@@ -1,0 +1,2045 @@
+make  all-recursive
+make[1]: Entering directory `/home/repos/webserver_framework/trunk'
+Making all in src
+make[2]: Entering directory `/home/repos/webserver_framework/trunk/src'
+make[2]: Nothing to be done for `all'.
+make[2]: Leaving directory `/home/repos/webserver_framework/trunk/src'
+Making all in src/python
+make[2]: Entering directory `/home/repos/webserver_framework/trunk/src/python'
+/bin/bash ../../libtool --tag=CXX   --mode=compile g++ -DHAVE_CONFIG_H -I. -I../..     -g -O2 -I/usr/include/python2.6 -I/usr/include/python2.6 -MT WebserverWrap.lo -MD -MP -MF .deps/WebserverWrap.Tpo -c -o WebserverWrap.lo WebserverWrap.cpp
+libtool: compile:  g++ -DHAVE_CONFIG_H -I. -I../.. -g -O2 -I/usr/include/python2.6 -I/usr/include/python2.6 -MT WebserverWrap.lo -MD -MP -MF .deps/WebserverWrap.Tpo -c WebserverWrap.cpp  -fPIC -DPIC -o .libs/WebserverWrap.o
+WebserverWrap.cpp:5218:25: error: Webserver.hpp: No such file or directory
+In file included from WebserverWrap.cpp:5270:
+WebserverWrap.h:18: error: expected class-name before ‘,’ token
+WebserverWrap.h:23: error: ‘HttpResponse’ does not name a type
+WebserverWrap.h:24: error: ‘HttpResponse’ does not name a type
+WebserverWrap.h:25: error: ‘HttpResponse’ does not name a type
+WebserverWrap.h:26: error: ‘HttpResponse’ does not name a type
+WebserverWrap.h:27: error: ‘HttpResponse’ does not name a type
+WebserverWrap.h:28: error: ‘HttpResponse’ does not name a type
+WebserverWrap.h:29: error: ‘HttpResponse’ does not name a type
+WebserverWrap.h:30: error: ‘HttpResponse’ does not name a type
+WebserverWrap.h:31: error: ‘HttpResponse’ does not name a type
+WebserverWrap.h:32: error: ‘HttpResponse’ does not name a type
+WebserverWrap.h:33: error: ‘HttpResponse’ does not name a type
+WebserverWrap.h:34: error: ‘HttpResponse’ does not name a type
+WebserverWrap.h:35: error: ‘HttpResponse’ does not name a type
+WebserverWrap.cpp: In constructor ‘SwigDirector_HttpResource::SwigDirector_HttpResource(PyObject*)’:
+WebserverWrap.cpp:5272: error: class ‘SwigDirector_HttpResource’ does not have any field named ‘HttpResource’
+WebserverWrap.cpp: At global scope:
+WebserverWrap.cpp:5282: error: ‘HttpResponse’ does not name a type
+WebserverWrap.cpp:5316: error: ‘HttpResponse’ does not name a type
+WebserverWrap.cpp:5348: error: ‘HttpResponse’ does not name a type
+WebserverWrap.cpp:5380: error: ‘HttpResponse’ does not name a type
+WebserverWrap.cpp:5412: error: ‘HttpResponse’ does not name a type
+WebserverWrap.cpp:5446: error: ‘HttpResponse’ does not name a type
+WebserverWrap.cpp:5480: error: ‘HttpResponse’ does not name a type
+WebserverWrap.cpp:5514: error: ‘HttpResponse’ does not name a type
+WebserverWrap.cpp:5548: error: ‘HttpResponse’ does not name a type
+WebserverWrap.cpp:5582: error: ‘HttpResponse’ does not name a type
+WebserverWrap.cpp:5616: error: ‘HttpResponse’ does not name a type
+WebserverWrap.cpp:5650: error: ‘HttpResponse’ does not name a type
+WebserverWrap.cpp:5684: error: ‘HttpResponse’ does not name a type
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_continue_get()’:
+WebserverWrap.cpp:8748: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_switching_protocol_get()’:
+WebserverWrap.cpp:8762: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_processing_get()’:
+WebserverWrap.cpp:8776: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_ok_get()’:
+WebserverWrap.cpp:8790: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_created_get()’:
+WebserverWrap.cpp:8804: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_accepted_get()’:
+WebserverWrap.cpp:8818: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_non_authoritative_information_get()’:
+WebserverWrap.cpp:8832: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_no_content_get()’:
+WebserverWrap.cpp:8846: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_reset_content_get()’:
+WebserverWrap.cpp:8860: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_partial_content_get()’:
+WebserverWrap.cpp:8874: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_multi_status_get()’:
+WebserverWrap.cpp:8888: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_multiple_choices_get()’:
+WebserverWrap.cpp:8902: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_moved_permanently_get()’:
+WebserverWrap.cpp:8916: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_found_get()’:
+WebserverWrap.cpp:8930: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_see_other_get()’:
+WebserverWrap.cpp:8944: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_not_modified_get()’:
+WebserverWrap.cpp:8958: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_use_proxy_get()’:
+WebserverWrap.cpp:8972: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_switch_proxy_get()’:
+WebserverWrap.cpp:8986: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_temporary_redirect_get()’:
+WebserverWrap.cpp:9000: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_bad_request_get()’:
+WebserverWrap.cpp:9014: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_unauthorized_get()’:
+WebserverWrap.cpp:9028: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_payment_required_get()’:
+WebserverWrap.cpp:9042: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_forbidden_get()’:
+WebserverWrap.cpp:9056: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_not_found_get()’:
+WebserverWrap.cpp:9070: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_method_not_allowed_get()’:
+WebserverWrap.cpp:9084: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_method_not_acceptable_get()’:
+WebserverWrap.cpp:9098: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_proxy_authentication_required_get()’:
+WebserverWrap.cpp:9112: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_request_timeout_get()’:
+WebserverWrap.cpp:9126: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_conflict_get()’:
+WebserverWrap.cpp:9140: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_gone_get()’:
+WebserverWrap.cpp:9154: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_length_required_get()’:
+WebserverWrap.cpp:9168: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_precondition_failed_get()’:
+WebserverWrap.cpp:9182: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_request_entity_too_large_get()’:
+WebserverWrap.cpp:9196: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_request_uri_too_long_get()’:
+WebserverWrap.cpp:9210: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_unsupported_media_type_get()’:
+WebserverWrap.cpp:9224: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_requested_range_not_satisfiable_get()’:
+WebserverWrap.cpp:9238: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_expectation_failed_get()’:
+WebserverWrap.cpp:9252: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_unprocessable_entity_get()’:
+WebserverWrap.cpp:9266: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_locked_get()’:
+WebserverWrap.cpp:9280: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_failed_dependency_get()’:
+WebserverWrap.cpp:9294: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_unordered_collection_get()’:
+WebserverWrap.cpp:9308: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_upgrade_required_get()’:
+WebserverWrap.cpp:9322: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_retry_with_get()’:
+WebserverWrap.cpp:9336: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_internal_server_error_get()’:
+WebserverWrap.cpp:9350: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_not_implemented_get()’:
+WebserverWrap.cpp:9364: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_bad_gateway_get()’:
+WebserverWrap.cpp:9378: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_service_unavailable_get()’:
+WebserverWrap.cpp:9392: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_gateway_timeout_get()’:
+WebserverWrap.cpp:9406: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_version_not_supported_get()’:
+WebserverWrap.cpp:9420: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_variant_also_negotiated_get()’:
+WebserverWrap.cpp:9434: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_insufficient_storage_get()’:
+WebserverWrap.cpp:9448: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_bandwidth_limit_exceeded_get()’:
+WebserverWrap.cpp:9462: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_not_extended_get()’:
+WebserverWrap.cpp:9476: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_accept_get()’:
+WebserverWrap.cpp:9490: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_accept_charset_get()’:
+WebserverWrap.cpp:9504: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_accept_encoding_get()’:
+WebserverWrap.cpp:9518: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_accept_language_get()’:
+WebserverWrap.cpp:9532: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_accept_ranges_get()’:
+WebserverWrap.cpp:9546: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_age_get()’:
+WebserverWrap.cpp:9560: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_allow_get()’:
+WebserverWrap.cpp:9574: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_authorization_get()’:
+WebserverWrap.cpp:9588: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_cache_control_get()’:
+WebserverWrap.cpp:9602: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_connection_get()’:
+WebserverWrap.cpp:9616: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_content_encoding_get()’:
+WebserverWrap.cpp:9630: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_content_language_get()’:
+WebserverWrap.cpp:9644: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_content_length_get()’:
+WebserverWrap.cpp:9658: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_content_location_get()’:
+WebserverWrap.cpp:9672: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_content_md5_get()’:
+WebserverWrap.cpp:9686: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_content_range_get()’:
+WebserverWrap.cpp:9700: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_content_type_get()’:
+WebserverWrap.cpp:9714: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_date_get()’:
+WebserverWrap.cpp:9728: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_etag_get()’:
+WebserverWrap.cpp:9742: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_expect_get()’:
+WebserverWrap.cpp:9756: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_expires_get()’:
+WebserverWrap.cpp:9770: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_from_get()’:
+WebserverWrap.cpp:9784: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_host_get()’:
+WebserverWrap.cpp:9798: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_if_match_get()’:
+WebserverWrap.cpp:9812: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_if_modified_since_get()’:
+WebserverWrap.cpp:9826: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_if_none_match_get()’:
+WebserverWrap.cpp:9840: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_if_range_get()’:
+WebserverWrap.cpp:9854: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_if_unmodified_since_get()’:
+WebserverWrap.cpp:9868: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_last_modified_get()’:
+WebserverWrap.cpp:9882: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_location_get()’:
+WebserverWrap.cpp:9896: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_max_forwards_get()’:
+WebserverWrap.cpp:9910: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_pragma_get()’:
+WebserverWrap.cpp:9924: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_proxy_authenticate_get()’:
+WebserverWrap.cpp:9938: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_proxy_authentication_get()’:
+WebserverWrap.cpp:9952: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_range_get()’:
+WebserverWrap.cpp:9966: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_referer_get()’:
+WebserverWrap.cpp:9980: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_retry_after_get()’:
+WebserverWrap.cpp:9994: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_server_get()’:
+WebserverWrap.cpp:10008: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_te_get()’:
+WebserverWrap.cpp:10022: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_trailer_get()’:
+WebserverWrap.cpp:10036: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_transfer_encoding_get()’:
+WebserverWrap.cpp:10050: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_upgrade_get()’:
+WebserverWrap.cpp:10064: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_user_agent_get()’:
+WebserverWrap.cpp:10078: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_vary_get()’:
+WebserverWrap.cpp:10092: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_via_get()’:
+WebserverWrap.cpp:10106: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_warning_get()’:
+WebserverWrap.cpp:10120: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_header_www_authenticate_get()’:
+WebserverWrap.cpp:10134: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_version_1_0_get()’:
+WebserverWrap.cpp:10148: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_version_1_1_get()’:
+WebserverWrap.cpp:10162: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_method_connect_get()’:
+WebserverWrap.cpp:10176: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_method_delete_get()’:
+WebserverWrap.cpp:10190: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_method_head_get()’:
+WebserverWrap.cpp:10204: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_method_get_get()’:
+WebserverWrap.cpp:10218: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_method_options_get()’:
+WebserverWrap.cpp:10232: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_method_post_get()’:
+WebserverWrap.cpp:10246: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_method_put_get()’:
+WebserverWrap.cpp:10260: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_method_trace_get()’:
+WebserverWrap.cpp:10274: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_post_encoding_form_urlencoded_get()’:
+WebserverWrap.cpp:10288: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* Swig_var_HttpUtils_http_post_encoding_multipart_formdata_get()’:
+WebserverWrap.cpp:10302: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpUtils_tokenizeUrl__SWIG_0(PyObject*, PyObject*)’:
+WebserverWrap.cpp:10336: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpUtils_tokenizeUrl__SWIG_1(PyObject*, PyObject*)’:
+WebserverWrap.cpp:10367: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpUtils_standardizeUrl(PyObject*, PyObject*)’:
+WebserverWrap.cpp:10436: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp: In function ‘PyObject* _wrap_new_HttpUtils(PyObject*, PyObject*)’:
+WebserverWrap.cpp:10448: error: ‘HttpUtils’ was not declared in this scope
+WebserverWrap.cpp:10448: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:10453: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:10453: error: expected ‘;’ before ‘new’
+WebserverWrap.cpp: In function ‘PyObject* _wrap_delete_HttpUtils(PyObject*, PyObject*)’:
+WebserverWrap.cpp:10469: error: ‘HttpUtils’ was not declared in this scope
+WebserverWrap.cpp:10469: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:10469: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:10469: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:10479: error: expected type-specifier before ‘HttpUtils’
+WebserverWrap.cpp:10479: error: expected ‘>’ before ‘HttpUtils’
+WebserverWrap.cpp:10479: error: expected ‘(’ before ‘HttpUtils’
+WebserverWrap.cpp:10479: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:10479: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:10482: error: type ‘<type error>’ argument given to ‘delete’, expected pointer
+WebserverWrap.cpp: In function ‘PyObject* _wrap_ArgComparator___call__(PyObject*, PyObject*)’:
+WebserverWrap.cpp:10505: error: ‘ArgComparator’ was not declared in this scope
+WebserverWrap.cpp:10505: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:10505: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:10505: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:10522: error: expected type-specifier before ‘ArgComparator’
+WebserverWrap.cpp:10522: error: expected ‘>’ before ‘ArgComparator’
+WebserverWrap.cpp:10522: error: expected ‘(’ before ‘ArgComparator’
+WebserverWrap.cpp:10522: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:10522: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:10545: error: expected ‘)’ before ‘const’
+WebserverWrap.cpp:10545: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_new_ArgComparator(PyObject*, PyObject*)’:
+WebserverWrap.cpp:10559: error: ‘ArgComparator’ was not declared in this scope
+WebserverWrap.cpp:10559: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:10564: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:10564: error: expected ‘;’ before ‘new’
+WebserverWrap.cpp: In function ‘PyObject* _wrap_delete_ArgComparator(PyObject*, PyObject*)’:
+WebserverWrap.cpp:10580: error: ‘ArgComparator’ was not declared in this scope
+WebserverWrap.cpp:10580: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:10580: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:10580: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:10590: error: expected type-specifier before ‘ArgComparator’
+WebserverWrap.cpp:10590: error: expected ‘>’ before ‘ArgComparator’
+WebserverWrap.cpp:10590: error: expected ‘(’ before ‘ArgComparator’
+WebserverWrap.cpp:10590: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:10590: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:10593: error: type ‘<type error>’ argument given to ‘delete’, expected pointer
+WebserverWrap.cpp: In function ‘PyObject* _wrap_new_HttpEndpoint__SWIG_0(PyObject*, PyObject*)’:
+WebserverWrap.cpp:10620: error: ‘HttpEndpoint’ was not declared in this scope
+WebserverWrap.cpp:10620: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:10630: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:10630: error: expected ‘;’ before ‘new’
+WebserverWrap.cpp: In function ‘PyObject* _wrap_new_HttpEndpoint__SWIG_1(PyObject*, PyObject*)’:
+WebserverWrap.cpp:10646: error: ‘HttpEndpoint’ was not declared in this scope
+WebserverWrap.cpp:10646: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:10651: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:10651: error: expected ‘;’ before ‘new’
+WebserverWrap.cpp: In function ‘PyObject* _wrap_new_HttpEndpoint__SWIG_2(PyObject*, PyObject*)’:
+WebserverWrap.cpp:10678: error: ‘HttpEndpoint’ was not declared in this scope
+WebserverWrap.cpp:10678: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:10704: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:10704: error: expected ‘;’ before ‘new’
+WebserverWrap.cpp: In function ‘PyObject* _wrap_new_HttpEndpoint__SWIG_3(PyObject*, PyObject*)’:
+WebserverWrap.cpp:10729: error: ‘HttpEndpoint’ was not declared in this scope
+WebserverWrap.cpp:10729: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:10750: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:10750: error: expected ‘;’ before ‘new’
+WebserverWrap.cpp: In function ‘PyObject* _wrap_new_HttpEndpoint__SWIG_4(PyObject*, PyObject*)’:
+WebserverWrap.cpp:10771: error: ‘HttpEndpoint’ was not declared in this scope
+WebserverWrap.cpp:10771: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:10787: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:10787: error: expected ‘;’ before ‘new’
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpEndpoint___lt__(PyObject*, PyObject*)’:
+WebserverWrap.cpp:10883: error: ‘HttpEndpoint’ was not declared in this scope
+WebserverWrap.cpp:10883: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:10883: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:10883: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:10884: error: ‘arg2’ was not declared in this scope
+WebserverWrap.cpp:10898: error: expected type-specifier before ‘HttpEndpoint’
+WebserverWrap.cpp:10898: error: expected ‘>’ before ‘HttpEndpoint’
+WebserverWrap.cpp:10898: error: expected ‘(’ before ‘HttpEndpoint’
+WebserverWrap.cpp:10898: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:10898: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:10906: error: expected type-specifier before ‘HttpEndpoint’
+WebserverWrap.cpp:10906: error: expected ‘>’ before ‘HttpEndpoint’
+WebserverWrap.cpp:10906: error: expected ‘(’ before ‘HttpEndpoint’
+WebserverWrap.cpp:10906: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:10906: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:10909: error: expected ‘)’ before ‘const’
+WebserverWrap.cpp:10909: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpEndpoint_match(PyObject*, PyObject*)’:
+WebserverWrap.cpp:10925: error: ‘HttpEndpoint’ was not declared in this scope
+WebserverWrap.cpp:10925: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:10925: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:10925: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:10926: error: ‘arg2’ was not declared in this scope
+WebserverWrap.cpp:10940: error: expected type-specifier before ‘HttpEndpoint’
+WebserverWrap.cpp:10940: error: expected ‘>’ before ‘HttpEndpoint’
+WebserverWrap.cpp:10940: error: expected ‘(’ before ‘HttpEndpoint’
+WebserverWrap.cpp:10940: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:10940: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:10948: error: expected type-specifier before ‘HttpEndpoint’
+WebserverWrap.cpp:10948: error: expected ‘>’ before ‘HttpEndpoint’
+WebserverWrap.cpp:10948: error: expected ‘(’ before ‘HttpEndpoint’
+WebserverWrap.cpp:10948: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:10948: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:10951: error: expected ‘)’ before ‘const’
+WebserverWrap.cpp:10951: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpEndpoint_get_url_pars(PyObject*, PyObject*)’:
+WebserverWrap.cpp:10967: error: ‘HttpEndpoint’ was not declared in this scope
+WebserverWrap.cpp:10967: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:10967: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:10967: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:10978: error: expected type-specifier before ‘HttpEndpoint’
+WebserverWrap.cpp:10978: error: expected ‘>’ before ‘HttpEndpoint’
+WebserverWrap.cpp:10978: error: expected ‘(’ before ‘HttpEndpoint’
+WebserverWrap.cpp:10978: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:10978: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:10981: error: expected ‘)’ before ‘const’
+WebserverWrap.cpp:10981: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpEndpoint_get_url_pieces(PyObject*, PyObject*)’:
+WebserverWrap.cpp:10997: error: ‘HttpEndpoint’ was not declared in this scope
+WebserverWrap.cpp:10997: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:10997: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:10997: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:11008: error: expected type-specifier before ‘HttpEndpoint’
+WebserverWrap.cpp:11008: error: expected ‘>’ before ‘HttpEndpoint’
+WebserverWrap.cpp:11008: error: expected ‘(’ before ‘HttpEndpoint’
+WebserverWrap.cpp:11008: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:11008: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:11011: error: expected ‘)’ before ‘const’
+WebserverWrap.cpp:11011: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpEndpoint_get_chunk_positions(PyObject*, PyObject*)’:
+WebserverWrap.cpp:11027: error: ‘HttpEndpoint’ was not declared in this scope
+WebserverWrap.cpp:11027: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:11027: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:11027: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:11038: error: expected type-specifier before ‘HttpEndpoint’
+WebserverWrap.cpp:11038: error: expected ‘>’ before ‘HttpEndpoint’
+WebserverWrap.cpp:11038: error: expected ‘(’ before ‘HttpEndpoint’
+WebserverWrap.cpp:11038: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:11038: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:11041: error: expected ‘)’ before ‘const’
+WebserverWrap.cpp:11041: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_delete_HttpEndpoint(PyObject*, PyObject*)’:
+WebserverWrap.cpp:11057: error: ‘HttpEndpoint’ was not declared in this scope
+WebserverWrap.cpp:11057: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:11057: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:11057: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:11067: error: expected type-specifier before ‘HttpEndpoint’
+WebserverWrap.cpp:11067: error: expected ‘>’ before ‘HttpEndpoint’
+WebserverWrap.cpp:11067: error: expected ‘(’ before ‘HttpEndpoint’
+WebserverWrap.cpp:11067: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:11067: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:11070: error: type ‘<type error>’ argument given to ‘delete’, expected pointer
+WebserverWrap.cpp: In function ‘PyObject* _wrap_new_HttpRequest__SWIG_0(PyObject*, PyObject*)’:
+WebserverWrap.cpp:11093: error: ‘HttpRequest’ was not declared in this scope
+WebserverWrap.cpp:11093: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:11098: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:11098: error: expected ‘;’ before ‘new’
+WebserverWrap.cpp: In function ‘PyObject* _wrap_new_HttpRequest__SWIG_1(PyObject*, PyObject*)’:
+WebserverWrap.cpp:11114: error: ‘HttpRequest’ was not declared in this scope
+WebserverWrap.cpp:11114: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:11118: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:11128: error: expected type-specifier before ‘HttpRequest’
+WebserverWrap.cpp:11128: error: expected ‘>’ before ‘HttpRequest’
+WebserverWrap.cpp:11128: error: expected ‘(’ before ‘HttpRequest’
+WebserverWrap.cpp:11128: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:11128: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:11131: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:11131: error: expected ‘;’ before ‘new’
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpRequest_getUser(PyObject*, PyObject*)’:
+WebserverWrap.cpp:11178: error: ‘HttpRequest’ was not declared in this scope
+WebserverWrap.cpp:11178: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:11178: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:11178: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:11189: error: expected type-specifier before ‘HttpRequest’
+WebserverWrap.cpp:11189: error: expected ‘>’ before ‘HttpRequest’
+WebserverWrap.cpp:11189: error: expected ‘(’ before ‘HttpRequest’
+WebserverWrap.cpp:11189: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:11189: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:11192: error: expected ‘)’ before ‘const’
+WebserverWrap.cpp:11192: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpRequest_getPass(PyObject*, PyObject*)’:
+WebserverWrap.cpp:11208: error: ‘HttpRequest’ was not declared in this scope
+WebserverWrap.cpp:11208: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:11208: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:11208: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:11219: error: expected type-specifier before ‘HttpRequest’
+WebserverWrap.cpp:11219: error: expected ‘>’ before ‘HttpRequest’
+WebserverWrap.cpp:11219: error: expected ‘(’ before ‘HttpRequest’
+WebserverWrap.cpp:11219: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:11219: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:11222: error: expected ‘)’ before ‘const’
+WebserverWrap.cpp:11222: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpRequest_getPath(PyObject*, PyObject*)’:
+WebserverWrap.cpp:11238: error: ‘HttpRequest’ was not declared in this scope
+WebserverWrap.cpp:11238: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:11238: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:11238: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:11249: error: expected type-specifier before ‘HttpRequest’
+WebserverWrap.cpp:11249: error: expected ‘>’ before ‘HttpRequest’
+WebserverWrap.cpp:11249: error: expected ‘(’ before ‘HttpRequest’
+WebserverWrap.cpp:11249: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:11249: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:11252: error: expected ‘)’ before ‘const’
+WebserverWrap.cpp:11252: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpRequest_getPathPieces(PyObject*, PyObject*)’:
+WebserverWrap.cpp:11268: error: ‘HttpRequest’ was not declared in this scope
+WebserverWrap.cpp:11268: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:11268: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:11268: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:11279: error: expected type-specifier before ‘HttpRequest’
+WebserverWrap.cpp:11279: error: expected ‘>’ before ‘HttpRequest’
+WebserverWrap.cpp:11279: error: expected ‘(’ before ‘HttpRequest’
+WebserverWrap.cpp:11279: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:11279: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:11282: error: expected ‘)’ before ‘const’
+WebserverWrap.cpp:11282: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpRequest_getMethod(PyObject*, PyObject*)’:
+WebserverWrap.cpp:11298: error: ‘HttpRequest’ was not declared in this scope
+WebserverWrap.cpp:11298: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:11298: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:11298: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:11309: error: expected type-specifier before ‘HttpRequest’
+WebserverWrap.cpp:11309: error: expected ‘>’ before ‘HttpRequest’
+WebserverWrap.cpp:11309: error: expected ‘(’ before ‘HttpRequest’
+WebserverWrap.cpp:11309: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:11309: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:11312: error: expected ‘)’ before ‘const’
+WebserverWrap.cpp:11312: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpRequest_getHeaders(PyObject*, PyObject*)’:
+WebserverWrap.cpp:11328: error: ‘HttpRequest’ was not declared in this scope
+WebserverWrap.cpp:11328: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:11328: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:11328: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:11339: error: expected type-specifier before ‘HttpRequest’
+WebserverWrap.cpp:11339: error: expected ‘>’ before ‘HttpRequest’
+WebserverWrap.cpp:11339: error: expected ‘(’ before ‘HttpRequest’
+WebserverWrap.cpp:11339: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:11339: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:11342: error: expected ‘)’ before ‘const’
+WebserverWrap.cpp:11342: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpRequest_getArgs(PyObject*, PyObject*)’:
+WebserverWrap.cpp:11358: error: ‘HttpRequest’ was not declared in this scope
+WebserverWrap.cpp:11358: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:11358: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:11358: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:11369: error: expected type-specifier before ‘HttpRequest’
+WebserverWrap.cpp:11369: error: expected ‘>’ before ‘HttpRequest’
+WebserverWrap.cpp:11369: error: expected ‘(’ before ‘HttpRequest’
+WebserverWrap.cpp:11369: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:11369: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:11372: error: expected ‘)’ before ‘const’
+WebserverWrap.cpp:11372: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpRequest_getHeader(PyObject*, PyObject*)’:
+WebserverWrap.cpp:11388: error: ‘HttpRequest’ was not declared in this scope
+WebserverWrap.cpp:11388: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:11388: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:11388: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:11402: error: expected type-specifier before ‘HttpRequest’
+WebserverWrap.cpp:11402: error: expected ‘>’ before ‘HttpRequest’
+WebserverWrap.cpp:11402: error: expected ‘(’ before ‘HttpRequest’
+WebserverWrap.cpp:11402: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:11402: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:11416: error: expected ‘)’ before ‘const’
+WebserverWrap.cpp:11416: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpRequest_getArg(PyObject*, PyObject*)’:
+WebserverWrap.cpp:11434: error: ‘HttpRequest’ was not declared in this scope
+WebserverWrap.cpp:11434: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:11434: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:11434: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:11448: error: expected type-specifier before ‘HttpRequest’
+WebserverWrap.cpp:11448: error: expected ‘>’ before ‘HttpRequest’
+WebserverWrap.cpp:11448: error: expected ‘(’ before ‘HttpRequest’
+WebserverWrap.cpp:11448: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:11448: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:11462: error: expected ‘)’ before ‘const’
+WebserverWrap.cpp:11462: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpRequest_getContent(PyObject*, PyObject*)’:
+WebserverWrap.cpp:11480: error: ‘HttpRequest’ was not declared in this scope
+WebserverWrap.cpp:11480: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:11480: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:11480: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:11491: error: expected type-specifier before ‘HttpRequest’
+WebserverWrap.cpp:11491: error: expected ‘>’ before ‘HttpRequest’
+WebserverWrap.cpp:11491: error: expected ‘(’ before ‘HttpRequest’
+WebserverWrap.cpp:11491: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:11491: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:11494: error: expected ‘)’ before ‘const’
+WebserverWrap.cpp:11494: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpRequest_setHeader(PyObject*, PyObject*)’:
+WebserverWrap.cpp:11510: error: ‘HttpRequest’ was not declared in this scope
+WebserverWrap.cpp:11510: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:11510: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:11510: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:11526: error: expected type-specifier before ‘HttpRequest’
+WebserverWrap.cpp:11526: error: expected ‘>’ before ‘HttpRequest’
+WebserverWrap.cpp:11526: error: expected ‘(’ before ‘HttpRequest’
+WebserverWrap.cpp:11526: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:11526: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpRequest_setArg(PyObject*, PyObject*)’:
+WebserverWrap.cpp:11571: error: ‘HttpRequest’ was not declared in this scope
+WebserverWrap.cpp:11571: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:11571: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:11571: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:11587: error: expected type-specifier before ‘HttpRequest’
+WebserverWrap.cpp:11587: error: expected ‘>’ before ‘HttpRequest’
+WebserverWrap.cpp:11587: error: expected ‘(’ before ‘HttpRequest’
+WebserverWrap.cpp:11587: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:11587: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpRequest_setContent(PyObject*, PyObject*)’:
+WebserverWrap.cpp:11632: error: ‘HttpRequest’ was not declared in this scope
+WebserverWrap.cpp:11632: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:11632: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:11632: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:11645: error: expected type-specifier before ‘HttpRequest’
+WebserverWrap.cpp:11645: error: expected ‘>’ before ‘HttpRequest’
+WebserverWrap.cpp:11645: error: expected ‘(’ before ‘HttpRequest’
+WebserverWrap.cpp:11645: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:11645: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpRequest_growContent(PyObject*, PyObject*)’:
+WebserverWrap.cpp:11677: error: ‘HttpRequest’ was not declared in this scope
+WebserverWrap.cpp:11677: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:11677: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:11677: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:11694: error: expected type-specifier before ‘HttpRequest’
+WebserverWrap.cpp:11694: error: expected ‘>’ before ‘HttpRequest’
+WebserverWrap.cpp:11694: error: expected ‘(’ before ‘HttpRequest’
+WebserverWrap.cpp:11694: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:11694: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpRequest_setPath(PyObject*, PyObject*)’:
+WebserverWrap.cpp:11731: error: ‘HttpRequest’ was not declared in this scope
+WebserverWrap.cpp:11731: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:11731: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:11731: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:11744: error: expected type-specifier before ‘HttpRequest’
+WebserverWrap.cpp:11744: error: expected ‘>’ before ‘HttpRequest’
+WebserverWrap.cpp:11744: error: expected ‘(’ before ‘HttpRequest’
+WebserverWrap.cpp:11744: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:11744: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpRequest_setMethod(PyObject*, PyObject*)’:
+WebserverWrap.cpp:11776: error: ‘HttpRequest’ was not declared in this scope
+WebserverWrap.cpp:11776: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:11776: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:11776: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:11789: error: expected type-specifier before ‘HttpRequest’
+WebserverWrap.cpp:11789: error: expected ‘>’ before ‘HttpRequest’
+WebserverWrap.cpp:11789: error: expected ‘(’ before ‘HttpRequest’
+WebserverWrap.cpp:11789: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:11789: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpRequest_removeHeader(PyObject*, PyObject*)’:
+WebserverWrap.cpp:11821: error: ‘HttpRequest’ was not declared in this scope
+WebserverWrap.cpp:11821: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:11821: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:11821: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:11834: error: expected type-specifier before ‘HttpRequest’
+WebserverWrap.cpp:11834: error: expected ‘>’ before ‘HttpRequest’
+WebserverWrap.cpp:11834: error: expected ‘(’ before ‘HttpRequest’
+WebserverWrap.cpp:11834: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:11834: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpRequest_setHeaders(PyObject*, PyObject*)’:
+WebserverWrap.cpp:11866: error: ‘HttpRequest’ was not declared in this scope
+WebserverWrap.cpp:11866: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:11866: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:11866: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:11880: error: expected type-specifier before ‘HttpRequest’
+WebserverWrap.cpp:11880: error: expected ‘>’ before ‘HttpRequest’
+WebserverWrap.cpp:11880: error: expected ‘(’ before ‘HttpRequest’
+WebserverWrap.cpp:11880: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:11880: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpRequest_setArgs(PyObject*, PyObject*)’:
+WebserverWrap.cpp:11907: error: ‘HttpRequest’ was not declared in this scope
+WebserverWrap.cpp:11907: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:11907: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:11907: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:11921: error: expected type-specifier before ‘HttpRequest’
+WebserverWrap.cpp:11921: error: expected ‘>’ before ‘HttpRequest’
+WebserverWrap.cpp:11921: error: expected ‘(’ before ‘HttpRequest’
+WebserverWrap.cpp:11921: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:11921: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpRequest_setUser(PyObject*, PyObject*)’:
+WebserverWrap.cpp:11948: error: ‘HttpRequest’ was not declared in this scope
+WebserverWrap.cpp:11948: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:11948: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:11948: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:11961: error: expected type-specifier before ‘HttpRequest’
+WebserverWrap.cpp:11961: error: expected ‘>’ before ‘HttpRequest’
+WebserverWrap.cpp:11961: error: expected ‘(’ before ‘HttpRequest’
+WebserverWrap.cpp:11961: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:11961: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpRequest_setPass(PyObject*, PyObject*)’:
+WebserverWrap.cpp:11993: error: ‘HttpRequest’ was not declared in this scope
+WebserverWrap.cpp:11993: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:11993: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:11993: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:12006: error: expected type-specifier before ‘HttpRequest’
+WebserverWrap.cpp:12006: error: expected ‘>’ before ‘HttpRequest’
+WebserverWrap.cpp:12006: error: expected ‘(’ before ‘HttpRequest’
+WebserverWrap.cpp:12006: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:12006: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_delete_HttpRequest(PyObject*, PyObject*)’:
+WebserverWrap.cpp:12038: error: ‘HttpRequest’ was not declared in this scope
+WebserverWrap.cpp:12038: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:12038: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:12038: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:12048: error: expected type-specifier before ‘HttpRequest’
+WebserverWrap.cpp:12048: error: expected ‘>’ before ‘HttpRequest’
+WebserverWrap.cpp:12048: error: expected ‘(’ before ‘HttpRequest’
+WebserverWrap.cpp:12048: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:12048: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:12051: error: type ‘<type error>’ argument given to ‘delete’, expected pointer
+WebserverWrap.cpp: In function ‘PyObject* _wrap_new_HttpResponse__SWIG_0(PyObject*, PyObject*)’:
+WebserverWrap.cpp:12074: error: ‘HttpResponse’ was not declared in this scope
+WebserverWrap.cpp:12074: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:12079: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:12079: error: expected ‘;’ before ‘new’
+WebserverWrap.cpp: In function ‘PyObject* _wrap_new_HttpResponse__SWIG_1(PyObject*, PyObject*)’:
+WebserverWrap.cpp:12097: error: ‘HttpResponse’ has not been declared
+WebserverWrap.cpp:12097: error: ‘arg3’ was not declared in this scope
+WebserverWrap.cpp:12103: error: ‘HttpResponse’ has not been declared
+WebserverWrap.cpp:12103: error: expected ‘;’ before ‘temp3’
+WebserverWrap.cpp:12107: error: ‘HttpResponse’ was not declared in this scope
+WebserverWrap.cpp:12107: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:12130: error: ‘temp3’ was not declared in this scope
+WebserverWrap.cpp:12130: error: expected type-specifier before ‘HttpResponse’
+WebserverWrap.cpp:12130: error: expected ‘>’ before ‘HttpResponse’
+WebserverWrap.cpp:12130: error: expected ‘(’ before ‘HttpResponse’
+WebserverWrap.cpp:12130: error: ‘HttpResponse’ is not a class or namespace
+WebserverWrap.cpp:12130: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:12135: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:12135: error: expected ‘;’ before ‘new’
+WebserverWrap.cpp: In function ‘PyObject* _wrap_new_HttpResponse__SWIG_2(PyObject*, PyObject*)’:
+WebserverWrap.cpp:12160: error: ‘HttpResponse’ was not declared in this scope
+WebserverWrap.cpp:12160: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:12181: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:12181: error: expected ‘;’ before ‘new’
+WebserverWrap.cpp: In function ‘PyObject* _wrap_new_HttpResponse__SWIG_3(PyObject*, PyObject*)’:
+WebserverWrap.cpp:12199: error: ‘HttpResponse’ was not declared in this scope
+WebserverWrap.cpp:12199: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:12203: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:12213: error: expected type-specifier before ‘HttpResponse’
+WebserverWrap.cpp:12213: error: expected ‘>’ before ‘HttpResponse’
+WebserverWrap.cpp:12213: error: expected ‘(’ before ‘HttpResponse’
+WebserverWrap.cpp:12213: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:12213: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:12216: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:12216: error: expected ‘;’ before ‘new’
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpResponse_getContent(PyObject*, PyObject*)’:
+WebserverWrap.cpp:12299: error: ‘HttpResponse’ was not declared in this scope
+WebserverWrap.cpp:12299: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:12299: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:12299: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:12310: error: expected type-specifier before ‘HttpResponse’
+WebserverWrap.cpp:12310: error: expected ‘>’ before ‘HttpResponse’
+WebserverWrap.cpp:12310: error: expected ‘(’ before ‘HttpResponse’
+WebserverWrap.cpp:12310: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:12310: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpResponse_setContent(PyObject*, PyObject*)’:
+WebserverWrap.cpp:12329: error: ‘HttpResponse’ was not declared in this scope
+WebserverWrap.cpp:12329: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:12329: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:12329: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:12342: error: expected type-specifier before ‘HttpResponse’
+WebserverWrap.cpp:12342: error: expected ‘>’ before ‘HttpResponse’
+WebserverWrap.cpp:12342: error: expected ‘(’ before ‘HttpResponse’
+WebserverWrap.cpp:12342: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:12342: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpResponse_getHeader(PyObject*, PyObject*)’:
+WebserverWrap.cpp:12374: error: ‘HttpResponse’ was not declared in this scope
+WebserverWrap.cpp:12374: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:12374: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:12374: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:12388: error: expected type-specifier before ‘HttpResponse’
+WebserverWrap.cpp:12388: error: expected ‘>’ before ‘HttpResponse’
+WebserverWrap.cpp:12388: error: expected ‘(’ before ‘HttpResponse’
+WebserverWrap.cpp:12388: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:12388: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpResponse_getFooter(PyObject*, PyObject*)’:
+WebserverWrap.cpp:12420: error: ‘HttpResponse’ was not declared in this scope
+WebserverWrap.cpp:12420: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:12420: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:12420: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:12434: error: expected type-specifier before ‘HttpResponse’
+WebserverWrap.cpp:12434: error: expected ‘>’ before ‘HttpResponse’
+WebserverWrap.cpp:12434: error: expected ‘(’ before ‘HttpResponse’
+WebserverWrap.cpp:12434: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:12434: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpResponse_setHeader(PyObject*, PyObject*)’:
+WebserverWrap.cpp:12466: error: ‘HttpResponse’ was not declared in this scope
+WebserverWrap.cpp:12466: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:12466: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:12466: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:12482: error: expected type-specifier before ‘HttpResponse’
+WebserverWrap.cpp:12482: error: expected ‘>’ before ‘HttpResponse’
+WebserverWrap.cpp:12482: error: expected ‘(’ before ‘HttpResponse’
+WebserverWrap.cpp:12482: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:12482: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpResponse_setFooter(PyObject*, PyObject*)’:
+WebserverWrap.cpp:12527: error: ‘HttpResponse’ was not declared in this scope
+WebserverWrap.cpp:12527: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:12527: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:12527: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:12543: error: expected type-specifier before ‘HttpResponse’
+WebserverWrap.cpp:12543: error: expected ‘>’ before ‘HttpResponse’
+WebserverWrap.cpp:12543: error: expected ‘(’ before ‘HttpResponse’
+WebserverWrap.cpp:12543: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:12543: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpResponse_setContentType(PyObject*, PyObject*)’:
+WebserverWrap.cpp:12588: error: ‘HttpResponse’ was not declared in this scope
+WebserverWrap.cpp:12588: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:12588: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:12588: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:12601: error: expected type-specifier before ‘HttpResponse’
+WebserverWrap.cpp:12601: error: expected ‘>’ before ‘HttpResponse’
+WebserverWrap.cpp:12601: error: expected ‘(’ before ‘HttpResponse’
+WebserverWrap.cpp:12601: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:12601: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpResponse_removeHeader(PyObject*, PyObject*)’:
+WebserverWrap.cpp:12633: error: ‘HttpResponse’ was not declared in this scope
+WebserverWrap.cpp:12633: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:12633: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:12633: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:12646: error: expected type-specifier before ‘HttpResponse’
+WebserverWrap.cpp:12646: error: expected ‘>’ before ‘HttpResponse’
+WebserverWrap.cpp:12646: error: expected ‘(’ before ‘HttpResponse’
+WebserverWrap.cpp:12646: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:12646: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpResponse_getHeaders(PyObject*, PyObject*)’:
+WebserverWrap.cpp:12678: error: ‘HttpResponse’ was not declared in this scope
+WebserverWrap.cpp:12678: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:12678: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:12678: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:12689: error: expected type-specifier before ‘HttpResponse’
+WebserverWrap.cpp:12689: error: expected ‘>’ before ‘HttpResponse’
+WebserverWrap.cpp:12689: error: expected ‘(’ before ‘HttpResponse’
+WebserverWrap.cpp:12689: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:12689: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpResponse_getFooters(PyObject*, PyObject*)’:
+WebserverWrap.cpp:12708: error: ‘HttpResponse’ was not declared in this scope
+WebserverWrap.cpp:12708: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:12708: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:12708: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:12719: error: expected type-specifier before ‘HttpResponse’
+WebserverWrap.cpp:12719: error: expected ‘>’ before ‘HttpResponse’
+WebserverWrap.cpp:12719: error: expected ‘(’ before ‘HttpResponse’
+WebserverWrap.cpp:12719: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:12719: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpResponse_setHeaders(PyObject*, PyObject*)’:
+WebserverWrap.cpp:12738: error: ‘HttpResponse’ was not declared in this scope
+WebserverWrap.cpp:12738: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:12738: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:12738: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:12752: error: expected type-specifier before ‘HttpResponse’
+WebserverWrap.cpp:12752: error: expected ‘>’ before ‘HttpResponse’
+WebserverWrap.cpp:12752: error: expected ‘(’ before ‘HttpResponse’
+WebserverWrap.cpp:12752: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:12752: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpResponse_setFooters(PyObject*, PyObject*)’:
+WebserverWrap.cpp:12779: error: ‘HttpResponse’ was not declared in this scope
+WebserverWrap.cpp:12779: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:12779: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:12779: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:12793: error: expected type-specifier before ‘HttpResponse’
+WebserverWrap.cpp:12793: error: expected ‘>’ before ‘HttpResponse’
+WebserverWrap.cpp:12793: error: expected ‘(’ before ‘HttpResponse’
+WebserverWrap.cpp:12793: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:12793: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpResponse_setResponseCode(PyObject*, PyObject*)’:
+WebserverWrap.cpp:12820: error: ‘HttpResponse’ was not declared in this scope
+WebserverWrap.cpp:12820: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:12820: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:12820: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:12834: error: expected type-specifier before ‘HttpResponse’
+WebserverWrap.cpp:12834: error: expected ‘>’ before ‘HttpResponse’
+WebserverWrap.cpp:12834: error: expected ‘(’ before ‘HttpResponse’
+WebserverWrap.cpp:12834: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:12834: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpResponse_getResponseCode(PyObject*, PyObject*)’:
+WebserverWrap.cpp:12858: error: ‘HttpResponse’ was not declared in this scope
+WebserverWrap.cpp:12858: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:12858: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:12858: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:12869: error: expected type-specifier before ‘HttpResponse’
+WebserverWrap.cpp:12869: error: expected ‘>’ before ‘HttpResponse’
+WebserverWrap.cpp:12869: error: expected ‘(’ before ‘HttpResponse’
+WebserverWrap.cpp:12869: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:12869: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_delete_HttpResponse(PyObject*, PyObject*)’:
+WebserverWrap.cpp:12888: error: ‘HttpResponse’ was not declared in this scope
+WebserverWrap.cpp:12888: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:12888: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:12888: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:12898: error: expected type-specifier before ‘HttpResponse’
+WebserverWrap.cpp:12898: error: expected ‘>’ before ‘HttpResponse’
+WebserverWrap.cpp:12898: error: expected ‘(’ before ‘HttpResponse’
+WebserverWrap.cpp:12898: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:12898: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:12901: error: type ‘<type error>’ argument given to ‘delete’, expected pointer
+WebserverWrap.cpp: In function ‘PyObject* _wrap_new_HttpResource(PyObject*, PyObject*)’:
+WebserverWrap.cpp:12926: error: ‘HttpResource’ was not declared in this scope
+WebserverWrap.cpp:12926: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:12934: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:12934: error: expected ‘;’ before ‘new’
+WebserverWrap.cpp:12936: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:12936: error: expected ‘;’ before ‘new’
+WebserverWrap.cpp: In function ‘PyObject* _wrap_delete_HttpResource(PyObject*, PyObject*)’:
+WebserverWrap.cpp:12954: error: ‘HttpResource’ was not declared in this scope
+WebserverWrap.cpp:12954: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:12954: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:12954: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:12964: error: expected type-specifier before ‘HttpResource’
+WebserverWrap.cpp:12964: error: expected ‘>’ before ‘HttpResource’
+WebserverWrap.cpp:12964: error: expected ‘(’ before ‘HttpResource’
+WebserverWrap.cpp:12964: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:12964: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:12967: error: type ‘<type error>’ argument given to ‘delete’, expected pointer
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpResource_render(PyObject*, PyObject*)’:
+WebserverWrap.cpp:12983: error: ‘HttpResource’ was not declared in this scope
+WebserverWrap.cpp:12983: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:12983: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:12983: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:12984: error: ‘HttpRequest’ was not declared in this scope
+WebserverWrap.cpp:12984: error: ‘arg2’ was not declared in this scope
+WebserverWrap.cpp:12993: error: ‘HttpResponse’ was not declared in this scope
+WebserverWrap.cpp:12993: error: expected ‘;’ before ‘result’
+WebserverWrap.cpp:13000: error: expected type-specifier before ‘HttpResource’
+WebserverWrap.cpp:13000: error: expected ‘>’ before ‘HttpResource’
+WebserverWrap.cpp:13000: error: expected ‘(’ before ‘HttpResource’
+WebserverWrap.cpp:13000: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:13000: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13008: error: expected type-specifier before ‘HttpRequest’
+WebserverWrap.cpp:13008: error: expected ‘>’ before ‘HttpRequest’
+WebserverWrap.cpp:13008: error: expected ‘(’ before ‘HttpRequest’
+WebserverWrap.cpp:13008: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:13008: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13009: error: cannot dynamic_cast ‘arg1’ (of type ‘<type error>’) to type ‘class Swig::Director*’ (source is not a pointer)
+WebserverWrap.cpp:13015: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:13015: error: ‘HttpResource’ is not a class or namespace
+WebserverWrap.cpp:13015: error: expected ‘)’ before ‘const’
+WebserverWrap.cpp:13015: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13017: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:13017: error: expected ‘)’ before ‘const’
+WebserverWrap.cpp:13017: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13028: error: expected type-specifier before ‘HttpResponse’
+WebserverWrap.cpp:13028: error: expected ‘)’ before ‘HttpResponse’
+WebserverWrap.cpp:13028: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpResource_render_404(PyObject*, PyObject*)’:
+WebserverWrap.cpp:13037: error: ‘HttpResource’ was not declared in this scope
+WebserverWrap.cpp:13037: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:13037: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:13037: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:13043: error: ‘HttpResponse’ was not declared in this scope
+WebserverWrap.cpp:13043: error: expected ‘;’ before ‘result’
+WebserverWrap.cpp:13050: error: expected type-specifier before ‘HttpResource’
+WebserverWrap.cpp:13050: error: expected ‘>’ before ‘HttpResource’
+WebserverWrap.cpp:13050: error: expected ‘(’ before ‘HttpResource’
+WebserverWrap.cpp:13050: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:13050: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13051: error: cannot dynamic_cast ‘arg1’ (of type ‘<type error>’) to type ‘class Swig::Director*’ (source is not a pointer)
+WebserverWrap.cpp:13057: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:13057: error: ‘HttpResource’ is not a class or namespace
+WebserverWrap.cpp:13059: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:13070: error: expected type-specifier before ‘HttpResponse’
+WebserverWrap.cpp:13070: error: expected ‘)’ before ‘HttpResponse’
+WebserverWrap.cpp:13070: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpResource_render_500(PyObject*, PyObject*)’:
+WebserverWrap.cpp:13079: error: ‘HttpResource’ was not declared in this scope
+WebserverWrap.cpp:13079: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:13079: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:13079: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:13085: error: ‘HttpResponse’ was not declared in this scope
+WebserverWrap.cpp:13085: error: expected ‘;’ before ‘result’
+WebserverWrap.cpp:13092: error: expected type-specifier before ‘HttpResource’
+WebserverWrap.cpp:13092: error: expected ‘>’ before ‘HttpResource’
+WebserverWrap.cpp:13092: error: expected ‘(’ before ‘HttpResource’
+WebserverWrap.cpp:13092: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:13092: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13093: error: cannot dynamic_cast ‘arg1’ (of type ‘<type error>’) to type ‘class Swig::Director*’ (source is not a pointer)
+WebserverWrap.cpp:13099: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:13099: error: ‘HttpResource’ is not a class or namespace
+WebserverWrap.cpp:13101: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:13112: error: expected type-specifier before ‘HttpResponse’
+WebserverWrap.cpp:13112: error: expected ‘)’ before ‘HttpResponse’
+WebserverWrap.cpp:13112: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpResource_render_405(PyObject*, PyObject*)’:
+WebserverWrap.cpp:13121: error: ‘HttpResource’ was not declared in this scope
+WebserverWrap.cpp:13121: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:13121: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:13121: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:13127: error: ‘HttpResponse’ was not declared in this scope
+WebserverWrap.cpp:13127: error: expected ‘;’ before ‘result’
+WebserverWrap.cpp:13134: error: expected type-specifier before ‘HttpResource’
+WebserverWrap.cpp:13134: error: expected ‘>’ before ‘HttpResource’
+WebserverWrap.cpp:13134: error: expected ‘(’ before ‘HttpResource’
+WebserverWrap.cpp:13134: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:13134: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13135: error: cannot dynamic_cast ‘arg1’ (of type ‘<type error>’) to type ‘class Swig::Director*’ (source is not a pointer)
+WebserverWrap.cpp:13141: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:13141: error: ‘HttpResource’ is not a class or namespace
+WebserverWrap.cpp:13143: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:13154: error: expected type-specifier before ‘HttpResponse’
+WebserverWrap.cpp:13154: error: expected ‘)’ before ‘HttpResponse’
+WebserverWrap.cpp:13154: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpResource_render_GET(PyObject*, PyObject*)’:
+WebserverWrap.cpp:13163: error: ‘HttpResource’ was not declared in this scope
+WebserverWrap.cpp:13163: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:13163: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:13163: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:13164: error: ‘HttpRequest’ was not declared in this scope
+WebserverWrap.cpp:13164: error: ‘arg2’ was not declared in this scope
+WebserverWrap.cpp:13173: error: ‘HttpResponse’ was not declared in this scope
+WebserverWrap.cpp:13173: error: expected ‘;’ before ‘result’
+WebserverWrap.cpp:13180: error: expected type-specifier before ‘HttpResource’
+WebserverWrap.cpp:13180: error: expected ‘>’ before ‘HttpResource’
+WebserverWrap.cpp:13180: error: expected ‘(’ before ‘HttpResource’
+WebserverWrap.cpp:13180: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:13180: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13188: error: expected type-specifier before ‘HttpRequest’
+WebserverWrap.cpp:13188: error: expected ‘>’ before ‘HttpRequest’
+WebserverWrap.cpp:13188: error: expected ‘(’ before ‘HttpRequest’
+WebserverWrap.cpp:13188: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:13188: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13189: error: cannot dynamic_cast ‘arg1’ (of type ‘<type error>’) to type ‘class Swig::Director*’ (source is not a pointer)
+WebserverWrap.cpp:13195: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:13195: error: ‘HttpResource’ is not a class or namespace
+WebserverWrap.cpp:13195: error: expected ‘)’ before ‘const’
+WebserverWrap.cpp:13195: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13197: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:13197: error: expected ‘)’ before ‘const’
+WebserverWrap.cpp:13197: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13208: error: expected type-specifier before ‘HttpResponse’
+WebserverWrap.cpp:13208: error: expected ‘)’ before ‘HttpResponse’
+WebserverWrap.cpp:13208: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpResource_render_POST(PyObject*, PyObject*)’:
+WebserverWrap.cpp:13217: error: ‘HttpResource’ was not declared in this scope
+WebserverWrap.cpp:13217: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:13217: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:13217: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:13218: error: ‘HttpRequest’ was not declared in this scope
+WebserverWrap.cpp:13218: error: ‘arg2’ was not declared in this scope
+WebserverWrap.cpp:13227: error: ‘HttpResponse’ was not declared in this scope
+WebserverWrap.cpp:13227: error: expected ‘;’ before ‘result’
+WebserverWrap.cpp:13234: error: expected type-specifier before ‘HttpResource’
+WebserverWrap.cpp:13234: error: expected ‘>’ before ‘HttpResource’
+WebserverWrap.cpp:13234: error: expected ‘(’ before ‘HttpResource’
+WebserverWrap.cpp:13234: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:13234: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13242: error: expected type-specifier before ‘HttpRequest’
+WebserverWrap.cpp:13242: error: expected ‘>’ before ‘HttpRequest’
+WebserverWrap.cpp:13242: error: expected ‘(’ before ‘HttpRequest’
+WebserverWrap.cpp:13242: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:13242: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13243: error: cannot dynamic_cast ‘arg1’ (of type ‘<type error>’) to type ‘class Swig::Director*’ (source is not a pointer)
+WebserverWrap.cpp:13249: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:13249: error: ‘HttpResource’ is not a class or namespace
+WebserverWrap.cpp:13249: error: expected ‘)’ before ‘const’
+WebserverWrap.cpp:13249: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13251: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:13251: error: expected ‘)’ before ‘const’
+WebserverWrap.cpp:13251: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13262: error: expected type-specifier before ‘HttpResponse’
+WebserverWrap.cpp:13262: error: expected ‘)’ before ‘HttpResponse’
+WebserverWrap.cpp:13262: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpResource_render_PUT(PyObject*, PyObject*)’:
+WebserverWrap.cpp:13271: error: ‘HttpResource’ was not declared in this scope
+WebserverWrap.cpp:13271: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:13271: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:13271: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:13272: error: ‘HttpRequest’ was not declared in this scope
+WebserverWrap.cpp:13272: error: ‘arg2’ was not declared in this scope
+WebserverWrap.cpp:13281: error: ‘HttpResponse’ was not declared in this scope
+WebserverWrap.cpp:13281: error: expected ‘;’ before ‘result’
+WebserverWrap.cpp:13288: error: expected type-specifier before ‘HttpResource’
+WebserverWrap.cpp:13288: error: expected ‘>’ before ‘HttpResource’
+WebserverWrap.cpp:13288: error: expected ‘(’ before ‘HttpResource’
+WebserverWrap.cpp:13288: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:13288: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13296: error: expected type-specifier before ‘HttpRequest’
+WebserverWrap.cpp:13296: error: expected ‘>’ before ‘HttpRequest’
+WebserverWrap.cpp:13296: error: expected ‘(’ before ‘HttpRequest’
+WebserverWrap.cpp:13296: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:13296: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13297: error: cannot dynamic_cast ‘arg1’ (of type ‘<type error>’) to type ‘class Swig::Director*’ (source is not a pointer)
+WebserverWrap.cpp:13303: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:13303: error: ‘HttpResource’ is not a class or namespace
+WebserverWrap.cpp:13303: error: expected ‘)’ before ‘const’
+WebserverWrap.cpp:13303: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13305: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:13305: error: expected ‘)’ before ‘const’
+WebserverWrap.cpp:13305: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13316: error: expected type-specifier before ‘HttpResponse’
+WebserverWrap.cpp:13316: error: expected ‘)’ before ‘HttpResponse’
+WebserverWrap.cpp:13316: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpResource_render_HEAD(PyObject*, PyObject*)’:
+WebserverWrap.cpp:13325: error: ‘HttpResource’ was not declared in this scope
+WebserverWrap.cpp:13325: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:13325: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:13325: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:13326: error: ‘HttpRequest’ was not declared in this scope
+WebserverWrap.cpp:13326: error: ‘arg2’ was not declared in this scope
+WebserverWrap.cpp:13335: error: ‘HttpResponse’ was not declared in this scope
+WebserverWrap.cpp:13335: error: expected ‘;’ before ‘result’
+WebserverWrap.cpp:13342: error: expected type-specifier before ‘HttpResource’
+WebserverWrap.cpp:13342: error: expected ‘>’ before ‘HttpResource’
+WebserverWrap.cpp:13342: error: expected ‘(’ before ‘HttpResource’
+WebserverWrap.cpp:13342: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:13342: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13350: error: expected type-specifier before ‘HttpRequest’
+WebserverWrap.cpp:13350: error: expected ‘>’ before ‘HttpRequest’
+WebserverWrap.cpp:13350: error: expected ‘(’ before ‘HttpRequest’
+WebserverWrap.cpp:13350: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:13350: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13351: error: cannot dynamic_cast ‘arg1’ (of type ‘<type error>’) to type ‘class Swig::Director*’ (source is not a pointer)
+WebserverWrap.cpp:13357: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:13357: error: ‘HttpResource’ is not a class or namespace
+WebserverWrap.cpp:13357: error: expected ‘)’ before ‘const’
+WebserverWrap.cpp:13357: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13359: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:13359: error: expected ‘)’ before ‘const’
+WebserverWrap.cpp:13359: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13370: error: expected type-specifier before ‘HttpResponse’
+WebserverWrap.cpp:13370: error: expected ‘)’ before ‘HttpResponse’
+WebserverWrap.cpp:13370: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpResource_render_DELETE(PyObject*, PyObject*)’:
+WebserverWrap.cpp:13379: error: ‘HttpResource’ was not declared in this scope
+WebserverWrap.cpp:13379: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:13379: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:13379: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:13380: error: ‘HttpRequest’ was not declared in this scope
+WebserverWrap.cpp:13380: error: ‘arg2’ was not declared in this scope
+WebserverWrap.cpp:13389: error: ‘HttpResponse’ was not declared in this scope
+WebserverWrap.cpp:13389: error: expected ‘;’ before ‘result’
+WebserverWrap.cpp:13396: error: expected type-specifier before ‘HttpResource’
+WebserverWrap.cpp:13396: error: expected ‘>’ before ‘HttpResource’
+WebserverWrap.cpp:13396: error: expected ‘(’ before ‘HttpResource’
+WebserverWrap.cpp:13396: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:13396: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13404: error: expected type-specifier before ‘HttpRequest’
+WebserverWrap.cpp:13404: error: expected ‘>’ before ‘HttpRequest’
+WebserverWrap.cpp:13404: error: expected ‘(’ before ‘HttpRequest’
+WebserverWrap.cpp:13404: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:13404: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13405: error: cannot dynamic_cast ‘arg1’ (of type ‘<type error>’) to type ‘class Swig::Director*’ (source is not a pointer)
+WebserverWrap.cpp:13411: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:13411: error: ‘HttpResource’ is not a class or namespace
+WebserverWrap.cpp:13411: error: expected ‘)’ before ‘const’
+WebserverWrap.cpp:13411: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13413: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:13413: error: expected ‘)’ before ‘const’
+WebserverWrap.cpp:13413: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13424: error: expected type-specifier before ‘HttpResponse’
+WebserverWrap.cpp:13424: error: expected ‘)’ before ‘HttpResponse’
+WebserverWrap.cpp:13424: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpResource_render_TRACE(PyObject*, PyObject*)’:
+WebserverWrap.cpp:13433: error: ‘HttpResource’ was not declared in this scope
+WebserverWrap.cpp:13433: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:13433: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:13433: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:13434: error: ‘HttpRequest’ was not declared in this scope
+WebserverWrap.cpp:13434: error: ‘arg2’ was not declared in this scope
+WebserverWrap.cpp:13443: error: ‘HttpResponse’ was not declared in this scope
+WebserverWrap.cpp:13443: error: expected ‘;’ before ‘result’
+WebserverWrap.cpp:13450: error: expected type-specifier before ‘HttpResource’
+WebserverWrap.cpp:13450: error: expected ‘>’ before ‘HttpResource’
+WebserverWrap.cpp:13450: error: expected ‘(’ before ‘HttpResource’
+WebserverWrap.cpp:13450: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:13450: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13458: error: expected type-specifier before ‘HttpRequest’
+WebserverWrap.cpp:13458: error: expected ‘>’ before ‘HttpRequest’
+WebserverWrap.cpp:13458: error: expected ‘(’ before ‘HttpRequest’
+WebserverWrap.cpp:13458: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:13458: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13459: error: cannot dynamic_cast ‘arg1’ (of type ‘<type error>’) to type ‘class Swig::Director*’ (source is not a pointer)
+WebserverWrap.cpp:13465: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:13465: error: ‘HttpResource’ is not a class or namespace
+WebserverWrap.cpp:13465: error: expected ‘)’ before ‘const’
+WebserverWrap.cpp:13465: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13467: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:13467: error: expected ‘)’ before ‘const’
+WebserverWrap.cpp:13467: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13478: error: expected type-specifier before ‘HttpResponse’
+WebserverWrap.cpp:13478: error: expected ‘)’ before ‘HttpResponse’
+WebserverWrap.cpp:13478: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpResource_render_OPTIONS(PyObject*, PyObject*)’:
+WebserverWrap.cpp:13487: error: ‘HttpResource’ was not declared in this scope
+WebserverWrap.cpp:13487: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:13487: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:13487: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:13488: error: ‘HttpRequest’ was not declared in this scope
+WebserverWrap.cpp:13488: error: ‘arg2’ was not declared in this scope
+WebserverWrap.cpp:13497: error: ‘HttpResponse’ was not declared in this scope
+WebserverWrap.cpp:13497: error: expected ‘;’ before ‘result’
+WebserverWrap.cpp:13504: error: expected type-specifier before ‘HttpResource’
+WebserverWrap.cpp:13504: error: expected ‘>’ before ‘HttpResource’
+WebserverWrap.cpp:13504: error: expected ‘(’ before ‘HttpResource’
+WebserverWrap.cpp:13504: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:13504: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13512: error: expected type-specifier before ‘HttpRequest’
+WebserverWrap.cpp:13512: error: expected ‘>’ before ‘HttpRequest’
+WebserverWrap.cpp:13512: error: expected ‘(’ before ‘HttpRequest’
+WebserverWrap.cpp:13512: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:13512: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13513: error: cannot dynamic_cast ‘arg1’ (of type ‘<type error>’) to type ‘class Swig::Director*’ (source is not a pointer)
+WebserverWrap.cpp:13519: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:13519: error: ‘HttpResource’ is not a class or namespace
+WebserverWrap.cpp:13519: error: expected ‘)’ before ‘const’
+WebserverWrap.cpp:13519: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13521: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:13521: error: expected ‘)’ before ‘const’
+WebserverWrap.cpp:13521: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13532: error: expected type-specifier before ‘HttpResponse’
+WebserverWrap.cpp:13532: error: expected ‘)’ before ‘HttpResponse’
+WebserverWrap.cpp:13532: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpResource_render_CONNECT(PyObject*, PyObject*)’:
+WebserverWrap.cpp:13541: error: ‘HttpResource’ was not declared in this scope
+WebserverWrap.cpp:13541: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:13541: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:13541: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:13542: error: ‘HttpRequest’ was not declared in this scope
+WebserverWrap.cpp:13542: error: ‘arg2’ was not declared in this scope
+WebserverWrap.cpp:13551: error: ‘HttpResponse’ was not declared in this scope
+WebserverWrap.cpp:13551: error: expected ‘;’ before ‘result’
+WebserverWrap.cpp:13558: error: expected type-specifier before ‘HttpResource’
+WebserverWrap.cpp:13558: error: expected ‘>’ before ‘HttpResource’
+WebserverWrap.cpp:13558: error: expected ‘(’ before ‘HttpResource’
+WebserverWrap.cpp:13558: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:13558: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13566: error: expected type-specifier before ‘HttpRequest’
+WebserverWrap.cpp:13566: error: expected ‘>’ before ‘HttpRequest’
+WebserverWrap.cpp:13566: error: expected ‘(’ before ‘HttpRequest’
+WebserverWrap.cpp:13566: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:13566: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13567: error: cannot dynamic_cast ‘arg1’ (of type ‘<type error>’) to type ‘class Swig::Director*’ (source is not a pointer)
+WebserverWrap.cpp:13573: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:13573: error: ‘HttpResource’ is not a class or namespace
+WebserverWrap.cpp:13573: error: expected ‘)’ before ‘const’
+WebserverWrap.cpp:13573: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13575: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:13575: error: expected ‘)’ before ‘const’
+WebserverWrap.cpp:13575: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13586: error: expected type-specifier before ‘HttpResponse’
+WebserverWrap.cpp:13586: error: expected ‘)’ before ‘HttpResponse’
+WebserverWrap.cpp:13586: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpResource_routeRequest(PyObject*, PyObject*)’:
+WebserverWrap.cpp:13595: error: ‘HttpResource’ was not declared in this scope
+WebserverWrap.cpp:13595: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:13595: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:13595: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:13596: error: ‘HttpRequest’ was not declared in this scope
+WebserverWrap.cpp:13596: error: ‘arg2’ was not declared in this scope
+WebserverWrap.cpp:13605: error: ‘HttpResponse’ was not declared in this scope
+WebserverWrap.cpp:13605: error: expected ‘;’ before ‘result’
+WebserverWrap.cpp:13612: error: expected type-specifier before ‘HttpResource’
+WebserverWrap.cpp:13612: error: expected ‘>’ before ‘HttpResource’
+WebserverWrap.cpp:13612: error: expected ‘(’ before ‘HttpResource’
+WebserverWrap.cpp:13612: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:13612: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13620: error: expected type-specifier before ‘HttpRequest’
+WebserverWrap.cpp:13620: error: expected ‘>’ before ‘HttpRequest’
+WebserverWrap.cpp:13620: error: expected ‘(’ before ‘HttpRequest’
+WebserverWrap.cpp:13620: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:13620: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13621: error: cannot dynamic_cast ‘arg1’ (of type ‘<type error>’) to type ‘class Swig::Director*’ (source is not a pointer)
+WebserverWrap.cpp:13627: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:13627: error: ‘HttpResource’ is not a class or namespace
+WebserverWrap.cpp:13627: error: expected ‘)’ before ‘const’
+WebserverWrap.cpp:13627: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13629: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:13629: error: expected ‘)’ before ‘const’
+WebserverWrap.cpp:13629: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13640: error: expected type-specifier before ‘HttpResponse’
+WebserverWrap.cpp:13640: error: expected ‘)’ before ‘HttpResponse’
+WebserverWrap.cpp:13640: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpResource_setAllowing(PyObject*, PyObject*)’:
+WebserverWrap.cpp:13649: error: ‘HttpResource’ was not declared in this scope
+WebserverWrap.cpp:13649: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:13649: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:13649: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:13666: error: expected type-specifier before ‘HttpResource’
+WebserverWrap.cpp:13666: error: expected ‘>’ before ‘HttpResource’
+WebserverWrap.cpp:13666: error: expected ‘(’ before ‘HttpResource’
+WebserverWrap.cpp:13666: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:13666: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpResource_allowAll(PyObject*, PyObject*)’:
+WebserverWrap.cpp:13703: error: ‘HttpResource’ was not declared in this scope
+WebserverWrap.cpp:13703: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:13703: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:13703: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:13713: error: expected type-specifier before ‘HttpResource’
+WebserverWrap.cpp:13713: error: expected ‘>’ before ‘HttpResource’
+WebserverWrap.cpp:13713: error: expected ‘(’ before ‘HttpResource’
+WebserverWrap.cpp:13713: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:13713: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpResource_disallowAll(PyObject*, PyObject*)’:
+WebserverWrap.cpp:13732: error: ‘HttpResource’ was not declared in this scope
+WebserverWrap.cpp:13732: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:13732: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:13732: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:13742: error: expected type-specifier before ‘HttpResource’
+WebserverWrap.cpp:13742: error: expected ‘>’ before ‘HttpResource’
+WebserverWrap.cpp:13742: error: expected ‘(’ before ‘HttpResource’
+WebserverWrap.cpp:13742: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:13742: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_HttpResource_isAllowed(PyObject*, PyObject*)’:
+WebserverWrap.cpp:13761: error: ‘HttpResource’ was not declared in this scope
+WebserverWrap.cpp:13761: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:13761: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:13761: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:13775: error: expected type-specifier before ‘HttpResource’
+WebserverWrap.cpp:13775: error: expected ‘>’ before ‘HttpResource’
+WebserverWrap.cpp:13775: error: expected ‘(’ before ‘HttpResource’
+WebserverWrap.cpp:13775: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:13775: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_disown_HttpResource(PyObject*, PyObject*)’:
+WebserverWrap.cpp:13807: error: ‘HttpResource’ was not declared in this scope
+WebserverWrap.cpp:13807: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:13807: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:13807: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:13817: error: expected type-specifier before ‘HttpResource’
+WebserverWrap.cpp:13817: error: expected ‘>’ before ‘HttpResource’
+WebserverWrap.cpp:13817: error: expected ‘(’ before ‘HttpResource’
+WebserverWrap.cpp:13817: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:13817: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13821: error: cannot dynamic_cast ‘arg1’ (of type ‘<type error>’) to type ‘class Swig::Director*’ (source is not a pointer)
+WebserverWrap.cpp: In function ‘PyObject* _wrap_new_LoggingDelegate(PyObject*, PyObject*)’:
+WebserverWrap.cpp:13843: error: ‘LoggingDelegate’ was not declared in this scope
+WebserverWrap.cpp:13843: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:13848: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:13848: error: expected ‘;’ before ‘new’
+WebserverWrap.cpp: In function ‘PyObject* _wrap_delete_LoggingDelegate(PyObject*, PyObject*)’:
+WebserverWrap.cpp:13864: error: ‘LoggingDelegate’ was not declared in this scope
+WebserverWrap.cpp:13864: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:13864: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:13864: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:13874: error: expected type-specifier before ‘LoggingDelegate’
+WebserverWrap.cpp:13874: error: expected ‘>’ before ‘LoggingDelegate’
+WebserverWrap.cpp:13874: error: expected ‘(’ before ‘LoggingDelegate’
+WebserverWrap.cpp:13874: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:13874: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13877: error: type ‘<type error>’ argument given to ‘delete’, expected pointer
+WebserverWrap.cpp: In function ‘PyObject* _wrap_LoggingDelegate_log_access(PyObject*, PyObject*)’:
+WebserverWrap.cpp:13893: error: ‘LoggingDelegate’ was not declared in this scope
+WebserverWrap.cpp:13893: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:13893: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:13893: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:13906: error: expected type-specifier before ‘LoggingDelegate’
+WebserverWrap.cpp:13906: error: expected ‘>’ before ‘LoggingDelegate’
+WebserverWrap.cpp:13906: error: expected ‘(’ before ‘LoggingDelegate’
+WebserverWrap.cpp:13906: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:13906: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13920: error: expected ‘)’ before ‘const’
+WebserverWrap.cpp:13920: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_LoggingDelegate_log_error(PyObject*, PyObject*)’:
+WebserverWrap.cpp:13938: error: ‘LoggingDelegate’ was not declared in this scope
+WebserverWrap.cpp:13938: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:13938: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:13938: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:13951: error: expected type-specifier before ‘LoggingDelegate’
+WebserverWrap.cpp:13951: error: expected ‘>’ before ‘LoggingDelegate’
+WebserverWrap.cpp:13951: error: expected ‘(’ before ‘LoggingDelegate’
+WebserverWrap.cpp:13951: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:13951: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:13965: error: expected ‘)’ before ‘const’
+WebserverWrap.cpp:13965: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_new_RequestValidator(PyObject*, PyObject*)’:
+WebserverWrap.cpp:13990: error: ‘RequestValidator’ was not declared in this scope
+WebserverWrap.cpp:13990: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:13995: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:13995: error: expected ‘;’ before ‘new’
+WebserverWrap.cpp: In function ‘PyObject* _wrap_delete_RequestValidator(PyObject*, PyObject*)’:
+WebserverWrap.cpp:14011: error: ‘RequestValidator’ was not declared in this scope
+WebserverWrap.cpp:14011: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:14011: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:14011: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:14021: error: expected type-specifier before ‘RequestValidator’
+WebserverWrap.cpp:14021: error: expected ‘>’ before ‘RequestValidator’
+WebserverWrap.cpp:14021: error: expected ‘(’ before ‘RequestValidator’
+WebserverWrap.cpp:14021: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:14021: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:14024: error: type ‘<type error>’ argument given to ‘delete’, expected pointer
+WebserverWrap.cpp: In function ‘PyObject* _wrap_RequestValidator_validate(PyObject*, PyObject*)’:
+WebserverWrap.cpp:14040: error: ‘RequestValidator’ was not declared in this scope
+WebserverWrap.cpp:14040: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:14040: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:14040: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:14054: error: expected type-specifier before ‘RequestValidator’
+WebserverWrap.cpp:14054: error: expected ‘>’ before ‘RequestValidator’
+WebserverWrap.cpp:14054: error: expected ‘(’ before ‘RequestValidator’
+WebserverWrap.cpp:14054: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:14054: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:14068: error: expected ‘)’ before ‘const’
+WebserverWrap.cpp:14068: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_new_Unescaper(PyObject*, PyObject*)’:
+WebserverWrap.cpp:14093: error: ‘Unescaper’ was not declared in this scope
+WebserverWrap.cpp:14093: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:14098: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:14098: error: expected ‘;’ before ‘new’
+WebserverWrap.cpp: In function ‘PyObject* _wrap_delete_Unescaper(PyObject*, PyObject*)’:
+WebserverWrap.cpp:14114: error: ‘Unescaper’ was not declared in this scope
+WebserverWrap.cpp:14114: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:14114: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:14114: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:14124: error: expected type-specifier before ‘Unescaper’
+WebserverWrap.cpp:14124: error: expected ‘>’ before ‘Unescaper’
+WebserverWrap.cpp:14124: error: expected ‘(’ before ‘Unescaper’
+WebserverWrap.cpp:14124: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:14124: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:14127: error: type ‘<type error>’ argument given to ‘delete’, expected pointer
+WebserverWrap.cpp: In function ‘PyObject* _wrap_Unescaper_unescape(PyObject*, PyObject*)’:
+WebserverWrap.cpp:14143: error: ‘Unescaper’ was not declared in this scope
+WebserverWrap.cpp:14143: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:14143: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:14143: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:14158: error: expected type-specifier before ‘Unescaper’
+WebserverWrap.cpp:14158: error: expected ‘>’ before ‘Unescaper’
+WebserverWrap.cpp:14158: error: expected ‘(’ before ‘Unescaper’
+WebserverWrap.cpp:14158: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:14158: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:14166: error: expected ‘)’ before ‘const’
+WebserverWrap.cpp:14166: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_new_Webserver__SWIG_0(PyObject*, PyObject*)’:
+WebserverWrap.cpp:14197: error: ‘LoggingDelegate’ was not declared in this scope
+WebserverWrap.cpp:14197: error: ‘arg7’ was not declared in this scope
+WebserverWrap.cpp:14197: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:14197: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:14198: error: ‘RequestValidator’ was not declared in this scope
+WebserverWrap.cpp:14198: error: ‘arg8’ was not declared in this scope
+WebserverWrap.cpp:14198: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:14198: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:14199: error: ‘Unescaper’ was not declared in this scope
+WebserverWrap.cpp:14199: error: ‘arg9’ was not declared in this scope
+WebserverWrap.cpp:14199: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:14199: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:14205: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp:14205: error: expected ‘;’ before ‘arg15’
+WebserverWrap.cpp:14253: error: ‘Webserver’ was not declared in this scope
+WebserverWrap.cpp:14253: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:14290: error: expected type-specifier before ‘LoggingDelegate’
+WebserverWrap.cpp:14290: error: expected ‘>’ before ‘LoggingDelegate’
+WebserverWrap.cpp:14290: error: expected ‘(’ before ‘LoggingDelegate’
+WebserverWrap.cpp:14290: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:14290: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:14295: error: expected type-specifier before ‘RequestValidator’
+WebserverWrap.cpp:14295: error: expected ‘>’ before ‘RequestValidator’
+WebserverWrap.cpp:14295: error: expected ‘(’ before ‘RequestValidator’
+WebserverWrap.cpp:14295: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:14295: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:14300: error: expected type-specifier before ‘Unescaper’
+WebserverWrap.cpp:14300: error: expected ‘>’ before ‘Unescaper’
+WebserverWrap.cpp:14300: error: expected ‘(’ before ‘Unescaper’
+WebserverWrap.cpp:14300: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:14300: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:14354: error: ‘arg15’ was not declared in this scope
+WebserverWrap.cpp:14354: error: expected type-specifier before ‘HttpUtils’
+WebserverWrap.cpp:14354: error: expected ‘>’ before ‘HttpUtils’
+WebserverWrap.cpp:14354: error: expected ‘(’ before ‘HttpUtils’
+WebserverWrap.cpp:14354: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp:14354: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:14371: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:14371: error: expected ‘;’ before ‘new’
+WebserverWrap.cpp: In function ‘PyObject* _wrap_new_Webserver__SWIG_1(PyObject*, PyObject*)’:
+WebserverWrap.cpp:14401: error: ‘LoggingDelegate’ was not declared in this scope
+WebserverWrap.cpp:14401: error: ‘arg7’ was not declared in this scope
+WebserverWrap.cpp:14401: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:14401: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:14402: error: ‘RequestValidator’ was not declared in this scope
+WebserverWrap.cpp:14402: error: ‘arg8’ was not declared in this scope
+WebserverWrap.cpp:14402: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:14402: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:14403: error: ‘Unescaper’ was not declared in this scope
+WebserverWrap.cpp:14403: error: ‘arg9’ was not declared in this scope
+WebserverWrap.cpp:14403: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:14403: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:14409: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp:14409: error: expected ‘;’ before ‘arg15’
+WebserverWrap.cpp:14453: error: ‘Webserver’ was not declared in this scope
+WebserverWrap.cpp:14453: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:14490: error: expected type-specifier before ‘LoggingDelegate’
+WebserverWrap.cpp:14490: error: expected ‘>’ before ‘LoggingDelegate’
+WebserverWrap.cpp:14490: error: expected ‘(’ before ‘LoggingDelegate’
+WebserverWrap.cpp:14490: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:14490: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:14495: error: expected type-specifier before ‘RequestValidator’
+WebserverWrap.cpp:14495: error: expected ‘>’ before ‘RequestValidator’
+WebserverWrap.cpp:14495: error: expected ‘(’ before ‘RequestValidator’
+WebserverWrap.cpp:14495: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:14495: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:14500: error: expected type-specifier before ‘Unescaper’
+WebserverWrap.cpp:14500: error: expected ‘>’ before ‘Unescaper’
+WebserverWrap.cpp:14500: error: expected ‘(’ before ‘Unescaper’
+WebserverWrap.cpp:14500: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:14500: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:14554: error: ‘arg15’ was not declared in this scope
+WebserverWrap.cpp:14554: error: expected type-specifier before ‘HttpUtils’
+WebserverWrap.cpp:14554: error: expected ‘>’ before ‘HttpUtils’
+WebserverWrap.cpp:14554: error: expected ‘(’ before ‘HttpUtils’
+WebserverWrap.cpp:14554: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp:14554: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:14566: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:14566: error: expected ‘;’ before ‘new’
+WebserverWrap.cpp: In function ‘PyObject* _wrap_new_Webserver__SWIG_2(PyObject*, PyObject*)’:
+WebserverWrap.cpp:14596: error: ‘LoggingDelegate’ was not declared in this scope
+WebserverWrap.cpp:14596: error: ‘arg7’ was not declared in this scope
+WebserverWrap.cpp:14596: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:14596: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:14597: error: ‘RequestValidator’ was not declared in this scope
+WebserverWrap.cpp:14597: error: ‘arg8’ was not declared in this scope
+WebserverWrap.cpp:14597: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:14597: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:14598: error: ‘Unescaper’ was not declared in this scope
+WebserverWrap.cpp:14598: error: ‘arg9’ was not declared in this scope
+WebserverWrap.cpp:14598: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:14598: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:14604: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp:14604: error: expected ‘;’ before ‘arg15’
+WebserverWrap.cpp:14646: error: ‘Webserver’ was not declared in this scope
+WebserverWrap.cpp:14646: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:14683: error: expected type-specifier before ‘LoggingDelegate’
+WebserverWrap.cpp:14683: error: expected ‘>’ before ‘LoggingDelegate’
+WebserverWrap.cpp:14683: error: expected ‘(’ before ‘LoggingDelegate’
+WebserverWrap.cpp:14683: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:14683: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:14688: error: expected type-specifier before ‘RequestValidator’
+WebserverWrap.cpp:14688: error: expected ‘>’ before ‘RequestValidator’
+WebserverWrap.cpp:14688: error: expected ‘(’ before ‘RequestValidator’
+WebserverWrap.cpp:14688: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:14688: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:14693: error: expected type-specifier before ‘Unescaper’
+WebserverWrap.cpp:14693: error: expected ‘>’ before ‘Unescaper’
+WebserverWrap.cpp:14693: error: expected ‘(’ before ‘Unescaper’
+WebserverWrap.cpp:14693: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:14693: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:14747: error: ‘arg15’ was not declared in this scope
+WebserverWrap.cpp:14747: error: expected type-specifier before ‘HttpUtils’
+WebserverWrap.cpp:14747: error: expected ‘>’ before ‘HttpUtils’
+WebserverWrap.cpp:14747: error: expected ‘(’ before ‘HttpUtils’
+WebserverWrap.cpp:14747: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp:14747: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:14750: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:14750: error: expected ‘;’ before ‘new’
+WebserverWrap.cpp: In function ‘PyObject* _wrap_new_Webserver__SWIG_3(PyObject*, PyObject*)’:
+WebserverWrap.cpp:14780: error: ‘LoggingDelegate’ was not declared in this scope
+WebserverWrap.cpp:14780: error: ‘arg7’ was not declared in this scope
+WebserverWrap.cpp:14780: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:14780: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:14781: error: ‘RequestValidator’ was not declared in this scope
+WebserverWrap.cpp:14781: error: ‘arg8’ was not declared in this scope
+WebserverWrap.cpp:14781: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:14781: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:14782: error: ‘Unescaper’ was not declared in this scope
+WebserverWrap.cpp:14782: error: ‘arg9’ was not declared in this scope
+WebserverWrap.cpp:14782: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:14782: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:14826: error: ‘Webserver’ was not declared in this scope
+WebserverWrap.cpp:14826: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:14863: error: expected type-specifier before ‘LoggingDelegate’
+WebserverWrap.cpp:14863: error: expected ‘>’ before ‘LoggingDelegate’
+WebserverWrap.cpp:14863: error: expected ‘(’ before ‘LoggingDelegate’
+WebserverWrap.cpp:14863: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:14863: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:14868: error: expected type-specifier before ‘RequestValidator’
+WebserverWrap.cpp:14868: error: expected ‘>’ before ‘RequestValidator’
+WebserverWrap.cpp:14868: error: expected ‘(’ before ‘RequestValidator’
+WebserverWrap.cpp:14868: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:14868: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:14873: error: expected type-specifier before ‘Unescaper’
+WebserverWrap.cpp:14873: error: expected ‘>’ before ‘Unescaper’
+WebserverWrap.cpp:14873: error: expected ‘(’ before ‘Unescaper’
+WebserverWrap.cpp:14873: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:14873: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:14925: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:14925: error: expected ‘;’ before ‘new’
+WebserverWrap.cpp: In function ‘PyObject* _wrap_new_Webserver__SWIG_4(PyObject*, PyObject*)’:
+WebserverWrap.cpp:14955: error: ‘LoggingDelegate’ was not declared in this scope
+WebserverWrap.cpp:14955: error: ‘arg7’ was not declared in this scope
+WebserverWrap.cpp:14955: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:14955: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:14956: error: ‘RequestValidator’ was not declared in this scope
+WebserverWrap.cpp:14956: error: ‘arg8’ was not declared in this scope
+WebserverWrap.cpp:14956: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:14956: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:14957: error: ‘Unescaper’ was not declared in this scope
+WebserverWrap.cpp:14957: error: ‘arg9’ was not declared in this scope
+WebserverWrap.cpp:14957: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:14957: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:14998: error: ‘Webserver’ was not declared in this scope
+WebserverWrap.cpp:14998: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:15035: error: expected type-specifier before ‘LoggingDelegate’
+WebserverWrap.cpp:15035: error: expected ‘>’ before ‘LoggingDelegate’
+WebserverWrap.cpp:15035: error: expected ‘(’ before ‘LoggingDelegate’
+WebserverWrap.cpp:15035: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:15035: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:15040: error: expected type-specifier before ‘RequestValidator’
+WebserverWrap.cpp:15040: error: expected ‘>’ before ‘RequestValidator’
+WebserverWrap.cpp:15040: error: expected ‘(’ before ‘RequestValidator’
+WebserverWrap.cpp:15040: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:15040: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:15045: error: expected type-specifier before ‘Unescaper’
+WebserverWrap.cpp:15045: error: expected ‘>’ before ‘Unescaper’
+WebserverWrap.cpp:15045: error: expected ‘(’ before ‘Unescaper’
+WebserverWrap.cpp:15045: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:15045: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:15086: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:15086: error: expected ‘;’ before ‘new’
+WebserverWrap.cpp: In function ‘PyObject* _wrap_new_Webserver__SWIG_5(PyObject*, PyObject*)’:
+WebserverWrap.cpp:15114: error: ‘LoggingDelegate’ was not declared in this scope
+WebserverWrap.cpp:15114: error: ‘arg7’ was not declared in this scope
+WebserverWrap.cpp:15114: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:15114: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:15115: error: ‘RequestValidator’ was not declared in this scope
+WebserverWrap.cpp:15115: error: ‘arg8’ was not declared in this scope
+WebserverWrap.cpp:15115: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:15115: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:15116: error: ‘Unescaper’ was not declared in this scope
+WebserverWrap.cpp:15116: error: ‘arg9’ was not declared in this scope
+WebserverWrap.cpp:15116: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:15116: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:15154: error: ‘Webserver’ was not declared in this scope
+WebserverWrap.cpp:15154: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:15191: error: expected type-specifier before ‘LoggingDelegate’
+WebserverWrap.cpp:15191: error: expected ‘>’ before ‘LoggingDelegate’
+WebserverWrap.cpp:15191: error: expected ‘(’ before ‘LoggingDelegate’
+WebserverWrap.cpp:15191: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:15191: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:15196: error: expected type-specifier before ‘RequestValidator’
+WebserverWrap.cpp:15196: error: expected ‘>’ before ‘RequestValidator’
+WebserverWrap.cpp:15196: error: expected ‘(’ before ‘RequestValidator’
+WebserverWrap.cpp:15196: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:15196: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:15201: error: expected type-specifier before ‘Unescaper’
+WebserverWrap.cpp:15201: error: expected ‘>’ before ‘Unescaper’
+WebserverWrap.cpp:15201: error: expected ‘(’ before ‘Unescaper’
+WebserverWrap.cpp:15201: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:15201: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:15231: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:15231: error: expected ‘;’ before ‘new’
+WebserverWrap.cpp: In function ‘PyObject* _wrap_new_Webserver__SWIG_6(PyObject*, PyObject*)’:
+WebserverWrap.cpp:15257: error: ‘LoggingDelegate’ was not declared in this scope
+WebserverWrap.cpp:15257: error: ‘arg7’ was not declared in this scope
+WebserverWrap.cpp:15257: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:15257: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:15258: error: ‘RequestValidator’ was not declared in this scope
+WebserverWrap.cpp:15258: error: ‘arg8’ was not declared in this scope
+WebserverWrap.cpp:15258: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:15258: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:15259: error: ‘Unescaper’ was not declared in this scope
+WebserverWrap.cpp:15259: error: ‘arg9’ was not declared in this scope
+WebserverWrap.cpp:15259: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:15259: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:15294: error: ‘Webserver’ was not declared in this scope
+WebserverWrap.cpp:15294: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:15331: error: expected type-specifier before ‘LoggingDelegate’
+WebserverWrap.cpp:15331: error: expected ‘>’ before ‘LoggingDelegate’
+WebserverWrap.cpp:15331: error: expected ‘(’ before ‘LoggingDelegate’
+WebserverWrap.cpp:15331: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:15331: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:15336: error: expected type-specifier before ‘RequestValidator’
+WebserverWrap.cpp:15336: error: expected ‘>’ before ‘RequestValidator’
+WebserverWrap.cpp:15336: error: expected ‘(’ before ‘RequestValidator’
+WebserverWrap.cpp:15336: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:15336: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:15341: error: expected type-specifier before ‘Unescaper’
+WebserverWrap.cpp:15341: error: expected ‘>’ before ‘Unescaper’
+WebserverWrap.cpp:15341: error: expected ‘(’ before ‘Unescaper’
+WebserverWrap.cpp:15341: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:15341: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:15360: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:15360: error: expected ‘;’ before ‘new’
+WebserverWrap.cpp: In function ‘PyObject* _wrap_new_Webserver__SWIG_7(PyObject*, PyObject*)’:
+WebserverWrap.cpp:15384: error: ‘LoggingDelegate’ was not declared in this scope
+WebserverWrap.cpp:15384: error: ‘arg7’ was not declared in this scope
+WebserverWrap.cpp:15384: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:15384: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:15385: error: ‘RequestValidator’ was not declared in this scope
+WebserverWrap.cpp:15385: error: ‘arg8’ was not declared in this scope
+WebserverWrap.cpp:15385: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:15385: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:15386: error: ‘Unescaper’ was not declared in this scope
+WebserverWrap.cpp:15386: error: ‘arg9’ was not declared in this scope
+WebserverWrap.cpp:15386: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:15386: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:15418: error: ‘Webserver’ was not declared in this scope
+WebserverWrap.cpp:15418: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:15455: error: expected type-specifier before ‘LoggingDelegate’
+WebserverWrap.cpp:15455: error: expected ‘>’ before ‘LoggingDelegate’
+WebserverWrap.cpp:15455: error: expected ‘(’ before ‘LoggingDelegate’
+WebserverWrap.cpp:15455: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:15455: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:15460: error: expected type-specifier before ‘RequestValidator’
+WebserverWrap.cpp:15460: error: expected ‘>’ before ‘RequestValidator’
+WebserverWrap.cpp:15460: error: expected ‘(’ before ‘RequestValidator’
+WebserverWrap.cpp:15460: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:15460: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:15465: error: expected type-specifier before ‘Unescaper’
+WebserverWrap.cpp:15465: error: expected ‘>’ before ‘Unescaper’
+WebserverWrap.cpp:15465: error: expected ‘(’ before ‘Unescaper’
+WebserverWrap.cpp:15465: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:15465: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:15473: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:15473: error: expected ‘;’ before ‘new’
+WebserverWrap.cpp: In function ‘PyObject* _wrap_new_Webserver__SWIG_8(PyObject*, PyObject*)’:
+WebserverWrap.cpp:15495: error: ‘LoggingDelegate’ was not declared in this scope
+WebserverWrap.cpp:15495: error: ‘arg7’ was not declared in this scope
+WebserverWrap.cpp:15495: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:15495: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:15496: error: ‘RequestValidator’ was not declared in this scope
+WebserverWrap.cpp:15496: error: ‘arg8’ was not declared in this scope
+WebserverWrap.cpp:15496: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:15496: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:15497: error: ‘Unescaper’ was not declared in this scope
+WebserverWrap.cpp:15497: error: ‘arg9’ was not declared in this scope
+WebserverWrap.cpp:15497: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:15497: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:15525: error: ‘Webserver’ was not declared in this scope
+WebserverWrap.cpp:15525: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:15562: error: expected type-specifier before ‘LoggingDelegate’
+WebserverWrap.cpp:15562: error: expected ‘>’ before ‘LoggingDelegate’
+WebserverWrap.cpp:15562: error: expected ‘(’ before ‘LoggingDelegate’
+WebserverWrap.cpp:15562: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:15562: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:15567: error: expected type-specifier before ‘RequestValidator’
+WebserverWrap.cpp:15567: error: expected ‘>’ before ‘RequestValidator’
+WebserverWrap.cpp:15567: error: expected ‘(’ before ‘RequestValidator’
+WebserverWrap.cpp:15567: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:15567: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:15572: error: expected type-specifier before ‘Unescaper’
+WebserverWrap.cpp:15572: error: expected ‘>’ before ‘Unescaper’
+WebserverWrap.cpp:15572: error: expected ‘(’ before ‘Unescaper’
+WebserverWrap.cpp:15572: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:15572: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:15575: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:15575: error: expected ‘;’ before ‘new’
+WebserverWrap.cpp: In function ‘PyObject* _wrap_new_Webserver__SWIG_9(PyObject*, PyObject*)’:
+WebserverWrap.cpp:15597: error: ‘LoggingDelegate’ was not declared in this scope
+WebserverWrap.cpp:15597: error: ‘arg7’ was not declared in this scope
+WebserverWrap.cpp:15597: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:15597: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:15598: error: ‘RequestValidator’ was not declared in this scope
+WebserverWrap.cpp:15598: error: ‘arg8’ was not declared in this scope
+WebserverWrap.cpp:15598: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:15598: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:15623: error: ‘Webserver’ was not declared in this scope
+WebserverWrap.cpp:15623: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:15660: error: expected type-specifier before ‘LoggingDelegate’
+WebserverWrap.cpp:15660: error: expected ‘>’ before ‘LoggingDelegate’
+WebserverWrap.cpp:15660: error: expected ‘(’ before ‘LoggingDelegate’
+WebserverWrap.cpp:15660: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:15660: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:15665: error: expected type-specifier before ‘RequestValidator’
+WebserverWrap.cpp:15665: error: expected ‘>’ before ‘RequestValidator’
+WebserverWrap.cpp:15665: error: expected ‘(’ before ‘RequestValidator’
+WebserverWrap.cpp:15665: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:15665: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:15668: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:15668: error: expected ‘;’ before ‘new’
+WebserverWrap.cpp: In function ‘PyObject* _wrap_new_Webserver__SWIG_10(PyObject*, PyObject*)’:
+WebserverWrap.cpp:15690: error: ‘LoggingDelegate’ was not declared in this scope
+WebserverWrap.cpp:15690: error: ‘arg7’ was not declared in this scope
+WebserverWrap.cpp:15690: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:15690: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:15712: error: ‘Webserver’ was not declared in this scope
+WebserverWrap.cpp:15712: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:15749: error: expected type-specifier before ‘LoggingDelegate’
+WebserverWrap.cpp:15749: error: expected ‘>’ before ‘LoggingDelegate’
+WebserverWrap.cpp:15749: error: expected ‘(’ before ‘LoggingDelegate’
+WebserverWrap.cpp:15749: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:15749: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:15752: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:15752: error: expected ‘;’ before ‘new’
+WebserverWrap.cpp: In function ‘PyObject* _wrap_new_Webserver__SWIG_11(PyObject*, PyObject*)’:
+WebserverWrap.cpp:15792: error: ‘Webserver’ was not declared in this scope
+WebserverWrap.cpp:15792: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:15827: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:15827: error: expected ‘;’ before ‘new’
+WebserverWrap.cpp: In function ‘PyObject* _wrap_new_Webserver__SWIG_12(PyObject*, PyObject*)’:
+WebserverWrap.cpp:15863: error: ‘Webserver’ was not declared in this scope
+WebserverWrap.cpp:15863: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:15893: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:15893: error: expected ‘;’ before ‘new’
+WebserverWrap.cpp: In function ‘PyObject* _wrap_new_Webserver__SWIG_13(PyObject*, PyObject*)’:
+WebserverWrap.cpp:15925: error: ‘Webserver’ was not declared in this scope
+WebserverWrap.cpp:15925: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:15950: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:15950: error: expected ‘;’ before ‘new’
+WebserverWrap.cpp: In function ‘PyObject* _wrap_new_Webserver__SWIG_14(PyObject*, PyObject*)’:
+WebserverWrap.cpp:15978: error: ‘Webserver’ was not declared in this scope
+WebserverWrap.cpp:15978: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:15998: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:15998: error: expected ‘;’ before ‘new’
+WebserverWrap.cpp: In function ‘PyObject* _wrap_new_Webserver__SWIG_15(PyObject*, PyObject*)’:
+WebserverWrap.cpp:16022: error: ‘Webserver’ was not declared in this scope
+WebserverWrap.cpp:16022: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:16037: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:16037: error: expected ‘;’ before ‘new’
+WebserverWrap.cpp: In function ‘PyObject* _wrap_new_Webserver__SWIG_16(PyObject*, PyObject*)’:
+WebserverWrap.cpp:16057: error: ‘Webserver’ was not declared in this scope
+WebserverWrap.cpp:16057: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:16067: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:16067: error: expected ‘;’ before ‘new’
+WebserverWrap.cpp: In function ‘PyObject* _wrap_new_Webserver__SWIG_17(PyObject*, PyObject*)’:
+WebserverWrap.cpp:16083: error: ‘Webserver’ was not declared in this scope
+WebserverWrap.cpp:16083: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:16088: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:16088: error: expected ‘;’ before ‘new’
+WebserverWrap.cpp: In function ‘PyObject* _wrap_delete_Webserver(PyObject*, PyObject*)’:
+WebserverWrap.cpp:17051: error: ‘Webserver’ was not declared in this scope
+WebserverWrap.cpp:17051: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:17051: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:17051: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:17061: error: expected type-specifier before ‘Webserver’
+WebserverWrap.cpp:17061: error: expected ‘>’ before ‘Webserver’
+WebserverWrap.cpp:17061: error: expected ‘(’ before ‘Webserver’
+WebserverWrap.cpp:17061: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:17061: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:17064: error: type ‘<type error>’ argument given to ‘delete’, expected pointer
+WebserverWrap.cpp: In function ‘PyObject* _wrap_Webserver_start__SWIG_0(PyObject*, PyObject*)’:
+WebserverWrap.cpp:17080: error: ‘Webserver’ was not declared in this scope
+WebserverWrap.cpp:17080: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:17080: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:17080: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:17095: error: expected type-specifier before ‘Webserver’
+WebserverWrap.cpp:17095: error: expected ‘>’ before ‘Webserver’
+WebserverWrap.cpp:17095: error: expected ‘(’ before ‘Webserver’
+WebserverWrap.cpp:17095: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:17095: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_Webserver_start__SWIG_1(PyObject*, PyObject*)’:
+WebserverWrap.cpp:17119: error: ‘Webserver’ was not declared in this scope
+WebserverWrap.cpp:17119: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:17119: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:17119: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:17130: error: expected type-specifier before ‘Webserver’
+WebserverWrap.cpp:17130: error: expected ‘>’ before ‘Webserver’
+WebserverWrap.cpp:17130: error: expected ‘(’ before ‘Webserver’
+WebserverWrap.cpp:17130: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:17130: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_Webserver_stop(PyObject*, PyObject*)’:
+WebserverWrap.cpp:17193: error: ‘Webserver’ was not declared in this scope
+WebserverWrap.cpp:17193: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:17193: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:17193: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:17204: error: expected type-specifier before ‘Webserver’
+WebserverWrap.cpp:17204: error: expected ‘>’ before ‘Webserver’
+WebserverWrap.cpp:17204: error: expected ‘(’ before ‘Webserver’
+WebserverWrap.cpp:17204: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:17204: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_Webserver_isRunning(PyObject*, PyObject*)’:
+WebserverWrap.cpp:17223: error: ‘Webserver’ was not declared in this scope
+WebserverWrap.cpp:17223: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:17223: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:17223: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:17234: error: expected type-specifier before ‘Webserver’
+WebserverWrap.cpp:17234: error: expected ‘>’ before ‘Webserver’
+WebserverWrap.cpp:17234: error: expected ‘(’ before ‘Webserver’
+WebserverWrap.cpp:17234: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:17234: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_Webserver_registerResource__SWIG_0(PyObject*, PyObject*)’:
+WebserverWrap.cpp:17253: error: ‘Webserver’ was not declared in this scope
+WebserverWrap.cpp:17253: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:17253: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:17253: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:17255: error: ‘HttpResource’ was not declared in this scope
+WebserverWrap.cpp:17255: error: ‘arg3’ was not declared in this scope
+WebserverWrap.cpp:17255: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:17255: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:17274: error: expected type-specifier before ‘Webserver’
+WebserverWrap.cpp:17274: error: expected ‘>’ before ‘Webserver’
+WebserverWrap.cpp:17274: error: expected ‘(’ before ‘Webserver’
+WebserverWrap.cpp:17274: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:17274: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:17290: error: expected type-specifier before ‘HttpResource’
+WebserverWrap.cpp:17290: error: expected ‘>’ before ‘HttpResource’
+WebserverWrap.cpp:17290: error: expected ‘(’ before ‘HttpResource’
+WebserverWrap.cpp:17290: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:17290: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_Webserver_registerResource__SWIG_1(PyObject*, PyObject*)’:
+WebserverWrap.cpp:17316: error: ‘Webserver’ was not declared in this scope
+WebserverWrap.cpp:17316: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:17316: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:17316: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:17318: error: ‘HttpResource’ was not declared in this scope
+WebserverWrap.cpp:17318: error: ‘arg3’ was not declared in this scope
+WebserverWrap.cpp:17318: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:17318: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:17333: error: expected type-specifier before ‘Webserver’
+WebserverWrap.cpp:17333: error: expected ‘>’ before ‘Webserver’
+WebserverWrap.cpp:17333: error: expected ‘(’ before ‘Webserver’
+WebserverWrap.cpp:17333: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:17333: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:17349: error: expected type-specifier before ‘HttpResource’
+WebserverWrap.cpp:17349: error: expected ‘>’ before ‘HttpResource’
+WebserverWrap.cpp:17349: error: expected ‘(’ before ‘HttpResource’
+WebserverWrap.cpp:17349: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:17349: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_Webserver_sweetKill(PyObject*, PyObject*)’:
+WebserverWrap.cpp:17432: error: ‘Webserver’ was not declared in this scope
+WebserverWrap.cpp:17432: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:17432: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:17432: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:17442: error: expected type-specifier before ‘Webserver’
+WebserverWrap.cpp:17442: error: expected ‘>’ before ‘Webserver’
+WebserverWrap.cpp:17442: error: expected ‘(’ before ‘Webserver’
+WebserverWrap.cpp:17442: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:17442: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_policyCallback(PyObject*, PyObject*)’:
+WebserverWrap.cpp:17462: error: ‘sockaddr’ was not declared in this scope
+WebserverWrap.cpp:17462: error: ‘arg2’ was not declared in this scope
+WebserverWrap.cpp:17462: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:17462: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:17483: error: expected type-specifier before ‘sockaddr’
+WebserverWrap.cpp:17483: error: expected ‘>’ before ‘sockaddr’
+WebserverWrap.cpp:17483: error: expected ‘(’ before ‘sockaddr’
+WebserverWrap.cpp:17483: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:17483: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:17499: error: expected ‘)’ before ‘const’
+WebserverWrap.cpp:17499: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_error_log(PyObject*, PyObject*)’:
+WebserverWrap.cpp:17553: error: ‘error_log’ was not declared in this scope
+WebserverWrap.cpp: In function ‘PyObject* _wrap_access_log(PyObject*, PyObject*)’:
+WebserverWrap.cpp:17571: error: ‘Webserver’ was not declared in this scope
+WebserverWrap.cpp:17571: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:17571: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:17571: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:17583: error: expected type-specifier before ‘Webserver’
+WebserverWrap.cpp:17583: error: expected ‘>’ before ‘Webserver’
+WebserverWrap.cpp:17583: error: expected ‘(’ before ‘Webserver’
+WebserverWrap.cpp:17583: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:17583: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:17595: error: ‘access_log’ was not declared in this scope
+WebserverWrap.cpp: In function ‘PyObject* _wrap_uri_log(PyObject*, PyObject*)’:
+WebserverWrap.cpp:17633: error: ‘uri_log’ was not declared in this scope
+WebserverWrap.cpp: In function ‘PyObject* _wrap_unescaper_func(PyObject*, PyObject*)’:
+WebserverWrap.cpp:17652: error: ‘MHD_Connection’ was not declared in this scope
+WebserverWrap.cpp:17652: error: ‘arg2’ was not declared in this scope
+WebserverWrap.cpp:17652: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:17652: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:17674: error: expected type-specifier before ‘MHD_Connection’
+WebserverWrap.cpp:17674: error: expected ‘>’ before ‘MHD_Connection’
+WebserverWrap.cpp:17674: error: expected ‘(’ before ‘MHD_Connection’
+WebserverWrap.cpp:17674: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:17674: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:17682: error: ‘unescaper_func’ was not declared in this scope
+WebserverWrap.cpp: In function ‘PyObject* _wrap_ModdedRequest_pp_set(PyObject*, PyObject*)’:
+WebserverWrap.cpp:17707: error: ‘ModdedRequest’ was not declared in this scope
+WebserverWrap.cpp:17707: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:17707: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:17707: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:17708: error: ‘MHD_PostProcessor’ was not declared in this scope
+WebserverWrap.cpp:17708: error: ‘arg2’ was not declared in this scope
+WebserverWrap.cpp:17708: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:17708: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:17721: error: expected type-specifier before ‘ModdedRequest’
+WebserverWrap.cpp:17721: error: expected ‘>’ before ‘ModdedRequest’
+WebserverWrap.cpp:17721: error: expected ‘(’ before ‘ModdedRequest’
+WebserverWrap.cpp:17721: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:17721: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:17726: error: expected type-specifier before ‘MHD_PostProcessor’
+WebserverWrap.cpp:17726: error: expected ‘>’ before ‘MHD_PostProcessor’
+WebserverWrap.cpp:17726: error: expected ‘(’ before ‘MHD_PostProcessor’
+WebserverWrap.cpp:17726: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:17726: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_ModdedRequest_pp_get(PyObject*, PyObject*)’:
+WebserverWrap.cpp:17737: error: ‘ModdedRequest’ was not declared in this scope
+WebserverWrap.cpp:17737: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:17737: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:17737: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:17741: error: ‘MHD_PostProcessor’ was not declared in this scope
+WebserverWrap.cpp:17741: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:17748: error: expected type-specifier before ‘ModdedRequest’
+WebserverWrap.cpp:17748: error: expected ‘>’ before ‘ModdedRequest’
+WebserverWrap.cpp:17748: error: expected ‘(’ before ‘ModdedRequest’
+WebserverWrap.cpp:17748: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:17748: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:17749: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_ModdedRequest_completeUri_set(PyObject*, PyObject*)’:
+WebserverWrap.cpp:17759: error: ‘ModdedRequest’ was not declared in this scope
+WebserverWrap.cpp:17759: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:17759: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:17759: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:17773: error: expected type-specifier before ‘ModdedRequest’
+WebserverWrap.cpp:17773: error: expected ‘>’ before ‘ModdedRequest’
+WebserverWrap.cpp:17773: error: expected ‘(’ before ‘ModdedRequest’
+WebserverWrap.cpp:17773: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:17773: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_ModdedRequest_completeUri_get(PyObject*, PyObject*)’:
+WebserverWrap.cpp:17789: error: ‘ModdedRequest’ was not declared in this scope
+WebserverWrap.cpp:17789: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:17789: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:17789: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:17800: error: expected type-specifier before ‘ModdedRequest’
+WebserverWrap.cpp:17800: error: expected ‘>’ before ‘ModdedRequest’
+WebserverWrap.cpp:17800: error: expected ‘(’ before ‘ModdedRequest’
+WebserverWrap.cpp:17800: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:17800: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_ModdedRequest_dhr_set(PyObject*, PyObject*)’:
+WebserverWrap.cpp:17811: error: ‘ModdedRequest’ was not declared in this scope
+WebserverWrap.cpp:17811: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:17811: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:17811: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:17812: error: ‘HttpRequest’ was not declared in this scope
+WebserverWrap.cpp:17812: error: ‘arg2’ was not declared in this scope
+WebserverWrap.cpp:17812: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:17812: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:17825: error: expected type-specifier before ‘ModdedRequest’
+WebserverWrap.cpp:17825: error: expected ‘>’ before ‘ModdedRequest’
+WebserverWrap.cpp:17825: error: expected ‘(’ before ‘ModdedRequest’
+WebserverWrap.cpp:17825: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:17825: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:17830: error: expected type-specifier before ‘HttpRequest’
+WebserverWrap.cpp:17830: error: expected ‘>’ before ‘HttpRequest’
+WebserverWrap.cpp:17830: error: expected ‘(’ before ‘HttpRequest’
+WebserverWrap.cpp:17830: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:17830: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_ModdedRequest_dhr_get(PyObject*, PyObject*)’:
+WebserverWrap.cpp:17841: error: ‘ModdedRequest’ was not declared in this scope
+WebserverWrap.cpp:17841: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:17841: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:17841: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:17845: error: ‘HttpRequest’ was not declared in this scope
+WebserverWrap.cpp:17845: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:17852: error: expected type-specifier before ‘ModdedRequest’
+WebserverWrap.cpp:17852: error: expected ‘>’ before ‘ModdedRequest’
+WebserverWrap.cpp:17852: error: expected ‘(’ before ‘ModdedRequest’
+WebserverWrap.cpp:17852: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:17852: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:17853: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_ModdedRequest_second_set(PyObject*, PyObject*)’:
+WebserverWrap.cpp:17863: error: ‘ModdedRequest’ was not declared in this scope
+WebserverWrap.cpp:17863: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:17863: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:17863: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:17877: error: expected type-specifier before ‘ModdedRequest’
+WebserverWrap.cpp:17877: error: expected ‘>’ before ‘ModdedRequest’
+WebserverWrap.cpp:17877: error: expected ‘(’ before ‘ModdedRequest’
+WebserverWrap.cpp:17877: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:17877: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_ModdedRequest_second_get(PyObject*, PyObject*)’:
+WebserverWrap.cpp:17893: error: ‘ModdedRequest’ was not declared in this scope
+WebserverWrap.cpp:17893: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:17893: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:17893: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:17904: error: expected type-specifier before ‘ModdedRequest’
+WebserverWrap.cpp:17904: error: expected ‘>’ before ‘ModdedRequest’
+WebserverWrap.cpp:17904: error: expected ‘(’ before ‘ModdedRequest’
+WebserverWrap.cpp:17904: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:17904: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp: In function ‘PyObject* _wrap_new_ModdedRequest(PyObject*, PyObject*)’:
+WebserverWrap.cpp:17915: error: ‘ModdedRequest’ was not declared in this scope
+WebserverWrap.cpp:17915: error: ‘result’ was not declared in this scope
+WebserverWrap.cpp:17920: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:17920: error: expected ‘;’ before ‘new’
+WebserverWrap.cpp: In function ‘PyObject* _wrap_delete_ModdedRequest(PyObject*, PyObject*)’:
+WebserverWrap.cpp:17936: error: ‘ModdedRequest’ was not declared in this scope
+WebserverWrap.cpp:17936: error: ‘arg1’ was not declared in this scope
+WebserverWrap.cpp:17936: error: expected primary-expression before ‘)’ token
+WebserverWrap.cpp:17936: error: expected ‘;’ before numeric constant
+WebserverWrap.cpp:17946: error: expected type-specifier before ‘ModdedRequest’
+WebserverWrap.cpp:17946: error: expected ‘>’ before ‘ModdedRequest’
+WebserverWrap.cpp:17946: error: expected ‘(’ before ‘ModdedRequest’
+WebserverWrap.cpp:17946: error: expected primary-expression before ‘>’ token
+WebserverWrap.cpp:17946: error: expected ‘)’ before ‘;’ token
+WebserverWrap.cpp:17949: error: type ‘<type error>’ argument given to ‘delete’, expected pointer
+WebserverWrap.cpp: In function ‘void init_libpythonwebserver()’:
+WebserverWrap.cpp:18961: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp:18962: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp:18963: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp:18964: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp:18965: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp:18966: error: ‘HttpUtils’ has not been declared
+WebserverWrap.cpp:19086: error: ‘HttpResponse’ has not been declared
+WebserverWrap.cpp:19087: error: ‘HttpResponse’ has not been declared
+make[2]: *** [WebserverWrap.lo] Error 1
+make[2]: Leaving directory `/home/repos/webserver_framework/trunk/src/python'
+make[1]: *** [all-recursive] Error 1
+make[1]: Leaving directory `/home/repos/webserver_framework/trunk'
+make: *** [all] Error 2

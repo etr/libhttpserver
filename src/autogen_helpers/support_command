@@ -1,0 +1,2 @@
+$(srcdir)/WebserverWrap.cpp $(srcdir)/WebserverWrap.h: $(top_srcdir)/src/Webserver.hpp
+	swig -c++ -$(language) -o $(srcdir)/WebserverWrap.cpp $(srcdir)/../Webserver.hpp

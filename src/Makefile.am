@@ -1,0 +1,9 @@
+INCLUDES = -I../
+METASOURCES = AUTO
+lib_LTLIBRARIES = libwebserver_framework.la
+libwebserver_framework_la_SOURCES = string_utilities.cpp Webserver.cpp HttpUtils.cpp 
+noinst_HEADERS = string_utilities.hpp
+include_HEADERS = Webserver.hpp HttpUtils.hpp
+AM_CXXFLAGS = -fPIC
+libwebserver_framework_la_LIBADD = -lmicrohttpd -luuid
+libwebserver_framework_la_LDFLAGS =
