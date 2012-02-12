@@ -1,4 +1,3 @@
-/* # $geodrop: $URL: svn+ssh://nessus/home/repos/geodrop_common_framework/trunk/src/HttpUtils.hpp $, v $Rev: 12699 $ $Date: 2011-08-30 16:16:52 +0200(mar, 30 ago 2011) $ $Author: merlinos $ Exp $ */
 /*
      This file is part of libhttpserver
      Copyright (C) 2011 Sebastiano Merlino
