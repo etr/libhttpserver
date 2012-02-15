@@ -295,14 +295,19 @@ class HttpRequest
 		const std::string getMethod() const;
 		/**
 		 * Method used to get all headers passed with the request.
-		 * @return a map<string,string> containing all headers.
+		 * @return a vector<pair<string,string> > containing all headers.
 		**/
 		const std::vector<std::pair<std::string, std::string> > getHeaders() const;
 		/**
 		 * Method used to get all footers passed with the request.
-		 * @return a map<string,string> containing all footers.
+		 * @return a vector<pair<string,string> > containing all footers.
 		**/
 		const std::vector<std::pair<std::string, std::string> > getFooters() const;
+        /**
+         * Method used to get all cookies passed with the request.
+         * @return a vector<pair<string, string> > containing all cookies.
+        **/
+        const std::vector<std::pair<std::string, std::string> > getCookies() const;
 		/**
 		 * Method used to get all parameters passed with the request. Usually parameters are passed with DELETE or GET methods.
 		 * @return a map<string,string> containing all parameters.
@@ -358,6 +363,12 @@ class HttpRequest
 		 * @param value The value assumed by the footer
 		**/
 		void setFooter(const std::string& key, const std::string& value);
+		/**
+		 * Method used to set a cookie value by key.
+		 * @param key The name identifying the cookie
+		 * @param value The value assumed by the cookie
+		**/
+        void setCookie(const std::string& key, const std::string& value);
 		/**
 		 * Method used to set an argument value by key.
 		 * @param key The name identifying the argument
@@ -423,6 +434,11 @@ class HttpRequest
 		**/
 		void setFooters(const std::map<std::string, std::string>& footers);
 		/**
+		 * Method used to set all cookies of the request.
+		 * @param cookies The cookies key-value map to set for the request.
+		**/
+		void setCookies(const std::map<std::string, std::string>& cookies);
+		/**
 		 * Method used to set all arguments of the request.
 		 * @param args The args key-value map to set for the request.
 		**/
@@ -446,6 +462,7 @@ class HttpRequest
 		std::vector<std::string> post_path;
 		std::map<std::string, std::string, HeaderComparator> headers;
 		std::map<std::string, std::string, HeaderComparator> footers;
+		std::map<std::string, std::string, HeaderComparator> cookies;
 		std::map<std::string, std::string, ArgComparator> args;
 		std::string content;
 		std::string version;
@@ -531,6 +548,12 @@ class HttpResponse
 		 * @param value The value assumed by the footer
 		**/
 		void setFooter(const std::string& key, const std::string& value);
+        /**
+         * Method used to set a cookie value by key.
+         * @param key The name identifying the cookie
+         * @param value The value assumed by the cookie
+        **/
+        void setCookie(const std::string& key, const std::string& value);
 		/**
 		 * Method used to set the content type for the request. This is a shortcut of setting the corresponding header.
 		 * @param contentType the content type to use for the request
@@ -552,6 +575,11 @@ class HttpResponse
 		**/
 		const std::vector<std::pair<std::string, std::string> > getFooters();
 		/**
+		 * Method used to get all cookies passed with the request.
+		 * @return a map<string,string> containing all cookies.
+		**/
+        const std::vector<std::pair<std::string, std::string> > getCookies();
+		/**
 		 * Method used to set all headers of the response.
 		 * @param headers The headers key-value map to set for the response.
 		**/
@@ -561,6 +589,11 @@ class HttpResponse
 		 * @param footers The footers key-value map to set for the response.
 		**/
 		void setFooters(const std::map<std::string, std::string>& footers);
+		/**
+		 * Method used to set all cookies of the response.
+		 * @param cookies The cookies key-value map to set for the response.
+		**/
+        void setCookies(const std::map<std::string, std::string>& cookies);
 		/**
 		 * Method used to set the response code of the response
 		 * @param responseCode the response code to set
@@ -578,6 +611,7 @@ class HttpResponse
 		int responseCode;
 		std::map<std::string, std::string, HeaderComparator> headers;
 		std::map<std::string, std::string, ArgComparator> footers;
+		std::map<std::string, std::string, HeaderComparator> cookies;
 		int fp;
 		std::string filename;
 };
@@ -884,6 +918,7 @@ class Webserver
 		static void requestCompleted(void *cls, struct MHD_Connection *connection, void **con_cls, enum MHD_RequestTerminationCode toe);
 		static int buildRequestHeader (void *cls, enum MHD_ValueKind kind, const char *key, const char *value);
 		static int buildRequestFooter (void *cls, enum MHD_ValueKind kind, const char *key, const char *value);
+		static int buildRequestCookie (void *cls, enum MHD_ValueKind kind, const char *key, const char *value);
 		static int buildRequestArgs (void *cls, enum MHD_ValueKind kind, const char *key, const char *value);
 		static int answerToConnection
 		(

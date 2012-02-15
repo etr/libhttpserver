@@ -481,6 +481,11 @@ void HttpRequest::setFooter(const string& key, const string& value)
 	this->footers[key] = value;
 }
 
+void HttpRequest::setCookie(const string& key, const string& value) 
+{
+	this->cookies[key] = value;
+}
+
 void HttpRequest::setVersion(const string& version)
 {
 	this->version = version;
@@ -498,11 +503,18 @@ void HttpRequest::setHeaders(const map<string, string>& headers)
 		this->headers[it->first] = it->second;
 }
 
-void HttpRequest::setFooters(const map<string, string>& headers) 
+void HttpRequest::setFooters(const map<string, string>& footers) 
 {
 	map<string, string>::const_iterator it;
 	for(it = footers.begin(); it != footers.end(); it++)
 		this->footers[it->first] = it->second;
+}
+
+void HttpRequest::setCookies(const map<string, string>& cookies) 
+{
+	map<string, string>::const_iterator it;
+	for(it = cookies.begin(); it != cookies.end(); it++)
+		this->cookies[it->first] = it->second;
 }
 
 void HttpRequest::setArgs(const map<string, string>& args) 
@@ -577,6 +589,15 @@ const std::vector<std::pair<std::string, std::string> > HttpRequest::getHeaders(
 	std::vector<std::pair<std::string, std::string> > toRet;
 	map<string, string, HeaderComparator>::const_iterator it;
 	for(it = headers.begin(); it != headers.end(); it++)
+		toRet.push_back(make_pair<string, string>((*it).first,(*it).second));
+	return toRet;
+}
+
+const std::vector<std::pair<std::string, std::string> > HttpRequest::getCookies() const
+{
+	std::vector<std::pair<std::string, std::string> > toRet;
+	map<string, string, HeaderComparator>::const_iterator it;
+	for(it = cookies.begin(); it != cookies.end(); it++)
 		toRet.push_back(make_pair<string, string>((*it).first,(*it).second));
 	return toRet;
 }
@@ -732,6 +753,15 @@ const std::vector<std::pair<std::string, std::string> > HttpResponse::getHeaders
 	return toRet;
 }
 
+const std::vector<std::pair<std::string, std::string> > HttpResponse::getCookies() 
+{
+	std::vector<std::pair<std::string, std::string> > toRet;
+	map<string, string, HeaderComparator>::const_iterator it;
+	for(it = cookies.begin(); it != cookies.end(); it++)
+		toRet.push_back(make_pair<string, string>((*it).first,(*it).second));
+	return toRet;
+}
+
 const std::vector<std::pair<std::string, std::string> > HttpResponse::getFooters() 
 {
 	std::vector<std::pair<std::string, std::string> > toRet;
@@ -753,6 +783,13 @@ void HttpResponse::setFooters(const map<string, string>& footers)
 	map<string, string>::const_iterator it;
 	for(it = footers.begin(); it != footers.end(); it ++)
 		this->footers[it->first] = it->second;
+}
+
+void HttpResponse::setCookies(const map<string, string>& cookies)
+{
+	map<string, string>::const_iterator it;
+	for(it = cookies.begin(); it != cookies.end(); it ++)
+		this->cookies[it->first] = it->second;
 }
 
 int HttpResponse::getResponseCode() 
@@ -952,6 +989,13 @@ int Webserver::buildRequestHeader (void *cls, enum MHD_ValueKind kind, const cha
 	return MHD_YES;
 }
 
+int Webserver::buildRequestCookie (void *cls, enum MHD_ValueKind kind, const char *key, const char *value)
+{
+    HttpRequest* dhr = (HttpRequest*)(cls);
+    dhr->setCookie(key, value);
+    return MHD_YES;
+}
+
 int Webserver::buildRequestFooter (void *cls, enum MHD_ValueKind kind, const char *key, const char *value)
 {
 	HttpRequest* dhr = (HttpRequest*)(cls);
@@ -1133,19 +1177,13 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
 	{
 		MHD_get_connection_values (connection, MHD_HEADER_KIND, &buildRequestHeader, (void*) mr->dhr);
 		MHD_get_connection_values (connection, MHD_FOOTER_KIND, &buildRequestFooter, (void*) mr->dhr);
-		if(mr->dhr->getHeader("traceid") == "")
-		{
-			mr->dhr->setHeader("traceid", generate_random_uuid());
-		}
+		MHD_get_connection_values (connection, MHD_COOKIE_KIND, &buildRequestCookie, (void*) mr->dhr);
 	}
 	else
 	{
 		MHD_get_connection_values (connection, MHD_HEADER_KIND, &buildRequestHeader, (void*) &supportReq);
 		MHD_get_connection_values (connection, MHD_FOOTER_KIND, &buildRequestFooter, (void*) &supportReq);
-		if(supportReq.getHeader("traceid") == "")
-		{
-			supportReq.setHeader("traceid", generate_random_uuid());
-		}
+		MHD_get_connection_values (connection, MHD_COOKIE_KIND, &buildRequestCookie, (void*) &supportReq);
 	}
 	if (    0 == strcmp(method, MHD_HTTP_METHOD_DELETE) || 
 		0 == strcmp(method, MHD_HTTP_METHOD_GET) ||

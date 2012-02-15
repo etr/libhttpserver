@@ -170,17 +170,6 @@ std::string HttpUtils::standardizeUrl(const std::string& url)
     }
 }
 
-std::string generate_random_uuid()
-{
-	uuid_t out;
-	uuid_generate(out);
-	std::string ret;
-	ret.assign((const char*)out, 16);
-	char unparsed[37];
-	uuid_unparse((const unsigned char*)ret.c_str(), unparsed);
-	return unparsed;
-}
-
 std::string get_ip_str(const struct sockaddr *sa, socklen_t maxlen)
 {
 	char* to_ret;
