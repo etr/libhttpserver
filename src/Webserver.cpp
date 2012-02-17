@@ -27,6 +27,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <signal.h>
 #ifdef WITH_PYTHON
 #include <Python.h>
 #endif
@@ -39,6 +40,26 @@ void* uri_log(void*, const char*);
 void access_log(Webserver*, string);
 size_t unescaper_func(void*, struct MHD_Connection*, char*);
 size_t internal_unescaper(void*, struct MHD_Connection*, char*);
+
+static void catcher (int sig)
+{
+}
+
+static void ignore_sigpipe ()
+{
+    struct sigaction oldsig;
+    struct sigaction sig;
+
+    sig.sa_handler = &catcher;
+    sigemptyset (&sig.sa_mask);
+#ifdef SA_INTERRUPT
+    sig.sa_flags = SA_INTERRUPT;  /* SunOS */
+#else
+    sig.sa_flags = SA_RESTART;
+#endif
+    if (0 != sigaction (SIGPIPE, &sig, &oldsig))
+        fprintf (stderr, "Failed to install SIGPIPE handler: %s\n", strerror (errno));
+}
 
 //ENDPOINT
 HttpEndpoint::HttpEndpoint(bool family):
@@ -753,15 +774,6 @@ const std::vector<std::pair<std::string, std::string> > HttpResponse::getHeaders
 	return toRet;
 }
 
-const std::vector<std::pair<std::string, std::string> > HttpResponse::getCookies() 
-{
-	std::vector<std::pair<std::string, std::string> > toRet;
-	map<string, string, HeaderComparator>::const_iterator it;
-	for(it = cookies.begin(); it != cookies.end(); it++)
-		toRet.push_back(make_pair<string, string>((*it).first,(*it).second));
-	return toRet;
-}
-
 const std::vector<std::pair<std::string, std::string> > HttpResponse::getFooters() 
 {
 	std::vector<std::pair<std::string, std::string> > toRet;
@@ -783,13 +795,6 @@ void HttpResponse::setFooters(const map<string, string>& footers)
 	map<string, string>::const_iterator it;
 	for(it = footers.begin(); it != footers.end(); it ++)
 		this->footers[it->first] = it->second;
-}
-
-void HttpResponse::setCookies(const map<string, string>& cookies)
-{
-	map<string, string>::const_iterator it;
-	for(it = cookies.begin(); it != cookies.end(); it ++)
-		this->cookies[it->first] = it->second;
 }
 
 int HttpResponse::getResponseCode() 
@@ -829,6 +834,7 @@ void Unescaper::unescape(char* s) const {}
 Webserver::Webserver 
 (
 	const int port, 
+    const HttpUtils::StartMethod_T startMethod,
 	const int maxThreads, 
 	const int maxConnections,
 	const int memoryLimit,
@@ -838,6 +844,10 @@ Webserver::Webserver
 	const RequestValidator* validator,
 	const Unescaper* unescaper,
 	const int maxThreadStackSize,
+    const bool useSsl,
+    const bool useIpv6,
+    const bool debug,
+    const bool pedantic,
 	const string& httpsMemKey,
 	const string& httpsMemCert,
 	const string& httpsMemTrust,
@@ -855,6 +865,11 @@ Webserver::Webserver
 	logDelegate(logDelegate),
 	validator(validator),
 	unescaper(unescaper),
+    maxThreadStackSize(maxThreadStackSize),
+    useSsl(useSsl),
+    useIpv6(useIpv6),
+    debug(debug),
+    pedantic(pedantic),
 	httpsMemKey(httpsMemKey),
 	httpsMemCert(httpsMemCert),
 	httpsMemTrust(httpsMemTrust),
@@ -864,6 +879,7 @@ Webserver::Webserver
 	nonceNcSize(nonceNcSize),
 	running(false)
 {
+    ignore_sigpipe();
 }
 
 Webserver::~Webserver()
@@ -903,11 +919,9 @@ bool Webserver::start(bool blocking)
 	vector<struct MHD_OptionItem> iov;
 
 	iov.push_back(gen(MHD_OPTION_NOTIFY_COMPLETED, (intptr_t) &requestCompleted, NULL ));
-	iov.push_back(gen(MHD_OPTION_URI_LOG_CALLBACK, (intptr_t)&uri_log, this));
-	iov.push_back(gen(MHD_OPTION_EXTERNAL_LOGGER, (intptr_t)&error_log, this));
-	iov.push_back(gen(MHD_OPTION_UNESCAPE_CALLBACK, (intptr_t)&unescaper_func, this));
-	if(connectionTimeout == 0)
-		connectionTimeout = DEFAULT_DROP_WS_TIMEOUT;
+	iov.push_back(gen(MHD_OPTION_URI_LOG_CALLBACK, (intptr_t) &uri_log, this));
+	iov.push_back(gen(MHD_OPTION_EXTERNAL_LOGGER, (intptr_t) &error_log, this));
+	iov.push_back(gen(MHD_OPTION_UNESCAPE_CALLBACK, (intptr_t) &unescaper_func, this));
 	iov.push_back(gen(MHD_OPTION_CONNECTION_TIMEOUT, connectionTimeout));
 	if(maxThreads != 0)
 		iov.push_back(gen(MHD_OPTION_THREAD_POOL_SIZE, maxThreads));
@@ -942,9 +956,19 @@ bool Webserver::start(bool blocking)
 		ops[i] = iov[i];
 	}
 
+    int startConf = startMethod;
+    if(useSsl)
+        startConf |= MHD_USE_SSL;
+    if(useIpv6)
+        startConf |= MHD_USE_IPv6;
+    if(debug)
+        startConf |= MHD_USE_DEBUG;
+    if(pedantic)
+        startConf |= MHD_USE_PEDANTIC_CHECKS;
+
 	this->daemon = MHD_start_daemon
 	(
-			MHD_USE_SELECT_INTERNALLY, this->port, &policyCallback, this,
+			startConf, this->port, &policyCallback, this,
 			&answerToConnection, this, MHD_OPTION_ARRAY, ops, MHD_OPTION_END
 	);
 

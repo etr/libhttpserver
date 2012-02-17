@@ -143,9 +143,8 @@ namespace std {
 #define METHOD_ERROR "{\"description\":\"METHOD NOT ALLOWED\"}"
 #define NOT_METHOD_ERROR "{\"description\":\"METHOD NOT ACCEPTABLE\"}"
 #define GENERIC_ERROR "{\"description\":\"INTERNAL ERROR\"}"
-
-#define DEFAULT_DROP_WS_PORT 9898
-#define DEFAULT_DROP_WS_TIMEOUT 180
+#define DEFAULT_WS_PORT 9898
+#define DEFAULT_WS_TIMEOUT 180
 
 #include <sys/types.h>
 #include <sys/select.h>
@@ -548,12 +547,6 @@ class HttpResponse
 		 * @param value The value assumed by the footer
 		**/
 		void setFooter(const std::string& key, const std::string& value);
-        /**
-         * Method used to set a cookie value by key.
-         * @param key The name identifying the cookie
-         * @param value The value assumed by the cookie
-        **/
-        void setCookie(const std::string& key, const std::string& value);
 		/**
 		 * Method used to set the content type for the request. This is a shortcut of setting the corresponding header.
 		 * @param contentType the content type to use for the request
@@ -574,11 +567,6 @@ class HttpResponse
 		 * @return a map<string,string> containing all footers.
 		**/
 		const std::vector<std::pair<std::string, std::string> > getFooters();
-		/**
-		 * Method used to get all cookies passed with the request.
-		 * @return a map<string,string> containing all cookies.
-		**/
-        const std::vector<std::pair<std::string, std::string> > getCookies();
 		/**
 		 * Method used to set all headers of the response.
 		 * @param headers The headers key-value map to set for the response.
@@ -611,7 +599,6 @@ class HttpResponse
 		int responseCode;
 		std::map<std::string, std::string, HeaderComparator> headers;
 		std::map<std::string, std::string, ArgComparator> footers;
-		std::map<std::string, std::string, HeaderComparator> cookies;
 		int fp;
 		std::string filename;
 };
@@ -808,6 +795,7 @@ class Webserver
 		/**
 		 * Constructor of the class.
 		 * @param port Integer representing the port the webserver is listening on.
+         * @param startMethod
 		 * @param maxThreads max number of serving threads (0 -> infty)
 		 * @param maxConnections max number of allowed connections (0 -> infty).
 		 * @param memoryLimit max memory allocated to serve requests (0 -> infty).
@@ -826,16 +814,21 @@ class Webserver
 		**/
 		Webserver
 		(
-			const int port = DEFAULT_DROP_WS_PORT, 
+			const int port = DEFAULT_WS_PORT, 
+            const HttpUtils::StartMethod_T startMethod = HttpUtils::INTERNAL_SELECT,
 			const int maxThreads = 0, 
 			const int maxConnections = 0,
 			const int memoryLimit = 0,
-			const int connectionTimeout = 0,
+			const int connectionTimeout = DEFAULT_WS_TIMEOUT,
 			const int perIPConnectionLimit = 0,
 			const LoggingDelegate* logDelegate = 0x0,
 			const RequestValidator* validator = 0x0,
 			const Unescaper* unescaper = 0x0,
 			const int maxThreadStackSize = 0,
+            const bool useSsl = false,
+            const bool useIpv6 = false,
+            const bool debug = false,
+            const bool pedantic = false,
 			const std::string& httpsMemKey = "",
 			const std::string& httpsMemCert = "",
 			const std::string& httpsMemTrust = "",
@@ -885,6 +878,10 @@ class Webserver
 		void sweetKill();
 	private:
 		bool running;
+        bool useSsl;
+        bool useIpv6;
+        bool debug;
+        bool pedantic;
 		int port;
 		int maxThreads;
 		int maxConnections;
@@ -902,6 +899,7 @@ class Webserver
 		std::string httpsPriorities;
 		std::string digestAuthRandom;
 		HttpUtils::CredType_T credType;
+        HttpUtils::StartMethod_T startMethod;
 
 		std::map<HttpEndpoint, HttpResource* > registeredResources;
 		struct MHD_Daemon *daemon;

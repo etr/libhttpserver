@@ -42,6 +42,13 @@ class HttpUtils
 		IA = GNUTLS_CRD_IA
 	};
 
+    enum StartMethod_T
+    {
+        INTERNAL_SELECT = MHD_USE_SELECT_INTERNALLY,
+        THREADS = MHD_USE_THREAD_PER_CONNECTION,
+        POOL = MHD_USE_POLL
+    };
+
 #ifdef SWIG
         %immutable;
 #endif
