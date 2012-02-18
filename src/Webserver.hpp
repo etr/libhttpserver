@@ -826,6 +826,8 @@ class Webserver
 			const LoggingDelegate* logDelegate = 0x0,
 			const RequestValidator* validator = 0x0,
 			const Unescaper* unescaper = 0x0,
+            const struct sockaddr* bindAddress = 0x0,
+            const int bindSocket = 0,
 			const int maxThreadStackSize = 0,
             const bool useSsl = false,
             const bool useIpv6 = false,
@@ -896,6 +898,8 @@ class Webserver
 		const LoggingDelegate* logDelegate;
 		const RequestValidator* validator;
 		const Unescaper* unescaper;
+        const struct sockaddr* bindAddress;
+        int bindSocket;
 		std::string httpsMemKey;
 		std::string httpsMemCert;
 		std::string httpsMemTrust;
@@ -962,6 +966,8 @@ class CreateWebserver
         CreateWebserver& logDelegate(const LoggingDelegate* logDelegate);
         CreateWebserver& validator(const RequestValidator* validator);
         CreateWebserver& unescaper(const Unescaper* unescaper);
+        CreateWebserver& bindAddress(const struct sockaddr* bindAddress);
+        CreateWebserver& bindSocket(const int bindSocket);
         CreateWebserver& maxThreadStackSize(const int maxThreadStackSize);
         CreateWebserver& useSsl();
         CreateWebserver& noSsl();
@@ -989,6 +995,8 @@ class CreateWebserver
         const LoggingDelegate* _logDelegate;
         const RequestValidator* _validator;
         const Unescaper* _unescaper;
+        const struct sockaddr* _bindAddress;
+        int _bindSocket;
         int _maxThreadStackSize;
         bool _useSsl;
         bool _useIpv6;

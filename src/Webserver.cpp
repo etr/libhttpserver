@@ -867,6 +867,8 @@ inline CreateWebserver::CreateWebserver(const int port):
     _logDelegate(0x0),
     _validator(0x0),
     _unescaper(0x0),
+    _bindAddress(0x0),
+    _bindSocket(0),
     _maxThreadStackSize(0),
     _useSsl(false),
     _useIpv6(false),
@@ -892,6 +894,8 @@ inline CreateWebserver& CreateWebserver::perIPConnectionLimit(const int perIPCon
 inline CreateWebserver& CreateWebserver::logDelegate(const LoggingDelegate* logDelegate) { _logDelegate = logDelegate; return *this; }
 inline CreateWebserver& CreateWebserver::validator(const RequestValidator* validator) { _validator = validator; return *this; }
 inline CreateWebserver& CreateWebserver::unescaper(const Unescaper* unescaper) { _unescaper = unescaper; return *this; }
+inline CreateWebserver& CreateWebserver::bindAddress(const struct sockaddr* bindAddress) { _bindAddress = bindAddress; return *this; }
+inline CreateWebserver& CreateWebserver::bindSocket(const int bindSocket) { _bindSocket = bindSocket; return *this; }
 inline CreateWebserver& CreateWebserver::maxThreadStackSize(const int maxThreadStackSize) { _maxThreadStackSize = maxThreadStackSize; return *this; }
 inline CreateWebserver& CreateWebserver::useSsl() { _useSsl = true; return *this; }
 inline CreateWebserver& CreateWebserver::noSsl() { _useSsl = false; return *this; }
@@ -922,6 +926,8 @@ Webserver::Webserver
 	const LoggingDelegate* logDelegate,
 	const RequestValidator* validator,
 	const Unescaper* unescaper,
+    const struct sockaddr* bindAddress,
+    const int bindSocket,
 	const int maxThreadStackSize,
     const bool useSsl,
     const bool useIpv6,
@@ -944,6 +950,8 @@ Webserver::Webserver
 	logDelegate(logDelegate),
 	validator(validator),
 	unescaper(unescaper),
+    bindAddress(bindAddress),
+    bindSocket(bindSocket),
     maxThreadStackSize(maxThreadStackSize),
     useSsl(useSsl),
     useIpv6(useIpv6),
@@ -971,6 +979,8 @@ Webserver::Webserver(const CreateWebserver& params):
     logDelegate(params._logDelegate),
     validator(params._validator),
     unescaper(params._unescaper),
+    bindAddress(params._bindAddress),
+    bindSocket(params._bindSocket),
     maxThreadStackSize(params._maxThreadStackSize),
     useSsl(params._useSsl),
     useIpv6(params._useIpv6),
@@ -1029,6 +1039,10 @@ bool Webserver::start(bool blocking)
 	iov.push_back(gen(MHD_OPTION_EXTERNAL_LOGGER, (intptr_t) &error_log, this));
 	iov.push_back(gen(MHD_OPTION_UNESCAPE_CALLBACK, (intptr_t) &unescaper_func, this));
 	iov.push_back(gen(MHD_OPTION_CONNECTION_TIMEOUT, connectionTimeout));
+    if(bindAddress != 0x0)
+        iov.push_back(gen(MHD_OPTION_SOCK_ADDR, (intptr_t) bindAddress));
+    if(bindSocket != 0)
+        iov.push_back(gen(MHD_OPTION_LISTEN_SOCKET, bindSocket));
 	if(maxThreads != 0)
 		iov.push_back(gen(MHD_OPTION_THREAD_POOL_SIZE, maxThreads));
 	if(maxConnections != 0)
