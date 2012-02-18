@@ -786,6 +786,8 @@ class Unescaper
 		virtual void unescape(char* s) const;
 };
 
+class CreateWebserver;
+
 /**
  * Class representing the webserver. Main class of the apis.
 **/
@@ -837,6 +839,7 @@ class Webserver
 			const std::string digestAuthRandom = "", //IT'S CORRECT TO PASS THIS PARAMETER BY VALUE
 			const int nonceNcSize = 0
 		);
+        Webserver(const CreateWebserver& params);
 		/**
 		 * Destructor of the class
 		**/
@@ -942,6 +945,64 @@ class Webserver
 		friend void* uri_log(void* cls, const char* uri);
 		friend size_t unescaper_func(void * cls, struct MHD_Connection *c, char *s);
 		friend size_t internal_unescaper(void * cls, struct MHD_Connection *c, char *s);
+};
+
+class CreateWebserver 
+{
+    public:
+        CreateWebserver();
+        explicit CreateWebserver(const int port);
+        CreateWebserver& port(const int port);
+        CreateWebserver& startMethod(const HttpUtils::StartMethod_T& startMethod);
+        CreateWebserver& maxThreads(const int maxThreads);
+        CreateWebserver& maxConnections(const int maxConnections);
+        CreateWebserver& memoryLimit(const int memoryLimit);
+        CreateWebserver& connectionTimeout(const int connectionTimeout);
+        CreateWebserver& perIPConnectionLimit(const int perIPConnectionLimit);
+        CreateWebserver& logDelegate(const LoggingDelegate* logDelegate);
+        CreateWebserver& validator(const RequestValidator* validator);
+        CreateWebserver& unescaper(const Unescaper* unescaper);
+        CreateWebserver& maxThreadStackSize(const int maxThreadStackSize);
+        CreateWebserver& useSsl();
+        CreateWebserver& noSsl();
+        CreateWebserver& useIpv6();
+        CreateWebserver& noIpv6();
+        CreateWebserver& debug();
+        CreateWebserver& noDebug();
+        CreateWebserver& pedantic();
+        CreateWebserver& noPedantic();
+		CreateWebserver& httpsMemKey(const std::string& httpsMemKey);
+		CreateWebserver& httpsMemCert(const std::string& httpsMemCert);
+        CreateWebserver& httpsMemTrust(const std::string& httpsMemTrust);
+        CreateWebserver& httpsPriorities(const std::string& httpsPriorities);
+        CreateWebserver& credType(const HttpUtils::CredType_T& credType);
+        CreateWebserver& digestAuthRandom(const std::string& digestAuthRandom); //IT'S CORRECT TO PASS THIS PARAMETER BY VALUE
+        CreateWebserver& nonceNcSize(const int nonceNcSize);
+    private:
+        int _port;
+        HttpUtils::StartMethod_T _startMethod;
+        int _maxThreads;
+        int _maxConnections;
+        int _memoryLimit;
+        int _connectionTimeout;
+        int _perIPConnectionLimit;
+        const LoggingDelegate* _logDelegate;
+        const RequestValidator* _validator;
+        const Unescaper* _unescaper;
+        int _maxThreadStackSize;
+        bool _useSsl;
+        bool _useIpv6;
+        bool _debug;
+        bool _pedantic;
+        std::string _httpsMemKey;
+        std::string _httpsMemCert;
+        std::string _httpsMemTrust;
+        std::string _httpsPriorities;
+        HttpUtils::CredType_T _credType;
+        std::string _digestAuthRandom;
+        int _nonceNcSize;
+
+        friend class Webserver;
 };
 
 struct ModdedRequest

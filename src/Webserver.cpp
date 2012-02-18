@@ -830,6 +830,85 @@ Unescaper::~Unescaper() {}
 
 void Unescaper::unescape(char* s) const {}
 
+inline CreateWebserver::CreateWebserver():
+    _port(DEFAULT_WS_PORT),
+    _startMethod(HttpUtils::INTERNAL_SELECT),
+    _maxThreads(0),
+    _maxConnections(0),
+    _memoryLimit(0),
+    _connectionTimeout(DEFAULT_WS_TIMEOUT),
+    _perIPConnectionLimit(0),
+    _logDelegate(0x0),
+    _validator(0x0),
+    _unescaper(0x0),
+    _maxThreadStackSize(0),
+    _useSsl(false),
+    _useIpv6(false),
+    _debug(false),
+    _pedantic(false),
+    _httpsMemKey(""),
+    _httpsMemCert(""),
+    _httpsMemTrust(""),
+    _httpsPriorities(""),
+    _credType(HttpUtils::NONE),
+    _digestAuthRandom(""),
+    _nonceNcSize(0)
+{
+}
+
+inline CreateWebserver::CreateWebserver(const int port):
+    _port(port),
+    _startMethod(HttpUtils::INTERNAL_SELECT),
+    _maxThreads(0),
+    _maxConnections(0),
+    _memoryLimit(0),
+    _connectionTimeout(DEFAULT_WS_TIMEOUT),
+    _perIPConnectionLimit(0),
+    _logDelegate(0x0),
+    _validator(0x0),
+    _unescaper(0x0),
+    _maxThreadStackSize(0),
+    _useSsl(false),
+    _useIpv6(false),
+    _debug(false),
+    _pedantic(false),
+    _httpsMemKey(""),
+    _httpsMemCert(""),
+    _httpsMemTrust(""),
+    _httpsPriorities(""),
+    _credType(HttpUtils::NONE),
+    _digestAuthRandom(""),
+    _nonceNcSize(0)
+{
+}
+
+inline CreateWebserver& CreateWebserver::port(const int port) { _port = port; return *this; }
+inline CreateWebserver& CreateWebserver::startMethod(const HttpUtils::StartMethod_T& startMethod) { _startMethod = startMethod; return *this; }
+inline CreateWebserver& CreateWebserver::maxThreads(const int maxThreads) { _maxThreads = maxThreads; return *this; }
+inline CreateWebserver& CreateWebserver::maxConnections(const int maxConnections) { _maxConnections = maxConnections; return *this; }
+inline CreateWebserver& CreateWebserver::memoryLimit(const int memoryLimit) { _memoryLimit = memoryLimit; return *this; }
+inline CreateWebserver& CreateWebserver::connectionTimeout(const int connectionTimeout) { _connectionTimeout = connectionTimeout; return *this; }
+inline CreateWebserver& CreateWebserver::perIPConnectionLimit(const int perIPConnectionLimit) { _perIPConnectionLimit = perIPConnectionLimit; return *this; }
+inline CreateWebserver& CreateWebserver::logDelegate(const LoggingDelegate* logDelegate) { _logDelegate = logDelegate; return *this; }
+inline CreateWebserver& CreateWebserver::validator(const RequestValidator* validator) { _validator = validator; return *this; }
+inline CreateWebserver& CreateWebserver::unescaper(const Unescaper* unescaper) { _unescaper = unescaper; return *this; }
+inline CreateWebserver& CreateWebserver::maxThreadStackSize(const int maxThreadStackSize) { _maxThreadStackSize = maxThreadStackSize; return *this; }
+inline CreateWebserver& CreateWebserver::useSsl() { _useSsl = true; return *this; }
+inline CreateWebserver& CreateWebserver::noSsl() { _useSsl = false; return *this; }
+inline CreateWebserver& CreateWebserver::useIpv6() { _useIpv6 = true; return *this; }
+inline CreateWebserver& CreateWebserver::noIpv6() { _useIpv6 = false; return *this; }
+inline CreateWebserver& CreateWebserver::debug() { _debug = true; return *this; }
+inline CreateWebserver& CreateWebserver::noDebug() { _debug = false; return *this; }
+inline CreateWebserver& CreateWebserver::pedantic() { _pedantic = true; return *this; }
+inline CreateWebserver& CreateWebserver::noPedantic() { _pedantic = false; return *this; }
+inline CreateWebserver& CreateWebserver::httpsMemKey(const string& httpsMemKey) { _httpsMemKey = httpsMemKey; return *this; }
+inline CreateWebserver& CreateWebserver::httpsMemCert(const string& httpsMemCert) { _httpsMemCert = httpsMemCert; return *this; }
+inline CreateWebserver& CreateWebserver::httpsMemTrust(const string& httpsMemTrust) { _httpsMemTrust = httpsMemTrust; return *this; }
+inline CreateWebserver& CreateWebserver::httpsPriorities(const string& httpsPriorities) { _httpsPriorities = httpsPriorities; return *this; }
+inline CreateWebserver& CreateWebserver::credType(const HttpUtils::CredType_T& credType) { _credType = credType; return *this; }
+inline CreateWebserver& CreateWebserver::digestAuthRandom(const string& digestAuthRandom) { _digestAuthRandom = digestAuthRandom; return *this; }
+inline CreateWebserver& CreateWebserver::nonceNcSize(const int nonceNcSize) { _nonceNcSize = nonceNcSize; return *this; }
+
 //WEBSERVER
 Webserver::Webserver 
 (
@@ -878,6 +957,33 @@ Webserver::Webserver
 	digestAuthRandom(digestAuthRandom),
 	nonceNcSize(nonceNcSize),
 	running(false)
+{
+    ignore_sigpipe();
+}
+
+Webserver::Webserver(const CreateWebserver& params):
+    port(params._port),
+    maxThreads(params._maxThreads),
+    maxConnections(params._maxConnections),
+    memoryLimit(params._memoryLimit),
+    connectionTimeout(params._connectionTimeout),
+    perIPConnectionLimit(params._perIPConnectionLimit),
+    logDelegate(params._logDelegate),
+    validator(params._validator),
+    unescaper(params._unescaper),
+    maxThreadStackSize(params._maxThreadStackSize),
+    useSsl(params._useSsl),
+    useIpv6(params._useIpv6),
+    debug(params._debug),
+    pedantic(params._pedantic),
+    httpsMemKey(params._httpsMemKey),
+    httpsMemCert(params._httpsMemCert),
+    httpsMemTrust(params._httpsMemTrust),
+    httpsPriorities(params._httpsPriorities),
+    credType(params._credType),
+    digestAuthRandom(params._digestAuthRandom),
+    nonceNcSize(params._nonceNcSize),
+    running(false)
 {
     ignore_sigpipe();
 }
@@ -1096,6 +1202,7 @@ size_t internal_unescaper(void* cls, struct MHD_Connection *c, char* s)
 		return http_unescape(s);
 	}
 }
+
 
 int Webserver::post_iterator (void *cls, enum MHD_ValueKind kind,
 	const char *key,
