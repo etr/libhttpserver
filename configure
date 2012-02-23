@@ -15049,17 +15049,6 @@ ac_compiler_gnu=$ac_cv_c_compiler_gnu
 # Checks for libraries.
 
 # Checks for header files.
-ac_fn_c_check_header_mongrel "$LINENO" "boost/version.hpp" "ac_cv_header_boost_version_hpp" "$ac_includes_default"
-if test "x$ac_cv_header_boost_version_hpp" = x""yes; then :
-
-else
-
-	 as_fn_error $? "\"Boost header files not found\"" "$LINENO" 5
-
-
-fi
-
-
 ac_fn_c_check_header_mongrel "$LINENO" "microhttpd.h" "ac_cv_header_microhttpd_h" "$ac_includes_default"
 if test "x$ac_cv_header_microhttpd_h" = x""yes; then :
 

@@ -69,15 +69,13 @@ am__base_list = \
   sed '$$!N;$$!N;$$!N;$$!N;s/\n/ /g'
 am__installdirs = "$(DESTDIR)$(libdir)" "$(DESTDIR)$(includedir)"
 LTLIBRARIES = $(lib_LTLIBRARIES)
-libwebserver_framework_la_DEPENDENCIES =
-am_libwebserver_framework_la_OBJECTS = string_utilities.lo \
-	Webserver.lo HttpUtils.lo
-libwebserver_framework_la_OBJECTS =  \
-	$(am_libwebserver_framework_la_OBJECTS)
-libwebserver_framework_la_LINK = $(LIBTOOL) --tag=CXX \
-	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CXXLD) \
-	$(AM_CXXFLAGS) $(CXXFLAGS) \
-	$(libwebserver_framework_la_LDFLAGS) $(LDFLAGS) -o $@
+libhttpserver_la_DEPENDENCIES =
+am_libhttpserver_la_OBJECTS = string_utilities.lo Webserver.lo \
+	HttpUtils.lo
+libhttpserver_la_OBJECTS = $(am_libhttpserver_la_OBJECTS)
+libhttpserver_la_LINK = $(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=link $(CXXLD) $(AM_CXXFLAGS) \
+	$(CXXFLAGS) $(libhttpserver_la_LDFLAGS) $(LDFLAGS) -o $@
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__depfiles_maybe = depfiles
@@ -91,8 +89,8 @@ CXXLD = $(CXX)
 CXXLINK = $(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
 	--mode=link $(CXXLD) $(AM_CXXFLAGS) $(CXXFLAGS) $(AM_LDFLAGS) \
 	$(LDFLAGS) -o $@
-SOURCES = $(libwebserver_framework_la_SOURCES)
-DIST_SOURCES = $(libwebserver_framework_la_SOURCES)
+SOURCES = $(libhttpserver_la_SOURCES)
+DIST_SOURCES = $(libhttpserver_la_SOURCES)
 HEADERS = $(include_HEADERS) $(noinst_HEADERS)
 ETAGS = etags
 CTAGS = ctags
@@ -215,13 +213,13 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 INCLUDES = -I../
 METASOURCES = AUTO
-lib_LTLIBRARIES = libwebserver_framework.la
-libwebserver_framework_la_SOURCES = string_utilities.cpp Webserver.cpp HttpUtils.cpp 
+lib_LTLIBRARIES = libhttpserver.la
+libhttpserver_la_SOURCES = string_utilities.cpp Webserver.cpp HttpUtils.cpp 
 noinst_HEADERS = string_utilities.hpp
 include_HEADERS = Webserver.hpp HttpUtils.hpp
 AM_CXXFLAGS = -fPIC
-libwebserver_framework_la_LIBADD = -lmicrohttpd -luuid
-libwebserver_framework_la_LDFLAGS = 
+libhttpserver_la_LIBADD = -lmicrohttpd
+libhttpserver_la_LDFLAGS = 
 all: all-am
 
 .SUFFIXES:
@@ -287,8 +285,8 @@ clean-libLTLIBRARIES:
 	  echo "rm -f \"$${dir}/so_locations\""; \
 	  rm -f "$${dir}/so_locations"; \
 	done
-libwebserver_framework.la: $(libwebserver_framework_la_OBJECTS) $(libwebserver_framework_la_DEPENDENCIES) 
-	$(libwebserver_framework_la_LINK) -rpath $(libdir) $(libwebserver_framework_la_OBJECTS) $(libwebserver_framework_la_LIBADD) $(LIBS)
+libhttpserver.la: $(libhttpserver_la_OBJECTS) $(libhttpserver_la_DEPENDENCIES) 
+	$(libhttpserver_la_LINK) -rpath $(libdir) $(libhttpserver_la_OBJECTS) $(libhttpserver_la_LIBADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)

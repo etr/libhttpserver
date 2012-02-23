@@ -16,11 +16,6 @@ AC_PROG_CXX
 # Checks for libraries.
 
 # Checks for header files.
-AC_CHECK_HEADER([boost/version.hpp],[],
-	[
-	 AC_MSG_ERROR("Boost header files not found")
-	]
-)
 AC_CHECK_HEADER([microhttpd.h],[],
 	[
 	 AC_MSG_ERROR("Microhttpd header files not found")

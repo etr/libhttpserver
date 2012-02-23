@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 #include <unistd.h>
+#include <boost/thread.hpp>
 #include <iostream>
 #include <stdio.h>
 using namespace std;
@@ -49,11 +50,12 @@ HttpResponse Test::render_PUT(const HttpRequest& r)
 
 int main()
 {
-	Webserver* ws = new Webserver(9898, 5, 1);
+	Webserver ws = CreateWebserver(9898);
 	Test dt = Test();
 	Test2 dt2 = Test2();
-    ws->registerResource(string("base/{var1}/{var2}/drop_test/{var3}/tail"), &dt2, true);
-    ws->registerResource(string("other"), &dt, true);
-    ws->start(true);
+    ws.registerResource(string("base/{var1}/{var2}/drop_test/{var3}/tail"), &dt2, true);
+    ws.registerResource(string("other"), &dt, true);
+	boost::thread* t1 = new boost::thread(boost::bind(&Webserver::start, ws, true));
+	t1->join();
 	return 0;
 }

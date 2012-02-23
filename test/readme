@@ -1,0 +1,3 @@
+In order to compile test file it is necessary to compile running:
+
+    g++ -lwebserver_framework -lboost_thread Test.cpp -o Test

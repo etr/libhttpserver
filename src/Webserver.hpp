@@ -816,30 +816,30 @@ class Webserver
 		**/
 		Webserver
 		(
-			const int port = DEFAULT_WS_PORT, 
-            const HttpUtils::StartMethod_T startMethod = HttpUtils::INTERNAL_SELECT,
-			const int maxThreads = 0, 
-			const int maxConnections = 0,
-			const int memoryLimit = 0,
-			const int connectionTimeout = DEFAULT_WS_TIMEOUT,
-			const int perIPConnectionLimit = 0,
+			int port = DEFAULT_WS_PORT, 
+            const HttpUtils::StartMethod_T& startMethod = HttpUtils::INTERNAL_SELECT,
+			int maxThreads = 0, 
+			int maxConnections = 0,
+			int memoryLimit = 0,
+			int connectionTimeout = DEFAULT_WS_TIMEOUT,
+			int perIPConnectionLimit = 0,
 			const LoggingDelegate* logDelegate = 0x0,
 			const RequestValidator* validator = 0x0,
 			const Unescaper* unescaper = 0x0,
             const struct sockaddr* bindAddress = 0x0,
-            const int bindSocket = 0,
-			const int maxThreadStackSize = 0,
-            const bool useSsl = false,
-            const bool useIpv6 = false,
-            const bool debug = false,
-            const bool pedantic = false,
+            int bindSocket = 0,
+			int maxThreadStackSize = 0,
+            bool useSsl = false,
+            bool useIpv6 = false,
+            bool debug = false,
+            bool pedantic = false,
 			const std::string& httpsMemKey = "",
 			const std::string& httpsMemCert = "",
 			const std::string& httpsMemTrust = "",
 			const std::string& httpsPriorities = "",
-			const HttpUtils::CredType_T credType= HttpUtils::NONE,
+			const HttpUtils::CredType_T& credType= HttpUtils::NONE,
 			const std::string digestAuthRandom = "", //IT'S CORRECT TO PASS THIS PARAMETER BY VALUE
-			const int nonceNcSize = 0
+			int nonceNcSize = 0
 		);
         Webserver(const CreateWebserver& params);
 		/**
@@ -954,36 +954,88 @@ class Webserver
 class CreateWebserver 
 {
     public:
-        CreateWebserver();
-        explicit CreateWebserver(const int port);
-        CreateWebserver& port(const int port);
-        CreateWebserver& startMethod(const HttpUtils::StartMethod_T& startMethod);
-        CreateWebserver& maxThreads(const int maxThreads);
-        CreateWebserver& maxConnections(const int maxConnections);
-        CreateWebserver& memoryLimit(const int memoryLimit);
-        CreateWebserver& connectionTimeout(const int connectionTimeout);
-        CreateWebserver& perIPConnectionLimit(const int perIPConnectionLimit);
-        CreateWebserver& logDelegate(const LoggingDelegate* logDelegate);
-        CreateWebserver& validator(const RequestValidator* validator);
-        CreateWebserver& unescaper(const Unescaper* unescaper);
-        CreateWebserver& bindAddress(const struct sockaddr* bindAddress);
-        CreateWebserver& bindSocket(const int bindSocket);
-        CreateWebserver& maxThreadStackSize(const int maxThreadStackSize);
-        CreateWebserver& useSsl();
-        CreateWebserver& noSsl();
-        CreateWebserver& useIpv6();
-        CreateWebserver& noIpv6();
-        CreateWebserver& debug();
-        CreateWebserver& noDebug();
-        CreateWebserver& pedantic();
-        CreateWebserver& noPedantic();
-		CreateWebserver& httpsMemKey(const std::string& httpsMemKey);
-		CreateWebserver& httpsMemCert(const std::string& httpsMemCert);
-        CreateWebserver& httpsMemTrust(const std::string& httpsMemTrust);
-        CreateWebserver& httpsPriorities(const std::string& httpsPriorities);
-        CreateWebserver& credType(const HttpUtils::CredType_T& credType);
-        CreateWebserver& digestAuthRandom(const std::string& digestAuthRandom); //IT'S CORRECT TO PASS THIS PARAMETER BY VALUE
-        CreateWebserver& nonceNcSize(const int nonceNcSize);
+        CreateWebserver():
+            _port(DEFAULT_WS_PORT),
+            _startMethod(HttpUtils::INTERNAL_SELECT),
+            _maxThreads(0),
+            _maxConnections(0),
+            _memoryLimit(0),
+            _connectionTimeout(DEFAULT_WS_TIMEOUT),
+            _perIPConnectionLimit(0),
+            _logDelegate(0x0),
+            _validator(0x0),
+            _unescaper(0x0),
+            _maxThreadStackSize(0),
+            _useSsl(false),
+            _useIpv6(false),
+            _debug(false),
+            _pedantic(false),
+            _httpsMemKey(""),
+            _httpsMemCert(""),
+            _httpsMemTrust(""),
+            _httpsPriorities(""),
+            _credType(HttpUtils::NONE),
+            _digestAuthRandom(""),
+            _nonceNcSize(0)
+        {
+        }
+
+        CreateWebserver(int port):
+            _port(port),
+            _startMethod(HttpUtils::INTERNAL_SELECT),
+            _maxThreads(0),
+            _maxConnections(0),
+            _memoryLimit(0),
+            _connectionTimeout(DEFAULT_WS_TIMEOUT),
+            _perIPConnectionLimit(0),
+            _logDelegate(0x0),
+            _validator(0x0),
+            _unescaper(0x0),
+            _bindAddress(0x0),
+            _bindSocket(0),
+            _maxThreadStackSize(0),
+            _useSsl(false),
+            _useIpv6(false),
+            _debug(false),
+            _pedantic(false),
+            _httpsMemKey(""),
+            _httpsMemCert(""),
+            _httpsMemTrust(""),
+            _httpsPriorities(""),
+            _credType(HttpUtils::NONE),
+            _digestAuthRandom(""),
+            _nonceNcSize(0)
+        {
+        }
+
+        CreateWebserver& port(int port) { _port = port; return *this; }
+        CreateWebserver& startMethod(const HttpUtils::StartMethod_T& startMethod) { _startMethod = startMethod; return *this; }
+        CreateWebserver& maxThreads(int maxThreads) { _maxThreads = maxThreads; return *this; }
+        CreateWebserver& maxConnections(int maxConnections) { _maxConnections = maxConnections; return *this; }
+        CreateWebserver& memoryLimit(int memoryLimit) { _memoryLimit = memoryLimit; return *this; }
+        CreateWebserver& connectionTimeout(int connectionTimeout) { _connectionTimeout = connectionTimeout; return *this; }
+        CreateWebserver& perIPConnectionLimit(int perIPConnectionLimit) { _perIPConnectionLimit = perIPConnectionLimit; return *this; }
+        CreateWebserver& logDelegate(const LoggingDelegate* logDelegate) { _logDelegate = logDelegate; return *this; }
+        CreateWebserver& validator(const RequestValidator* validator) { _validator = validator; return *this; }
+        CreateWebserver& unescaper(const Unescaper* unescaper) { _unescaper = unescaper; return *this; }
+        CreateWebserver& bindAddress(const struct sockaddr* bindAddress) { _bindAddress = bindAddress; return *this; }
+        CreateWebserver& bindSocket(int bindSocket) { _bindSocket = bindSocket; return *this; }
+        CreateWebserver& maxThreadStackSize(int maxThreadStackSize) { _maxThreadStackSize = maxThreadStackSize; return *this; }
+        CreateWebserver& useSsl() { _useSsl = true; return *this; }
+        CreateWebserver& noSsl() { _useSsl = false; return *this; }
+        CreateWebserver& useIpv6() { _useIpv6 = true; return *this; }
+        CreateWebserver& noIpv6() { _useIpv6 = false; return *this; }
+        CreateWebserver& debug() { _debug = true; return *this; }
+        CreateWebserver& noDebug() { _debug = false; return *this; }
+        CreateWebserver& pedantic() { _pedantic = true; return *this; }
+        CreateWebserver& noPedantic() { _pedantic = false; return *this; }
+        CreateWebserver& httpsMemKey(const std::string& httpsMemKey) { _httpsMemKey = httpsMemKey; return *this; }
+        CreateWebserver& httpsMemCert(const std::string& httpsMemCert) { _httpsMemCert = httpsMemCert; return *this; }
+        CreateWebserver& httpsMemTrust(const std::string& httpsMemTrust) { _httpsMemTrust = httpsMemTrust; return *this; }
+        CreateWebserver& httpsPriorities(const std::string& httpsPriorities) { _httpsPriorities = httpsPriorities; return *this; }
+        CreateWebserver& credType(const HttpUtils::CredType_T& credType) { _credType = credType; return *this; }
+        CreateWebserver& digestAuthRandom(const std::string& digestAuthRandom) { _digestAuthRandom = digestAuthRandom; return *this; }
+        CreateWebserver& nonceNcSize(int nonceNcSize) { _nonceNcSize = nonceNcSize; return *this; }
     private:
         int _port;
         HttpUtils::StartMethod_T _startMethod;
