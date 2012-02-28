@@ -4,6 +4,6 @@ lib_LTLIBRARIES = libhttpserver.la
 libhttpserver_la_SOURCES = string_utilities.cpp Webserver.cpp HttpUtils.cpp 
 noinst_HEADERS = string_utilities.hpp
 include_HEADERS = Webserver.hpp HttpUtils.hpp
-AM_CXXFLAGS = -fPIC
+AM_CXXFLAGS = -fPIC -Wall
 libhttpserver_la_LIBADD = -lmicrohttpd
 libhttpserver_la_LDFLAGS =
