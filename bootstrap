@@ -1,3 +1,4 @@
+#!/bin/sh
 #
 #     This file is part of libhttpserver
 #     Copyright (C) 2011 Sebastiano Merlino
@@ -16,12 +17,16 @@
 #     License along with this library; if not, write to the Free Software
 #     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-default: all
+aclocal
+autoheader
+libtoolize --automake
+automake --add-missing
+autoconf
 
-all:
-	aclocal
-	autoheader
-	libtoolize --automake
-	automake --add-missing
-	autoconf
-
+# Optionally do the build as well.
+if [ "$1" = "-build" -o "$1" = "--build" ] ; then
+    shift
+    ./configure "$@"
+    make
+    make check
+fi
