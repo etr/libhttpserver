@@ -4,6 +4,10 @@ AUTOMAKE_OPTIONS = foreign 1.4
 
 SUBDIRS = src $(PYTHON_DIR) $(JAVA_DIR) $(PHP_DIR)
 DIST_SUBDIRS = src $(PYTHON_DIR) $(JAVA_DIR) $(PHP_DIR)
+EXTRA_DIST = libhttpserver.pc.in
+
+pkgconfigdir = $(libdir)/pkgconfig
+pkgconfig_DATA = libhttpserver.pc
 
 if PYTHON
 PYTHON_DIR = src/python

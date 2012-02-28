@@ -1,7 +1,9 @@
 #                                               -*- Autoconf -*-
 # Process this file with autoconf to produce a configure script.
 
-AC_INIT([FULL-PACKAGE-NAME], [VERSION], [BUG-REPORT-ADDRESS])
+AC_PREREQ(2.57)
+AC_INIT([libhttpserver], [0.1.1], [electrictwister2000@gmail.com])
+AM_INIT_AUTOMAKE([libhttpserver], [0.1.1])
 AM_INIT_AUTOMAKE
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIR([m4])
@@ -27,6 +29,8 @@ AC_CHECK_HEADER([microhttpd.h],[],
 AC_TYPE_UINT16_T
 
 # Checks for library functions.
+
+LHT_LIBDEPS="-lmicrohttpd"
 
 AC_ARG_WITH([python],
      [--with-python    Compile PYTHON libraries],
@@ -95,6 +99,19 @@ if test x$php = xtrue; then
 	PHP_AUTOGENERATION=src/autogen_helpers/support_command
 fi 
 
+AC_SUBST(LHT_LIBDEPS)
+AC_SUBST(CPPFLAGS)
+AC_SUBST(LIBS)
+AC_SUBST(LDFLAGS)
+AC_SUBST(EXT_LIB_PATH)
+AC_SUBST(EXT_LIBS)
+
 AC_OUTPUT(
-	  Makefile src/Makefile src/python/Makefile src/php/Makefile src/java/Makefile
+	  libhttpserver.pc Makefile src/Makefile src/python/Makefile src/php/Makefile src/java/Makefile
 )
+
+AC_MSG_NOTICE([Configuration Summary:  
+  Operating System:  ${host_os}
+  Target directory:  ${prefix}
+  License         :  LGPL only
+])
