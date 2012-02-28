@@ -882,31 +882,31 @@ class Webserver
 		**/
 		void sweetKill();
 	private:
-		bool running;
-        bool useSsl;
-        bool useIpv6;
-        bool debug;
-        bool pedantic;
 		int port;
+        HttpUtils::StartMethod_T startMethod;
 		int maxThreads;
 		int maxConnections;
 		int memoryLimit;
 		int connectionTimeout;
 		int perIPConnectionLimit;
-		int maxThreadStackSize;
-		int nonceNcSize;
 		const LoggingDelegate* logDelegate;
 		const RequestValidator* validator;
 		const Unescaper* unescaper;
         const struct sockaddr* bindAddress;
         int bindSocket;
+		int maxThreadStackSize;
+        bool useSsl;
+        bool useIpv6;
+        bool debug;
+        bool pedantic;
 		std::string httpsMemKey;
 		std::string httpsMemCert;
 		std::string httpsMemTrust;
 		std::string httpsPriorities;
-		std::string digestAuthRandom;
 		HttpUtils::CredType_T credType;
-        HttpUtils::StartMethod_T startMethod;
+		std::string digestAuthRandom;
+		int nonceNcSize;
+		bool running;
 
 		std::map<HttpEndpoint, HttpResource* > registeredResources;
 		struct MHD_Daemon *daemon;
@@ -948,7 +948,7 @@ class Webserver
 		friend void access_log(Webserver* cls, std::string uri);
 		friend void* uri_log(void* cls, const char* uri);
 		friend size_t unescaper_func(void * cls, struct MHD_Connection *c, char *s);
-		friend size_t internal_unescaper(void * cls, struct MHD_Connection *c, char *s);
+		friend size_t internal_unescaper(void * cls, char *s);
 };
 
 class CreateWebserver 
@@ -1070,6 +1070,7 @@ struct ModdedRequest
 	struct MHD_PostProcessor *pp;
 	std::string* completeUri;
 	HttpRequest *dhr;
+	Webserver* ws;
 	bool second;
 };
 
