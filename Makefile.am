@@ -1,18 +1,9 @@
-# not a GNU package. You can remove this line, if
-# have all needed files, that a GNU package needs
-AUTOMAKE_OPTIONS = foreign 1.4
-
-SUBDIRS = src $(PYTHON_DIR) $(JAVA_DIR) $(PHP_DIR)
-DIST_SUBDIRS = src $(PYTHON_DIR) $(JAVA_DIR) $(PHP_DIR)
-
-if PYTHON
-PYTHON_DIR = src/python
-endif
-
-if JAVA
-JAVA_DIR = src/java
-endif
-
-if PHP
-PHP_DIR = src/php
-endif
+INCLUDES = -I../
+METASOURCES = AUTO
+lib_LTLIBRARIES = libhttpserver.la
+libhttpserver_la_SOURCES = string_utilities.cpp Webserver.cpp HttpUtils.cpp 
+noinst_HEADERS = string_utilities.hpp
+include_HEADERS = Webserver.hpp HttpUtils.hpp
+AM_CXXFLAGS = -fPIC -Wall
+libhttpserver_la_LIBADD = -lmicrohttpd
+libhttpserver_la_LDFLAGS =

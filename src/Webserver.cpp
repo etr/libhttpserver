@@ -39,7 +39,7 @@ void error_log(void*, const char*, va_list);
 void* uri_log(void*, const char*);
 void access_log(Webserver*, string);
 size_t unescaper_func(void*, struct MHD_Connection*, char*);
-size_t internal_unescaper(void*, struct MHD_Connection*, char*);
+size_t internal_unescaper(void*, char*);
 
 static void catcher (int sig)
 {
@@ -81,7 +81,7 @@ HttpEndpoint::HttpEndpoint(const string& url, bool family, bool registration):
 	bool first = true;
     if(registration)
     {
-        for(int i = 0; i< parts.size(); i++)
+        for(unsigned int i = 0; i< parts.size(); i++)
         {
 			if((parts[i] != "") && (parts[i][0] != '{')) 
 			{
@@ -107,7 +107,7 @@ HttpEndpoint::HttpEndpoint(const string& url, bool family, bool registration):
 				if(( parts[i].size() >= 3) && (parts[i][0] == '{') && (parts[i][parts[i].size() - 1] == '}') ) 
 				{
 					int bar = parts[i].find_first_of('|');
-					if(bar != string::npos)
+					if(bar != (int)string::npos)
 					{
 						this->url_pars.push_back(parts[i].substr(1, bar - 1));
 						if(first)
@@ -147,7 +147,7 @@ HttpEndpoint::HttpEndpoint(const string& url, bool family, bool registration):
     }
     else
     {
-        for(int i = 0; i< parts.size(); i++)
+        for(unsigned int i = 0; i< parts.size(); i++)
         {
 			if(first)
 			{
@@ -212,7 +212,7 @@ bool HttpEndpoint::match(const HttpEndpoint& url) const
 	{
 		string nn = "/";
 		bool first = true;
-		for(int i = 0; i < this->url_pieces.size(); i++)
+		for(unsigned int i = 0; i < this->url_pieces.size(); i++)
 		{
 			if(first)
 			{
@@ -481,7 +481,7 @@ void HttpRequest::setPath(const string& path)
 	//this->path = boost::to_lower_copy(path);
 	this->path = path;
 	vector<string> complete_path = HttpUtils::tokenizeUrl(this->path);
-	for(int i = 0; i < complete_path.size(); i++) 
+	for(unsigned int i = 0; i < complete_path.size(); i++) 
 	{
 		this->post_path.push_back(complete_path[i]);
 	}
@@ -821,7 +821,7 @@ RequestValidator::RequestValidator() {}
 
 RequestValidator::~RequestValidator() {}
 
-bool RequestValidator::validate(const string& address) const {}
+bool RequestValidator::validate(const string& address) const { return true; }
 
 //UNESCAPER
 Unescaper::Unescaper() {}
@@ -859,6 +859,7 @@ Webserver::Webserver
 	int nonceNcSize
 ) :
 	port(port), 
+	startMethod(startMethod),
 	maxThreads(maxThreads), 
 	maxConnections(maxConnections),
 	memoryLimit(memoryLimit),
@@ -888,6 +889,7 @@ Webserver::Webserver
 
 Webserver::Webserver(const CreateWebserver& params):
     port(params._port),
+	startMethod(params._startMethod),
     maxThreads(params._maxThreads),
     maxConnections(params._maxConnections),
     memoryLimit(params._memoryLimit),
@@ -936,7 +938,8 @@ void Webserver::requestCompleted (void *cls, struct MHD_Connection *connection, 
 	{
 		MHD_destroy_post_processor (mr->pp);
 	}
-	delete mr->dhr;
+	if(mr->second)
+		delete mr->dhr; //TODO: verify. It could be an error
 	delete mr->completeUri;
 	free(mr);
 }
@@ -988,7 +991,7 @@ bool Webserver::start(bool blocking)
 	iov.push_back(gen(MHD_OPTION_END, 0, NULL ));
 
 	struct MHD_OptionItem ops[iov.size()];
-	for(int i = 0; i < iov.size(); i++)
+	for(unsigned int i = 0; i < iov.size(); i++)
 	{
 		ops[i] = iov[i];
 	}
@@ -1015,13 +1018,14 @@ bool Webserver::start(bool blocking)
 		return false;
 	}
 	this->running = true;
+	bool value_onclose = false;
 	if(blocking)
 	{
 		while(blocking && running)
 			sleep(1);
-		this->stop();
+		value_onclose = this->stop();
 	}
-	return true;
+	return value_onclose;
 }
 
 bool Webserver::isRunning()
@@ -1036,6 +1040,7 @@ bool Webserver::stop()
 		MHD_stop_daemon (this->daemon);
 		this->running = false;
 	}
+	return true;
 }
 
 void Webserver::registerResource(const string& resource, HttpResource* http_resource, bool family)
@@ -1066,9 +1071,9 @@ int Webserver::buildRequestFooter (void *cls, enum MHD_ValueKind kind, const cha
 
 int Webserver::buildRequestArgs (void *cls, enum MHD_ValueKind kind, const char *key, const char *value)
 {
-	HttpRequest* dhr = (HttpRequest*)(cls);
-	int size = http_unescape((char*) value);
-	dhr->setArg(key, string(value, size));
+	ModdedRequest* mr = (ModdedRequest*)(cls);
+	int size = internal_unescaper((void*)mr->ws, (char*) value);
+	mr->dhr->setArg(key, string(value, size));
 	return MHD_YES;
 }
 
@@ -1120,7 +1125,7 @@ size_t unescaper_func(void * cls, struct MHD_Connection *c, char *s)
 	return strlen(s);
 }
 
-size_t internal_unescaper(void* cls, struct MHD_Connection *c, char* s)
+size_t internal_unescaper(void* cls, char* s)
 {
 	Webserver* dws = (Webserver*) cls;
 	if(dws->unescaper != 0x0)
@@ -1133,7 +1138,6 @@ size_t internal_unescaper(void* cls, struct MHD_Connection *c, char* s)
 		return http_unescape(s);
 	}
 }
-
 
 int Webserver::post_iterator (void *cls, enum MHD_ValueKind kind,
 	const char *key,
@@ -1199,23 +1203,22 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
 	int ret;
 	HttpRequest supportReq;
 	Webserver* dws = (Webserver*)(cls);
-	http_unescape((char*) url);
+	internal_unescaper(cls, (char*) url);
 	string st_url = HttpUtils::standardizeUrl(url);
 
 	mr = (struct ModdedRequest*) *con_cls;
 	access_log(dws, *(mr->completeUri) + " METHOD: " + method);
+	mr->ws = dws;
 	if (0 == strcmp (method, MHD_HTTP_METHOD_POST) || 0 == strcmp(method, MHD_HTTP_METHOD_PUT)) 
 	{
 		if (mr->second == false) 
 		{
 			mr->second = true;
 			mr->dhr = new HttpRequest();
-			mr->dhr->setPath(st_url);
-			mr->dhr->setMethod(method);
 			const char *encoding = MHD_lookup_connection_value (connection, MHD_HEADER_KIND, HttpUtils::http_header_content_type.c_str());
+			//mr->dhr->setHeader(HttpUtils::http_header_content_type, string(encoding));
 			if ( 0x0 != encoding && 0 == strcmp(method, MHD_HTTP_METHOD_POST) && ((0 == strncasecmp (MHD_HTTP_POST_ENCODING_FORM_URLENCODED, encoding, strlen (MHD_HTTP_POST_ENCODING_FORM_URLENCODED))))) 
 			{
-				mr->dhr->setHeader(HttpUtils::http_header_content_type, string(encoding));
 				mr->pp = MHD_create_post_processor (connection, 1024, &post_iterator, mr);
 			} 
 			else 
@@ -1228,25 +1231,16 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
 	else 
 	{
 		supportReq = HttpRequest();
-		supportReq.setMethod(string(method));
-		supportReq.setPath(string(st_url));
-		const char *encoding = MHD_lookup_connection_value (connection, MHD_HEADER_KIND, HttpUtils::http_header_content_type.c_str());
-		if(encoding != 0x0)
-			supportReq.setHeader(HttpUtils::http_header_content_type, string(encoding));
+		mr->dhr = &supportReq;
 	}
 
-	if(0 == strcmp (method, MHD_HTTP_METHOD_POST) || 0 == strcmp(method, MHD_HTTP_METHOD_PUT))
-	{
-		MHD_get_connection_values (connection, MHD_HEADER_KIND, &buildRequestHeader, (void*) mr->dhr);
-		MHD_get_connection_values (connection, MHD_FOOTER_KIND, &buildRequestFooter, (void*) mr->dhr);
-		MHD_get_connection_values (connection, MHD_COOKIE_KIND, &buildRequestCookie, (void*) mr->dhr);
-	}
-	else
-	{
-		MHD_get_connection_values (connection, MHD_HEADER_KIND, &buildRequestHeader, (void*) &supportReq);
-		MHD_get_connection_values (connection, MHD_FOOTER_KIND, &buildRequestFooter, (void*) &supportReq);
-		MHD_get_connection_values (connection, MHD_COOKIE_KIND, &buildRequestCookie, (void*) &supportReq);
-	}
+	mr->dhr->setPath(string(st_url));
+	mr->dhr->setMethod(string(method));
+
+	MHD_get_connection_values (connection, MHD_HEADER_KIND, &buildRequestHeader, (void*) mr->dhr);
+	MHD_get_connection_values (connection, MHD_FOOTER_KIND, &buildRequestFooter, (void*) mr->dhr);
+	MHD_get_connection_values (connection, MHD_COOKIE_KIND, &buildRequestCookie, (void*) mr->dhr);
+
 	if (    0 == strcmp(method, MHD_HTTP_METHOD_DELETE) || 
 		0 == strcmp(method, MHD_HTTP_METHOD_GET) ||
 		0 == strcmp(method, MHD_HTTP_METHOD_HEAD) ||
@@ -1255,7 +1249,7 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
 		0 == strcmp(method, MHD_HTTP_METHOD_TRACE)
 	) 
 	{
-		MHD_get_connection_values (connection, MHD_GET_ARGUMENT_KIND, &buildRequestArgs, (void*) &supportReq);
+		MHD_get_connection_values (connection, MHD_GET_ARGUMENT_KIND, &buildRequestArgs, (void*) mr);
 	} 
 	else if (0 == strcmp (method, MHD_HTTP_METHOD_POST) || 0 == strcmp(method, MHD_HTTP_METHOD_PUT)) 
 	{
@@ -1335,7 +1329,7 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
 		HttpEndpoint matchingEndpoint;
 		for(it=dws->registeredResources.begin(); it!=dws->registeredResources.end(); it++) 
 		{
-			if(len == -1 || (*it).first.get_url_pieces().size() > len)
+			if(len == -1 || ((int)((*it).first.get_url_pieces().size())) > len)
 			{
 				if((*it).first.match(endpoint))
 				{
@@ -1359,7 +1353,7 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
 			vector<string> url_pars = matchingEndpoint.get_url_pars();
 			vector<string> url_pieces = endpoint.get_url_pieces();
 			vector<int> chunkes = matchingEndpoint.get_chunk_positions();
-			for(int i = 0; i < url_pars.size(); i++) 
+			for(unsigned int i = 0; i < url_pars.size(); i++) 
 			{
 				supportReq.setArg(url_pars[i], url_pieces[chunkes[i]]);
 			}
