@@ -28,6 +28,9 @@
 #include <gnutls/gnutls.h>
 #include <uuid/uuid.h>
 
+namespace httpserver {
+namespace http {
+
 class HttpUtils 
 {
     public:
@@ -268,5 +271,8 @@ short get_port(const struct sockaddr* sa);
  *  shorter afterwards due to elimination of escape sequences)
  */
 size_t http_unescape (char *val);
+
+};
+};
 #endif
 

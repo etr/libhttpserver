@@ -27,6 +27,8 @@
 #include <stdlib.h>
 #include <string.h>
  
+namespace httpserver
+{
 namespace string_utilities
 {
 
@@ -83,4 +85,5 @@ std::string regex_replace(std::string str, std::string pattern, std::string repl
     return to_ret;
 }
 
+};
 };

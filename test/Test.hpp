@@ -2,6 +2,8 @@
 #define _TEST_HPP_
 #include "Webserver.hpp"
 
+using namespace httpserver;
+
 class Test : virtual public HttpResource {
 	public:
         Test();

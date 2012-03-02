@@ -26,6 +26,9 @@
 #include <arpa/inet.h>
 //#include <boost/xpressive/xpressive.hpp>
 
+namespace httpserver {
+namespace http {
+
 /* See also: http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html */
 const int HttpUtils::http_continue = MHD_HTTP_CONTINUE;
 const int HttpUtils::http_switching_protocol = MHD_HTTP_SWITCHING_PROTOCOLS;
@@ -249,19 +252,5 @@ size_t http_unescape (char *val)
 	return wpos - val; /* = strlen(val) */
 }
 
-//std::string HttpUtils::base64_decode(const std::string& aPlain) {
-    //unsigned char buf[512];
-    //memset(buf, '\0', 512);
-    //BIO* mbio=BIO_new(BIO_s_mem());
-    //BIO* b64bio=BIO_new(BIO_f_base64());
-    //BIO_set_flags(b64bio,BIO_FLAGS_BASE64_NO_NL);
-    //BIO_puts(mbio,aPlain.c_str());
-    //BIO* bio=BIO_push(b64bio,mbio);
-    //std::string aOut;
-    //int i=BIO_read(bio, (void*)buf, BIO_ctrl_pending(bio));
-    //if (i>0) {
-        //aOut = std::string((char*)buf);
-    //}
-    //BIO_free_all(bio);
-    //return aOut;
-//}
+};
+};
