@@ -40,6 +40,18 @@ AC_ARG_WITH([php],
      [--with-php    Compile PHP libraries],
      [php=true])
 
+AC_ARG_WITH([ruby],
+	 [--with-ruby   Compile RUBY libraries],
+	 [ruby=true])
+
+AC_ARG_WITH([perl],
+	 [--with-perl   Compile PERL libraries],
+	 [perl=true])
+
+AC_ARG_WITH([lua],
+	 [--with-lua   Compile LUA libraries],
+	 [lua=true])
+
 AC_ARG_WITH([java],
      [--with-java    Compile JAVA libraries],
      [java=true])
@@ -57,6 +69,9 @@ AC_ARG_WITH(java-dir,
 AM_CONDITIONAL([PYTHON], [test x$python = xtrue])
 AM_CONDITIONAL([JAVA], [test x$java = xtrue])
 AM_CONDITIONAL([PHP], [test x$php = xtrue])
+AM_CONDITIONAL([PERL], [test x$perl = xtrue])
+AM_CONDITIONAL([LUA], [test x$lua = xtrue])
+AM_CONDITIONAL([RUBY], [test x$ruby = xtrue])
 
 if test x$python = xtrue; then
 	CXXFLAGS="$CXXFLAGS `python-config --includes` -DWITH_PYTHON"
@@ -107,7 +122,7 @@ AC_SUBST(EXT_LIB_PATH)
 AC_SUBST(EXT_LIBS)
 
 AC_OUTPUT(
-	  libhttpserver.pc Makefile src/Makefile src/python/Makefile src/php/Makefile src/java/Makefile
+	  libhttpserver.pc Makefile src/Makefile src/python/Makefile src/php/Makefile src/java/Makefile src/perl/Makefile src/ruby/Makefile src/lua/Makefile
 )
 
 AC_MSG_NOTICE([Configuration Summary:  

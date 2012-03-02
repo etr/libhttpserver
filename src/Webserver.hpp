@@ -34,7 +34,7 @@ namespace std {
 }
 
 #ifdef SWIGPHP
-	%module(directors="1") libphpwebserver_framework
+	%module(directors="1") libhttpserver_php
 	%include "typemaps.i"
 	%include "cpointer.i"
 	%feature("director") Webserver;
@@ -44,10 +44,10 @@ namespace std {
 	%feature("director") HttpEndpoint;
 	%feature("director") HttpUtils;
 #endif
-	    
+		
 #ifdef SWIGJAVA
 	%javaconst(1);
-	%module(directors="1") libjavawebserver_framework
+	%module(directors="1") libhttpserver_java
 	%include "jstring.i"
 	%include "typemaps.i"
 	%include "cpointer.i"
@@ -59,8 +59,45 @@ namespace std {
 	%feature("director") HttpUtils;
 #endif
 
+#ifdef SWIGRUBY
+	%module(directors="1") libhttpserver_ruby
+	%include "typemaps.i"
+	%include "cpointer.i"
+	%feature("director") Webserver;
+	%feature("director") HttpRequest;
+	%feature("director") HttpResponse;
+	%feature("director") HttpResource;
+	%feature("director") HttpEndpoint;
+	%feature("director") HttpUtils;
+#endif
+
+#ifdef SWIGLUA
+	%module(directors="1") libhttpserver_lua
+	%include "typemaps.i"
+	%include "cpointer.i"
+	%feature("director") Webserver;
+	%feature("director") HttpRequest;
+	%feature("director") HttpResponse;
+	%feature("director") HttpResource;
+	%feature("director") HttpEndpoint;
+	%feature("director") HttpUtils;
+#endif
+
+#ifdef SWIGPERL
+	%module(directors="1") libhttpserver_perl
+	%include "typemaps.i"
+	%include "cpointer.i"
+	%feature("director") Webserver;
+	%feature("director") HttpRequest;
+	%feature("director") HttpResponse;
+	%feature("director") HttpResource;
+	%feature("director") HttpEndpoint;
+	%feature("director") HttpUtils;
+#endif
+
+
 #ifdef SWIGPYTHON
-	%module(directors="1", threads="1") libpythonwebserver_framework
+	%module(directors="1", threads="1") libhttpserver_python
 	%nothread;
 	%include "typemaps.i"
 	%include "cpointer.i"
@@ -80,15 +117,6 @@ namespace std {
 			throw Swig::DirectorMethodException();
 		}
 	}
-
-	%exception {
-		try {
-			$action
-		} catch (const Swig::DirectorException& e) {
-			PyEval_SaveThread();
-			PyErr_SetString(PyExc_RuntimeError, e.getMessage());
-		}
-	};
 #endif
 
 %include "HttpUtils.hpp"
@@ -107,24 +135,32 @@ namespace std {
 
 %exception {
 	try {
-	    $action
-	} catch (const std::out_of_range& e) {
-	#ifdef SWIGPYTHON
-	    PyEval_SaveThread();
+		$action
+	} 
+	#ifdef SWIGPYTHON //DirectorException should be ignored in python because is used as an internal trick
+	catch (const Swig::DirectorException& e)
+	{
+		PyEval_SaveThread();
+		PyErr_SetString(PyExc_RuntimeError, e.getMessage());
+	}
 	#endif
-	    SWIG_exception(SWIG_IndexError,const_cast<char*>(e.what()));
+	catch (const std::out_of_range& e) {
+	#ifdef SWIGPYTHON
+		PyEval_SaveThread();
+	#endif
+		SWIG_exception(SWIG_IndexError,const_cast<char*>(e.what()));
 	} catch (const std::exception& e) {
 	#ifdef SWIGPYTHON
-	    PyEval_SaveThread();
+		PyEval_SaveThread();
 	#endif
-	    SWIG_exception(SWIG_RuntimeError, e.what());
+		SWIG_exception(SWIG_RuntimeError, e.what());
 	} catch (...) {
 	#ifdef SWIGPYTHON
-	    PyEval_SaveThread();
+		PyEval_SaveThread();
 	#endif
-	    SWIG_exception(SWIG_RuntimeError, "Generic SWIG Exception");
+		SWIG_exception(SWIG_RuntimeError, "Generic SWIG Exception");
 	}
-}
+};
 
 %ignore policyCallback (void*, const struct sockaddr*, socklen_t);
 %ignore error_log(void*, const char*, va_list);
