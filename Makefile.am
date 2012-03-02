@@ -20,8 +20,8 @@
 # have all needed files, that a GNU package needs
 AUTOMAKE_OPTIONS = foreign 1.4
 
-SUBDIRS = src $(PYTHON_DIR) $(JAVA_DIR) $(PHP_DIR)
-DIST_SUBDIRS = src $(PYTHON_DIR) $(JAVA_DIR) $(PHP_DIR)
+SUBDIRS = src $(PYTHON_DIR) $(JAVA_DIR) $(PHP_DIR) $(LUA_DIR) $(PERL_DIR) $(RUBY_DIR)
+DIST_SUBDIRS = src $(PYTHON_DIR) $(JAVA_DIR) $(PHP_DIR) $(LUA_DIR) $(PERL_DIR) $(RUBY_DIR)
 EXTRA_DIST = libhttpserver.pc.in
 
 pkgconfigdir = $(libdir)/pkgconfig
@@ -37,4 +37,16 @@ endif
 
 if PHP
 PHP_DIR = src/php
+endif
+
+if LUA
+LUA_DIR = src/lua
+endif
+
+if PERL
+PERL_DIR = src/perl
+endif
+
+if RUBY
+RUBY_DIR = src/ruby
 endif

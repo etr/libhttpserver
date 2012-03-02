@@ -1,12 +1,12 @@
 INCLUDES = -I../ -I$(top_srcdir)/src
 METASOURCES = AUTO
-lib_LTLIBRARIES = libpythonwebserver_framework.la
-libpythonwebserver_framework_la_LIBADD = -lmicrohttpd
-libpythonwebserver_framework_la_SOURCES = WebserverWrap.cpp ../Webserver.cpp ../HttpUtils.cpp
+lib_LTLIBRARIES = libhttpserver_python.la
+libhttpserver_python_la_LIBADD = -lmicrohttpd
+libhttpserver_python_la_SOURCES = WebserverWrap.cpp ../Webserver.cpp ../HttpUtils.cpp
 
 pydir=$(datadir)/python
 
-py_DATA=libpythonwebserver_framework.py
+py_DATA=libhttpserver_python.py
 
 language=python
 @PYTHON_AUTOGENERATION@

@@ -33,8 +33,8 @@ POST_INSTALL = :
 NORMAL_UNINSTALL = :
 PRE_UNINSTALL = :
 POST_UNINSTALL = :
-build_triplet = i686-pc-linux-gnu
-host_triplet = i686-pc-linux-gnu
+build_triplet = x86_64-unknown-linux-gnu
+host_triplet = x86_64-unknown-linux-gnu
 subdir = src/python
 DIST_COMMON = $(srcdir)/Makefile.am $(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
@@ -68,11 +68,11 @@ am__base_list = \
   sed '$$!N;$$!N;$$!N;$$!N;s/\n/ /g'
 am__installdirs = "$(DESTDIR)$(libdir)" "$(DESTDIR)$(pydir)"
 LTLIBRARIES = $(lib_LTLIBRARIES)
-libpythonwebserver_framework_la_DEPENDENCIES =
-am_libpythonwebserver_framework_la_OBJECTS = WebserverWrap.lo \
-	Webserver.lo HttpUtils.lo
-libpythonwebserver_framework_la_OBJECTS =  \
-	$(am_libpythonwebserver_framework_la_OBJECTS)
+libhttpserver_python_la_DEPENDENCIES =
+am_libhttpserver_python_la_OBJECTS = WebserverWrap.lo Webserver.lo \
+	HttpUtils.lo
+libhttpserver_python_la_OBJECTS =  \
+	$(am_libhttpserver_python_la_OBJECTS)
 DEFAULT_INCLUDES = -I. -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__depfiles_maybe = depfiles
@@ -86,19 +86,19 @@ CXXLD = $(CXX)
 CXXLINK = $(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
 	--mode=link $(CXXLD) $(AM_CXXFLAGS) $(CXXFLAGS) $(AM_LDFLAGS) \
 	$(LDFLAGS) -o $@
-SOURCES = $(libpythonwebserver_framework_la_SOURCES)
-DIST_SOURCES = $(libpythonwebserver_framework_la_SOURCES)
+SOURCES = $(libhttpserver_python_la_SOURCES)
+DIST_SOURCES = $(libhttpserver_python_la_SOURCES)
 DATA = $(py_DATA)
 ETAGS = etags
 CTAGS = ctags
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
-ACLOCAL = ${SHELL} /home/etr/progs/webserver_framework/trunk/missing --run aclocal-1.11
-AMTAR = ${SHELL} /home/etr/progs/webserver_framework/trunk/missing --run tar
+ACLOCAL = ${SHELL} /home/etr/progs/rw/libhttpserver/missing --run aclocal-1.11
+AMTAR = ${SHELL} /home/etr/progs/rw/libhttpserver/missing --run tar
 AR = ar
-AUTOCONF = ${SHELL} /home/etr/progs/webserver_framework/trunk/missing --run autoconf
-AUTOHEADER = ${SHELL} /home/etr/progs/webserver_framework/trunk/missing --run autoheader
-AUTOMAKE = ${SHELL} /home/etr/progs/webserver_framework/trunk/missing --run automake-1.11
-AWK = mawk
+AUTOCONF = ${SHELL} /home/etr/progs/rw/libhttpserver/missing --run autoconf
+AUTOHEADER = ${SHELL} /home/etr/progs/rw/libhttpserver/missing --run autoheader
+AUTOMAKE = ${SHELL} /home/etr/progs/rw/libhttpserver/missing --run automake-1.11
+AWK = gawk
 CC = gcc
 CCDEPMODE = depmode=gcc3
 CFLAGS = -g -O2
@@ -111,23 +111,24 @@ CXXFLAGS = -g -O2
 CYGPATH_W = echo
 DEFS = -DHAVE_CONFIG_H
 DEPDIR = .deps
+DLLTOOL = false
 DSYMUTIL = 
 DUMPBIN = 
 ECHO_C = 
 ECHO_N = -n
 ECHO_T = 
-EGREP = /bin/grep -E
+EGREP = /usr/bin/grep -E
 EXEEXT = 
 EXT_LIBS = 
 EXT_LIB_PATH = 
-FGREP = /bin/grep -F
-GREP = /bin/grep
-INSTALL = /usr/bin/install -c
+FGREP = /usr/bin/grep -F
+GREP = /usr/bin/grep
+INSTALL = /usr/bin/ginstall -c
 INSTALL_DATA = ${INSTALL} -m 644
 INSTALL_PROGRAM = ${INSTALL}
 INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
-LD = /usr/bin/ld
+LD = /usr/x86_64-slackware-linux/bin/ld -m elf_x86_64
 LDFLAGS = 
 LHT_LIBDEPS = -lmicrohttpd
 LIBOBJS = 
@@ -136,8 +137,9 @@ LIBTOOL = $(SHELL) $(top_builddir)/libtool
 LIPO = 
 LN_S = ln -s
 LTLIBOBJS = 
-MAKEINFO = ${SHELL} /home/etr/progs/webserver_framework/trunk/missing --run makeinfo
-MKDIR_P = /bin/mkdir -p
+MAKEINFO = ${SHELL} /home/etr/progs/rw/libhttpserver/missing --run makeinfo
+MANIFEST_TOOL = :
+MKDIR_P = /usr/bin/mkdir -p
 NM = /usr/bin/nm -B
 NMEDIT = 
 OBJDUMP = objdump
@@ -152,16 +154,21 @@ PACKAGE_TARNAME = libhttpserver
 PACKAGE_URL = 
 PACKAGE_VERSION = 0.1.1
 PATH_SEPARATOR = :
+PERLINT = 
+PHPCONFIG = 
+PYTHONCONFIG = 
 RANLIB = ranlib
-SED = /bin/sed
+RUBYINT = 
+SED = /usr/bin/sed
 SET_MAKE = 
-SHELL = /bin/bash
+SHELL = /bin/sh
 STRIP = strip
 VERSION = 0.1.1
-abs_builddir = /home/etr/progs/webserver_framework/trunk/src/python
-abs_srcdir = /home/etr/progs/webserver_framework/trunk/src/python
-abs_top_builddir = /home/etr/progs/webserver_framework/trunk
-abs_top_srcdir = /home/etr/progs/webserver_framework/trunk
+abs_builddir = /home/etr/progs/rw/libhttpserver/src/python
+abs_srcdir = /home/etr/progs/rw/libhttpserver/src/python
+abs_top_builddir = /home/etr/progs/rw/libhttpserver
+abs_top_srcdir = /home/etr/progs/rw/libhttpserver
+ac_ct_AR = ar
 ac_ct_CC = gcc
 ac_ct_CXX = g++
 ac_ct_DUMPBIN = 
@@ -171,33 +178,32 @@ am__quote =
 am__tar = ${AMTAR} chof - "$$tardir"
 am__untar = ${AMTAR} xf -
 bindir = ${exec_prefix}/bin
-build = i686-pc-linux-gnu
+build = x86_64-unknown-linux-gnu
 build_alias = 
-build_cpu = i686
+build_cpu = x86_64
 build_os = linux-gnu
-build_vendor = pc
+build_vendor = unknown
 builddir = .
 datadir = ${datarootdir}
 datarootdir = ${prefix}/share
 docdir = ${datarootdir}/doc/${PACKAGE_TARNAME}
 dvidir = ${docdir}
 exec_prefix = ${prefix}
-host = i686-pc-linux-gnu
+host = x86_64-unknown-linux-gnu
 host_alias = 
-host_cpu = i686
+host_cpu = x86_64
 host_os = linux-gnu
-host_vendor = pc
+host_vendor = unknown
 htmldir = ${docdir}
 includedir = ${prefix}/include
 infodir = ${datarootdir}/info
-install_sh = ${SHELL} /home/etr/progs/webserver_framework/trunk/install-sh
+install_sh = ${SHELL} /home/etr/progs/rw/libhttpserver/install-sh
 libdir = ${exec_prefix}/lib
 libexecdir = ${exec_prefix}/libexec
 localedir = ${datarootdir}/locale
 localstatedir = ${prefix}/var
-lt_ECHO = echo
 mandir = ${datarootdir}/man
-mkdir_p = /bin/mkdir -p
+mkdir_p = /usr/bin/mkdir -p
 oldincludedir = /usr/include
 pdfdir = ${docdir}
 prefix = /usr/local
@@ -213,11 +219,11 @@ top_builddir = ../..
 top_srcdir = ../..
 INCLUDES = -I../ -I$(top_srcdir)/src
 METASOURCES = AUTO
-lib_LTLIBRARIES = libpythonwebserver_framework.la
-libpythonwebserver_framework_la_LIBADD = -lmicrohttpd
-libpythonwebserver_framework_la_SOURCES = WebserverWrap.cpp ../Webserver.cpp ../HttpUtils.cpp
+lib_LTLIBRARIES = libhttpserver_python.la
+libhttpserver_python_la_LIBADD = -lmicrohttpd
+libhttpserver_python_la_SOURCES = WebserverWrap.cpp ../Webserver.cpp ../HttpUtils.cpp
 pydir = $(datadir)/python
-py_DATA = libpythonwebserver_framework.py
+py_DATA = libhttpserver_python.py
 language = python
 all: all-am
 
@@ -284,8 +290,8 @@ clean-libLTLIBRARIES:
 	  echo "rm -f \"$${dir}/so_locations\""; \
 	  rm -f "$${dir}/so_locations"; \
 	done
-libpythonwebserver_framework.la: $(libpythonwebserver_framework_la_OBJECTS) $(libpythonwebserver_framework_la_DEPENDENCIES) 
-	$(CXXLINK) -rpath $(libdir) $(libpythonwebserver_framework_la_OBJECTS) $(libpythonwebserver_framework_la_LIBADD) $(LIBS)
+libhttpserver_python.la: $(libhttpserver_python_la_OBJECTS) $(libhttpserver_python_la_DEPENDENCIES) 
+	$(CXXLINK) -rpath $(libdir) $(libhttpserver_python_la_OBJECTS) $(libhttpserver_python_la_LIBADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)

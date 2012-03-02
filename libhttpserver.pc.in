@@ -6,8 +6,8 @@ includedir=@includedir@
 Name: libhttpserver
 Description: A C++ library for creating an embedded Rest HTTP server
 Version: @VERSION@
-Requires: libhttpserver >= 0.9.9
+Requires: libmicrohttpd >= 0.9.9
 Conflicts:
-Libs: -L${libdir} -lhttpserver
+Libs: -L${libdir} -lmicrohttpd
 Libs.private: @LHT_LIBDEPS@
 Cflags: -I${includedir}
