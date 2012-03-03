@@ -22,7 +22,6 @@
 
 #include <string>
 #include <vector>
-#include <regex.h>
 
 namespace httpserver
 {

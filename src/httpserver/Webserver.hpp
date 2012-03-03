@@ -26,6 +26,12 @@
 %include "exception.i"
 %include "stl.i"
 %include "std_map.i"
+%include "HttpUtils.hpp"
+%include "HttpRequest.hpp"
+%include "HttpResponse.hpp"
+%include "HttpResource.hpp"
+%include "HttpEndpoint.hpp"
+%include "Webserver.hpp"
 
 namespace std {
 	%template(StringVector) vector<std::string>;
@@ -119,8 +125,6 @@ namespace std {
 	}
 #endif
 
-%include "HttpUtils.hpp"
-
 %template(SQMHeaders) std::map<std::string, std::string>;    
 
 %extend std::map<std::string, std::string> {
@@ -173,6 +177,7 @@ namespace std {
 #include "HttpUtils.hpp"
 #include "HttpRequest.hpp"
 #include "HttpResponse.hpp"
+#include "HttpResource.hpp"
 #include "HttpEndpoint.hpp"
 #include "Webserver.hpp"
 %}
@@ -197,7 +202,6 @@ namespace std {
 #include <vector>
 #include <string>
 #include <utility>
-#include <regex.h>
 #include <memory>
 //#include <boost/xpressive/xpressive.hpp>
 
