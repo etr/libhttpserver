@@ -26,7 +26,6 @@
 #include <ctype.h>
 #include <vector>
 #include <gnutls/gnutls.h>
-#include <uuid/uuid.h>
 
 namespace httpserver {
 namespace http {
@@ -243,11 +242,6 @@ class ArgComparator {
 		}
 };
 
-/**
- * Method used to generate a random uuid string
- * @return string representing the uuid
-**/
-std::string generate_random_uuid();
 /**
  * Method used to get an ip in form of string from a sockaddr structure
  * @param sa The sockaddr object to find the ip address from

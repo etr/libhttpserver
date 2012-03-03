@@ -17,10 +17,7 @@
      Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
 */
-#include "Webserver.hpp"
-#include "HttpUtils.hpp"
-#include "iostream"
-#include "string_utilities.hpp"
+#include <iostream>
 #include <stdlib.h>
 #include <stdio.h>
 #include <errno.h>
@@ -28,9 +25,19 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <signal.h>
+
 #ifdef WITH_PYTHON
 #include <Python.h>
 #endif
+
+#include "HttpUtils.hpp"
+#include "HttpResource.hpp"
+#include "HttpResponse.hpp"
+#include "HttpRequest.hpp"
+#include "HttpEndpoint.hpp"
+#include "string_utilities.hpp"
+#include "Webserver.hpp"
+
 
 using namespace std;
 

@@ -1,6 +1,6 @@
 #ifndef _TEST_HPP_
 #define _TEST_HPP_
-#include "Webserver.hpp"
+#include <httpserver.h>
 
 using namespace httpserver;
 

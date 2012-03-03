@@ -195,13 +195,12 @@ namespace std {
 #include <memory>
 //#include <boost/xpressive/xpressive.hpp>
 
-#include "HttpUtils.hpp"
-#include "HttpResource.hpp"
-#include "HttpResponse.hpp"
-#include "HttpRequest.hpp"
-#include "HttpEndpoint.hpp"
-
 namespace httpserver {
+
+class HttpResource;
+class HttpResponse;
+class HttpRequest;
+class HttpEndpoint;
 
 using namespace http;
 
