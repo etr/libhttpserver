@@ -22,7 +22,6 @@
 AC_PREREQ(2.57)
 AC_INIT([libhttpserver], [0.1.1], [electrictwister2000@gmail.com])
 AM_INIT_AUTOMAKE([libhttpserver], [0.1.1])
-AM_INIT_AUTOMAKE
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIR([m4])
 
@@ -80,16 +79,6 @@ AC_ARG_WITH(lua-include-dir,
                 fi
            ])
 
-AC_ARG_WITH(lua-lib-dir,
-            [  --with-lua-lib-dir=DIR        where to look for lua libs],
-            [   
-                lualib=""
-                if test -d "$withval"
-                then
-                        lualib="$withval"
-                fi
-           ])
-
 AC_ARG_WITH([java],
      [  --with-java    Compile JAVA libraries],
      [java=true])
@@ -119,16 +108,23 @@ if test x$python = xtrue; then
 	then
 		AC_MSG_ERROR(python-config not found)
 	fi
-	CXXFLAGS="$CXXFLAGS `python-config --includes` -DWITH_PYTHON"
-	LDFLAGS="$LDFLAGS -L`python-config --prefix`/lib"
-	LIBS="$LIBS `python-config --libs`"
+    PYINCLUDES="`python-config --includes`"
+    PYDEFINES="-DWITHPYTHON"
+	PYLDFLAGS="$LDFLAGS -L`python-config --prefix`/lib"
+	PYLIBS="$LIBS `python-config --libs`"
+    AC_SUBST(PYINCLUDES)
+    AC_SUBST(PYDEFINES)
+    AC_SUBST(PYLDFLAGS)
+    AC_SUBST(PYLIBS)
 	AC_SUBST_FILE([PYTHON_AUTOGENERATION])
 	PYTHON_AUTOGENERATION=src/autogen_helpers/support_command
 	LANGUAGES="$LANGUAGES Python"
 fi 
 
 if test x$java = xtrue; then
-
+    JAVAINCLUDES=""
+    JAVALDFLAGS="$LDFLAGS"
+    JAVALIBS="$LIBS"
 	found=""
 	for loc in $javaloc /usr /usr/local
 	do
@@ -138,8 +134,7 @@ if test x$java = xtrue; then
 			AC_MSG_CHECKING([for jni in])
 			AC_MSG_RESULT($loc)
 			AC_CHECK_FILE("$loc/include/jni.h", 
-			      [CXXFLAGS="$CXXFLAGS -I$loc/include -I$loc/include/linux"; LDFLAGS="$LDFLAGS";
-			       LIBS="$LIBS"; found=1],[])
+			      [JAVAINCLUDES="$CXXFLAGS -I$loc/include -I$loc/include/linux"; found=1],[])
 
 		fi  
 
@@ -148,6 +143,9 @@ if test x$java = xtrue; then
 	then
 		AC_MSG_ERROR([Unable to find jni headers. Please provide a --with-java-dir=<dir> location])
 	fi
+    AC_SUBST(JAVAINCLUDES)
+    AC_SUBST(JAVALDFLAGS)
+    AC_SUBST(JABALIBS)
 	AC_SUBST_FILE([JAVA_AUTOGENERATION])
 	JAVA_AUTOGENERATION=src/autogen_helpers/support_command
 	LANGUAGES="$LANGUAGES Java"
@@ -159,14 +157,17 @@ if test x$php = xtrue; then
 	then
 		AC_MSG_ERROR(php-config not found)
 	fi
-	CXXFLAGS="$CXXFLAGS `php-config --includes`"
-	LDFLAGS="$LDFLAGS -L`php-config --prefix`/lib"
+	PHPINCLUDES="`php-config --includes`"
+	PHPLDFLAGS="$LDFLAGS -L`php-config --prefix`/lib"
+    AC_SUBST(PHPINCLUDES)
+    AC_SUBST(PHPLDFLAGS)
 	AC_SUBST_FILE([PHP_AUTOGENERATION])
 	PHP_AUTOGENERATION=src/autogen_helpers/support_command
 	LANGUAGES="$LANGUAGES PHP"
 fi 
 
 if test x$lua = xtrue; then
+    LUAINCLUDES=""
 	found=""
 	for loc in $luahead /usr/include /usr/local/include
 	do
@@ -176,7 +177,7 @@ if test x$lua = xtrue; then
 			AC_MSG_CHECKING([for lua.h in])
 			AC_MSG_RESULT($loc)
 			AC_CHECK_FILE("$loc/lua.h",
-			      [CXXFLAGS="$CXXFLAGS -I$loc";
+			      [LUAINCLUDES="$LUACXXFLAGS -I$loc";
 			       found=1],[])
 
 		fi  
@@ -185,25 +186,7 @@ if test x$lua = xtrue; then
 	then
 		AC_MSG_ERROR([Unable to find lua headers. Please provide a --with-lua-include-dir=<dir> location])
 	fi
-
-	found=""
-	for loc in $lualib /usr/lib /usr/local/lib
-	do
-
-		if test "x$found" = "x" 
-		then
-			AC_MSG_CHECKING([for liblua.so in])
-			AC_MSG_RESULT($loc)
-			AC_CHECK_FILE("$loc/liblua.so",
-			      [LDFLAGS="$LDFLAGS -L$loc";
-			       found=1],[])
-
-		fi  
-	done
-	if test "x$found" = "x" 
-	then
-		AC_MSG_ERROR([Unable to find lua libs. Please provide a --with-lua-lib-dir=<dir> location])
-	fi
+    AC_SUBST(LUAINCLUDES)
 	AC_SUBST_FILE([LUA_AUTOGENERATION])
 	LUA_AUTOGENERATION=src/autogen_helpers/support_command
 	LANGUAGES="$LANGUAGES LUA"
@@ -215,7 +198,10 @@ if test x$perl = xtrue; then
 	then
 		AC_MSG_ERROR(perl interpreter not found)
 	fi
-	CXXFLAGS="$CXXFLAGS -I`perl -e 'use Config; print $Config{archlib};'`/CORE -Dbool=char"
+	PERLINCLUDES="$PERLINCLUDES -I`perl -e 'use Config; print $Config{archlib};'`/CORE"
+    PERLDEFINES="-Dbool=char -D_GNU_SOURCE"
+    AC_SUBST(PERLINCLUDES)
+    AC_SUBST(PERLDEFINES)
 	AC_SUBST_FILE([PERL_AUTOGENERATION])
 	PERL_AUTOGENERATION=src/autogen_helpers/support_command
 	LANGUAGES="$LANGUAGES Perl"
@@ -223,11 +209,29 @@ fi
 
 if test x$ruby = xtrue; then
 	AC_CHECK_PROG([RUBYINT],[ruby],["ruby"], ["no"])
+    RUBYINCLUDES=""
 	if test "$RUBYINT" = "no"
 	then
 		AC_MSG_ERROR(ruby interpreter not found)
 	fi
-	CXXFLAGS="$CXXFLAGS -I`ruby -e 'puts $:.join(\" -I\")'`"
+	found=""
+	for loc in `ruby -e 'puts $:.join(" ")'`
+	do
+
+		if test "x$found" = "x" 
+		then
+			AC_MSG_CHECKING([for ruby.h in])
+			AC_MSG_RESULT($loc)
+			AC_CHECK_FILE("$loc/ruby.h", [RUBYINCLUDES="$RUBYINCLUDES -I$loc";found=1],[])
+		fi  
+	done
+	if test "x$found" = "x" 
+	then
+		AC_MSG_ERROR([Unable to find ruby headers.])
+	fi
+    RUBYDEFINES="-fno-strict-aliasing -D_FILE_OFFSET_BITS=64"
+    AC_SUBST(RUBYINCLUDES)
+    AC_SUBST(RUBYDEFINES)
 	AC_SUBST_FILE([RUBY_AUTOGENERATION])
 	RUBY_AUTOGENERATION=src/autogen_helpers/support_command
 	LANGUAGES="$LANGUAGES Ruby"

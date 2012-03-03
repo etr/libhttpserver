@@ -17,6 +17,7 @@
      Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
 */
+#include <regex.h>
 #include "HttpEndpoint.hpp"
 #include "HttpUtils.hpp"
 #include "string_utilities.hpp"

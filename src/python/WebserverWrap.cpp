@@ -3162,14 +3162,14 @@ namespace Swig {
 
 /* -------- TYPES TABLE (BEGIN) -------- */
 
-#define SWIGTYPE_p_HttpRequest swig_types[0]
-#define SWIGTYPE_p_HttpResource swig_types[1]
-#define SWIGTYPE_p_MHD_PostProcessor swig_types[2]
-#define SWIGTYPE_p_allocator_type swig_types[3]
-#define SWIGTYPE_p_char swig_types[4]
-#define SWIGTYPE_p_difference_type swig_types[5]
-#define SWIGTYPE_p_first_type swig_types[6]
-#define SWIGTYPE_p_httpserver__CreateWebserver swig_types[7]
+#define SWIGTYPE_p_MHD_PostProcessor swig_types[0]
+#define SWIGTYPE_p_allocator_type swig_types[1]
+#define SWIGTYPE_p_char swig_types[2]
+#define SWIGTYPE_p_difference_type swig_types[3]
+#define SWIGTYPE_p_first_type swig_types[4]
+#define SWIGTYPE_p_httpserver__CreateWebserver swig_types[5]
+#define SWIGTYPE_p_httpserver__HttpRequest swig_types[6]
+#define SWIGTYPE_p_httpserver__HttpResource swig_types[7]
 #define SWIGTYPE_p_httpserver__LoggingDelegate swig_types[8]
 #define SWIGTYPE_p_httpserver__ModdedRequest swig_types[9]
 #define SWIGTYPE_p_httpserver__RequestValidator swig_types[10]
@@ -5439,6 +5439,10 @@ SWIGINTERN std::string std_map_Sl_std_string_Sc_std_string_Sg__getHeader(std::ma
 			return "";    
 	}
 
+#include "HttpUtils.hpp"
+#include "HttpRequest.hpp"
+#include "HttpResponse.hpp"
+#include "HttpEndpoint.hpp"
 #include "Webserver.hpp"
 
 
@@ -12682,19 +12686,6 @@ SWIGINTERN PyObject *ArgComparator_swigregister(PyObject *SWIGUNUSEDPARM(self), 
   SWIG_TypeNewClientData(SWIGTYPE_p_httpserver__http__ArgComparator, SWIG_NewClientData(obj));
   return SWIG_Py_Void();
 }
-
-SWIGINTERN PyObject *_wrap_generate_random_uuid(PyObject *SWIGUNUSEDPARM(self), PyObject *args) {
-  PyObject *resultobj = 0;
-  std::string result;
-  
-  if (!PyArg_ParseTuple(args,(char *)":generate_random_uuid")) SWIG_fail;
-  result = httpserver::http::generate_random_uuid();
-  resultobj = SWIG_From_std_string(static_cast< std::string >(result));
-  return resultobj;
-fail:
-  return NULL;
-}
-
 
 SWIGINTERN PyObject *_wrap_get_ip_str__SWIG_0(PyObject *SWIGUNUSEDPARM(self), PyObject *args) {
   PyObject *resultobj = 0;
@@ -20615,7 +20606,7 @@ SWIGINTERN PyObject *_wrap_Webserver_registerResource__SWIG_0(PyObject *SWIGUNUS
   PyObject *resultobj = 0;
   httpserver::Webserver *arg1 = (httpserver::Webserver *) 0 ;
   std::string *arg2 = 0 ;
-  HttpResource *arg3 = (HttpResource *) 0 ;
+  httpserver::HttpResource *arg3 = (httpserver::HttpResource *) 0 ;
   bool arg4 ;
   void *argp1 = 0 ;
   int res1 = 0 ;
@@ -20646,11 +20637,11 @@ SWIGINTERN PyObject *_wrap_Webserver_registerResource__SWIG_0(PyObject *SWIGUNUS
     }
     arg2 = ptr;
   }
-  res3 = SWIG_ConvertPtr(obj2, &argp3,SWIGTYPE_p_HttpResource, 0 |  0 );
+  res3 = SWIG_ConvertPtr(obj2, &argp3,SWIGTYPE_p_httpserver__HttpResource, 0 |  0 );
   if (!SWIG_IsOK(res3)) {
-    SWIG_exception_fail(SWIG_ArgError(res3), "in method '" "Webserver_registerResource" "', argument " "3"" of type '" "HttpResource *""'"); 
+    SWIG_exception_fail(SWIG_ArgError(res3), "in method '" "Webserver_registerResource" "', argument " "3"" of type '" "httpserver::HttpResource *""'"); 
   }
-  arg3 = reinterpret_cast< HttpResource * >(argp3);
+  arg3 = reinterpret_cast< httpserver::HttpResource * >(argp3);
   ecode4 = SWIG_AsVal_bool(obj3, &val4);
   if (!SWIG_IsOK(ecode4)) {
     SWIG_exception_fail(SWIG_ArgError(ecode4), "in method '" "Webserver_registerResource" "', argument " "4"" of type '" "bool""'");
@@ -20695,7 +20686,7 @@ SWIGINTERN PyObject *_wrap_Webserver_registerResource__SWIG_1(PyObject *SWIGUNUS
   PyObject *resultobj = 0;
   httpserver::Webserver *arg1 = (httpserver::Webserver *) 0 ;
   std::string *arg2 = 0 ;
-  HttpResource *arg3 = (HttpResource *) 0 ;
+  httpserver::HttpResource *arg3 = (httpserver::HttpResource *) 0 ;
   void *argp1 = 0 ;
   int res1 = 0 ;
   int res2 = SWIG_OLDOBJ ;
@@ -20722,11 +20713,11 @@ SWIGINTERN PyObject *_wrap_Webserver_registerResource__SWIG_1(PyObject *SWIGUNUS
     }
     arg2 = ptr;
   }
-  res3 = SWIG_ConvertPtr(obj2, &argp3,SWIGTYPE_p_HttpResource, 0 |  0 );
+  res3 = SWIG_ConvertPtr(obj2, &argp3,SWIGTYPE_p_httpserver__HttpResource, 0 |  0 );
   if (!SWIG_IsOK(res3)) {
-    SWIG_exception_fail(SWIG_ArgError(res3), "in method '" "Webserver_registerResource" "', argument " "3"" of type '" "HttpResource *""'"); 
+    SWIG_exception_fail(SWIG_ArgError(res3), "in method '" "Webserver_registerResource" "', argument " "3"" of type '" "httpserver::HttpResource *""'"); 
   }
-  arg3 = reinterpret_cast< HttpResource * >(argp3);
+  arg3 = reinterpret_cast< httpserver::HttpResource * >(argp3);
   {
     try {
       (arg1)->registerResource((std::string const &)*arg2,arg3);
@@ -20782,7 +20773,7 @@ SWIGINTERN PyObject *_wrap_Webserver_registerResource(PyObject *self, PyObject *
       _v = SWIG_CheckState(res);
       if (_v) {
         void *vptr = 0;
-        int res = SWIG_ConvertPtr(argv[2], &vptr, SWIGTYPE_p_HttpResource, 0);
+        int res = SWIG_ConvertPtr(argv[2], &vptr, SWIGTYPE_p_httpserver__HttpResource, 0);
         _v = SWIG_CheckState(res);
         if (_v) {
           return _wrap_Webserver_registerResource__SWIG_1(self, args);
@@ -20800,7 +20791,7 @@ SWIGINTERN PyObject *_wrap_Webserver_registerResource(PyObject *self, PyObject *
       _v = SWIG_CheckState(res);
       if (_v) {
         void *vptr = 0;
-        int res = SWIG_ConvertPtr(argv[2], &vptr, SWIGTYPE_p_HttpResource, 0);
+        int res = SWIG_ConvertPtr(argv[2], &vptr, SWIGTYPE_p_httpserver__HttpResource, 0);
         _v = SWIG_CheckState(res);
         if (_v) {
           {
@@ -20818,8 +20809,8 @@ SWIGINTERN PyObject *_wrap_Webserver_registerResource(PyObject *self, PyObject *
 fail:
   SWIG_SetErrorMsg(PyExc_NotImplementedError,"Wrong number of arguments for overloaded function 'Webserver_registerResource'.\n"
     "  Possible C/C++ prototypes are:\n"
-    "    registerResource(httpserver::Webserver *,std::string const &,HttpResource *,bool)\n"
-    "    registerResource(httpserver::Webserver *,std::string const &,HttpResource *)\n");
+    "    registerResource(httpserver::Webserver *,std::string const &,httpserver::HttpResource *,bool)\n"
+    "    registerResource(httpserver::Webserver *,std::string const &,httpserver::HttpResource *)\n");
   return NULL;
 }
 
@@ -22692,7 +22683,7 @@ fail:
 SWIGINTERN PyObject *_wrap_ModdedRequest_dhr_set(PyObject *SWIGUNUSEDPARM(self), PyObject *args) {
   PyObject *resultobj = 0;
   httpserver::ModdedRequest *arg1 = (httpserver::ModdedRequest *) 0 ;
-  HttpRequest *arg2 = (HttpRequest *) 0 ;
+  httpserver::HttpRequest *arg2 = (httpserver::HttpRequest *) 0 ;
   void *argp1 = 0 ;
   int res1 = 0 ;
   void *argp2 = 0 ;
@@ -22706,11 +22697,11 @@ SWIGINTERN PyObject *_wrap_ModdedRequest_dhr_set(PyObject *SWIGUNUSEDPARM(self),
     SWIG_exception_fail(SWIG_ArgError(res1), "in method '" "ModdedRequest_dhr_set" "', argument " "1"" of type '" "httpserver::ModdedRequest *""'"); 
   }
   arg1 = reinterpret_cast< httpserver::ModdedRequest * >(argp1);
-  res2 = SWIG_ConvertPtr(obj1, &argp2,SWIGTYPE_p_HttpRequest, SWIG_POINTER_DISOWN |  0 );
+  res2 = SWIG_ConvertPtr(obj1, &argp2,SWIGTYPE_p_httpserver__HttpRequest, SWIG_POINTER_DISOWN |  0 );
   if (!SWIG_IsOK(res2)) {
-    SWIG_exception_fail(SWIG_ArgError(res2), "in method '" "ModdedRequest_dhr_set" "', argument " "2"" of type '" "HttpRequest *""'"); 
+    SWIG_exception_fail(SWIG_ArgError(res2), "in method '" "ModdedRequest_dhr_set" "', argument " "2"" of type '" "httpserver::HttpRequest *""'"); 
   }
-  arg2 = reinterpret_cast< HttpRequest * >(argp2);
+  arg2 = reinterpret_cast< httpserver::HttpRequest * >(argp2);
   if (arg1) (arg1)->dhr = arg2;
   resultobj = SWIG_Py_Void();
   return resultobj;
@@ -22725,7 +22716,7 @@ SWIGINTERN PyObject *_wrap_ModdedRequest_dhr_get(PyObject *SWIGUNUSEDPARM(self),
   void *argp1 = 0 ;
   int res1 = 0 ;
   PyObject * obj0 = 0 ;
-  HttpRequest *result = 0 ;
+  httpserver::HttpRequest *result = 0 ;
   
   if (!PyArg_ParseTuple(args,(char *)"O:ModdedRequest_dhr_get",&obj0)) SWIG_fail;
   res1 = SWIG_ConvertPtr(obj0, &argp1,SWIGTYPE_p_httpserver__ModdedRequest, 0 |  0 );
@@ -22733,8 +22724,8 @@ SWIGINTERN PyObject *_wrap_ModdedRequest_dhr_get(PyObject *SWIGUNUSEDPARM(self),
     SWIG_exception_fail(SWIG_ArgError(res1), "in method '" "ModdedRequest_dhr_get" "', argument " "1"" of type '" "httpserver::ModdedRequest *""'"); 
   }
   arg1 = reinterpret_cast< httpserver::ModdedRequest * >(argp1);
-  result = (HttpRequest *) ((arg1)->dhr);
-  resultobj = SWIG_NewPointerObj(SWIG_as_voidptr(result), SWIGTYPE_p_HttpRequest, 0 |  0 );
+  result = (httpserver::HttpRequest *) ((arg1)->dhr);
+  resultobj = SWIG_NewPointerObj(SWIG_as_voidptr(result), SWIGTYPE_p_httpserver__HttpRequest, 0 |  0 );
   return resultobj;
 fail:
   return NULL;
@@ -23044,7 +23035,6 @@ static PyMethodDef SwigMethods[] = {
 	 { (char *)"new_ArgComparator", _wrap_new_ArgComparator, METH_VARARGS, NULL},
 	 { (char *)"delete_ArgComparator", _wrap_delete_ArgComparator, METH_VARARGS, NULL},
 	 { (char *)"ArgComparator_swigregister", ArgComparator_swigregister, METH_VARARGS, NULL},
-	 { (char *)"generate_random_uuid", _wrap_generate_random_uuid, METH_VARARGS, NULL},
 	 { (char *)"get_ip_str", _wrap_get_ip_str, METH_VARARGS, NULL},
 	 { (char *)"get_port", _wrap_get_port, METH_VARARGS, NULL},
 	 { (char *)"http_unescape", _wrap_http_unescape, METH_VARARGS, NULL},
@@ -23151,14 +23141,14 @@ static PyMethodDef SwigMethods[] = {
 
 /* -------- TYPE CONVERSION AND EQUIVALENCE RULES (BEGIN) -------- */
 
-static swig_type_info _swigt__p_HttpRequest = {"_p_HttpRequest", "HttpRequest *", 0, 0, (void*)0, 0};
-static swig_type_info _swigt__p_HttpResource = {"_p_HttpResource", "HttpResource *", 0, 0, (void*)0, 0};
 static swig_type_info _swigt__p_MHD_PostProcessor = {"_p_MHD_PostProcessor", "MHD_PostProcessor *", 0, 0, (void*)0, 0};
 static swig_type_info _swigt__p_allocator_type = {"_p_allocator_type", "allocator_type *", 0, 0, (void*)0, 0};
 static swig_type_info _swigt__p_char = {"_p_char", "char *", 0, 0, (void*)0, 0};
 static swig_type_info _swigt__p_difference_type = {"_p_difference_type", "difference_type *", 0, 0, (void*)0, 0};
 static swig_type_info _swigt__p_first_type = {"_p_first_type", "first_type *", 0, 0, (void*)0, 0};
 static swig_type_info _swigt__p_httpserver__CreateWebserver = {"_p_httpserver__CreateWebserver", "httpserver::CreateWebserver *", 0, 0, (void*)0, 0};
+static swig_type_info _swigt__p_httpserver__HttpRequest = {"_p_httpserver__HttpRequest", "httpserver::HttpRequest *", 0, 0, (void*)0, 0};
+static swig_type_info _swigt__p_httpserver__HttpResource = {"_p_httpserver__HttpResource", "httpserver::HttpResource *", 0, 0, (void*)0, 0};
 static swig_type_info _swigt__p_httpserver__LoggingDelegate = {"_p_httpserver__LoggingDelegate", "httpserver::LoggingDelegate *", 0, 0, (void*)0, 0};
 static swig_type_info _swigt__p_httpserver__ModdedRequest = {"_p_httpserver__ModdedRequest", "httpserver::ModdedRequest *", 0, 0, (void*)0, 0};
 static swig_type_info _swigt__p_httpserver__RequestValidator = {"_p_httpserver__RequestValidator", "httpserver::RequestValidator *", 0, 0, (void*)0, 0};
@@ -23188,14 +23178,14 @@ static swig_type_info _swigt__p_swig__SwigPyIterator = {"_p_swig__SwigPyIterator
 static swig_type_info _swigt__p_value_type = {"_p_value_type", "value_type *", 0, 0, (void*)0, 0};
 
 static swig_type_info *swig_type_initial[] = {
-  &_swigt__p_HttpRequest,
-  &_swigt__p_HttpResource,
   &_swigt__p_MHD_PostProcessor,
   &_swigt__p_allocator_type,
   &_swigt__p_char,
   &_swigt__p_difference_type,
   &_swigt__p_first_type,
   &_swigt__p_httpserver__CreateWebserver,
+  &_swigt__p_httpserver__HttpRequest,
+  &_swigt__p_httpserver__HttpResource,
   &_swigt__p_httpserver__LoggingDelegate,
   &_swigt__p_httpserver__ModdedRequest,
   &_swigt__p_httpserver__RequestValidator,
@@ -23225,14 +23215,14 @@ static swig_type_info *swig_type_initial[] = {
   &_swigt__p_value_type,
 };
 
-static swig_cast_info _swigc__p_HttpRequest[] = {  {&_swigt__p_HttpRequest, 0, 0, 0},{0, 0, 0, 0}};
-static swig_cast_info _swigc__p_HttpResource[] = {  {&_swigt__p_HttpResource, 0, 0, 0},{0, 0, 0, 0}};
 static swig_cast_info _swigc__p_MHD_PostProcessor[] = {  {&_swigt__p_MHD_PostProcessor, 0, 0, 0},{0, 0, 0, 0}};
 static swig_cast_info _swigc__p_allocator_type[] = {  {&_swigt__p_allocator_type, 0, 0, 0},{0, 0, 0, 0}};
 static swig_cast_info _swigc__p_char[] = {  {&_swigt__p_char, 0, 0, 0},{0, 0, 0, 0}};
 static swig_cast_info _swigc__p_difference_type[] = {  {&_swigt__p_difference_type, 0, 0, 0},{0, 0, 0, 0}};
 static swig_cast_info _swigc__p_first_type[] = {  {&_swigt__p_first_type, 0, 0, 0},{0, 0, 0, 0}};
 static swig_cast_info _swigc__p_httpserver__CreateWebserver[] = {  {&_swigt__p_httpserver__CreateWebserver, 0, 0, 0},{0, 0, 0, 0}};
+static swig_cast_info _swigc__p_httpserver__HttpRequest[] = {  {&_swigt__p_httpserver__HttpRequest, 0, 0, 0},{0, 0, 0, 0}};
+static swig_cast_info _swigc__p_httpserver__HttpResource[] = {  {&_swigt__p_httpserver__HttpResource, 0, 0, 0},{0, 0, 0, 0}};
 static swig_cast_info _swigc__p_httpserver__LoggingDelegate[] = {  {&_swigt__p_httpserver__LoggingDelegate, 0, 0, 0},{0, 0, 0, 0}};
 static swig_cast_info _swigc__p_httpserver__ModdedRequest[] = {  {&_swigt__p_httpserver__ModdedRequest, 0, 0, 0},{0, 0, 0, 0}};
 static swig_cast_info _swigc__p_httpserver__RequestValidator[] = {  {&_swigt__p_httpserver__RequestValidator, 0, 0, 0},{0, 0, 0, 0}};
@@ -23262,14 +23252,14 @@ static swig_cast_info _swigc__p_swig__SwigPyIterator[] = {  {&_swigt__p_swig__Sw
 static swig_cast_info _swigc__p_value_type[] = {  {&_swigt__p_value_type, 0, 0, 0},{0, 0, 0, 0}};
 
 static swig_cast_info *swig_cast_initial[] = {
-  _swigc__p_HttpRequest,
-  _swigc__p_HttpResource,
   _swigc__p_MHD_PostProcessor,
   _swigc__p_allocator_type,
   _swigc__p_char,
   _swigc__p_difference_type,
   _swigc__p_first_type,
   _swigc__p_httpserver__CreateWebserver,
+  _swigc__p_httpserver__HttpRequest,
+  _swigc__p_httpserver__HttpResource,
   _swigc__p_httpserver__LoggingDelegate,
   _swigc__p_httpserver__ModdedRequest,
   _swigc__p_httpserver__RequestValidator,

@@ -17,6 +17,8 @@
      Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
 */
+#include <stdint.h>
+#include <inttypes.h>
 #include <iostream>
 #include <stdlib.h>
 #include <stdio.h>
@@ -29,6 +31,8 @@
 #ifdef WITH_PYTHON
 #include <Python.h>
 #endif
+
+#include <microhttpd.h>
 
 #include "HttpUtils.hpp"
 #include "HttpResource.hpp"

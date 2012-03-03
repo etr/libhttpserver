@@ -167,9 +167,13 @@ namespace std {
 %ignore access_log(Webserver*, std::string);
 %ignore uri_log(void*, const char*);
 %ignore unescaper_func(void*, struct MHD_Connection*, char*);
-%ignore internal_unescaper(void*, struct MHD_Connection*, char*);
+%ignore internal_unescaper(void*, char*);
 
 %{
+#include "HttpUtils.hpp"
+#include "HttpRequest.hpp"
+#include "HttpResponse.hpp"
+#include "HttpEndpoint.hpp"
 #include "Webserver.hpp"
 %}
 
@@ -182,11 +186,13 @@ namespace std {
 #define DEFAULT_WS_PORT 9898
 #define DEFAULT_WS_TIMEOUT 180
 
+#include <stdint.h>
+#include <inttypes.h>
 #include <sys/types.h>
 #include <sys/select.h>
 #include <sys/socket.h>
 #include <microhttpd.h>
-#include <string.h>
+#include <cstring>
 #include <map>
 #include <vector>
 #include <string>

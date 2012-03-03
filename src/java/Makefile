@@ -15,6 +15,24 @@
 
 
 
+#
+#     This file is part of libhttpserver
+#     Copyright (C) 2011 Sebastiano Merlino
+#
+#     This library is free software; you can redistribute it and/or
+#     modify it under the terms of the GNU Lesser General Public
+#     License as published by the Free Software Foundation; either
+#     version 2.1 of the License, or (at your option) any later version.
+#
+#     This library is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+#     Lesser General Public License for more details.
+#
+#     You should have received a copy of the GNU Lesser General Public
+#     License along with this library; if not, write to the Free Software
+#     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+
 
 
 pkgdatadir = $(datadir)/libhttpserver
@@ -72,8 +90,12 @@ am__installdirs = "$(DESTDIR)$(libdir)" \
 LTLIBRARIES = $(lib_LTLIBRARIES)
 libhttpserver_java_la_DEPENDENCIES =
 am_libhttpserver_java_la_OBJECTS = WebserverWrap.lo Webserver.lo \
-	HttpUtils.lo
+	HttpUtils.lo HttpEndpoint.lo HttpResource.lo HttpRequest.lo \
+	HttpResponse.lo string_utilities.lo
 libhttpserver_java_la_OBJECTS = $(am_libhttpserver_java_la_OBJECTS)
+libhttpserver_java_la_LINK = $(LIBTOOL) --tag=CXX $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=link $(CXXLD) $(AM_CXXFLAGS) \
+	$(CXXFLAGS) $(libhttpserver_java_la_LDFLAGS) $(LDFLAGS) -o $@
 DEFAULT_INCLUDES = -I. -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__depfiles_maybe = depfiles
@@ -128,6 +150,9 @@ INSTALL_DATA = ${INSTALL} -m 644
 INSTALL_PROGRAM = ${INSTALL}
 INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
+JABALIBS = 
+JAVAINCLUDES = -g -O2 -I/usr/local/SDK/jdk/include -I/usr/local/SDK/jdk/include/linux
+JAVALDFLAGS = 
 LD = /usr/bin/ld
 LDFLAGS = 
 LHT_LIBDEPS = -lmicrohttpd
@@ -137,6 +162,7 @@ LIBTOOL = $(SHELL) $(top_builddir)/libtool
 LIPO = 
 LN_S = ln -s
 LTLIBOBJS = 
+LUAINCLUDES =  -I/usr/include/lua5.1/
 MAKEINFO = ${SHELL} /home/etr/progs/webserver_framework/trunk/missing --run makeinfo
 MKDIR_P = /bin/mkdir -p
 NM = /usr/bin/nm -B
@@ -153,11 +179,21 @@ PACKAGE_TARNAME = libhttpserver
 PACKAGE_URL = 
 PACKAGE_VERSION = 0.1.1
 PATH_SEPARATOR = :
+PERLDEFINES = 
+PERLINCLUDES = 
 PERLINT = 
-PHPCONFIG = 
-PYTHONCONFIG = 
+PHPCONFIG = php-config
+PHPINCLUDES = -I/usr/include/php5 -I/usr/include/php5/main -I/usr/include/php5/TSRM -I/usr/include/php5/Zend -I/usr/include/php5/ext -I/usr/include/php5/ext/date/lib -D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64
+PHPLDFLAGS =  -L/usr/lib
+PYDEFINES = -DWITHPYTHON
+PYINCLUDES = -I/usr/include/python2.6 -I/usr/include/python2.6
+PYLDFLAGS =  -L/usr/lib
+PYLIBS =  -lpthread -ldl -lutil -lm -lpython2.6
+PYTHONCONFIG = php-config
 RANLIB = ranlib
-RUBYINT = 
+RUBYDEFINES = -fno-strict-aliasing -D_FILE_OFFSET_BITS=64
+RUBYINCLUDES =  -I/usr/lib/ruby/1.8/i486-linux
+RUBYINT = ruby
 SED = /bin/sed
 SET_MAKE = 
 SHELL = /bin/bash
@@ -216,15 +252,17 @@ target_alias =
 top_build_prefix = ../../
 top_builddir = ../..
 top_srcdir = ../..
-INCLUDES = -I../ -I$(top_srcdir)/src
+INCLUDES = -I../ -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver $(JAVAINCLUDES)
 METASOURCES = AUTO
 lib_LTLIBRARIES = libhttpserver_java.la
-libhttpserver_java_la_LIBADD = -lmicrohttpd
-libhttpserver_java_la_SOURCES = WebserverWrap.cpp ../Webserver.cpp ../HttpUtils.cpp
+libhttpserver_java_la_LDFLAGS = $(JAVALDFLAGS)
+libhttpserver_java_la_LIBADD = -lmicrohttpd $(JAVALIBS)
+libhttpserver_java_la_SOURCES = WebserverWrap.cpp $(top_srcdir)/src/Webserver.cpp $(top_srcdir)/src/HttpUtils.cpp $(top_srcdir)/src/HttpEndpoint.cpp $(top_srcdir)/src/HttpResource.cpp $(top_srcdir)/src/HttpRequest.cpp $(top_srcdir)/src/HttpResponse.cpp $(top_srcdir)/src/string_utilities.cpp
 libjavasqi_la_includedir = $(includedir)/amgx/swig/java
 libjavasqi_la_include_HEADERS = Webserver.java HttpRequest.java HttpResponse.java HttpResource.java HttpEndpoint.java HttpUtils.java
 javadir = $(datadir)/java
 language = java
+swigoptions = -Wall
 all: all-am
 
 .SUFFIXES:
@@ -291,7 +329,7 @@ clean-libLTLIBRARIES:
 	  rm -f "$${dir}/so_locations"; \
 	done
 libhttpserver_java.la: $(libhttpserver_java_la_OBJECTS) $(libhttpserver_java_la_DEPENDENCIES) 
-	$(CXXLINK) -rpath $(libdir) $(libhttpserver_java_la_OBJECTS) $(libhttpserver_java_la_LIBADD) $(LIBS)
+	$(libhttpserver_java_la_LINK) -rpath $(libdir) $(libhttpserver_java_la_OBJECTS) $(libhttpserver_java_la_LIBADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -299,9 +337,14 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+include ./$(DEPDIR)/HttpEndpoint.Plo
+include ./$(DEPDIR)/HttpRequest.Plo
+include ./$(DEPDIR)/HttpResource.Plo
+include ./$(DEPDIR)/HttpResponse.Plo
 include ./$(DEPDIR)/HttpUtils.Plo
 include ./$(DEPDIR)/Webserver.Plo
 include ./$(DEPDIR)/WebserverWrap.Plo
+include ./$(DEPDIR)/string_utilities.Plo
 
 .cpp.o:
 	$(CXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
@@ -324,19 +367,54 @@ include ./$(DEPDIR)/WebserverWrap.Plo
 #	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
 #	$(LTCXXCOMPILE) -c -o $@ $<
 
-Webserver.lo: ../Webserver.cpp
-	$(LIBTOOL)  --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT Webserver.lo -MD -MP -MF $(DEPDIR)/Webserver.Tpo -c -o Webserver.lo `test -f '../Webserver.cpp' || echo '$(srcdir)/'`../Webserver.cpp
+Webserver.lo: $(top_srcdir)/src/Webserver.cpp
+	$(LIBTOOL)  --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT Webserver.lo -MD -MP -MF $(DEPDIR)/Webserver.Tpo -c -o Webserver.lo `test -f '$(top_srcdir)/src/Webserver.cpp' || echo '$(srcdir)/'`$(top_srcdir)/src/Webserver.cpp
 	$(am__mv) $(DEPDIR)/Webserver.Tpo $(DEPDIR)/Webserver.Plo
-#	source='../Webserver.cpp' object='Webserver.lo' libtool=yes \
+#	source='$(top_srcdir)/src/Webserver.cpp' object='Webserver.lo' libtool=yes \
 #	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(LIBTOOL)  --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o Webserver.lo `test -f '../Webserver.cpp' || echo '$(srcdir)/'`../Webserver.cpp
+#	$(LIBTOOL)  --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o Webserver.lo `test -f '$(top_srcdir)/src/Webserver.cpp' || echo '$(srcdir)/'`$(top_srcdir)/src/Webserver.cpp
 
-HttpUtils.lo: ../HttpUtils.cpp
-	$(LIBTOOL)  --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT HttpUtils.lo -MD -MP -MF $(DEPDIR)/HttpUtils.Tpo -c -o HttpUtils.lo `test -f '../HttpUtils.cpp' || echo '$(srcdir)/'`../HttpUtils.cpp
+HttpUtils.lo: $(top_srcdir)/src/HttpUtils.cpp
+	$(LIBTOOL)  --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT HttpUtils.lo -MD -MP -MF $(DEPDIR)/HttpUtils.Tpo -c -o HttpUtils.lo `test -f '$(top_srcdir)/src/HttpUtils.cpp' || echo '$(srcdir)/'`$(top_srcdir)/src/HttpUtils.cpp
 	$(am__mv) $(DEPDIR)/HttpUtils.Tpo $(DEPDIR)/HttpUtils.Plo
-#	source='../HttpUtils.cpp' object='HttpUtils.lo' libtool=yes \
+#	source='$(top_srcdir)/src/HttpUtils.cpp' object='HttpUtils.lo' libtool=yes \
 #	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(LIBTOOL)  --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o HttpUtils.lo `test -f '../HttpUtils.cpp' || echo '$(srcdir)/'`../HttpUtils.cpp
+#	$(LIBTOOL)  --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o HttpUtils.lo `test -f '$(top_srcdir)/src/HttpUtils.cpp' || echo '$(srcdir)/'`$(top_srcdir)/src/HttpUtils.cpp
+
+HttpEndpoint.lo: $(top_srcdir)/src/HttpEndpoint.cpp
+	$(LIBTOOL)  --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT HttpEndpoint.lo -MD -MP -MF $(DEPDIR)/HttpEndpoint.Tpo -c -o HttpEndpoint.lo `test -f '$(top_srcdir)/src/HttpEndpoint.cpp' || echo '$(srcdir)/'`$(top_srcdir)/src/HttpEndpoint.cpp
+	$(am__mv) $(DEPDIR)/HttpEndpoint.Tpo $(DEPDIR)/HttpEndpoint.Plo
+#	source='$(top_srcdir)/src/HttpEndpoint.cpp' object='HttpEndpoint.lo' libtool=yes \
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
+#	$(LIBTOOL)  --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o HttpEndpoint.lo `test -f '$(top_srcdir)/src/HttpEndpoint.cpp' || echo '$(srcdir)/'`$(top_srcdir)/src/HttpEndpoint.cpp
+
+HttpResource.lo: $(top_srcdir)/src/HttpResource.cpp
+	$(LIBTOOL)  --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT HttpResource.lo -MD -MP -MF $(DEPDIR)/HttpResource.Tpo -c -o HttpResource.lo `test -f '$(top_srcdir)/src/HttpResource.cpp' || echo '$(srcdir)/'`$(top_srcdir)/src/HttpResource.cpp
+	$(am__mv) $(DEPDIR)/HttpResource.Tpo $(DEPDIR)/HttpResource.Plo
+#	source='$(top_srcdir)/src/HttpResource.cpp' object='HttpResource.lo' libtool=yes \
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
+#	$(LIBTOOL)  --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o HttpResource.lo `test -f '$(top_srcdir)/src/HttpResource.cpp' || echo '$(srcdir)/'`$(top_srcdir)/src/HttpResource.cpp
+
+HttpRequest.lo: $(top_srcdir)/src/HttpRequest.cpp
+	$(LIBTOOL)  --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT HttpRequest.lo -MD -MP -MF $(DEPDIR)/HttpRequest.Tpo -c -o HttpRequest.lo `test -f '$(top_srcdir)/src/HttpRequest.cpp' || echo '$(srcdir)/'`$(top_srcdir)/src/HttpRequest.cpp
+	$(am__mv) $(DEPDIR)/HttpRequest.Tpo $(DEPDIR)/HttpRequest.Plo
+#	source='$(top_srcdir)/src/HttpRequest.cpp' object='HttpRequest.lo' libtool=yes \
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
+#	$(LIBTOOL)  --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o HttpRequest.lo `test -f '$(top_srcdir)/src/HttpRequest.cpp' || echo '$(srcdir)/'`$(top_srcdir)/src/HttpRequest.cpp
+
+HttpResponse.lo: $(top_srcdir)/src/HttpResponse.cpp
+	$(LIBTOOL)  --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT HttpResponse.lo -MD -MP -MF $(DEPDIR)/HttpResponse.Tpo -c -o HttpResponse.lo `test -f '$(top_srcdir)/src/HttpResponse.cpp' || echo '$(srcdir)/'`$(top_srcdir)/src/HttpResponse.cpp
+	$(am__mv) $(DEPDIR)/HttpResponse.Tpo $(DEPDIR)/HttpResponse.Plo
+#	source='$(top_srcdir)/src/HttpResponse.cpp' object='HttpResponse.lo' libtool=yes \
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
+#	$(LIBTOOL)  --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o HttpResponse.lo `test -f '$(top_srcdir)/src/HttpResponse.cpp' || echo '$(srcdir)/'`$(top_srcdir)/src/HttpResponse.cpp
+
+string_utilities.lo: $(top_srcdir)/src/string_utilities.cpp
+	$(LIBTOOL)  --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT string_utilities.lo -MD -MP -MF $(DEPDIR)/string_utilities.Tpo -c -o string_utilities.lo `test -f '$(top_srcdir)/src/string_utilities.cpp' || echo '$(srcdir)/'`$(top_srcdir)/src/string_utilities.cpp
+	$(am__mv) $(DEPDIR)/string_utilities.Tpo $(DEPDIR)/string_utilities.Plo
+#	source='$(top_srcdir)/src/string_utilities.cpp' object='string_utilities.lo' libtool=yes \
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
+#	$(LIBTOOL)  --tag=CXX $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o string_utilities.lo `test -f '$(top_srcdir)/src/string_utilities.cpp' || echo '$(srcdir)/'`$(top_srcdir)/src/string_utilities.cpp
 
 mostlyclean-libtool:
 	-rm -f *.lo
@@ -568,7 +646,26 @@ uninstall-am: uninstall-libLTLIBRARIES \
 	uninstall-am uninstall-libLTLIBRARIES \
 	uninstall-libjavasqi_la_includeHEADERS
 
-@JAVA_AUTOGENERATION@
+#
+#     This file is part of libhttpserver
+#     Copyright (C) 2011 Sebastiano Merlino
+#
+#     This library is free software; you can redistribute it and/or
+#     modify it under the terms of the GNU Lesser General Public
+#     License as published by the Free Software Foundation; either
+#     version 2.1 of the License, or (at your option) any later version.
+#
+#     This library is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+#     Lesser General Public License for more details.
+#
+#     You should have received a copy of the GNU Lesser General Public
+#     License along with this library; if not, write to the Free Software
+#     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+#
+$(srcdir)/WebserverWrap.cpp $(srcdir)/WebserverWrap.h: $(top_srcdir)/src/httpserver/Webserver.hpp
+	swig -c++ -$(language) $(swigoptions) -o $(srcdir)/WebserverWrap.cpp -I$(srcdir)/.. $(srcdir)/../httpserver/Webserver.hpp
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

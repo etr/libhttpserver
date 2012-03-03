@@ -23,9 +23,10 @@
 #include <sstream>
 #include <vector>
 #include <cctype>
+#include <cstdlib>
+#include <cstring>
+#include <regex.h>
 #include "string_utilities.hpp"
-#include <stdlib.h>
-#include <string.h>
  
 namespace httpserver
 {
