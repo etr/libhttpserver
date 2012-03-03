@@ -23,7 +23,7 @@ lib_LTLIBRARIES = libhttpserver_perl.la
 libhttpserver_perl_la_LIBADD = -lmicrohttpd
 libhttpserver_perl_la_SOURCES = WebserverWrap.cpp $(top_srcdir)/src/Webserver.cpp $(top_srcdir)/src/HttpUtils.cpp $(top_srcdir)/src/HttpEndpoint.cpp $(top_srcdir)/src/HttpResource.cpp $(top_srcdir)/src/HttpRequest.cpp $(top_srcdir)/src/HttpResponse.cpp $(top_srcdir)/src/string_utilities.cpp
 libhttpserver_perl_la_includedir = 
-libhttpserver_perl_la_include_HEADERS = libhttpserver_perl.pl
+libhttpserver_perl_la_include_HEADERS =
 
 language=perl
 swigoptions=-Wall

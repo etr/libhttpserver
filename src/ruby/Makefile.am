@@ -18,12 +18,10 @@
 
 METASOURCES = AUTO
 lib_LTLIBRARIES = libhttpserver_ruby.la
-noinst_LIBRARIES = libHttpEndpoint.a libstring_utilities.a
-libHttpEndpoint_a_SOURCES = $(top_srcdir)/src/HttpEndpoint.cpp
-libHttpEndpoint_a_CPPFLAGS = -I../ -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver
-libstring_utilities_a_SOURCES = $(top_srcdir)/src/string_utilities.cpp
-libstring_utilities_a_CPPFLAGS = -I../ -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver
-libhttpserver_ruby_la_LIBADD = -lmicrohttpd libHttpEndpoint.a libstring_utilities.a
+noinst_LIBRARIES = libsupport.a
+libsupport_a_SOURCES = $(top_srcdir)/src/HttpEndpoint.cpp $(top_srcdir)/src/string_utilities.cpp
+libsupport_a_CPPFLAGS = -I../ -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver
+libhttpserver_ruby_la_LIBADD = -lmicrohttpd libsupport.a
 libhttpserver_ruby_la_SOURCES = WebserverWrap.cpp $(top_srcdir)/src/Webserver.cpp $(top_srcdir)/src/HttpUtils.cpp $(top_srcdir)/src/HttpResource.cpp $(top_srcdir)/src/HttpRequest.cpp $(top_srcdir)/src/HttpResponse.cpp
 libhttpserver_ruby_la_CPPFLAGS = -I../ -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver $(RUBYINCLUDES) $(RUBYDEFINES)
 libhttpserver_ruby_la_includedir = 

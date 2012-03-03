@@ -199,7 +199,7 @@ if test x$perl = xtrue; then
 		AC_MSG_ERROR(perl interpreter not found)
 	fi
 	PERLINCLUDES="$PERLINCLUDES -I`perl -e 'use Config; print $Config{archlib};'`/CORE"
-    PERLDEFINES="-Dbool=char -D_GNU_SOURCE"
+    PERLDEFINES="-D_GNU_SOURCE"
     AC_SUBST(PERLINCLUDES)
     AC_SUBST(PERLDEFINES)
 	AC_SUBST_FILE([PERL_AUTOGENERATION])
