@@ -145,11 +145,6 @@ class HttpResponse
 		**/
 		void setFooters(const std::map<std::string, std::string>& footers);
 		/**
-		 * Method used to set all cookies of the response.
-		 * @param cookies The cookies key-value map to set for the response.
-		**/
-        void setCookies(const std::map<std::string, std::string>& cookies);
-		/**
 		 * Method used to set the response code of the response
 		 * @param responseCode the response code to set
 		**/

@@ -93,12 +93,17 @@ AC_ARG_WITH(java-dir,
                 fi
            ])
 
+AC_ARG_WITH(doc,
+            [  --with-doc   Compile DOC],
+            [doc=true])
+
 AM_CONDITIONAL([PYTHON], [test x$python = xtrue])
 AM_CONDITIONAL([JAVA], [test x$java = xtrue])
 AM_CONDITIONAL([PHP], [test x$php = xtrue])
 AM_CONDITIONAL([PERL], [test x$perl = xtrue])
 AM_CONDITIONAL([LUA], [test x$lua = xtrue])
 AM_CONDITIONAL([RUBY], [test x$ruby = xtrue])
+AM_CONDITIONAL([DOC], [test x$doc = xtrue])
 
 LANGUAGES="C++"
 

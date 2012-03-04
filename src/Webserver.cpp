@@ -34,6 +34,7 @@
 
 #include <microhttpd.h>
 
+#include "gettext.h"
 #include "HttpUtils.hpp"
 #include "HttpResource.hpp"
 #include "HttpResponse.hpp"
@@ -73,7 +74,7 @@ static void ignore_sigpipe ()
     sig.sa_flags = SA_RESTART;
 #endif
     if (0 != sigaction (SIGPIPE, &sig, &oldsig))
-        fprintf (stderr, "Failed to install SIGPIPE handler: %s\n", strerror (errno));
+        fprintf (stderr, gettext("Failed to install SIGPIPE handler: %s\n"), strerror (errno));
 }
 
 //LOGGING DELEGATE
@@ -283,7 +284,7 @@ bool Webserver::start(bool blocking)
 
 	if(NULL == daemon)
 	{
-		cout << "Unable to connect daemon to port: " << this->port << endl;
+		cout << gettext("Unable to connect daemon to port: ") << this->port << endl;
 		return false;
 	}
 	this->running = true;
