@@ -51,23 +51,23 @@ LHT_LIBDEPS="-lmicrohttpd"
 
 AC_ARG_WITH([python],
      [  --with-python    Compile PYTHON libraries],
-     [python=true])
+     [python=true; swig=true])
 
 AC_ARG_WITH([php],
      [  --with-php    Compile PHP libraries],
-     [php=true])
+     [php=true; swig=true])
 
 AC_ARG_WITH([ruby],
 	 [  --with-ruby   Compile RUBY libraries],
-	 [ruby=true])
+	 [ruby=true; swig=true])
 
 AC_ARG_WITH([perl],
 	 [  --with-perl   Compile PERL libraries],
-	 [perl=true])
+	 [perl=true; swig=true])
 
 AC_ARG_WITH([lua],
 	 [  --with-lua   Compile LUA libraries],
-	 [lua=true])
+	 [lua=true; swig=true])
 
 AC_ARG_WITH(lua-include-dir,
             [  --with-lua-include-dir=DIR        where to look for lua headers],
@@ -81,7 +81,7 @@ AC_ARG_WITH(lua-include-dir,
 
 AC_ARG_WITH([java],
      [  --with-java    Compile JAVA libraries],
-     [java=true])
+     [java=true; swig=true])
 
 AC_ARG_WITH(java-dir,
             [  --with-java-dir=DIR        where to look for jni headers and libs. We search for jni.h in 'java-dir/include/'],
@@ -93,6 +93,10 @@ AC_ARG_WITH(java-dir,
                 fi
            ])
 
+AC_ARG_WITH([guile],
+     [  --with-guile    Compile GUILE libraries],
+     [guile=true; swig=true])
+
 AC_ARG_WITH(doc,
             [  --with-doc   Compile DOC],
             [doc=true])
@@ -103,12 +107,21 @@ AM_CONDITIONAL([PHP], [test x$php = xtrue])
 AM_CONDITIONAL([PERL], [test x$perl = xtrue])
 AM_CONDITIONAL([LUA], [test x$lua = xtrue])
 AM_CONDITIONAL([RUBY], [test x$ruby = xtrue])
+AM_CONDITIONAL([GUILE], [test x$guile = xtrue])
 AM_CONDITIONAL([DOC], [test x$doc = xtrue])
 
 LANGUAGES="C++"
 
+if test x$swig = xtrue; then
+	AC_CHECK_PROG([SWIG], [swig], ["yes"], ["no"])
+	if test "SWIG" = "no"
+	then
+		AC_MSG_ERROR(swig not found)
+	fi
+fi
+
 if test x$python = xtrue; then
-	AC_CHECK_PROG([PYTHONCONFIG],[python-config],["php-config"], ["no"])
+	AC_CHECK_PROG([PYTHONCONFIG],[python-config],["yes"], ["no"])
 	if test "$PYTHONCONFIG" = "no"
 	then
 		AC_MSG_ERROR(python-config not found)
@@ -122,7 +135,7 @@ if test x$python = xtrue; then
     AC_SUBST(PYLDFLAGS)
     AC_SUBST(PYLIBS)
 	AC_SUBST_FILE([PYTHON_AUTOGENERATION])
-	PYTHON_AUTOGENERATION=src/autogen_helpers/support_command
+	PYTHON_AUTOGENERATION=$srcdir/src/autogen_helpers/support_command
 	LANGUAGES="$LANGUAGES Python"
 fi 
 
@@ -152,12 +165,12 @@ if test x$java = xtrue; then
     AC_SUBST(JAVALDFLAGS)
     AC_SUBST(JABALIBS)
 	AC_SUBST_FILE([JAVA_AUTOGENERATION])
-	JAVA_AUTOGENERATION=src/autogen_helpers/support_command
+	JAVA_AUTOGENERATION=$srcdir/src/autogen_helpers/support_command
 	LANGUAGES="$LANGUAGES Java"
 fi 
 
 if test x$php = xtrue; then
-	AC_CHECK_PROG([PHPCONFIG],[php-config],["php-config"], ["no"])
+	AC_CHECK_PROG([PHPCONFIG],[php-config],["yes"], ["no"])
 	if test "$PHPCONFIG" = "no"
 	then
 		AC_MSG_ERROR(php-config not found)
@@ -167,7 +180,7 @@ if test x$php = xtrue; then
     AC_SUBST(PHPINCLUDES)
     AC_SUBST(PHPLDFLAGS)
 	AC_SUBST_FILE([PHP_AUTOGENERATION])
-	PHP_AUTOGENERATION=src/autogen_helpers/support_command
+	PHP_AUTOGENERATION=$srcdir/src/autogen_helpers/support_command
 	LANGUAGES="$LANGUAGES PHP"
 fi 
 
@@ -193,12 +206,12 @@ if test x$lua = xtrue; then
 	fi
     AC_SUBST(LUAINCLUDES)
 	AC_SUBST_FILE([LUA_AUTOGENERATION])
-	LUA_AUTOGENERATION=src/autogen_helpers/support_command
+	LUA_AUTOGENERATION=$srcdir/src/autogen_helpers/support_command
 	LANGUAGES="$LANGUAGES LUA"
 fi
 
 if test x$perl = xtrue; then
-	AC_CHECK_PROG([PERLINT],[perl],["perl"], ["no"])
+	AC_CHECK_PROG([PERLINT],[perl],["yes"], ["no"])
 	if test "$PERLINT" = "no"
 	then
 		AC_MSG_ERROR(perl interpreter not found)
@@ -208,12 +221,12 @@ if test x$perl = xtrue; then
     AC_SUBST(PERLINCLUDES)
     AC_SUBST(PERLDEFINES)
 	AC_SUBST_FILE([PERL_AUTOGENERATION])
-	PERL_AUTOGENERATION=src/autogen_helpers/support_command
+	PERL_AUTOGENERATION=$srcdir/src/autogen_helpers/support_command
 	LANGUAGES="$LANGUAGES Perl"
 fi
 
 if test x$ruby = xtrue; then
-	AC_CHECK_PROG([RUBYINT],[ruby],["ruby"], ["no"])
+	AC_CHECK_PROG([RUBYINT],[ruby],["yes"], ["no"])
     RUBYINCLUDES=""
 	if test "$RUBYINT" = "no"
 	then
@@ -238,8 +251,19 @@ if test x$ruby = xtrue; then
     AC_SUBST(RUBYINCLUDES)
     AC_SUBST(RUBYDEFINES)
 	AC_SUBST_FILE([RUBY_AUTOGENERATION])
-	RUBY_AUTOGENERATION=src/autogen_helpers/support_command
+	RUBY_AUTOGENERATION=$srcdir/src/autogen_helpers/support_command
 	LANGUAGES="$LANGUAGES Ruby"
+fi
+
+if test x$guile = xtrue; then
+	AC_CHECK_PROG([GUILEINT],[guile],["yes"], ["no"])
+	if test "$GUILEINT" = "no"
+	then
+		AC_MSG_ERROR(guile interpreter not found)
+	fi
+	AC_SUBST_FILE([GUILE_AUTOGENERATION])
+	GUILE_AUTOGENERATION=$srcdir/src/autogen_helpers/support_command
+	LANGUAGES="$LANGUAGES Guile"
 fi
 
 AC_SUBST(LHT_LIBDEPS)
@@ -250,7 +274,7 @@ AC_SUBST(EXT_LIB_PATH)
 AC_SUBST(EXT_LIBS)
 
 AC_OUTPUT(
-	  libhttpserver.pc Makefile src/Makefile src/python/Makefile src/java/Makefile src/php/Makefile src/lua/Makefile src/perl/Makefile src/ruby/Makefile
+	  libhttpserver.pc Makefile src/Makefile src/python/Makefile src/java/Makefile src/php/Makefile src/lua/Makefile src/perl/Makefile src/ruby/Makefile src/guile/Makefile
 )
 
 AC_MSG_NOTICE([Configuration Summary:  

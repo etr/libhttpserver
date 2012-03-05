@@ -77,6 +77,18 @@ namespace std {
 	%feature("director") HttpUtils;
 #endif
 
+#ifdef SWIGGUILE
+	%module(directors="1") libhttpserver_guile
+	%include "typemaps.i"
+	%include "cpointer.i"
+	%feature("director") Webserver;
+	%feature("director") HttpRequest;
+	%feature("director") HttpResponse;
+	%feature("director") HttpResource;
+	%feature("director") HttpEndpoint;
+	%feature("director") HttpUtils;
+#endif
+
 #ifdef SWIGLUA
 	%module(directors="1") libhttpserver_lua
 	%include "typemaps.i"

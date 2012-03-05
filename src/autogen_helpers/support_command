@@ -16,5 +16,5 @@
 #     License along with this library; if not, write to the Free Software
 #     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 #
-$(srcdir)/WebserverWrap.cpp $(srcdir)/WebserverWrap.h: $(top_srcdir)/src/httpserver/Webserver.hpp $(top_srcdir)/src/httpserver/HttpResponse.hpp $(top_srcdir)/src/httpserver/HttpRequest.hpp $(top_srcdir)/src/httpserver/HttpResource.hpp $(top_srcdir)/src/httpserver/HttpEndpoint.hpp $(top_srcdir)/src/httpserver/HttpUtils.hpp
+$(srcdir)/WebserverWrap.cpp $(srcdir)/WebserverWrap.h: $(srcdir)/../httpserver/Webserver.hpp $(srcdir)/../httpserver/HttpResponse.hpp $(srcdir)/../httpserver/HttpRequest.hpp $(srcdir)/../httpserver/HttpResource.hpp $(srcdir)/../httpserver/HttpEndpoint.hpp $(srcdir)/../httpserver/HttpUtils.hpp
 	swig -c++ -$(language) $(swigoptions) -o $(srcdir)/WebserverWrap.cpp -I$(srcdir)/.. $(srcdir)/../httpserver/Webserver.hpp

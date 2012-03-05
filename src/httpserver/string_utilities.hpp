@@ -28,6 +28,12 @@ namespace httpserver
 namespace string_utilities
 {
 
+/**
+ * Function used to convert a string to its uppercase version.
+ * It generates a new string in output
+ * @param str The string to turn uppercase
+ * @return a string that is the uppercase version of the previous
+**/
 std::string to_upper_copy(std::string str);
 std::string to_lower_copy(std::string str);
 std::vector<std::string> string_split(std::string s, char sep);

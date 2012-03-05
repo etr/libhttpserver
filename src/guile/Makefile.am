@@ -16,41 +16,14 @@
 #     License along with this library; if not, write to the Free Software
 #     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-# not a GNU package. You can remove this line, if
-# have all needed files, that a GNU package needs
-AUTOMAKE_OPTIONS = foreign 1.4
+INCLUDES = -I../ -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver
+METASOURCES = AUTO
+lib_LTLIBRARIES = libhttpserver_guile.la
+libhttpserver_guile_la_LIBADD = -lmicrohttpd
+libhttpserver_guile_la_SOURCES = WebserverWrap.cpp $(top_srcdir)/src/Webserver.cpp $(top_srcdir)/src/HttpUtils.cpp $(top_srcdir)/src/HttpEndpoint.cpp $(top_srcdir)/src/HttpResource.cpp $(top_srcdir)/src/HttpRequest.cpp $(top_srcdir)/src/HttpResponse.cpp $(top_srcdir)/src/string_utilities.cpp
+libhttpserver_guile_la_includedir = 
+libhttpserver_guile_la_include_HEADERS =
 
-SUBDIRS = src $(PYTHON_DIR) $(JAVA_DIR) $(PHP_DIR) $(LUA_DIR) $(PERL_DIR) $(RUBY_DIR) $(GUILE_DIR)
-DIST_SUBDIRS = src $(PYTHON_DIR) $(JAVA_DIR) $(PHP_DIR) $(LUA_DIR) $(PERL_DIR) $(RUBY_DIR) $(GUILE_DIR)
-EXTRA_DIST = libhttpserver.pc.in
-
-pkgconfigdir = $(libdir)/pkgconfig
-pkgconfig_DATA = libhttpserver.pc
-
-if PYTHON
-PYTHON_DIR = src/python
-endif
-
-if JAVA
-JAVA_DIR = src/java
-endif
-
-if PHP
-PHP_DIR = src/php
-endif
-
-if LUA
-LUA_DIR = src/lua
-endif
-
-if PERL
-PERL_DIR = src/perl
-endif
-
-if RUBY
-RUBY_DIR = src/ruby
-endif
-
-if GUILE
-GUILE_DIR = src/guile
-endif
+language=guile
+swigoptions=-Wall
+@GUILE_AUTOGENERATION@
