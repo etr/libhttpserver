@@ -22,7 +22,7 @@ AUTOMAKE_OPTIONS = foreign 1.4
 
 SUBDIRS = src $(PYTHON_DIR) $(JAVA_DIR) $(PHP_DIR) $(LUA_DIR) $(PERL_DIR) $(RUBY_DIR) $(GUILE_DIR)
 DIST_SUBDIRS = src $(PYTHON_DIR) $(JAVA_DIR) $(PHP_DIR) $(LUA_DIR) $(PERL_DIR) $(RUBY_DIR) $(GUILE_DIR)
-EXTRA_DIST = libhttpserver.pc.in
+EXTRA_DIST = libhttpserver.pc.in $(DOXYFILE)
 
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = libhttpserver.pc
@@ -54,3 +54,6 @@ endif
 if GUILE
 GUILE_DIR = src/guile
 endif
+
+include $(top_srcdir)/aminclude.am
+DOXYFILE = doxyconfig

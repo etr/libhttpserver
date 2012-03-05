@@ -25,27 +25,43 @@ AM_INIT_AUTOMAKE([libhttpserver], [0.1.1])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIR([m4])
 
+OLD_CXXFLAGS=$CXXFLAGS
 AC_PROG_LIBTOOL
 AC_PROG_CC
-#AM_CONDITIONAL([XXX], [true])
-
-# Checks for programs.
 AC_PROG_CXX
-
-# Checks for libraries.
+CXXFLAGS=$OLD_CXXFLAGS
+AC_LANG([C++])
 
 # Checks for header files.
-AC_CHECK_HEADER([microhttpd.h],[],
-	[
-	 AC_MSG_ERROR("Microhttpd header files not found")
-	]
-)
-
+AC_HEADER_STDC
+AC_CHECK_HEADER([string],[],[AC_MSG_ERROR("C++ strings not found")])
+AC_CHECK_HEADER([vector],[],[AC_MSG_ERROR("C++ vector not found")])
+AC_CHECK_HEADER([map],[],[AC_MSG_ERROR("C++ map not found")])
+AC_CHECK_HEADER([algorithm],[],[AC_MSG_ERROR("C++ algorithm not found")])
+AC_CHECK_HEADER([istream],[],[AC_MSG_ERROR("C++ istream not found")])
+AC_CHECK_HEADER([sstream],[],[AC_MSG_ERROR("C++ sstream not found")])
+AC_CHECK_HEADER([iostream],[],[AC_MSG_ERROR("C++ iostream not found")])
+AC_CHECK_HEADER([stdint.h],[],[AC_MSG_ERROR("stdint.h not found")])
+AC_CHECK_HEADER([inttypes.h],[],[AC_MSG_ERROR("inttypes.h not found")])
+AC_CHECK_HEADER([stdlib.h],[],[AC_MSG_ERROR("stdlib.h not found")])
+AC_CHECK_HEADER([string.h],[],[AC_MSG_ERROR("cstring not found")])
+AC_CHECK_HEADER([stdio.h],[],[AC_MSG_ERROR("cstdio not found")])
+AC_CHECK_HEADER([errno.h],[],[AC_MSG_ERROR("errno.h not found")])
+AC_CHECK_HEADER([unistd.h],[],[AC_MSG_ERROR("unistd.h not found")])
+AC_CHECK_HEADER([ctype.h],[],[AC_MSG_ERROR("cctype not found")])
+AC_CHECK_HEADER([regex.h],[],[AC_MSG_ERROR("regex.h not found")])
+AC_CHECK_HEADER([sys/stat.h],[],[AC_MSG_ERROR("sys/stat.h not found")])
+AC_CHECK_HEADER([sys/types.h],[],[AC_MSG_ERROR("sys/types.h not found")])
+AC_CHECK_HEADER([arpa/inet.h],[],[AC_MSG_ERROR("arpa/inet.h not found")])
+AC_CHECK_HEADER([gnutls/gnutls.h],[],[AC_MSG_ERROR("gnutls/gnutls.h not found")])
+AC_CHECK_HEADER([signal.h],[],[AC_MSG_ERROR("signal.h not found")])
+AC_CHECK_HEADER([microhttpd.h],[],[AC_MSG_ERROR("Microhttpd header files not found")])
 
 # Checks for typedefs, structures, and compiler characteristics.
+AC_TYPE_SIZE_T
 AC_TYPE_UINT16_T
-
-# Checks for library functions.
+AC_TYPE_UINT32_T
+AC_TYPE_UINT64_T
 
 LHT_LIBDEPS="-lmicrohttpd"
 
@@ -97,9 +113,21 @@ AC_ARG_WITH([guile],
      [  --with-guile    Compile GUILE libraries],
      [guile=true; swig=true])
 
-AC_ARG_WITH(doc,
-            [  --with-doc   Compile DOC],
-            [doc=true])
+AC_MSG_CHECKING([whether to build with debug information])
+AC_ARG_ENABLE([debug],
+    [AS_HELP_STRING([--enable-debug],
+        [enable debug data generation (def=no)])],
+    [debugit="$enableval"],
+    [debugit=no])
+AC_MSG_RESULT([$debugit])
+
+if test x"$debugit" = x"yes"; then
+    AC_DEFINE([DEBUG],[],[Debug Mode])
+    AM_CXXFLAGS="$AM_CXXFLAGS -g -Wall -Werror -Wno-uninitialized -O0"
+else
+    AC_DEFINE([NDEBUG],[],[No-debug Mode])
+    AM_CXXFLAGS="$AM_CXXFLAGS -O3"
+fi
 
 AM_CONDITIONAL([PYTHON], [test x$python = xtrue])
 AM_CONDITIONAL([JAVA], [test x$java = xtrue])
@@ -111,6 +139,16 @@ AM_CONDITIONAL([GUILE], [test x$guile = xtrue])
 AM_CONDITIONAL([DOC], [test x$doc = xtrue])
 
 LANGUAGES="C++"
+
+DX_HTML_FEATURE(ON)
+DX_CHM_FEATURE(OFF)
+DX_CHI_FEATURE(OFF)
+DX_MAN_FEATURE(ON)
+DX_RTF_FEATURE(OFF)
+DX_XML_FEATURE(OFF)
+DX_PDF_FEATURE(OFF)
+DX_PS_FEATURE(OFF)
+DX_INIT_DOXYGEN([$PACKAGE_NAME],[doxyconfig])
 
 if test x$swig = xtrue; then
 	AC_CHECK_PROG([SWIG], [swig], ["yes"], ["no"])
@@ -267,6 +305,7 @@ if test x$guile = xtrue; then
 fi
 
 AC_SUBST(LHT_LIBDEPS)
+AC_SUBST([AM_CXXFLAGS])
 AC_SUBST(CPPFLAGS)
 AC_SUBST(LIBS)
 AC_SUBST(LDFLAGS)
@@ -282,4 +321,5 @@ AC_MSG_NOTICE([Configuration Summary:
   Target directory:  ${prefix}
   License         :  LGPL only
   Languages       :  ${LANGUAGES}
+  Debug	          :  ${debugit}
 ])
