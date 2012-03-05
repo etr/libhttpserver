@@ -55,6 +55,9 @@ AC_CHECK_HEADER([sys/types.h],[],[AC_MSG_ERROR("sys/types.h not found")])
 AC_CHECK_HEADER([arpa/inet.h],[],[AC_MSG_ERROR("arpa/inet.h not found")])
 AC_CHECK_HEADER([gnutls/gnutls.h],[],[AC_MSG_ERROR("gnutls/gnutls.h not found")])
 AC_CHECK_HEADER([signal.h],[],[AC_MSG_ERROR("signal.h not found")])
+
+# Checks for libmicrohttpd
+PKG_CHECK_MODULES([LIBMICROHTTPD],[libmicrohttpd >= 0.9.9],[],[AC_MSG_ERROR("libmicrohttpd not present or too old - install libmicrohttpd >= 0.9.9")])
 AC_CHECK_HEADER([microhttpd.h],[],[AC_MSG_ERROR("Microhttpd header files not found")])
 
 # Checks for typedefs, structures, and compiler characteristics.
