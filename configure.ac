@@ -32,6 +32,10 @@ AC_PROG_CXX
 CXXFLAGS=$OLD_CXXFLAGS
 AC_LANG([C++])
 
+if test "`cd $srcdir; /bin/pwd`" = "`/bin/pwd`"; then 
+	AC_MSG_ERROR([you must configure in a separate build directory])
+fi
+
 # Checks for header files.
 AC_HEADER_STDC
 AC_CHECK_HEADER([string],[],[AC_MSG_ERROR("C++ strings not found")])
@@ -57,8 +61,8 @@ AC_CHECK_HEADER([gnutls/gnutls.h],[],[AC_MSG_ERROR("gnutls/gnutls.h not found")]
 AC_CHECK_HEADER([signal.h],[],[AC_MSG_ERROR("signal.h not found")])
 
 # Checks for libmicrohttpd
-PKG_CHECK_MODULES([LIBMICROHTTPD],[libmicrohttpd >= 0.9.9],[],[AC_MSG_ERROR("libmicrohttpd not present or too old - install libmicrohttpd >= 0.9.9")])
-AC_CHECK_HEADER([microhttpd.h],[],[AC_MSG_ERROR("Microhttpd header files not found")])
+#PKG_CHECK_MODULES([LIBMICROHTTPD],[libmicrohttpd >= 0.9.9],[],[AC_MSG_ERROR("libmicrohttpd not present or too old - install libmicrohttpd >= 0.9.9")])
+AC_CHECK_HEADER([microhttpd.h],[],[AC_MSG_ERROR("Microhttpd header files not found. Please use a version >= 0.9.9.")])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_TYPE_SIZE_T
