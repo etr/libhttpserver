@@ -130,7 +130,7 @@ AC_MSG_RESULT([$debugit])
 
 if test x"$debugit" = x"yes"; then
     AC_DEFINE([DEBUG],[],[Debug Mode])
-    AM_CXXFLAGS="$AM_CXXFLAGS -g -Wall -Werror -Wno-uninitialized -O0"
+    AM_CXXFLAGS="$AM_CXXFLAGS -DDEBUG -g -Wall -Werror -Wno-uninitialized -O0"
 else
     AC_DEFINE([NDEBUG],[],[No-debug Mode])
     AM_CXXFLAGS="$AM_CXXFLAGS -O3"
@@ -312,7 +312,7 @@ if test x$guile = xtrue; then
 fi
 
 AC_SUBST(LHT_LIBDEPS)
-AC_SUBST([AM_CXXFLAGS])
+AC_SUBST(AM_CXXFLAGS)
 AC_SUBST(CPPFLAGS)
 AC_SUBST(LIBS)
 AC_SUBST(LDFLAGS)

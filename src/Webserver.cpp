@@ -530,6 +530,9 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
 		}
 		if ( 0 != *upload_data_size)
 		{
+#ifdef DEBUG
+			cout << "Writing content: " << upload_data << endl;
+#endif
 			mr->dhr->growContent(upload_data, *upload_data_size);
 			*upload_data_size = 0;
 			return MHD_YES;

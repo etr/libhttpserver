@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <boost/thread.hpp>
 #include <iostream>
+#include <fstream>
 #include <stdio.h>
 using namespace std;
 
@@ -28,13 +29,12 @@ HttpResponse Test::render_GET(const HttpRequest& r)
 
 HttpResponse Test::render_POST(const HttpRequest& r)
 {
-	cout << r.getContent() << endl;
-	cout << "prova: " << r.getArg("prova") << endl;
-	
-	string pp = r.getArg("prova");
+	fstream filestr;
+	filestr.open("test.txt", fstream::out | fstream::app);
+	filestr << r.getContent() << endl;
+	filestr.close();
 	cout << "DOPO" << endl;
-
-	return HttpResponse(pp,200);
+	return HttpResponse("OK",200);
 }
 
 HttpResponse Test2::render_GET(const HttpRequest& r)
