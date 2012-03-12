@@ -18,17 +18,22 @@
 
 # not a GNU package. You can remove this line, if
 # have all needed files, that a GNU package needs
+
+LIBTOOL_DEPS = @LIBTOOL_DEPS@
+
 AUTOMAKE_OPTIONS = foreign 1.4
+ACLOCAL_AMFLAGS = -I m4
 
 SUBDIRS = src $(PYTHON_DIR) $(JAVA_DIR) $(PHP_DIR) $(LUA_DIR) $(PERL_DIR) $(RUBY_DIR) $(GUILE_DIR)
 DIST_SUBDIRS = src $(PYTHON_DIR) $(JAVA_DIR) $(PHP_DIR) $(LUA_DIR) $(PERL_DIR) $(RUBY_DIR) $(GUILE_DIR)
-EXTRA_DIST = libhttpserver.pc.in $(DOXYFILE)
+EXTRA_DIST = libhttpserver.pc.in $(DOXYFILE) $(PYTHON_EXTRA) $(PHP_EXTRA) $(PERL_EXTRA)
 
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = libhttpserver.pc
 
 if PYTHON
 PYTHON_DIR = src/python
+PYTHON_EXTRA = src/python/libhttpserver_python.py
 endif
 
 if JAVA
@@ -37,6 +42,7 @@ endif
 
 if PHP
 PHP_DIR = src/php
+PHP_EXTRA = src/php/libhttpserver_php.php
 endif
 
 if LUA
@@ -45,6 +51,7 @@ endif
 
 if PERL
 PERL_DIR = src/perl
+PERL_EXTRA = src/php/libhttpserver_perl.pm
 endif
 
 if RUBY
@@ -57,3 +64,12 @@ endif
 
 include $(top_srcdir)/aminclude.am
 DOXYFILE = doxyconfig
+
+# Update libtool, if needed.
+libtool: $(LIBTOOL_DEPS)
+	$(SHELL) ./config.status --recheck
+
+dist-hook:
+	date >DIST_REVISION
+	git branch -vv >>DIST_REVISION
+	cp DIST_REVISION $(distdir)/

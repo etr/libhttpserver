@@ -18,15 +18,13 @@
 
 INCLUDES = -I../ -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver $(PYINCLUDES)
 AM_CPPFLAGS=$(PYDEFINES)
+pythonSitePackagesdirdir = $(pythondir)
 METASOURCES = AUTO
-lib_LTLIBRARIES = _libhttpserver_python.la
+pythonSitePackagesdir_LTLIBRARIES = _libhttpserver_python.la
+pythonSitePackagesdir_SCRIPTS = libhttpserver_python.py
 _libhttpserver_python_la_LDFLAGS = -module $(PYLDFLAGS)
 _libhttpserver_python_la_LIBADD = -lmicrohttpd $(PYLIBS)
 _libhttpserver_python_la_SOURCES = WebserverWrap.cpp $(top_srcdir)/src/Webserver.cpp $(top_srcdir)/src/HttpUtils.cpp $(top_srcdir)/src/HttpEndpoint.cpp $(top_srcdir)/src/HttpResource.cpp $(top_srcdir)/src/HttpRequest.cpp $(top_srcdir)/src/HttpResponse.cpp $(top_srcdir)/src/string_utilities.cpp
-
-pydir=$(datadir)/python
-
-py_DATA=libhttpserver_python.py
 
 language=python
 swigoptions=-Wall

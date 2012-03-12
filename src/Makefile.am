@@ -25,5 +25,3 @@ nobase_include_HEADERS = httpserver.h httpserver/Webserver.hpp httpserver/HttpUt
 AM_CXXFLAGS += -fPIC -Wall
 libhttpserver_la_LIBADD = -lmicrohttpd
 libhttpserver_la_LDFLAGS =
-
-

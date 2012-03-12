@@ -171,6 +171,38 @@ if test x$python = xtrue; then
 	then
 		AC_MSG_ERROR(python-config not found)
 	fi
+    AC_CHECK_PROG([PYTHONINT],[python],["yes"], ["no"])
+	if test "$PYTHONINT" = "no"
+	then
+		AC_MSG_ERROR(python interpreter not found)
+	fi
+
+    AM_PATH_PYTHON()
+    if test -n "$PYTHON" ; then
+        AC_MSG_CHECKING([$PYTHON include dir])
+        if $PYTHON -c 'import distutils.sysconfig' 2>/dev/null ; then
+            PYTHON_INC=`$PYTHON -c 'import os,distutils.sysconfig;print(distutils.sysconfig.get_python_inc().replace(os.sep,"/"))'`
+        AC_SUBST(PYTHON_INC)
+        else
+            if test yes = "$with_python" ; then
+            AC_MSG_ERROR([Could not import Python module distutils.sysconfig - you probably need to install a python-dev or python-devel package])
+        else
+            AC_MSG_WARN([Couldn not import Python module distutils.sysconfig - you probably do not have a python-dev or python-devel package installed])
+        fi
+        fi
+        AC_MSG_RESULT([$PYTHON_INC])
+        AC_MSG_CHECKING([for directory to install python bindings in])
+        if test -z "$PYTHON_LIB" ; then
+          PYTHON_LIB=`$PYTHON -c 'import os,distutils.sysconfig;print(distutils.sysconfig.get_python_lib(1).replace(os.sep,"/"))'`
+        fi
+        AC_MSG_RESULT([$PYTHON_LIB])
+        AC_ARG_VAR(PYTHON_LIB, [Directory to install python bindings in])
+
+        AC_MSG_CHECKING([for python libraries to link against])
+        PYTHON_LIBS=`$PYTHON -c 'import os,sys;print("-L"+os.path.join(sys.path[[3]],"config")+" -lpython"+sys.version[[:3]])'`
+        AC_SUBST(PYTHON_LIBS)
+        AC_MSG_RESULT([$PYTHON_LIBS])
+    fi
     PYINCLUDES="`python-config --includes`"
     PYDEFINES="-DWITHPYTHON"
 	PYLDFLAGS="$LDFLAGS -L`python-config --prefix`/lib"
