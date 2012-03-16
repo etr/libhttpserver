@@ -191,12 +191,12 @@ if test x$python = xtrue; then
         fi
         fi
         AC_MSG_RESULT([$PYTHON_INC])
-        AC_MSG_CHECKING([for directory to install python bindings in])
+        AC_MSG_CHECKING([for directory to install python wrapper in])
         if test -z "$PYTHON_LIB" ; then
           PYTHON_LIB=`$PYTHON -c 'import os,distutils.sysconfig;print(distutils.sysconfig.get_python_lib(1).replace(os.sep,"/"))'`
         fi
         AC_MSG_RESULT([$PYTHON_LIB])
-        AC_ARG_VAR(PYTHON_LIB, [Directory to install python bindings in])
+        AC_ARG_VAR(PYTHON_LIB, [Directory to install python wrapper in])
 
         AC_MSG_CHECKING([for python libraries to link against])
         PYTHON_LIBS=`$PYTHON -c 'import os,sys;print("-L"+os.path.join(sys.path[[3]],"config")+" -lpython"+sys.version[[:3]])'`
