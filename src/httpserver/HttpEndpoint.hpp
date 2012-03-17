@@ -84,6 +84,11 @@ class HttpEndpoint
 		**/
 		bool match(const HttpEndpoint& url) const;
 		/**
+		 * Method used to get the complete endpoint url
+		 * @return a string representing the url
+		**/
+		const std::string get_url_complete() const;
+		/**
 		 * Method used to get all pars defined inside an url.
 		 * @return a vector of strings representing all found pars.
 		**/

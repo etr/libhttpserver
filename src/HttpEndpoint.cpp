@@ -199,6 +199,11 @@ bool HttpEndpoint::match(const HttpEndpoint& url) const
 	}
 }
 
+const std::string HttpEndpoint::get_url_complete() const 
+{
+	return this->url_complete;
+}
+
 const std::vector<std::string> HttpEndpoint::get_url_pars() const 
 {
 	return this->url_pars;

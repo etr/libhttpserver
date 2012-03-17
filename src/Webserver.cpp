@@ -291,8 +291,20 @@ bool Webserver::start(bool blocking)
 	bool value_onclose = false;
 	if(blocking)
 	{
+#ifdef WITH_PYTHON
+		if(PyEval_ThreadsInitialized())
+		{
+			Py_BEGIN_ALLOW_THREADS;
+		}
+#endif
 		while(blocking && running)
 			sleep(1);
+#ifdef WITH_PYTHON
+		if(PyEval_ThreadsInitialized())
+		{
+			Py_END_ALLOW_THREADS;
+		}
+#endif
 		value_onclose = this->stop();
 	}
 	return value_onclose;
@@ -598,20 +610,27 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
 	{
 		map<HttpEndpoint, HttpResource* >::iterator it;
 		int len = -1;
+		int tot_len = -1;
 		bool found = false;
 		HttpEndpoint matchingEndpoint;
 		for(it=dws->registeredResources.begin(); it!=dws->registeredResources.end(); it++) 
 		{
-			if(len == -1 || ((int)((*it).first.get_url_pieces().size())) > len)
+			int endpoint_pieces_len = ((int)((*it).first.get_url_pieces().size()));
+			int endpoint_tot_len = ((int)((*it).first.get_url_complete().size()));
+			if(tot_len == -1 || len == -1 || endpoint_pieces_len > len || (endpoint_pieces_len == len && endpoint_tot_len > tot_len))
 			{
 				if((*it).first.match(endpoint))
 				{
 					found = true;
-					len = (*it).first.get_url_pieces().size();
+					len = endpoint_pieces_len;
+					tot_len = endpoint_tot_len;
 					matchingEndpoint = (*it).first;
 				}
 			}
 		}
+#ifdef DEBUG
+		cout << "Using: " << matchingEndpoint.get_url_complete() << endl;
+#endif
 		if(!found) 
 		{
 			toRet = not_found_page(cls, connection);
