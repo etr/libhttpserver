@@ -1,5 +1,5 @@
-#ifndef _httpserver_h_
-#define _httpserver_h_
+#ifndef _httpserver_hpp_
+#define _httpserver_hpp_
 
 #ifdef SWIG
 %include "std_string.i"
