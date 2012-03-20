@@ -577,42 +577,13 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
 	void* page;
 	size_t size = 0;
 	bool to_free = false;
-	if((dws->registeredResources.count(endpoint) > 0)) 
-	{
-#ifdef WITH_PYTHON
-		PyGILState_STATE gstate;
-		if(PyEval_ThreadsInitialized())
-		{
-			gstate = PyGILState_Ensure();
-		}
-#endif
-		dhrs = dws->registeredResources[endpoint]->routeRequest(supportReq);
-#ifdef WITH_PYTHON
-		if(PyEval_ThreadsInitialized())
-		{
-			PyGILState_Release(gstate);
-		}
-#endif
-		if(dhrs.content != "")
-		{
-			vector<char> v_page(dhrs.content.begin(), dhrs.content.end());
-			size = v_page.size();
-			page = (void*) malloc(size*sizeof(char));
-			memcpy( page, &v_page[0], sizeof( char ) * size );
-			to_free = true;
-		}
-		else
-		{
-			page = (void*) "";
-		}
-	} 
-	else 
+	HttpEndpoint matchingEndpoint;
+	if(!(dws->registeredResources.count(endpoint) > 0)) 
 	{
 		map<HttpEndpoint, HttpResource* >::iterator it;
 		int len = -1;
 		int tot_len = -1;
 		bool found = false;
-		HttpEndpoint matchingEndpoint;
 		for(it=dws->registeredResources.begin(); it!=dws->registeredResources.end(); it++) 
 		{
 			int endpoint_pieces_len = ((int)((*it).first.get_url_pieces().size()));
@@ -649,33 +620,37 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
 			{
 				supportReq.setArg(url_pars[i], url_pieces[chunkes[i]]);
 			}
-#ifdef WITH_PYTHON
-			PyGILState_STATE gstate;
-			if(PyEval_ThreadsInitialized())
-			{
-				gstate = PyGILState_Ensure();
-			}
-#endif
-			dhrs = dws->registeredResources[matchingEndpoint]->routeRequest(supportReq);
-#ifdef WITH_PYTHON
-			if(PyEval_ThreadsInitialized())
-			{
-				PyGILState_Release(gstate);
-			}
-#endif
-			if(dhrs.content != "")
-			{
-				vector<char> v_page(dhrs.content.begin(), dhrs.content.end());
-				size = v_page.size();
-				page = (void*) malloc(size*sizeof(char));
-				memcpy( page, &v_page[0], sizeof( char ) * size );
-				to_free = true;
-			}
-			else
-			{
-				page = (void*)"";
-			}
 		}
+	}
+	else
+	{
+		matchingEndpoint = dws->registeredResources[endpoint];
+	}
+#ifdef WITH_PYTHON
+	PyGILState_STATE gstate;
+	if(PyEval_ThreadsInitialized())
+	{
+		gstate = PyGILState_Ensure();
+	}
+#endif
+	dhrs = dws->registeredResources[matchingEndpoint]->routeRequest(supportReq);
+#ifdef WITH_PYTHON
+	if(PyEval_ThreadsInitialized())
+	{
+		PyGILState_Release(gstate);
+	}
+#endif
+	if(dhrs.content != "")
+	{
+		vector<char> v_page(dhrs.content.begin(), dhrs.content.end());
+		size = v_page.size();
+		page = (void*) malloc(size*sizeof(char));
+		memcpy( page, &v_page[0], sizeof( char ) * size );
+		to_free = true;
+	}
+	else
+	{
+		page = (void*)"";
 	}
 	if(dhrs.responseType == HttpResponse::FILE_CONTENT)
 	{
