@@ -577,7 +577,7 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
 	void* page;
 	size_t size = 0;
 	bool to_free = false;
-	HttpEndpoint matchingEndpoint;
+	const HttpEndpoint* matchingEndpoint;
 	if(!(dws->registeredResources.count(endpoint) > 0)) 
 	{
 		map<HttpEndpoint, HttpResource* >::iterator it;
@@ -595,13 +595,10 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
 					found = true;
 					len = endpoint_pieces_len;
 					tot_len = endpoint_tot_len;
-					matchingEndpoint = (*it).first;
+					matchingEndpoint = &((*it).first);
 				}
 			}
 		}
-#ifdef DEBUG
-		cout << "Using: " << matchingEndpoint.get_url_complete() << endl;
-#endif
 		if(!found) 
 		{
 			toRet = not_found_page(cls, connection);
@@ -613,9 +610,9 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
 		} 
 		else 
 		{
-			vector<string> url_pars = matchingEndpoint.get_url_pars();
+			vector<string> url_pars = matchingEndpoint->get_url_pars();
 			vector<string> url_pieces = endpoint.get_url_pieces();
-			vector<int> chunkes = matchingEndpoint.get_chunk_positions();
+			vector<int> chunkes = matchingEndpoint->get_chunk_positions();
 			for(unsigned int i = 0; i < url_pars.size(); i++) 
 			{
 				supportReq.setArg(url_pars[i], url_pieces[chunkes[i]]);
@@ -624,8 +621,11 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
 	}
 	else
 	{
-		matchingEndpoint = dws->registeredResources[endpoint];
+		matchingEndpoint = &endpoint;
 	}
+#ifdef DEBUG
+		cout << "Using: " << matchingEndpoint->get_url_complete() << endl;
+#endif
 #ifdef WITH_PYTHON
 	PyGILState_STATE gstate;
 	if(PyEval_ThreadsInitialized())
@@ -633,7 +633,7 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
 		gstate = PyGILState_Ensure();
 	}
 #endif
-	dhrs = dws->registeredResources[matchingEndpoint]->routeRequest(supportReq);
+	dhrs = dws->registeredResources[*matchingEndpoint]->routeRequest(supportReq);
 #ifdef WITH_PYTHON
 	if(PyEval_ThreadsInitialized())
 	{
