@@ -81,7 +81,9 @@ int HttpRequest::getPathPiecesSize() const
 
 const string HttpRequest::getPathPiece(int idx) const
 {
-	return this->post_path[idx];
+	if(((int)(this->post_path.size())) > idx)
+		return this->post_path[idx];
+	return "";
 }
 
 const string HttpRequest::getMethod() const 
