@@ -28,4 +28,5 @@ _libhttpserver_python_la_SOURCES = WebserverWrap.cpp $(top_srcdir)/src/Webserver
 
 language=python
 swigoptions=-Wall
+swigscripts=libhttpserver_python.py
 @PYTHON_AUTOGENERATION@

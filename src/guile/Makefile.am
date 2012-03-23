@@ -26,4 +26,5 @@ libhttpserver_guile_la_include_HEADERS =
 
 language=guile
 swigoptions=-Wall
+swigscripts=
 @GUILE_AUTOGENERATION@

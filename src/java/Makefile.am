@@ -29,4 +29,5 @@ javadir=$(datadir)/java
 
 language=java
 swigoptions=-Wall
+swigscripts=
 @JAVA_AUTOGENERATION@

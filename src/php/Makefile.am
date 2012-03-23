@@ -27,4 +27,5 @@ libhttpserver_php_la_include_HEADERS = libhttpserver_php.php
 
 language=php
 swigoptions=-Wall
+swigscripts=
 @PHP_AUTOGENERATION@

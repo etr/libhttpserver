@@ -26,4 +26,5 @@ libhttpserver_lua_la_include_HEADERS =
 
 language=lua
 swigoptions=-Wall
+swigscripts=
 @LUA_AUTOGENERATION@

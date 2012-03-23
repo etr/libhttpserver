@@ -29,4 +29,5 @@ libhttpserver_ruby_la_include_HEADERS =
 
 language=ruby
 swigoptions=-minherit -Wall
+swigscripts=
 @RUBY_AUTOGENERATION@
