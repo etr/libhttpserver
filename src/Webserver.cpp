@@ -571,7 +571,6 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
 		supportReq.setPass(string(pass));
 		supportReq.setUser(string(user));
 	}
-	int toRet;
 	HttpEndpoint endpoint = HttpEndpoint(st_url);
 	HttpResponse dhrs;
 	void* page;
@@ -601,7 +600,6 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
 		}
 		if(!found) 
 		{
-			toRet = not_found_page(cls, connection);
 			if (user != 0x0)
 				free (user);
 			if (pass != 0x0)
@@ -669,7 +667,6 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
 	for (it=response_footers.begin() ; it != response_footers.end(); it++)
 		MHD_add_response_footer(response, (*it).first.c_str(), (*it).second.c_str());
 	ret = MHD_queue_response(connection, dhrs.getResponseCode(), response);
-	toRet = ret;
 
 	if (user != 0x0)
 		free (user);
