@@ -356,9 +356,12 @@ class CreateWebserver
         CreateWebserver& noDebug() { _debug = false; return *this; }
         CreateWebserver& pedantic() { _pedantic = true; return *this; }
         CreateWebserver& noPedantic() { _pedantic = false; return *this; }
-        CreateWebserver& httpsMemKey(const std::string& httpsMemKey) { _httpsMemKey = httpsMemKey; return *this; }
-        CreateWebserver& httpsMemCert(const std::string& httpsMemCert) { _httpsMemCert = httpsMemCert; return *this; }
-        CreateWebserver& httpsMemTrust(const std::string& httpsMemTrust) { _httpsMemTrust = httpsMemTrust; return *this; }
+        CreateWebserver& httpsMemKey(const std::string& httpsMemKey);
+        CreateWebserver& httpsMemCert(const std::string& httpsMemCert);
+        CreateWebserver& httpsMemTrust(const std::string& httpsMemTrust);
+        CreateWebserver& rawHttpsMemKey(const std::string& httpsMemKey) { _httpsMemKey = httpsMemKey; return *this; }
+        CreateWebserver& rawHttpsMemCert(const std::string& httpsMemCert) { _httpsMemCert = httpsMemCert; return *this; }
+        CreateWebserver& rawHttpsMemTrust(const std::string& httpsMemTrust) { _httpsMemTrust = httpsMemTrust; return *this; }
         CreateWebserver& httpsPriorities(const std::string& httpsPriorities) { _httpsPriorities = httpsPriorities; return *this; }
         CreateWebserver& credType(const HttpUtils::CredType_T& credType) { _credType = credType; return *this; }
         CreateWebserver& digestAuthRandom(const std::string& digestAuthRandom) { _digestAuthRandom = digestAuthRandom; return *this; }

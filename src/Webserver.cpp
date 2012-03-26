@@ -77,6 +77,57 @@ static void ignore_sigpipe ()
         fprintf (stderr, gettext("Failed to install SIGPIPE handler: %s\n"), strerror (errno));
 }
 
+static long get_file_size (const char *filename)
+{
+	FILE *fp;
+
+	fp = fopen (filename, "rb");
+	if (fp)
+	{   
+		long size;
+
+		if ((0 != fseek (fp, 0, SEEK_END)) || (-1 == (size = ftell (fp))))
+			size = 0;
+
+		fclose (fp);
+
+		return size;
+	}   
+	else
+	return 0;
+}
+
+static char * load_file (const char *filename)
+{
+	FILE *fp;
+	char *buffer;
+	long size;
+
+	size = get_file_size (filename);
+	if (size == 0)
+		return NULL;
+
+	fp = fopen (filename, "rb");
+	if (!fp)
+		return NULL;
+
+	buffer = (char*) malloc (size);
+	if (!buffer)
+	{   
+		fclose (fp);
+		return NULL;
+	}   
+
+	if (size != (int) fread (buffer, 1, size, fp))
+	{   
+		free (buffer);
+		buffer = NULL;
+	}   
+
+	fclose (fp);
+	return buffer;
+}
+
 //LOGGING DELEGATE
 LoggingDelegate::LoggingDelegate() {}
 
@@ -99,6 +150,25 @@ Unescaper::Unescaper() {}
 Unescaper::~Unescaper() {}
 
 void Unescaper::unescape(char* s) const {}
+
+//WEBSERVER CREATOR
+CreateWebserver& CreateWebserver::httpsMemKey(const std::string& httpsMemKey)
+{
+	_httpsMemKey = load_file(httpsMemKey.c_str());
+	return *this;
+}
+
+CreateWebserver& CreateWebserver::httpsMemCert(const std::string& httpsMemCert)
+{
+	_httpsMemCert = load_file(httpsMemCert.c_str());
+	return *this;
+}
+
+CreateWebserver& CreateWebserver::httpsMemTrust(const std::string& httpsMemTrust)
+{
+	_httpsMemTrust = load_file(httpsMemTrust.c_str());
+	return *this;
+}
 
 //WEBSERVER
 Webserver::Webserver 
@@ -245,14 +315,14 @@ bool Webserver::start(bool blocking)
 		iov.push_back(gen(MHD_OPTION_THREAD_STACK_SIZE, maxThreadStackSize));
 	if(nonceNcSize != 0)
 		iov.push_back(gen(MHD_OPTION_NONCE_NC_SIZE, nonceNcSize));
-	if(httpsMemKey != "")
-		iov.push_back(gen(MHD_OPTION_HTTPS_MEM_KEY, (intptr_t)httpsMemKey.c_str()));
-	if(httpsMemCert != "")
-		iov.push_back(gen(MHD_OPTION_HTTPS_MEM_CERT, (intptr_t)httpsMemCert.c_str()));
-	if(httpsMemTrust != "")
-		iov.push_back(gen(MHD_OPTION_HTTPS_MEM_TRUST, (intptr_t)httpsMemTrust.c_str()));
-	if(httpsPriorities != "")
-		iov.push_back(gen(MHD_OPTION_HTTPS_PRIORITIES, (intptr_t)httpsPriorities.c_str()));
+	if(useSsl)
+		iov.push_back(gen(MHD_OPTION_HTTPS_MEM_KEY, 0, (void*)httpsMemKey.c_str()));
+	if(useSsl)
+		iov.push_back(gen(MHD_OPTION_HTTPS_MEM_CERT, 0, (void*)httpsMemCert.c_str()));
+	if(httpsMemTrust != "" && useSsl)
+		iov.push_back(gen(MHD_OPTION_HTTPS_MEM_TRUST, 0, (void*)httpsMemTrust.c_str()));
+	if(httpsPriorities != "" && useSsl)
+		iov.push_back(gen(MHD_OPTION_HTTPS_PRIORITIES, 0, (void*)httpsPriorities.c_str()));
 	if(digestAuthRandom != "")
 		iov.push_back(gen(MHD_OPTION_DIGEST_AUTH_RANDOM, digestAuthRandom.size(), (char*)digestAuthRandom.c_str()));
 	if(credType != HttpUtils::NONE)
