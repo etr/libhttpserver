@@ -20,10 +20,10 @@
 #ifndef _FRAMEWORK_WEBSERVER_HPP_
 #define _FRAMEWORK_WEBSERVER_HPP_
 
-#define NOT_FOUND_ERROR "{\"description\":\"NOT FOUND\"}"
-#define METHOD_ERROR "{\"description\":\"METHOD NOT ALLOWED\"}"
-#define NOT_METHOD_ERROR "{\"description\":\"METHOD NOT ACCEPTABLE\"}"
-#define GENERIC_ERROR "{\"description\":\"INTERNAL ERROR\"}"
+#define NOT_FOUND_ERROR "Not Found"
+#define METHOD_ERROR "Method not Allowed"
+#define NOT_METHOD_ERROR "Method not Acceptable"
+#define GENERIC_ERROR "Internal Error"
 #define DEFAULT_WS_PORT 9898
 #define DEFAULT_WS_TIMEOUT 180
 

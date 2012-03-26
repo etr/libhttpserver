@@ -449,7 +449,7 @@ int Webserver::not_found_page (const void *cls,
 		response);
 	MHD_add_response_header (response,
 		MHD_HTTP_HEADER_CONTENT_ENCODING,
-		"application/json");
+		"text/plain");
 	MHD_destroy_response (response);
 	return ret;
 }
@@ -469,7 +469,7 @@ int Webserver::method_not_acceptable_page (const void *cls,
 		response);
 	MHD_add_response_header (response,
 		MHD_HTTP_HEADER_CONTENT_ENCODING,
-		"application/json");
+		"text/plain");
 	MHD_destroy_response (response);
 	return ret;
 }
