@@ -29,5 +29,5 @@ javadir=$(datadir)/java
 
 language=java
 swigoptions=-Wall
-swigscripts=
+swigscripts=Webserver.java HttpRequest.java HttpResponse.java HttpResource.java HttpEndpoint.java HttpUtils.java
 @JAVA_AUTOGENERATION@

@@ -27,5 +27,5 @@ libhttpserver_perl_la_include_HEADERS =
 
 language=perl
 swigoptions=-Wall
-swigscripts=
+swigscripts=libhttpserver_perl.pm
 @PERL_AUTOGENERATION@
