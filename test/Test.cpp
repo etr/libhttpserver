@@ -50,7 +50,7 @@ HttpResponse Test::render_PUT(const HttpRequest& r)
 
 int main()
 {
-	Webserver ws = CreateWebserver(9898).useSsl().httpsMemKey("key.pem").httpsMemCert("cert.pem");
+	Webserver ws = CreateWebserver(9898);
 	Test dt = Test();
 	Test2 dt2 = Test2();
     ws.registerResource(string("base/{var1}/{var2}/drop_test/{var3}/tail"), &dt2, true);

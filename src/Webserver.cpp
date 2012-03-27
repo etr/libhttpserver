@@ -674,7 +674,7 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
 				free (user);
 			if (pass != 0x0)
 				free (pass);
-			return MHD_YES;
+			return not_found_page(cls, connection);
 		} 
 		else 
 		{
