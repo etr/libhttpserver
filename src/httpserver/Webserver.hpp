@@ -36,6 +36,7 @@
 #include <cstring>
 #include <map>
 #include <vector>
+#include <set>
 #include <string>
 #include <utility>
 #include <memory>
@@ -204,6 +205,9 @@ class Webserver
 		 * @param family boolean indicating whether the resource is registered for the endpoint and its child or not.
 		**/
 		void registerResource(const std::string& resource, HttpResource* http_resource, bool family = false);
+        void unregisterResource(const std::string& resource);
+        void banIp(const std::string& ip);
+        void unbanIp(const std::string& ip);
 		/**
 		 * Method used to kill the webserver waiting for it to terminate
 		**/
@@ -236,6 +240,7 @@ class Webserver
 		bool running;
 
 		std::map<HttpEndpoint, HttpResource* > registeredResources;
+        std::set<std::string> bans;
 		struct MHD_Daemon *daemon;
 		static int not_found_page 
 		(

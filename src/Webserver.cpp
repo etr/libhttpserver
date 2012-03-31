@@ -400,6 +400,21 @@ void Webserver::registerResource(const string& resource, HttpResource* http_reso
 	this->registeredResources[HttpEndpoint(resource, family, true)] = http_resource;
 }
 
+void Webserver::unregisterResource(const string& resource)
+{
+    this->registeredResources.erase(HttpEndpoint(resource));
+}
+
+void Webserver::banIp(const string& ip)
+{
+    this->bans.insert(ip);
+}
+
+void Webserver::unbanIp(const string& ip)
+{
+    this->bans.erase(ip);
+}
+
 int Webserver::buildRequestHeader (void *cls, enum MHD_ValueKind kind, const char *key, const char *value)
 {
 	HttpRequest* dhr = (HttpRequest*)(cls);
@@ -431,7 +446,11 @@ int Webserver::buildRequestArgs (void *cls, enum MHD_ValueKind kind, const char 
 
 int policyCallback (void *cls, const struct sockaddr* addr, socklen_t addrlen)
 {
-	// TODO: Develop a system that allow to study a configurable policy callback
+    if(((Webserver*)cls)->bans.count(get_ip_str(addr, addrlen)))
+        return MHD_NO;
+#ifdef DEBUG
+    cout << get_ip_str(addr, addrlen) << endl;
+#endif
 	return MHD_YES;
 }
 
