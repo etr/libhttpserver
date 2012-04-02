@@ -571,7 +571,6 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
 {
 	struct MHD_Response *response;
 	struct ModdedRequest *mr;
-	int ret;
 	HttpRequest supportReq;
 	Webserver* dws = (Webserver*)(cls);
 	internal_unescaper(cls, (char*) url);
@@ -755,7 +754,7 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
 		MHD_add_response_header(response, (*it).first.c_str(), (*it).second.c_str());
 	for (it=response_footers.begin() ; it != response_footers.end(); it++)
 		MHD_add_response_footer(response, (*it).first.c_str(), (*it).second.c_str());
-	ret = MHD_queue_response(connection, dhrs.getResponseCode(), response);
+	MHD_queue_response(connection, dhrs.getResponseCode(), response);
 
 	if (user != 0x0)
 		free (user);
