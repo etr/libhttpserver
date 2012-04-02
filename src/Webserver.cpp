@@ -449,7 +449,7 @@ int policyCallback (void *cls, const struct sockaddr* addr, socklen_t addrlen)
     if(((Webserver*)cls)->bans.count(get_ip_str(addr, addrlen)))
         return MHD_NO;
 #ifdef DEBUG
-    cout << get_ip_str(addr, addrlen) << endl;
+    cout << "IP: " << get_ip_str(addr, addrlen) << " - " << "IP-LEN: " << addrlen << endl;
 #endif
 	return MHD_YES;
 }

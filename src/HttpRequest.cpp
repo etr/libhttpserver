@@ -225,7 +225,11 @@ const std::vector<std::pair<std::string, std::string> > HttpRequest::getHeaders(
 	std::vector<std::pair<std::string, std::string> > toRet;
 	map<string, string, HeaderComparator>::const_iterator it;
 	for(it = headers.begin(); it != headers.end(); it++)
+#ifdef USE_CPP_ZEROX
+		toRet.push_back(make_pair((*it).first,(*it).second));
+#else
 		toRet.push_back(make_pair<string, string>((*it).first,(*it).second));
+#endif
 	return toRet;
 }
 
@@ -234,7 +238,11 @@ const std::vector<std::pair<std::string, std::string> > HttpRequest::getCookies(
 	std::vector<std::pair<std::string, std::string> > toRet;
 	map<string, string, HeaderComparator>::const_iterator it;
 	for(it = cookies.begin(); it != cookies.end(); it++)
+#ifdef USE_CPP_ZEROX
+		toRet.push_back(make_pair((*it).first,(*it).second));
+#else
 		toRet.push_back(make_pair<string, string>((*it).first,(*it).second));
+#endif
 	return toRet;
 }
 
@@ -243,7 +251,11 @@ const std::vector<std::pair<std::string, std::string> > HttpRequest::getFooters(
 	std::vector<std::pair<std::string, std::string> > toRet;
 	map<string, string, HeaderComparator>::const_iterator it;
 	for(it = footers.begin(); it != footers.end(); it++)
+#ifdef USE_CPP_ZEROX
+		toRet.push_back(make_pair((*it).first,(*it).second));
+#else
 		toRet.push_back(make_pair<string, string>((*it).first,(*it).second));
+#endif
 	return toRet;
 }
 
@@ -252,7 +264,11 @@ const std::vector<std::pair<std::string, std::string> > HttpRequest::getArgs() c
 	std::vector<std::pair<std::string, std::string> > toRet;
 	map<string, string, ArgComparator>::const_iterator it;
 	for(it = args.begin(); it != args.end(); it++)
+#ifdef USE_CPP_ZEROX
+		toRet.push_back(make_pair((*it).first,(*it).second));
+#else
 		toRet.push_back(make_pair<string, string>((*it).first,(*it).second));
+#endif
 	return toRet;
 }
 

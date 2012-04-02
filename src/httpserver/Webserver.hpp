@@ -36,7 +36,11 @@
 #include <cstring>
 #include <map>
 #include <vector>
+#ifdef USE_CPP_ZEROX
+#include <unordered_set>
+#else
 #include <set>
+#endif
 #include <string>
 #include <utility>
 #include <memory>
@@ -240,7 +244,11 @@ class Webserver
 		bool running;
 
 		std::map<HttpEndpoint, HttpResource* > registeredResources;
+#ifdef USE_CPP_ZEROX
+        std::unordered_set<std::string> bans;
+#else
         std::set<std::string> bans;
+#endif
 		struct MHD_Daemon *daemon;
 		static int not_found_page 
 		(

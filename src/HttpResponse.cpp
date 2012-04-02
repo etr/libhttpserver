@@ -134,7 +134,11 @@ const std::vector<std::pair<std::string, std::string> > HttpResponse::getHeaders
 	std::vector<std::pair<std::string, std::string> > toRet;
 	map<string, string, HeaderComparator>::const_iterator it;
 	for(it = headers.begin(); it != headers.end(); it++)
+#ifdef USE_CPP_ZEROX
+		toRet.push_back(make_pair((*it).first,(*it).second));
+#else
 		toRet.push_back(make_pair<string, string>((*it).first,(*it).second));
+#endif
 	return toRet;
 }
 
@@ -143,7 +147,11 @@ const std::vector<std::pair<std::string, std::string> > HttpResponse::getFooters
 	std::vector<std::pair<std::string, std::string> > toRet;
 	map<string, string, ArgComparator>::const_iterator it;
 	for(it = footers.begin(); it != footers.end(); it++)
+#ifdef USE_CPP_ZEROX
+		toRet.push_back(make_pair((*it).first,(*it).second));
+#else
 		toRet.push_back(make_pair<string, string>((*it).first,(*it).second));
+#endif
 	return toRet;
 }
 

@@ -138,6 +138,21 @@ else
     AM_CXXFLAGS="$AM_CXXFLAGS -O3"
 fi
 
+AC_MSG_CHECKING([whether to use c++0x std classes])
+AC_ARG_ENABLE([cpp0x],
+              [AS_HELP_STRING([--enable-cpp0x],
+              [enable c++0x std classes (def=no)])],
+              [cpp0x="$enableval"],
+              [cpp0x=no])
+AC_MSG_RESULT([$cpp0x])
+
+if test x"$cpp0x" = x"yes"; then
+    AC_DEFINE([CPP0X],[],[c++0x Mode])
+    AM_CXXFLAGS="$AM_CXXFLAGS -DUSE_CPP_ZEROX -std=c++0x"
+else
+    AC_DEFINE([NCPP0X],[],[standard Mode])
+fi
+
 AM_CONDITIONAL([PYTHON], [test x$python = xtrue])
 AM_CONDITIONAL([JAVA], [test x$java = xtrue])
 AM_CONDITIONAL([PHP], [test x$php = xtrue])
@@ -363,4 +378,5 @@ AC_MSG_NOTICE([Configuration Summary:
   License         :  LGPL only
   Languages       :  ${LANGUAGES}
   Debug	          :  ${debugit}
+  C++0x           :  ${cpp0x}
 ])
