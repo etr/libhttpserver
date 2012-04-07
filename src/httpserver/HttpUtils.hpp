@@ -25,6 +25,7 @@
 #include <string>
 #include <ctype.h>
 #include <vector>
+#include <algorithm>
 #include <gnutls/gnutls.h>
 
 namespace httpserver {
@@ -49,6 +50,11 @@ class HttpUtils
         INTERNAL_SELECT = MHD_USE_SELECT_INTERNALLY,
         THREADS = MHD_USE_THREAD_PER_CONNECTION,
         POOL = MHD_USE_POLL
+    };
+
+    enum IPVersion_T
+    {
+        IPV4 = 4, IPV6 = 16
     };
 
 #ifdef SWIG
@@ -242,6 +248,24 @@ class ArgComparator {
 		}
 };
 
+struct ip_representation
+{
+    HttpUtils::IPVersion_T ip_version;
+    unsigned short pieces[16];
+    unsigned short mask[16];
+
+    ip_representation(HttpUtils::IPVersion_T ip_version) : ip_version(ip_version)
+    {
+        std::fill(mask, mask + 16, 1);
+        std::fill(pieces, pieces + 16, 0);
+    }
+
+    ip_representation(const std::string& ip);
+    ip_representation(const struct sockaddr* ip);
+
+    bool operator <(const ip_representation& b) const;
+};
+
 /**
  * Method used to get an ip in form of string from a sockaddr structure
  * @param sa The sockaddr object to find the ip address from
@@ -266,6 +290,7 @@ short get_port(const struct sockaddr* sa);
  */
 size_t http_unescape (char *val);
 
+const struct sockaddr str_to_ip(const std::string& src);
 };
 };
 #endif

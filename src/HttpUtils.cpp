@@ -24,7 +24,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <arpa/inet.h>
+#include <sstream>
+#include <iomanip>
 //#include <boost/xpressive/xpressive.hpp>
+
+using namespace std;
 
 namespace httpserver {
 namespace http {
@@ -201,6 +205,20 @@ std::string get_ip_str(const struct sockaddr *sa, socklen_t maxlen)
 	return std::string(res);
 }
 
+const struct sockaddr str_to_ip(const std::string& src)
+{
+    struct sockaddr s;
+    if(src.find(":") != std::string::npos)
+    {
+        inet_pton(AF_INET6, src.c_str(), (void*) &s);
+    }
+    else
+    {
+        inet_pton(AF_INET, src.c_str(), (void*) &s);
+    }
+    return s;
+}
+
 short get_port(const struct sockaddr* sa)
 {
 	switch(sa->sa_family)
@@ -251,6 +269,159 @@ size_t http_unescape (char *val)
 	*wpos = '\0'; /* add 0-terminator */
 	return wpos - val; /* = strlen(val) */
 }
+
+ip_representation::ip_representation(const struct sockaddr* ip)
+{
+    std::fill(pieces, pieces + 16, 0);
+    if(ip->sa_family == AF_INET)
+    {
+        ip_version = HttpUtils::IPV4;
+        for(int i=0;i<4;i++)
+        {
+            pieces[12+i] = ((u_char*)&(((struct sockaddr_in *)ip)->sin_addr))[i];
+        }
+    }
+    else
+    {
+        ip_version = HttpUtils::IPV6;
+        for(int i=0;i<32;i+=2)
+        {
+            pieces[i/2] = ip->sa_data[i] + 16 * ip->sa_data[i+1];
+        }
+    }
+    std::fill(mask, mask + 16, 1);
+}
+
+ip_representation::ip_representation(const std::string& ip)
+{
+    std::vector<std::string> parts;
+    std::fill(mask, mask + 16, 1);
+    std::fill(pieces, pieces + 16, 0);
+    if(ip.find(':') != std::string::npos) //IPV6
+    {
+        ip_version = HttpUtils::IPV6;
+        parts = string_utilities::string_split(ip, ':', false);
+        int y = 0;
+        for(unsigned int i = 0; i < parts.size(); i++)
+        {
+            if(parts[i] != "*" && parts[i] != "")
+            {
+                if(parts[i].size() < 4)
+                {
+                    stringstream ss;
+                    ss << setfill('0') << setw(4) << parts[i];
+                    parts[i] = ss.str();
+                }
+                if(parts[i].size() == 4)
+                {
+                    pieces[y] = strtol((parts[i].substr(0,2)).c_str(),NULL,16);
+                    pieces[y+1] = strtol((parts[i].substr(2,2)).c_str(), NULL, 16);
+                    y += 2;
+                }
+                else
+                {
+                    if(y != 12)
+                    {
+                        //errore
+                    }
+                    if(parts[i].find('.') != std::string::npos)
+                    {
+                        vector<string> subparts = string_utilities::string_split(parts[i], '.');
+                        if(subparts.size() == 4)
+                        {
+                            for(unsigned int ii = 0; ii < subparts.size(); ii++)
+                            {
+                                if(subparts[ii] != "*")
+                                {
+                                    pieces[y+ii] = strtol(subparts[ii].c_str(), NULL, 10);
+                                }
+                                else
+                                {
+                                    mask[y+ii] = 0;
+                                }
+                                y++;
+                            }
+                        }
+                        else
+                        {
+                            //errore
+                        }
+                    }
+                    else
+                    {
+                        //errore
+                    }
+                }
+            }
+            else if(parts[i] == "*")
+            {
+                mask[y] = 0;
+                y++;
+            }
+            else
+            {
+                if(parts.size() <= 8)
+                {
+                    int covered_pieces = 1 + (8 - parts.size());
+                    if(parts[parts.size() - 1].find('.') != std::string::npos)
+                    {
+                        covered_pieces -= 2;
+                    }
+                    for(int k = 0; k < covered_pieces; k++)
+                    {
+                        pieces[y] = 0;
+                        y++;
+                    }
+                }
+                else
+                {
+                    //errore
+                }
+            }
+        }
+    }
+    else //IPV4
+    {
+        ip_version = HttpUtils::IPV4;
+        parts = string_utilities::string_split(ip, '.');
+        if(parts.size() == 4)
+        {
+            for(unsigned int i = 0; i < parts.size(); i++)
+            {
+                if(parts[i] != "*")
+                {
+                    pieces[12+i] = strtol(parts[i].c_str(), NULL, 10);
+                }
+                else
+                {
+                    mask[12+i] = 0;
+                }
+            }
+        }
+        else
+        {
+            //errore
+        }
+    }
+}
+
+bool ip_representation::operator <(const ip_representation& b) const
+{
+    int VAL = 16;
+    if(this->ip_version == HttpUtils::IPV4 && this->ip_version == b.ip_version)
+    {
+        VAL = this->ip_version;
+    }
+    for(int i = 16 - VAL; i < 16; i++)
+    {
+        if(this->mask[i] == 1 && b.mask[i] == 1 && this->pieces[i] < b.pieces[i])
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 
 };
 };

@@ -55,6 +55,10 @@ class HttpEndpoint;
 
 using namespace http;
 
+namespace http {
+struct ip_representation;
+};
+
 /**
  * Delegate class used to wrap callbacks dedicated to logging.
 **/
@@ -245,9 +249,9 @@ class Webserver
 
 		std::map<HttpEndpoint, HttpResource* > registeredResources;
 #ifdef USE_CPP_ZEROX
-        std::unordered_set<std::string> bans;
+        std::unordered_set<ip_representation> bans;
 #else
-        std::set<std::string> bans;
+        std::set<ip_representation> bans;
 #endif
 		struct MHD_Daemon *daemon;
 		static int not_found_page 

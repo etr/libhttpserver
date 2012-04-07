@@ -53,13 +53,13 @@ std::string to_lower_copy(std::string str)
     return str;
 }
 
-std::vector<std::string> string_split(std::string s, char sep)
+std::vector<std::string> string_split(std::string s, char sep, bool collapse)
 {
     std::vector<std::string> v;
     std::istringstream buf(s);
     for(std::string token; getline(buf, token, sep); )
     {
-        if(token != "")
+        if((collapse && token != "") || !collapse)
             v.push_back(token);
     }
     return v;

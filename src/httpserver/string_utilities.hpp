@@ -36,7 +36,7 @@ namespace string_utilities
 **/
 std::string to_upper_copy(std::string str);
 std::string to_lower_copy(std::string str);
-std::vector<std::string> string_split(std::string s, char sep);
+std::vector<std::string> string_split(std::string s, char sep = ' ', bool collapse = true);
 std::string regex_replace(std::string str, std::string pattern, std::string replace_str);
 
 };

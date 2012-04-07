@@ -446,7 +446,7 @@ int Webserver::buildRequestArgs (void *cls, enum MHD_ValueKind kind, const char 
 
 int policyCallback (void *cls, const struct sockaddr* addr, socklen_t addrlen)
 {
-    if(((Webserver*)cls)->bans.count(get_ip_str(addr, addrlen)))
+    if(((Webserver*)cls)->bans.count(ip_representation(addr)))
         return MHD_NO;
 #ifdef DEBUG
     cout << "IP: " << get_ip_str(addr, addrlen) << " - " << "IP-LEN: " << addrlen << endl;
