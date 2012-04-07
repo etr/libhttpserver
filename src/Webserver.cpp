@@ -196,7 +196,8 @@ Webserver::Webserver
 	const string& httpsPriorities,
 	const HttpUtils::CredType_T& credType,
 	const string digestAuthRandom,
-	int nonceNcSize
+	int nonceNcSize,
+    const HttpUtils::Policy_T& defaultPolicy
 ) :
 	port(port), 
 	startMethod(startMethod),
@@ -222,7 +223,8 @@ Webserver::Webserver
 	credType(credType),
 	digestAuthRandom(digestAuthRandom),
 	nonceNcSize(nonceNcSize),
-	running(false)
+	running(false),
+    defaultPolicy(defaultPolicy)
 {
     ignore_sigpipe();
 }
@@ -252,7 +254,8 @@ Webserver::Webserver(const CreateWebserver& params):
     credType(params._credType),
     digestAuthRandom(params._digestAuthRandom),
     nonceNcSize(params._nonceNcSize),
-    running(false)
+    running(false),
+    defaultPolicy(params._defaultPolicy)
 {
     ignore_sigpipe();
 }
@@ -410,9 +413,19 @@ void Webserver::banIp(const string& ip)
     this->bans.insert(ip);
 }
 
+void Webserver::allowIp(const string& ip)
+{
+    this->allowances.insert(ip);
+}
+
 void Webserver::unbanIp(const string& ip)
 {
     this->bans.erase(ip);
+}
+
+void Webserver::disallowIp(const string& ip)
+{
+    this->allowances.erase(ip);
 }
 
 int Webserver::buildRequestHeader (void *cls, enum MHD_ValueKind kind, const char *key, const char *value)
@@ -446,11 +459,20 @@ int Webserver::buildRequestArgs (void *cls, enum MHD_ValueKind kind, const char 
 
 int policyCallback (void *cls, const struct sockaddr* addr, socklen_t addrlen)
 {
-    if(((Webserver*)cls)->bans.count(ip_representation(addr)))
-        return MHD_NO;
 #ifdef DEBUG
     cout << "IP: " << get_ip_str(addr, addrlen) << " - " << "IP-LEN: " << addrlen << endl;
+    cout << "DEFAULT POLICY: " << (((Webserver*)cls)->defaultPolicy == HttpUtils::ACCEPT) << endl;
+    cout << "BANNED: " << (((Webserver*)cls)->bans.count(addr)) << endl;
+    cout << "ALLOWED: " << (((Webserver*)cls)->allowances.count(addr)) << endl;
 #endif
+    if(((((Webserver*)cls)->defaultPolicy == HttpUtils::ACCEPT) && 
+       (((Webserver*)cls)->bans.count(addr)) && 
+       (!((Webserver*)cls)->allowances.count(addr))
+    ) ||
+    ((((Webserver*)cls)->defaultPolicy == HttpUtils::REJECT) &&
+       (!((Webserver*)cls)->allowances.count(addr))
+    ))
+        return MHD_NO;
 	return MHD_YES;
 }
 

@@ -181,7 +181,8 @@ class Webserver
 			const std::string& httpsPriorities = "",
 			const HttpUtils::CredType_T& credType= HttpUtils::NONE,
 			const std::string digestAuthRandom = "", //IT'S CORRECT TO PASS THIS PARAMETER BY VALUE
-			int nonceNcSize = 0
+			int nonceNcSize = 0,
+            const HttpUtils::Policy_T& defaultPolicy = HttpUtils::ACCEPT
 		);
         Webserver(const CreateWebserver& params);
 		/**
@@ -215,7 +216,9 @@ class Webserver
 		void registerResource(const std::string& resource, HttpResource* http_resource, bool family = false);
         void unregisterResource(const std::string& resource);
         void banIp(const std::string& ip);
+        void allowIp(const std::string& ip);
         void unbanIp(const std::string& ip);
+        void disallowIp(const std::string& ip);
 		/**
 		 * Method used to kill the webserver waiting for it to terminate
 		**/
@@ -246,12 +249,15 @@ class Webserver
 		std::string digestAuthRandom;
 		int nonceNcSize;
 		bool running;
+		HttpUtils::Policy_T defaultPolicy;
 
 		std::map<HttpEndpoint, HttpResource* > registeredResources;
 #ifdef USE_CPP_ZEROX
         std::unordered_set<ip_representation> bans;
+        std::unordered_set<ip_representation> allowances;
 #else
         std::set<ip_representation> bans;
+        std::set<ip_representation> allowances;
 #endif
 		struct MHD_Daemon *daemon;
 		static int not_found_page 
@@ -320,7 +326,8 @@ class CreateWebserver
             _httpsPriorities(""),
             _credType(HttpUtils::NONE),
             _digestAuthRandom(""),
-            _nonceNcSize(0)
+            _nonceNcSize(0),
+            _defaultPolicy(HttpUtils::ACCEPT)
         {
         }
 
@@ -348,7 +355,8 @@ class CreateWebserver
             _httpsPriorities(""),
             _credType(HttpUtils::NONE),
             _digestAuthRandom(""),
-            _nonceNcSize(0)
+            _nonceNcSize(0),
+            _defaultPolicy(HttpUtils::ACCEPT)
         {
         }
 
@@ -383,6 +391,7 @@ class CreateWebserver
         CreateWebserver& credType(const HttpUtils::CredType_T& credType) { _credType = credType; return *this; }
         CreateWebserver& digestAuthRandom(const std::string& digestAuthRandom) { _digestAuthRandom = digestAuthRandom; return *this; }
         CreateWebserver& nonceNcSize(int nonceNcSize) { _nonceNcSize = nonceNcSize; return *this; }
+        CreateWebserver& defaultPolicy(const HttpUtils::Policy_T& defaultPolicy) { _defaultPolicy = defaultPolicy; return *this; }
     private:
         int _port;
         HttpUtils::StartMethod_T _startMethod;
@@ -408,6 +417,7 @@ class CreateWebserver
         HttpUtils::CredType_T _credType;
         std::string _digestAuthRandom;
         int _nonceNcSize;
+        HttpUtils::Policy_T _defaultPolicy;
 
         friend class Webserver;
 };

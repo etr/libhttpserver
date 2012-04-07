@@ -52,6 +52,12 @@ class HttpUtils
         POOL = MHD_USE_POLL
     };
 
+    enum Policy_T
+    {
+        ACCEPT,
+        REJECT
+    };
+
     enum IPVersion_T
     {
         IPV4 = 4, IPV6 = 16
