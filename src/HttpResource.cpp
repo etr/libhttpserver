@@ -157,7 +157,7 @@ HttpResponse HttpResource::routeRequest(const HttpRequest& r)
 	return res;
 }
 
-void HttpResource::setAllowing(const string& method, bool allowing) 
+inline void HttpResource::setAllowing(const string& method, bool allowing) 
 {
 	if(this->allowedMethods.count(method)) 
 	{
@@ -165,21 +165,21 @@ void HttpResource::setAllowing(const string& method, bool allowing)
 	}
 }
 
-void HttpResource::allowAll() 
+inline void HttpResource::allowAll() 
 {
     map<string,bool>::iterator it;
     for ( it=this->allowedMethods.begin() ; it != this->allowedMethods.end(); it++ )
         this->allowedMethods[(*it).first] = true;
 }
 
-void HttpResource::disallowAll() 
+inline void HttpResource::disallowAll() 
 {
 	map<string,bool>::iterator it;
 	for ( it=this->allowedMethods.begin() ; it != this->allowedMethods.end(); it++ )
 		this->allowedMethods[(*it).first] = false;
 }
 
-bool HttpResource::isAllowed(const string& method) 
+inline bool HttpResource::isAllowed(const string& method) 
 {
 	if(this->allowedMethods.count(method))
 	{

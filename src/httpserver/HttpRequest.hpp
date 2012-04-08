@@ -25,6 +25,8 @@
 #include <string>
 #include <utility>
 
+struct MHD_Connection;
+
 namespace httpserver 
 {
 
@@ -58,6 +60,7 @@ class HttpRequest
 		 * @return string representation of the username.
 		**/
 		const std::string getUser() const;
+        const std::string getDigestedUser() const;
 		/**
 		 * Method used to get the password eventually passed through basic authentication.
 		 * @return string representation of the password.
@@ -243,16 +246,19 @@ class HttpRequest
 		 * @param user The username to set.
 		**/
 		void setUser(const std::string& user);
+		void setDigestedUser(const std::string& user);
 		/**
 		 * Method used to set the password of the request.
 		 * @param pass The password to set.
 		**/
 		void setPass(const std::string& pass);
+        bool checkDigestAuth(const std::string& realm, const std::string& password, int nonce_timeout, bool& reloadNonce) const;
 	private:
 		friend class Webserver;
 		std::string user;
 		std::string pass;
 		std::string path;
+        std::string digestedUser;
 		std::string method;
 		std::vector<std::string> post_path;
 		std::map<std::string, std::string, HeaderComparator> headers;
@@ -263,6 +269,9 @@ class HttpRequest
 		std::string version;
 		std::string requestor;
 		short requestorPort;
+        struct MHD_Connection* underlying_connection;
+
+        void set_underlying_connection(struct MHD_Connection*);
 };
 
 };

@@ -48,7 +48,8 @@ class HttpResponse
 		enum ResponseType_T 
 		{
 			STRING_CONTENT = 0,
-			FILE_CONTENT
+			FILE_CONTENT,
+            DIGEST_AUTH_FAIL
 		};
 		
 		/**
@@ -66,7 +67,10 @@ class HttpResponse
 			const std::string& content, 
 			int responseCode,
 			const std::string& contentType = "application/json",
-			const HttpResponse::ResponseType_T& responseType = HttpResponse::STRING_CONTENT
+			const HttpResponse::ResponseType_T& responseType = HttpResponse::STRING_CONTENT,
+            const std::string& realm = "",
+            const std::string& opaque = "",
+            bool reloadNonce = false
 		);
 		void HttpResponseInit
 		(
@@ -154,6 +158,9 @@ class HttpResponse
 		 * @return The response code
 		**/
 		int getResponseCode();
+        const std::string getRealm() const;
+        const std::string getOpaque() const;
+        const bool needNonceReload() const;
 	private:
 		friend class Webserver;
 		std::string content;
@@ -163,6 +170,9 @@ class HttpResponse
 		std::map<std::string, std::string, ArgComparator> footers;
 		int fp;
 		std::string filename;
+        std::string realm;
+        std::string opaque;
+        bool reloadNonce;
 };
 
 };

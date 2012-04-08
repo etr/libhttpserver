@@ -26,7 +26,7 @@ using namespace std;
 namespace httpserver
 {
 //REQUEST
-HttpRequest::HttpRequest():
+inline HttpRequest::HttpRequest():
 	content("")
 {
 	this->content = "";
@@ -44,54 +44,64 @@ HttpRequest::HttpRequest(const HttpRequest& o)
 	this->content = o.content;
 }
 
-const string HttpRequest::getUser() const 
+inline const string HttpRequest::getUser() const 
 {
 	return this->user;
 }
 
-const string HttpRequest::getPass() const 
+inline const string HttpRequest::getPass() const 
 {
 	return this->pass;
 }
 
-void HttpRequest::setUser(const std::string& user) 
+inline void HttpRequest::setUser(const std::string& user) 
 {
 	this->user = user;
 }
 
-void HttpRequest::setPass(const std::string& pass) 
+inline void HttpRequest::setDigestedUser(const std::string& digestedUser)
+{
+    this->digestedUser = digestedUser;
+}
+
+inline const string HttpRequest::getDigestedUser() const
+{
+    return this->digestedUser;
+}
+
+inline void HttpRequest::setPass(const std::string& pass) 
 {
 	this->pass = pass;
 }
 
-const string HttpRequest::getPath() const 
+inline const string HttpRequest::getPath() const 
 {
 	return this->path;
 }
 
-const vector<string> HttpRequest::getPathPieces() const 
+inline const vector<string> HttpRequest::getPathPieces() const 
 {
 	return this->post_path;
 }
 
-int HttpRequest::getPathPiecesSize() const
+inline int HttpRequest::getPathPiecesSize() const
 {
 	return this->post_path.size();
 }
 
-const string HttpRequest::getPathPiece(int idx) const
+inline const string HttpRequest::getPathPiece(int idx) const
 {
 	if(((int)(this->post_path.size())) > idx)
 		return this->post_path[idx];
 	return "";
 }
 
-const string HttpRequest::getMethod() const 
+inline const string HttpRequest::getMethod() const 
 {
 	return this->method;
 }
 
-void HttpRequest::setPath(const string& path)
+inline void HttpRequest::setPath(const string& path)
 {
 	//this->path = boost::to_lower_copy(path);
 	this->path = path;
@@ -102,75 +112,75 @@ void HttpRequest::setPath(const string& path)
 	}
 }
 
-void HttpRequest::setMethod(const string& method) 
+inline void HttpRequest::setMethod(const string& method) 
 {
 	this->method = string_utilities::to_upper_copy(method);
 }
 
-void HttpRequest::setHeader(const string& key, const string& value) 
+inline void HttpRequest::setHeader(const string& key, const string& value) 
 {
 	this->headers[key] = value;
 }
 
-void HttpRequest::setFooter(const string& key, const string& value) 
+inline void HttpRequest::setFooter(const string& key, const string& value) 
 {
 	this->footers[key] = value;
 }
 
-void HttpRequest::setCookie(const string& key, const string& value) 
+inline void HttpRequest::setCookie(const string& key, const string& value) 
 {
 	this->cookies[key] = value;
 }
 
-void HttpRequest::setVersion(const string& version)
+inline void HttpRequest::setVersion(const string& version)
 {
 	this->version = version;
 }
 
-const std::string HttpRequest::getVersion() const
+inline const std::string HttpRequest::getVersion() const
 {
 	return version;
 }
 
-void HttpRequest::setHeaders(const map<string, string>& headers) 
+inline void HttpRequest::setHeaders(const map<string, string>& headers) 
 {
 	map<string, string>::const_iterator it;
 	for(it = headers.begin(); it != headers.end(); it++)
 		this->headers[it->first] = it->second;
 }
 
-void HttpRequest::setFooters(const map<string, string>& footers) 
+inline void HttpRequest::setFooters(const map<string, string>& footers) 
 {
 	map<string, string>::const_iterator it;
 	for(it = footers.begin(); it != footers.end(); it++)
 		this->footers[it->first] = it->second;
 }
 
-void HttpRequest::setCookies(const map<string, string>& cookies) 
+inline void HttpRequest::setCookies(const map<string, string>& cookies) 
 {
 	map<string, string>::const_iterator it;
 	for(it = cookies.begin(); it != cookies.end(); it++)
 		this->cookies[it->first] = it->second;
 }
 
-void HttpRequest::setArgs(const map<string, string>& args) 
+inline void HttpRequest::setArgs(const map<string, string>& args) 
 {
 	map<string, string>::const_iterator it;
 	for(it = args.begin(); it != args.end(); it++)
 		this->args[it->first] = it->second;
 }
 
-void HttpRequest::setArg(const string& key, const string& value) 
+inline void HttpRequest::setArg(const string& key, const string& value) 
 {
 	this->args[key] = value;
 }
 
-void HttpRequest::setArg(const char* key, const char* value, size_t size)
+inline void HttpRequest::setArg(const char* key, const char* value, size_t size)
 {
 	this->args[key] = string(value, size);
 }
 
-const string HttpRequest::getArg(const string& key) const 
+inline const string HttpRequest::getArg(const string& key) const 
 {
 	//string new_key = string_utilities::to_lower_copy(key);
 	map<string, string>::const_iterator it = this->args.find(key);
@@ -180,27 +190,27 @@ const string HttpRequest::getArg(const string& key) const
 		return "";
 }
 
-const string HttpRequest::getRequestor() const
+inline const string HttpRequest::getRequestor() const
 {
 	return this->requestor;
 }
 
-void HttpRequest::setRequestor(const std::string& requestor)
+inline void HttpRequest::setRequestor(const std::string& requestor)
 {
 	this->requestor = requestor;
 }
 
-short HttpRequest::getRequestorPort() const
+inline short HttpRequest::getRequestorPort() const
 {
 	return this->requestorPort;
 }
 
-void HttpRequest::setRequestorPort(short requestorPort)
+inline void HttpRequest::setRequestorPort(short requestorPort)
 {
 	this->requestorPort = requestorPort;
 }
 
-const string HttpRequest::getHeader(const string& key) const 
+inline const string HttpRequest::getHeader(const string& key) const 
 {
 	//string new_key = boost::to_lower_copy(key);
 	map<string, string>::const_iterator it = this->headers.find(key);
@@ -210,7 +220,7 @@ const string HttpRequest::getHeader(const string& key) const
 		return "";
 }
 
-const string HttpRequest::getFooter(const string& key) const 
+inline const string HttpRequest::getFooter(const string& key) const 
 {
 	//string new_key = boost::to_lower_copy(key);
 	map<string, string>::const_iterator it = this->footers.find(key);
@@ -220,7 +230,7 @@ const string HttpRequest::getFooter(const string& key) const
 		return "";
 }
 
-const std::vector<std::pair<std::string, std::string> > HttpRequest::getHeaders() const
+inline const std::vector<std::pair<std::string, std::string> > HttpRequest::getHeaders() const
 {
 	std::vector<std::pair<std::string, std::string> > toRet;
 	map<string, string, HeaderComparator>::const_iterator it;
@@ -233,7 +243,7 @@ const std::vector<std::pair<std::string, std::string> > HttpRequest::getHeaders(
 	return toRet;
 }
 
-const std::vector<std::pair<std::string, std::string> > HttpRequest::getCookies() const
+inline const std::vector<std::pair<std::string, std::string> > HttpRequest::getCookies() const
 {
 	std::vector<std::pair<std::string, std::string> > toRet;
 	map<string, string, HeaderComparator>::const_iterator it;
@@ -246,7 +256,7 @@ const std::vector<std::pair<std::string, std::string> > HttpRequest::getCookies(
 	return toRet;
 }
 
-const std::vector<std::pair<std::string, std::string> > HttpRequest::getFooters() const
+inline const std::vector<std::pair<std::string, std::string> > HttpRequest::getFooters() const
 {
 	std::vector<std::pair<std::string, std::string> > toRet;
 	map<string, string, HeaderComparator>::const_iterator it;
@@ -259,7 +269,7 @@ const std::vector<std::pair<std::string, std::string> > HttpRequest::getFooters(
 	return toRet;
 }
 
-const std::vector<std::pair<std::string, std::string> > HttpRequest::getArgs() const
+inline const std::vector<std::pair<std::string, std::string> > HttpRequest::getArgs() const
 {
 	std::vector<std::pair<std::string, std::string> > toRet;
 	map<string, string, ArgComparator>::const_iterator it;
@@ -272,24 +282,46 @@ const std::vector<std::pair<std::string, std::string> > HttpRequest::getArgs() c
 	return toRet;
 }
 
-const string HttpRequest::getContent() const
+inline const string HttpRequest::getContent() const
 {
 	return this->content;
 }
 
-void HttpRequest::setContent(const string& content) 
+inline void HttpRequest::setContent(const string& content) 
 {
 	this->content = content;
 }
 
-void HttpRequest::growContent(const char* content, size_t size)
+inline void HttpRequest::growContent(const char* content, size_t size)
 {
 	this->content += string(content, size);
 }
 
-void HttpRequest::removeHeader(const string& key) 
+inline void HttpRequest::removeHeader(const string& key) 
 {
 	this->headers.erase(key);
+}
+
+inline void HttpRequest::set_underlying_connection(struct MHD_Connection* conn)
+{
+    this->underlying_connection = conn;
+}
+
+bool HttpRequest::checkDigestAuth(const std::string& realm, const std::string& password, int nonce_timeout, bool& reloadNonce) const
+{
+    int val = MHD_digest_auth_check(underlying_connection, realm.c_str(), digestedUser.c_str(), password.c_str(), nonce_timeout);
+    if(val == MHD_INVALID_NONCE)
+    {
+        reloadNonce = true;
+        return false;
+    }
+    else if(val == MHD_NO)
+    {
+        reloadNonce = false;
+        return false;
+    }
+    reloadNonce = false;
+    return true;
 }
 
 };

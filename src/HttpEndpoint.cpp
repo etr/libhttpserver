@@ -27,7 +27,7 @@ namespace httpserver
 {
 using namespace http;
 //ENDPOINT
-HttpEndpoint::HttpEndpoint(bool family):
+inline HttpEndpoint::HttpEndpoint(bool family):
 	url_complete("/"),
 	url_modded("/"),
 	family_url(family),
@@ -142,7 +142,7 @@ HttpEndpoint::HttpEndpoint(const HttpEndpoint& h)
     this->chunk_positions = h.chunk_positions;
 }
 
-HttpEndpoint::~HttpEndpoint()
+inline HttpEndpoint::~HttpEndpoint()
 {
     
     if(reg_compiled)
@@ -166,7 +166,7 @@ HttpEndpoint& HttpEndpoint::operator =(const HttpEndpoint& h)
     return *this;
 }
 
-bool HttpEndpoint::operator <(const HttpEndpoint& b) const 
+inline bool HttpEndpoint::operator <(const HttpEndpoint& b) const 
 {
 	return string_utilities::to_lower_copy(this->url_modded) < string_utilities::to_lower_copy(b.url_modded);
 }
@@ -199,22 +199,22 @@ bool HttpEndpoint::match(const HttpEndpoint& url) const
 	}
 }
 
-const std::string HttpEndpoint::get_url_complete() const 
+inline const std::string HttpEndpoint::get_url_complete() const 
 {
 	return this->url_complete;
 }
 
-const std::vector<std::string> HttpEndpoint::get_url_pars() const 
+inline const std::vector<std::string> HttpEndpoint::get_url_pars() const 
 {
 	return this->url_pars;
 }
 
-const std::vector<std::string> HttpEndpoint::get_url_pieces() const 
+inline const std::vector<std::string> HttpEndpoint::get_url_pieces() const 
 {
 	return this->url_pieces;
 }
 
-const std::vector<int> HttpEndpoint::get_chunk_positions() const 
+inline const std::vector<int> HttpEndpoint::get_chunk_positions() const 
 {
 	return this->chunk_positions;
 }

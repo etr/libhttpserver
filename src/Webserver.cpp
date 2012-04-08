@@ -691,16 +691,21 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
 	} 
 
 	char* pass = NULL;
-	char* user = MHD_basic_auth_get_username_password (connection, &pass);
+	char* user = MHD_basic_auth_get_username_password(connection, &pass);
+    char* digestedUser = MHD_digest_auth_get_username(connection);
 	supportReq.setVersion(version);
 	const MHD_ConnectionInfo * conninfo = MHD_get_connection_info(connection, MHD_CONNECTION_INFO_CLIENT_ADDRESS);
 	supportReq.setRequestor(get_ip_str(conninfo->client_addr));
 	supportReq.setRequestorPort(get_port(conninfo->client_addr));
 	if(pass != NULL)
 	{
-		supportReq.setPass(string(pass));
-		supportReq.setUser(string(user));
+		supportReq.setPass(pass);
+		supportReq.setUser(user);
 	}
+    if(digestedUser != NULL)
+    {
+        supportReq.setDigestedUser(digestedUser);
+    }
 	HttpEndpoint endpoint = HttpEndpoint(st_url);
 	HttpResponse dhrs;
 	void* page;
@@ -734,6 +739,8 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
 				free (user);
 			if (pass != 0x0)
 				free (pass);
+            if (digestedUser != 0x0)
+                free (digestedUser);
 			return not_found_page(cls, connection);
 		} 
 		else 
@@ -751,6 +758,7 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
 	{
 		matchingEndpoint = &endpoint;
 	}
+    supportReq.set_underlying_connection(connection);
 #ifdef DEBUG
 		cout << "Using: " << matchingEndpoint->get_url_complete() << endl;
 #endif
@@ -796,12 +804,16 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
 		MHD_add_response_header(response, (*it).first.c_str(), (*it).second.c_str());
 	for (it=response_footers.begin() ; it != response_footers.end(); it++)
 		MHD_add_response_footer(response, (*it).first.c_str(), (*it).second.c_str());
+    if(dhrs.responseType == HttpResponse::DIGEST_AUTH_FAIL)
+        MHD_queue_auth_fail_response(connection, dhrs.getRealm().c_str(), dhrs.getOpaque().c_str(), response, dhrs.needNonceReload() ? MHD_YES : MHD_NO);
 	MHD_queue_response(connection, dhrs.getResponseCode(), response);
 
 	if (user != 0x0)
 		free (user);
 	if (pass != 0x0)
 		free (pass);
+    if (digestedUser != 0x0)
+        free (digestedUser);
 	MHD_destroy_response (response);
 	if(to_free)
 		free(page);
