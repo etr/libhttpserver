@@ -26,10 +26,19 @@
 #include <ctype.h>
 #include <vector>
 #include <algorithm>
+#include <exception>
 #include <gnutls/gnutls.h>
 
 namespace httpserver {
 namespace http {
+
+class bad_ip_format_exception: public std::exception
+{
+    virtual const char* what() const throw()
+    {
+        return "IP is badly formatted!";
+    }
+};
 
 class HttpUtils 
 {

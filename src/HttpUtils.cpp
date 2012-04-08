@@ -322,7 +322,7 @@ ip_representation::ip_representation(const std::string& ip)
                 {
                     if(y != 12)
                     {
-                        //errore
+                        throw bad_ip_format_exception();
                     }
                     if(parts[i].find('.') != std::string::npos)
                     {
@@ -344,12 +344,12 @@ ip_representation::ip_representation(const std::string& ip)
                         }
                         else
                         {
-                            //errore
+                            throw bad_ip_format_exception();
                         }
                     }
                     else
                     {
-                        //errore
+                        throw bad_ip_format_exception();
                     }
                 }
             }
@@ -375,7 +375,7 @@ ip_representation::ip_representation(const std::string& ip)
                 }
                 else
                 {
-                    //errore
+                    throw bad_ip_format_exception();
                 }
             }
         }
@@ -400,7 +400,7 @@ ip_representation::ip_representation(const std::string& ip)
         }
         else
         {
-            //errore
+            throw bad_ip_format_exception();
         }
     }
 }
