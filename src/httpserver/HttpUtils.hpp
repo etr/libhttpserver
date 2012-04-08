@@ -279,6 +279,10 @@ struct ip_representation
     ip_representation(const struct sockaddr* ip);
 
     bool operator <(const ip_representation& b) const;
+    const int weight() const
+    {
+        return (int) std::count(mask, mask + 16, 0);
+    }
 };
 
 /**

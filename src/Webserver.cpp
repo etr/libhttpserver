@@ -410,12 +410,32 @@ void Webserver::unregisterResource(const string& resource)
 
 void Webserver::banIp(const string& ip)
 {
-    this->bans.insert(ip);
+    ip_representation t_ip(ip);
+    set<ip_representation>::iterator it = bans.find(t_ip);
+    if(t_ip.weight() > (*it).weight())
+    {
+        this->bans.erase(it);
+        this->bans.insert(t_ip);
+    }
+    else
+    {
+        this->bans.insert(t_ip);
+    }
 }
 
 void Webserver::allowIp(const string& ip)
 {
-    this->allowances.insert(ip);
+    ip_representation t_ip(ip);
+    set<ip_representation>::iterator it = allowances.find(t_ip);
+    if(t_ip.weight() > (*it).weight())
+    {
+        this->allowances.erase(it);
+        this->allowances.insert(t_ip);
+    }
+    else
+    {
+        this->allowances.insert(t_ip);
+    }
 }
 
 void Webserver::unbanIp(const string& ip)

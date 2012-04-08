@@ -156,7 +156,7 @@ class Webserver
 		 * @param digestAuthRandom used with https. Digest authentication nonce's seed.
 		 * @param nonceNcSize used with https. Size of an array of nonce and nonce counter map.
 		**/
-		Webserver
+		explicit Webserver
 		(
 			int port = DEFAULT_WS_PORT, 
             const HttpUtils::StartMethod_T& startMethod = HttpUtils::INTERNAL_SELECT,
@@ -331,7 +331,7 @@ class CreateWebserver
         {
         }
 
-        CreateWebserver(int port):
+        explicit CreateWebserver(int port):
             _port(port),
             _startMethod(HttpUtils::INTERNAL_SELECT),
             _maxThreads(0),
