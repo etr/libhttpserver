@@ -490,7 +490,8 @@ int policyCallback (void *cls, const struct sockaddr* addr, socklen_t addrlen)
        (!((Webserver*)cls)->allowances.count(addr))
     ) ||
     ((((Webserver*)cls)->defaultPolicy == HttpUtils::REJECT) &&
-       (!((Webserver*)cls)->allowances.count(addr))
+       ((!((Webserver*)cls)->allowances.count(addr)) ||
+       (((Webserver*)cls)->bans.count(addr)))
     ))
         return MHD_NO;
 	return MHD_YES;
