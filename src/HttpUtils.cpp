@@ -18,15 +18,16 @@
 
 */
 
-#include "HttpUtils.hpp"
-#include "string_utilities.hpp"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <arpa/inet.h>
 #include <sstream>
 #include <iomanip>
-//#include <boost/xpressive/xpressive.hpp>
+#include "string_utilities.hpp"
+#include "HttpUtils.hpp"
+
+#pragma GCC diagnostic ignored "-Warray-bounds"
 
 using namespace std;
 
@@ -286,7 +287,7 @@ ip_representation::ip_representation(const struct sockaddr* ip)
         ip_version = HttpUtils::IPV6;
         for(int i=0;i<32;i+=2)
         {
-            pieces[i/2] = ip->sa_data[i] + 16 * ip->sa_data[i+1];
+            pieces[i/2] = ((u_char*)&(((struct sockaddr_in6 *)ip)->sin6_addr))[i] + 16 * ((u_char*)&(((struct sockaddr_in6 *)ip)->sin6_addr))[i+1];
         }
     }
     std::fill(mask, mask + 16, 1);
