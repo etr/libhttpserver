@@ -328,8 +328,10 @@ bool Webserver::start(bool blocking)
 		iov.push_back(gen(MHD_OPTION_HTTPS_PRIORITIES, 0, (void*)httpsPriorities.c_str()));
 	if(digestAuthRandom != "")
 		iov.push_back(gen(MHD_OPTION_DIGEST_AUTH_RANDOM, digestAuthRandom.size(), (char*)digestAuthRandom.c_str()));
+#ifdef HAVE_GNUTLS
 	if(credType != HttpUtils::NONE)
 		iov.push_back(gen(MHD_OPTION_HTTPS_CRED_TYPE, credType));
+#endif
 
 	iov.push_back(gen(MHD_OPTION_END, 0, NULL ));
 

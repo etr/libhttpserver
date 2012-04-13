@@ -27,7 +27,9 @@
 #include <vector>
 #include <algorithm>
 #include <exception>
+#ifdef HAVE_GNUTLS
 #include <gnutls/gnutls.h>
+#endif
 
 namespace httpserver {
 namespace http {
@@ -46,12 +48,14 @@ class HttpUtils
 
 	enum CredType_T 
 	{
-		NONE = -1,
-		CERTIFICATE = GNUTLS_CRD_CERTIFICATE,
+		NONE = -1
+#ifdef HAVE_GNUTLS
+		,CERTIFICATE = GNUTLS_CRD_CERTIFICATE,
 		ANON = GNUTLS_CRD_ANON,
 		SRP = GNUTLS_CRD_SRP,
 		PSK = GNUTLS_CRD_PSK,
 		IA = GNUTLS_CRD_IA
+#endif
 	};
 
     enum StartMethod_T

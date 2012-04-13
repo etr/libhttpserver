@@ -58,13 +58,14 @@ AC_CHECK_HEADER([regex.h],[],[AC_MSG_ERROR("regex.h not found")])
 AC_CHECK_HEADER([sys/stat.h],[],[AC_MSG_ERROR("sys/stat.h not found")])
 AC_CHECK_HEADER([sys/types.h],[],[AC_MSG_ERROR("sys/types.h not found")])
 AC_CHECK_HEADER([arpa/inet.h],[],[AC_MSG_ERROR("arpa/inet.h not found")])
-AC_CHECK_HEADER([gnutls/gnutls.h],[],[AC_MSG_ERROR("gnutls/gnutls.h not found")])
 AC_CHECK_HEADER([signal.h],[],[AC_MSG_ERROR("signal.h not found")])
 
+AC_CHECK_HEADER([gnutls/gnutls.h],[have_gnutls="yes"],[AC_MSG_WARN("gnutls/gnutls.h not found. TLS will be disabled"); have_gnutls="no"])
+
 # Checks for libmicrohttpd
-#PKG_CHECK_MODULES([LIBMICROHTTPD],[libmicrohttpd >= 0.9.9],[],[AC_MSG_ERROR("libmicrohttpd not present or too old - install libmicrohttpd >= 0.9.9")])
-AC_CHECK_HEADER([microhttpd.h],[],[AC_MSG_ERROR("Microhttpd header files not found. Please use a version >= 0.9.9.")])
-AC_CHECK_LIB([microhttpd],[MHD_start_daemon],[],[AC_MSG_ERROR("Microhttpd header files not found. Please use a version >= 0.9.9.")])
+PKG_CHECK_MODULES([LIBMICROHTTPD],[libmicrohttpd >= 0.9.9],[],[AC_MSG_ERROR("libmicrohttpd not present or too old - install libmicrohttpd >= 0.9.9")])
+#AC_CHECK_HEADER([microhttpd.h],[],[AC_MSG_ERROR("Microhttpd header files not found. Please use a version >= 0.9.9.")])
+#AC_CHECK_LIB([microhttpd],[MHD_start_daemon],[],[AC_MSG_ERROR("Microhttpd header files not found. Please use a version >= 0.9.9.")])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_TYPE_SIZE_T
@@ -136,6 +137,10 @@ if test x"$debugit" = x"yes"; then
 else
     AC_DEFINE([NDEBUG],[],[No-debug Mode])
     AM_CXXFLAGS="$AM_CXXFLAGS -O3"
+fi
+
+if test x"have_gnutls" = x"yes"; then
+    AM_CXXFLAGS="$AM_CXXFLAGS -DHAVE_GNUTLS"
 fi
 
 AC_MSG_CHECKING([whether to use c++0x std classes])
@@ -378,5 +383,6 @@ AC_MSG_NOTICE([Configuration Summary:
   License         :  LGPL only
   Languages       :  ${LANGUAGES}
   Debug	          :  ${debugit}
+  TLS Enabled     :  ${have_gnutls}
   C++0x           :  ${cpp0x}
 ])
