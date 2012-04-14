@@ -48,17 +48,17 @@ class HttpUtils
 {
     public:
 
-	enum CredType_T 
-	{
-		NONE = -1
+    enum CredType_T 
+    {
+        NONE = -1
 #ifdef HAVE_GNUTLS
-		,CERTIFICATE = GNUTLS_CRD_CERTIFICATE,
-		ANON = GNUTLS_CRD_ANON,
-		SRP = GNUTLS_CRD_SRP,
-		PSK = GNUTLS_CRD_PSK,
-		IA = GNUTLS_CRD_IA
+        ,CERTIFICATE = GNUTLS_CRD_CERTIFICATE,
+        ANON = GNUTLS_CRD_ANON,
+        SRP = GNUTLS_CRD_SRP,
+        PSK = GNUTLS_CRD_PSK,
+        IA = GNUTLS_CRD_IA
 #endif
-	};
+    };
 
     enum StartMethod_T
     {
@@ -210,28 +210,28 @@ class HttpUtils
 };
 
 class HeaderComparator {
-	public:
-		/**
-		 * Operator used to compare strings.
-		 * @param first string
-		 * @param second string
-		**/
-		bool operator()(const std::string& x,const std::string& y) const 
-		{ 
-			size_t l1 = x.size();
-			size_t l2 = y.size();
-			if (l1 < l2) return true;
-			if (l1 > l2) return false;
+    public:
+        /**
+         * Operator used to compare strings.
+         * @param first string
+         * @param second string
+        **/
+        bool operator()(const std::string& x,const std::string& y) const 
+        { 
+            size_t l1 = x.size();
+            size_t l2 = y.size();
+            if (l1 < l2) return true;
+            if (l1 > l2) return false;
 
-			for (size_t n = 0; n < l1; n++)
-			{
-				char a = toupper(x[n]);
-				char b = toupper(y[n]);
-				if (a < b) return true;
-				if (a > b) return false;
-			}
-			return false;
-		}
+            for (size_t n = 0; n < l1; n++)
+            {
+                char a = toupper(x[n]);
+                char b = toupper(y[n]);
+                if (a < b) return true;
+                if (a > b) return false;
+            }
+            return false;
+        }
 };
 
 /**
@@ -240,33 +240,33 @@ class HeaderComparator {
  * compilation phase the flag CASE_INSENSITIVE to the preprocessor.
 **/
 class ArgComparator {
-	public:
-		/**
-		 * Operator used to compare strings.
-		 * @param first string
-		 * @param second string
-		**/
-		bool operator()(const std::string& x,const std::string& y) const 
-		{ 
-			size_t l1 = x.size();
-			size_t l2 = y.size();
-			if (l1 < l2) return true;
-			if (l1 > l2) return false;
+    public:
+        /**
+         * Operator used to compare strings.
+         * @param first string
+         * @param second string
+        **/
+        bool operator()(const std::string& x,const std::string& y) const 
+        { 
+            size_t l1 = x.size();
+            size_t l2 = y.size();
+            if (l1 < l2) return true;
+            if (l1 > l2) return false;
 
-			for (size_t n = 0; n < l1; n++)
-			{
+            for (size_t n = 0; n < l1; n++)
+            {
 #ifdef CASE_INSENSITIVE
-				char a = toupper(x[n]);
-				char b = toupper(y[n]);
+                char a = toupper(x[n]);
+                char b = toupper(y[n]);
 #else
-				char a = x[n];
-				char b = y[n];
+                char a = x[n];
+                char b = y[n];
 #endif
-				if (a < b) return true;
-				if (a > b) return false;
-			}
-			return false;
-		}
+                if (a < b) return true;
+                if (a > b) return false;
+            }
+            return false;
+        }
 };
 
 struct ip_representation

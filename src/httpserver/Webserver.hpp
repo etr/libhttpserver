@@ -57,25 +57,25 @@ struct ip_representation;
 **/
 class LoggingDelegate
 {
-	public:
-		/**
-		 * Delegate constructor.
-		**/
-		LoggingDelegate();
-		/**
-		 * Destructor of the class
-		**/
-		virtual ~LoggingDelegate();
-		/**
-		 * Method used to log access to the webserver.
-		 * @param s string to log
-		**/
-		virtual void log_access(const std::string& s) const;
-		/**
-		 * Method used to log errors on the webserver.
-		 * @param s string to log
-		**/
-		virtual void log_error(const std::string& s) const;
+    public:
+        /**
+         * Delegate constructor.
+        **/
+        LoggingDelegate();
+        /**
+         * Destructor of the class
+        **/
+        virtual ~LoggingDelegate();
+        /**
+         * Method used to log access to the webserver.
+         * @param s string to log
+        **/
+        virtual void log_access(const std::string& s) const;
+        /**
+         * Method used to log errors on the webserver.
+         * @param s string to log
+        **/
+        virtual void log_error(const std::string& s) const;
 };
 
 /**
@@ -83,21 +83,21 @@ class LoggingDelegate
 **/
 class RequestValidator
 {
-	public:
-		/**
-		 * Delegate constructor
-		**/
-		RequestValidator();
-		/**
-		 * Destructor of the class
-		**/
-		virtual ~RequestValidator();
-		/**
-		 * Method used to validate a request. The validation method is entirely based upon the requestor address.
-		 * @param address The requestor address
-		 * @return true if the request is considered to be valid, false otherwise.
-		**/
-		virtual bool validate(const std::string& address) const;
+    public:
+        /**
+         * Delegate constructor
+        **/
+        RequestValidator();
+        /**
+         * Destructor of the class
+        **/
+        virtual ~RequestValidator();
+        /**
+         * Method used to validate a request. The validation method is entirely based upon the requestor address.
+         * @param address The requestor address
+         * @return true if the request is considered to be valid, false otherwise.
+        **/
+        virtual bool validate(const std::string& address) const;
 };
 
 /**
@@ -105,20 +105,20 @@ class RequestValidator
 **/
 class Unescaper
 {
-	public:
-		/**
-		 * Delegate constructor
-		**/
-		Unescaper();
-		/**
-		 * Destructor of the class
-		**/
-		virtual ~Unescaper();
-		/**
-		 * Method used to unescape the uri.
-		 * @param s pointer to the uri string representation to unescape.
-		**/
-		virtual void unescape(char* s) const;
+    public:
+        /**
+         * Delegate constructor
+        **/
+        Unescaper();
+        /**
+         * Destructor of the class
+        **/
+        virtual ~Unescaper();
+        /**
+         * Method used to unescape the uri.
+         * @param s pointer to the uri string representation to unescape.
+        **/
+        virtual void unescape(char* s) const;
 };
 
 class CreateWebserver;
@@ -128,123 +128,123 @@ class CreateWebserver;
 **/
 class Webserver 
 {
-	public:
-		/**
-		 * Constructor of the class.
-		 * @param port Integer representing the port the webserver is listening on.
+    public:
+        /**
+         * Constructor of the class.
+         * @param port Integer representing the port the webserver is listening on.
          * @param startMethod
-		 * @param maxThreads max number of serving threads (0 -> infty)
-		 * @param maxConnections max number of allowed connections (0 -> infty).
-		 * @param memoryLimit max memory allocated to serve requests (0 -> infty).
-		 * @param perIPConnectionLimit max number of connections allowed for a single IP (0 -> infty).
-		 * @param logDelegate LoggingDelegate object used to log
-		 * @param validator RequestValidator object used to validate requestors
-		 * @param unescaper Unescaper object used to unescape urls.
-		 * @param maxThreadStackSize max dimesion of request stack
-		 * @param httpsMemKey used with https. Private key used for requests.
-		 * @param httpsMemCert used with https. Certificate used for requests.
-		 * @param httpsMemTrust used with https. CA Certificate used to trust request certificates.
-		 * @param httpsPriorities used with https. Determinates the SSL/TLS version to be used.
-		 * @param credType used with https. Daemon credential type. Can be NONE, certificate or anonymous.
-		 * @param digestAuthRandom used with https. Digest authentication nonce's seed.
-		 * @param nonceNcSize used with https. Size of an array of nonce and nonce counter map.
-		**/
-		explicit Webserver
-		(
-			int port = DEFAULT_WS_PORT, 
+         * @param maxThreads max number of serving threads (0 -> infty)
+         * @param maxConnections max number of allowed connections (0 -> infty).
+         * @param memoryLimit max memory allocated to serve requests (0 -> infty).
+         * @param perIPConnectionLimit max number of connections allowed for a single IP (0 -> infty).
+         * @param logDelegate LoggingDelegate object used to log
+         * @param validator RequestValidator object used to validate requestors
+         * @param unescaper Unescaper object used to unescape urls.
+         * @param maxThreadStackSize max dimesion of request stack
+         * @param httpsMemKey used with https. Private key used for requests.
+         * @param httpsMemCert used with https. Certificate used for requests.
+         * @param httpsMemTrust used with https. CA Certificate used to trust request certificates.
+         * @param httpsPriorities used with https. Determinates the SSL/TLS version to be used.
+         * @param credType used with https. Daemon credential type. Can be NONE, certificate or anonymous.
+         * @param digestAuthRandom used with https. Digest authentication nonce's seed.
+         * @param nonceNcSize used with https. Size of an array of nonce and nonce counter map.
+        **/
+        explicit Webserver
+        (
+            int port = DEFAULT_WS_PORT, 
             const HttpUtils::StartMethod_T& startMethod = HttpUtils::INTERNAL_SELECT,
-			int maxThreads = 0, 
-			int maxConnections = 0,
-			int memoryLimit = 0,
-			int connectionTimeout = DEFAULT_WS_TIMEOUT,
-			int perIPConnectionLimit = 0,
-			const LoggingDelegate* logDelegate = 0x0,
-			const RequestValidator* validator = 0x0,
-			const Unescaper* unescaper = 0x0,
+            int maxThreads = 0, 
+            int maxConnections = 0,
+            int memoryLimit = 0,
+            int connectionTimeout = DEFAULT_WS_TIMEOUT,
+            int perIPConnectionLimit = 0,
+            const LoggingDelegate* logDelegate = 0x0,
+            const RequestValidator* validator = 0x0,
+            const Unescaper* unescaper = 0x0,
             const struct sockaddr* bindAddress = 0x0,
             int bindSocket = 0,
-			int maxThreadStackSize = 0,
+            int maxThreadStackSize = 0,
             bool useSsl = false,
             bool useIpv6 = false,
             bool debug = false,
             bool pedantic = false,
-			const std::string& httpsMemKey = "",
-			const std::string& httpsMemCert = "",
-			const std::string& httpsMemTrust = "",
-			const std::string& httpsPriorities = "",
-			const HttpUtils::CredType_T& credType= HttpUtils::NONE,
-			const std::string digestAuthRandom = "", //IT'S CORRECT TO PASS THIS PARAMETER BY VALUE
-			int nonceNcSize = 0,
+            const std::string& httpsMemKey = "",
+            const std::string& httpsMemCert = "",
+            const std::string& httpsMemTrust = "",
+            const std::string& httpsPriorities = "",
+            const HttpUtils::CredType_T& credType= HttpUtils::NONE,
+            const std::string digestAuthRandom = "", //IT'S CORRECT TO PASS THIS PARAMETER BY VALUE
+            int nonceNcSize = 0,
             const HttpUtils::Policy_T& defaultPolicy = HttpUtils::ACCEPT
-		);
+        );
         Webserver(const CreateWebserver& params);
-		/**
-		 * Destructor of the class
-		**/
-		~Webserver();
-		/**
-		 * Method used to start the webserver.
-		 * This method can be blocking or not.
-		 * @param blocking param indicating if the method is blocking or not
-		 * @return a boolean indicating if the webserver is running or not.
-		**/
-		bool start(bool blocking = false);
-		/**
-		 * Method used to stop the webserver.
-		 * @return true if the webserver is stopped.
-		**/
-		bool stop();
-		/**
-		 * Method used to evaluate if the server is running or not.
-		 * @return true if the webserver is running
-		**/
-		bool isRunning();
-		/**
-		 * Method used to registrate a resource to the webserver.
-		 * @param resource The url pointing to the resource. This url could be also parametrized in the form /path/to/url/{par1}/and/{par2}
-		 *                 or a regular expression.
-		 * @param http_resource HttpResource pointer to register.
-		 * @param family boolean indicating whether the resource is registered for the endpoint and its child or not.
-		**/
-		void registerResource(const std::string& resource, HttpResource* http_resource, bool family = false);
+        /**
+         * Destructor of the class
+        **/
+        ~Webserver();
+        /**
+         * Method used to start the webserver.
+         * This method can be blocking or not.
+         * @param blocking param indicating if the method is blocking or not
+         * @return a boolean indicating if the webserver is running or not.
+        **/
+        bool start(bool blocking = false);
+        /**
+         * Method used to stop the webserver.
+         * @return true if the webserver is stopped.
+        **/
+        bool stop();
+        /**
+         * Method used to evaluate if the server is running or not.
+         * @return true if the webserver is running
+        **/
+        bool isRunning();
+        /**
+         * Method used to registrate a resource to the webserver.
+         * @param resource The url pointing to the resource. This url could be also parametrized in the form /path/to/url/{par1}/and/{par2}
+         *                 or a regular expression.
+         * @param http_resource HttpResource pointer to register.
+         * @param family boolean indicating whether the resource is registered for the endpoint and its child or not.
+        **/
+        void registerResource(const std::string& resource, HttpResource* http_resource, bool family = false);
         void unregisterResource(const std::string& resource);
         void banIp(const std::string& ip);
         void allowIp(const std::string& ip);
         void unbanIp(const std::string& ip);
         void disallowIp(const std::string& ip);
-		/**
-		 * Method used to kill the webserver waiting for it to terminate
-		**/
-		void sweetKill();
-	private:
-		int port;
+        /**
+         * Method used to kill the webserver waiting for it to terminate
+        **/
+        void sweetKill();
+    private:
+        int port;
         HttpUtils::StartMethod_T startMethod;
-		int maxThreads;
-		int maxConnections;
-		int memoryLimit;
-		int connectionTimeout;
-		int perIPConnectionLimit;
-		const LoggingDelegate* logDelegate;
-		const RequestValidator* validator;
-		const Unescaper* unescaper;
+        int maxThreads;
+        int maxConnections;
+        int memoryLimit;
+        int connectionTimeout;
+        int perIPConnectionLimit;
+        const LoggingDelegate* logDelegate;
+        const RequestValidator* validator;
+        const Unescaper* unescaper;
         const struct sockaddr* bindAddress;
         int bindSocket;
-		int maxThreadStackSize;
+        int maxThreadStackSize;
         bool useSsl;
         bool useIpv6;
         bool debug;
         bool pedantic;
-		std::string httpsMemKey;
-		std::string httpsMemCert;
-		std::string httpsMemTrust;
-		std::string httpsPriorities;
-		HttpUtils::CredType_T credType;
-		std::string digestAuthRandom;
-		int nonceNcSize;
-		bool running;
-		HttpUtils::Policy_T defaultPolicy;
+        std::string httpsMemKey;
+        std::string httpsMemCert;
+        std::string httpsMemTrust;
+        std::string httpsPriorities;
+        HttpUtils::CredType_T credType;
+        std::string digestAuthRandom;
+        int nonceNcSize;
+        bool running;
+        HttpUtils::Policy_T defaultPolicy;
 
-		std::map<HttpEndpoint, HttpResource* > registeredResources;
+        std::map<HttpEndpoint, HttpResource* > registeredResources;
 #ifdef USE_CPP_ZEROX
         std::unordered_set<ip_representation> bans;
         std::unordered_set<ip_representation> allowances;
@@ -252,46 +252,46 @@ class Webserver
         std::set<ip_representation> bans;
         std::set<ip_representation> allowances;
 #endif
-		struct MHD_Daemon *daemon;
-		static int not_found_page 
-		(
-			const void *cls,
-			struct MHD_Connection *connection
-		);
-		static int method_not_acceptable_page 
-		(
-			const void *cls,
-			struct MHD_Connection *connection
-		);
-		static void requestCompleted(void *cls, struct MHD_Connection *connection, void **con_cls, enum MHD_RequestTerminationCode toe);
-		static int buildRequestHeader (void *cls, enum MHD_ValueKind kind, const char *key, const char *value);
-		static int buildRequestFooter (void *cls, enum MHD_ValueKind kind, const char *key, const char *value);
-		static int buildRequestCookie (void *cls, enum MHD_ValueKind kind, const char *key, const char *value);
-		static int buildRequestArgs (void *cls, enum MHD_ValueKind kind, const char *key, const char *value);
-		static int answerToConnection
-		(
-			void* cls, MHD_Connection* connection,
-			const char* url, const char* method,
-			const char* version, const char* upload_data,
-			size_t* upload_data_size, void** con_cls
-		);
-		static int post_iterator 
-		(
-			void *cls,
-			enum MHD_ValueKind kind,
-			const char *key,
-			const char *filename,
-			const char *content_type,
-			const char *transfer_encoding,
-			const char *data, uint64_t off, size_t size
-		);
+        struct MHD_Daemon *daemon;
+        static int not_found_page 
+        (
+            const void *cls,
+            struct MHD_Connection *connection
+        );
+        static int method_not_acceptable_page 
+        (
+            const void *cls,
+            struct MHD_Connection *connection
+        );
+        static void requestCompleted(void *cls, struct MHD_Connection *connection, void **con_cls, enum MHD_RequestTerminationCode toe);
+        static int buildRequestHeader (void *cls, enum MHD_ValueKind kind, const char *key, const char *value);
+        static int buildRequestFooter (void *cls, enum MHD_ValueKind kind, const char *key, const char *value);
+        static int buildRequestCookie (void *cls, enum MHD_ValueKind kind, const char *key, const char *value);
+        static int buildRequestArgs (void *cls, enum MHD_ValueKind kind, const char *key, const char *value);
+        static int answerToConnection
+        (
+            void* cls, MHD_Connection* connection,
+            const char* url, const char* method,
+            const char* version, const char* upload_data,
+            size_t* upload_data_size, void** con_cls
+        );
+        static int post_iterator 
+        (
+            void *cls,
+            enum MHD_ValueKind kind,
+            const char *key,
+            const char *filename,
+            const char *content_type,
+            const char *transfer_encoding,
+            const char *data, uint64_t off, size_t size
+        );
 
-		friend int policyCallback (void *cls, const struct sockaddr* addr, socklen_t addrlen);
-		friend void error_log(void* cls, const char* fmt, va_list ap);
-		friend void access_log(Webserver* cls, std::string uri);
-		friend void* uri_log(void* cls, const char* uri);
-		friend size_t unescaper_func(void * cls, struct MHD_Connection *c, char *s);
-		friend size_t internal_unescaper(void * cls, char *s);
+        friend int policyCallback (void *cls, const struct sockaddr* addr, socklen_t addrlen);
+        friend void error_log(void* cls, const char* fmt, va_list ap);
+        friend void access_log(Webserver* cls, std::string uri);
+        friend void* uri_log(void* cls, const char* uri);
+        friend size_t unescaper_func(void * cls, struct MHD_Connection *c, char *s);
+        friend size_t internal_unescaper(void * cls, char *s);
 };
 
 class CreateWebserver 
@@ -417,11 +417,11 @@ class CreateWebserver
 
 struct ModdedRequest
 {
-	struct MHD_PostProcessor *pp;
-	std::string* completeUri;
-	HttpRequest *dhr;
-	Webserver* ws;
-	bool second;
+    struct MHD_PostProcessor *pp;
+    std::string* completeUri;
+    HttpRequest *dhr;
+    Webserver* ws;
+    bool second;
 };
 
 };

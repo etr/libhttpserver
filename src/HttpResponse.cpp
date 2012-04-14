@@ -29,36 +29,36 @@ namespace httpserver
 //RESPONSE
 void HttpResponse::HttpResponseInit
 (
-	const string& content,
-	int responseCode,
-	const std::string& contentType,
-	const HttpResponse::ResponseType_T& responseType
+    const string& content,
+    int responseCode,
+    const std::string& contentType,
+    const HttpResponse::ResponseType_T& responseType
 )
 {
-	if(responseType == HttpResponse::FILE_CONTENT)
-	{
-		FILE* f;
-		if(!(f = fopen(content.c_str(), "r")))
-		{
-			this->content = NOT_FOUND_ERROR;
-			this->responseCode = 404;
-			this->setHeader(HttpUtils::http_header_content_type, contentType);
-			this->fp = -1;
-		}
-		else
-		{
-			this->responseCode = responseCode;
-			this->filename = content;
-			this->fp = fileno(f);
-		}
-	}
-	else
-	{
-		this->content = content;
-		this->responseCode = responseCode;
-		this->setHeader(HttpUtils::http_header_content_type, contentType);
-		this->fp = -1;
-	}
+    if(responseType == HttpResponse::FILE_CONTENT)
+    {
+        FILE* f;
+        if(!(f = fopen(content.c_str(), "r")))
+        {
+            this->content = NOT_FOUND_ERROR;
+            this->responseCode = 404;
+            this->setHeader(HttpUtils::http_header_content_type, contentType);
+            this->fp = -1;
+        }
+        else
+        {
+            this->responseCode = responseCode;
+            this->filename = content;
+            this->fp = fileno(f);
+        }
+    }
+    else
+    {
+        this->content = content;
+        this->responseCode = responseCode;
+        this->setHeader(HttpUtils::http_header_content_type, contentType);
+        this->fp = -1;
+    }
 }
 
 };
