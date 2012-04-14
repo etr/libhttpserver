@@ -101,7 +101,11 @@ class HttpResponse
             content(b.content),
             responseCode(b.responseCode),
             headers(b.headers),
-            footers(b.footers)
+            footers(b.footers),
+            responseType(b.responseType),
+            realm(b.realm),
+            opaque(b.opaque),
+            reloadNonce(b.reloadNonce)
         {
         }
         /**
