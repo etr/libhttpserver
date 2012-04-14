@@ -27,14 +27,6 @@ namespace httpserver
 {
 using namespace http;
 //ENDPOINT
-inline HttpEndpoint::HttpEndpoint(bool family):
-	url_complete("/"),
-	url_modded("/"),
-	family_url(family),
-    reg_compiled(false)
-{
-}
-
 HttpEndpoint::HttpEndpoint(const string& url, bool family, bool registration):
 	url_complete(string_utilities::to_lower_copy(url)),
 	url_modded("/"),
@@ -142,16 +134,6 @@ HttpEndpoint::HttpEndpoint(const HttpEndpoint& h)
     this->chunk_positions = h.chunk_positions;
 }
 
-inline HttpEndpoint::~HttpEndpoint()
-{
-    
-    if(reg_compiled)
-    {
-        regfree(&(this->re_url_modded));
-    }
-    
-}
-
 HttpEndpoint& HttpEndpoint::operator =(const HttpEndpoint& h)
 {
     this->url_complete = h.url_complete;
@@ -166,7 +148,7 @@ HttpEndpoint& HttpEndpoint::operator =(const HttpEndpoint& h)
     return *this;
 }
 
-inline bool HttpEndpoint::operator <(const HttpEndpoint& b) const 
+bool HttpEndpoint::operator <(const HttpEndpoint& b) const 
 {
 	return string_utilities::to_lower_copy(this->url_modded) < string_utilities::to_lower_copy(b.url_modded);
 }
@@ -197,26 +179,6 @@ bool HttpEndpoint::match(const HttpEndpoint& url) const
         return regexec(&(this->re_url_modded), url.url_modded.c_str(), 0, NULL, 0) == 0;
 //		return boost::xpressive::regex_match(url.url_modded, this->re_url_modded);
 	}
-}
-
-inline const std::string HttpEndpoint::get_url_complete() const 
-{
-	return this->url_complete;
-}
-
-inline const std::vector<std::string> HttpEndpoint::get_url_pars() const 
-{
-	return this->url_pars;
-}
-
-inline const std::vector<std::string> HttpEndpoint::get_url_pieces() const 
-{
-	return this->url_pieces;
-}
-
-inline const std::vector<int> HttpEndpoint::get_chunk_positions() const 
-{
-	return this->chunk_positions;
 }
 
 };

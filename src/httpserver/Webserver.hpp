@@ -27,12 +27,6 @@
 #define DEFAULT_WS_PORT 9898
 #define DEFAULT_WS_TIMEOUT 180
 
-#include <stdint.h>
-#include <inttypes.h>
-#include <sys/types.h>
-#include <sys/select.h>
-#include <sys/socket.h>
-#include <microhttpd.h>
 #include <cstring>
 #include <map>
 #include <vector>
@@ -44,7 +38,6 @@
 #include <string>
 #include <utility>
 #include <memory>
-//#include <boost/xpressive/xpressive.hpp>
 
 namespace httpserver {
 

@@ -28,6 +28,9 @@
 #include "HttpUtils.hpp"
 
 #pragma GCC diagnostic ignored "-Warray-bounds"
+#define CHECK_BIT(var,pos) ((var) & (1<<(pos)))
+#define SET_BIT(var,pos) ((var) |= 1 << (pos))
+#define CLEAR_BIT(var,pos) ((var) &= ~(1<<(pos)))
 
 using namespace std;
 
@@ -290,13 +293,13 @@ ip_representation::ip_representation(const struct sockaddr* ip)
             pieces[i/2] = ((u_char*)&(((struct sockaddr_in6 *)ip)->sin6_addr))[i] + 16 * ((u_char*)&(((struct sockaddr_in6 *)ip)->sin6_addr))[i+1];
         }
     }
-    std::fill(mask, mask + 16, 1);
+    mask = 65535;
 }
 
 ip_representation::ip_representation(const std::string& ip)
 {
     std::vector<std::string> parts;
-    std::fill(mask, mask + 16, 1);
+    mask = 65535;
     std::fill(pieces, pieces + 16, 0);
     if(ip.find(':') != std::string::npos) //IPV6
     {
@@ -338,7 +341,7 @@ ip_representation::ip_representation(const std::string& ip)
                                 }
                                 else
                                 {
-                                    mask[y+ii] = 0;
+                                    CLEAR_BIT(mask, y+11);
                                 }
                                 y++;
                             }
@@ -356,7 +359,7 @@ ip_representation::ip_representation(const std::string& ip)
             }
             else if(parts[i] == "*")
             {
-                mask[y] = 0;
+                CLEAR_BIT(mask, y);
                 y++;
             }
             else
@@ -395,7 +398,7 @@ ip_representation::ip_representation(const std::string& ip)
                 }
                 else
                 {
-                    mask[12+i] = 0;
+                    CLEAR_BIT(mask, 12+i);
                 }
             }
         }
@@ -415,7 +418,7 @@ bool ip_representation::operator <(const ip_representation& b) const
     }
     for(int i = 16 - VAL; i < 16; i++)
     {
-        if(this->mask[i] == 1 && b.mask[i] == 1 && this->pieces[i] < b.pieces[i])
+        if(CHECK_BIT(this->mask,i) && CHECK_BIT(b.mask,i) && this->pieces[i] < b.pieces[i])
         {
             return true;
         }

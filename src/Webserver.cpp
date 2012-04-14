@@ -714,7 +714,7 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
 	void* page;
 	size_t size = 0;
 	bool to_free = false;
-	const HttpEndpoint* matchingEndpoint;
+	const HttpEndpoint* matchingEndpoint = 0x0;
 	if(!(dws->registeredResources.count(endpoint) > 0)) 
 	{
 		map<HttpEndpoint, HttpResource* >::iterator it;
@@ -807,9 +807,13 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
 		MHD_add_response_header(response, (*it).first.c_str(), (*it).second.c_str());
 	for (it=response_footers.begin() ; it != response_footers.end(); it++)
 		MHD_add_response_footer(response, (*it).first.c_str(), (*it).second.c_str());
+    int to_ret;
     if(dhrs.responseType == HttpResponse::DIGEST_AUTH_FAIL)
-        MHD_queue_auth_fail_response(connection, dhrs.getRealm().c_str(), dhrs.getOpaque().c_str(), response, dhrs.needNonceReload() ? MHD_YES : MHD_NO);
-	MHD_queue_response(connection, dhrs.getResponseCode(), response);
+        to_ret = MHD_queue_auth_fail_response(connection, dhrs.getRealm().c_str(), dhrs.getOpaque().c_str(), response, dhrs.needNonceReload() ? MHD_YES : MHD_NO);
+    else if(dhrs.responseType == HttpResponse::BASIC_AUTH_FAIL)
+        to_ret = MHD_queue_basic_auth_fail_response(connection, dhrs.getRealm().c_str(), response);
+    else
+        to_ret = MHD_queue_response(connection, dhrs.getResponseCode(), response);
 
 	if (user != 0x0)
 		free (user);
@@ -820,7 +824,7 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
 	MHD_destroy_response (response);
 	if(to_free)
 		free(page);
-	return MHD_YES;
+	return to_ret;
 }
 
 };

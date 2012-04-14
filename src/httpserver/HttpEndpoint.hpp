@@ -42,7 +42,13 @@ class HttpEndpoint
 		 *                For example, if I identify "/path/" like a family endpoint and I associate to it the resource "A", also
 		 *                "/path/to/res/" is automatically associated to resource "A".
 		**/
-		HttpEndpoint(bool family = false);
+		HttpEndpoint(bool family = false):
+            url_complete("/"),
+            url_modded("/"),
+            family_url(family),
+            reg_compiled(false)
+        {
+        }
 		/**
 		 * Constructor of the class HttpEndpoint. It is used to initialize an HttpEndpoint starting from a string form URL.
 		 * @param url The string representation of the endpoint. All endpoints are in the form "/path/to/resource".
@@ -62,7 +68,15 @@ class HttpEndpoint
         /**
          * Destructor of the class. Essentially it frees the regex dinamically allocated pattern
         **/
-        ~HttpEndpoint();
+        ~HttpEndpoint()
+        {
+            
+            if(reg_compiled)
+            {
+                regfree(&(this->re_url_modded));
+            }
+            
+        }
 		/**
 		 * Operator overload for "less than operator". It is used to order endpoints in maps.
 		 * @param b The HttpEndpoint to compare to
@@ -87,22 +101,34 @@ class HttpEndpoint
 		 * Method used to get the complete endpoint url
 		 * @return a string representing the url
 		**/
-		const std::string get_url_complete() const;
+		const std::string get_url_complete() const
+        {
+            return this->url_complete;
+        }
 		/**
 		 * Method used to get all pars defined inside an url.
 		 * @return a vector of strings representing all found pars.
 		**/
-		const std::vector<std::string> get_url_pars() const;
+		const std::vector<std::string> get_url_pars() const
+        {
+            return this->url_pars;
+        }
 		/**
 		 * Method used to get all pieces of an url; considering an url splitted by '/'.
 		 * @return a vector of strings representing all found pieces.
 		**/
-		const std::vector<std::string> get_url_pieces() const;
+		const std::vector<std::string> get_url_pieces() const
+        {
+            return this->url_pieces;
+        }
 		/**
 		 * Method used to get indexes of all parameters inside url
 		 * @return a vector of int indicating all positions.
 		**/
-		const std::vector<int> get_chunk_positions() const;
+		const std::vector<int> get_chunk_positions() const
+        {
+            return this->chunk_positions;
+        }
 	private:
 		std::string url_complete;
 		std::string url_modded;

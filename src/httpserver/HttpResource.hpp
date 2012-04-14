@@ -123,21 +123,47 @@ class HttpResource
 		 * @param method method to set permission on
 		 * @param allowed boolean indicating if the method is allowed or not
 		**/
-		void setAllowing(const std::string& method, bool allowed);
+		void setAllowing(const std::string& method, bool allowed)
+        {
+            if(this->allowedMethods.count(method)) 
+            {
+                this->allowedMethods[method] = allowed;
+            }
+        }
 		/**
 		 * Method used to implicitly allow all methods
 		**/
-		void allowAll();
+		void allowAll()
+        {
+            std::map<std::string,bool>::iterator it;
+            for ( it=this->allowedMethods.begin() ; it != this->allowedMethods.end(); it++ )
+                this->allowedMethods[(*it).first] = true;
+        }
 		/**
 		 * Method used to implicitly disallow all methods
 		**/
-		void disallowAll();
+		void disallowAll()
+        {
+            std::map<std::string,bool>::iterator it;
+            for ( it=this->allowedMethods.begin() ; it != this->allowedMethods.end(); it++ )
+                this->allowedMethods[(*it).first] = false;
+        }
 		/**
 		 * Method used to discover if an http method is allowed or not for this resource
 		 * @param method Method to discover allowings
 		 * @return true if the method is allowed
 		**/
-		bool isAllowed(const std::string& method);
+		bool isAllowed(const std::string& method)
+        {
+            if(this->allowedMethods.count(method))
+            {
+                return this->allowedMethods[method];
+            }
+            else
+            {
+                return false;
+            }
+        }
 	private:
 		friend class Webserver;
 		std::map<std::string, bool> allowedMethods;
