@@ -31,6 +31,8 @@
 #include <gnutls/gnutls.h>
 #endif
 
+#define DEFAULT_MASK_VALUE 65535
+
 namespace httpserver {
 namespace http {
 
@@ -275,7 +277,7 @@ struct ip_representation
 
     ip_representation(HttpUtils::IPVersion_T ip_version) : ip_version(ip_version)
     {
-        mask = 65535;
+        mask = DEFAULT_MASK_VALUE;
         std::fill(pieces, pieces + 16, 0);
     }
 

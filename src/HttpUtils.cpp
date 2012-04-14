@@ -293,13 +293,13 @@ ip_representation::ip_representation(const struct sockaddr* ip)
             pieces[i/2] = ((u_char*)&(((struct sockaddr_in6 *)ip)->sin6_addr))[i] + 16 * ((u_char*)&(((struct sockaddr_in6 *)ip)->sin6_addr))[i+1];
         }
     }
-    mask = 65535;
+    mask = DEFAULT_MASK_VALUE;
 }
 
 ip_representation::ip_representation(const std::string& ip)
 {
     std::vector<std::string> parts;
-    mask = 65535;
+    mask = DEFAULT_MASK_VALUE;
     std::fill(pieces, pieces + 16, 0);
     if(ip.find(':') != std::string::npos) //IPV6
     {
