@@ -99,10 +99,10 @@ class HttpResponse
         **/
         HttpResponse(const HttpResponse& b):
             content(b.content),
+            responseType(b.responseType),
             responseCode(b.responseCode),
             headers(b.headers),
             footers(b.footers),
-            responseType(b.responseType),
             realm(b.realm),
             opaque(b.opaque),
             reloadNonce(b.reloadNonce)

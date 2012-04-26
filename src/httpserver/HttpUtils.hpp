@@ -31,7 +31,7 @@
 #include <gnutls/gnutls.h>
 #endif
 
-#define DEFAULT_MASK_VALUE 65535
+#define DEFAULT_MASK_VALUE 0xFFFF
 
 namespace httpserver {
 namespace http {

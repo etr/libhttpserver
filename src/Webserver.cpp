@@ -649,13 +649,6 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
         mr->dhr = &supportReq;
     }
 
-    mr->dhr->setPath(string(st_url));
-    mr->dhr->setMethod(string(method));
-
-    MHD_get_connection_values (connection, MHD_HEADER_KIND, &buildRequestHeader, (void*) mr->dhr);
-    MHD_get_connection_values (connection, MHD_FOOTER_KIND, &buildRequestFooter, (void*) mr->dhr);
-    MHD_get_connection_values (connection, MHD_COOKIE_KIND, &buildRequestCookie, (void*) mr->dhr);
-
     if (    0 == strcmp(method, MHD_HTTP_METHOD_DELETE) || 
         0 == strcmp(method, MHD_HTTP_METHOD_GET) ||
         0 == strcmp(method, MHD_HTTP_METHOD_HEAD) ||
@@ -687,6 +680,13 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
     {
         return method_not_acceptable_page(cls, connection);
     }
+
+    MHD_get_connection_values (connection, MHD_HEADER_KIND, &buildRequestHeader, (void*) mr->dhr);
+    MHD_get_connection_values (connection, MHD_FOOTER_KIND, &buildRequestFooter, (void*) mr->dhr);
+    MHD_get_connection_values (connection, MHD_COOKIE_KIND, &buildRequestCookie, (void*) mr->dhr);
+
+    mr->dhr->setPath(st_url);
+    mr->dhr->setMethod(method);
 
     if (0 == strcmp (method, MHD_HTTP_METHOD_POST) || 0 == strcmp(method, MHD_HTTP_METHOD_PUT)) 
     {

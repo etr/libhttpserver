@@ -34,6 +34,11 @@ HttpResponse Test::render_POST(const HttpRequest& r)
 	filestr << r.getContent() << endl;
 	filestr.close();
 	cout << "DOPO" << endl;
+    vector<string> vv = r.getPathPieces();
+    for(int i = 0; i < vv.size(); i++)
+    {
+        cout << vv[i] << endl;
+    }
 	return HttpResponse("OK",200);
 }
 
@@ -54,7 +59,7 @@ int main()
 	Test dt = Test();
 	Test2 dt2 = Test2();
     ws.registerResource(string("base/{var1}/{var2}/drop_test/{var3}/tail"), &dt2, true);
-    ws.registerResource(string("other"), &dt, true);
+    ws.registerResource(string("other/side"), &dt, true);
 	boost::thread* t1 = new boost::thread(boost::bind(&Webserver::start, ws, true));
 	t1->join();
 	return 0;
