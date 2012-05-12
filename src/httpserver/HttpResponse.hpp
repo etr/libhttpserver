@@ -49,6 +49,7 @@ class HttpResponse
         {
             STRING_CONTENT = 0,
             FILE_CONTENT,
+            SHOUTCAST_CONTENT,
             DIGEST_AUTH_FAIL,
             BASIC_AUTH_FAIL
         };

@@ -56,6 +56,8 @@ void HttpResponse::HttpResponseInit
     {
         this->content = content;
         this->responseCode = responseCode;
+        if(responseType == HttpResponse::SHOUTCAST_CONTENT)
+            this->responseCode |= HttpUtils::shoutcast_response;
         this->setHeader(HttpUtils::http_header_content_type, contentType);
         this->fp = -1;
     }

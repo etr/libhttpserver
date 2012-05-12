@@ -96,6 +96,7 @@ const int HttpUtils::http_insufficient_storage = MHD_HTTP_INSUFFICIENT_STORAGE;
 const int HttpUtils::http_bandwidth_limit_exceeded = MHD_HTTP_BANDWIDTH_LIMIT_EXCEEDED;
 const int HttpUtils::http_not_extended = MHD_HTTP_NOT_EXTENDED;
 
+const int HttpUtils::shoutcast_response = MHD_ICY_FLAG;
 
 const std::string HttpUtils::http_header_accept = MHD_HTTP_HEADER_ACCEPT;
 const std::string HttpUtils::http_header_accept_charset = MHD_HTTP_HEADER_ACCEPT_CHARSET;

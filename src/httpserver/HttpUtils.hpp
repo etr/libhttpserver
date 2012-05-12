@@ -139,6 +139,8 @@ class HttpUtils
         static const int http_bandwidth_limit_exceeded;
         static const int http_not_extended;
 
+        static const int shoutcast_response;
+
         /* See also: http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html */
         static const std::string http_header_accept;
         static const std::string http_header_accept_charset;
