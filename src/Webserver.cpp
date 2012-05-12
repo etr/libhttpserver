@@ -414,15 +414,13 @@ void Webserver::banIp(const string& ip)
 {
     ip_representation t_ip(ip);
     set<ip_representation>::iterator it = bans.find(t_ip);
-    if(t_ip.weight() > (*it).weight())
+    if(it != bans.end() && (t_ip.weight() < (*it).weight()))
     {
         this->bans.erase(it);
         this->bans.insert(t_ip);
     }
     else
-    {
         this->bans.insert(t_ip);
-    }
 }
 
 void Webserver::allowIp(const string& ip)
