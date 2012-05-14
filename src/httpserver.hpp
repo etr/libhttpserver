@@ -56,6 +56,11 @@ namespace std {
 %feature("director") Webserver;
 %feature("director") HttpRequest;
 %feature("director") HttpResponse;
+%feature("director") HttpStringResponse;
+%feature("director") HttpFileResponse;
+%feature("director") HttpBasicAuthFailResponse;
+%feature("director") HttpDigestAuthFailResponse;
+%feature("director") ShoutCASTResponse;
 %feature("director") HttpResource;
 %feature("director") HttpEndpoint;
 %feature("director") HttpUtils;

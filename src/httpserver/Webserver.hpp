@@ -285,6 +285,12 @@ class Webserver
             const char *transfer_encoding,
             const char *data, uint64_t off, size_t size
         );
+        static void upgrade_handler 
+        (
+            void *cls, 
+            struct MHD_Connection* connection,
+            void **con_cls, int upgrade_socket
+        );
 
         friend int policyCallback (void *cls, const struct sockaddr* addr, socklen_t addrlen);
         friend void error_log(void* cls, const char* fmt, va_list ap);

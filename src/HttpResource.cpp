@@ -59,17 +59,17 @@ HttpResponse HttpResource::render(const HttpRequest& r)
 
 HttpResponse HttpResource::render_404() 
 {
-    return HttpResponse(NOT_FOUND_ERROR, 404);
+    return HttpStringResponse(NOT_FOUND_ERROR, 404);
 }
 
 HttpResponse HttpResource::render_405() 
 {
-    return HttpResponse(METHOD_ERROR, 405);
+    return HttpStringResponse(METHOD_ERROR, 405);
 }
 
 HttpResponse HttpResource::render_500() 
 {
-    return HttpResponse(GENERIC_ERROR, 500);
+    return HttpStringResponse(GENERIC_ERROR, 500);
 }
 
 HttpResponse HttpResource::render_GET(const HttpRequest& r) 

@@ -51,19 +51,10 @@ class HttpResponse
             FILE_CONTENT,
             SHOUTCAST_CONTENT,
             DIGEST_AUTH_FAIL,
-            BASIC_AUTH_FAIL
+            BASIC_AUTH_FAIL,
+            SWITCH_PROTOCOL
         };
         
-        /**
-         * Default constructor
-        **/
-        HttpResponse():
-            content("{}"),
-            responseCode(200),
-            fp(-1)
-        {
-            setHeader(HttpUtils::http_header_content_type, "text/plain");
-        }
         /**
          * Constructor used to build an HttpResponse with a content and a responseCode
          * @param content The content to set for the request. (if the responseType is FILE_CONTENT, it represents the path to the file to read from).
@@ -72,41 +63,41 @@ class HttpResponse
         **/
         HttpResponse
         (
-            const std::string& content, 
-            int responseCode,
-            const std::string& contentType = "text/plain",
             const HttpResponse::ResponseType_T& responseType = HttpResponse::STRING_CONTENT,
+            const std::string& content = "", 
+            int responseCode = 200,
+            const std::string& contentType = "text/plain",
             const std::string& realm = "",
             const std::string& opaque = "",
             bool reloadNonce = false
         ):
             responseType(responseType),
+            content(content),
+            responseCode(responseCode),
             realm(realm),
             opaque(opaque),
-            reloadNonce(reloadNonce)
+            reloadNonce(reloadNonce),
+            fp(-1),
+            filename(content)
         {
-            HttpResponseInit(content, responseCode, contentType, responseType);
+            setHeader(HttpUtils::http_header_content_type, contentType);
         }
-        void HttpResponseInit
-        (
-            const std::string& content, 
-            int responseCode,
-            const std::string& contentType = "text/plain",
-            const HttpResponse::ResponseType_T& responseType = HttpResponse::STRING_CONTENT
-        );
+
         /**
          * Copy constructor
          * @param b The HttpResponse object to copy attributes value from.
         **/
         HttpResponse(const HttpResponse& b):
-            content(b.content),
             responseType(b.responseType),
+            content(b.content),
             responseCode(b.responseCode),
-            headers(b.headers),
-            footers(b.footers),
             realm(b.realm),
             opaque(b.opaque),
-            reloadNonce(b.reloadNonce)
+            reloadNonce(b.reloadNonce),
+            fp(b.fp),
+            filename(b.filename),
+            headers(b.headers),
+            footers(b.footers)
         {
         }
         /**
@@ -257,18 +248,92 @@ class HttpResponse
         {
             return this->reloadNonce;
         }
-    private:
+        int getSwitchCallback() const
+        {
+            return 0;
+        }
+    protected:
         friend class Webserver;
-        std::string content;
         ResponseType_T responseType;
+        std::string content;
         int responseCode;
-        std::map<std::string, std::string, HeaderComparator> headers;
-        std::map<std::string, std::string, ArgComparator> footers;
-        int fp;
-        std::string filename;
         std::string realm;
         std::string opaque;
         bool reloadNonce;
+        int fp;
+        std::string filename;
+        std::map<std::string, std::string, HeaderComparator> headers;
+        std::map<std::string, std::string, ArgComparator> footers;
+};
+
+class HttpStringResponse : public HttpResponse
+{
+    public:
+        HttpStringResponse
+        (
+            const std::string& content,
+            int responseCode,
+            const std::string& contentType = "text/plain"
+        ): HttpResponse(HttpResponse::STRING_CONTENT, content, responseCode, contentType) { }
+};
+
+class HttpFileResponse : public HttpResponse
+{
+    public:
+        HttpFileResponse
+        (
+            const std::string& filename, 
+            int responseCode,
+            const std::string& contentType = "text/plain"
+        );
+};
+
+class HttpBasicAuthFailResponse : public HttpResponse
+{
+    public:
+        HttpBasicAuthFailResponse
+        (
+            const std::string& content,
+            int responseCode,
+            const std::string& contentType = "text/plain",
+            const std::string& realm = "",
+            const HttpResponse::ResponseType_T& responseType = HttpResponse::BASIC_AUTH_FAIL
+        ) : HttpResponse(HttpResponse::BASIC_AUTH_FAIL, content, responseCode, contentType, realm) { }
+};
+
+class HttpDigestAuthFailResponse : public HttpResponse
+{
+    public:
+        HttpDigestAuthFailResponse
+        (
+            const std::string& content,
+            int responseCode,
+            const std::string& contentType = "text/plain",
+            const std::string& realm = "",
+            const std::string& opaque = "",
+            bool reloadNonce = false
+        ) : HttpResponse(HttpResponse::DIGEST_AUTH_FAIL, content, responseCode, contentType, realm, opaque, reloadNonce)
+        { 
+        }
+};
+
+class ShoutCASTResponse : public HttpResponse
+{
+    public:
+        ShoutCASTResponse
+        (
+            const std::string& content,
+            int responseCode,
+            const std::string& contentType = "text/plain"
+        ); 
+};
+
+class SwitchProtocolResponse : public HttpResponse
+{
+    public:
+        SwitchProtocolResponse
+        (
+        );
 };
 
 };

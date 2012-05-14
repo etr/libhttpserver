@@ -22,45 +22,46 @@
 #include "Webserver.hpp"
 #include "HttpResponse.hpp"
 
+#include <iostream>
+
 using namespace std;
 
 namespace httpserver
 {
 //RESPONSE
-void HttpResponse::HttpResponseInit
+HttpFileResponse::HttpFileResponse
 (
-    const string& content,
+    const string& filename,
     int responseCode,
-    const std::string& contentType,
-    const HttpResponse::ResponseType_T& responseType
+    const std::string& contentType
 )
 {
-    if(responseType == HttpResponse::FILE_CONTENT)
+    FILE* f;
+    this->filename = filename;
+    if(!(f = fopen(filename.c_str(), "r")))
     {
-        FILE* f;
-        if(!(f = fopen(content.c_str(), "r")))
-        {
-            this->content = NOT_FOUND_ERROR;
-            this->responseCode = 404;
-            this->setHeader(HttpUtils::http_header_content_type, contentType);
-            this->fp = -1;
-        }
-        else
-        {
-            this->responseCode = responseCode;
-            this->filename = content;
-            this->fp = fileno(f);
-        }
-    }
-    else
-    {
-        this->content = content;
-        this->responseCode = responseCode;
-        if(responseType == HttpResponse::SHOUTCAST_CONTENT)
-            this->responseCode |= HttpUtils::shoutcast_response;
+        this->responseType = HttpResponse::STRING_CONTENT;
+        this->content = NOT_FOUND_ERROR;
+        this->responseCode = HttpUtils::http_not_found;
         this->setHeader(HttpUtils::http_header_content_type, contentType);
         this->fp = -1;
     }
+    else
+    {
+        this->responseType = HttpResponse::FILE_CONTENT;
+        this->responseCode = responseCode;
+        this->fp = fileno(f);
+    }
+}
+
+ShoutCASTResponse::ShoutCASTResponse
+(
+    const std::string& content,
+    int responseCode,
+    const std::string& contentType
+):
+    HttpResponse(HttpResponse::SHOUTCAST_CONTENT, content, responseCode | HttpUtils::shoutcast_response, contentType)
+{
 }
 
 };

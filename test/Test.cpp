@@ -24,7 +24,7 @@ HttpResponse Test::render_GET(const HttpRequest& r)
 	cout << "PROVA: " << r.getArg("prova") << endl;
 	cout << "ALTRO: " << r.getArg("altro") << endl;
 	string pp = r.getArg("prova");
-	return HttpResponse(pp, 200);
+	return HttpFileResponse("/home/etr/progs/libhttpserver/test/readme", 200);
 }
 
 HttpResponse Test::render_POST(const HttpRequest& r)
@@ -39,18 +39,18 @@ HttpResponse Test::render_POST(const HttpRequest& r)
     {
         cout << vv[i] << endl;
     }
-	return HttpResponse("OK",200);
+	return HttpStringResponse("OK",200);
 }
 
 HttpResponse Test2::render_GET(const HttpRequest& r)
 {
 	cout << "D2" << endl;
-	return HttpResponse("{\" var1 \" : \" "+r.getArg("var1")+" \", \" var2 \" : \" "+r.getArg("var2")+" \", \" var3 \" : \" "+r.getArg("var3")+" \"}", 200);
+	return HttpStringResponse("{\" var1 \" : \" "+r.getArg("var1")+" \", \" var2 \" : \" "+r.getArg("var2")+" \", \" var3 \" : \" "+r.getArg("var3")+" \"}", 200);
 }
 
 HttpResponse Test::render_PUT(const HttpRequest& r)
 {
-	return HttpResponse(r.getContent(), 200);
+	return HttpStringResponse(r.getContent(), 200);
 }
 
 int main()

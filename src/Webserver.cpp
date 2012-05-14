@@ -427,15 +427,13 @@ void Webserver::allowIp(const string& ip)
 {
     ip_representation t_ip(ip);
     set<ip_representation>::iterator it = allowances.find(t_ip);
-    if(t_ip.weight() > (*it).weight())
+    if(it != allowances.end() && (t_ip.weight() < (*it).weight()))
     {
         this->allowances.erase(it);
         this->allowances.insert(t_ip);
     }
     else
-    {
         this->allowances.insert(t_ip);
-    }
 }
 
 void Webserver::unbanIp(const string& ip)
@@ -564,6 +562,11 @@ int Webserver::post_iterator (void *cls, enum MHD_ValueKind kind,
     struct ModdedRequest* mr = (struct ModdedRequest*) cls;
     mr->dhr->setArg(key, data, size);
     return MHD_YES;
+}
+
+void Webserver::upgrade_handler (void *cls, struct MHD_Connection* connection,
+                                void **con_cls, int upgrade_socket)
+{
 }
 
 int Webserver::not_found_page (const void *cls,
@@ -777,27 +780,33 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
         PyGILState_Release(gstate);
     }
 #endif
-    if(dhrs.content != "")
-    {
-        vector<char> v_page(dhrs.content.begin(), dhrs.content.end());
-        size = v_page.size();
-        page = (void*) malloc(size*sizeof(char));
-        memcpy( page, &v_page[0], sizeof( char ) * size );
-        to_free = true;
-    }
-    else
-    {
-        page = (void*)"";
-    }
     if(dhrs.responseType == HttpResponse::FILE_CONTENT)
     {
         struct stat st;
         fstat(dhrs.fp, &st);
         size_t filesize = st.st_size;
-        response = MHD_create_response_from_fd_at_offset(filesize, dhrs.fp, 0);
+        response = MHD_create_response_from_fd(filesize, dhrs.fp);
+    }
+    else if(dhrs.responseType == HttpResponse::SWITCH_PROTOCOL)
+    {
+        response = MHD_create_response_for_upgrade(&upgrade_handler, (void*)dhrs.getSwitchCallback());
     }
     else
+    {
+        if(dhrs.content != "")
+        {
+            vector<char> v_page(dhrs.content.begin(), dhrs.content.end());
+            size = v_page.size();
+            page = (void*) malloc(size*sizeof(char));
+            memcpy( page, &v_page[0], sizeof( char ) * size );
+            to_free = true;
+        }
+        else
+        {
+            page = (void*)"";
+        }
         response = MHD_create_response_from_buffer(size, page, MHD_RESPMEM_MUST_COPY);
+    }
     vector<pair<string,string> > response_headers = dhrs.getHeaders();
     vector<pair<string,string> > response_footers = dhrs.getFooters();
     vector<pair<string,string> >::iterator it;
