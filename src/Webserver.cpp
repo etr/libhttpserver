@@ -623,7 +623,8 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
     string st_url = HttpUtils::standardizeUrl(url);
 
     mr = (struct ModdedRequest*) *con_cls;
-    access_log(dws, *(mr->completeUri) + " METHOD: " + method);
+    if(mr->second == false)
+        access_log(dws, *(mr->completeUri) + " METHOD: " + method);
     mr->ws = dws;
     if (0 == strcmp (method, MHD_HTTP_METHOD_POST) || 0 == strcmp(method, MHD_HTTP_METHOD_PUT)) 
     {
@@ -712,9 +713,6 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
     }
     HttpEndpoint endpoint = HttpEndpoint(st_url);
     HttpResponse dhrs;
-    void* page;
-    size_t size = 0;
-    bool to_free = false;
     const HttpEndpoint* matchingEndpoint = 0x0;
     if(!(dws->registeredResources.count(endpoint) > 0)) 
     {
@@ -789,23 +787,22 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
     }
     else if(dhrs.responseType == HttpResponse::SWITCH_PROTOCOL)
     {
-        response = MHD_create_response_for_upgrade(&upgrade_handler, (void*)dhrs.getSwitchCallback());
+    //    response = MHD_create_response_for_upgrade(&upgrade_handler, (void*)dhrs.getSwitchCallback());
     }
     else
     {
         if(dhrs.content != "")
         {
             vector<char> v_page(dhrs.content.begin(), dhrs.content.end());
-            size = v_page.size();
-            page = (void*) malloc(size*sizeof(char));
-            memcpy( page, &v_page[0], sizeof( char ) * size );
-            to_free = true;
+            size_t size = v_page.size();
+            char page[size];
+            memcpy( (char*) page, &v_page[0], sizeof( char ) * size );
+            response = MHD_create_response_from_buffer(size, page, MHD_RESPMEM_MUST_COPY);
         }
         else
         {
-            page = (void*)"";
+            response = MHD_create_response_from_buffer(0, (void*)"", MHD_RESPMEM_MUST_COPY);
         }
-        response = MHD_create_response_from_buffer(size, page, MHD_RESPMEM_MUST_COPY);
     }
     vector<pair<string,string> > response_headers = dhrs.getHeaders();
     vector<pair<string,string> > response_footers = dhrs.getFooters();
@@ -829,8 +826,6 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
     if (digestedUser != 0x0)
         free (digestedUser);
     MHD_destroy_response (response);
-    if(to_free)
-        free(page);
     return to_ret;
 }
 

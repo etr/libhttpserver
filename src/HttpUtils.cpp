@@ -184,30 +184,25 @@ std::string HttpUtils::standardizeUrl(const std::string& url)
 
 std::string get_ip_str(const struct sockaddr *sa, socklen_t maxlen)
 {
-    char* to_ret;
+    char to_ret[INET6_ADDRSTRLEN] = { '\0' };
     switch(sa->sa_family) 
     {
         case AF_INET:
             if(maxlen == 0)
                 maxlen = INET_ADDRSTRLEN;
-            to_ret = (char*)malloc(maxlen*sizeof(char));
             inet_ntop(AF_INET, &(((struct sockaddr_in *)sa)->sin_addr), to_ret, maxlen);
             break;
 
         case AF_INET6:
             if(maxlen == 0)
                 maxlen = INET6_ADDRSTRLEN;
-            to_ret = (char*)malloc(maxlen*sizeof(char));
             inet_ntop(AF_INET6, &(((struct sockaddr_in6 *)sa)->sin6_addr), to_ret, maxlen);
             break;
         default:
-            to_ret = (char*)malloc(11*sizeof(char));
             strncpy(to_ret, "Unknown AF", 11);
             return NULL;
     }
-    std::string res(to_ret);
-    free(to_ret);
-    return std::string(res);
+    return to_ret;
 }
 
 const struct sockaddr str_to_ip(const std::string& src)
