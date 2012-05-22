@@ -48,4 +48,53 @@ bool HttpRequest::checkDigestAuth(const std::string& realm, const std::string& p
     return true;
 }
 
+const std::vector<std::pair<std::string, std::string> > HttpRequest::getHeaders() const
+{
+    std::vector<std::pair<std::string, std::string> > toRet;
+    std::map<std::string, std::string, HeaderComparator>::const_iterator it;
+    for(it = headers.begin(); it != headers.end(); it++)
+#ifdef USE_CPP_ZEROX
+        toRet.push_back(std::make_pair((*it).first,(*it).second));
+#else
+        toRet.push_back(std::make_pair<std::string, std::string>((*it).first,(*it).second));
+#endif
+    return toRet;
+}
+const std::vector<std::pair<std::string, std::string> > HttpRequest::getFooters() const
+{
+    std::vector<std::pair<std::string, std::string> > toRet;
+    std::map<std::string, std::string, HeaderComparator>::const_iterator it;
+    for(it = footers.begin(); it != footers.end(); it++)
+#ifdef USE_CPP_ZEROX
+        toRet.push_back(std::make_pair((*it).first,(*it).second));
+#else
+        toRet.push_back(std::make_pair<std::string, std::string>((*it).first,(*it).second));
+#endif
+    return toRet;
+}
+const std::vector<std::pair<std::string, std::string> > HttpRequest::getCookies() const
+{
+    std::vector<std::pair<std::string, std::string> > toRet;
+    std::map<std::string, std::string, HeaderComparator>::const_iterator it;
+    for(it = cookies.begin(); it != cookies.end(); it++)
+#ifdef USE_CPP_ZEROX
+        toRet.push_back(std::make_pair((*it).first,(*it).second));
+#else
+        toRet.push_back(std::make_pair<std::string, std::string>((*it).first,(*it).second));
+#endif
+    return toRet;
+}
+const std::vector<std::pair<std::string, std::string> > HttpRequest::getArgs() const
+{
+    std::vector<std::pair<std::string, std::string> > toRet;
+    std::map<std::string, std::string, ArgComparator>::const_iterator it;
+    for(it = args.begin(); it != args.end(); it++)
+#ifdef USE_CPP_ZEROX
+        toRet.push_back(std::make_pair((*it).first,(*it).second));
+#else
+        toRet.push_back(std::make_pair<std::string, std::string>((*it).first,(*it).second));
+#endif
+    return toRet;
+}
+
 };

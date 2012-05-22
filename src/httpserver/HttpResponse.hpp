@@ -172,34 +172,12 @@ class HttpResponse
          * Method used to get all headers passed with the request.
          * @return a map<string,string> containing all headers.
         **/
-        const std::vector<std::pair<std::string, std::string> > getHeaders()
-        {
-            std::vector<std::pair<std::string, std::string> > toRet;
-            std::map<std::string, std::string, HeaderComparator>::const_iterator it;
-            for(it = headers.begin(); it != headers.end(); it++)
-#ifdef USE_CPP_ZEROX
-                toRet.push_back(std::make_pair((*it).first,(*it).second));
-#else
-                toRet.push_back(std::make_pair<std::string, std::string>((*it).first,(*it).second));
-#endif
-            return toRet;
-        }
+        const std::vector<std::pair<std::string, std::string> > getHeaders();
         /**
          * Method used to get all footers passed with the request.
          * @return a map<string,string> containing all footers.
         **/
-        const std::vector<std::pair<std::string, std::string> > getFooters()
-        {
-            std::vector<std::pair<std::string, std::string> > toRet;
-            std::map<std::string, std::string, ArgComparator>::const_iterator it;
-            for(it = footers.begin(); it != footers.end(); it++)
-#ifdef USE_CPP_ZEROX
-                toRet.push_back(std::make_pair((*it).first,(*it).second));
-#else
-                toRet.push_back(std::make_pair<std::string, std::string>((*it).first,(*it).second));
-#endif
-            return toRet;
-        }
+        const std::vector<std::pair<std::string, std::string> > getFooters();
         /**
          * Method used to set all headers of the response.
          * @param headers The headers key-value map to set for the response.

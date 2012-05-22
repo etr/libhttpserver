@@ -134,66 +134,22 @@ class HttpRequest
          * Method used to get all headers passed with the request.
          * @return a vector<pair<string,string> > containing all headers.
         **/
-        const std::vector<std::pair<std::string, std::string> > getHeaders() const
-        {
-            std::vector<std::pair<std::string, std::string> > toRet;
-            std::map<std::string, std::string, HeaderComparator>::const_iterator it;
-            for(it = headers.begin(); it != headers.end(); it++)
-#ifdef USE_CPP_ZEROX
-                toRet.push_back(std::make_pair((*it).first,(*it).second));
-#else
-                toRet.push_back(std::make_pair<std::string, std::string>((*it).first,(*it).second));
-#endif
-            return toRet;
-        }
+        const std::vector<std::pair<std::string, std::string> > getHeaders() const;
         /**
          * Method used to get all footers passed with the request.
          * @return a vector<pair<string,string> > containing all footers.
         **/
-        const std::vector<std::pair<std::string, std::string> > getFooters() const
-        {
-            std::vector<std::pair<std::string, std::string> > toRet;
-            std::map<std::string, std::string, HeaderComparator>::const_iterator it;
-            for(it = footers.begin(); it != footers.end(); it++)
-#ifdef USE_CPP_ZEROX
-                toRet.push_back(std::make_pair((*it).first,(*it).second));
-#else
-                toRet.push_back(std::make_pair<std::string, std::string>((*it).first,(*it).second));
-#endif
-            return toRet;
-        }
+        const std::vector<std::pair<std::string, std::string> > getFooters() const;
         /**
          * Method used to get all cookies passed with the request.
          * @return a vector<pair<string, string> > containing all cookies.
         **/
-        const std::vector<std::pair<std::string, std::string> > getCookies() const
-        {
-            std::vector<std::pair<std::string, std::string> > toRet;
-            std::map<std::string, std::string, HeaderComparator>::const_iterator it;
-            for(it = cookies.begin(); it != cookies.end(); it++)
-#ifdef USE_CPP_ZEROX
-                toRet.push_back(std::make_pair((*it).first,(*it).second));
-#else
-                toRet.push_back(std::make_pair<std::string, std::string>((*it).first,(*it).second));
-#endif
-            return toRet;
-        }
+        const std::vector<std::pair<std::string, std::string> > getCookies() const;
         /**
          * Method used to get all parameters passed with the request. Usually parameters are passed with DELETE or GET methods.
          * @return a map<string,string> containing all parameters.
         **/
-        const std::vector<std::pair<std::string, std::string> > getArgs() const
-        {
-            std::vector<std::pair<std::string, std::string> > toRet;
-            std::map<std::string, std::string, ArgComparator>::const_iterator it;
-            for(it = args.begin(); it != args.end(); it++)
-#ifdef USE_CPP_ZEROX
-                toRet.push_back(std::make_pair((*it).first,(*it).second));
-#else
-                toRet.push_back(std::make_pair<std::string, std::string>((*it).first,(*it).second));
-#endif
-            return toRet;
-        }
+        const std::vector<std::pair<std::string, std::string> > getArgs() const;
         /**
          * Method used to get a specific header passed with the request.
          * @param key the specific header to get the value from
