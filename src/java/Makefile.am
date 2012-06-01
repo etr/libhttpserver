@@ -21,13 +21,13 @@ METASOURCES = AUTO
 lib_LTLIBRARIES = libhttpserver_java.la
 libhttpserver_java_la_LDFLAGS = $(JAVALDFLAGS)
 libhttpserver_java_la_LIBADD = -lmicrohttpd $(JAVALIBS)
-libhttpserver_java_la_SOURCES = WebserverWrap.cpp $(top_srcdir)/src/Webserver.cpp $(top_srcdir)/src/HttpUtils.cpp $(top_srcdir)/src/HttpEndpoint.cpp $(top_srcdir)/src/HttpResource.cpp $(top_srcdir)/src/HttpRequest.cpp $(top_srcdir)/src/HttpResponse.cpp $(top_srcdir)/src/string_utilities.cpp
+libhttpserver_java_la_SOURCES = webserver_wrap.cpp $(top_srcdir)/src/webserver.cpp $(top_srcdir)/src/http_utils.cpp $(top_srcdir)/src/http_endpoint.cpp $(top_srcdir)/src/http_resource.cpp $(top_srcdir)/src/http_request.cpp $(top_srcdir)/src/http_response.cpp $(top_srcdir)/src/string_utilities.cpp
 libjavasqi_la_includedir = $(includedir)/amgx/swig/java
-libjavasqi_la_include_HEADERS = Webserver.java HttpRequest.java HttpResponse.java HttpResource.java HttpEndpoint.java HttpUtils.java
+libjavasqi_la_include_HEADERS = webserver.java http_request.java http_response.java http_resource.java http_endpoint.java http_utils.java
 
 javadir=$(datadir)/java
 
 language=java
 swigoptions=-Wall
-swigscripts=Webserver.java HttpRequest.java HttpResponse.java HttpResource.java HttpEndpoint.java HttpUtils.java
+swigscripts=webserver.java http_request.java http_response.java http_resource.java http_endpoint.java http_utils.java
 @JAVA_AUTOGENERATION@

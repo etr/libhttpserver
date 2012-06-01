@@ -18,9 +18,9 @@
 
 */
 #include <cstdio>
-#include "HttpUtils.hpp"
-#include "Webserver.hpp"
-#include "HttpResponse.hpp"
+#include "http_utils.hpp"
+#include "webserver.hpp"
+#include "http_response.hpp"
 
 #include <iostream>
 
@@ -29,38 +29,38 @@ using namespace std;
 namespace httpserver
 {
 //RESPONSE
-HttpFileResponse::HttpFileResponse
+http_file_response::http_file_response
 (
     const string& filename,
-    int responseCode,
-    const std::string& contentType
+    int response_code,
+    const std::string& content_type
 )
 {
     FILE* f;
     this->filename = filename;
     if(!(f = fopen(filename.c_str(), "r")))
     {
-        this->responseType = HttpResponse::STRING_CONTENT;
+        this->response_type = http_response::STRING_CONTENT;
         this->content = NOT_FOUND_ERROR;
-        this->responseCode = HttpUtils::http_not_found;
-        this->setHeader(HttpUtils::http_header_content_type, contentType);
+        this->response_code = http_utils::http_not_found;
+        this->set_header(http_utils::http_header_content_type, content_type);
         this->fp = -1;
     }
     else
     {
-        this->responseType = HttpResponse::FILE_CONTENT;
-        this->responseCode = responseCode;
+        this->response_type = http_response::FILE_CONTENT;
+        this->response_code = response_code;
         this->fp = fileno(f);
     }
 }
 
-ShoutCASTResponse::ShoutCASTResponse
+shoutCAST_response::shoutCAST_response
 (
     const std::string& content,
-    int responseCode,
-    const std::string& contentType
+    int response_code,
+    const std::string& content_type
 ):
-    HttpResponse(HttpResponse::SHOUTCAST_CONTENT, content, responseCode | HttpUtils::shoutcast_response, contentType)
+    http_response(http_response::SHOUTCAST_CONTENT, content, response_code | http_utils::shoutcast_response, content_type)
 {
 }
 

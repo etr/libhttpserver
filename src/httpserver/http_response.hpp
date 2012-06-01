@@ -17,8 +17,8 @@
      Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
 */
-#ifndef _http_response_hpp_
-#define _http_response_hpp_
+#ifndef _HTTP_RESPONSE_HPP_
+#define _HTTP_RESPONSE_HPP_
 #include <map>
 #include <utility>
 #include <string>
@@ -26,12 +26,12 @@
 namespace httpserver
 {
 
-class Webserver;
+class webserver;
 
 namespace http
 {
-    class HeaderComparator;
-    class ArgComparator;
+    class header_comparator;
+    class arg_comparator;
 };
 
 using namespace http;
@@ -39,13 +39,13 @@ using namespace http;
 /**
  * Class representing an abstraction for an Http Response. It is used from classes using these apis to send information through http protocol.
 **/
-class HttpResponse 
+class http_response 
 {
     public:
         /**
          * Enumeration indicating whether the response content is got from a string or from a file
         **/
-        enum ResponseType_T 
+        enum response_type_T 
         {
             STRING_CONTENT = 0,
             FILE_CONTENT,
@@ -56,44 +56,44 @@ class HttpResponse
         };
         
         /**
-         * Constructor used to build an HttpResponse with a content and a responseCode
-         * @param content The content to set for the request. (if the responseType is FILE_CONTENT, it represents the path to the file to read from).
-         * @param responseCode The response code to set for the request.
-         * @param responseType param indicating if the content have to be read from a string or from a file
+         * Constructor used to build an http_response with a content and a response_code
+         * @param content The content to set for the request. (if the response_type is FILE_CONTENT, it represents the path to the file to read from).
+         * @param response_code The response code to set for the request.
+         * @param response_type param indicating if the content have to be read from a string or from a file
         **/
-        HttpResponse
+        http_response
         (
-            const HttpResponse::ResponseType_T& responseType = HttpResponse::STRING_CONTENT,
+            const http_response::response_type_T& response_type = http_response::STRING_CONTENT,
             const std::string& content = "", 
-            int responseCode = 200,
-            const std::string& contentType = "text/plain",
+            int response_code = 200,
+            const std::string& content_type = "text/plain",
             const std::string& realm = "",
             const std::string& opaque = "",
-            bool reloadNonce = false
+            bool reload_nonce = false
         ):
-            responseType(responseType),
+            response_type(response_type),
             content(content),
-            responseCode(responseCode),
+            response_code(response_code),
             realm(realm),
             opaque(opaque),
-            reloadNonce(reloadNonce),
+            reload_nonce(reload_nonce),
             fp(-1),
             filename(content)
         {
-            setHeader(HttpUtils::http_header_content_type, contentType);
+            set_header(http_utils::http_header_content_type, content_type);
         }
 
         /**
          * Copy constructor
-         * @param b The HttpResponse object to copy attributes value from.
+         * @param b The http_response object to copy attributes value from.
         **/
-        HttpResponse(const HttpResponse& b):
-            responseType(b.responseType),
+        http_response(const http_response& b):
+            response_type(b.response_type),
             content(b.content),
-            responseCode(b.responseCode),
+            response_code(b.response_code),
             realm(b.realm),
             opaque(b.opaque),
-            reloadNonce(b.reloadNonce),
+            reload_nonce(b.reload_nonce),
             fp(b.fp),
             filename(b.filename),
             headers(b.headers),
@@ -104,7 +104,7 @@ class HttpResponse
          * Method used to get the content from the response.
          * @return the content in string form
         **/
-        const std::string getContent()
+        const std::string get_content()
         {
             return this->content;
         }
@@ -112,7 +112,7 @@ class HttpResponse
          * Method used to set the content of the response
          * @param content The content to set
         **/
-        void setContent(const std::string& content)
+        void set_content(const std::string& content)
         {
             this->content = content;
         }
@@ -121,7 +121,7 @@ class HttpResponse
          * @param key The header identification
          * @return a string representing the value assumed by the header
         **/
-        const std::string getHeader(const std::string& key)
+        const std::string get_header(const std::string& key)
         {
             return this->headers[key];
         }
@@ -130,7 +130,7 @@ class HttpResponse
          * @param key The footer identification
          * @return a string representing the value assumed by the footer
         **/
-        const std::string getFooter(const std::string& key)
+        const std::string get_footer(const std::string& key)
         {
             return this->footers[key];
         }
@@ -139,7 +139,7 @@ class HttpResponse
          * @param key The name identifying the header
          * @param value The value assumed by the header
         **/
-        void setHeader(const std::string& key, const std::string& value)
+        void set_header(const std::string& key, const std::string& value)
         {
             this->headers[key] = value;
         }
@@ -148,23 +148,23 @@ class HttpResponse
          * @param key The name identifying the footer
          * @param value The value assumed by the footer
         **/
-        void setFooter(const std::string& key, const std::string& value)
+        void set_footer(const std::string& key, const std::string& value)
         {
             this->footers[key] = value;
         }
         /**
          * Method used to set the content type for the request. This is a shortcut of setting the corresponding header.
-         * @param contentType the content type to use for the request
+         * @param content_type the content type to use for the request
         **/
-        void setContentType(const std::string& contentType)
+        void set_content_type(const std::string& content_type)
         {
-            this->headers[HttpUtils::http_header_content_type] = contentType;
+            this->headers[http_utils::http_header_content_type] = content_type;
         }
         /**
          * Method used to remove previously defined header
          * @param key The header to remove
         **/
-        void removeHeader(const std::string& key)
+        void remove_header(const std::string& key)
         {
             this->headers.erase(key);
         }
@@ -172,39 +172,39 @@ class HttpResponse
          * Method used to get all headers passed with the request.
          * @return a map<string,string> containing all headers.
         **/
-        const std::vector<std::pair<std::string, std::string> > getHeaders()
+        const std::vector<std::pair<std::string, std::string> > get_headers()
         {
-            std::vector<std::pair<std::string, std::string> > toRet;
-            std::map<std::string, std::string, HeaderComparator>::const_iterator it;
+            std::vector<std::pair<std::string, std::string> > to_ret;
+            std::map<std::string, std::string, header_comparator>::const_iterator it;
             for(it = headers.begin(); it != headers.end(); it++)
 #ifdef USE_CPP_ZEROX
-                toRet.push_back(std::make_pair((*it).first,(*it).second));
+                to_ret.push_back(std::make_pair((*it).first,(*it).second));
 #else
-                toRet.push_back(std::make_pair<std::string, std::string>((*it).first,(*it).second));
+                to_ret.push_back(std::make_pair<std::string, std::string>((*it).first,(*it).second));
 #endif
-            return toRet;
+            return to_ret;
         }
         /**
          * Method used to get all footers passed with the request.
          * @return a map<string,string> containing all footers.
         **/
-        const std::vector<std::pair<std::string, std::string> > getFooters()
+        const std::vector<std::pair<std::string, std::string> > get_footers()
         {
-            std::vector<std::pair<std::string, std::string> > toRet;
-            std::map<std::string, std::string, ArgComparator>::const_iterator it;
+            std::vector<std::pair<std::string, std::string> > to_ret;
+            std::map<std::string, std::string, arg_comparator>::const_iterator it;
             for(it = footers.begin(); it != footers.end(); it++)
 #ifdef USE_CPP_ZEROX
-                toRet.push_back(std::make_pair((*it).first,(*it).second));
+                to_ret.push_back(std::make_pair((*it).first,(*it).second));
 #else
-                toRet.push_back(std::make_pair<std::string, std::string>((*it).first,(*it).second));
+                to_ret.push_back(std::make_pair<std::string, std::string>((*it).first,(*it).second));
 #endif
-            return toRet;
+            return to_ret;
         }
         /**
          * Method used to set all headers of the response.
          * @param headers The headers key-value map to set for the response.
         **/
-        void setHeaders(const std::map<std::string, std::string>& headers)
+        void set_headers(const std::map<std::string, std::string>& headers)
         {
             std::map<std::string, std::string>::const_iterator it;
             for(it = headers.begin(); it != headers.end(); it ++)
@@ -214,7 +214,7 @@ class HttpResponse
          * Method used to set all footers of the response.
          * @param footers The footers key-value map to set for the response.
         **/
-        void setFooters(const std::map<std::string, std::string>& footers)
+        void set_footers(const std::map<std::string, std::string>& footers)
         {
             std::map<std::string, std::string>::const_iterator it;
             for(it = footers.begin(); it != footers.end(); it ++)
@@ -222,118 +222,130 @@ class HttpResponse
         }
         /**
          * Method used to set the response code of the response
-         * @param responseCode the response code to set
+         * @param response_code the response code to set
         **/
-        void setResponseCode(int responseCode)
+        void set_response_code(int response_code)
         {
-            this->responseCode = responseCode;
+            this->response_code = response_code;
         }
         /**
          * Method used to get the response code from the response
          * @return The response code
         **/
-        int getResponseCode()
+        int get_response_code()
         {
-            return this->responseCode;
+            return this->response_code;
         }
-        const std::string getRealm() const
+        const std::string get_realm() const
         {
             return this->realm;
         }
-        const std::string getOpaque() const
+        const std::string get_opaque() const
         {
             return this->opaque;
         }
-        const bool needNonceReload() const
+        const bool need_nonce_reload() const
         {
-            return this->reloadNonce;
+            return this->reload_nonce;
         }
-        int getSwitchCallback() const
+        int get_switch_callback() const
         {
             return 0;
         }
     protected:
-        friend class Webserver;
-        ResponseType_T responseType;
+        friend class webserver;
+        response_type_T response_type;
         std::string content;
-        int responseCode;
+        int response_code;
         std::string realm;
         std::string opaque;
-        bool reloadNonce;
+        bool reload_nonce;
         int fp;
         std::string filename;
-        std::map<std::string, std::string, HeaderComparator> headers;
-        std::map<std::string, std::string, ArgComparator> footers;
+        std::map<std::string, std::string, header_comparator> headers;
+        std::map<std::string, std::string, arg_comparator> footers;
 };
 
-class HttpStringResponse : public HttpResponse
+class http_string_response : public http_response
 {
     public:
-        HttpStringResponse
+        http_string_response
         (
             const std::string& content,
-            int responseCode,
-            const std::string& contentType = "text/plain"
-        ): HttpResponse(HttpResponse::STRING_CONTENT, content, responseCode, contentType) { }
+            int response_code,
+            const std::string& content_type = "text/plain"
+        ): http_response(http_response::STRING_CONTENT, content, response_code, content_type) { }
+
+        http_string_response(const http_string_response& b) : http_response(b) { }
 };
 
-class HttpFileResponse : public HttpResponse
+class http_file_response : public http_response
 {
     public:
-        HttpFileResponse
+        http_file_response
         (
             const std::string& filename, 
-            int responseCode,
-            const std::string& contentType = "text/plain"
+            int response_code,
+            const std::string& content_type = "text/plain"
         );
+
+        http_file_response(const http_file_response& b) : http_response(b) { }
 };
 
-class HttpBasicAuthFailResponse : public HttpResponse
+class http_basic_auth_fail_response : public http_response
 {
     public:
-        HttpBasicAuthFailResponse
+        http_basic_auth_fail_response
         (
             const std::string& content,
-            int responseCode,
-            const std::string& contentType = "text/plain",
+            int response_code,
+            const std::string& content_type = "text/plain",
             const std::string& realm = "",
-            const HttpResponse::ResponseType_T& responseType = HttpResponse::BASIC_AUTH_FAIL
-        ) : HttpResponse(HttpResponse::BASIC_AUTH_FAIL, content, responseCode, contentType, realm) { }
+            const http_response::response_type_T& response_type = http_response::BASIC_AUTH_FAIL
+        ) : http_response(http_response::BASIC_AUTH_FAIL, content, response_code, content_type, realm) { }
+
+        http_basic_auth_fail_response(const http_basic_auth_fail_response& b) : http_response(b) { }
 };
 
-class HttpDigestAuthFailResponse : public HttpResponse
+class http_digest_auth_fail_response : public http_response
 {
     public:
-        HttpDigestAuthFailResponse
+        http_digest_auth_fail_response
         (
             const std::string& content,
-            int responseCode,
-            const std::string& contentType = "text/plain",
+            int response_code,
+            const std::string& content_type = "text/plain",
             const std::string& realm = "",
             const std::string& opaque = "",
-            bool reloadNonce = false
-        ) : HttpResponse(HttpResponse::DIGEST_AUTH_FAIL, content, responseCode, contentType, realm, opaque, reloadNonce)
+            bool reload_nonce = false
+        ) : http_response(http_response::DIGEST_AUTH_FAIL, content, response_code, content_type, realm, opaque, reload_nonce)
         { 
         }
+
+        http_digest_auth_fail_response(const http_digest_auth_fail_response& b) : http_response(b) { }
 };
 
-class ShoutCASTResponse : public HttpResponse
+class shoutCAST_response : public http_response
 {
     public:
-        ShoutCASTResponse
+        shoutCAST_response
         (
             const std::string& content,
-            int responseCode,
-            const std::string& contentType = "text/plain"
-        ); 
+            int response_code,
+            const std::string& content_type = "text/plain"
+        );
+
+        shoutCAST_response(const shoutCAST_response& b) : http_response(b) { }
 };
 
-class SwitchProtocolResponse : public HttpResponse
+class switch_protocol_response : public http_response
 {
     public:
-        SwitchProtocolResponse
+        switch_protocol_response
         (
         );
+
+        switch_protocol_response(const switch_protocol_response& b) : http_response(b) { }
 };
 
 };

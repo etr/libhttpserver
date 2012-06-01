@@ -19,9 +19,9 @@
 INCLUDES = -I../ -I$(srcdir)/httpserver/
 METASOURCES = AUTO
 lib_LTLIBRARIES = libhttpserver.la
-libhttpserver_la_SOURCES = string_utilities.cpp Webserver.cpp HttpUtils.cpp HttpEndpoint.cpp HttpRequest.cpp HttpResponse.cpp HttpResource.cpp
+libhttpserver_la_SOURCES = string_utilities.cpp webserver.cpp http_utils.cpp http_endpoint.cpp http_request.cpp http_response.cpp http_resource.cpp
 noinst_HEADERS = httpserver/string_utilities.hpp gettext.h
-nobase_include_HEADERS = httpserver.hpp httpserver/Webserver.hpp httpserver/HttpUtils.hpp httpserver/HttpEndpoint.hpp httpserver/HttpRequest.hpp httpserver/HttpResponse.hpp httpserver/HttpResource.hpp
+nobase_include_HEADERS = httpserver.hpp httpserver/webserver.hpp httpserver/http_utils.hpp httpserver/http_endpoint.hpp httpserver/http_request.hpp httpserver/http_response.hpp httpserver/http_resource.hpp
 AM_CXXFLAGS += -fPIC -Wall
 libhttpserver_la_LIBADD = -lmicrohttpd
 libhttpserver_la_LDFLAGS =

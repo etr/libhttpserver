@@ -44,11 +44,11 @@ class bad_ip_format_exception: public std::exception
     }
 };
 
-class HttpUtils 
+class http_utils 
 {
     public:
 
-    enum CredType_T 
+    enum cred_type_T 
     {
         NONE = -1
 #ifdef HAVE_GNUTLS
@@ -60,20 +60,20 @@ class HttpUtils
 #endif
     };
 
-    enum StartMethod_T
+    enum start_method_T
     {
         INTERNAL_SELECT = MHD_USE_SELECT_INTERNALLY,
         THREADS = MHD_USE_THREAD_PER_CONNECTION,
         POOL = MHD_USE_POLL
     };
 
-    enum Policy_T
+    enum policy_T
     {
         ACCEPT,
         REJECT
     };
 
-    enum IPVersion_T
+    enum IP_version_T
     {
         IPV4 = 4, IPV6 = 16
     };
@@ -207,11 +207,11 @@ class HttpUtils
 #ifdef SWIG
         %mutable;
 #endif
-        static const std::vector<std::string> tokenizeUrl(const std::string&, const char separator = '/');
-        static std::string standardizeUrl(const std::string&);
+        static const std::vector<std::string> tokenize_url(const std::string&, const char separator = '/');
+        static std::string standardize_url(const std::string&);
 };
 
-class HeaderComparator {
+class header_comparator {
     public:
         /**
          * Operator used to compare strings.
@@ -241,7 +241,7 @@ class HeaderComparator {
  * The default comparison is case sensitive. To obtain insensitive comparison you have to pass in
  * compilation phase the flag CASE_INSENSITIVE to the preprocessor.
 **/
-class ArgComparator {
+class arg_comparator {
     public:
         /**
          * Operator used to compare strings.
@@ -273,11 +273,11 @@ class ArgComparator {
 
 struct ip_representation
 {
-    HttpUtils::IPVersion_T ip_version;
+    http_utils::IP_version_T ip_version;
     unsigned short pieces[16];
     unsigned int mask:16;
 
-    ip_representation(HttpUtils::IPVersion_T ip_version) : ip_version(ip_version)
+    ip_representation(http_utils::IP_version_T ip_version) : ip_version(ip_version)
     {
         mask = DEFAULT_MASK_VALUE;
         std::fill(pieces, pieces + 16, 0);

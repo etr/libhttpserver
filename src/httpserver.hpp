@@ -12,7 +12,7 @@
 
 %ignore policyCallback (void*, const struct sockaddr*, socklen_t);
 %ignore error_log(void*, const char*, va_list);
-%ignore access_log(Webserver*, std::string);
+%ignore access_log(webserver*, std::string);
 %ignore uri_log(void*, const char*);
 %ignore unescaper_func(void*, struct MHD_Connection*, char*);
 %ignore internal_unescaper(void*, char*);
@@ -53,17 +53,17 @@ namespace std {
 %module(directors="1") libhttpserver_python
 #endif
 
-%feature("director") Webserver;
-%feature("director") HttpRequest;
-%feature("director") HttpResponse;
-%feature("director") HttpStringResponse;
-%feature("director") HttpFileResponse;
-%feature("director") HttpBasicAuthFailResponse;
-%feature("director") HttpDigestAuthFailResponse;
-%feature("director") ShoutCASTResponse;
-%feature("director") HttpResource;
-%feature("director") HttpEndpoint;
-%feature("director") HttpUtils;
+%feature("director") webserver;
+%feature("director") http_request;
+%feature("director") http_response;
+%feature("director") http_string_response;
+%feature("director") http_file_response;
+%feature("director") http_basic_auth_fail_response;
+%feature("director") http_digest_auth_fail_response;
+%feature("director") shoutCAST_response;
+%feature("director") http_resource;
+%feature("director") http_endpoint;
+%feature("director") http_utils;
 
 #ifdef SWIGPYTHON
 %typemap(out) string {
@@ -119,29 +119,29 @@ namespace std {
 	}
 };
 
-%include "HttpUtils.hpp"
-%include "HttpRequest.hpp"
-%include "HttpResponse.hpp"
-%include "HttpResource.hpp"
-%include "HttpEndpoint.hpp"
-%include "Webserver.hpp"
+%include "http_utils.hpp"
+%include "http_request.hpp"
+%include "http_response.hpp"
+%include "http_resource.hpp"
+%include "http_endpoint.hpp"
+%include "webserver.hpp"
 
 %{
-#include "HttpUtils.hpp"
-#include "HttpRequest.hpp"
-#include "HttpResponse.hpp"
-#include "HttpResource.hpp"
-#include "HttpEndpoint.hpp"
-#include "Webserver.hpp"
+#include "http_utils.hpp"
+#include "http_request.hpp"
+#include "http_response.hpp"
+#include "http_resource.hpp"
+#include "http_endpoint.hpp"
+#include "webserver.hpp"
 %}
 
 #endif
 
-#include "httpserver/HttpUtils.hpp"
-#include "httpserver/HttpEndpoint.hpp"
-#include "httpserver/HttpResource.hpp"
-#include "httpserver/HttpResponse.hpp"
-#include "httpserver/HttpRequest.hpp"
-#include "httpserver/Webserver.hpp"
+#include "httpserver/http_utils.hpp"
+#include "httpserver/http_endpoint.hpp"
+#include "httpserver/http_resource.hpp"
+#include "httpserver/http_response.hpp"
+#include "httpserver/http_request.hpp"
+#include "httpserver/webserver.hpp"
 
 #endif

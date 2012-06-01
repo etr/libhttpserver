@@ -21,7 +21,7 @@ METASOURCES = AUTO
 lib_LTLIBRARIES = libhttpserver_php.la
 libhttpserver_php_la_LIBADD = -lmicrohttpd
 libhttpserver_php_la_LDFLAGS = $(PHPLDFLAGS)
-libhttpserver_php_la_SOURCES = WebserverWrap.cpp $(top_srcdir)/src/Webserver.cpp $(top_srcdir)/src/HttpUtils.cpp $(top_srcdir)/src/HttpEndpoint.cpp $(top_srcdir)/src/HttpResource.cpp $(top_srcdir)/src/HttpRequest.cpp $(top_srcdir)/src/HttpResponse.cpp $(top_srcdir)/src/string_utilities.cpp
+libhttpserver_php_la_SOURCES = webserver_wrap.cpp $(top_srcdir)/src/webserver.cpp $(top_srcdir)/src/http_utils.cpp $(top_srcdir)/src/http_endpoint.cpp $(top_srcdir)/src/http_resource.cpp $(top_srcdir)/src/http_request.cpp $(top_srcdir)/src/http_response.cpp $(top_srcdir)/src/string_utilities.cpp
 libhttpserver_php_la_includedir = 
 libhttpserver_php_la_include_HEADERS = libhttpserver_php.php
 

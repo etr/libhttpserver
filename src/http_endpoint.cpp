@@ -17,8 +17,8 @@
      Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
 */
-#include "HttpEndpoint.hpp"
-#include "HttpUtils.hpp"
+#include "http_endpoint.hpp"
+#include "http_utils.hpp"
 #include "string_utilities.hpp"
 
 using namespace std;
@@ -27,13 +27,13 @@ namespace httpserver
 {
 using namespace http;
 //ENDPOINT
-HttpEndpoint::HttpEndpoint(const string& url, bool family, bool registration):
+http_endpoint::http_endpoint(const string& url, bool family, bool registration):
     url_complete(string_utilities::to_lower_copy(url)),
     url_modded("/"),
     family_url(family),
     reg_compiled(false)
 {
-    vector<string> parts = HttpUtils::tokenizeUrl(url);
+    vector<string> parts = http_utils::tokenize_url(url);
     string buffered;
     bool first = true;
     if(registration)
@@ -118,23 +118,22 @@ HttpEndpoint::HttpEndpoint(const string& url, bool family, bool registration):
             this->url_pieces.push_back(parts[i]);
         }
     }
-//  this->re_url_modded = boost::xpressive::sregex::compile( url_modded, boost::xpressive::regex_constants::icase );
 }
 
-HttpEndpoint::HttpEndpoint(const HttpEndpoint& h)
+http_endpoint::http_endpoint(const http_endpoint& h):
+    url_complete(h.url_complete),
+    url_modded(h.url_modded),
+    url_pars(h.url_pars),
+    url_pieces(h.url_pieces),
+    chunk_positions(h.chunk_positions),
+    family_url(h.family_url),
+    reg_compiled(h.reg_compiled)
 {
-    this->url_complete = h.url_complete;
-    this->url_modded = h.url_modded;
-    this->family_url = h.family_url;
-    this->reg_compiled = h.reg_compiled;
     if(this->reg_compiled)
         regcomp(&(this->re_url_modded), url_modded.c_str(), REG_EXTENDED|REG_ICASE);
-    this->url_pars = h.url_pars;
-    this->url_pieces = h.url_pieces;
-    this->chunk_positions = h.chunk_positions;
 }
 
-HttpEndpoint& HttpEndpoint::operator =(const HttpEndpoint& h)
+http_endpoint& http_endpoint::operator =(const http_endpoint& h)
 {
     this->url_complete = h.url_complete;
     this->url_modded = h.url_modded;
@@ -148,12 +147,12 @@ HttpEndpoint& HttpEndpoint::operator =(const HttpEndpoint& h)
     return *this;
 }
 
-bool HttpEndpoint::operator <(const HttpEndpoint& b) const 
+bool http_endpoint::operator <(const http_endpoint& b) const 
 {
     return string_utilities::to_lower_copy(this->url_modded) < string_utilities::to_lower_copy(b.url_modded);
 }
 
-bool HttpEndpoint::match(const HttpEndpoint& url) const 
+bool http_endpoint::match(const http_endpoint& url) const 
 {
     if(this->family_url && (url.url_pieces.size() >= this->url_pieces.size()))
     {
@@ -172,13 +171,9 @@ bool HttpEndpoint::match(const HttpEndpoint& url) const
             }
         }
         return regexec(&(this->re_url_modded), nn.c_str(), 0, NULL, 0) == 0;
-//      return boost::xpressive::regex_match(nn, this->re_url_modded);
     }
     else
-    {
         return regexec(&(this->re_url_modded), url.url_modded.c_str(), 0, NULL, 0) == 0;
-//      return boost::xpressive::regex_match(url.url_modded, this->re_url_modded);
-    }
 }
 
 };

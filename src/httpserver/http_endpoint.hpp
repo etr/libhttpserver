@@ -17,8 +17,8 @@
      Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
 */
-#ifndef _http_endpoint_hpp_
-#define _http_endpoint_hpp_
+#ifndef _HTTP_ENDPOINT_HPP_
+#define _HTTP_ENDPOINT_HPP_
 
 #include <vector>
 #include <regex.h>
@@ -27,12 +27,12 @@
 namespace httpserver
 {
 
-class Webserver;
+class webserver;
 
 /**
  * Class representing an Http Endpoint. It is an abstraction used by the APIs.
 **/
-class HttpEndpoint 
+class http_endpoint 
 {
     public:
         /**
@@ -42,7 +42,7 @@ class HttpEndpoint
          *                For example, if I identify "/path/" like a family endpoint and I associate to it the resource "A", also
          *                "/path/to/res/" is automatically associated to resource "A".
         **/
-        HttpEndpoint(bool family = false):
+        http_endpoint(bool family = false):
             url_complete("/"),
             url_modded("/"),
             family_url(family),
@@ -50,7 +50,7 @@ class HttpEndpoint
         {
         }
         /**
-         * Constructor of the class HttpEndpoint. It is used to initialize an HttpEndpoint starting from a string form URL.
+         * Constructor of the class http_endpoint. It is used to initialize an http_endpoint starting from a string form URL.
          * @param url The string representation of the endpoint. All endpoints are in the form "/path/to/resource".
          * @param family boolean that indicates if the endpoint is a family endpoint.
          *                A family endpoint is an endpoint that identifies a root and all its child like the same resource.
@@ -59,16 +59,16 @@ class HttpEndpoint
          * @param registration boolean that indicates to the system if this is an endpoint that need to be registered to a webserver
          *                     or it is simply an endpoint to be used for comparisons.
         **/
-        HttpEndpoint(const std::string& url, bool family = false, bool registration = false);
+        http_endpoint(const std::string& url, bool family = false, bool registration = false);
         /**
          * Copy constructor. It is useful expecially to copy regex_t structure that contains dinamically allocated data.
-         * @param h The HttpEndpoint to copy
+         * @param h The http_endpoint to copy
         **/
-        HttpEndpoint(const HttpEndpoint& h);
+        http_endpoint(const http_endpoint& h);
         /**
          * Destructor of the class. Essentially it frees the regex dinamically allocated pattern
         **/
-        ~HttpEndpoint()
+        ~http_endpoint()
         {
             
             if(reg_compiled)
@@ -79,24 +79,24 @@ class HttpEndpoint
         }
         /**
          * Operator overload for "less than operator". It is used to order endpoints in maps.
-         * @param b The HttpEndpoint to compare to
+         * @param b The http_endpoint to compare to
          * @return boolean indicating if this is less than b.
         **/
-        bool operator <(const HttpEndpoint& b) const;
+        bool operator <(const http_endpoint& b) const;
         /**
          * Operator overload for "assignment operator". It is used to copy endpoints to existing objects.
          * Is is functional expecially to copy regex_t structure that contains dinamically allocated data.
-         * @param h The HttpEndpoint to copy
-         * @return a reference to the HttpEndpoint obtained
+         * @param h The http_endpoint to copy
+         * @return a reference to the http_endpoint obtained
         **/
-        HttpEndpoint& operator =(const HttpEndpoint& h);
+        http_endpoint& operator =(const http_endpoint& h);
         /**
          * Method indicating if this endpoint 'matches' with the one passed. A passed endpoint matches a registered endpoint if
          * the regex represented by the registered endpoint matches the passed one.
          * @param url The endpoint to match
          * @return true if the passed endpoint matches this.
         **/
-        bool match(const HttpEndpoint& url) const;
+        bool match(const http_endpoint& url) const;
         /**
          * Method used to get the complete endpoint url
          * @return a string representing the url

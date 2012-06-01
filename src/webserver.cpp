@@ -35,13 +35,13 @@
 #include <microhttpd.h>
 
 #include "gettext.h"
-#include "HttpUtils.hpp"
-#include "HttpResource.hpp"
-#include "HttpResponse.hpp"
-#include "HttpRequest.hpp"
-#include "HttpEndpoint.hpp"
+#include "http_utils.hpp"
+#include "http_resource.hpp"
+#include "http_response.hpp"
+#include "http_request.hpp"
+#include "http_endpoint.hpp"
 #include "string_utilities.hpp"
-#include "Webserver.hpp"
+#include "webserver.hpp"
 
 
 using namespace std;
@@ -50,10 +50,10 @@ namespace httpserver {
 
 using namespace http;
 
-int policyCallback (void *, const struct sockaddr*, socklen_t);
+int policy_callback (void *, const struct sockaddr*, socklen_t);
 void error_log(void*, const char*, va_list);
 void* uri_log(void*, const char*);
-void access_log(Webserver*, string);
+void access_log(webserver*, string);
 size_t unescaper_func(void*, struct MHD_Connection*, char*);
 size_t internal_unescaper(void*, char*);
 
@@ -129,150 +129,150 @@ static char * load_file (const char *filename)
 }
 
 //LOGGING DELEGATE
-LoggingDelegate::LoggingDelegate() {}
+logging_delegate::logging_delegate() {}
 
-LoggingDelegate::~LoggingDelegate() {}
+logging_delegate::~logging_delegate() {}
 
-void LoggingDelegate::log_access(const string& s) const {}
+void logging_delegate::log_access(const string& s) const {}
 
-void LoggingDelegate::log_error(const string& s) const {}
+void logging_delegate::log_error(const string& s) const {}
 
 //REQUEST VALIDATOR
-RequestValidator::RequestValidator() {}
+request_validator::request_validator() {}
 
-RequestValidator::~RequestValidator() {}
+request_validator::~request_validator() {}
 
-bool RequestValidator::validate(const string& address) const { return true; }
+bool request_validator::validate(const string& address) const { return true; }
 
 //UNESCAPER
-Unescaper::Unescaper() {}
+unescaper::unescaper() {}
 
-Unescaper::~Unescaper() {}
+unescaper::~unescaper() {}
 
-void Unescaper::unescape(char* s) const {}
+void unescaper::unescape(char* s) const {}
 
 //WEBSERVER CREATOR
-CreateWebserver& CreateWebserver::httpsMemKey(const std::string& httpsMemKey)
+create_webserver& create_webserver::https_mem_key(const std::string& https_mem_key)
 {
-    _httpsMemKey = load_file(httpsMemKey.c_str());
+    _https_mem_key = load_file(https_mem_key.c_str());
     return *this;
 }
 
-CreateWebserver& CreateWebserver::httpsMemCert(const std::string& httpsMemCert)
+create_webserver& create_webserver::https_mem_cert(const std::string& https_mem_cert)
 {
-    _httpsMemCert = load_file(httpsMemCert.c_str());
+    _https_mem_cert = load_file(https_mem_cert.c_str());
     return *this;
 }
 
-CreateWebserver& CreateWebserver::httpsMemTrust(const std::string& httpsMemTrust)
+create_webserver& create_webserver::https_mem_trust(const std::string& https_mem_trust)
 {
-    _httpsMemTrust = load_file(httpsMemTrust.c_str());
+    _https_mem_trust = load_file(https_mem_trust.c_str());
     return *this;
 }
 
 //WEBSERVER
-Webserver::Webserver 
+webserver::webserver 
 (
     int port, 
-    const HttpUtils::StartMethod_T& startMethod,
-    int maxThreads, 
-    int maxConnections,
-    int memoryLimit,
-    int connectionTimeout,
-    int perIPConnectionLimit,
-    const LoggingDelegate* logDelegate,
-    const RequestValidator* validator,
-    const Unescaper* unescaper,
-    const struct sockaddr* bindAddress,
-    int bindSocket,
-    int maxThreadStackSize,
-    bool useSsl,
-    bool useIpv6,
+    const http_utils::start_method_T& start_method,
+    int max_threads, 
+    int max_connections,
+    int memory_limit,
+    int connection_timeout,
+    int per_IP_connection_limit,
+    const logging_delegate* log_delegate,
+    const request_validator* validator,
+    const unescaper* unescaper_pointer,
+    const struct sockaddr* bind_address,
+    int bind_socket,
+    int max_thread_stack_size,
+    bool use_ssl,
+    bool use_ipv6,
     bool debug,
     bool pedantic,
-    const string& httpsMemKey,
-    const string& httpsMemCert,
-    const string& httpsMemTrust,
-    const string& httpsPriorities,
-    const HttpUtils::CredType_T& credType,
-    const string digestAuthRandom,
-    int nonceNcSize,
-    const HttpUtils::Policy_T& defaultPolicy
+    const string& https_mem_key,
+    const string& https_mem_cert,
+    const string& https_mem_trust,
+    const string& https_priorities,
+    const http_utils::cred_type_T& cred_type,
+    const string digest_auth_random,
+    int nonce_nc_size,
+    const http_utils::policy_T& default_policy
 ) :
     port(port), 
-    startMethod(startMethod),
-    maxThreads(maxThreads), 
-    maxConnections(maxConnections),
-    memoryLimit(memoryLimit),
-    connectionTimeout(connectionTimeout),
-    perIPConnectionLimit(perIPConnectionLimit),
-    logDelegate(logDelegate),
+    start_method(start_method),
+    max_threads(max_threads), 
+    max_connections(max_connections),
+    memory_limit(memory_limit),
+    connection_timeout(connection_timeout),
+    per_IP_connection_limit(per_IP_connection_limit),
+    log_delegate(log_delegate),
     validator(validator),
-    unescaper(unescaper),
-    bindAddress(bindAddress),
-    bindSocket(bindSocket),
-    maxThreadStackSize(maxThreadStackSize),
-    useSsl(useSsl),
-    useIpv6(useIpv6),
+    unescaper_pointer(unescaper_pointer),
+    bind_address(bind_address),
+    bind_socket(bind_socket),
+    max_thread_stack_size(max_thread_stack_size),
+    use_ssl(use_ssl),
+    use_ipv6(use_ipv6),
     debug(debug),
     pedantic(pedantic),
-    httpsMemKey(httpsMemKey),
-    httpsMemCert(httpsMemCert),
-    httpsMemTrust(httpsMemTrust),
-    httpsPriorities(httpsPriorities),
-    credType(credType),
-    digestAuthRandom(digestAuthRandom),
-    nonceNcSize(nonceNcSize),
+    https_mem_key(https_mem_key),
+    https_mem_cert(https_mem_cert),
+    https_mem_trust(https_mem_trust),
+    https_priorities(https_priorities),
+    cred_type(cred_type),
+    digest_auth_random(digest_auth_random),
+    nonce_nc_size(nonce_nc_size),
     running(false),
-    defaultPolicy(defaultPolicy)
+    default_policy(default_policy)
 {
     ignore_sigpipe();
 }
 
-Webserver::Webserver(const CreateWebserver& params):
+webserver::webserver(const create_webserver& params):
     port(params._port),
-    startMethod(params._startMethod),
-    maxThreads(params._maxThreads),
-    maxConnections(params._maxConnections),
-    memoryLimit(params._memoryLimit),
-    connectionTimeout(params._connectionTimeout),
-    perIPConnectionLimit(params._perIPConnectionLimit),
-    logDelegate(params._logDelegate),
+    start_method(params._start_method),
+    max_threads(params._max_threads),
+    max_connections(params._max_connections),
+    memory_limit(params._memory_limit),
+    connection_timeout(params._connection_timeout),
+    per_IP_connection_limit(params._per_IP_connection_limit),
+    log_delegate(params._log_delegate),
     validator(params._validator),
-    unescaper(params._unescaper),
-    bindAddress(params._bindAddress),
-    bindSocket(params._bindSocket),
-    maxThreadStackSize(params._maxThreadStackSize),
-    useSsl(params._useSsl),
-    useIpv6(params._useIpv6),
+    unescaper_pointer(params._unescaper_pointer),
+    bind_address(params._bind_address),
+    bind_socket(params._bind_socket),
+    max_thread_stack_size(params._max_thread_stack_size),
+    use_ssl(params._use_ssl),
+    use_ipv6(params._use_ipv6),
     debug(params._debug),
     pedantic(params._pedantic),
-    httpsMemKey(params._httpsMemKey),
-    httpsMemCert(params._httpsMemCert),
-    httpsMemTrust(params._httpsMemTrust),
-    httpsPriorities(params._httpsPriorities),
-    credType(params._credType),
-    digestAuthRandom(params._digestAuthRandom),
-    nonceNcSize(params._nonceNcSize),
+    https_mem_key(params._https_mem_key),
+    https_mem_cert(params._https_mem_cert),
+    https_mem_trust(params._https_mem_trust),
+    https_priorities(params._https_priorities),
+    cred_type(params._cred_type),
+    digest_auth_random(params._digest_auth_random),
+    nonce_nc_size(params._nonce_nc_size),
     running(false),
-    defaultPolicy(params._defaultPolicy)
+    default_policy(params._default_policy)
 {
     ignore_sigpipe();
 }
 
-Webserver::~Webserver()
+webserver::~webserver()
 {
     this->stop();
 }
 
-void Webserver::sweetKill()
+void webserver::sweet_kill()
 {
     this->running = false;
 }
 
-void Webserver::requestCompleted (void *cls, struct MHD_Connection *connection, void **con_cls, enum MHD_RequestTerminationCode toe) 
+void webserver::request_completed (void *cls, struct MHD_Connection *connection, void **con_cls, enum MHD_RequestTerminationCode toe) 
 {
-    ModdedRequest* mr = (struct ModdedRequest*) *con_cls;
+    modded_request* mr = (struct modded_request*) *con_cls;
     if (NULL == mr) 
     {
         return;
@@ -283,11 +283,11 @@ void Webserver::requestCompleted (void *cls, struct MHD_Connection *connection, 
     }
     if(mr->second)
         delete mr->dhr; //TODO: verify. It could be an error
-    delete mr->completeUri;
+    delete mr->complete_uri;
     free(mr);
 }
 
-bool Webserver::start(bool blocking)
+bool webserver::start(bool blocking)
 {
     struct {
         MHD_OptionItem operator ()(enum MHD_OPTION opt, intptr_t val, void *ptr = 0) {
@@ -297,40 +297,40 @@ bool Webserver::start(bool blocking)
     } gen;
     vector<struct MHD_OptionItem> iov;
 
-    iov.push_back(gen(MHD_OPTION_NOTIFY_COMPLETED, (intptr_t) &requestCompleted, NULL ));
+    iov.push_back(gen(MHD_OPTION_NOTIFY_COMPLETED, (intptr_t) &request_completed, NULL ));
     iov.push_back(gen(MHD_OPTION_URI_LOG_CALLBACK, (intptr_t) &uri_log, this));
     iov.push_back(gen(MHD_OPTION_EXTERNAL_LOGGER, (intptr_t) &error_log, this));
     iov.push_back(gen(MHD_OPTION_UNESCAPE_CALLBACK, (intptr_t) &unescaper_func, this));
-    iov.push_back(gen(MHD_OPTION_CONNECTION_TIMEOUT, connectionTimeout));
-    if(bindAddress != 0x0)
-        iov.push_back(gen(MHD_OPTION_SOCK_ADDR, (intptr_t) bindAddress));
-    if(bindSocket != 0)
-        iov.push_back(gen(MHD_OPTION_LISTEN_SOCKET, bindSocket));
-    if(maxThreads != 0)
-        iov.push_back(gen(MHD_OPTION_THREAD_POOL_SIZE, maxThreads));
-    if(maxConnections != 0)
-        iov.push_back(gen(MHD_OPTION_CONNECTION_LIMIT, maxConnections));
-    if(memoryLimit != 0)
-        iov.push_back(gen(MHD_OPTION_CONNECTION_MEMORY_LIMIT, memoryLimit));
-    if(perIPConnectionLimit != 0)
-        iov.push_back(gen(MHD_OPTION_PER_IP_CONNECTION_LIMIT, perIPConnectionLimit));
-    if(maxThreadStackSize != 0)
-        iov.push_back(gen(MHD_OPTION_THREAD_STACK_SIZE, maxThreadStackSize));
-    if(nonceNcSize != 0)
-        iov.push_back(gen(MHD_OPTION_NONCE_NC_SIZE, nonceNcSize));
-    if(useSsl)
-        iov.push_back(gen(MHD_OPTION_HTTPS_MEM_KEY, 0, (void*)httpsMemKey.c_str()));
-    if(useSsl)
-        iov.push_back(gen(MHD_OPTION_HTTPS_MEM_CERT, 0, (void*)httpsMemCert.c_str()));
-    if(httpsMemTrust != "" && useSsl)
-        iov.push_back(gen(MHD_OPTION_HTTPS_MEM_TRUST, 0, (void*)httpsMemTrust.c_str()));
-    if(httpsPriorities != "" && useSsl)
-        iov.push_back(gen(MHD_OPTION_HTTPS_PRIORITIES, 0, (void*)httpsPriorities.c_str()));
-    if(digestAuthRandom != "")
-        iov.push_back(gen(MHD_OPTION_DIGEST_AUTH_RANDOM, digestAuthRandom.size(), (char*)digestAuthRandom.c_str()));
+    iov.push_back(gen(MHD_OPTION_CONNECTION_TIMEOUT, connection_timeout));
+    if(bind_address != 0x0)
+        iov.push_back(gen(MHD_OPTION_SOCK_ADDR, (intptr_t) bind_address));
+    if(bind_socket != 0)
+        iov.push_back(gen(MHD_OPTION_LISTEN_SOCKET, bind_socket));
+    if(max_threads != 0)
+        iov.push_back(gen(MHD_OPTION_THREAD_POOL_SIZE, max_threads));
+    if(max_connections != 0)
+        iov.push_back(gen(MHD_OPTION_CONNECTION_LIMIT, max_connections));
+    if(memory_limit != 0)
+        iov.push_back(gen(MHD_OPTION_CONNECTION_MEMORY_LIMIT, memory_limit));
+    if(per_IP_connection_limit != 0)
+        iov.push_back(gen(MHD_OPTION_PER_IP_CONNECTION_LIMIT, per_IP_connection_limit));
+    if(max_thread_stack_size != 0)
+        iov.push_back(gen(MHD_OPTION_THREAD_STACK_SIZE, max_thread_stack_size));
+    if(nonce_nc_size != 0)
+        iov.push_back(gen(MHD_OPTION_NONCE_NC_SIZE, nonce_nc_size));
+    if(use_ssl)
+        iov.push_back(gen(MHD_OPTION_HTTPS_MEM_KEY, 0, (void*)https_mem_key.c_str()));
+    if(use_ssl)
+        iov.push_back(gen(MHD_OPTION_HTTPS_MEM_CERT, 0, (void*)https_mem_cert.c_str()));
+    if(https_mem_trust != "" && use_ssl)
+        iov.push_back(gen(MHD_OPTION_HTTPS_MEM_TRUST, 0, (void*)https_mem_trust.c_str()));
+    if(https_priorities != "" && use_ssl)
+        iov.push_back(gen(MHD_OPTION_HTTPS_PRIORITIES, 0, (void*)https_priorities.c_str()));
+    if(digest_auth_random != "")
+        iov.push_back(gen(MHD_OPTION_DIGEST_AUTH_RANDOM, digest_auth_random.size(), (char*)digest_auth_random.c_str()));
 #ifdef HAVE_GNUTLS
-    if(credType != HttpUtils::NONE)
-        iov.push_back(gen(MHD_OPTION_HTTPS_CRED_TYPE, credType));
+    if(cred_type != http_utils::NONE)
+        iov.push_back(gen(MHD_OPTION_HTTPS_CRED_TYPE, cred_type));
 #endif
 
     iov.push_back(gen(MHD_OPTION_END, 0, NULL ));
@@ -341,20 +341,20 @@ bool Webserver::start(bool blocking)
         ops[i] = iov[i];
     }
 
-    int startConf = startMethod;
-    if(useSsl)
-        startConf |= MHD_USE_SSL;
-    if(useIpv6)
-        startConf |= MHD_USE_IPv6;
+    int start_conf = start_method;
+    if(use_ssl)
+        start_conf |= MHD_USE_SSL;
+    if(use_ipv6)
+        start_conf |= MHD_USE_IPv6;
     if(debug)
-        startConf |= MHD_USE_DEBUG;
+        start_conf |= MHD_USE_DEBUG;
     if(pedantic)
-        startConf |= MHD_USE_PEDANTIC_CHECKS;
+        start_conf |= MHD_USE_PEDANTIC_CHECKS;
 
     this->daemon = MHD_start_daemon
     (
-            startConf, this->port, &policyCallback, this,
-            &answerToConnection, this, MHD_OPTION_ARRAY, ops, MHD_OPTION_END
+            start_conf, this->port, &policy_callback, this,
+            &answer_to_connection, this, MHD_OPTION_ARRAY, ops, MHD_OPTION_END
     );
 
     if(NULL == daemon)
@@ -385,12 +385,12 @@ bool Webserver::start(bool blocking)
     return value_onclose;
 }
 
-bool Webserver::isRunning()
+bool webserver::is_running()
 {
     return this->running;
 }
 
-bool Webserver::stop()
+bool webserver::stop()
 {
     if(this->running)
     {
@@ -400,17 +400,17 @@ bool Webserver::stop()
     return true;
 }
 
-void Webserver::registerResource(const string& resource, HttpResource* http_resource, bool family)
+void webserver::register_resource(const string& resource, http_resource* http_resource, bool family)
 {
-    this->registeredResources[HttpEndpoint(resource, family, true)] = http_resource;
+    this->registered_resources[http_endpoint(resource, family, true)] = http_resource;
 }
 
-void Webserver::unregisterResource(const string& resource)
+void webserver::unregister_resource(const string& resource)
 {
-    this->registeredResources.erase(HttpEndpoint(resource));
+    this->registered_resources.erase(http_endpoint(resource));
 }
 
-void Webserver::banIp(const string& ip)
+void webserver::ban_ip(const string& ip)
 {
     ip_representation t_ip(ip);
     set<ip_representation>::iterator it = bans.find(t_ip);
@@ -423,7 +423,7 @@ void Webserver::banIp(const string& ip)
         this->bans.insert(t_ip);
 }
 
-void Webserver::allowIp(const string& ip)
+void webserver::allow_ip(const string& ip)
 {
     ip_representation t_ip(ip);
     set<ip_representation>::iterator it = allowances.find(t_ip);
@@ -436,60 +436,60 @@ void Webserver::allowIp(const string& ip)
         this->allowances.insert(t_ip);
 }
 
-void Webserver::unbanIp(const string& ip)
+void webserver::unban_ip(const string& ip)
 {
     this->bans.erase(ip);
 }
 
-void Webserver::disallowIp(const string& ip)
+void webserver::disallow_ip(const string& ip)
 {
     this->allowances.erase(ip);
 }
 
-int Webserver::buildRequestHeader (void *cls, enum MHD_ValueKind kind, const char *key, const char *value)
+int webserver::build_request_header (void *cls, enum MHD_ValueKind kind, const char *key, const char *value)
 {
-    HttpRequest* dhr = (HttpRequest*)(cls);
-    dhr->setHeader(key, value);
+    http_request* dhr = (http_request*)(cls);
+    dhr->set_header(key, value);
     return MHD_YES;
 }
 
-int Webserver::buildRequestCookie (void *cls, enum MHD_ValueKind kind, const char *key, const char *value)
+int webserver::build_request_cookie (void *cls, enum MHD_ValueKind kind, const char *key, const char *value)
 {
-    HttpRequest* dhr = (HttpRequest*)(cls);
-    dhr->setCookie(key, value);
+    http_request* dhr = (http_request*)(cls);
+    dhr->set_cookie(key, value);
     return MHD_YES;
 }
 
-int Webserver::buildRequestFooter (void *cls, enum MHD_ValueKind kind, const char *key, const char *value)
+int webserver::build_request_footer (void *cls, enum MHD_ValueKind kind, const char *key, const char *value)
 {
-    HttpRequest* dhr = (HttpRequest*)(cls);
-    dhr->setFooter(key, value);
+    http_request* dhr = (http_request*)(cls);
+    dhr->set_footer(key, value);
     return MHD_YES;
 }
 
-int Webserver::buildRequestArgs (void *cls, enum MHD_ValueKind kind, const char *key, const char *value)
+int webserver::build_request_args (void *cls, enum MHD_ValueKind kind, const char *key, const char *value)
 {
-    ModdedRequest* mr = (ModdedRequest*)(cls);
+    modded_request* mr = (modded_request*)(cls);
     int size = internal_unescaper((void*)mr->ws, (char*) value);
-    mr->dhr->setArg(key, string(value, size));
+    mr->dhr->set_arg(key, string(value, size));
     return MHD_YES;
 }
 
-int policyCallback (void *cls, const struct sockaddr* addr, socklen_t addrlen)
+int policy_callback (void *cls, const struct sockaddr* addr, socklen_t addrlen)
 {
 #ifdef DEBUG
     cout << "IP: " << get_ip_str(addr, addrlen) << " - " << "IP-LEN: " << addrlen << endl;
-    cout << "DEFAULT POLICY: " << (((Webserver*)cls)->defaultPolicy == HttpUtils::ACCEPT) << endl;
-    cout << "BANNED: " << (((Webserver*)cls)->bans.count(addr)) << endl;
-    cout << "ALLOWED: " << (((Webserver*)cls)->allowances.count(addr)) << endl;
+    cout << "DEFAULT POLICY: " << (((webserver*)cls)->default_policy == http_utils::ACCEPT) << endl;
+    cout << "BANNED: " << (((webserver*)cls)->bans.count(addr)) << endl;
+    cout << "ALLOWED: " << (((webserver*)cls)->allowances.count(addr)) << endl;
 #endif
-    if(((((Webserver*)cls)->defaultPolicy == HttpUtils::ACCEPT) && 
-       (((Webserver*)cls)->bans.count(addr)) && 
-       (!((Webserver*)cls)->allowances.count(addr))
+    if(((((webserver*)cls)->default_policy == http_utils::ACCEPT) && 
+       (((webserver*)cls)->bans.count(addr)) && 
+       (!((webserver*)cls)->allowances.count(addr))
     ) ||
-    ((((Webserver*)cls)->defaultPolicy == HttpUtils::REJECT) &&
-       ((!((Webserver*)cls)->allowances.count(addr)) ||
-       (((Webserver*)cls)->bans.count(addr)))
+    ((((webserver*)cls)->default_policy == http_utils::REJECT) &&
+       ((!((webserver*)cls)->allowances.count(addr)) ||
+       (((webserver*)cls)->bans.count(addr)))
     ))
         return MHD_NO;
     return MHD_YES;
@@ -497,18 +497,18 @@ int policyCallback (void *cls, const struct sockaddr* addr, socklen_t addrlen)
 
 void* uri_log(void* cls, const char* uri)
 {
-    struct ModdedRequest* mr = (struct ModdedRequest*) calloc(1,sizeof(struct ModdedRequest));
-    mr->completeUri = new string(uri);
+    struct modded_request* mr = (struct modded_request*) calloc(1,sizeof(struct modded_request));
+    mr->complete_uri = new string(uri);
     mr->second = false;
     return ((void*)mr);
 }
 
 void error_log(void* cls, const char* fmt, va_list ap)
 {
-    Webserver* dws = (Webserver*) cls;
-    if(dws->logDelegate != 0x0)
+    webserver* dws = (webserver*) cls;
+    if(dws->log_delegate != 0x0)
     {
-        dws->logDelegate->log_error(fmt);
+        dws->log_delegate->log_error(fmt);
     }
     else
     {
@@ -516,11 +516,11 @@ void error_log(void* cls, const char* fmt, va_list ap)
     }
 }
 
-void access_log(Webserver* dws, string uri)
+void access_log(webserver* dws, string uri)
 {
-    if(dws->logDelegate != 0x0)
+    if(dws->log_delegate != 0x0)
     {
-        dws->logDelegate->log_access(uri);
+        dws->log_delegate->log_access(uri);
     }
     else
     {
@@ -539,10 +539,10 @@ size_t unescaper_func(void * cls, struct MHD_Connection *c, char *s)
 
 size_t internal_unescaper(void* cls, char* s)
 {
-    Webserver* dws = (Webserver*) cls;
-    if(dws->unescaper != 0x0)
+    webserver* dws = (webserver*) cls;
+    if(dws->unescaper_pointer != 0x0)
     {
-        dws->unescaper->unescape(s);
+        dws->unescaper_pointer->unescape(s);
         return strlen(s);
     }
     else
@@ -551,7 +551,7 @@ size_t internal_unescaper(void* cls, char* s)
     }
 }
 
-int Webserver::post_iterator (void *cls, enum MHD_ValueKind kind,
+int webserver::post_iterator (void *cls, enum MHD_ValueKind kind,
     const char *key,
     const char *filename,
     const char *content_type,
@@ -559,17 +559,17 @@ int Webserver::post_iterator (void *cls, enum MHD_ValueKind kind,
     const char *data, uint64_t off, size_t size
     )
 {
-    struct ModdedRequest* mr = (struct ModdedRequest*) cls;
-    mr->dhr->setArg(key, data, size);
+    struct modded_request* mr = (struct modded_request*) cls;
+    mr->dhr->set_arg(key, data, size);
     return MHD_YES;
 }
 
-void Webserver::upgrade_handler (void *cls, struct MHD_Connection* connection,
+void webserver::upgrade_handler (void *cls, struct MHD_Connection* connection,
                                 void **con_cls, int upgrade_socket)
 {
 }
 
-int Webserver::not_found_page (const void *cls,
+int webserver::not_found_page (const void *cls,
     struct MHD_Connection *connection)
 {
     int ret;
@@ -589,7 +589,7 @@ int Webserver::not_found_page (const void *cls,
     return ret;
 }
 
-int Webserver::method_not_acceptable_page (const void *cls,
+int webserver::method_not_acceptable_page (const void *cls,
     struct MHD_Connection *connection)
 {
     int ret;
@@ -609,31 +609,31 @@ int Webserver::method_not_acceptable_page (const void *cls,
     return ret;
 }
 
-int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
+int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
     const char* url, const char* method,
     const char* version, const char* upload_data,
     size_t* upload_data_size, void** con_cls
     )
 {
     struct MHD_Response *response;
-    struct ModdedRequest *mr;
-    HttpRequest supportReq;
-    Webserver* dws = (Webserver*)(cls);
+    struct modded_request *mr;
+    http_request support_req;
+    webserver* dws = (webserver*)(cls);
     internal_unescaper(cls, (char*) url);
-    string st_url = HttpUtils::standardizeUrl(url);
+    string st_url = http_utils::standardize_url(url);
 
-    mr = (struct ModdedRequest*) *con_cls;
+    mr = (struct modded_request*) *con_cls;
     if(mr->second == false)
-        access_log(dws, *(mr->completeUri) + " METHOD: " + method);
+        access_log(dws, *(mr->complete_uri) + " METHOD: " + method);
     mr->ws = dws;
     if (0 == strcmp (method, MHD_HTTP_METHOD_POST) || 0 == strcmp(method, MHD_HTTP_METHOD_PUT)) 
     {
         if (mr->second == false) 
         {
             mr->second = true;
-            mr->dhr = new HttpRequest();
-            const char *encoding = MHD_lookup_connection_value (connection, MHD_HEADER_KIND, HttpUtils::http_header_content_type.c_str());
-            //mr->dhr->setHeader(HttpUtils::http_header_content_type, string(encoding));
+            mr->dhr = new http_request();
+            const char *encoding = MHD_lookup_connection_value (connection, MHD_HEADER_KIND, http_utils::http_header_content_type.c_str());
+            //mr->dhr->set_header(http_utils::http_header_content_type, string(encoding));
             if ( 0x0 != encoding && 0 == strcmp(method, MHD_HTTP_METHOD_POST) && ((0 == strncasecmp (MHD_HTTP_POST_ENCODING_FORM_URLENCODED, encoding, strlen (MHD_HTTP_POST_ENCODING_FORM_URLENCODED))))) 
             {
                 mr->pp = MHD_create_post_processor (connection, 1024, &post_iterator, mr);
@@ -647,8 +647,8 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
     }
     else 
     {
-        supportReq = HttpRequest();
-        mr->dhr = &supportReq;
+        support_req = http_request();
+        mr->dhr = &support_req;
     }
 
     if (    0 == strcmp(method, MHD_HTTP_METHOD_DELETE) || 
@@ -659,11 +659,11 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
         0 == strcmp(method, MHD_HTTP_METHOD_TRACE)
     ) 
     {
-        MHD_get_connection_values (connection, MHD_GET_ARGUMENT_KIND, &buildRequestArgs, (void*) mr);
+        MHD_get_connection_values (connection, MHD_GET_ARGUMENT_KIND, &build_request_args, (void*) mr);
     } 
     else if (0 == strcmp (method, MHD_HTTP_METHOD_POST) || 0 == strcmp(method, MHD_HTTP_METHOD_PUT)) 
     {
-        string encoding = mr->dhr->getHeader(HttpUtils::http_header_content_type);
+        string encoding = mr->dhr->get_header(http_utils::http_header_content_type);
         if ( 0 == strcmp(method, MHD_HTTP_METHOD_POST) && ((0 == strncasecmp (MHD_HTTP_POST_ENCODING_FORM_URLENCODED, encoding.c_str(), strlen (MHD_HTTP_POST_ENCODING_FORM_URLENCODED))))) 
         {
             MHD_post_process(mr->pp, upload_data, *upload_data_size);
@@ -673,7 +673,7 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
 #ifdef DEBUG
             cout << "Writing content: " << upload_data << endl;
 #endif
-            mr->dhr->growContent(upload_data, *upload_data_size);
+            mr->dhr->grow_content(upload_data, *upload_data_size);
             *upload_data_size = 0;
             return MHD_YES;
         } 
@@ -683,44 +683,44 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
         return method_not_acceptable_page(cls, connection);
     }
 
-    MHD_get_connection_values (connection, MHD_HEADER_KIND, &buildRequestHeader, (void*) mr->dhr);
-    MHD_get_connection_values (connection, MHD_FOOTER_KIND, &buildRequestFooter, (void*) mr->dhr);
-    MHD_get_connection_values (connection, MHD_COOKIE_KIND, &buildRequestCookie, (void*) mr->dhr);
+    MHD_get_connection_values (connection, MHD_HEADER_KIND, &build_request_header, (void*) mr->dhr);
+    MHD_get_connection_values (connection, MHD_FOOTER_KIND, &build_request_footer, (void*) mr->dhr);
+    MHD_get_connection_values (connection, MHD_COOKIE_KIND, &build_request_cookie, (void*) mr->dhr);
 
-    mr->dhr->setPath(st_url);
-    mr->dhr->setMethod(method);
+    mr->dhr->set_path(st_url);
+    mr->dhr->set_method(method);
 
     if (0 == strcmp (method, MHD_HTTP_METHOD_POST) || 0 == strcmp(method, MHD_HTTP_METHOD_PUT)) 
     {
-        supportReq = *(mr->dhr);
+        support_req = *(mr->dhr);
     } 
 
     char* pass = NULL;
     char* user = MHD_basic_auth_get_username_password(connection, &pass);
-    char* digestedUser = MHD_digest_auth_get_username(connection);
-    supportReq.setVersion(version);
+    char* digested_user = MHD_digest_auth_get_username(connection);
+    support_req.set_version(version);
     const MHD_ConnectionInfo * conninfo = MHD_get_connection_info(connection, MHD_CONNECTION_INFO_CLIENT_ADDRESS);
-    supportReq.setRequestor(get_ip_str(conninfo->client_addr));
-    supportReq.setRequestorPort(get_port(conninfo->client_addr));
+    support_req.set_requestor(get_ip_str(conninfo->client_addr));
+    support_req.set_requestor_port(get_port(conninfo->client_addr));
     if(pass != NULL)
     {
-        supportReq.setPass(pass);
-        supportReq.setUser(user);
+        support_req.set_pass(pass);
+        support_req.set_user(user);
     }
-    if(digestedUser != NULL)
+    if(digested_user != NULL)
     {
-        supportReq.setDigestedUser(digestedUser);
+        support_req.set_digested_user(digested_user);
     }
-    HttpEndpoint endpoint = HttpEndpoint(st_url);
-    HttpResponse dhrs;
-    const HttpEndpoint* matchingEndpoint = 0x0;
-    if(!(dws->registeredResources.count(endpoint) > 0)) 
+    http_endpoint endpoint = http_endpoint(st_url);
+    http_response dhrs;
+    const http_endpoint* matching_endpoint = 0x0;
+    if(!(dws->registered_resources.count(endpoint) > 0)) 
     {
-        map<HttpEndpoint, HttpResource* >::iterator it;
+        map<http_endpoint, http_resource* >::iterator it;
         int len = -1;
         int tot_len = -1;
         bool found = false;
-        for(it=dws->registeredResources.begin(); it!=dws->registeredResources.end(); it++) 
+        for(it=dws->registered_resources.begin(); it!=dws->registered_resources.end(); it++) 
         {
             int endpoint_pieces_len = ((int)((*it).first.get_url_pieces().size()));
             int endpoint_tot_len = ((int)((*it).first.get_url_complete().size()));
@@ -731,7 +731,7 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
                     found = true;
                     len = endpoint_pieces_len;
                     tot_len = endpoint_tot_len;
-                    matchingEndpoint = &((*it).first);
+                    matching_endpoint = &((*it).first);
                 }
             }
         }
@@ -741,28 +741,28 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
                 free (user);
             if (pass != 0x0)
                 free (pass);
-            if (digestedUser != 0x0)
-                free (digestedUser);
+            if (digested_user != 0x0)
+                free (digested_user);
             return not_found_page(cls, connection);
         } 
         else 
         {
-            vector<string> url_pars = matchingEndpoint->get_url_pars();
+            vector<string> url_pars = matching_endpoint->get_url_pars();
             vector<string> url_pieces = endpoint.get_url_pieces();
-            vector<int> chunkes = matchingEndpoint->get_chunk_positions();
+            vector<int> chunkes = matching_endpoint->get_chunk_positions();
             for(unsigned int i = 0; i < url_pars.size(); i++) 
             {
-                supportReq.setArg(url_pars[i], url_pieces[chunkes[i]]);
+                support_req.set_arg(url_pars[i], url_pieces[chunkes[i]]);
             }
         }
     }
     else
     {
-        matchingEndpoint = &endpoint;
+        matching_endpoint = &endpoint;
     }
-    supportReq.set_underlying_connection(connection);
+    support_req.set_underlying_connection(connection);
 #ifdef DEBUG
-        cout << "Using: " << matchingEndpoint->get_url_complete() << endl;
+        cout << "Using: " << matching_endpoint->get_url_complete() << endl;
 #endif
 #ifdef WITH_PYTHON
     PyGILState_STATE gstate;
@@ -771,21 +771,21 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
         gstate = PyGILState_Ensure();
     }
 #endif
-    dhrs = dws->registeredResources[*matchingEndpoint]->routeRequest(supportReq);
+    dhrs = dws->registered_resources[*matching_endpoint]->route_request(support_req);
 #ifdef WITH_PYTHON
     if(PyEval_ThreadsInitialized())
     {
         PyGILState_Release(gstate);
     }
 #endif
-    if(dhrs.responseType == HttpResponse::FILE_CONTENT)
+    if(dhrs.response_type == http_response::FILE_CONTENT)
     {
         struct stat st;
         fstat(dhrs.fp, &st);
         size_t filesize = st.st_size;
         response = MHD_create_response_from_fd(filesize, dhrs.fp);
     }
-    else if(dhrs.responseType == HttpResponse::SWITCH_PROTOCOL)
+    else if(dhrs.response_type == http_response::SWITCH_PROTOCOL)
     {
     //    response = MHD_create_response_for_upgrade(&upgrade_handler, (void*)dhrs.getSwitchCallback());
     }
@@ -804,27 +804,27 @@ int Webserver::answerToConnection(void* cls, MHD_Connection* connection,
             response = MHD_create_response_from_buffer(0, (void*)"", MHD_RESPMEM_MUST_COPY);
         }
     }
-    vector<pair<string,string> > response_headers = dhrs.getHeaders();
-    vector<pair<string,string> > response_footers = dhrs.getFooters();
+    vector<pair<string,string> > response_headers = dhrs.get_headers();
+    vector<pair<string,string> > response_footers = dhrs.get_footers();
     vector<pair<string,string> >::iterator it;
     for (it=response_headers.begin() ; it != response_headers.end(); it++)
         MHD_add_response_header(response, (*it).first.c_str(), (*it).second.c_str());
     for (it=response_footers.begin() ; it != response_footers.end(); it++)
         MHD_add_response_footer(response, (*it).first.c_str(), (*it).second.c_str());
     int to_ret;
-    if(dhrs.responseType == HttpResponse::DIGEST_AUTH_FAIL)
-        to_ret = MHD_queue_auth_fail_response(connection, dhrs.getRealm().c_str(), dhrs.getOpaque().c_str(), response, dhrs.needNonceReload() ? MHD_YES : MHD_NO);
-    else if(dhrs.responseType == HttpResponse::BASIC_AUTH_FAIL)
-        to_ret = MHD_queue_basic_auth_fail_response(connection, dhrs.getRealm().c_str(), response);
+    if(dhrs.response_type == http_response::DIGEST_AUTH_FAIL)
+        to_ret = MHD_queue_auth_fail_response(connection, dhrs.get_realm().c_str(), dhrs.get_opaque().c_str(), response, dhrs.need_nonce_reload() ? MHD_YES : MHD_NO);
+    else if(dhrs.response_type == http_response::BASIC_AUTH_FAIL)
+        to_ret = MHD_queue_basic_auth_fail_response(connection, dhrs.get_realm().c_str(), response);
     else
-        to_ret = MHD_queue_response(connection, dhrs.getResponseCode(), response);
+        to_ret = MHD_queue_response(connection, dhrs.get_response_code(), response);
 
     if (user != 0x0)
         free (user);
     if (pass != 0x0)
         free (pass);
-    if (digestedUser != 0x0)
-        free (digestedUser);
+    if (digested_user != 0x0)
+        free (digested_user);
     MHD_destroy_response (response);
     return to_ret;
 }

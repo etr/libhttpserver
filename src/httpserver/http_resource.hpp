@@ -25,139 +25,143 @@
 namespace httpserver
 {
 
-class Webserver;
-class HttpRequest;
-class HttpResponse;
+class webserver;
+class http_request;
+class http_response;
 
 /**
  * Class representing a callable http resource.
 **/
-class HttpResource 
+class http_resource 
 {
     public:
         /**
          * Constructor of the class
         **/
-        HttpResource();
+        http_resource();
+        /**
+         * Copy constructor
+        **/
+        http_resource(const http_resource& b) : allowed_methods(b.allowed_methods) { }
         /**
          * Class destructor
         **/
-        virtual ~HttpResource();
+        virtual ~http_resource();
         /**
          * Method used to answer to a generic request
          * @param req Request passed through http
-         * @return A HttpResponse object
+         * @return A http_response object
         **/
-        virtual HttpResponse render(const HttpRequest& req);
+        virtual http_response render(const http_request& req);
         /**
          * Method used to return a 404 error from the server
-         * @return A HttpResponse object containing a 404 error content and responseCode
+         * @return A http_response object containing a 404 error content and responseCode
         **/
-        virtual HttpResponse render_404();
+        virtual http_response render_404();
         /**
          * Method used to return a 500 error from the server
-         * @return A HttpResponse object containing a 500 error content and responseCode
+         * @return A http_response object containing a 500 error content and responseCode
         **/
-        virtual HttpResponse render_500();
+        virtual http_response render_500();
         /**
          * Method used to return a 405 error from the server
-         * @return A HttpResponse object containing a 405 error content and responseCode
+         * @return A http_response object containing a 405 error content and responseCode
         **/
-        virtual HttpResponse render_405();
+        virtual http_response render_405();
         /**
          * Method used to answer to a GET request
          * @param req Request passed through http
-         * @return A HttpResponse object
+         * @return A http_response object
         **/
-        virtual HttpResponse render_GET(const HttpRequest& req);
+        virtual http_response render_GET(const http_request& req);
         /**
          * Method used to answer to a POST request
          * @param req Request passed through http
-         * @return A HttpResponse object
+         * @return A http_response object
         **/
-        virtual HttpResponse render_POST(const HttpRequest& req);
+        virtual http_response render_POST(const http_request& req);
         /**
          * Method used to answer to a PUT request
          * @param req Request passed through http
-         * @return A HttpResponse object
+         * @return A http_response object
         **/
-        virtual HttpResponse render_PUT(const HttpRequest& req);
+        virtual http_response render_PUT(const http_request& req);
         /**
          * Method used to answer to a HEAD request
          * @param req Request passed through http
-         * @return A HttpResponse object
+         * @return A http_response object
         **/
-        virtual HttpResponse render_HEAD(const HttpRequest& req);
+        virtual http_response render_HEAD(const http_request& req);
         /**
          * Method used to answer to a DELETE request
          * @param req Request passed through http
-         * @return A HttpResponse object
+         * @return A http_response object
         **/
-        virtual HttpResponse render_DELETE(const HttpRequest& req);
+        virtual http_response render_DELETE(const http_request& req);
         /**
          * Method used to answer to a TRACE request
          * @param req Request passed through http
-         * @return A HttpResponse object
+         * @return A http_response object
         **/
-        virtual HttpResponse render_TRACE(const HttpRequest& req);
+        virtual http_response render_TRACE(const http_request& req);
         /**
          * Method used to answer to a OPTIONS request
          * @param req Request passed through http
-         * @return A HttpResponse object
+         * @return A http_response object
         **/
-        virtual HttpResponse render_OPTIONS(const HttpRequest& req);
+        virtual http_response render_OPTIONS(const http_request& req);
         /**
          * Method used to answer to a CONNECT request
          * @param req Request passed through http
-         * @return A HttpResponse object
+         * @return A http_response object
         **/
-        virtual HttpResponse render_CONNECT(const HttpRequest& req);
+        virtual http_response render_CONNECT(const http_request& req);
         /**
          * Method used to route the request to the correct object method according to the METHOD in the request
          * @param req Request passed through http
-         * @return A HttpResponse object
+         * @return A http_response object
         **/
-        virtual HttpResponse routeRequest(const HttpRequest& req);
+        virtual http_response route_request(const http_request& req);
         /**
          * Method used to set if a specific method is allowed or not on this request
          * @param method method to set permission on
          * @param allowed boolean indicating if the method is allowed or not
         **/
-        void setAllowing(const std::string& method, bool allowed)
+        void set_allowing(const std::string& method, bool allowed)
         {
-            if(this->allowedMethods.count(method)) 
+            if(this->allowed_methods.count(method)) 
             {
-                this->allowedMethods[method] = allowed;
+                this->allowed_methods[method] = allowed;
             }
         }
         /**
          * Method used to implicitly allow all methods
         **/
-        void allowAll()
+        void allow_all()
         {
             std::map<std::string,bool>::iterator it;
-            for ( it=this->allowedMethods.begin() ; it != this->allowedMethods.end(); it++ )
-                this->allowedMethods[(*it).first] = true;
+            for ( it=this->allowed_methods.begin() ; it != this->allowed_methods.end(); it++ )
+                this->allowed_methods[(*it).first] = true;
         }
         /**
          * Method used to implicitly disallow all methods
         **/
-        void disallowAll()
+        void disallow_all()
         {
             std::map<std::string,bool>::iterator it;
-            for ( it=this->allowedMethods.begin() ; it != this->allowedMethods.end(); it++ )
-                this->allowedMethods[(*it).first] = false;
+            for ( it=this->allowed_methods.begin() ; it != this->allowed_methods.end(); it++ )
+                this->allowed_methods[(*it).first] = false;
         }
         /**
          * Method used to discover if an http method is allowed or not for this resource
          * @param method Method to discover allowings
          * @return true if the method is allowed
         **/
-        bool isAllowed(const std::string& method)
+        bool is_allowed(const std::string& method)
         {
-            if(this->allowedMethods.count(method))
+            if(this->allowed_methods.count(method))
             {
-                return this->allowedMethods[method];
+                return this->allowed_methods[method];
             }
             else
             {
@@ -165,8 +169,8 @@ class HttpResource
             }
         }
     private:
-        friend class Webserver;
-        std::map<std::string, bool> allowedMethods;
+        friend class webserver;
+        std::map<std::string, bool> allowed_methods;
 };
 
 };

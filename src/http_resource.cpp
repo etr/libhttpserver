@@ -17,11 +17,11 @@
      Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
 */
-#include "HttpResource.hpp"
-#include "HttpUtils.hpp"
-#include "HttpRequest.hpp"
-#include "HttpResponse.hpp"
-#include "Webserver.hpp"
+#include "http_resource.hpp"
+#include "http_utils.hpp"
+#include "http_request.hpp"
+#include "http_response.hpp"
+#include "webserver.hpp"
 #include "string_utilities.hpp"
 
 using namespace std;
@@ -29,25 +29,25 @@ using namespace std;
 namespace httpserver 
 {
 //RESOURCE
-HttpResource::HttpResource() 
+http_resource::http_resource() 
 {
-    this->allowedMethods[MHD_HTTP_METHOD_GET] = true;
-    this->allowedMethods[MHD_HTTP_METHOD_POST] = true;
-    this->allowedMethods[MHD_HTTP_METHOD_PUT] = true;
-    this->allowedMethods[MHD_HTTP_METHOD_HEAD] = true;
-    this->allowedMethods[MHD_HTTP_METHOD_DELETE] = true;
-    this->allowedMethods[MHD_HTTP_METHOD_TRACE] = true;
-    this->allowedMethods[MHD_HTTP_METHOD_CONNECT] = true;
-    this->allowedMethods[MHD_HTTP_METHOD_OPTIONS] = true;
+    this->allowed_methods[MHD_HTTP_METHOD_GET] = true;
+    this->allowed_methods[MHD_HTTP_METHOD_POST] = true;
+    this->allowed_methods[MHD_HTTP_METHOD_PUT] = true;
+    this->allowed_methods[MHD_HTTP_METHOD_HEAD] = true;
+    this->allowed_methods[MHD_HTTP_METHOD_DELETE] = true;
+    this->allowed_methods[MHD_HTTP_METHOD_TRACE] = true;
+    this->allowed_methods[MHD_HTTP_METHOD_CONNECT] = true;
+    this->allowed_methods[MHD_HTTP_METHOD_OPTIONS] = true;
 }
 
-HttpResource::~HttpResource() 
+http_resource::~http_resource() 
 {
 }
 
-HttpResponse HttpResource::render(const HttpRequest& r) 
+http_response http_resource::render(const http_request& r) 
 {
-    if(this->isAllowed(r.getMethod()))
+    if(this->is_allowed(r.get_method()))
     {
         return this->render_404();
     } 
@@ -57,66 +57,66 @@ HttpResponse HttpResource::render(const HttpRequest& r)
     }
 }
 
-HttpResponse HttpResource::render_404() 
+http_response http_resource::render_404() 
 {
-    return HttpStringResponse(NOT_FOUND_ERROR, 404);
+    return http_string_response(NOT_FOUND_ERROR, 404);
 }
 
-HttpResponse HttpResource::render_405() 
+http_response http_resource::render_405() 
 {
-    return HttpStringResponse(METHOD_ERROR, 405);
+    return http_string_response(METHOD_ERROR, 405);
 }
 
-HttpResponse HttpResource::render_500() 
+http_response http_resource::render_500() 
 {
-    return HttpStringResponse(GENERIC_ERROR, 500);
+    return http_string_response(GENERIC_ERROR, 500);
 }
 
-HttpResponse HttpResource::render_GET(const HttpRequest& r) 
+http_response http_resource::render_GET(const http_request& r) 
 {
     return this->render(r);
 }
 
-HttpResponse HttpResource::render_POST(const HttpRequest& r) 
+http_response http_resource::render_POST(const http_request& r) 
 {
     return this->render(r);
 }
 
-HttpResponse HttpResource::render_PUT(const HttpRequest& r) 
+http_response http_resource::render_PUT(const http_request& r) 
 {
     return this->render(r);
 }
 
-HttpResponse HttpResource::render_DELETE(const HttpRequest& r) 
+http_response http_resource::render_DELETE(const http_request& r) 
 {
     return this->render(r);
 }
 
-HttpResponse HttpResource::render_HEAD(const HttpRequest& r) 
+http_response http_resource::render_HEAD(const http_request& r) 
 {
     return this->render(r);
 }
 
-HttpResponse HttpResource::render_TRACE(const HttpRequest& r) 
+http_response http_resource::render_TRACE(const http_request& r) 
 {
     return this->render(r);
 }
 
-HttpResponse HttpResource::render_OPTIONS(const HttpRequest& r) 
+http_response http_resource::render_OPTIONS(const http_request& r) 
 {
     return this->render(r);
 }
 
-HttpResponse HttpResource::render_CONNECT(const HttpRequest& r) 
+http_response http_resource::render_CONNECT(const http_request& r) 
 {
     return this->render(r);
 }
 
-HttpResponse HttpResource::routeRequest(const HttpRequest& r) 
+http_response http_resource::route_request(const http_request& r) 
 {
-    string method = string_utilities::to_upper_copy(r.getMethod());
+    string method = string_utilities::to_upper_copy(r.get_method());
 
-    HttpResponse res;
+    http_response res;
 
     if(method == MHD_HTTP_METHOD_GET) 
     {

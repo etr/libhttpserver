@@ -24,7 +24,7 @@ pythonSitePackagesdir_LTLIBRARIES = _libhttpserver_python.la
 pythonSitePackagesdir_SCRIPTS = libhttpserver_python.py
 _libhttpserver_python_la_LDFLAGS = -module $(PYLDFLAGS)
 _libhttpserver_python_la_LIBADD = -lmicrohttpd $(PYLIBS)
-_libhttpserver_python_la_SOURCES = WebserverWrap.cpp $(top_srcdir)/src/Webserver.cpp $(top_srcdir)/src/HttpUtils.cpp $(top_srcdir)/src/HttpEndpoint.cpp $(top_srcdir)/src/HttpResource.cpp $(top_srcdir)/src/HttpRequest.cpp $(top_srcdir)/src/HttpResponse.cpp $(top_srcdir)/src/string_utilities.cpp
+_libhttpserver_python_la_SOURCES = webserver_wrap.cpp $(top_srcdir)/src/webserver.cpp $(top_srcdir)/src/http_utils.cpp $(top_srcdir)/src/http_endpoint.cpp $(top_srcdir)/src/http_resource.cpp $(top_srcdir)/src/http_request.cpp $(top_srcdir)/src/http_response.cpp $(top_srcdir)/src/string_utilities.cpp
 
 language=python
 swigoptions=-Wall
