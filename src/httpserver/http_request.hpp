@@ -46,34 +46,7 @@ using namespace http;
 class http_request 
 {
     public:
-        /**
-         * Default constructor of the class. It is a specific responsibility of apis to initialize this type of objects.
-        **/
-        http_request():
-            content("")
-        {
-        }
-        /**
-         * Copy constructor.
-         * @param b http_request b to copy attributes from.
-        **/
-        http_request(const http_request& b):
-            user(b.user),
-            pass(b.pass),
-            path(b.path),
-            digested_user(b.digested_user),
-            method(b.method),
-            post_path(b.post_path),
-            headers(b.headers),
-            footers(b.footers),
-            cookies(b.cookies),
-            args(b.args),
-            content(b.content),
-            version(b.version),
-            requestor(b.requestor),
-            underlying_connection(b.underlying_connection)
-        {
-        }
+
         /**
          * Method used to get the username eventually passed through basic authentication.
          * @return string representation of the username.
@@ -406,7 +379,34 @@ class http_request
         }
         bool check_digest_auth(const std::string& realm, const std::string& password, int nonce_timeout, bool& reload_nonce) const;
     private:
-        friend class webserver;
+        /**
+         * Default constructor of the class. It is a specific responsibility of apis to initialize this type of objects.
+        **/
+        http_request():
+            content("")
+        {
+        }
+        /**
+         * Copy constructor.
+         * @param b http_request b to copy attributes from.
+        **/
+        http_request(const http_request& b):
+            user(b.user),
+            pass(b.pass),
+            path(b.path),
+            digested_user(b.digested_user),
+            method(b.method),
+            post_path(b.post_path),
+            headers(b.headers),
+            footers(b.footers),
+            cookies(b.cookies),
+            args(b.args),
+            content(b.content),
+            version(b.version),
+            requestor(b.requestor),
+            underlying_connection(b.underlying_connection)
+        {
+        }
         std::string user;
         std::string pass;
         std::string path;
@@ -427,6 +427,7 @@ class http_request
         {
             this->underlying_connection = conn;
         }
+        friend class webserver;
 };
 
 };

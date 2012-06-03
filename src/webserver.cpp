@@ -718,7 +718,7 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
     {
         support_req.set_digested_user(digested_user);
     }
-    http_endpoint endpoint = http_endpoint(st_url);
+    http_endpoint endpoint(st_url);
     http_response dhrs;
     const http_endpoint* matching_endpoint = 0x0;
     if(!(dws->registered_resources.count(endpoint) > 0)) 

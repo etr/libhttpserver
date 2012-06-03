@@ -27,6 +27,13 @@ namespace httpserver
 {
 using namespace http;
 //ENDPOINT
+http_endpoint::~http_endpoint()
+{
+    if(reg_compiled)
+    {
+        regfree(&(this->re_url_modded));
+    }
+}
 http_endpoint::http_endpoint(const string& url, bool family, bool registration):
     url_complete(string_utilities::to_lower_copy(url)),
     url_modded("/"),

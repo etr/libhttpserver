@@ -36,14 +36,6 @@ class http_resource
 {
     public:
         /**
-         * Constructor of the class
-        **/
-        http_resource();
-        /**
-         * Copy constructor
-        **/
-        http_resource(const http_resource& b) : allowed_methods(b.allowed_methods) { }
-        /**
          * Class destructor
         **/
         virtual ~http_resource();
@@ -168,6 +160,16 @@ class http_resource
                 return false;
             }
         }
+    protected:
+        /**
+         * Constructor of the class
+        **/
+        http_resource();
+        /**
+         * Copy constructor
+        **/
+        http_resource(const http_resource& b) : allowed_methods(b.allowed_methods) { }
+
     private:
         friend class webserver;
         std::map<std::string, bool> allowed_methods;

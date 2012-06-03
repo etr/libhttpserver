@@ -54,7 +54,7 @@ class http_response
             BASIC_AUTH_FAIL,
             SWITCH_PROTOCOL
         };
-        
+
         /**
          * Constructor used to build an http_response with a content and a response_code
          * @param content The content to set for the request. (if the response_type is FILE_CONTENT, it represents the path to the file to read from).
@@ -82,7 +82,6 @@ class http_response
         {
             set_header(http_utils::http_header_content_type, content_type);
         }
-
         /**
          * Copy constructor
          * @param b The http_response object to copy attributes value from.
@@ -231,7 +230,6 @@ class http_response
             return 0;
         }
     protected:
-        friend class webserver;
         response_type_T response_type;
         std::string content;
         int response_code;
@@ -242,6 +240,7 @@ class http_response
         std::string filename;
         std::map<std::string, std::string, header_comparator> headers;
         std::map<std::string, std::string, arg_comparator> footers;
+        friend class webserver;
 };
 
 class http_string_response : public http_response

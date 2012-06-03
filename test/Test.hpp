@@ -4,18 +4,18 @@
 
 using namespace httpserver;
 
-class Test : virtual public HttpResource {
+class Test : virtual public http_resource {
 	public:
         Test();
-		virtual HttpResponse render_GET(const HttpRequest&);
-        virtual HttpResponse render_PUT(const HttpRequest&);
-        virtual HttpResponse render_POST(const HttpRequest&);
+		virtual http_response render_GET(const http_request&);
+        virtual http_response render_PUT(const http_request&);
+        virtual http_response render_POST(const http_request&);
 };
 
-class Test2 : virtual public HttpResource {
+class Test2 : virtual public http_resource {
 	public:
         Test2();
-        virtual HttpResponse render_GET(const HttpRequest&);
+        virtual http_response render_GET(const http_request&);
 };
 
 #endif

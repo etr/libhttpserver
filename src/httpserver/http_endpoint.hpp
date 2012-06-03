@@ -21,6 +21,7 @@
 #define _HTTP_ENDPOINT_HPP_
 
 #include <vector>
+#include <utility>
 #include <regex.h>
 #include <string>
 
@@ -36,47 +37,14 @@ class http_endpoint
 {
     public:
         /**
-         * Default constructor of the class.
-         * @param family boolean that indicates if the endpoint is a family endpoint.
-         *                A family endpoint is an endpoint that identifies a root and all its child like the same resource.
-         *                For example, if I identify "/path/" like a family endpoint and I associate to it the resource "A", also
-         *                "/path/to/res/" is automatically associated to resource "A".
-        **/
-        http_endpoint(bool family = false):
-            url_complete("/"),
-            url_modded("/"),
-            family_url(family),
-            reg_compiled(false)
-        {
-        }
-        /**
-         * Constructor of the class http_endpoint. It is used to initialize an http_endpoint starting from a string form URL.
-         * @param url The string representation of the endpoint. All endpoints are in the form "/path/to/resource".
-         * @param family boolean that indicates if the endpoint is a family endpoint.
-         *                A family endpoint is an endpoint that identifies a root and all its child like the same resource.
-         *                For example, if I identify "/path/" like a family endpoint and I associate to it the resource "A", also
-         *                "/path/to/res/" is automatically associated to resource "A".
-         * @param registration boolean that indicates to the system if this is an endpoint that need to be registered to a webserver
-         *                     or it is simply an endpoint to be used for comparisons.
-        **/
-        http_endpoint(const std::string& url, bool family = false, bool registration = false);
-        /**
          * Copy constructor. It is useful expecially to copy regex_t structure that contains dinamically allocated data.
          * @param h The http_endpoint to copy
         **/
         http_endpoint(const http_endpoint& h);
         /**
-         * Destructor of the class. Essentially it frees the regex dinamically allocated pattern
+         * Class Destructor
         **/
-        ~http_endpoint()
-        {
-            
-            if(reg_compiled)
-            {
-                regfree(&(this->re_url_modded));
-            }
-            
-        }
+        ~http_endpoint(); //if inlined it causes problems during ruby wrapper compiling
         /**
          * Operator overload for "less than operator". It is used to order endpoints in maps.
          * @param b The http_endpoint to compare to
@@ -130,6 +98,34 @@ class http_endpoint
             return this->chunk_positions;
         }
     private:
+        /**
+         * Default constructor of the class.
+         * @param family boolean that indicates if the endpoint is a family endpoint.
+         *                A family endpoint is an endpoint that identifies a root and all its child like the same resource.
+         *                For example, if I identify "/path/" like a family endpoint and I associate to it the resource "A", also
+         *                "/path/to/res/" is automatically associated to resource "A".
+        **/
+        http_endpoint(bool family = false):
+            url_complete("/"),
+            url_modded("/"),
+            family_url(family),
+            reg_compiled(false)
+        {
+        }
+        /**
+         * Constructor of the class http_endpoint. It is used to initialize an http_endpoint starting from a string form URL.
+         * @param url The string representation of the endpoint. All endpoints are in the form "/path/to/resource".
+         * @param family boolean that indicates if the endpoint is a family endpoint.
+         *                A family endpoint is an endpoint that identifies a root and all its child like the same resource.
+         *                For example, if I identify "/path/" like a family endpoint and I associate to it the resource "A", also
+         *                "/path/to/res/" is automatically associated to resource "A".
+         * @param registration boolean that indicates to the system if this is an endpoint that need to be registered to a webserver
+         *                     or it is simply an endpoint to be used for comparisons.
+        **/
+        http_endpoint(const std::string& url, bool family = false, bool registration = false);
+        /**
+         * Destructor of the class. Essentially it frees the regex dinamically allocated pattern
+        **/
         std::string url_complete;
         std::string url_modded;
         std::vector<std::string> url_pars;
@@ -139,6 +135,7 @@ class http_endpoint
 //      boost::xpressive::sregex re_url_modded;
         bool family_url;
         bool reg_compiled;
+        friend class webserver;
 };
 
 };
