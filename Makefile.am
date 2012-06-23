@@ -26,7 +26,9 @@ ACLOCAL_AMFLAGS = -I m4
 
 SUBDIRS = src $(PYTHON_DIR) $(JAVA_DIR) $(PHP_DIR) $(LUA_DIR) $(PERL_DIR) $(RUBY_DIR) $(GUILE_DIR)
 DIST_SUBDIRS = src $(PYTHON_DIR) $(JAVA_DIR) $(PHP_DIR) $(LUA_DIR) $(PERL_DIR) $(RUBY_DIR) $(GUILE_DIR)
-EXTRA_DIST = libhttpserver.pc.in $(DOXYFILE) $(PYTHON_EXTRA) $(PHP_EXTRA) $(PERL_EXTRA)
+EXTRA_DIST = libhttpserver.pc.in $(DX_CONFIG) $(PYTHON_EXTRA) $(PHP_EXTRA) $(PERL_EXTRA)
+
+MOSTLYCLEANFILES = $(DX_CLEANFILES)
 
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = libhttpserver.pc
@@ -63,7 +65,6 @@ GUILE_DIR = src/guile
 endif
 
 include $(top_srcdir)/aminclude.am
-DOXYFILE = doxyconfig
 
 # Update libtool, if needed.
 libtool: $(LIBTOOL_DEPS)

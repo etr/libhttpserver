@@ -261,10 +261,12 @@ class http_file_response : public http_response
     public:
         http_file_response
         (
-            const std::string& filename, 
+            const std::string& filename,
             int response_code,
             const std::string& content_type = "text/plain"
-        );
+        ) : http_response(http_response::FILE_CONTENT, filename, response_code, content_type)
+        {
+        }
 
         http_file_response(const http_file_response& b) : http_response(b) { }
 };

@@ -177,7 +177,7 @@ DX_RTF_FEATURE(OFF)
 DX_XML_FEATURE(OFF)
 DX_PDF_FEATURE(OFF)
 DX_PS_FEATURE(OFF)
-DX_INIT_DOXYGEN([$PACKAGE_NAME],[doxyconfig])
+DX_INIT_DOXYGEN([$PACKAGE_NAME],[doxyconfig.in])
 
 if test x$swig = xtrue; then
 	AC_CHECK_PROG([SWIG], [swig], ["yes"], ["no"])

@@ -54,31 +54,6 @@ const std::vector<std::pair<std::string, std::string> > http_response::get_foote
     return to_ret;
 }
 //RESPONSE
-http_file_response::http_file_response
-(
-    const string& filename,
-    int response_code,
-    const std::string& content_type
-)
-{
-    FILE* f;
-    this->filename = filename;
-    if(!(f = fopen(filename.c_str(), "r")))
-    {
-        this->response_type = http_response::STRING_CONTENT;
-        this->content = NOT_FOUND_ERROR;
-        this->response_code = http_utils::http_not_found;
-        this->set_header(http_utils::http_header_content_type, content_type);
-        this->fp = -1;
-    }
-    else
-    {
-        this->response_type = http_response::FILE_CONTENT;
-        this->response_code = response_code;
-        this->fp = fileno(f);
-    }
-}
-
 shoutCAST_response::shoutCAST_response
 (
     const std::string& content,

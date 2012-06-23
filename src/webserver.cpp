@@ -20,6 +20,7 @@
 #include <stdint.h>
 #include <inttypes.h>
 #include <iostream>
+#include <fstream>
 #include <stdlib.h>
 #include <stdio.h>
 #include <errno.h>
@@ -77,55 +78,26 @@ static void ignore_sigpipe ()
         fprintf (stderr, gettext("Failed to install SIGPIPE handler: %s\n"), strerror (errno));
 }
 
-static long get_file_size (const char *filename)
+static size_t load_file (const char* filename, char** content)
 {
-    FILE *fp;
-
-    fp = fopen (filename, "rb");
-    if (fp)
-    {   
-        long size;
-
-        if ((0 != fseek (fp, 0, SEEK_END)) || (-1 == (size = ftell (fp))))
-            size = 0;
-
-        fclose (fp);
-
+    ifstream fp(filename, ios::in | ios::binary | ios::ate);
+    if(fp.is_open())
+    {
+        int size = fp.tellg();
+        *content = (char*) malloc(size * sizeof(char));
+        fp.seekg(0, ios::beg);
+        fp.read(*content, size);
+        fp.close();
         return size;
-    }   
-    else
+    }
     return 0;
 }
 
-static char * load_file (const char *filename)
+static char* load_file (const char *filename)
 {
-    FILE *fp;
-    char *buffer;
-    long size;
-
-    size = get_file_size (filename);
-    if (size == 0)
-        return NULL;
-
-    fp = fopen (filename, "rb");
-    if (!fp)
-        return NULL;
-
-    buffer = (char*) malloc (size);
-    if (!buffer)
-    {   
-        fclose (fp);
-        return NULL;
-    }   
-
-    if (size != (int) fread (buffer, 1, size, fp))
-    {   
-        free (buffer);
-        buffer = NULL;
-    }   
-
-    fclose (fp);
-    return buffer;
+    char* content = NULL;
+    load_file(filename, &content);
+    return content;
 }
 
 //LOGGING DELEGATE
@@ -154,19 +126,25 @@ void unescaper::unescape(char* s) const {}
 //WEBSERVER CREATOR
 create_webserver& create_webserver::https_mem_key(const std::string& https_mem_key)
 {
-    _https_mem_key = load_file(https_mem_key.c_str());
+    char* _https_mem_key_pt = load_file(https_mem_key.c_str());
+    _https_mem_key = _https_mem_key_pt;
+    free(_https_mem_key_pt);
     return *this;
 }
 
 create_webserver& create_webserver::https_mem_cert(const std::string& https_mem_cert)
 {
-    _https_mem_cert = load_file(https_mem_cert.c_str());
+    char* _https_mem_cert_pt = load_file(https_mem_cert.c_str());
+    _https_mem_cert = _https_mem_cert_pt;
+    free(_https_mem_cert_pt);
     return *this;
 }
 
 create_webserver& create_webserver::https_mem_trust(const std::string& https_mem_trust)
 {
-    _https_mem_trust = load_file(https_mem_trust.c_str());
+    char* _https_mem_trust_pt = load_file(https_mem_trust.c_str());
+    _https_mem_trust = _https_mem_trust_pt;
+    free(_https_mem_trust_pt);
     return *this;
 }
 
@@ -787,10 +765,20 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
 #endif
     if(dhrs.response_type == http_response::FILE_CONTENT)
     {
-        struct stat st;
-        fstat(dhrs.fp, &st);
-        size_t filesize = st.st_size;
-        response = MHD_create_response_from_fd(filesize, dhrs.fp);
+        char* page = NULL;
+        size_t size = load_file(dhrs.filename.c_str(), &page);
+        if(size)
+            response = MHD_create_response_from_buffer(size, page, MHD_RESPMEM_MUST_FREE);
+        else
+        {
+            if (user != 0x0)
+                free (user);
+            if (pass != 0x0)
+                free (pass);
+            if (digested_user != 0x0)
+                free (digested_user);
+            return not_found_page(cls, connection);
+        }
     }
     else if(dhrs.response_type == http_response::SWITCH_PROTOCOL)
     {
@@ -800,11 +788,13 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
     {
         if(dhrs.content != "")
         {
+            //this process is necessary to avoid to truncate byte strings to '\0'
             vector<char> v_page(dhrs.content.begin(), dhrs.content.end());
             size_t size = v_page.size();
-            char page[size];
-            memcpy( (char*) page, &v_page[0], sizeof( char ) * size );
-            response = MHD_create_response_from_buffer(size, page, MHD_RESPMEM_MUST_COPY);
+            char* page = (char*) malloc(sizeof(char)*size);
+            memcpy( page, &v_page[0], sizeof( char ) * size );
+            //end string conversion process
+            response = MHD_create_response_from_buffer(size, page, MHD_RESPMEM_MUST_FREE);
         }
         else
         {
