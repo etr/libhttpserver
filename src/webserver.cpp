@@ -455,12 +455,6 @@ int webserver::build_request_args (void *cls, enum MHD_ValueKind kind, const cha
 
 int policy_callback (void *cls, const struct sockaddr* addr, socklen_t addrlen)
 {
-#ifdef DEBUG
-    cout << "IP: " << get_ip_str(addr, addrlen) << " - " << "IP-LEN: " << addrlen << endl;
-    cout << "DEFAULT POLICY: " << (((webserver*)cls)->default_policy == http_utils::ACCEPT) << endl;
-    cout << "BANNED: " << (((webserver*)cls)->bans.count(addr)) << endl;
-    cout << "ALLOWED: " << (((webserver*)cls)->allowances.count(addr)) << endl;
-#endif
     if(((((webserver*)cls)->default_policy == http_utils::ACCEPT) && 
        (((webserver*)cls)->bans.count(addr)) && 
        (!((webserver*)cls)->allowances.count(addr))
@@ -598,7 +592,8 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
     http_request support_req;
     webserver* dws = (webserver*)(cls);
     internal_unescaper(cls, (char*) url);
-    string st_url = http_utils::standardize_url(url);
+    string st_url;
+    http_utils::standardize_url(url, st_url);
 
     mr = (struct modded_request*) *con_cls;
     if(mr->second == false)
@@ -685,7 +680,9 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
     char* digested_user = MHD_digest_auth_get_username(connection);
     support_req.set_version(version);
     const MHD_ConnectionInfo * conninfo = MHD_get_connection_info(connection, MHD_CONNECTION_INFO_CLIENT_ADDRESS);
-    support_req.set_requestor(get_ip_str(conninfo->client_addr));
+    std::string ip_str;
+    get_ip_str(conninfo->client_addr, ip_str);
+    support_req.set_requestor(ip_str);
     support_req.set_requestor_port(get_port(conninfo->client_addr));
     if(pass != NULL)
     {
@@ -707,8 +704,8 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
         bool found = false;
         for(it=dws->registered_resources.begin(); it!=dws->registered_resources.end(); it++) 
         {
-            int endpoint_pieces_len = ((int)((*it).first.get_url_pieces().size()));
-            int endpoint_tot_len = ((int)((*it).first.get_url_complete().size()));
+            int endpoint_pieces_len = (*it).first.get_url_pieces_num();
+            int endpoint_tot_len = (*it).first.get_url_complete_size();
             if(tot_len == -1 || len == -1 || endpoint_pieces_len > len || (endpoint_pieces_len == len && endpoint_tot_len > tot_len))
             {
                 if((*it).first.match(endpoint))
@@ -732,10 +729,13 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
         } 
         else 
         {
-            vector<string> url_pars = matching_endpoint->get_url_pars();
-            vector<string> url_pieces = endpoint.get_url_pieces();
-            vector<int> chunkes = matching_endpoint->get_chunk_positions();
-            for(unsigned int i = 0; i < url_pars.size(); i++) 
+            vector<string> url_pars;
+            unsigned int pars_size = matching_endpoint->get_url_pars(url_pars);
+            vector<string> url_pieces;
+            endpoint.get_url_pieces(url_pieces);
+            vector<int> chunkes;
+            matching_endpoint->get_chunk_positions(chunkes);
+            for(unsigned int i = 0; i < pars_size; i++) 
             {
                 support_req.set_arg(url_pars[i], url_pieces[chunkes[i]]);
             }
@@ -801,8 +801,10 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
             response = MHD_create_response_from_buffer(0, (void*)"", MHD_RESPMEM_MUST_COPY);
         }
     }
-    vector<pair<string,string> > response_headers = dhrs.get_headers();
-    vector<pair<string,string> > response_footers = dhrs.get_footers();
+    vector<pair<string,string> > response_headers;
+    dhrs.get_headers(response_headers);
+    vector<pair<string,string> > response_footers;
+    dhrs.get_footers(response_footers);
     vector<pair<string,string> >::iterator it;
     for (it=response_headers.begin() ; it != response_headers.end(); it++)
         MHD_add_response_header(response, (*it).first.c_str(), (*it).second.c_str());

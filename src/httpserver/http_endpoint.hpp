@@ -73,6 +73,14 @@ class http_endpoint
         {
             return this->url_complete;
         }
+        void get_url_complete(std::string& result) const
+        {
+            result = this->url_complete;
+        }
+        size_t get_url_complete_size() const
+        {
+            return this->url_complete.size();
+        }
         /**
          * Method used to get all pars defined inside an url.
          * @return a vector of strings representing all found pars.
@@ -80,6 +88,11 @@ class http_endpoint
         const std::vector<std::string> get_url_pars() const
         {
             return this->url_pars;
+        }
+        size_t get_url_pars(std::vector<std::string>& result) const
+        {
+            result = this->url_pars;
+            return result.size();
         }
         /**
          * Method used to get all pieces of an url; considering an url splitted by '/'.
@@ -89,6 +102,15 @@ class http_endpoint
         {
             return this->url_pieces;
         }
+        size_t get_url_pieces(std::vector<std::string>& result) const
+        {
+            result = this->url_pieces;
+            return result.size();
+        }
+        size_t get_url_pieces_num() const
+        {
+            return this->url_pieces.size();
+        }
         /**
          * Method used to get indexes of all parameters inside url
          * @return a vector of int indicating all positions.
@@ -96,6 +118,11 @@ class http_endpoint
         const std::vector<int> get_chunk_positions() const
         {
             return this->chunk_positions;
+        }
+        size_t get_chunk_positions(std::vector<int>& result) const
+        {
+            result = this->chunk_positions;
+            return result.size();
         }
     private:
         /**

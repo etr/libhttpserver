@@ -114,7 +114,9 @@ http_response http_resource::render_CONNECT(const http_request& r)
 
 http_response http_resource::route_request(const http_request& r) 
 {
-    string method = string_utilities::to_upper_copy(r.get_method());
+    string method;
+    r.get_method(method);
+    string_utilities::to_upper(method);
 
     http_response res;
 

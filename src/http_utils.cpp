@@ -162,25 +162,27 @@ const std::string http_utils::http_post_encoding_form_urlencoded = MHD_HTTP_POST
 const std::string http_utils::http_post_encoding_multipart_formdata = MHD_HTTP_POST_ENCODING_MULTIPART_FORMDATA;
 
 
-const std::vector<std::string> http_utils::tokenize_url(const std::string& str, const char separator)
+size_t http_utils::tokenize_url(const std::string& str, std::vector<std::string>& result, const char separator)
 {
-    return string_utilities::string_split(str, separator);
+    string_utilities::string_split(str, result, separator);
+    return result.size();
 }
 
-std::string http_utils::standardize_url(const std::string& url)
+void http_utils::standardize_url(const std::string& url, std::string& result)
 {
-    std::string n_url = string_utilities::regex_replace(url, "(\\/)+", "/");
+    std::string n_url;
+    string_utilities::regex_replace(url, "(\\/)+", "/", n_url);
     if(n_url[n_url.size() - 1] == '/')
     {
-        return n_url.substr(0, n_url.size() -1);
+        result = n_url.substr(0, n_url.size() -1);
     }
     else
     {
-        return n_url;
+        result = n_url;
     }
 }
 
-std::string get_ip_str(const struct sockaddr *sa, socklen_t maxlen)
+void get_ip_str(const struct sockaddr *sa, std::string& result, socklen_t maxlen)
 {
     char to_ret[INET6_ADDRSTRLEN] = { '\0' };
     switch(sa->sa_family) 
@@ -198,9 +200,9 @@ std::string get_ip_str(const struct sockaddr *sa, socklen_t maxlen)
             break;
         default:
             strncpy(to_ret, "Unknown AF", 11);
-            return NULL;
+            return;
     }
-    return to_ret;
+    result = to_ret;
 }
 
 const struct sockaddr str_to_ip(const std::string& src)
@@ -298,7 +300,7 @@ ip_representation::ip_representation(const std::string& ip)
     if(ip.find(':') != std::string::npos) //IPV6
     {
         ip_version = http_utils::IPV6;
-        parts = string_utilities::string_split(ip, ':', false);
+        string_utilities::string_split(ip, parts, ':', false);
         int y = 0;
         for(unsigned int i = 0; i < parts.size(); i++)
         {
@@ -324,7 +326,8 @@ ip_representation::ip_representation(const std::string& ip)
                     }
                     if(parts[i].find('.') != std::string::npos)
                     {
-                        vector<string> subparts = string_utilities::string_split(parts[i], '.');
+                        vector<string> subparts;
+                        string_utilities::string_split(parts[i], subparts, '.');
                         if(subparts.size() == 4)
                         {
                             for(unsigned int ii = 0; ii < subparts.size(); ii++)
@@ -381,7 +384,7 @@ ip_representation::ip_representation(const std::string& ip)
     else //IPV4
     {
         ip_version = http_utils::IPV4;
-        parts = string_utilities::string_split(ip, '.');
+        string_utilities::string_split(ip, parts, '.');
         if(parts.size() == 4)
         {
             for(unsigned int i = 0; i < parts.size(); i++)

@@ -53,17 +53,7 @@ namespace std {
 %module(directors="1") libhttpserver_python
 #endif
 
-//%feature("director") webserver;
-//%feature("director") http_request;
-//%feature("director") http_response;
-//%feature("director") http_string_response;
-//%feature("director") http_file_response;
-//%feature("director") http_basic_auth_fail_response;
-//%feature("director") http_digest_auth_fail_response;
-//%feature("director") shoutCAST_response;
 %feature("director") http_resource;
-//%feature("director") http_endpoint;
-//%feature("director") http_utils;
 
 #ifdef SWIGPYTHON
 %typemap(out) string {

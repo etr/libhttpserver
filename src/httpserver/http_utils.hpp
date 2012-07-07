@@ -207,8 +207,8 @@ class http_utils
 #ifdef SWIG
         %mutable;
 #endif
-        static const std::vector<std::string> tokenize_url(const std::string&, const char separator = '/');
-        static std::string standardize_url(const std::string&);
+        static size_t tokenize_url(const std::string&, std::vector<std::string>& result, const char separator = '/');
+        static void standardize_url(const std::string&, std::string& result);
 };
 
 class header_comparator {
@@ -303,7 +303,7 @@ struct ip_representation
  * @param maxlen Maxlen of the address (automatically discovered if not passed)
  * @return string containing the ip address
 **/
-std::string get_ip_str(const struct sockaddr *sa, socklen_t maxlen = 0);
+void get_ip_str(const struct sockaddr *sa, std::string& result, socklen_t maxlen = 0);
 /**
  * Method used to get a port from a sockaddr
  * @param sa The sockaddr object to find the port from

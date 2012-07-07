@@ -33,42 +33,49 @@ namespace httpserver
 namespace string_utilities
 {
 
-std::string to_upper_copy(std::string str)
+void to_upper_copy(const std::string& str, std::string& result)
+{
+    result = str;
+    std::transform(result.begin(), 
+        result.end(), 
+        result.begin(),
+        (int(*)(int)) std::toupper
+    );
+}
+
+void to_upper(std::string& str)
 {
     std::transform(str.begin(), 
         str.end(), 
         str.begin(),
         (int(*)(int)) std::toupper
     );
-    return str;
 }
  
-std::string to_lower_copy(std::string str)
+void to_lower_copy(const std::string& str, std::string& result)
 {
-    std::transform(str.begin(), 
-        str.end(), 
-        str.begin(),
+    result = str;
+    std::transform(result.begin(), 
+        result.end(), 
+        result.begin(),
         (int(*)(int)) std::tolower
     );
-    return str;
 }
 
-std::vector<std::string> string_split(std::string s, char sep, bool collapse)
+size_t string_split(const std::string& s, std::vector<std::string>& result, char sep, bool collapse)
 {
-    std::vector<std::string> v;
     std::istringstream buf(s);
     for(std::string token; getline(buf, token, sep); )
     {
         if((collapse && token != "") || !collapse)
-            v.push_back(token);
+            result.push_back(token);
     }
-    return v;
+    return result.size();
 }
 
-std::string regex_replace(std::string str, std::string pattern, std::string replace_str)
+void regex_replace(const std::string& str, const std::string& pattern, const std::string& replace_str, std::string& result)
 {
     regex_t preg;
-    std::string to_ret;
     regmatch_t substmatch[1];
     regcomp(&preg, pattern.c_str(), REG_EXTENDED|REG_ICASE);
     if ( regexec(&preg, str.c_str(), 1, substmatch, 0) == 0 )
@@ -78,10 +85,9 @@ std::string regex_replace(std::string str, std::string pattern, std::string repl
         memcpy(&ns[substmatch[0].rm_so], replace_str.c_str(), replace_str.size());
         memcpy(&ns[substmatch[0].rm_so+replace_str.size()], &str[substmatch[0].rm_eo], strlen(&str[substmatch[0].rm_eo]));
         ns[ substmatch[0].rm_so + replace_str.size() + strlen(&str[substmatch[0].rm_eo]) ] = 0;
-        to_ret = std::string((char*)ns);
+        result = std::string((char*)ns);
     } 
     regfree(&preg);
-    return to_ret;
 }
 
 };

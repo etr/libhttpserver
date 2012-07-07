@@ -35,12 +35,13 @@ http_endpoint::~http_endpoint()
     }
 }
 http_endpoint::http_endpoint(const string& url, bool family, bool registration):
-    url_complete(string_utilities::to_lower_copy(url)),
     url_modded("/"),
     family_url(family),
     reg_compiled(false)
 {
-    vector<string> parts = http_utils::tokenize_url(url);
+    vector<string> parts;
+    string_utilities::to_lower_copy(url, url_complete);
+    http_utils::tokenize_url(url, parts);
     string buffered;
     bool first = true;
     if(registration)
@@ -156,7 +157,11 @@ http_endpoint& http_endpoint::operator =(const http_endpoint& h)
 
 bool http_endpoint::operator <(const http_endpoint& b) const 
 {
-    return string_utilities::to_lower_copy(this->url_modded) < string_utilities::to_lower_copy(b.url_modded);
+    string url_modded_l;
+    string url_modded_r;
+    string_utilities::to_lower_copy(this->url_modded, url_modded_l);
+    string_utilities::to_lower_copy(b.url_modded, url_modded_r);
+    return url_modded_l < url_modded_r;
 }
 
 bool http_endpoint::match(const http_endpoint& url) const 

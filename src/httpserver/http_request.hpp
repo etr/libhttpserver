@@ -55,9 +55,17 @@ class http_request
         {
             return this->user;
         }
+        void get_user(std::string& result) const
+        {
+            result = this->user;
+        }
         const std::string get_digested_user() const
         {
             return this->digested_user;
+        }
+        void get_digested_user(std::string& result) const
+        {
+            result = this->digested_user;
         }
         /**
          * Method used to get the password eventually passed through basic authentication.
@@ -67,6 +75,10 @@ class http_request
         {
             return this->pass;
         }
+        void get_pass(std::string& result) const
+        {
+            result = this->pass;
+        }
         /**
          * Method used to get the path requested
          * @return string representing the path requested.
@@ -75,6 +87,10 @@ class http_request
         {
             return this->path;
         }
+        void get_path(std::string& result) const
+        {
+            result = this->path;
+        }
         /**
          * Method used to get all pieces of the path requested; considering an url splitted by '/'.
          * @return a vector of strings containing all pieces
@@ -82,6 +98,11 @@ class http_request
         const std::vector<std::string> get_path_pieces() const
         {
             return this->post_path;
+        }
+        int get_path_pieces(std::vector<std::string>& result) const
+        {
+            result = this->post_path;
+            return result.size();
         }
         /**
          * Method used to obtain the size of path in terms of pieces; considering an url splitted by '/'.
@@ -101,6 +122,19 @@ class http_request
                 return this->post_path[index];
             return "";
         }
+        size_t get_path_piece(int index, std::string& result) const
+        {
+            if(((int)(this->post_path.size())) > index)
+            {
+                result = this->post_path[index];
+                return result.size();
+            }
+            else
+            {
+                result = "";
+                return result.size();
+            }
+        }
         /**
          * Method used to get the METHOD used to make the request.
          * @return string representing the method.
@@ -109,26 +143,46 @@ class http_request
         {
             return this->method;
         }
+        void get_method(std::string& result) const
+        {
+            result = this->method;
+        }
         /**
          * Method used to get all headers passed with the request.
          * @return a vector<pair<string,string> > containing all headers.
         **/
         const std::vector<std::pair<std::string, std::string> > get_headers() const;
+        size_t get_headers(std::vector<std::pair<std::string, std::string> >& result) const;
+#ifndef SWIG
+        size_t get_headers(std::map<std::string, std::string, header_comparator>& result) const;
+#endif
         /**
          * Method used to get all footers passed with the request.
          * @return a vector<pair<string,string> > containing all footers.
         **/
         const std::vector<std::pair<std::string, std::string> > get_footers() const;
+        size_t get_footers(std::vector<std::pair<std::string, std::string> >& result) const;
+#ifndef SWIG
+        size_t get_footers(std::map<std::string, std::string, header_comparator>& result) const;
+#endif
         /**
          * Method used to get all cookies passed with the request.
          * @return a vector<pair<string, string> > containing all cookies.
         **/
         const std::vector<std::pair<std::string, std::string> > get_cookies() const;
+        size_t get_cookies(std::vector<std::pair<std::string, std::string> >& result) const;
+#ifndef SWIG
+        size_t get_cookies(std::map<std::string, std::string, header_comparator>& result) const;
+#endif
         /**
          * Method used to get all parameters passed with the request. Usually parameters are passed with DELETE or GET methods.
          * @return a map<string,string> containing all parameters.
         **/
         const std::vector<std::pair<std::string, std::string> > get_args() const;
+        size_t get_args(std::vector<std::pair<std::string, std::string> >& result) const;
+#ifndef SWIG
+        size_t get_args(std::map<std::string, std::string, arg_comparator>& result) const;
+#endif
         /**
          * Method used to get a specific header passed with the request.
          * @param key the specific header to get the value from
@@ -136,12 +190,19 @@ class http_request
         **/
         const std::string get_header(const std::string& key) const
         {
-            //string new_key = boost::to_lower_copy(key);
             std::map<std::string, std::string>::const_iterator it = this->headers.find(key);
             if(it != this->headers.end())
                 return it->second;
             else
                 return "";
+        }
+        void get_header(const std::string& key, std::string& result) const
+        {
+            std::map<std::string, std::string>::const_iterator it = this->headers.find(key);
+            if(it != this->headers.end())
+                result = it->second;
+            else
+                result = "";
         }
         /**
          * Method used to get a specific footer passed with the request.
@@ -150,12 +211,19 @@ class http_request
         **/
         const std::string get_footer(const std::string& key) const
         {
-            //string new_key = boost::to_lower_copy(key);
             std::map<std::string, std::string>::const_iterator it = this->footers.find(key);
             if(it != this->footers.end())
                 return it->second;
             else
                 return "";
+        }
+        void get_footer(const std::string& key, std::string& result) const
+        {
+            std::map<std::string, std::string>::const_iterator it = this->footers.find(key);
+            if(it != this->footers.end())
+                result = it->second;
+            else
+                result = "";
         }
         /**
          * Method used to get a specific argument passed with the request.
@@ -164,12 +232,19 @@ class http_request
         **/
         const std::string get_arg(const std::string& key) const
         {
-            //string new_key = string_utilities::to_lower_copy(key);
             std::map<std::string, std::string>::const_iterator it = this->args.find(key);
             if(it != this->args.end())
                 return it->second;
             else
                 return "";
+        }
+        void get_arg(const std::string& key, std::string& result) const
+        {
+            std::map<std::string, std::string>::const_iterator it = this->args.find(key);
+            if(it != this->args.end())
+                result = it->second;
+            else
+                result = "";
         }
         /**
          * Method used to get the content of the request.
@@ -179,13 +254,21 @@ class http_request
         {
             return this->content;
         }
+        void get_content(std::string& result) const
+        {
+            result = this->content;
+        }
         /**
          * Method used to get the version of the request.
          * @return the version in string representation
         **/
         const std::string get_version() const
         {
-            return version;
+            return this->version;
+        }
+        void get_version(std::string& result) const
+        {
+            result = this->version;
         }
         /**
          * Method used to get the requestor.
@@ -194,6 +277,10 @@ class http_request
         const std::string get_requestor() const
         {
             return this->requestor;
+        }
+        void get_requestor(std::string& result) const
+        {
+            result = this->requestor;
         }
         /**
          * Method used to get the requestor port used.
@@ -272,9 +359,9 @@ class http_request
         **/
         void set_path(const std::string& path)
         {
-            //this->path = boost::to_lower_copy(path);
             this->path = path;
-            std::vector<std::string> complete_path = http_utils::tokenize_url(this->path);
+            std::vector<std::string> complete_path;
+            http_utils::tokenize_url(this->path, complete_path);
             for(unsigned int i = 0; i < complete_path.size(); i++) 
             {
                 this->post_path.push_back(complete_path[i]);

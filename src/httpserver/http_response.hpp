@@ -107,6 +107,10 @@ class http_response
         {
             return this->content;
         }
+        void get_content(std::string& result)
+        {
+            result = this->content;
+        }
         /**
          * Method used to set the content of the response
          * @param content The content to set
@@ -124,6 +128,10 @@ class http_response
         {
             return this->headers[key];
         }
+        void get_header(const std::string& key, std::string& result)
+        {
+            result = this->headers[key];
+        }
         /**
          * Method used to get a specified footer defined for the response
          * @param key The footer identification
@@ -132,6 +140,10 @@ class http_response
         const std::string get_footer(const std::string& key)
         {
             return this->footers[key];
+        }
+        void get_footer(const std::string& key, std::string& result)
+        {
+            result = this->footers[key];
         }
         /**
          * Method used to set an header value by key.
@@ -172,11 +184,19 @@ class http_response
          * @return a map<string,string> containing all headers.
         **/
         const std::vector<std::pair<std::string, std::string> > get_headers();
+        size_t get_headers(std::vector<std::pair<std::string, std::string> >& result);
+#ifndef SWIG
+        size_t get_headers(std::map<std::string, std::string, header_comparator>& result);
+#endif
         /**
          * Method used to get all footers passed with the request.
          * @return a map<string,string> containing all footers.
         **/
         const std::vector<std::pair<std::string, std::string> > get_footers();
+        size_t get_footers(std::vector<std::pair<std::string, std::string> >& result);
+#ifndef SWIG
+        size_t get_footers(std::map<std::string, std::string, header_comparator>& result);
+#endif
         /**
          * Method used to set all headers of the response.
          * @param headers The headers key-value map to set for the response.
@@ -217,9 +237,17 @@ class http_response
         {
             return this->realm;
         }
+        void get_realm(std::string& result) const
+        {
+            result = this->realm;
+        }
         const std::string get_opaque() const
         {
             return this->opaque;
+        }
+        void get_opaque(std::string& result) const
+        {
+            result = this->opaque;
         }
         const bool need_nonce_reload() const
         {
@@ -239,7 +267,7 @@ class http_response
         int fp;
         std::string filename;
         std::map<std::string, std::string, header_comparator> headers;
-        std::map<std::string, std::string, arg_comparator> footers;
+        std::map<std::string, std::string, header_comparator> footers;
         friend class webserver;
 };
 
