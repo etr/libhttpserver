@@ -23,6 +23,7 @@ http_response Test::render_GET(const http_request& r)
 	cout << r.get_requestor_port() << endl;
 	cout << "PROVA: " << r.get_arg("prova") << endl;
 	cout << "ALTRO: " << r.get_arg("altro") << endl;
+    cout << "THUMB: " << r.get_arg("thumbId") << endl;
 	string pp = r.get_arg("prova");
 	return http_file_response("/home/etr/progs/libhttpserver/test/readme", 200);
 }
@@ -59,7 +60,7 @@ int main()
 	Test dt = Test();
 	Test2 dt2 = Test2();
     ws.register_resource(string("base/{var1}/{var2}/drop_test/{var3}/tail"), &dt2, true);
-    ws.register_resource(string("other/side"), &dt, true);
+    ws.register_resource(string("other/side/{thumbId|[0-9]*}"), &dt, true);
 	boost::thread* t1 = new boost::thread(boost::bind(&webserver::start, ws, true));
 	t1->join();
 	return 0;

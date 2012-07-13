@@ -46,6 +46,7 @@ http_endpoint::http_endpoint(const string& url, bool family, bool registration):
     bool first = true;
     if(registration)
     {
+        this->url_modded = "^/";
         for(unsigned int i = 0; i< parts.size(); i++)
         {
             if((parts[i] != "") && (parts[i][0] != '{')) 
@@ -107,7 +108,8 @@ http_endpoint::http_endpoint(const string& url, bool family, bool registration):
             }
             this->url_pieces.push_back(parts[i]);
         }
-        regcomp(&(this->re_url_modded), url_modded.c_str(), REG_EXTENDED|REG_ICASE);
+        this->url_modded += "$";
+        regcomp(&(this->re_url_modded), url_modded.c_str(), REG_EXTENDED|REG_ICASE|REG_NOSUB);
         reg_compiled = true;
     }
     else
@@ -138,7 +140,7 @@ http_endpoint::http_endpoint(const http_endpoint& h):
     reg_compiled(h.reg_compiled)
 {
     if(this->reg_compiled)
-        regcomp(&(this->re_url_modded), url_modded.c_str(), REG_EXTENDED|REG_ICASE);
+        regcomp(&(this->re_url_modded), url_modded.c_str(), REG_EXTENDED|REG_ICASE|REG_NOSUB);
 }
 
 http_endpoint& http_endpoint::operator =(const http_endpoint& h)
@@ -148,7 +150,7 @@ http_endpoint& http_endpoint::operator =(const http_endpoint& h)
     this->family_url = h.family_url;
     this->reg_compiled = h.reg_compiled;
     if(this->reg_compiled)
-        regcomp(&(this->re_url_modded), url_modded.c_str(), REG_EXTENDED|REG_ICASE);
+        regcomp(&(this->re_url_modded), url_modded.c_str(), REG_EXTENDED|REG_ICASE|REG_NOSUB);
     this->url_pars = h.url_pars;
     this->url_pieces = h.url_pieces;
     this->chunk_positions = h.chunk_positions;
