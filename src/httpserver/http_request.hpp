@@ -204,6 +204,22 @@ class http_request
             else
                 result = "";
         }
+        const std::string get_cookie(const std::string& key) const
+        {
+            std::map<std::string, std::string>::const_iterator it = this->cookies.find(key);
+            if(it != this->cookies.end())
+                return it->second;
+            else
+                return "";
+        }
+        void get_cookie(const std::string& key, std::string& result) const
+        {
+            std::map<std::string, std::string>::const_iterator it = this->cookies.find(key);
+            if(it != this->cookies.end())
+                result = it->second;
+            else
+                result = "";
+        }
         /**
          * Method used to get a specific footer passed with the request.
          * @param key the specific footer to get the value from
