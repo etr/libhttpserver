@@ -373,13 +373,13 @@ class create_webserver
         create_webserver& bind_socket(int bind_socket) { _bind_socket = bind_socket; return *this; }
         create_webserver& max_thread_stack_size(int max_thread_stack_size) { _max_thread_stack_size = max_thread_stack_size; return *this; }
         create_webserver& use_ssl() { _use_ssl = true; return *this; }
-        create_webserver& noSsl() { _use_ssl = false; return *this; }
+        create_webserver& no_ssl() { _use_ssl = false; return *this; }
         create_webserver& use_ipv6() { _use_ipv6 = true; return *this; }
-        create_webserver& noIpv6() { _use_ipv6 = false; return *this; }
+        create_webserver& no_ipv6() { _use_ipv6 = false; return *this; }
         create_webserver& debug() { _debug = true; return *this; }
-        create_webserver& noDebug() { _debug = false; return *this; }
+        create_webserver& no_debug() { _debug = false; return *this; }
         create_webserver& pedantic() { _pedantic = true; return *this; }
-        create_webserver& noPedantic() { _pedantic = false; return *this; }
+        create_webserver& no_pedantic() { _pedantic = false; return *this; }
         create_webserver& https_mem_key(const std::string& https_mem_key);
         create_webserver& https_mem_cert(const std::string& https_mem_cert);
         create_webserver& https_mem_trust(const std::string& https_mem_trust);
