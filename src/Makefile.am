@@ -27,7 +27,7 @@ libhttpserver_la_LIBADD = -lmicrohttpd
 libhttpserver_la_LDFLAGS =
 
 install-exec-hook:
-	(cd $(DESTDIR)$(includedir) && $(LN_S) -f httpserver.hpp httpserverpp)
+	(mkdir -p $(DESTDIR)$(includedir) && cd $(DESTDIR)$(includedir) && $(LN_S) -f httpserver.hpp httpserverpp)
 
 uninstall-hook:
 	(cd $(DESTDIR)$(includedir) && rm -f httpserverpp)

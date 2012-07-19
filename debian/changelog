@@ -1,0 +1,5 @@
+libhttpserver (0.1.1) unstable; urgency=low
+
+  * First debian relese.
+
+ -- Andrea Nicotra <nicotra.andrea@gmail.com>  Thu, 19 Jul 2012 13:37:44 +0200 
