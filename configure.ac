@@ -34,7 +34,7 @@ CXXFLAGS=$OLD_CXXFLAGS
 AC_LANG([C++])
 
 if test "`cd $srcdir; /bin/pwd`" = "`/bin/pwd`"; then 
-	AC_MSG_ERROR([you must configure in a separate build directory])
+	AC_MSG_ERROR("you must configure in a separate build directory")
 fi
 
 # Checks for header files.
