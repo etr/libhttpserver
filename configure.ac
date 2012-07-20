@@ -20,8 +20,8 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.57)
-AC_INIT([libhttpserver], [0.1.1], [electrictwister2000@gmail.com])
-AM_INIT_AUTOMAKE([libhttpserver], [0.1.1])
+AC_INIT([libhttpserver], [0.1.2], [electrictwister2000@gmail.com])
+AM_INIT_AUTOMAKE([libhttpserver], [0.1.2])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIR([m4])
 
