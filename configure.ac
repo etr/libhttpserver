@@ -374,7 +374,16 @@ AC_SUBST(EXT_LIB_PATH)
 AC_SUBST(EXT_LIBS)
 
 AC_OUTPUT(
-	  libhttpserver.pc Makefile src/Makefile src/python/Makefile src/java/Makefile src/php/Makefile src/lua/Makefile src/perl/Makefile src/ruby/Makefile src/guile/Makefile
+	  libhttpserver.pc
+      Makefile
+      src/Makefile
+      src/python/Makefile
+      src/java/Makefile
+      src/php/Makefile
+      src/lua/Makefile
+      src/perl/Makefile
+      src/ruby/Makefile
+      src/guile/Makefile
 )
 
 AC_MSG_NOTICE([Configuration Summary:  

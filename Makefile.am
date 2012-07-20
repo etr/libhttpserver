@@ -74,3 +74,7 @@ dist-hook:
 	date >DIST_REVISION
 	git branch -vv >>DIST_REVISION
 	cp DIST_REVISION $(distdir)/
+
+deb:
+	cp -RLf $(top_srcdir)/debian $(builddir)
+	debuild -i -us -uc -b

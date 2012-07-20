@@ -1,5 +1,19 @@
 libhttpserver (0.1.1) unstable; urgency=low
 
-  * First debian relese.
+  * Added deb target to makefile.
+  * Added cmakemodule in order to help people who want to include the library
+    in a cmake installation
+
+ -- Sebastiano Merlino <electrictwister2000@gmail.com>  Sat, 21 Jul 2012 00:40:05 +0200
+
+libhttpserver (0.1.1) unstable; urgency=low
+
+  * First debian release.
 
  -- Andrea Nicotra <nicotra.andrea@gmail.com>  Thu, 19 Jul 2012 13:37:44 +0200 
+
+libhttpserver (0.1.1) unstable; urgency=low
+
+  * First tag.
+
+ -- Sebastiano Merlino <electrictwister2000@gmail.com>  Sun, 15 Jul 2012 11:15:44 +0200 
