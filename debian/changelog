@@ -1,4 +1,4 @@
-libhttpserver (0.1.1) unstable; urgency=low
+libhttpserver (0.1.2) unstable; urgency=low
 
   * Added deb target to makefile.
   * Added cmakemodule in order to help people who want to include the library
@@ -6,7 +6,7 @@ libhttpserver (0.1.1) unstable; urgency=low
 
  -- Sebastiano Merlino <electrictwister2000@gmail.com>  Sat, 21 Jul 2012 00:40:05 +0200
 
-libhttpserver (0.1.1) unstable; urgency=low
+libhttpserver (0.1.2) unstable; urgency=low
 
   * First debian release.
 
