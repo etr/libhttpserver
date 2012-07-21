@@ -170,6 +170,11 @@ class http_resource
         **/
         http_resource(const http_resource& b) : allowed_methods(b.allowed_methods) { }
 
+        void operator = (const http_resource& b)
+        {
+            allowed_methods = b.allowed_methods;
+        }
+
     private:
         friend class webserver;
         std::map<std::string, bool> allowed_methods;

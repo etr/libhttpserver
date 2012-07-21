@@ -30,6 +30,14 @@ namespace httpserver
 
 class webserver;
 
+class bad_http_endpoint : public std::exception
+{
+    virtual const char* what() const throw()
+    {
+        return "Bad url format!";
+    }
+};
+
 /**
  * Class representing an Http Endpoint. It is an abstraction used by the APIs.
 **/
@@ -149,7 +157,7 @@ class http_endpoint
          * @param registration boolean that indicates to the system if this is an endpoint that need to be registered to a webserver
          *                     or it is simply an endpoint to be used for comparisons.
         **/
-        http_endpoint(const std::string& url, bool family = false, bool registration = false);
+        http_endpoint(const std::string& url, bool family = false, bool registration = false, bool use_regex = true);
         /**
          * Destructor of the class. Essentially it frees the regex dinamically allocated pattern
         **/

@@ -175,7 +175,13 @@ class webserver
             const http_utils::cred_type_T& cred_type= http_utils::NONE,
             const std::string digest_auth_random = "", //IT'S CORRECT TO PASS THIS PARAMETER BY VALUE
             int nonce_nc_size = 0,
-            const http_utils::policy_T& default_policy = http_utils::ACCEPT
+            const http_utils::policy_T& default_policy = http_utils::ACCEPT,
+            bool basic_auth_enabled = true,
+            bool digest_auth_enabled = true,
+            bool regex_checking = true,
+            bool ban_system_enabled = true,
+            bool post_process_enabled = true,
+            http_resource* single_resource = 0x0
         );
         webserver(const create_webserver& params);
         /**
@@ -243,6 +249,12 @@ class webserver
         int nonce_nc_size;
         bool running;
         http_utils::policy_T default_policy;
+        bool basic_auth_enabled;
+        bool digest_auth_enabled;
+        bool regex_checking;
+        bool ban_system_enabled;
+        bool post_process_enabled;
+        bool single_resource;
 
         std::map<http_endpoint, http_resource* > registered_resources;
 #ifdef USE_CPP_ZEROX
@@ -326,7 +338,13 @@ class create_webserver
             _cred_type(http_utils::NONE),
             _digest_auth_random(""),
             _nonce_nc_size(0),
-            _default_policy(http_utils::ACCEPT)
+            _default_policy(http_utils::ACCEPT),
+            _basic_auth_enabled(true),
+            _digest_auth_enabled(true),
+            _regex_checking(true),
+            _ban_system_enabled(true),
+            _post_process_enabled(true),
+            _single_resource(0x0)
         {
         }
 
@@ -355,7 +373,13 @@ class create_webserver
             _cred_type(http_utils::NONE),
             _digest_auth_random(""),
             _nonce_nc_size(0),
-            _default_policy(http_utils::ACCEPT)
+            _default_policy(http_utils::ACCEPT),
+            _basic_auth_enabled(true),
+            _digest_auth_enabled(true),
+            _regex_checking(true),
+            _ban_system_enabled(true),
+            _post_process_enabled(true),
+            _single_resource(0x0)
         {
         }
 
@@ -391,6 +415,17 @@ class create_webserver
         create_webserver& digest_auth_random(const std::string& digest_auth_random) { _digest_auth_random = digest_auth_random; return *this; }
         create_webserver& nonce_nc_size(int nonce_nc_size) { _nonce_nc_size = nonce_nc_size; return *this; }
         create_webserver& default_policy(const http_utils::policy_T& default_policy) { _default_policy = default_policy; return *this; }
+        create_webserver& basic_auth() { _basic_auth_enabled = true; return *this; }
+        create_webserver& no_basic_auth() { _basic_auth_enabled = false; return *this; }
+        create_webserver& digest_auth() { _digest_auth_enabled = true; return *this; }
+        create_webserver& no_digest_auth() { _digest_auth_enabled = false; return *this; }
+        create_webserver& regex_checking() { _regex_checking = true; return *this; }
+        create_webserver& no_regex_checking() { _regex_checking = false; return *this; }
+        create_webserver& ban_system() { _ban_system_enabled = true; return *this; }
+        create_webserver& no_ban_system() { _ban_system_enabled = false; return *this; }
+        create_webserver& post_process() { _post_process_enabled = true; return *this; }
+        create_webserver& no_post_process() { _post_process_enabled = false; return *this; }
+        create_webserver& single_resource(http_resource* single_resource) { _single_resource = single_resource; return *this; }
     private:
         int _port;
         http_utils::start_method_T _start_method;
@@ -417,6 +452,12 @@ class create_webserver
         std::string _digest_auth_random;
         int _nonce_nc_size;
         http_utils::policy_T _default_policy;
+        bool _basic_auth_enabled;
+        bool _digest_auth_enabled;
+        bool _regex_checking;
+        bool _ban_system_enabled;
+        bool _post_process_enabled;
+        http_resource* _single_resource;
 
         friend class webserver;
 };

@@ -26,6 +26,7 @@ using namespace std;
 namespace httpserver
 {
 using namespace http;
+
 //ENDPOINT
 http_endpoint::~http_endpoint()
 {
@@ -34,11 +35,14 @@ http_endpoint::~http_endpoint()
         regfree(&(this->re_url_modded));
     }
 }
-http_endpoint::http_endpoint(const string& url, bool family, bool registration):
-    url_modded("/"),
+http_endpoint::http_endpoint(const string& url, bool family, bool registration, bool use_regex):
     family_url(family),
     reg_compiled(false)
 {
+    if(use_regex)
+        this->url_modded = "^/";
+    else
+        this->url_modded = "/";
     vector<string> parts;
     string_utilities::to_lower_copy(url, url_complete);
     http_utils::tokenize_url(url, parts);
@@ -46,7 +50,6 @@ http_endpoint::http_endpoint(const string& url, bool family, bool registration):
     bool first = true;
     if(registration)
     {
-        this->url_modded = "^/";
         for(unsigned int i = 0; i< parts.size(); i++)
         {
             if((parts[i] != "") && (parts[i][0] != '{')) 
@@ -103,14 +106,11 @@ http_endpoint::http_endpoint(const string& url, bool family, bool registration):
                 } 
                 else 
                 {
-                    // RITORNARE ECCEZIONE
+                    throw bad_http_endpoint();
                 }
             }
             this->url_pieces.push_back(parts[i]);
         }
-        this->url_modded += "$";
-        regcomp(&(this->re_url_modded), url_modded.c_str(), REG_EXTENDED|REG_ICASE|REG_NOSUB);
-        reg_compiled = true;
     }
     else
     {
@@ -127,6 +127,12 @@ http_endpoint::http_endpoint(const string& url, bool family, bool registration):
             }
             this->url_pieces.push_back(parts[i]);
         }
+    }
+    if(use_regex)
+    {
+        this->url_modded += "$";
+        regcomp(&(this->re_url_modded), url_modded.c_str(), REG_EXTENDED|REG_ICASE|REG_NOSUB);
+        reg_compiled = true;
     }
 }
 
