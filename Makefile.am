@@ -26,9 +26,10 @@ ACLOCAL_AMFLAGS = -I m4
 
 SUBDIRS = src $(PYTHON_DIR) $(JAVA_DIR) $(PHP_DIR) $(LUA_DIR) $(PERL_DIR) $(RUBY_DIR) $(GUILE_DIR)
 DIST_SUBDIRS = src $(PYTHON_DIR) $(JAVA_DIR) $(PHP_DIR) $(LUA_DIR) $(PERL_DIR) $(RUBY_DIR) $(GUILE_DIR)
-EXTRA_DIST = libhttpserver.pc.in $(DX_CONFIG) $(PYTHON_EXTRA) $(PHP_EXTRA) $(PERL_EXTRA)
+EXTRA_DIST = libhttpserver.pc.in debian/changelog.in debian/control.in debian/rules.in debian/libhttpserver-dev.install.in debian/libhttpserver.install.in redhat/libhttpserver.SPEC.in $(DX_CONFIG) $(PYTHON_EXTRA) $(PHP_EXTRA) $(PERL_EXTRA)
 
-MOSTLYCLEANFILES = $(DX_CLEANFILES)
+MOSTLYCLEANFILES = $(DX_CLEANFILES) redhat/SOURCES/*
+DISTCLEANFILES = redhat/SOURCES/* redhat/SPEC/* redhat/* debian/* DIST_REVISION
 
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = libhttpserver.pc
@@ -76,5 +77,10 @@ dist-hook:
 	cp DIST_REVISION $(distdir)/
 
 deb:
-	cp -RLf $(top_srcdir)/debian $(builddir)
 	debuild -i -us -uc -b
+
+rpm: dist
+	mkdir -p redhat/SOURCES
+	cp libhttpserver-@VERSION@.tar.gz redhat/SOURCES
+	rpmbuild -v -bb redhat/libhttpserver.SPEC
+	rpmbuild -v -ba redhat/libhttpserver.SPEC

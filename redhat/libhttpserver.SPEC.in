@@ -1,0 +1,51 @@
+%define _topdir @abs_builddir@
+%define name libhttpserver
+%define version @VERSION@
+%define buildroot %{_topdir}/%{name}-%{version}-root
+
+Name: %{name}  
+Release: 1
+Version: %{version}
+Summary: library embedding RESTful HTTP server functionality
+Group: Development/Libraries
+License: LGPL 2.1
+URL: https://github.com/etr/libhttpserver
+Source: @abs_builddir@/%{name}-%{version}.tar.gz
+Vendor: Zencoders
+Prefix: /usr
+BuildRoot: %{buildroot}
+Packager: Sebastiano Merlino <merlino.sebastiano@gmail.com>  
+BuildRequires: libmicrohttpd >= 0.9.9
+Requires: libmicrohttpd >= 0.9.9
+%description
+libhttpserver is a small C++ library for embedding RESTful HTTP server functionality into applications.
+
+%package devel
+Summary: Development files
+BuildRequires: libmicrohttpd >= 0.9.9, libmicrohttpd-devel >= 0.9.9
+Requires: libmicrohttpd >= 0.9.9, libmicrohttpd-devel >= 0.9.9
+%description devel
+libhttpserver is a small C++ library for embedding RESTful HTTP server functionality into applications.
+This package contains development files and headers.
+
+
+%prep
+%setup
+
+%build
+./configure
+make
+
+%install
+make install --prefix=$RPM_BUILD_ROOT/usr
+
+%files
+%defattr(-,root,root)
+/usr/lib/*.so.*
+
+%files devel
+%defattr(-,root,root)
+/usr/include
+/usr/lib/*.a
+/usr/lib/*.so.*
+/usr/lib/pkgconfig

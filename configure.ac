@@ -20,8 +20,8 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.57)
-AC_INIT([libhttpserver], [0.1.2], [electrictwister2000@gmail.com])
-AM_INIT_AUTOMAKE([libhttpserver], [0.1.2])
+AC_INIT([libhttpserver], 0.1.2, [electrictwister2000@gmail.com])
+AM_INIT_AUTOMAKE([libhttpserver], 0.1.2)
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIR([m4])
 
@@ -374,7 +374,7 @@ AC_SUBST(EXT_LIB_PATH)
 AC_SUBST(EXT_LIBS)
 
 AC_OUTPUT(
-	  libhttpserver.pc
+      libhttpserver.pc
       Makefile
       src/Makefile
       src/python/Makefile
@@ -384,6 +384,12 @@ AC_OUTPUT(
       src/perl/Makefile
       src/ruby/Makefile
       src/guile/Makefile
+      debian/changelog
+      debian/control
+      debian/libhttpserver-dev.install
+      debian/libhttpserver.install
+      debian/rules
+      redhat/libhttpserver.SPEC
 )
 
 AC_MSG_NOTICE([Configuration Summary:  

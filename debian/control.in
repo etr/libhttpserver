@@ -3,7 +3,7 @@ Section: libs
 Priority: optional
 Maintainer: Sebastiano Merlino <electrictwister2000@gmail.com>
 Build-Depends: libmicrohttpd10(>= 0.9.9)
-Standards-Version: 0.1.2
+Standards-Version: @VERSION@
 Vcs-Git: git://github.com/etr/libhttpserver.git
 Vcs-browser: https://github.com/etr/libhttpserver.git
 Homepage: https://github.com/etr/libhttpserver
