@@ -39,6 +39,14 @@ http_resource::http_resource()
     this->allowed_methods[MHD_HTTP_METHOD_TRACE] = true;
     this->allowed_methods[MHD_HTTP_METHOD_CONNECT] = true;
     this->allowed_methods[MHD_HTTP_METHOD_OPTIONS] = true;
+#ifdef DEBUG
+    std::map<std::string, bool>::iterator it;
+    for(it = allowed_methods.begin(); it != allowed_methods.end(); it++)
+    {
+        std::cout << (*it).first << " -> " << (*it).second << std::endl;
+    }
+#endif //DEBUG
+
 }
 
 http_resource::~http_resource() 
@@ -47,14 +55,7 @@ http_resource::~http_resource()
 
 http_response http_resource::render(const http_request& r) 
 {
-    if(this->is_allowed(r.get_method()))
-    {
-        return this->render_404();
-    } 
-    else 
-    {
-        return this->render_405();
-    }
+    return this->render_404();
 }
 
 http_response http_resource::render_404() 
@@ -120,41 +121,48 @@ http_response http_resource::route_request(const http_request& r)
 
     http_response res;
 
-    if(method == MHD_HTTP_METHOD_GET) 
+    if(this->is_allowed(method))
     {
-        res = this->render_GET(r);
-    } 
-    else if (method == MHD_HTTP_METHOD_POST) 
+        if(method == MHD_HTTP_METHOD_GET) 
+        {
+            res = this->render_GET(r);
+        } 
+        else if (method == MHD_HTTP_METHOD_POST) 
+        {
+            res = this->render_POST(r);
+        } 
+        else if (method == MHD_HTTP_METHOD_PUT) 
+        {
+            res = this->render_PUT(r);
+        } 
+        else if (method == MHD_HTTP_METHOD_DELETE) 
+        {
+            res = this->render_DELETE(r);
+        } 
+        else if (method == MHD_HTTP_METHOD_HEAD) 
+        {
+            res = this->render_HEAD(r);
+        } 
+        else if (method == MHD_HTTP_METHOD_TRACE) 
+        {
+            res = this->render_TRACE(r);
+        } 
+        else if (method == MHD_HTTP_METHOD_OPTIONS) 
+        {
+            res = this->render_OPTIONS(r);
+        } 
+        else if (method == MHD_HTTP_METHOD_CONNECT) 
+        {
+            res = this->render_CONNECT(r);
+        } 
+        else 
+        {
+            res = this->render(r);
+        }
+    }
+    else
     {
-        res = this->render_POST(r);
-    } 
-    else if (method == MHD_HTTP_METHOD_PUT) 
-    {
-        res = this->render_PUT(r);
-    } 
-    else if (method == MHD_HTTP_METHOD_DELETE) 
-    {
-        res = this->render_DELETE(r);
-    } 
-    else if (method == MHD_HTTP_METHOD_HEAD) 
-    {
-        res = this->render_HEAD(r);
-    } 
-    else if (method == MHD_HTTP_METHOD_TRACE) 
-    {
-        res = this->render_TRACE(r);
-    } 
-    else if (method == MHD_HTTP_METHOD_OPTIONS) 
-    {
-        res = this->render_OPTIONS(r);
-    } 
-    else if (method == MHD_HTTP_METHOD_CONNECT) 
-    {
-        res = this->render_CONNECT(r);
-    } 
-    else 
-    {
-        res = this->render(r);
+        res = this->render_405();
     }
     return res;
 }
