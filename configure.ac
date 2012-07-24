@@ -63,9 +63,14 @@ AC_CHECK_HEADER([signal.h],[],[AC_MSG_ERROR("signal.h not found")])
 AC_CHECK_HEADER([gnutls/gnutls.h],[have_gnutls="yes"],[AC_MSG_WARN("gnutls/gnutls.h not found. TLS will be disabled"); have_gnutls="no"])
 
 # Checks for libmicrohttpd
-PKG_CHECK_MODULES([LIBMICROHTTPD],[libmicrohttpd >= 0.9.9],[],[AC_MSG_ERROR("libmicrohttpd not present or too old - install libmicrohttpd >= 0.9.9")])
+PKG_CHECK_MODULES([LIBMICROHTTPD],[libmicrohttpd >= 0.9.7],[],[AC_MSG_ERROR("libmicrohttpd not present or too old - install libmicrohttpd >= 0.9.7")])
 #AC_CHECK_HEADER([microhttpd.h],[],[AC_MSG_ERROR("Microhttpd header files not found. Please use a version >= 0.9.9.")])
 #AC_CHECK_LIB([microhttpd],[MHD_start_daemon],[],[AC_MSG_ERROR("Microhttpd header files not found. Please use a version >= 0.9.9.")])
+
+m4_pattern_allow([AC_TYPE_SIZE_T])
+m4_pattern_allow([AC_TYPE_UINT16_T])
+m4_pattern_allow([AC_TYPE_UINT32_T])
+m4_pattern_allow([AC_TYPE_UINT64_T])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_TYPE_SIZE_T
@@ -168,6 +173,7 @@ AM_CONDITIONAL([GUILE], [test x$guile = xtrue])
 AM_CONDITIONAL([DOC], [test x$doc = xtrue])
 
 LANGUAGES="C++"
+OUTPUT_LANG=""
 
 DX_HTML_FEATURE(ON)
 DX_CHM_FEATURE(OFF)
@@ -236,6 +242,7 @@ if test x$python = xtrue; then
 	AC_SUBST_FILE([PYTHON_AUTOGENERATION])
 	PYTHON_AUTOGENERATION=$srcdir/src/autogen_helpers/support_command
 	LANGUAGES="$LANGUAGES Python"
+    OUTPUT_LANG="$OUTPUT_LANG src/python/Makefile"
 fi 
 
 if test x$java = xtrue; then
@@ -266,6 +273,7 @@ if test x$java = xtrue; then
 	AC_SUBST_FILE([JAVA_AUTOGENERATION])
 	JAVA_AUTOGENERATION=$srcdir/src/autogen_helpers/support_command
 	LANGUAGES="$LANGUAGES Java"
+    OUTPUT_LANG="$OUTPUT_LANG src/java/Makefile"
 fi 
 
 if test x$php = xtrue; then
@@ -281,6 +289,7 @@ if test x$php = xtrue; then
 	AC_SUBST_FILE([PHP_AUTOGENERATION])
 	PHP_AUTOGENERATION=$srcdir/src/autogen_helpers/support_command
 	LANGUAGES="$LANGUAGES PHP"
+    OUTPUT_LANG="$OUTPUT_LANG src/php/Makefile"
 fi 
 
 if test x$lua = xtrue; then
@@ -307,6 +316,7 @@ if test x$lua = xtrue; then
 	AC_SUBST_FILE([LUA_AUTOGENERATION])
 	LUA_AUTOGENERATION=$srcdir/src/autogen_helpers/support_command
 	LANGUAGES="$LANGUAGES LUA"
+    OUTPUT_LANG="$OUTPUT_LANG src/lua/Makefile"
 fi
 
 if test x$perl = xtrue; then
@@ -322,6 +332,7 @@ if test x$perl = xtrue; then
 	AC_SUBST_FILE([PERL_AUTOGENERATION])
 	PERL_AUTOGENERATION=$srcdir/src/autogen_helpers/support_command
 	LANGUAGES="$LANGUAGES Perl"
+    OUTPUT_LANG="$OUTPUT_LANG src/perl/Makefile"
 fi
 
 if test x$ruby = xtrue; then
@@ -352,6 +363,7 @@ if test x$ruby = xtrue; then
 	AC_SUBST_FILE([RUBY_AUTOGENERATION])
 	RUBY_AUTOGENERATION=$srcdir/src/autogen_helpers/support_command
 	LANGUAGES="$LANGUAGES Ruby"
+    OUTPUT_LANG="$OUTPUT_LANG src/ruby/Makefile"
 fi
 
 if test x$guile = xtrue; then
@@ -363,6 +375,7 @@ if test x$guile = xtrue; then
 	AC_SUBST_FILE([GUILE_AUTOGENERATION])
 	GUILE_AUTOGENERATION=$srcdir/src/autogen_helpers/support_command
 	LANGUAGES="$LANGUAGES Guile"
+    OUTPUT_LANG="$OUTPUT_LANG src/guile/Makefile"
 fi
 
 AC_SUBST(LHT_LIBDEPS)
@@ -377,13 +390,7 @@ AC_OUTPUT(
       libhttpserver.pc
       Makefile
       src/Makefile
-      src/python/Makefile
-      src/java/Makefile
-      src/php/Makefile
-      src/lua/Makefile
-      src/perl/Makefile
-      src/ruby/Makefile
-      src/guile/Makefile
+      $OUTPUT_LANG
       debian/changelog
       debian/control
       debian/libhttpserver-dev.install

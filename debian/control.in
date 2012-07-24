@@ -2,7 +2,7 @@ Source: libhttpserver
 Section: libs
 Priority: optional
 Maintainer: Sebastiano Merlino <electrictwister2000@gmail.com>
-Build-Depends: libmicrohttpd10(>= 0.9.9)
+Build-Depends: libmicrohttpd10(>= 0.9.7)
 Standards-Version: @VERSION@
 Vcs-Git: git://github.com/etr/libhttpserver.git
 Vcs-browser: https://github.com/etr/libhttpserver.git
@@ -23,7 +23,7 @@ Package: libhttpserver-dbg
 Section: debug
 Architecture: any
 Installed-Size:
-Depends: ${misc:Depends}, ${shlibs:Depends}, libmicrohttpd-dbg(>= 0.9.9)
+Depends: ${misc:Depends}, ${shlibs:Depends}, libmicrohttpd-dbg(>= 0.9.7)
 Description: libhttpserver debug
  library embedding RESTful HTTP server functionality (debug)
  libhttpserver is a small C++ library for embedding RESTful HTTP server functionality into
@@ -35,7 +35,7 @@ Package: libhttpserver-dev
 Section: libdevel
 Architecture: any
 Installed-Size:
-Depends: ${misc:Depends}, ${shlibs:Depends}, libmicrohttpd-dev(>= 0.9.9)
+Depends: ${misc:Depends}, ${shlibs:Depends}, libmicrohttpd-dev(>= 0.9.7)
 Description: libhttpserver
  The libhttpserver library .
  .

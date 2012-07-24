@@ -25,7 +25,7 @@ AUTOMAKE_OPTIONS = foreign 1.4
 ACLOCAL_AMFLAGS = -I m4
 
 SUBDIRS = src $(PYTHON_DIR) $(JAVA_DIR) $(PHP_DIR) $(LUA_DIR) $(PERL_DIR) $(RUBY_DIR) $(GUILE_DIR)
-DIST_SUBDIRS = src $(PYTHON_DIR) $(JAVA_DIR) $(PHP_DIR) $(LUA_DIR) $(PERL_DIR) $(RUBY_DIR) $(GUILE_DIR)
+DIST_SUBDIRS = $(SUBDIRS)
 EXTRA_DIST = libhttpserver.pc.in debian/changelog.in debian/control.in debian/rules.in debian/libhttpserver-dev.install.in debian/libhttpserver.install.in redhat/libhttpserver.SPEC.in $(DX_CONFIG) $(PYTHON_EXTRA) $(PHP_EXTRA) $(PERL_EXTRA)
 
 MOSTLYCLEANFILES = $(DX_CLEANFILES) redhat/SOURCES/*
@@ -81,6 +81,7 @@ deb:
 
 rpm: dist
 	mkdir -p redhat/SOURCES
+	mkdir -p redhar/BUILD
 	cp libhttpserver-@VERSION@.tar.gz redhat/SOURCES
 	rpmbuild -v -bb redhat/libhttpserver.SPEC
 	rpmbuild -v -ba redhat/libhttpserver.SPEC
