@@ -6,7 +6,7 @@
 CURDIR =
 DEB_SRCDIR = @abs_top_srcdir@
 DEB_DH_INSTALL_SOURCEDIR = debian/tmp
-DEB_BUILDDIR = deb_build
+DEB_BUILDDIR = @abs_top_builddir@/deb_build
 DEB_MAKE_CHECK_TARGET = check
 
 include /usr/share/cdbs/1/rules/debhelper.mk
