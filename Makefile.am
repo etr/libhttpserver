@@ -28,7 +28,7 @@ SUBDIRS = src $(PYTHON_DIR) $(JAVA_DIR) $(PHP_DIR) $(LUA_DIR) $(PERL_DIR) $(RUBY
 DIST_SUBDIRS = $(SUBDIRS)
 EXTRA_DIST = libhttpserver.pc.in debian/changelog.in debian/control.in debian/rules.in debian/libhttpserver-dev.install.in debian/libhttpserver.install.in redhat/libhttpserver.SPEC.in $(DX_CONFIG) $(PYTHON_EXTRA) $(PHP_EXTRA) $(PERL_EXTRA)
 
-MOSTLYCLEANFILES = $(DX_CLEANFILES) redhat/SOURCES/*
+MOSTLYCLEANFILES = $(DX_CLEANFILES) redhat/SOURCES/* $(top_srcdir)/src/java/*.java $(top_srcdir)/src/java/webserver_wrap.*
 DISTCLEANFILES = redhat/SOURCES/* redhat/SPEC/* redhat/* debian/* DIST_REVISION
 
 pkgconfigdir = $(libdir)/pkgconfig

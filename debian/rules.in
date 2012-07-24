@@ -5,7 +5,8 @@
 
 CURDIR =
 DEB_SRCDIR = @abs_top_srcdir@
-DEB_DH_INSTALL_SOURCEDIR = debian/tmp
+DEB_DESTDIR = @abs_top_builddir@/debian/tmp
+DEB_DH_INSTALL_SOURCEDIR = @abs_top_builddir@/debian/tmp
 DEB_BUILDDIR = @abs_top_builddir@/deb_build
 DEB_MAKE_CHECK_TARGET = check
 
