@@ -2,7 +2,8 @@ Source: libhttpserver
 Section: libs
 Priority: optional
 Maintainer: Sebastiano Merlino <electrictwister2000@gmail.com>
-Build-Depends: libmicrohttpd10(>= 0.9.7)
+Build-Depends: cdbs
+Depends: libmicrohttpd10(>= 0.9.7), libstdc++6
 Standards-Version: @VERSION@
 Vcs-Git: git://github.com/etr/libhttpserver.git
 Vcs-browser: https://github.com/etr/libhttpserver.git
@@ -12,7 +13,7 @@ Package: libhttpserver
 Architecture: any
 Installed-Size:
 Depends: ${misc:Depends}, ${shlibs:Depends}
-Description: libhttpserver
+Description:
  library embedding RESTful HTTP server functionality 
  libhttpserver is a small C++ library for embedding RESTful HTTP server functionality into
  applications.
@@ -23,8 +24,8 @@ Package: libhttpserver-dbg
 Section: debug
 Architecture: any
 Installed-Size:
-Depends: ${misc:Depends}, ${shlibs:Depends}, libmicrohttpd-dbg(>= 0.9.7)
-Description: libhttpserver debug
+Depends: ${misc:Depends}, ${shlibs:Depends}, libmicrohttpd-dbg(>= 0.9.7), libstdc++6
+Description:
  library embedding RESTful HTTP server functionality (debug)
  libhttpserver is a small C++ library for embedding RESTful HTTP server functionality into
  applications.
@@ -35,8 +36,8 @@ Package: libhttpserver-dev
 Section: libdevel
 Architecture: any
 Installed-Size:
-Depends: ${misc:Depends}, ${shlibs:Depends}, libmicrohttpd-dev(>= 0.9.7)
-Description: libhttpserver
+Depends: ${misc:Depends}, ${shlibs:Depends}, libmicrohttpd-dev(>= 0.9.7), libstdc++6
+Description:
  The libhttpserver library .
  .
  This package contains the development files.
