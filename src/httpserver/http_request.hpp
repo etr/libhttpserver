@@ -55,14 +55,26 @@ class http_request
         {
             return this->user;
         }
+        /**
+         * Method used to get the username eventually passed through basic authentication.
+         * @param result string that will be filled with the username
+        **/
         void get_user(std::string& result) const
         {
             result = this->user;
         }
+        /**
+         * Method used to get the username extracted from a digest authentication
+         * @return the username
+        **/
         const std::string get_digested_user() const
         {
             return this->digested_user;
         }
+        /**
+         * Method used to get the username extracted from a digest authentication
+         * @param result string that will be filled with the username
+        **/
         void get_digested_user(std::string& result) const
         {
             result = this->digested_user;
@@ -75,6 +87,10 @@ class http_request
         {
             return this->pass;
         }
+        /**
+         * Method used to get the password eventually passed through basic authentication.
+         * @param result string that will be filled with the password.
+        **/
         void get_pass(std::string& result) const
         {
             result = this->pass;
@@ -87,6 +103,10 @@ class http_request
         {
             return this->path;
         }
+        /**
+         * Method used to get the path requested
+         * @param result string that will be filled with the path.
+        **/
         void get_path(std::string& result) const
         {
             result = this->path;
@@ -99,7 +119,12 @@ class http_request
         {
             return this->post_path;
         }
-        int get_path_pieces(std::vector<std::string>& result) const
+        /**
+         * Method used to get all pieces of the path requested; considering an url splitted by '/'.
+         * @param result vector of strings containing the path
+         * @return the size of the vector filled
+        **/
+        size_t get_path_pieces(std::vector<std::string>& result) const
         {
             result = this->post_path;
             return result.size();
@@ -108,12 +133,13 @@ class http_request
          * Method used to obtain the size of path in terms of pieces; considering an url splitted by '/'.
          * @return an integer representing the number of pieces
         **/
-        int get_path_pieces_size() const
+        size_t get_path_pieces_size() const
         {
             return this->post_path.size();
         }
         /**
          * Method used to obtain a specified piece of the path; considering an url splitted by '/'.
+         * @param index the index of the piece selected
          * @return the selected piece in form of string
         **/
         const std::string get_path_piece(int index) const
@@ -122,6 +148,12 @@ class http_request
                 return this->post_path[index];
             return "";
         }
+        /**
+         * Method used to obtain a specified piece of the path; considering an url splitted by '/'.
+         * @param index the index of the piece selected
+         * @param result a string that will be filled with the piece found
+         * @return the length of the piece found
+        **/
         size_t get_path_piece(int index, std::string& result) const
         {
             if(((int)(this->post_path.size())) > index)
@@ -143,6 +175,10 @@ class http_request
         {
             return this->method;
         }
+        /**
+         * Method used to get the METHOD used to make the request.
+         * @param result string that will be filled with the method.
+        **/
         void get_method(std::string& result) const
         {
             result = this->method;
@@ -152,8 +188,18 @@ class http_request
          * @return a vector<pair<string,string> > containing all headers.
         **/
         const std::vector<std::pair<std::string, std::string> > get_headers() const;
+        /**
+         * Method used to get all headers passed with the request.
+         * @param result a vector<pair<string, string> > that will be filled with all headers
+         * @result the size of the vector
+        **/
         size_t get_headers(std::vector<std::pair<std::string, std::string> >& result) const;
 #ifndef SWIG
+        /**
+         * Method used to get all headers passed with the request.
+         * @param result a map<string, string> > that will be filled with all headers
+         * @result the size of the map
+        **/
         size_t get_headers(std::map<std::string, std::string, header_comparator>& result) const;
 #endif
         /**
@@ -161,8 +207,18 @@ class http_request
          * @return a vector<pair<string,string> > containing all footers.
         **/
         const std::vector<std::pair<std::string, std::string> > get_footers() const;
+        /**
+         * Method used to get all footers passed with the request.
+         * @param result a vector<pair<string, string> > that will be filled with all footers
+         * @result the size of the vector
+        **/
         size_t get_footers(std::vector<std::pair<std::string, std::string> >& result) const;
 #ifndef SWIG
+        /**
+         * Method used to get all footers passed with the request.
+         * @param result a map<string, string> > that will be filled with all footers
+         * @result the size of the map
+        **/
         size_t get_footers(std::map<std::string, std::string, header_comparator>& result) const;
 #endif
         /**
@@ -170,8 +226,18 @@ class http_request
          * @return a vector<pair<string, string> > containing all cookies.
         **/
         const std::vector<std::pair<std::string, std::string> > get_cookies() const;
+        /**
+         * Method used to get all cookies passed with the request.
+         * @param result a vector<pair<string, string> > that will be filled with all cookies
+         * @result the size of the vector
+        **/
         size_t get_cookies(std::vector<std::pair<std::string, std::string> >& result) const;
 #ifndef SWIG
+        /**
+         * Method used to get all cookies passed with the request.
+         * @param result a map<string, string> > that will be filled with all cookies
+         * @result the size of the map
+        **/
         size_t get_cookies(std::map<std::string, std::string, header_comparator>& result) const;
 #endif
         /**
@@ -179,8 +245,18 @@ class http_request
          * @return a map<string,string> containing all parameters.
         **/
         const std::vector<std::pair<std::string, std::string> > get_args() const;
+        /**
+         * Method used to get all args passed with the request.
+         * @param result a vector<pair<string, string> > that will be filled with all args
+         * @result the size of the vector
+        **/
         size_t get_args(std::vector<std::pair<std::string, std::string> >& result) const;
 #ifndef SWIG
+        /**
+         * Method used to get all args passed with the request.
+         * @param result a map<string, string> > that will be filled with all args
+         * @result the size of the map
+        **/
         size_t get_args(std::map<std::string, std::string, arg_comparator>& result) const;
 #endif
         /**
