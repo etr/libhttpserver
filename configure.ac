@@ -240,10 +240,10 @@ if test x$python = xtrue; then
     AC_SUBST(PYLDFLAGS)
     AC_SUBST(PYLIBS)
 	AC_SUBST_FILE([PYTHON_AUTOGENERATION])
-	PYTHON_AUTOGENERATION=$srcdir/src/autogen_helpers/support_command
 	LANGUAGES="$LANGUAGES Python"
     OUTPUT_LANG="$OUTPUT_LANG src/python/Makefile"
 fi 
+PYTHON_AUTOGENERATION=$srcdir/src/autogen_helpers/support_command
 
 if test x$java = xtrue; then
     JAVAINCLUDES=""
@@ -271,10 +271,10 @@ if test x$java = xtrue; then
     AC_SUBST(JAVALDFLAGS)
     AC_SUBST(JABALIBS)
 	AC_SUBST_FILE([JAVA_AUTOGENERATION])
-	JAVA_AUTOGENERATION=$srcdir/src/autogen_helpers/support_command
 	LANGUAGES="$LANGUAGES Java"
     OUTPUT_LANG="$OUTPUT_LANG src/java/Makefile"
 fi 
+JAVA_AUTOGENERATION=$srcdir/src/autogen_helpers/support_command
 
 if test x$php = xtrue; then
 	AC_CHECK_PROG([PHPCONFIG],[php-config],["yes"], ["no"])
@@ -287,10 +287,10 @@ if test x$php = xtrue; then
     AC_SUBST(PHPINCLUDES)
     AC_SUBST(PHPLDFLAGS)
 	AC_SUBST_FILE([PHP_AUTOGENERATION])
-	PHP_AUTOGENERATION=$srcdir/src/autogen_helpers/support_command
 	LANGUAGES="$LANGUAGES PHP"
     OUTPUT_LANG="$OUTPUT_LANG src/php/Makefile"
 fi 
+PHP_AUTOGENERATION=$srcdir/src/autogen_helpers/support_command
 
 if test x$lua = xtrue; then
     LUAINCLUDES=""
@@ -314,10 +314,10 @@ if test x$lua = xtrue; then
 	fi
     AC_SUBST(LUAINCLUDES)
 	AC_SUBST_FILE([LUA_AUTOGENERATION])
-	LUA_AUTOGENERATION=$srcdir/src/autogen_helpers/support_command
 	LANGUAGES="$LANGUAGES LUA"
     OUTPUT_LANG="$OUTPUT_LANG src/lua/Makefile"
 fi
+LUA_AUTOGENERATION=$srcdir/src/autogen_helpers/support_command
 
 if test x$perl = xtrue; then
 	AC_CHECK_PROG([PERLINT],[perl],["yes"], ["no"])
@@ -330,10 +330,10 @@ if test x$perl = xtrue; then
     AC_SUBST(PERLINCLUDES)
     AC_SUBST(PERLDEFINES)
 	AC_SUBST_FILE([PERL_AUTOGENERATION])
-	PERL_AUTOGENERATION=$srcdir/src/autogen_helpers/support_command
 	LANGUAGES="$LANGUAGES Perl"
     OUTPUT_LANG="$OUTPUT_LANG src/perl/Makefile"
 fi
+PERL_AUTOGENERATION=$srcdir/src/autogen_helpers/support_command
 
 if test x$ruby = xtrue; then
 	AC_CHECK_PROG([RUBYINT],[ruby],["yes"], ["no"])
@@ -361,10 +361,10 @@ if test x$ruby = xtrue; then
     AC_SUBST(RUBYINCLUDES)
     AC_SUBST(RUBYDEFINES)
 	AC_SUBST_FILE([RUBY_AUTOGENERATION])
-	RUBY_AUTOGENERATION=$srcdir/src/autogen_helpers/support_command
 	LANGUAGES="$LANGUAGES Ruby"
     OUTPUT_LANG="$OUTPUT_LANG src/ruby/Makefile"
 fi
+RUBY_AUTOGENERATION=$srcdir/src/autogen_helpers/support_command
 
 if test x$guile = xtrue; then
 	AC_CHECK_PROG([GUILEINT],[guile],["yes"], ["no"])
@@ -373,10 +373,10 @@ if test x$guile = xtrue; then
 		AC_MSG_ERROR(guile interpreter not found)
 	fi
 	AC_SUBST_FILE([GUILE_AUTOGENERATION])
-	GUILE_AUTOGENERATION=$srcdir/src/autogen_helpers/support_command
 	LANGUAGES="$LANGUAGES Guile"
     OUTPUT_LANG="$OUTPUT_LANG src/guile/Makefile"
 fi
+GUILE_AUTOGENERATION=$srcdir/src/autogen_helpers/support_command
 
 AC_SUBST(LHT_LIBDEPS)
 AC_SUBST(AM_CXXFLAGS)

@@ -1,3 +1,10 @@
+libhttpserver (0.2.0) unstable; urgency=low
+
+  * Deb target now seems to work really
+  * Rpm target added
+
+ -- Sebastiano Merlino <electrictwister2000@gmail.com> Wed, 25 Jul 2012 17:05:11 +0200
+
 libhttpserver (0.1.2) unstable; urgency=low
 
   * Added deb target to makefile.
