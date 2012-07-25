@@ -20,8 +20,13 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.57)
-AC_INIT([libhttpserver], 0.2, [electrictwister2000@gmail.com])
-AM_INIT_AUTOMAKE([libhttpserver], 0.2)
+m4_define([libhttpserver_MAJOR_VERSION],[0])dnl
+m4_define([libhttpserver_MINOR_VERSION],[2])dnl
+m4_define([libhttpserver_REVISION],[0])dnl
+m4_define([libhttpserver_PKG_VERSION],[libhttpserver_MAJOR_VERSION.libhttpserver_MINOR_VERSION.libhttpserver_REVISION])dnl
+m4_define([libhttpserver_LDF_VERSION],[libhttpserver_MAJOR_VERSION:libhttpserver_MINOR_VERSION:libhttpserver_REVISION])dnl
+AC_INIT([libhttpserver], libhttpserver_PKG_VERSION, [electrictwister2000@gmail.com])
+AM_INIT_AUTOMAKE([libhttpserver], libhttpserver_PKG_VERSION)
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIR([m4])
 
@@ -377,6 +382,8 @@ if test x$guile = xtrue; then
     OUTPUT_LANG="$OUTPUT_LANG src/guile/Makefile"
 fi
 GUILE_AUTOGENERATION=$srcdir/src/autogen_helpers/support_command
+
+LDFLAGS="$LDFLAGS -version-number libhttpserver_LDF_VERSION"
 
 AC_SUBST(LHT_LIBDEPS)
 AC_SUBST(AM_CXXFLAGS)
