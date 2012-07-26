@@ -41,7 +41,7 @@ http_resource::http_resource()
     this->allowed_methods[MHD_HTTP_METHOD_OPTIONS] = true;
 #ifdef DEBUG
     std::map<std::string, bool>::iterator it;
-    for(it = allowed_methods.begin(); it != allowed_methods.end(); it++)
+    for(it = allowed_methods.begin(); it != allowed_methods.end(); ++it)
     {
         std::cout << (*it).first << " -> " << (*it).second << std::endl;
     }

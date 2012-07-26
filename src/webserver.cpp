@@ -421,8 +421,8 @@ void webserver::unregister_resource(const string& resource)
 void webserver::ban_ip(const string& ip)
 {
     ip_representation t_ip(ip);
-    set<ip_representation>::iterator it = bans.find(t_ip);
-    if(it != bans.end() && (t_ip.weight() < (*it).weight()))
+    set<ip_representation>::iterator it = this->bans.find(t_ip);
+    if(it != this->bans.end() && (t_ip.weight() < (*it).weight()))
     {
         this->bans.erase(it);
         this->bans.insert(t_ip);
@@ -434,8 +434,8 @@ void webserver::ban_ip(const string& ip)
 void webserver::allow_ip(const string& ip)
 {
     ip_representation t_ip(ip);
-    set<ip_representation>::iterator it = allowances.find(t_ip);
-    if(it != allowances.end() && (t_ip.weight() < (*it).weight()))
+    set<ip_representation>::iterator it = this->allowances.find(t_ip);
+    if(it != this->allowances.end() && (t_ip.weight() < (*it).weight()))
     {
         this->allowances.erase(it);
         this->allowances.insert(t_ip);
@@ -456,28 +456,28 @@ void webserver::disallow_ip(const string& ip)
 
 int webserver::build_request_header (void *cls, enum MHD_ValueKind kind, const char *key, const char *value)
 {
-    http_request* dhr = (http_request*)(cls);
+    http_request* dhr = static_cast<http_request*>(cls);
     dhr->set_header(key, value);
     return MHD_YES;
 }
 
 int webserver::build_request_cookie (void *cls, enum MHD_ValueKind kind, const char *key, const char *value)
 {
-    http_request* dhr = (http_request*)(cls);
+    http_request* dhr = static_cast<http_request*>(cls);
     dhr->set_cookie(key, value);
     return MHD_YES;
 }
 
 int webserver::build_request_footer (void *cls, enum MHD_ValueKind kind, const char *key, const char *value)
 {
-    http_request* dhr = (http_request*)(cls);
+    http_request* dhr = static_cast<http_request*>(cls);
     dhr->set_footer(key, value);
     return MHD_YES;
 }
 
 int webserver::build_request_args (void *cls, enum MHD_ValueKind kind, const char *key, const char *value)
 {
-    modded_request* mr = (modded_request*)(cls);
+    modded_request* mr = static_cast<modded_request*>(cls);
     int size = internal_unescaper((void*)mr->ws, (char*) value);
     mr->dhr->set_arg(key, string(value, size));
     return MHD_YES;
@@ -485,15 +485,15 @@ int webserver::build_request_args (void *cls, enum MHD_ValueKind kind, const cha
 
 int policy_callback (void *cls, const struct sockaddr* addr, socklen_t addrlen)
 {
-    if(((webserver*)cls)->ban_system_enabled)
+    if((static_cast<webserver*>(cls))->ban_system_enabled)
     {
-        if(((((webserver*)cls)->default_policy == http_utils::ACCEPT) && 
-           (((webserver*)cls)->bans.count(addr)) && 
-           (!((webserver*)cls)->allowances.count(addr))
+        if((((static_cast<webserver*>(cls))->default_policy == http_utils::ACCEPT) && 
+           ((static_cast<webserver*>(cls))->bans.count(addr)) && 
+           (!(static_cast<webserver*>(cls))->allowances.count(addr))
         ) ||
-        ((((webserver*)cls)->default_policy == http_utils::REJECT) &&
-           ((!((webserver*)cls)->allowances.count(addr)) ||
-           (((webserver*)cls)->bans.count(addr)))
+        (((static_cast<webserver*>(cls))->default_policy == http_utils::REJECT) &&
+           ((!(static_cast<webserver*>(cls))->allowances.count(addr)) ||
+           ((static_cast<webserver*>(cls))->bans.count(addr)))
         ))
             return MHD_NO;
     }
@@ -510,7 +510,7 @@ void* uri_log(void* cls, const char* uri)
 
 void error_log(void* cls, const char* fmt, va_list ap)
 {
-    webserver* dws = (webserver*) cls;
+    webserver* dws = static_cast<webserver*>(cls);
     if(dws->log_delegate != 0x0)
     {
         dws->log_delegate->log_error(fmt);
@@ -544,7 +544,7 @@ size_t unescaper_func(void * cls, struct MHD_Connection *c, char *s)
 
 size_t internal_unescaper(void* cls, char* s)
 {
-    webserver* dws = (webserver*) cls;
+    webserver* dws = static_cast<webserver*>(cls);
     if(dws->unescaper_pointer != 0x0)
     {
         dws->unescaper_pointer->unescape(s);
@@ -624,7 +624,7 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
     struct MHD_Response *response = 0x0;
     struct modded_request *mr;
     http_request support_req;
-    webserver* dws = (webserver*)(cls);
+    webserver* dws = static_cast<webserver*>(cls);
     internal_unescaper(cls, (char*) url);
     string st_url;
     http_utils::standardize_url(url, st_url);
@@ -667,7 +667,6 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
 
     if (    0 == strcmp(method, MHD_HTTP_METHOD_DELETE) || 
         0 == strcmp(method, MHD_HTTP_METHOD_GET) ||
-        0 == strcmp(method, MHD_HTTP_METHOD_HEAD) ||
         0 == strcmp(method, MHD_HTTP_METHOD_CONNECT) ||
         0 == strcmp(method, MHD_HTTP_METHOD_HEAD) ||
         0 == strcmp(method, MHD_HTTP_METHOD_TRACE)
@@ -749,7 +748,7 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
                 map<http_endpoint, http_resource* >::iterator it;
                 int len = -1;
                 int tot_len = -1;
-                for(it=dws->registered_resources.begin(); it!=dws->registered_resources.end(); it++) 
+                for(it=dws->registered_resources.begin(); it!=dws->registered_resources.end(); ++it) 
                 {
                     int endpoint_pieces_len = (*it).first.get_url_pieces_num();
                     int endpoint_tot_len = (*it).first.get_url_complete_size();
@@ -842,9 +841,9 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
         vector<pair<string,string> > response_footers;
         dhrs.get_footers(response_footers);
         vector<pair<string,string> >::iterator it;
-        for (it=response_headers.begin() ; it != response_headers.end(); it++)
+        for (it=response_headers.begin() ; it != response_headers.end(); ++it)
             MHD_add_response_header(response, (*it).first.c_str(), (*it).second.c_str());
-        for (it=response_footers.begin() ; it != response_footers.end(); it++)
+        for (it=response_footers.begin() ; it != response_footers.end(); ++it)
             MHD_add_response_footer(response, (*it).first.c_str(), (*it).second.c_str());
         if(dhrs.response_type == http_response::DIGEST_AUTH_FAIL)
             to_ret = MHD_queue_auth_fail_response(connection, dhrs.get_realm().c_str(), dhrs.get_opaque().c_str(), response, dhrs.need_nonce_reload() ? MHD_YES : MHD_NO);

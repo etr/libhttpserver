@@ -204,7 +204,7 @@ class http_response
         void set_headers(const std::map<std::string, std::string>& headers)
         {
             std::map<std::string, std::string>::const_iterator it;
-            for(it = headers.begin(); it != headers.end(); it ++)
+            for(it = headers.begin(); it != headers.end(); ++it)
                 this->headers[it->first] = it->second;
         }
         /**
@@ -214,7 +214,7 @@ class http_response
         void set_footers(const std::map<std::string, std::string>& footers)
         {
             std::map<std::string, std::string>::const_iterator it;
-            for(it = footers.begin(); it != footers.end(); it ++)
+            for(it = footers.begin(); it != footers.end(); ++it)
                 this->footers[it->first] = it->second;
         }
         /**

@@ -326,6 +326,8 @@ class create_webserver
             _log_delegate(0x0),
             _validator(0x0),
             _unescaper_pointer(0x0),
+            _bind_address(0x0),
+            _bind_socket(0),
             _max_thread_stack_size(0),
             _use_ssl(false),
             _use_ipv6(false),

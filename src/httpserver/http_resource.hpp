@@ -136,7 +136,7 @@ class http_resource
         void allow_all()
         {
             std::map<std::string,bool>::iterator it;
-            for ( it=this->allowed_methods.begin() ; it != this->allowed_methods.end(); it++ )
+            for ( it=this->allowed_methods.begin() ; it != this->allowed_methods.end(); ++it )
                 this->allowed_methods[(*it).first] = true;
         }
         /**
@@ -145,7 +145,7 @@ class http_resource
         void disallow_all()
         {
             std::map<std::string,bool>::iterator it;
-            for ( it=this->allowed_methods.begin() ; it != this->allowed_methods.end(); it++ )
+            for ( it=this->allowed_methods.begin() ; it != this->allowed_methods.end(); ++it )
                 this->allowed_methods[(*it).first] = false;
         }
         /**
@@ -163,7 +163,7 @@ class http_resource
             {
 #ifdef DEBUG
                 std::map<std::string, bool>::iterator it;
-                for(it = allowed_methods.begin(); it != allowed_methods.end(); it++)
+                for(it = allowed_methods.begin(); it != allowed_methods.end(); ++it)
                 {
                     std::cout << (*it).first << " -> " << (*it).second << std::endl;
                 }
@@ -181,9 +181,10 @@ class http_resource
         **/
         http_resource(const http_resource& b) : allowed_methods(b.allowed_methods) { }
 
-        void operator = (const http_resource& b)
+        http_resource& operator = (const http_resource& b)
         {
             allowed_methods = b.allowed_methods;
+            return (*this);
         }
 
     private:

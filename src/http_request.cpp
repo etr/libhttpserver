@@ -52,7 +52,7 @@ const std::vector<std::pair<std::string, std::string> > http_request::get_header
 {
     std::vector<std::pair<std::string, std::string> > to_ret;
     std::map<std::string, std::string, header_comparator>::const_iterator it;
-    for(it = headers.begin(); it != headers.end(); it++)
+    for(it = headers.begin(); it != headers.end(); ++it)
 #ifdef USE_CPP_ZEROX
         to_ret.push_back(std::make_pair((*it).first,(*it).second));
 #else
@@ -63,7 +63,7 @@ const std::vector<std::pair<std::string, std::string> > http_request::get_header
 size_t http_request::get_headers(std::vector<std::pair<std::string, std::string> >& result) const
 {
     std::map<std::string, std::string, header_comparator>::const_iterator it;
-    for(it = headers.begin(); it != headers.end(); it++)
+    for(it = headers.begin(); it != headers.end(); ++it)
 #ifdef USE_CPP_ZEROX
         result.push_back(std::make_pair((*it).first,(*it).second));
 #else
@@ -84,7 +84,7 @@ const std::vector<std::pair<std::string, std::string> > http_request::get_footer
 {
     std::vector<std::pair<std::string, std::string> > to_ret;
     std::map<std::string, std::string, header_comparator>::const_iterator it;
-    for(it = footers.begin(); it != footers.end(); it++)
+    for(it = footers.begin(); it != footers.end(); ++it)
 #ifdef USE_CPP_ZEROX
         to_ret.push_back(std::make_pair((*it).first,(*it).second));
 #else
@@ -95,7 +95,7 @@ const std::vector<std::pair<std::string, std::string> > http_request::get_footer
 size_t http_request::get_footers(std::vector<std::pair<std::string, std::string> >& result) const
 {
     std::map<std::string, std::string, header_comparator>::const_iterator it;
-    for(it = footers.begin(); it != footers.end(); it++)
+    for(it = footers.begin(); it != footers.end(); ++it)
 #ifdef USE_CPP_ZEROX
         result.push_back(std::make_pair((*it).first,(*it).second));
 #else
@@ -116,7 +116,7 @@ const std::vector<std::pair<std::string, std::string> > http_request::get_cookie
 {
     std::vector<std::pair<std::string, std::string> > to_ret;
     std::map<std::string, std::string, header_comparator>::const_iterator it;
-    for(it = cookies.begin(); it != cookies.end(); it++)
+    for(it = cookies.begin(); it != cookies.end(); ++it)
 #ifdef USE_CPP_ZEROX
         to_ret.push_back(std::make_pair((*it).first,(*it).second));
 #else
@@ -128,7 +128,7 @@ const std::vector<std::pair<std::string, std::string> > http_request::get_cookie
 size_t http_request::get_cookies(std::vector<std::pair<std::string, std::string> >& result) const
 {
     std::map<std::string, std::string, header_comparator>::const_iterator it;
-    for(it = cookies.begin(); it != cookies.end(); it++)
+    for(it = cookies.begin(); it != cookies.end(); ++it)
 #ifdef USE_CPP_ZEROX
         result.push_back(std::make_pair((*it).first,(*it).second));
 #else
@@ -149,7 +149,7 @@ const std::vector<std::pair<std::string, std::string> > http_request::get_args()
 {
     std::vector<std::pair<std::string, std::string> > to_ret;
     std::map<std::string, std::string, arg_comparator>::const_iterator it;
-    for(it = args.begin(); it != args.end(); it++)
+    for(it = args.begin(); it != args.end(); ++it)
 #ifdef USE_CPP_ZEROX
         to_ret.push_back(std::make_pair((*it).first,(*it).second));
 #else
@@ -161,7 +161,7 @@ const std::vector<std::pair<std::string, std::string> > http_request::get_args()
 size_t http_request::get_args(std::vector<std::pair<std::string, std::string> >& result) const
 {
     std::map<std::string, std::string, header_comparator>::const_iterator it;
-    for(it = args.begin(); it != args.end(); it++)
+    for(it = args.begin(); it != args.end(); ++it)
 #ifdef USE_CPP_ZEROX
         result.push_back(std::make_pair((*it).first,(*it).second));
 #else
