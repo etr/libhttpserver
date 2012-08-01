@@ -72,6 +72,9 @@ PKG_CHECK_MODULES([LIBMICROHTTPD],[libmicrohttpd >= 0.9.7],[],[AC_MSG_ERROR("lib
 #AC_CHECK_HEADER([microhttpd.h],[],[AC_MSG_ERROR("Microhttpd header files not found. Please use a version >= 0.9.9.")])
 #AC_CHECK_LIB([microhttpd],[MHD_start_daemon],[],[AC_MSG_ERROR("Microhttpd header files not found. Please use a version >= 0.9.9.")])
 
+CXXFLAGS="$LIBMICROHTTPD_CFLAGS $CXXFLAGS"
+LDFLAGS="$LIBMICROHTTPD_LIBS $LD_FLAGS"
+
 m4_pattern_allow([AC_TYPE_SIZE_T])
 m4_pattern_allow([AC_TYPE_UINT16_T])
 m4_pattern_allow([AC_TYPE_UINT32_T])
