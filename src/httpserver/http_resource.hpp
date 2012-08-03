@@ -17,6 +17,11 @@
      Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
 */
+
+#if !defined (_HTTPSERVER_HPP_INSIDE_) && !defined (HTTPSERVER_COMPILATION)
+#error "Only <httpserver.hpp> or <httpserverpp> can be included directly."
+#endif
+
 #ifndef _http_resource_hpp_
 #define _http_resource_hpp_
 #include <map>

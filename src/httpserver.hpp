@@ -1,5 +1,7 @@
-#ifndef _httpserver_hpp_
-#define _httpserver_hpp_
+#ifndef _HTTPSERVER_HPP_
+#define _HTTPSERVER_HPP_
+
+#define _HTTPSERVER_HPP_INSIDE_
 
 #ifdef SWIG
 %include "std_string.i"
