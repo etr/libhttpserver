@@ -665,7 +665,7 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
     mr->dhr->set_path(st_url);
     mr->dhr->set_method(method);
 
-    if (    0 == strcmp(method, MHD_HTTP_METHOD_DELETE) || 
+/*    if (    0 == strcmp(method, MHD_HTTP_METHOD_DELETE) || 
         0 == strcmp(method, MHD_HTTP_METHOD_GET) ||
         0 == strcmp(method, MHD_HTTP_METHOD_CONNECT) ||
         0 == strcmp(method, MHD_HTTP_METHOD_HEAD) ||
@@ -673,8 +673,9 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
     ) 
     {
         MHD_get_connection_values (connection, MHD_GET_ARGUMENT_KIND, &build_request_args, (void*) mr);
-    } 
-    else if (0 == strcmp (method, MHD_HTTP_METHOD_POST) || 0 == strcmp(method, MHD_HTTP_METHOD_PUT)) 
+    } */
+    MHD_get_connection_values (connection, MHD_GET_ARGUMENT_KIND, &build_request_args, (void*) mr);
+    /*else*/ if (0 == strcmp (method, MHD_HTTP_METHOD_POST) || 0 == strcmp(method, MHD_HTTP_METHOD_PUT)) 
     {
         string encoding = mr->dhr->get_header(http_utils::http_header_content_type);
         if (( 0 == strcmp(method, MHD_HTTP_METHOD_POST) && ((0 == strncasecmp (MHD_HTTP_POST_ENCODING_FORM_URLENCODED, encoding.c_str(), strlen (MHD_HTTP_POST_ENCODING_FORM_URLENCODED))))) && dws->post_process_enabled)
