@@ -223,6 +223,8 @@ webserver::webserver
     else
         this->single_resource = false;
     ignore_sigpipe();
+    pthread_mutex_init(&mutexwait, NULL);
+    pthread_cond_init(&mutexcond, NULL);
 }
 
 webserver::webserver(const create_webserver& params):
@@ -266,16 +268,20 @@ webserver::webserver(const create_webserver& params):
     else
         this->single_resource = false;
     ignore_sigpipe();
+    pthread_mutex_init(&mutexwait, NULL);
+    pthread_cond_init(&mutexcond, NULL);
 }
 
 webserver::~webserver()
 {
     this->stop();
+    pthread_mutex_destroy(&mutexwait);
+    pthread_cond_destroy(&mutexcond);
 }
 
 void webserver::sweet_kill()
 {
-    this->running = false;
+    this->stop();
 }
 
 void webserver::request_completed (void *cls, struct MHD_Connection *connection, void **con_cls, enum MHD_RequestTerminationCode toe) 
@@ -380,15 +386,17 @@ bool webserver::start(bool blocking)
             Py_BEGIN_ALLOW_THREADS;
         }
 #endif
+        pthread_mutex_lock(&mutexwait);
         while(blocking && running)
-            sleep(1);
+            pthread_cond_wait(&mutexcond, &mutexwait);
+        pthread_mutex_unlock(&mutexwait);
 #ifdef WITH_PYTHON
         if(PyEval_ThreadsInitialized())
         {
             Py_END_ALLOW_THREADS;
         }
 #endif
-        value_onclose = this->stop();
+        value_onclose = true;
     }
     return value_onclose;
 }
@@ -400,11 +408,14 @@ bool webserver::is_running()
 
 bool webserver::stop()
 {
+    pthread_mutex_lock(&mutexwait);
     if(this->running)
     {
         MHD_stop_daemon (this->daemon);
         this->running = false;
     }
+    pthread_cond_signal(&mutexcond);
+    pthread_mutex_unlock(&mutexwait);
     return true;
 }
 
@@ -665,7 +676,7 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
     mr->dhr->set_path(st_url);
     mr->dhr->set_method(method);
 
-/*    if (    0 == strcmp(method, MHD_HTTP_METHOD_DELETE) || 
+/*    if (0 == strcmp(method, MHD_HTTP_METHOD_DELETE) || 
         0 == strcmp(method, MHD_HTTP_METHOD_GET) ||
         0 == strcmp(method, MHD_HTTP_METHOD_CONNECT) ||
         0 == strcmp(method, MHD_HTTP_METHOD_HEAD) ||
@@ -692,7 +703,12 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
             return MHD_YES;
         } 
     } 
-    else 
+    else if(0 != strcmp(method, MHD_HTTP_METHOD_DELETE) &&
+            0 != strcmp(method, MHD_HTTP_METHOD_GET) &&
+            0 != strcmp(method, MHD_HTTP_METHOD_CONNECT) &&
+            0 != strcmp(method, MHD_HTTP_METHOD_HEAD) &&
+            0 != strcmp(method, MHD_HTTP_METHOD_TRACE)
+    )
     {
         return method_not_acceptable_page(cls, connection);
     }

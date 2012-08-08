@@ -44,6 +44,8 @@
 #include <utility>
 #include <memory>
 
+#include <pthread.h>
+
 namespace httpserver {
 
 class http_resource;
@@ -260,6 +262,8 @@ class webserver
         bool ban_system_enabled;
         bool post_process_enabled;
         bool single_resource;
+        pthread_mutex_t mutexwait;
+        pthread_cond_t mutexcond;
 
         std::map<http_endpoint, http_resource* > registered_resources;
 #ifdef USE_CPP_ZEROX
