@@ -669,13 +669,6 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
         mr->dhr = &support_req;
     }
 
-    MHD_get_connection_values (connection, MHD_HEADER_KIND, &build_request_header, (void*) mr->dhr);
-    MHD_get_connection_values (connection, MHD_FOOTER_KIND, &build_request_footer, (void*) mr->dhr);
-    MHD_get_connection_values (connection, MHD_COOKIE_KIND, &build_request_cookie, (void*) mr->dhr);
-
-    mr->dhr->set_path(st_url);
-    mr->dhr->set_method(method);
-
 /*    if (0 == strcmp(method, MHD_HTTP_METHOD_DELETE) || 
         0 == strcmp(method, MHD_HTTP_METHOD_GET) ||
         0 == strcmp(method, MHD_HTTP_METHOD_CONNECT) ||
