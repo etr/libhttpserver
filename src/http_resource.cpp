@@ -55,22 +55,43 @@ http_resource::~http_resource()
 
 http_response http_resource::render(const http_request& r) 
 {
-    return this->render_404();
+    return http_string_response("", http_utils::http_ok);
 }
 
-http_response http_resource::render_404() 
+void http_resource::render(const http_request& r, http_response** res)
 {
-    return http_string_response(NOT_FOUND_ERROR, 404);
+    route_request(r, res);
 }
 
-http_response http_resource::render_405() 
+http_response http_resource::route_request(const http_request& r)
 {
-    return http_string_response(METHOD_ERROR, 405);
+    string method;
+    r.get_method(method);
+    string_utilities::to_upper(method);
+    if(method == MHD_HTTP_METHOD_GET) 
+        return this->render_GET(r);
+    else if (method == MHD_HTTP_METHOD_POST) 
+        return this->render_POST(r);
+    else if (method == MHD_HTTP_METHOD_PUT) 
+        return this->render_PUT(r);
+    else if (method == MHD_HTTP_METHOD_DELETE) 
+        return this->render_DELETE(r);
+    else if (method == MHD_HTTP_METHOD_HEAD) 
+        return this->render_HEAD(r);
+    else if (method == MHD_HTTP_METHOD_TRACE) 
+        return this->render_TRACE(r);
+    else if (method == MHD_HTTP_METHOD_OPTIONS) 
+        return this->render_OPTIONS(r);
+    else if (method == MHD_HTTP_METHOD_CONNECT) 
+        return this->render_CONNECT(r);
+    else
+        return this->render(r);
 }
 
-http_response http_resource::render_500() 
+void http_resource::route_request(const http_request& r, http_response** res)
 {
-    return http_string_response(GENERIC_ERROR, 500);
+    http_response hr(this->route_request(r));
+    clone_response(hr, res);
 }
 
 http_response http_resource::render_GET(const http_request& r) 
@@ -78,9 +99,19 @@ http_response http_resource::render_GET(const http_request& r)
     return this->render(r);
 }
 
+void http_resource::render_GET(const http_request& r, http_response** res) 
+{
+    render(r, res);
+}
+
 http_response http_resource::render_POST(const http_request& r) 
 {
     return this->render(r);
+}
+
+void http_resource::render_POST(const http_request& r, http_response** res) 
+{
+    render(r, res);
 }
 
 http_response http_resource::render_PUT(const http_request& r) 
@@ -88,9 +119,19 @@ http_response http_resource::render_PUT(const http_request& r)
     return this->render(r);
 }
 
+void http_resource::render_PUT(const http_request& r, http_response** res) 
+{
+    render(r, res);
+}
+
 http_response http_resource::render_DELETE(const http_request& r) 
 {
     return this->render(r);
+}
+
+void http_resource::render_DELETE(const http_request& r, http_response** res) 
+{
+    render(r, res);
 }
 
 http_response http_resource::render_HEAD(const http_request& r) 
@@ -98,9 +139,19 @@ http_response http_resource::render_HEAD(const http_request& r)
     return this->render(r);
 }
 
+void http_resource::render_HEAD(const http_request& r, http_response** res) 
+{
+    render(r, res);
+}
+
 http_response http_resource::render_TRACE(const http_request& r) 
 {
     return this->render(r);
+}
+
+void http_resource::render_TRACE(const http_request& r, http_response** res) 
+{
+    render(r, res);
 }
 
 http_response http_resource::render_OPTIONS(const http_request& r) 
@@ -108,63 +159,19 @@ http_response http_resource::render_OPTIONS(const http_request& r)
     return this->render(r);
 }
 
+void http_resource::render_OPTIONS(const http_request& r, http_response** res) 
+{
+    render(r, res);
+}
+
 http_response http_resource::render_CONNECT(const http_request& r) 
 {
     return this->render(r);
 }
 
-http_response http_resource::route_request(const http_request& r) 
+void http_resource::render_CONNECT(const http_request& r, http_response** res) 
 {
-    string method;
-    r.get_method(method);
-    string_utilities::to_upper(method);
-
-    http_response res;
-
-    if(this->is_allowed(method))
-    {
-        if(method == MHD_HTTP_METHOD_GET) 
-        {
-            res = this->render_GET(r);
-        } 
-        else if (method == MHD_HTTP_METHOD_POST) 
-        {
-            res = this->render_POST(r);
-        } 
-        else if (method == MHD_HTTP_METHOD_PUT) 
-        {
-            res = this->render_PUT(r);
-        } 
-        else if (method == MHD_HTTP_METHOD_DELETE) 
-        {
-            res = this->render_DELETE(r);
-        } 
-        else if (method == MHD_HTTP_METHOD_HEAD) 
-        {
-            res = this->render_HEAD(r);
-        } 
-        else if (method == MHD_HTTP_METHOD_TRACE) 
-        {
-            res = this->render_TRACE(r);
-        } 
-        else if (method == MHD_HTTP_METHOD_OPTIONS) 
-        {
-            res = this->render_OPTIONS(r);
-        } 
-        else if (method == MHD_HTTP_METHOD_CONNECT) 
-        {
-            res = this->render_CONNECT(r);
-        } 
-        else 
-        {
-            res = this->render(r);
-        }
-    }
-    else
-    {
-        res = this->render_405();
-    }
-    return res;
+    render(r, res);
 }
 
 };

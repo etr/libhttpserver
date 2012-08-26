@@ -20,7 +20,6 @@
 #include <stdint.h>
 #include <inttypes.h>
 #include <iostream>
-#include <fstream>
 #include <stdlib.h>
 #include <stdio.h>
 #include <errno.h>
@@ -43,6 +42,7 @@
 #include "http_endpoint.hpp"
 #include "string_utilities.hpp"
 #include "webserver.hpp"
+#include "modded_request.hpp"
 
 
 using namespace std;
@@ -78,28 +78,6 @@ static void ignore_sigpipe ()
         fprintf (stderr, gettext("Failed to install SIGPIPE handler: %s\n"), strerror (errno));
 }
 
-static size_t load_file (const char* filename, char** content)
-{
-    ifstream fp(filename, ios::in | ios::binary | ios::ate);
-    if(fp.is_open())
-    {
-        int size = fp.tellg();
-        *content = (char*) malloc(size * sizeof(char));
-        fp.seekg(0, ios::beg);
-        fp.read(*content, size);
-        fp.close();
-        return size;
-    }
-    return 0;
-}
-
-static char* load_file (const char *filename)
-{
-    char* content = NULL;
-    load_file(filename, &content);
-    return content;
-}
-
 //LOGGING DELEGATE
 logging_delegate::logging_delegate() {}
 
@@ -126,7 +104,7 @@ void unescaper::unescape(char* s) const {}
 //WEBSERVER CREATOR
 create_webserver& create_webserver::https_mem_key(const std::string& https_mem_key)
 {
-    char* _https_mem_key_pt = load_file(https_mem_key.c_str());
+    char* _https_mem_key_pt = http::load_file(https_mem_key.c_str());
     _https_mem_key = _https_mem_key_pt;
     free(_https_mem_key_pt);
     return *this;
@@ -134,7 +112,7 @@ create_webserver& create_webserver::https_mem_key(const std::string& https_mem_k
 
 create_webserver& create_webserver::https_mem_cert(const std::string& https_mem_cert)
 {
-    char* _https_mem_cert_pt = load_file(https_mem_cert.c_str());
+    char* _https_mem_cert_pt = http::load_file(https_mem_cert.c_str());
     _https_mem_cert = _https_mem_cert_pt;
     free(_https_mem_cert_pt);
     return *this;
@@ -142,7 +120,7 @@ create_webserver& create_webserver::https_mem_cert(const std::string& https_mem_
 
 create_webserver& create_webserver::https_mem_trust(const std::string& https_mem_trust)
 {
-    char* _https_mem_trust_pt = load_file(https_mem_trust.c_str());
+    char* _https_mem_trust_pt = http::load_file(https_mem_trust.c_str());
     _https_mem_trust = _https_mem_trust_pt;
     free(_https_mem_trust_pt);
     return *this;
@@ -181,7 +159,12 @@ webserver::webserver
     bool regex_checking,
     bool ban_system_enabled,
     bool post_process_enabled,
-    http_resource* single_resource
+    http_resource* single_resource,
+    http_resource* not_found_resource,
+    http_resource* method_not_allowed_resource,
+    http_resource* method_not_acceptable_resource,
+    http_resource* internal_error_resource
+
 ) :
     port(port), 
     start_method(start_method),
@@ -213,18 +196,13 @@ webserver::webserver
     digest_auth_enabled(digest_auth_enabled),
     regex_checking(regex_checking),
     ban_system_enabled(ban_system_enabled),
-    post_process_enabled(post_process_enabled)
+    post_process_enabled(post_process_enabled),
+    not_found_resource(not_found_resource),
+    method_not_allowed_resource(method_not_allowed_resource),
+    method_not_acceptable_resource(method_not_acceptable_resource),
+    internal_error_resource(internal_error_resource)
 {
-    if(single_resource != 0x0)
-    {
-        this->single_resource = true;
-        register_resource("", single_resource);
-    }
-    else
-        this->single_resource = false;
-    ignore_sigpipe();
-    pthread_mutex_init(&mutexwait, NULL);
-    pthread_cond_init(&mutexcond, NULL);
+    init(single_resource);
 }
 
 webserver::webserver(const create_webserver& params):
@@ -258,12 +236,21 @@ webserver::webserver(const create_webserver& params):
     digest_auth_enabled(params._digest_auth_enabled),
     regex_checking(params._regex_checking),
     ban_system_enabled(params._ban_system_enabled),
-    post_process_enabled(params._post_process_enabled)
+    post_process_enabled(params._post_process_enabled),
+    not_found_resource(params._not_found_resource),
+    method_not_allowed_resource(params._method_not_allowed_resource),
+    method_not_acceptable_resource(params._method_not_acceptable_resource),
+    internal_error_resource(params._internal_error_resource)
 {
-    if(params._single_resource != 0x0)
+    init(params._single_resource);
+}
+
+void webserver::init(http_resource* single_resource)
+{
+    if(single_resource != 0x0)
     {
         this->single_resource = true;
-        register_resource("", params._single_resource);
+        register_resource("", single_resource);
     }
     else
         this->single_resource = false;
@@ -297,6 +284,8 @@ void webserver::request_completed (void *cls, struct MHD_Connection *connection,
     }
     if(mr->second)
         delete mr->dhr; //TODO: verify. It could be an error
+    if(mr->dhrs)
+        delete mr->dhrs;
     delete mr->complete_uri;
     free(mr);
 }
@@ -422,6 +411,8 @@ bool webserver::stop()
 void webserver::register_resource(const string& resource, http_resource* http_resource, bool family)
 {
     this->registered_resources[http_endpoint(resource, family, true, regex_checking)] = http_resource;
+    if(method_not_acceptable_resource)
+        http_resource->method_not_acceptable_resource = method_not_acceptable_resource;
 }
 
 void webserver::unregister_resource(const string& resource)
@@ -489,7 +480,7 @@ int webserver::build_request_footer (void *cls, enum MHD_ValueKind kind, const c
 int webserver::build_request_args (void *cls, enum MHD_ValueKind kind, const char *key, const char *value)
 {
     modded_request* mr = static_cast<modded_request*>(cls);
-    int size = internal_unescaper((void*)mr->ws, (char*) value);
+    int size = internal_unescaper((void*) mr->ws, (char*) value);
     mr->dhr->set_arg(key, string(value, size));
     return MHD_YES;
 }
@@ -581,28 +572,16 @@ int webserver::post_iterator (void *cls, enum MHD_ValueKind kind,
 }
 
 void webserver::upgrade_handler (void *cls, struct MHD_Connection* connection,
-                                void **con_cls, int upgrade_socket)
+    void **con_cls, int upgrade_socket)
 {
 }
 
-int webserver::not_found_page (const void *cls,
-    struct MHD_Connection *connection)
+void webserver::not_found_page(http_response** dhrs, modded_request* mr)
 {
-    int ret;
-    struct MHD_Response *response;
-
-    /* unsupported HTTP method */
-    response = MHD_create_response_from_buffer (strlen (NOT_FOUND_ERROR),
-        (void *) NOT_FOUND_ERROR,
-        MHD_RESPMEM_PERSISTENT);
-    ret = MHD_queue_response (connection, 
-        MHD_HTTP_NOT_FOUND, 
-        response);
-    MHD_add_response_header (response,
-        MHD_HTTP_HEADER_CONTENT_ENCODING,
-        "text/plain");
-    MHD_destroy_response (response);
-    return ret;
+    if(not_found_resource != 0x0)
+        ((not_found_resource)->*(mr->callback))(*mr->dhr, dhrs);
+    else
+        *dhrs = new http_string_response(NOT_FOUND_ERROR, http_utils::http_not_found);
 }
 
 int webserver::method_not_acceptable_page (const void *cls,
@@ -625,87 +604,89 @@ int webserver::method_not_acceptable_page (const void *cls,
     return ret;
 }
 
-int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
+void webserver::method_not_allowed_page(http_response** dhrs, modded_request* mr)
+{
+    if(method_not_allowed_resource != 0x0)
+        ((method_not_allowed_resource)->*(mr->callback))(*mr->dhr, dhrs);
+    else
+        *dhrs = new http_string_response(METHOD_ERROR, http_utils::http_method_not_allowed);
+}
+
+void webserver::internal_error_page(http_response** dhrs, modded_request* mr)
+{
+    if(internal_error_resource != 0x0)
+        ((internal_error_resource)->*(mr->callback))(*mr->dhr, dhrs);
+    else
+        *dhrs = new http_string_response(GENERIC_ERROR, http_utils::http_internal_server_error);
+}
+
+int webserver::bodyless_requests_answer(MHD_Connection* connection,
     const char* url, const char* method,
-    const char* version, const char* upload_data,
-    size_t* upload_data_size, void** con_cls
+    const char* version, struct modded_request* mr
     )
 {
-    int to_ret = 0;
-    struct MHD_Response *response = 0x0;
-    struct modded_request *mr;
-    http_request support_req;
-    webserver* dws = static_cast<webserver*>(cls);
-    internal_unescaper(cls, (char*) url);
     string st_url;
+    internal_unescaper((void*) this, (char*) url);
     http_utils::standardize_url(url, st_url);
+    http_request req;
+    mr->dhr = &(req);
 
-    mr = (struct modded_request*) *con_cls;
-    if(mr->second == false)
-        access_log(dws, *(mr->complete_uri) + " METHOD: " + method);
-    mr->ws = dws;
-    if (0 == strcmp (method, MHD_HTTP_METHOD_POST) || 0 == strcmp(method, MHD_HTTP_METHOD_PUT))
-    {
-        if (mr->second == false) 
-        {
-            mr->second = true;
-            mr->dhr = new http_request();
-            const char *encoding = MHD_lookup_connection_value (connection, MHD_HEADER_KIND, http_utils::http_header_content_type.c_str());
-            //mr->dhr->set_header(http_utils::http_header_content_type, string(encoding));
-            if ( ( 0x0 != encoding && 0 == strcmp(method, MHD_HTTP_METHOD_POST) && ((0 == strncasecmp (MHD_HTTP_POST_ENCODING_FORM_URLENCODED, encoding, strlen (MHD_HTTP_POST_ENCODING_FORM_URLENCODED))))) && dws->post_process_enabled) 
-            {
-                mr->pp = MHD_create_post_processor (connection, 1024, &post_iterator, mr);
-            } 
-            else 
-            {
-                mr->pp = NULL;
-            }
-            return MHD_YES;
-        }
-    }
-    else 
-    {
-        support_req = http_request();
-        mr->dhr = &support_req;
-    }
+    return complete_request(connection, mr, version, st_url.c_str(), method);
+}
 
-/*    if (0 == strcmp(method, MHD_HTTP_METHOD_DELETE) || 
-        0 == strcmp(method, MHD_HTTP_METHOD_GET) ||
-        0 == strcmp(method, MHD_HTTP_METHOD_CONNECT) ||
-        0 == strcmp(method, MHD_HTTP_METHOD_HEAD) ||
-        0 == strcmp(method, MHD_HTTP_METHOD_TRACE)
+int webserver::bodyfull_requests_answer_first_step(MHD_Connection* connection, struct modded_request* mr)
+{
+    mr->second = true;
+    mr->dhr = new http_request();
+    const char *encoding = MHD_lookup_connection_value (connection, MHD_HEADER_KIND, http_utils::http_header_content_type.c_str());
+    if(encoding != 0x0)
+        mr->dhr->set_header(http_utils::http_header_content_type, encoding);
+    if ( post_process_enabled &&
+        (   
+            0x0 != encoding && 
+            ((0 == strncasecmp (MHD_HTTP_POST_ENCODING_FORM_URLENCODED, encoding, strlen (MHD_HTTP_POST_ENCODING_FORM_URLENCODED))))
+        )
     ) 
     {
-        MHD_get_connection_values (connection, MHD_GET_ARGUMENT_KIND, &build_request_args, (void*) mr);
-    } */
-    MHD_get_connection_values (connection, MHD_GET_ARGUMENT_KIND, &build_request_args, (void*) mr);
-    /*else*/ if (0 == strcmp (method, MHD_HTTP_METHOD_POST) || 0 == strcmp(method, MHD_HTTP_METHOD_PUT)) 
-    {
-        string encoding = mr->dhr->get_header(http_utils::http_header_content_type);
-        if (( 0 == strcmp(method, MHD_HTTP_METHOD_POST) && ((0 == strncasecmp (MHD_HTTP_POST_ENCODING_FORM_URLENCODED, encoding.c_str(), strlen (MHD_HTTP_POST_ENCODING_FORM_URLENCODED))))) && dws->post_process_enabled)
-        {
-            MHD_post_process(mr->pp, upload_data, *upload_data_size);
-        }
-        if ( 0 != *upload_data_size)
-        {
-#ifdef DEBUG
-            cout << "Writing content: " << upload_data << endl;
-#endif
-            mr->dhr->grow_content(upload_data, *upload_data_size);
-            *upload_data_size = 0;
-            return MHD_YES;
-        } 
+        mr->pp = MHD_create_post_processor (connection, 1024, &post_iterator, mr);
     } 
-    else if(0 != strcmp(method, MHD_HTTP_METHOD_DELETE) &&
-            0 != strcmp(method, MHD_HTTP_METHOD_GET) &&
-            0 != strcmp(method, MHD_HTTP_METHOD_CONNECT) &&
-            0 != strcmp(method, MHD_HTTP_METHOD_HEAD) &&
-            0 != strcmp(method, MHD_HTTP_METHOD_TRACE)
-    )
+    else 
     {
-        return method_not_acceptable_page(cls, connection);
+        mr->pp = NULL;
+    }
+    return MHD_YES;
+}
+
+int webserver::bodyfull_requests_answer_second_step(MHD_Connection* connection,
+    const char* url, const char* method,
+    const char* version, const char* upload_data,
+    size_t* upload_data_size, struct modded_request* mr
+)
+{
+    mr->st_url = new string();
+    internal_unescaper((void*) this, (char*) url);
+    http_utils::standardize_url(url, *mr->st_url);
+    if ( 0 != *upload_data_size)
+    {
+#ifdef DEBUG
+        cout << "Writing content: " << upload_data << endl;
+#endif
+        mr->dhr->grow_content(upload_data, *upload_data_size);
+        *upload_data_size = 0;
+        return MHD_YES;
+    }
+    if (mr->pp != NULL)
+    {
+        MHD_post_process(mr->pp, upload_data, *upload_data_size);
     }
 
+    return complete_request(connection, mr, version, mr->st_url->c_str(), method);
+}
+
+void webserver::end_request_construction(MHD_Connection* connection, struct modded_request* mr, const char* version, const char* st_url, const char* method, char* user, char* pass, char* digested_user)
+{
+    mr->ws = this;
+    MHD_get_connection_values (connection, MHD_GET_ARGUMENT_KIND, &build_request_args, (void*) mr);
     MHD_get_connection_values (connection, MHD_HEADER_KIND, &build_request_header, (void*) mr->dhr);
     MHD_get_connection_values (connection, MHD_FOOTER_KIND, &build_request_footer, (void*) mr->dhr);
     MHD_get_connection_values (connection, MHD_COOKIE_KIND, &build_request_cookie, (void*) mr->dhr);
@@ -713,52 +694,48 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
     mr->dhr->set_path(st_url);
     mr->dhr->set_method(method);
 
-    if (0 == strcmp (method, MHD_HTTP_METHOD_POST) || 0 == strcmp(method, MHD_HTTP_METHOD_PUT)) 
-    {
-        support_req = *(mr->dhr);
-    } 
-
-    char* pass = 0x0;
-    char* user = 0x0;
-    char* digested_user = 0x0;
-
-    if(dws->basic_auth_enabled)
+    if(basic_auth_enabled)
     {
         user = MHD_basic_auth_get_username_password(connection, &pass);
     }
-    if(dws->digest_auth_enabled)
+    if(digest_auth_enabled)
         digested_user = MHD_digest_auth_get_username(connection);
-    support_req.set_version(version);
+    mr->dhr->set_version(version);
     const MHD_ConnectionInfo * conninfo = MHD_get_connection_info(connection, MHD_CONNECTION_INFO_CLIENT_ADDRESS);
     std::string ip_str;
     get_ip_str(conninfo->client_addr, ip_str);
-    support_req.set_requestor(ip_str);
-    support_req.set_requestor_port(get_port(conninfo->client_addr));
+    mr->dhr->set_requestor(ip_str);
+    mr->dhr->set_requestor_port(get_port(conninfo->client_addr));
     if(pass != 0x0)
     {
-        support_req.set_pass(pass);
-        support_req.set_user(user);
+        mr->dhr->set_pass(pass);
+        mr->dhr->set_user(user);
     }
     if(digested_user != 0x0)
     {
-        support_req.set_digested_user(digested_user);
+        mr->dhr->set_digested_user(digested_user);
     }
-    http_response dhrs;
-//    const http_endpoint* matching_endpoint = 0x0;
+}
+
+int webserver::finalize_answer(MHD_Connection* connection, struct modded_request* mr, const char* st_url, const char* method)
+{
+    int to_ret = MHD_NO;
+    struct MHD_Response *response = 0x0;
+    http_response* dhrs = 0x0;
     map<http_endpoint, http_resource* >::iterator found_endpoint;
     bool found = false;
-    if(!dws->single_resource)
+    if(!single_resource)
     {
-        http_endpoint endpoint(st_url, false, false, dws->regex_checking);
-        found_endpoint = dws->registered_resources.find(endpoint);
-        if(found_endpoint == dws->registered_resources.end())
+        http_endpoint endpoint(st_url, false, false, regex_checking);
+        found_endpoint = registered_resources.find(endpoint);
+        if(found_endpoint == registered_resources.end())
         {
-            if(dws->regex_checking)
+            if(regex_checking)
             {
                 map<http_endpoint, http_resource* >::iterator it;
                 int len = -1;
                 int tot_len = -1;
-                for(it=dws->registered_resources.begin(); it!=dws->registered_resources.end(); ++it) 
+                for(it=registered_resources.begin(); it!=registered_resources.end(); ++it) 
                 {
                     int endpoint_pieces_len = (*it).first.get_url_pieces_num();
                     int endpoint_tot_len = (*it).first.get_url_complete_size();
@@ -783,7 +760,7 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
                     found_endpoint->first.get_chunk_positions(chunkes);
                     for(unsigned int i = 0; i < pars_size; i++) 
                     {
-                        support_req.set_arg(url_pars[i], url_pieces[chunkes[i]]);
+                        mr->dhr->set_arg(url_pars[i], url_pieces[chunkes[i]]);
                     }
                 }
             }
@@ -793,90 +770,149 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
     }
     else
     {
-        found_endpoint = dws->registered_resources.begin();
+        found_endpoint = registered_resources.begin();
         found = true;
     }
+    mr->dhr->set_underlying_connection(connection);
+#ifdef DEBUG
+    cout << "Using: " << found_endpoint->first.get_url_complete() << endl;
+#endif
+#ifdef WITH_PYTHON
+    PyGILState_STATE gstate;
+    if(PyEval_ThreadsInitialized())
+    {
+        gstate = PyGILState_Ensure();
+    }
+#endif
     if(found)
     {
-        support_req.set_underlying_connection(connection);
-#ifdef DEBUG
-        cout << "Using: " << found_endpoint->first.get_url_complete() << endl;
-#endif
-#ifdef WITH_PYTHON
-        PyGILState_STATE gstate;
-        if(PyEval_ThreadsInitialized())
+        try
         {
-            gstate = PyGILState_Ensure();
-        }
-#endif
-        dhrs = found_endpoint->second->route_request(support_req);
-#ifdef WITH_PYTHON
-        if(PyEval_ThreadsInitialized())
-        {
-            PyGILState_Release(gstate);
-        }
-#endif
-        if(dhrs.response_type == http_response::FILE_CONTENT)
-        {
-            char* page = NULL;
-            size_t size = load_file(dhrs.filename.c_str(), &page);
-            if(size)
-                response = MHD_create_response_from_buffer(size, page, MHD_RESPMEM_MUST_FREE);
-            else
-                found = false;
-        }
-        else if(dhrs.response_type == http_response::SWITCH_PROTOCOL)
-        {
-        //    response = MHD_create_response_for_upgrade(&upgrade_handler, (void*)dhrs.getSwitchCallback());
-        }
-        else
-        {
-            if(dhrs.content != "")
-            {
-                //this process is necessary to avoid to truncate byte strings to '\0'
-                vector<char> v_page(dhrs.content.begin(), dhrs.content.end());
-                size_t size = v_page.size();
-                char* page = (char*) malloc(sizeof(char)*size);
-                memcpy( page, &v_page[0], sizeof( char ) * size );
-                //end string conversion process
-                response = MHD_create_response_from_buffer(size, page, MHD_RESPMEM_MUST_FREE);
-            }
+            if(found_endpoint->second->is_allowed(method))
+                ((found_endpoint->second)->*(mr->callback))(*mr->dhr, &dhrs);
             else
             {
-                response = MHD_create_response_from_buffer(0, (void*)"", MHD_RESPMEM_MUST_COPY);
+                method_not_allowed_page(&dhrs, mr);
             }
         }
-        vector<pair<string,string> > response_headers;
-        dhrs.get_headers(response_headers);
-        vector<pair<string,string> > response_footers;
-        dhrs.get_footers(response_footers);
-        vector<pair<string,string> >::iterator it;
-        for (it=response_headers.begin() ; it != response_headers.end(); ++it)
-            MHD_add_response_header(response, (*it).first.c_str(), (*it).second.c_str());
-        for (it=response_footers.begin() ; it != response_footers.end(); ++it)
-            MHD_add_response_footer(response, (*it).first.c_str(), (*it).second.c_str());
-        if(dhrs.response_type == http_response::DIGEST_AUTH_FAIL)
-            to_ret = MHD_queue_auth_fail_response(connection, dhrs.get_realm().c_str(), dhrs.get_opaque().c_str(), response, dhrs.need_nonce_reload() ? MHD_YES : MHD_NO);
-        else if(dhrs.response_type == http_response::BASIC_AUTH_FAIL)
-            to_ret = MHD_queue_basic_auth_fail_response(connection, dhrs.get_realm().c_str(), response);
-        else
-            to_ret = MHD_queue_response(connection, dhrs.get_response_code(), response);
+        catch(const std::exception& e)
+        {
+            internal_error_page(&dhrs, mr);
+        }
+        catch(...)
+        {
+            internal_error_page(&dhrs, mr);
+        }
     }
+    else
+    {
+        not_found_page(&dhrs, mr);
+    }
+#ifdef WITH_PYTHON
+    if(PyEval_ThreadsInitialized())
+    {
+        PyGILState_Release(gstate);
+    }
+#endif
+    mr->dhrs = dhrs;
+    dhrs->get_raw_response(&response, &found);
+    vector<pair<string,string> > response_headers;
+    dhrs->get_headers(response_headers);
+    vector<pair<string,string> > response_footers;
+    dhrs->get_footers(response_footers);
+    vector<pair<string,string> >::iterator it;
+    for (it=response_headers.begin() ; it != response_headers.end(); ++it)
+        MHD_add_response_header(response, (*it).first.c_str(), (*it).second.c_str());
+    for (it=response_footers.begin() ; it != response_footers.end(); ++it)
+        MHD_add_response_footer(response, (*it).first.c_str(), (*it).second.c_str());
+    if(dhrs->response_type == http_response::DIGEST_AUTH_FAIL)
+        to_ret = MHD_queue_auth_fail_response(connection, dhrs->get_realm().c_str(), dhrs->get_opaque().c_str(), response, dhrs->need_nonce_reload() ? MHD_YES : MHD_NO);
+    else if(dhrs->response_type == http_response::BASIC_AUTH_FAIL)
+        to_ret = MHD_queue_basic_auth_fail_response(connection, dhrs->get_realm().c_str(), response);
+    else
+        to_ret = MHD_queue_response(connection, dhrs->get_response_code(), response);
+    MHD_destroy_response (response);
+    return to_ret;
+}
+
+int webserver::complete_request(MHD_Connection* connection, struct modded_request* mr, const char* version, const char* st_url, const char* method)
+{
+    char* pass = 0x0;
+    char* user = 0x0;
+    char* digested_user = 0x0;
+
+    end_request_construction(connection, mr, version, st_url, method, pass, user, digested_user);
+
+    int to_ret = finalize_answer(connection, mr, st_url, method);
+
     if (user != 0x0)
         free (user);
     if (pass != 0x0)
         free (pass);
     if (digested_user != 0x0)
         free (digested_user);
-    if(found)
+
+    return to_ret;
+}
+
+int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
+    const char* url, const char* method,
+    const char* version, const char* upload_data,
+    size_t* upload_data_size, void** con_cls
+    )
+{
+    struct modded_request* mr = static_cast<struct modded_request*>(*con_cls);
+    if(mr->second == false)
     {
-        MHD_destroy_response (response);
+        bool body = false;
+        access_log(static_cast<webserver*>(cls), *(mr->complete_uri) + " METHOD: " + method);
+        if( 0 == strcmp(method, http_utils::http_method_get.c_str()))
+        {
+            mr->callback = &http_resource::render_GET;
+        }
+        else if (0 == strcmp(method, http_utils::http_method_post.c_str()))
+        {
+            mr->callback = &http_resource::render_POST;
+            body = true;
+        }
+        else if (0 == strcmp(method, http_utils::http_method_put.c_str()))
+        {
+            mr->callback = &http_resource::render_PUT;
+            body = true;
+        }
+        else if (0 == strcmp(method, http_utils::http_method_delete.c_str()))
+        {
+            mr->callback = &http_resource::render_DELETE;
+        }
+        else if (0 == strcmp(method, http_utils::http_method_head.c_str()))
+        {
+            mr->callback = &http_resource::render_HEAD;
+        }
+        else if (0 == strcmp(method, http_utils::http_method_connect.c_str()))
+        {
+            mr->callback = &http_resource::render_CONNECT;
+        }
+        else if (0 == strcmp(method, http_utils::http_method_trace.c_str()))
+        {
+            mr->callback = &http_resource::render_TRACE;
+        }
+        else
+        {
+            if(static_cast<webserver*>(cls)->method_not_acceptable_resource)
+                mr->callback = &http_resource::render_not_acceptable;
+            else
+                return static_cast<webserver*>(cls)->method_not_acceptable_page(cls, connection);
+        }
+
+        if(body)
+            return static_cast<webserver*>(cls)->bodyfull_requests_answer_first_step(connection, mr);
+        else
+            return static_cast<webserver*>(cls)->bodyless_requests_answer(connection, url, method, version, mr);
     }
     else
     {
-        to_ret = not_found_page(cls, connection);
+        return static_cast<webserver*>(cls)->bodyfull_requests_answer_second_step(connection, url, method, version, upload_data, upload_data_size, mr);
     }
-    return to_ret;
 }
 
 };

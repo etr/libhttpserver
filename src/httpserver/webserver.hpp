@@ -53,6 +53,8 @@ class http_response;
 class http_request;
 class http_endpoint;
 
+struct modded_request;
+
 using namespace http;
 
 namespace http {
@@ -188,7 +190,11 @@ class webserver
             bool regex_checking = true,
             bool ban_system_enabled = true,
             bool post_process_enabled = true,
-            http_resource* single_resource = 0x0
+            http_resource* single_resource = 0x0,
+            http_resource* not_found_resource = 0x0,
+            http_resource* method_not_allowed_resource = 0x0,
+            http_resource* method_not_acceptable_resource = 0x0,
+            http_resource* internal_error_resource = 0x0
         );
         webserver(const create_webserver& params);
         /**
@@ -264,6 +270,10 @@ class webserver
         bool single_resource;
         pthread_mutex_t mutexwait;
         pthread_cond_t mutexcond;
+        http_resource* not_found_resource;
+        http_resource* method_not_allowed_resource;
+        http_resource* method_not_acceptable_resource;
+        http_resource* internal_error_resource;
 
         std::map<http_endpoint, http_resource* > registered_resources;
 #ifdef USE_CPP_ZEROX
@@ -274,11 +284,13 @@ class webserver
         std::set<ip_representation> allowances;
 #endif
         struct MHD_Daemon *daemon;
-        static int not_found_page 
-        (
-            const void *cls,
-            struct MHD_Connection *connection
-        );
+
+        void init(http_resource* single_resource);
+
+        void method_not_allowed_page(http_response** dhrs, modded_request* mr);
+        void internal_error_page(http_response** dhrs, modded_request* mr);
+        void not_found_page(http_response** dhrs, modded_request* mr);
+
         static int method_not_acceptable_page 
         (
             const void *cls,
@@ -313,6 +325,35 @@ class webserver
             void **con_cls, int upgrade_socket
         );
 
+        int bodyless_requests_answer(MHD_Connection* connection,
+            const char* url, const char* method,
+            const char* version, struct modded_request* mr
+        );
+
+        int bodyfull_requests_answer_first_step(MHD_Connection* connection, struct modded_request* mr);
+
+        int bodyfull_requests_answer_second_step(MHD_Connection* connection,
+            const char* url, const char* method,
+            const char* version, const char* upload_data,
+            size_t* upload_data_size, struct modded_request* mr
+        );
+
+        void end_request_construction(MHD_Connection* connection, 
+                struct modded_request* mr, const char* version, 
+                const char* st_url, const char* method, 
+                char* user, char* pass, char* digested_user
+        );
+
+        int finalize_answer(MHD_Connection* connection, 
+                struct modded_request* mr, const char* st_url, 
+                const char* method
+        );
+
+        int complete_request(MHD_Connection* connection, 
+                struct modded_request* mr, const char* version, 
+                const char* st_url, const char* method 
+        );
+
         friend int policy_callback (void *cls, const struct sockaddr* addr, socklen_t addrlen);
         friend void error_log(void* cls, const char* fmt, va_list ap);
         friend void access_log(webserver* cls, std::string uri);
@@ -321,7 +362,7 @@ class webserver
         friend size_t internal_unescaper(void * cls, char *s);
 };
 
-class create_webserver 
+class create_webserver
 {
     public:
         create_webserver():
@@ -355,7 +396,11 @@ class create_webserver
             _regex_checking(true),
             _ban_system_enabled(true),
             _post_process_enabled(true),
-            _single_resource(0x0)
+            _single_resource(0x0),
+            _not_found_resource(0x0),
+            _method_not_allowed_resource(0x0),
+            _method_not_acceptable_resource(0x0),
+            _internal_error_resource(0x0)
         {
         }
 
@@ -390,7 +435,11 @@ class create_webserver
             _regex_checking(true),
             _ban_system_enabled(true),
             _post_process_enabled(true),
-            _single_resource(0x0)
+            _single_resource(0x0),
+            _not_found_resource(0x0),
+            _method_not_allowed_resource(0x0),
+            _method_not_acceptable_resource(0x0),
+            _internal_error_resource(0x0)
         {
         }
 
@@ -437,6 +486,10 @@ class create_webserver
         create_webserver& post_process() { _post_process_enabled = true; return *this; }
         create_webserver& no_post_process() { _post_process_enabled = false; return *this; }
         create_webserver& single_resource(http_resource* single_resource) { _single_resource = single_resource; return *this; }
+        create_webserver& not_found_resource(http_resource* not_found_resource) { _not_found_resource = not_found_resource; return *this; }
+        create_webserver& method_not_allowed_resource(http_resource* method_not_allowed_resource) { _method_not_allowed_resource = method_not_allowed_resource; return *this; }
+        create_webserver& method_not_acceptable_resource(http_resource* method_not_acceptable_resource) { _method_not_acceptable_resource = method_not_acceptable_resource; return *this; }
+        create_webserver& internal_error_resource(http_resource* internal_error_resource) { _internal_error_resource = internal_error_resource; return *this; }
     private:
         int _port;
         http_utils::start_method_T _start_method;
@@ -469,17 +522,12 @@ class create_webserver
         bool _ban_system_enabled;
         bool _post_process_enabled;
         http_resource* _single_resource;
+        http_resource* _not_found_resource;
+        http_resource* _method_not_allowed_resource;
+        http_resource* _method_not_acceptable_resource;
+        http_resource* _internal_error_resource;
 
         friend class webserver;
-};
-
-struct modded_request
-{
-    struct MHD_PostProcessor *pp;
-    std::string* complete_uri;
-    http_request *dhr;
-    webserver* ws;
-    bool second;
 };
 
 };

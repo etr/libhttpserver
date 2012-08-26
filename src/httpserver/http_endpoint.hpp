@@ -55,7 +55,7 @@ class bad_http_endpoint : public std::exception
 **/
 class http_endpoint 
 {
-    public:
+    private:
         /**
          * Copy constructor. It is useful expecially to copy regex_t structure that contains dinamically allocated data.
          * @param h The http_endpoint to copy
@@ -166,7 +166,6 @@ class http_endpoint
             result = this->chunk_positions;
             return result.size();
         }
-    private:
         /**
          * Default constructor of the class.
          * @param family boolean that indicates if the endpoint is a family endpoint.
@@ -226,6 +225,8 @@ class http_endpoint
         **/
         bool reg_compiled;
         friend class webserver;
+        template<typename, typename> friend struct std::pair;
+        template<typename> friend struct std::less;
 };
 
 };

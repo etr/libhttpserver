@@ -85,6 +85,17 @@ class http_utils
 #ifdef SWIG
         %immutable;
 #endif
+
+        static const short http_method_connect_code;
+        static const short http_method_delete_code;
+        static const short http_method_get_code;
+        static const short http_method_head_code;
+        static const short http_method_options_code;
+        static const short http_method_post_code;
+        static const short http_method_put_code;
+        static const short http_method_trace_code;
+        static const short http_method_unknown_code;
+
         static const int http_continue;
         static const int http_switching_protocol;
         static const int http_processing;
@@ -326,6 +337,11 @@ short get_port(const struct sockaddr* sa);
 size_t http_unescape (char *val);
 
 const struct sockaddr str_to_ip(const std::string& src);
+
+char* load_file (const char *filename);
+
+size_t load_file (const char* filename, char** content);
+
 };
 };
 #endif

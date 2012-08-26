@@ -24,6 +24,7 @@
 #include <arpa/inet.h>
 #include <sstream>
 #include <iomanip>
+#include <fstream>
 #include "string_utilities.hpp"
 #include "http_utils.hpp"
 
@@ -38,6 +39,7 @@ namespace httpserver {
 namespace http {
 
 /* See also: http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html */
+
 const int http_utils::http_continue = MHD_HTTP_CONTINUE;
 const int http_utils::http_switching_protocol = MHD_HTTP_SWITCHING_PROTOCOLS;
 const int http_utils::http_processing = MHD_HTTP_PROCESSING;
@@ -423,6 +425,27 @@ bool ip_representation::operator <(const ip_representation& b) const
     return false;
 }
 
+size_t load_file (const char* filename, char** content)
+{
+    ifstream fp(filename, ios::in | ios::binary | ios::ate);
+    if(fp.is_open())
+    {
+        int size = fp.tellg();
+        *content = (char*) malloc(size * sizeof(char));
+        fp.seekg(0, ios::beg);
+        fp.read(*content, size);
+        fp.close();
+        return size;
+    }
+    return 0;
+}
+
+char* load_file (const char *filename)
+{
+    char* content = NULL;
+    load_file(filename, &content);
+    return content;
+}
 
 };
 };

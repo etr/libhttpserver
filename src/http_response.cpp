@@ -34,22 +34,14 @@ const std::vector<std::pair<std::string, std::string> > http_response::get_heade
     std::vector<std::pair<std::string, std::string> > to_ret;
     std::map<std::string, std::string, header_comparator>::const_iterator it;
     for(it = headers.begin(); it != headers.end(); ++it)
-#ifdef USE_CPP_ZEROX
-        to_ret.push_back(std::make_pair((*it).first,(*it).second));
-#else
-        to_ret.push_back(std::make_pair<std::string, std::string>((*it).first,(*it).second));
-#endif
+        to_ret.push_back(*it);
     return to_ret;
 }
 size_t http_response::get_headers(std::vector<std::pair<std::string, std::string> >& result)
 {
     std::map<std::string, std::string, header_comparator>::const_iterator it;
     for(it = headers.begin(); it != headers.end(); ++it)
-#ifdef USE_CPP_ZEROX
-        result.push_back(std::make_pair((*it).first,(*it).second));
-#else
-        result.push_back(std::make_pair<std::string, std::string>((*it).first,(*it).second));
-#endif
+        result.push_back(*it);
     return result.size();
 }
 size_t http_response::get_headers(std::map<std::string, std::string, header_comparator>& result)
@@ -63,22 +55,14 @@ const std::vector<std::pair<std::string, std::string> > http_response::get_foote
     std::vector<std::pair<std::string, std::string> > to_ret;
     std::map<std::string, std::string, header_comparator>::const_iterator it;
     for(it = footers.begin(); it != footers.end(); ++it)
-#ifdef USE_CPP_ZEROX
-        to_ret.push_back(std::make_pair((*it).first,(*it).second));
-#else
-        to_ret.push_back(std::make_pair<std::string, std::string>((*it).first,(*it).second));
-#endif
+        to_ret.push_back(*it);
     return to_ret;
 }
 size_t http_response::get_footers(std::vector<std::pair<std::string, std::string> >& result)
 {
     std::map<std::string, std::string, arg_comparator>::const_iterator it;
     for(it = footers.begin(); it != footers.end(); ++it)
-#ifdef USE_CPP_ZEROX
-        result.push_back(std::make_pair((*it).first,(*it).second));
-#else
-        result.push_back(std::make_pair<std::string, std::string>((*it).first,(*it).second));
-#endif
+        result.push_back(*it);
     return result.size();
 }
 size_t http_response::get_footers(std::map<std::string, std::string, header_comparator>& result)
@@ -96,6 +80,47 @@ shoutCAST_response::shoutCAST_response
 ):
     http_response(http_response::SHOUTCAST_CONTENT, content, response_code | http_utils::shoutcast_response, content_type)
 {
+}
+
+void http_response::get_raw_response(MHD_Response** response, bool* found)
+{
+    size_t size = &(*content.end()) - &(*content.begin());
+    *response = MHD_create_response_from_buffer(size, (void*) content.c_str(), MHD_RESPMEM_PERSISTENT);
+}
+
+void http_file_response::get_raw_response(MHD_Response** response, bool* found)
+{
+    char* page = NULL;
+    size_t size = http::load_file(filename.c_str(), &page);
+    if(size)
+        *response = MHD_create_response_from_buffer(size, page, MHD_RESPMEM_MUST_FREE);
+    else
+        *found = false;
+}
+
+void clone_response(const http_response& hr, http_response** dhrs)
+{
+    switch(hr.response_type)
+    {
+        case(http_response::STRING_CONTENT):
+            *dhrs = new http_string_response(hr);
+            return;
+        case(http_response::FILE_CONTENT):
+            *dhrs = new http_file_response(hr);
+            return;
+        case(http_response::SHOUTCAST_CONTENT):
+            *dhrs = new shoutCAST_response(hr);
+            return;
+        case(http_response::DIGEST_AUTH_FAIL):
+            *dhrs = new http_digest_auth_fail_response(hr);
+            return;
+        case(http_response::BASIC_AUTH_FAIL):
+            *dhrs = new http_basic_auth_fail_response(hr);
+            return;
+        case(http_response::SWITCH_PROTOCOL):
+            *dhrs = new switch_protocol_response(hr);
+            return;
+    }
 }
 
 };

@@ -387,6 +387,57 @@ class http_request
         {
             return this->requestor_port;
         }
+        bool check_digest_auth(const std::string& realm, const std::string& password, int nonce_timeout, bool& reload_nonce) const;
+    private:
+        /**
+         * Default constructor of the class. It is a specific responsibility of apis to initialize this type of objects.
+        **/
+        http_request():
+            content("")
+        {
+        }
+        /**
+         * Copy constructor.
+         * @param b http_request b to copy attributes from.
+        **/
+        http_request(const http_request& b):
+            user(b.user),
+            pass(b.pass),
+            path(b.path),
+            digested_user(b.digested_user),
+            method(b.method),
+            post_path(b.post_path),
+            headers(b.headers),
+            footers(b.footers),
+            cookies(b.cookies),
+            args(b.args),
+            content(b.content),
+            version(b.version),
+            requestor(b.requestor),
+            underlying_connection(b.underlying_connection)
+        {
+        }
+        std::string user;
+        std::string pass;
+        std::string path;
+        std::string digested_user;
+        std::string method;
+        std::vector<std::string> post_path;
+        std::map<std::string, std::string, header_comparator> headers;
+        std::map<std::string, std::string, header_comparator> footers;
+        std::map<std::string, std::string, header_comparator> cookies;
+        std::map<std::string, std::string, arg_comparator> args;
+        std::string content;
+        std::string version;
+        std::string requestor;
+
+        short requestor_port;
+        struct MHD_Connection* underlying_connection;
+
+        void set_underlying_connection(struct MHD_Connection* conn)
+        {
+            this->underlying_connection = conn;
+        }
         /**
          * Method used to set an header value by key.
          * @param key The name identifying the header
@@ -561,56 +612,7 @@ class http_request
         {
             this->pass = pass;
         }
-        bool check_digest_auth(const std::string& realm, const std::string& password, int nonce_timeout, bool& reload_nonce) const;
-    private:
-        /**
-         * Default constructor of the class. It is a specific responsibility of apis to initialize this type of objects.
-        **/
-        http_request():
-            content("")
-        {
-        }
-        /**
-         * Copy constructor.
-         * @param b http_request b to copy attributes from.
-        **/
-        http_request(const http_request& b):
-            user(b.user),
-            pass(b.pass),
-            path(b.path),
-            digested_user(b.digested_user),
-            method(b.method),
-            post_path(b.post_path),
-            headers(b.headers),
-            footers(b.footers),
-            cookies(b.cookies),
-            args(b.args),
-            content(b.content),
-            version(b.version),
-            requestor(b.requestor),
-            underlying_connection(b.underlying_connection)
-        {
-        }
-        std::string user;
-        std::string pass;
-        std::string path;
-        std::string digested_user;
-        std::string method;
-        std::vector<std::string> post_path;
-        std::map<std::string, std::string, header_comparator> headers;
-        std::map<std::string, std::string, header_comparator> footers;
-        std::map<std::string, std::string, header_comparator> cookies;
-        std::map<std::string, std::string, arg_comparator> args;
-        std::string content;
-        std::string version;
-        std::string requestor;
-        short requestor_port;
-        struct MHD_Connection* underlying_connection;
 
-        void set_underlying_connection(struct MHD_Connection* conn)
-        {
-            this->underlying_connection = conn;
-        }
         friend class webserver;
 };
 

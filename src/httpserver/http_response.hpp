@@ -104,6 +104,9 @@ class http_response
             footers(b.footers)
         {
         }
+        virtual ~http_response()
+        {
+        }
         /**
          * Method used to get the content from the response.
          * @return the content in string form
@@ -273,7 +276,11 @@ class http_response
         std::string filename;
         std::map<std::string, std::string, header_comparator> headers;
         std::map<std::string, std::string, header_comparator> footers;
+
+        virtual void get_raw_response(MHD_Response** res, bool* found);
+
         friend class webserver;
+        friend void clone_response(const http_response& hr, http_response** dhr);
 };
 
 class http_string_response : public http_response
@@ -286,7 +293,7 @@ class http_string_response : public http_response
             const std::string& content_type = "text/plain"
         ): http_response(http_response::STRING_CONTENT, content, response_code, content_type) { }
 
-        http_string_response(const http_string_response& b) : http_response(b) { }
+        http_string_response(const http_response& b) : http_response(b) { }
 };
 
 class http_file_response : public http_response
@@ -301,7 +308,9 @@ class http_file_response : public http_response
         {
         }
 
-        http_file_response(const http_file_response& b) : http_response(b) { }
+        http_file_response(const http_response& b) : http_response(b) { }
+    protected:
+        virtual void get_raw_response(MHD_Response** res, bool* found);
 };
 
 class http_basic_auth_fail_response : public http_response
@@ -316,7 +325,7 @@ class http_basic_auth_fail_response : public http_response
             const http_response::response_type_T& response_type = http_response::BASIC_AUTH_FAIL
         ) : http_response(http_response::BASIC_AUTH_FAIL, content, response_code, content_type, realm) { }
 
-        http_basic_auth_fail_response(const http_basic_auth_fail_response& b) : http_response(b) { }
+        http_basic_auth_fail_response(const http_response& b) : http_response(b) { }
 };
 
 class http_digest_auth_fail_response : public http_response
@@ -334,7 +343,7 @@ class http_digest_auth_fail_response : public http_response
         { 
         }
 
-        http_digest_auth_fail_response(const http_digest_auth_fail_response& b) : http_response(b) { }
+        http_digest_auth_fail_response(const http_response& b) : http_response(b) { }
 };
 
 class shoutCAST_response : public http_response
@@ -347,7 +356,7 @@ class shoutCAST_response : public http_response
             const std::string& content_type = "text/plain"
         );
 
-        shoutCAST_response(const shoutCAST_response& b) : http_response(b) { }
+        shoutCAST_response(const http_response& b) : http_response(b) { }
 };
 
 class switch_protocol_response : public http_response
@@ -357,8 +366,14 @@ class switch_protocol_response : public http_response
         (
         );
 
-        switch_protocol_response(const switch_protocol_response& b) : http_response(b) { }
+        switch_protocol_response(const http_response& b) : http_response(b) { }
+    protected:
+        virtual void get_raw_response(MHD_Response** res, bool* found)
+        {
+        }
 };
+
+void clone_response(http_response* hr, http_response** dhr);
 
 };
 #endif
