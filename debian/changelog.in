@@ -1,3 +1,9 @@
+libhttpserver (0.3.0) unstable; urgency=low
+  * Improved performaces
+  * Added capability to register default error pages
+
+ -- Sebastiano Merlino <electrictwister2000@gmail.com> Sun, 26 Aug 2012 19:00:42 +0200
+
 libhttpserver (0.2.0) unstable; urgency=low
 
   * Deb target now seems to work really
