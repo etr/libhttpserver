@@ -10,4 +10,4 @@ Requires: libmicrohttpd >= 0.9.9
 Conflicts:
 Libs: -L${libdir} -lmicrohttpd
 Libs.private: @LHT_LIBDEPS@
-Cflags: -I${includedir}
+Cflags: -I${includedir} -I${includedir}/httpserver
