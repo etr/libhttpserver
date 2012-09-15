@@ -51,9 +51,12 @@ namespace httpserver {
 class http_resource;
 class http_response;
 class http_request;
-class http_endpoint;
-
 struct modded_request;
+
+namespace details
+{
+    class http_endpoint;
+}
 
 using namespace http;
 
@@ -275,7 +278,7 @@ class webserver
         http_resource* method_not_acceptable_resource;
         http_resource* internal_error_resource;
 
-        std::map<http_endpoint, http_resource* > registered_resources;
+        std::map<details::http_endpoint, http_resource* > registered_resources;
 #ifdef USE_CPP_ZEROX
         std::unordered_set<ip_representation> bans;
         std::unordered_set<ip_representation> allowances;

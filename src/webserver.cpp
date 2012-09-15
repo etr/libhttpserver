@@ -410,14 +410,14 @@ bool webserver::stop()
 
 void webserver::register_resource(const string& resource, http_resource* http_resource, bool family)
 {
-    this->registered_resources[http_endpoint(resource, family, true, regex_checking)] = http_resource;
+    this->registered_resources[details::http_endpoint(resource, family, true, regex_checking)] = http_resource;
     if(method_not_acceptable_resource)
         http_resource->method_not_acceptable_resource = method_not_acceptable_resource;
 }
 
 void webserver::unregister_resource(const string& resource)
 {
-    this->registered_resources.erase(http_endpoint(resource));
+    this->registered_resources.erase(details::http_endpoint(resource));
 }
 
 void webserver::ban_ip(const string& ip)
@@ -722,17 +722,17 @@ int webserver::finalize_answer(MHD_Connection* connection, struct modded_request
     int to_ret = MHD_NO;
     struct MHD_Response *response = 0x0;
     http_response* dhrs = 0x0;
-    map<http_endpoint, http_resource* >::iterator found_endpoint;
+    map<details::http_endpoint, http_resource* >::iterator found_endpoint;
     bool found = false;
     if(!single_resource)
     {
-        http_endpoint endpoint(st_url, false, false, regex_checking);
+        details::http_endpoint endpoint(st_url, false, false, regex_checking);
         found_endpoint = registered_resources.find(endpoint);
         if(found_endpoint == registered_resources.end())
         {
             if(regex_checking)
             {
-                map<http_endpoint, http_resource* >::iterator it;
+                map<details::http_endpoint, http_resource* >::iterator it;
                 int len = -1;
                 int tot_len = -1;
                 for(it=registered_resources.begin(); it!=registered_resources.end(); ++it) 

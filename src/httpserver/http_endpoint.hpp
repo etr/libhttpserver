@@ -35,6 +35,9 @@ namespace httpserver
 
 class webserver;
 
+namespace details
+{
+
 /**
  * Exception class throwed when a bad formatted http url is used
 **/
@@ -224,9 +227,11 @@ class http_endpoint
          * Boolean indicating if the regex is compiled
         **/
         bool reg_compiled;
-        friend class webserver;
+        friend class httpserver::webserver;
         template<typename, typename> friend struct std::pair;
         template<typename> friend struct std::less;
+};
+
 };
 
 };
