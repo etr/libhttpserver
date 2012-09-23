@@ -68,7 +68,7 @@ class http_utils
     {
         INTERNAL_SELECT = MHD_USE_SELECT_INTERNALLY,
         THREADS = MHD_USE_THREAD_PER_CONNECTION,
-        POOL = MHD_USE_POLL
+        POLL = MHD_USE_THREAD_PER_CONNECTION | MHD_USE_POLL
     };
 
     enum policy_T
