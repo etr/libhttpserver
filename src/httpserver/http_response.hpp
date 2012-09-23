@@ -364,9 +364,13 @@ class switch_protocol_response : public http_response
     public:
         switch_protocol_response
         (
-        );
+        )
+        {
+        }
 
-        switch_protocol_response(const http_response& b) : http_response(b) { }
+        switch_protocol_response(const http_response& b) : http_response(b)
+        { 
+        }
     protected:
         virtual void get_raw_response(MHD_Response** res, bool* found)
         {
