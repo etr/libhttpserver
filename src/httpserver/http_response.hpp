@@ -57,7 +57,9 @@ class http_response
             SHOUTCAST_CONTENT,
             DIGEST_AUTH_FAIL,
             BASIC_AUTH_FAIL,
-            SWITCH_PROTOCOL
+            SWITCH_PROTOCOL,
+            LONG_POLLING_RECEIVE,
+            LONG_POLLING_SEND
         };
 
         /**
@@ -74,7 +76,8 @@ class http_response
             const std::string& content_type = "text/plain",
             const std::string& realm = "",
             const std::string& opaque = "",
-            bool reload_nonce = false
+            bool reload_nonce = false,
+            const std::string& topic = ""
         ):
             response_type(response_type),
             content(content),
@@ -83,7 +86,8 @@ class http_response
             opaque(opaque),
             reload_nonce(reload_nonce),
             fp(-1),
-            filename(content)
+            filename(content),
+            topic(topic)
         {
             set_header(http_utils::http_header_content_type, content_type);
         }
@@ -101,7 +105,8 @@ class http_response
             fp(b.fp),
             filename(b.filename),
             headers(b.headers),
-            footers(b.footers)
+            footers(b.footers),
+            topic(b.topic)
         {
         }
         virtual ~http_response()
@@ -265,6 +270,10 @@ class http_response
         {
             return 0;
         }
+        const std::string get_topic() const
+        {
+            return this->topic;
+        }
     protected:
         response_type_T response_type;
         std::string content;
@@ -276,8 +285,9 @@ class http_response
         std::string filename;
         std::map<std::string, std::string, header_comparator> headers;
         std::map<std::string, std::string, header_comparator> footers;
+        std::string topic;
 
-        virtual void get_raw_response(MHD_Response** res, bool* found);
+        virtual void get_raw_response(MHD_Response** res, bool* found, webserver* ws = 0x0);
 
         friend class webserver;
         friend void clone_response(const http_response& hr, http_response** dhr);
@@ -310,7 +320,7 @@ class http_file_response : public http_response
 
         http_file_response(const http_response& b) : http_response(b) { }
     protected:
-        virtual void get_raw_response(MHD_Response** res, bool* found);
+        virtual void get_raw_response(MHD_Response** res, bool* found, webserver* ws = 0x0);
 };
 
 class http_basic_auth_fail_response : public http_response
@@ -372,9 +382,44 @@ class switch_protocol_response : public http_response
         { 
         }
     protected:
-        virtual void get_raw_response(MHD_Response** res, bool* found)
+        virtual void get_raw_response(MHD_Response** res, bool* found, webserver* ws = 0x0) {}
+};
+
+class long_polling_receive_response : public http_response
+{
+    public:
+        long_polling_receive_response
+        (
+            const std::string& content,
+            int response_code,
+            const std::string& content_type,
+            const std::string& topic
+        ) : http_response(http_response::LONG_POLLING_RECEIVE, content, response_code, content_type, "", "", false, topic)
         {
         }
+
+        long_polling_receive_response(const http_response& b) : http_response(b) { }
+    protected:
+        virtual void get_raw_response(MHD_Response** res, bool* found, webserver* ws = 0x0);
+    private:
+        static ssize_t data_generator (void* cls, uint64_t pos, char* buf, size_t max);
+        static void free_callback(void* cls);
+};
+
+class long_polling_send_response : public http_response
+{
+    public:
+        long_polling_send_response
+        (
+            const std::string& content,
+            const std::string& topic
+        ) : http_response(http_response::LONG_POLLING_SEND, content, 200, "", "", "", false, topic)
+        {
+        }
+
+        long_polling_send_response(const http_response& b) : http_response(b) { }
+    protected:
+        virtual void get_raw_response(MHD_Response** res, bool* found, webserver* ws = 0x0);
 };
 
 void clone_response(http_response* hr, http_response** dhr);

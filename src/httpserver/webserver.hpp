@@ -52,6 +52,8 @@ class http_resource;
 class http_response;
 class http_request;
 struct modded_request;
+class long_polling_receive_response;
+class long_polling_send_response;
 
 namespace details
 {
@@ -234,6 +236,44 @@ class webserver
         void allow_ip(const std::string& ip);
         void unban_ip(const std::string& ip);
         void disallow_ip(const std::string& ip);
+
+        void send_message_to_topic(const std::string& topic, const std::string& message)
+        {
+            q_messages[topic] = message;
+            for(std::set<std::string>::const_iterator it = q_waitings[topic].begin(); it != q_waitings[topic].end(); ++it)
+                q_signal.insert((*it));
+        }
+
+        void register_to_topic(const std::string& topic, const std::string& connection_id)
+        {
+            q_waitings[topic].insert(connection_id);
+        }
+
+        size_t read_message_from_topic(const std::string& topic, std::string& message)
+        {
+            message = q_messages[topic];
+            return message.size();
+        }
+
+        size_t get_topic_consumers(const std::string& topic, std::set<std::string>& consumers)
+        {
+            for(std::set<std::string>::const_iterator it = q_waitings[topic].begin(); it != q_waitings[topic].end(); ++it)
+                consumers.insert((*it));
+            return consumers.size();
+        }
+
+        bool pop_signaled(const std::string& consumer)
+        {
+            std::set<std::string>::iterator it = q_signal.find(consumer);
+            if(it != q_signal.end())
+            {
+                q_signal.erase(it);
+                return true;
+            }
+            else
+                return false;
+        }
+
         /**
          * Method used to kill the webserver waiting for it to terminate
         **/
@@ -282,9 +322,15 @@ class webserver
 #ifdef USE_CPP_ZEROX
         std::unordered_set<ip_representation> bans;
         std::unordered_set<ip_representation> allowances;
+        std::unordered_map<std::string, std::string> q_messages;
+        std::unordered_map<std::string, std::unordered_set<std::string> > q_waitings;
+        std::unordered_set<std::string> q_signal;
 #else
         std::set<ip_representation> bans;
         std::set<ip_representation> allowances;
+        std::map<std::string, std::string> q_messages;
+        std::map<std::string, std::set<std::string> > q_waitings;
+        std::set<std::string> q_signal;
 #endif
         struct MHD_Daemon *daemon;
 

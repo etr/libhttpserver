@@ -5,6 +5,9 @@
 *.pm
 *.py
 *_wrap.*
+*.gcov
+*.gcno
+*.gcda
 build/*
 aclocal.m4
 autom4te.cache/

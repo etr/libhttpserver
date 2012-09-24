@@ -815,7 +815,7 @@ int webserver::finalize_answer(MHD_Connection* connection, struct modded_request
     }
 #endif
     mr->dhrs = dhrs;
-    dhrs->get_raw_response(&response, &found);
+    dhrs->get_raw_response(&response, &found, this);
     vector<pair<string,string> > response_headers;
     dhrs->get_headers(response_headers);
     vector<pair<string,string> > response_footers;

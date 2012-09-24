@@ -29,6 +29,13 @@ using namespace std;
 namespace httpserver
 {
 
+struct data_closure
+{
+    webserver* ws;
+    string connection_id;
+    string topic;
+};
+
 const std::vector<std::pair<std::string, std::string> > http_response::get_headers()
 {
     std::vector<std::pair<std::string, std::string> > to_ret;
@@ -82,13 +89,13 @@ shoutCAST_response::shoutCAST_response
 {
 }
 
-void http_response::get_raw_response(MHD_Response** response, bool* found)
+void http_response::get_raw_response(MHD_Response** response, bool* found, webserver* ws)
 {
     size_t size = &(*content.end()) - &(*content.begin());
     *response = MHD_create_response_from_buffer(size, (void*) content.c_str(), MHD_RESPMEM_PERSISTENT);
 }
 
-void http_file_response::get_raw_response(MHD_Response** response, bool* found)
+void http_file_response::get_raw_response(MHD_Response** response, bool* found, webserver* ws)
 {
     char* page = NULL;
     size_t size = http::load_file(filename.c_str(), &page);
@@ -96,6 +103,42 @@ void http_file_response::get_raw_response(MHD_Response** response, bool* found)
         *response = MHD_create_response_from_buffer(size, page, MHD_RESPMEM_MUST_FREE);
     else
         *found = false;
+}
+
+void long_polling_receive_response::get_raw_response(MHD_Response** response, bool* found, webserver* ws)
+{
+    data_closure* dc = new data_closure();
+    dc->ws = ws;
+    dc->topic = topic;
+    generate_random_uuid(dc->connection_id);
+    *response = MHD_create_response_from_callback(MHD_SIZE_UNKNOWN, 80,
+            &long_polling_receive_response::data_generator, (void*) dc, &long_polling_receive_response::free_callback);
+    ws->register_to_topic(dc->topic, dc->connection_id);
+}
+
+ssize_t long_polling_receive_response::data_generator (void* cls, uint64_t pos, char* buf, size_t max)
+{
+    data_closure* dc = static_cast<data_closure*>(cls);
+    if(dc->ws->pop_signaled(dc->connection_id))
+    {
+        string message;
+        int size = dc->ws->read_message_from_topic(dc->topic, message);
+        memcpy(buf, message.c_str(), size);
+        return size;
+    }
+    else
+        return 0;
+}
+
+void long_polling_receive_response::free_callback(void* cls)
+{
+    delete static_cast<data_closure*>(cls);
+}
+
+void long_polling_send_response::get_raw_response(MHD_Response** response, bool* found, webserver* ws)
+{
+    http_response::get_raw_response(response, found, ws);
+    ws->send_message_to_topic(topic, content);
 }
 
 void clone_response(const http_response& hr, http_response** dhrs)
@@ -119,6 +162,12 @@ void clone_response(const http_response& hr, http_response** dhrs)
             return;
         case(http_response::SWITCH_PROTOCOL):
             *dhrs = new switch_protocol_response(hr);
+            return;
+        case(http_response::LONG_POLLING_RECEIVE):
+            *dhrs = new long_polling_receive_response(hr);
+            return;
+        case(http_response::LONG_POLLING_SEND):
+            *dhrs = new long_polling_send_response(hr);
             return;
     }
 }
