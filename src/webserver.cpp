@@ -775,7 +775,10 @@ int webserver::finalize_answer(MHD_Connection* connection, struct modded_request
     }
     mr->dhr->set_underlying_connection(connection);
 #ifdef DEBUG
-    cout << "Using: " << found_endpoint->first.get_url_complete() << endl;
+    if(found)
+        cout << "Using: " << found_endpoint->first.get_url_complete() << endl;
+    else
+        cout << "Endpoint not found!" << endl;
 #endif
 #ifdef WITH_PYTHON
     PyGILState_STATE gstate;
