@@ -1,3 +1,8 @@
+libhttpserver (0.4.0) unstable; urgency=low
+  * Added support to Comet
+
+ -- Sebastiano Merlino <electrictwister2000@gmail.com> Tue, 25 Sep 2012 11:42:23 +0200
+
 libhttpserver (0.3.0) unstable; urgency=low
   * Improved performaces
   * Added capability to register default error pages

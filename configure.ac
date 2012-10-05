@@ -21,8 +21,8 @@
 
 AC_PREREQ(2.57)
 m4_define([libhttpserver_MAJOR_VERSION],[0])dnl
-m4_define([libhttpserver_MINOR_VERSION],[3])dnl
-m4_define([libhttpserver_REVISION],[0])dnl
+m4_define([libhttpserver_MINOR_VERSION],[4])dnl
+m4_define([libhttpserver_REVISION],[1])dnl
 m4_define([libhttpserver_PKG_VERSION],[libhttpserver_MAJOR_VERSION.libhttpserver_MINOR_VERSION.libhttpserver_REVISION])dnl
 m4_define([libhttpserver_LDF_VERSION],[libhttpserver_MAJOR_VERSION:libhttpserver_MINOR_VERSION:libhttpserver_REVISION])dnl
 AC_INIT([libhttpserver], libhttpserver_PKG_VERSION, [electrictwister2000@gmail.com])
@@ -72,9 +72,7 @@ PKG_CHECK_MODULES([LIBMICROHTTPD],[libmicrohttpd >= 0.9.7],[],[AC_MSG_ERROR("lib
 #AC_CHECK_HEADER([microhttpd.h],[],[AC_MSG_ERROR("Microhttpd header files not found. Please use a version >= 0.9.9.")])
 #AC_CHECK_LIB([microhttpd],[MHD_start_daemon],[],[AC_MSG_ERROR("Microhttpd header files not found. Please use a version >= 0.9.9.")])
 
-CXXFLAGS="-DHTTPSERVER_COMPILATION $CXXFLAGS"
-
-CXXFLAGS="$LIBMICROHTTPD_CFLAGS $CXXFLAGS"
+CXXFLAGS="-DHTTPSERVER_COMPILATION -D_REENTRANT $LIBMICROHTTPD_CFLAGS $CXXFLAGS"
 LDFLAGS="$LIBMICROHTTPD_LIBS $LD_FLAGS"
 
 m4_pattern_allow([AC_TYPE_SIZE_T])

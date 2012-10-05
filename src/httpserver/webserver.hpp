@@ -43,6 +43,7 @@
 #include <string>
 #include <utility>
 #include <memory>
+#include <deque>
 
 #include <pthread.h>
 
@@ -237,42 +238,16 @@ class webserver
         void unban_ip(const std::string& ip);
         void disallow_ip(const std::string& ip);
 
-        void send_message_to_topic(const std::string& topic, const std::string& message)
-        {
-            q_messages[topic] = message;
-            for(std::set<std::string>::const_iterator it = q_waitings[topic].begin(); it != q_waitings[topic].end(); ++it)
-                q_signal.insert((*it));
-        }
+        void send_message_to_topic(const std::string& topic, const std::string& message);
+        void send_message_to_consumer(int connection_id, const std::string& message, bool to_lock = true);
 
-        void register_to_topic(const std::string& topic, const std::string& connection_id)
-        {
-            q_waitings[topic].insert(connection_id);
-        }
+        void register_to_topics(const std::vector<std::string>& topics, int connection_id, int keepalive_secs = -1, std::string keepalive_msg = "");
 
-        size_t read_message_from_topic(const std::string& topic, std::string& message)
-        {
-            message = q_messages[topic];
-            return message.size();
-        }
+        size_t read_message(int connection_id, std::string& message);
 
-        size_t get_topic_consumers(const std::string& topic, std::set<std::string>& consumers)
-        {
-            for(std::set<std::string>::const_iterator it = q_waitings[topic].begin(); it != q_waitings[topic].end(); ++it)
-                consumers.insert((*it));
-            return consumers.size();
-        }
+        size_t get_topic_consumers(const std::string& topic, std::set<int>& consumers);
 
-        bool pop_signaled(const std::string& consumer)
-        {
-            std::set<std::string>::iterator it = q_signal.find(consumer);
-            if(it != q_signal.end())
-            {
-                q_signal.erase(it);
-                return true;
-            }
-            else
-                return false;
-        }
+        bool pop_signaled(int consumer);
 
         /**
          * Method used to kill the webserver waiting for it to terminate
@@ -312,7 +287,10 @@ class webserver
         bool post_process_enabled;
         bool single_resource;
         pthread_mutex_t mutexwait;
+        pthread_mutex_t runguard;
+        pthread_mutex_t cleanmux;
         pthread_cond_t mutexcond;
+        pthread_cond_t cleancond;
         http_resource* not_found_resource;
         http_resource* method_not_allowed_resource;
         http_resource* method_not_acceptable_resource;
@@ -322,19 +300,28 @@ class webserver
 #ifdef USE_CPP_ZEROX
         std::unordered_set<ip_representation> bans;
         std::unordered_set<ip_representation> allowances;
-        std::unordered_map<std::string, std::string> q_messages;
-        std::unordered_map<std::string, std::unordered_set<std::string> > q_waitings;
-        std::unordered_set<std::string> q_signal;
 #else
         std::set<ip_representation> bans;
         std::set<ip_representation> allowances;
-        std::map<std::string, std::string> q_messages;
-        std::map<std::string, std::set<std::string> > q_waitings;
-        std::set<std::string> q_signal;
 #endif
+
+//        std::map<std::string, std::string> q_messages;
+        std::map<int, std::deque<std::string> > q_messages;
+        std::map<std::string, std::set<int> > q_waitings;
+        std::map<int, std::pair<pthread_mutex_t, pthread_cond_t> > q_blocks;
+        std::set<int> q_signal;
+        std::map<int, long> q_keepalives;
+        std::map<int, std::pair<int, std::string> > q_keepalives_mem;
+        pthread_rwlock_t comet_guard;
+
         struct MHD_Daemon *daemon;
+        std::vector<pthread_t> threads;
 
         void init(http_resource* single_resource);
+        static void* select(void* self);
+        void schedule_fd(int fd, fd_set* schedule_list, int* max);
+        static void* cleaner(void* self);
+        void clean_connections();
 
         void method_not_allowed_page(http_response** dhrs, modded_request* mr);
         void internal_error_page(http_response** dhrs, modded_request* mr);
@@ -402,6 +389,11 @@ class webserver
                 struct modded_request* mr, const char* version, 
                 const char* st_url, const char* method 
         );
+
+        bool use_internal_select()
+        {
+            return this->start_method == http_utils::INTERNAL_SELECT;
+        }
 
         friend int policy_callback (void *cls, const struct sockaddr* addr, socklen_t addrlen);
         friend void error_log(void* cls, const char* fmt, va_list ap);

@@ -27,6 +27,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <signal.h>
+#include <fcntl.h>
 
 #ifdef WITH_PYTHON
 #include <Python.h>
@@ -44,6 +45,9 @@
 #include "webserver.hpp"
 #include "modded_request.hpp"
 
+#ifdef USE_COMET
+#define _REENTRANT 1
+#endif //USE_COMET
 
 using namespace std;
 
@@ -58,6 +62,15 @@ void access_log(webserver*, string);
 size_t unescaper_func(void*, struct MHD_Connection*, char*);
 size_t internal_unescaper(void*, char*);
 
+
+struct compare_value
+{
+    bool operator() (const std::pair<int, int>& left, const std::pair<int, int>& right) const
+    {
+        return left.second < right.second;
+    }
+};
+
 static void catcher (int sig)
 {
 }
@@ -71,9 +84,9 @@ static void ignore_sigpipe ()
     sigemptyset (&sig.sa_mask);
 #ifdef SA_INTERRUPT
     sig.sa_flags = SA_INTERRUPT;  /* SunOS */
-#else
+#else //SA_INTERRUPT
     sig.sa_flags = SA_RESTART;
-#endif
+#endif //SA_INTERRUPTT
     if (0 != sigaction (SIGPIPE, &sig, &oldsig))
         fprintf (stderr, gettext("Failed to install SIGPIPE handler: %s\n"), strerror (errno));
 }
@@ -256,7 +269,13 @@ void webserver::init(http_resource* single_resource)
         this->single_resource = false;
     ignore_sigpipe();
     pthread_mutex_init(&mutexwait, NULL);
+    pthread_mutex_init(&runguard, NULL);
     pthread_cond_init(&mutexcond, NULL);
+#ifdef USE_COMET
+    pthread_rwlock_init(&comet_guard, NULL);
+    pthread_mutex_init(&cleanmux, NULL);
+    pthread_cond_init(&cleancond, NULL);
+#endif //USE_COMET
 }
 
 webserver::~webserver()
@@ -290,6 +309,119 @@ void webserver::request_completed (void *cls, struct MHD_Connection *connection,
     free(mr);
 }
 
+void webserver::schedule_fd(int fd, fd_set* schedule_list, int* max)
+{
+    FD_SET(fd, schedule_list);
+    if(fd > *max)
+        *max = fd;
+}
+
+void* webserver::cleaner(void* self)
+{
+#ifdef USE_COMET
+    webserver* _this = static_cast<webserver*>(self);
+    while(true)
+    {
+        pthread_mutex_lock(&_this->cleanmux);
+        pthread_cond_wait(&_this->cleancond, &_this->cleanmux); //there are no problems with spurious wake-ups
+        pthread_mutex_unlock(&_this->cleanmux);
+        _this->clean_connections();
+    }
+#endif //USE_COMET
+    return 0x0;
+} 
+
+void webserver::clean_connections()
+{
+#ifdef USE_COMET
+    pthread_rwlock_wrlock(&comet_guard);
+    for(std::map<string, std::set<int> >::iterator it = q_waitings.begin(); it != q_waitings.end(); ++it)
+    {
+        std::set<int>::const_iterator itt;
+        for(itt = (*it).second.begin(); itt != (*it).second.end(); )
+        {
+            if(fcntl(*itt, F_GETFL) != -1 || errno != EBADF)
+            {
+                ++itt;
+            }
+            else
+            {
+                q_messages.erase(*itt);
+                q_blocks.erase(*itt);
+                q_signal.erase(*itt);
+                q_keepalives.erase(*itt);
+                (*it).second.erase(itt++);
+            }
+        }
+    }
+    pthread_rwlock_unlock(&comet_guard);
+#endif //USE_COMET
+}
+
+void* webserver::select(void* self)
+{
+#ifdef USE_COMET
+    fd_set rs;
+    fd_set ws;
+    fd_set es;
+    struct timeval timeout_value;
+    int max = 0;
+    webserver* _this = static_cast<webserver*>(self);
+    while (true)
+    {
+        FD_ZERO (&rs);
+        FD_ZERO (&ws);
+        FD_ZERO (&es);
+        if (MHD_YES != MHD_get_fdset (_this->daemon, &rs, &ws, &es, &max))
+            break; /* fatal internal error */
+        _this->clean_connections();
+        //TODO: clean connection structures also when working with threads
+
+        unsigned MHD_LONG_LONG mhd_timeout;
+
+        if (MHD_get_timeout (_this->daemon, &mhd_timeout) == MHD_YES)
+        {
+            timeout_value.tv_sec = mhd_timeout / 1000;
+            timeout_value.tv_usec = (mhd_timeout - (timeout_value.tv_sec * 1000)) * 1000;
+        }
+        int min_wait = timeout_value.tv_sec + (timeout_value.tv_usec / 10E6);
+
+        pthread_rwlock_wrlock(&_this->comet_guard);
+        for(std::map<int, long>::iterator it = _this->q_keepalives.begin(); it != _this->q_keepalives.end(); ++it)
+        {
+            struct timeval curtime;
+            gettimeofday(&curtime, NULL);
+            int waited_time = curtime.tv_sec - (*it).second;
+            if(waited_time >= _this->q_keepalives_mem[(*it).first].first)
+                _this->send_message_to_consumer((*it).first, _this->q_keepalives_mem[(*it).first].second);
+            else
+            {
+                int to_wait_time = _this->q_keepalives_mem[(*it).first].first - waited_time;
+                if(to_wait_time < min_wait)
+                    min_wait = to_wait_time;
+            }
+        }
+        pthread_rwlock_unlock(&_this->comet_guard);
+
+        pthread_rwlock_rdlock(&_this->comet_guard);
+        for(std::set<int>::const_iterator it = _this->q_signal.begin(); it != _this->q_signal.end(); ++it)
+        {
+            _this->schedule_fd(*it, &ws, &max);
+        }
+        timeout_value.tv_sec = min_wait;
+        timeout_value.tv_usec = 0;
+        pthread_rwlock_unlock(&_this->comet_guard);
+
+        ::select (max + 1, &rs, &ws, &es, &timeout_value);
+
+        pthread_mutex_lock(&_this->runguard);
+        MHD_run (_this->daemon);
+        pthread_mutex_unlock(&_this->runguard);
+    }
+#endif //USE_COMET
+    return 0x0;
+}
+
 bool webserver::start(bool blocking)
 {
     struct {
@@ -309,8 +441,10 @@ bool webserver::start(bool blocking)
         iov.push_back(gen(MHD_OPTION_SOCK_ADDR, (intptr_t) bind_address));
     if(bind_socket != 0)
         iov.push_back(gen(MHD_OPTION_LISTEN_SOCKET, bind_socket));
+#ifndef USE_COMET
     if(max_threads != 0)
         iov.push_back(gen(MHD_OPTION_THREAD_POOL_SIZE, max_threads));
+#endif //USE_COMET
     if(max_connections != 0)
         iov.push_back(gen(MHD_OPTION_CONNECTION_LIMIT, max_connections));
     if(memory_limit != 0)
@@ -334,7 +468,7 @@ bool webserver::start(bool blocking)
 #ifdef HAVE_GNUTLS
     if(cred_type != http_utils::NONE)
         iov.push_back(gen(MHD_OPTION_HTTPS_CRED_TYPE, cred_type));
-#endif
+#endif //HAVE_GNUTLS
 
     iov.push_back(gen(MHD_OPTION_END, 0, NULL ));
 
@@ -344,7 +478,15 @@ bool webserver::start(bool blocking)
         ops[i] = iov[i];
     }
 
+#ifdef USE_COMET
+    int start_conf;
+    if(start_method == http_utils::INTERNAL_SELECT)
+        start_conf = MHD_NO_FLAG;
+    else
+        start_conf = start_method;
+#else //USE_COMET
     int start_conf = start_method;
+#endif //USE_COMET
     if(use_ssl)
         start_conf |= MHD_USE_SSL;
     if(use_ipv6)
@@ -367,6 +509,29 @@ bool webserver::start(bool blocking)
     }
     this->running = true;
     bool value_onclose = false;
+#ifdef USE_COMET 
+    if(start_method == http_utils::INTERNAL_SELECT)
+    {
+        int num_threads = 1;
+        if(max_threads > num_threads)
+            num_threads = max_threads;
+        for(int i = 0; i < num_threads; i++)
+        {
+            //RUN SELECT THREADS
+            pthread_t t;
+            threads.push_back(t);
+            pthread_create(&threads[i], NULL, &webserver::select, static_cast<void*>(this));
+            //TODO: do something if initialization fails
+        }
+    }
+    else
+    {
+        pthread_t c;
+        threads.push_back(c);
+        pthread_create(&threads[0], NULL, &webserver::cleaner, static_cast<void*>(this));
+        //TODO: do something if initialization fails
+    }
+#endif //USE_COMET
     if(blocking)
     {
 #ifdef WITH_PYTHON
@@ -374,7 +539,7 @@ bool webserver::start(bool blocking)
         {
             Py_BEGIN_ALLOW_THREADS;
         }
-#endif
+#endif //WITH_PYTHON
         pthread_mutex_lock(&mutexwait);
         while(blocking && running)
             pthread_cond_wait(&mutexcond, &mutexwait);
@@ -384,7 +549,7 @@ bool webserver::start(bool blocking)
         {
             Py_END_ALLOW_THREADS;
         }
-#endif
+#endif //WITH_PYTHON
         value_onclose = true;
     }
     return value_onclose;
@@ -663,14 +828,14 @@ int webserver::bodyfull_requests_answer_second_step(MHD_Connection* connection,
     size_t* upload_data_size, struct modded_request* mr
 )
 {
-    mr->st_url = new string();
+    string st_url;
     internal_unescaper((void*) this, (char*) url);
-    http_utils::standardize_url(url, *mr->st_url);
+    http_utils::standardize_url(url, st_url);
     if ( 0 != *upload_data_size)
     {
 #ifdef DEBUG
         cout << "Writing content: " << upload_data << endl;
-#endif
+#endif //DEBUG
         mr->dhr->grow_content(upload_data, *upload_data_size);
         *upload_data_size = 0;
         return MHD_YES;
@@ -680,7 +845,7 @@ int webserver::bodyfull_requests_answer_second_step(MHD_Connection* connection,
         MHD_post_process(mr->pp, upload_data, *upload_data_size);
     }
 
-    return complete_request(connection, mr, version, mr->st_url->c_str(), method);
+    return complete_request(connection, mr, version, st_url.c_str(), method);
 }
 
 void webserver::end_request_construction(MHD_Connection* connection, struct modded_request* mr, const char* version, const char* st_url, const char* method, char* user, char* pass, char* digested_user)
@@ -776,14 +941,14 @@ int webserver::finalize_answer(MHD_Connection* connection, struct modded_request
     mr->dhr->set_underlying_connection(connection);
 #ifdef DEBUG
     cout << "Using: " << found_endpoint->first.get_url_complete() << endl;
-#endif
+#endif //DEBUG
 #ifdef WITH_PYTHON
     PyGILState_STATE gstate;
     if(PyEval_ThreadsInitialized())
     {
         gstate = PyGILState_Ensure();
     }
-#endif
+#endif //WITH_PYTHON
     if(found)
     {
         try
@@ -813,8 +978,9 @@ int webserver::finalize_answer(MHD_Connection* connection, struct modded_request
     {
         PyGILState_Release(gstate);
     }
-#endif
+#endif //WITH_PYTHON
     mr->dhrs = dhrs;
+    mr->dhrs->underlying_connection = connection;
     dhrs->get_raw_response(&response, &found, this);
     vector<pair<string,string> > response_headers;
     dhrs->get_headers(response_headers);
@@ -913,6 +1079,188 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
     {
         return static_cast<webserver*>(cls)->bodyfull_requests_answer_second_step(connection, url, method, version, upload_data, upload_data_size, mr);
     }
+}
+
+void webserver::send_message_to_consumer(int connection_id, const std::string& message, bool to_lock)
+{
+#ifdef USE_COMET
+    //This function need to be externally locked on write
+    q_messages[connection_id].push_back(message);
+    map<int, long>::const_iterator it;
+    if((it = q_keepalives.find(connection_id)) != q_keepalives.end())
+    {
+        struct timeval curtime;
+        gettimeofday(&curtime, NULL);
+        q_keepalives[connection_id] = curtime.tv_sec;
+    }
+    q_signal.insert(connection_id);
+    if(start_method != http_utils::INTERNAL_SELECT)
+    {
+        if(to_lock)
+            pthread_mutex_lock(&q_blocks[connection_id].first);
+        pthread_cond_signal(&q_blocks[connection_id].second);
+        if(to_lock)
+            pthread_mutex_unlock(&q_blocks[connection_id].first);
+    }
+#endif //USE_COMET
+}
+
+void webserver::send_message_to_topic(const std::string& topic, const std::string& message)
+{
+#ifdef USE_COMET
+    pthread_rwlock_wrlock(&comet_guard);
+    for(std::set<int>::const_iterator it = q_waitings[topic].begin(); it != q_waitings[topic].end(); ++it)
+    {
+        q_messages[(*it)].push_back(message);
+        q_signal.insert((*it));
+        if(start_method != http_utils::INTERNAL_SELECT)
+        {
+            pthread_mutex_lock(&q_blocks[(*it)].first);
+            pthread_cond_signal(&q_blocks[(*it)].second);
+            pthread_mutex_unlock(&q_blocks[(*it)].first);
+        }
+        map<int, long>::const_iterator itt;
+        if((itt = q_keepalives.find(*it)) != q_keepalives.end())
+        {
+            struct timeval curtime;
+            gettimeofday(&curtime, NULL);
+            q_keepalives[*it] = curtime.tv_sec;
+        }
+    }
+    pthread_rwlock_unlock(&comet_guard);
+    if(start_method != http_utils::INTERNAL_SELECT)
+    {
+        pthread_mutex_lock(&cleanmux);
+        pthread_cond_signal(&cleancond);
+        pthread_mutex_unlock(&cleanmux);
+    }
+#endif //USE_COMET
+}
+
+void webserver::register_to_topics(const std::vector<std::string>& topics, int connection_id, int keepalive_secs, string keepalive_msg)
+{
+#ifdef USE_COMET
+    pthread_rwlock_wrlock(&comet_guard);
+    for(std::vector<std::string>::const_iterator it = topics.begin(); it != topics.end(); ++it)
+        q_waitings[*it].insert(connection_id);
+    if(keepalive_secs != -1)
+    {
+        struct timeval curtime;
+        gettimeofday(&curtime, NULL);
+        q_keepalives[connection_id] = curtime.tv_sec;
+        q_keepalives_mem[connection_id] = make_pair<int, string>(keepalive_secs, keepalive_msg);
+    }
+    if(start_method != http_utils::INTERNAL_SELECT)
+    {
+        pthread_mutex_t m;
+        pthread_cond_t c;
+        pthread_mutex_init(&m, NULL);
+        pthread_cond_init(&c, NULL);
+        q_blocks[connection_id] = std::make_pair<pthread_mutex_t, pthread_cond_t>(m, c);
+    }
+    pthread_rwlock_unlock(&comet_guard);
+#endif //USE_COMET
+}
+
+size_t webserver::read_message(int connection_id, std::string& message)
+{
+#ifdef USE_COMET
+    pthread_rwlock_wrlock(&comet_guard);
+    std::deque<std::string>& t_deq = q_messages[connection_id];
+    message.assign(t_deq.front());
+    t_deq.pop_front();
+    pthread_rwlock_unlock(&comet_guard);
+    return message.size();
+#else //USE_COMET
+    return 0;
+#endif //USE_COMET
+}
+
+size_t webserver::get_topic_consumers(const std::string& topic, std::set<int>& consumers)
+{
+#ifdef USE_COMET
+    pthread_rwlock_rdlock(&comet_guard);
+    for(std::set<int>::const_iterator it = q_waitings[topic].begin(); it != q_waitings[topic].end(); ++it)
+        consumers.insert((*it));
+    int size = consumers.size();
+    pthread_rwlock_unlock(&comet_guard);
+    return size;
+#else //USE_COMET
+    return 0;
+#endif //USE_COMET
+}
+
+bool webserver::pop_signaled(int consumer)
+{
+#ifdef USE_COMET
+    if(start_method == http_utils::INTERNAL_SELECT)
+    {
+        pthread_rwlock_wrlock(&comet_guard);
+        std::set<int>::iterator it = q_signal.find(consumer);
+        if(it != q_signal.end())
+        {
+            if(q_messages[consumer].empty())
+            {
+                q_signal.erase(it);
+                pthread_rwlock_unlock(&comet_guard);
+                return false;
+            }
+            pthread_rwlock_unlock(&comet_guard);
+            return true;
+        }
+        else
+        {
+            pthread_rwlock_unlock(&comet_guard);
+            return false;
+        }
+    }
+    else
+    {
+        pthread_rwlock_rdlock(&comet_guard);
+        pthread_mutex_lock(&q_blocks[consumer].first);
+        struct timespec t;
+        struct timeval curtime;
+
+        {
+            bool to_unlock = true;
+            while(q_signal.find(consumer) == q_signal.end())
+            {
+                if(to_unlock)
+                {
+                    pthread_rwlock_unlock(&comet_guard);
+                    to_unlock = false;
+                }
+                gettimeofday(&curtime, NULL);
+                t.tv_sec = curtime.tv_sec + q_keepalives_mem[consumer].first;
+                t.tv_nsec = 0;
+                int rslt = pthread_cond_timedwait(&q_blocks[consumer].second, &q_blocks[consumer].first, &t);
+                if(rslt == ETIMEDOUT)
+                {
+                    pthread_rwlock_wrlock(&comet_guard);
+                    send_message_to_consumer(consumer, q_keepalives_mem[consumer].second, false);
+                    pthread_rwlock_unlock(&comet_guard);
+                }
+            }
+            if(to_unlock)
+                pthread_rwlock_unlock(&comet_guard);
+        }
+
+        if(q_messages[consumer].size() == 0)
+        {
+            pthread_rwlock_wrlock(&comet_guard);
+            q_signal.erase(consumer);
+            pthread_mutex_unlock(&q_blocks[consumer].first);
+            pthread_rwlock_unlock(&comet_guard);
+            return false;
+        }
+        pthread_rwlock_rdlock(&comet_guard);
+        pthread_mutex_unlock(&q_blocks[consumer].first);
+        pthread_rwlock_unlock(&comet_guard);
+        return true;
+    }
+#else //USE_COMET
+    return false;
+#endif //USE_COMET
 }
 
 };

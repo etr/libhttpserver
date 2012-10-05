@@ -29,13 +29,6 @@ using namespace std;
 namespace httpserver
 {
 
-struct data_closure
-{
-    webserver* ws;
-    string connection_id;
-    string topic;
-};
-
 const std::vector<std::pair<std::string, std::string> > http_response::get_headers()
 {
     std::vector<std::pair<std::string, std::string> > to_ret;
@@ -107,38 +100,41 @@ void http_file_response::get_raw_response(MHD_Response** response, bool* found, 
 
 void long_polling_receive_response::get_raw_response(MHD_Response** response, bool* found, webserver* ws)
 {
-    data_closure* dc = new data_closure();
-    dc->ws = ws;
-    dc->topic = topic;
-    generate_random_uuid(dc->connection_id);
+#ifdef USE_COMET
+    this->ws = ws;
+    this->connection_id = MHD_get_connection_info(this->underlying_connection, MHD_CONNECTION_INFO_FD)->socket_fd;
     *response = MHD_create_response_from_callback(MHD_SIZE_UNKNOWN, 80,
-            &long_polling_receive_response::data_generator, (void*) dc, &long_polling_receive_response::free_callback);
-    ws->register_to_topic(dc->topic, dc->connection_id);
+        &long_polling_receive_response::data_generator, (void*) this, NULL);
+    ws->register_to_topics(topics, connection_id, keepalive_secs, keepalive_msg);
+#else //USE_COMET
+    http_response::get_raw_response(response, found, ws);
+#endif //USE_COMET
 }
 
 ssize_t long_polling_receive_response::data_generator (void* cls, uint64_t pos, char* buf, size_t max)
 {
-    data_closure* dc = static_cast<data_closure*>(cls);
-    if(dc->ws->pop_signaled(dc->connection_id))
+#ifdef USE_COMET
+    long_polling_receive_response* _this = static_cast<long_polling_receive_response*>(cls);
+    if(_this->ws->pop_signaled(_this->connection_id))
     {
         string message;
-        int size = dc->ws->read_message_from_topic(dc->topic, message);
+        int size = _this->ws->read_message(_this->connection_id, message);
         memcpy(buf, message.c_str(), size);
         return size;
     }
     else
         return 0;
-}
-
-void long_polling_receive_response::free_callback(void* cls)
-{
-    delete static_cast<data_closure*>(cls);
+#else //USE_COMET
+    return 0;
+#endif //USE_COMET
 }
 
 void long_polling_send_response::get_raw_response(MHD_Response** response, bool* found, webserver* ws)
 {
     http_response::get_raw_response(response, found, ws);
-    ws->send_message_to_topic(topic, content);
+#ifdef USE_COMET
+    ws->send_message_to_topic(send_topic, content);
+#endif //USE_COMET
 }
 
 void clone_response(const http_response& hr, http_response** dhrs)

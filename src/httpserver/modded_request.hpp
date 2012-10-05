@@ -38,7 +38,6 @@ struct modded_request
 {
     struct MHD_PostProcessor *pp;
     std::string* complete_uri;
-    std::string* st_url;
     webserver* ws;
     void(http_resource::*callback)(const http_request&, http_response**);
     http_request* dhr;

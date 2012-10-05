@@ -28,6 +28,8 @@
 #include <utility>
 #include <string>
 
+struct MHD_Connection;
+
 namespace httpserver
 {
 
@@ -77,7 +79,10 @@ class http_response
             const std::string& realm = "",
             const std::string& opaque = "",
             bool reload_nonce = false,
-            const std::string& topic = ""
+            const std::vector<std::string>& topics = std::vector<std::string>(),
+            int keepalive_secs = -1,
+            const std::string keepalive_msg = "",
+            const std::string send_topic = ""
         ):
             response_type(response_type),
             content(content),
@@ -87,7 +92,10 @@ class http_response
             reload_nonce(reload_nonce),
             fp(-1),
             filename(content),
-            topic(topic)
+            topics(topics),
+            keepalive_secs(keepalive_secs),
+            keepalive_msg(keepalive_msg),
+            send_topic(send_topic)
         {
             set_header(http_utils::http_header_content_type, content_type);
         }
@@ -106,7 +114,10 @@ class http_response
             filename(b.filename),
             headers(b.headers),
             footers(b.footers),
-            topic(b.topic)
+            topics(b.topics),
+            keepalive_secs(b.keepalive_secs),
+            keepalive_msg(b.keepalive_msg),
+            send_topic(b.send_topic)
         {
         }
         virtual ~http_response()
@@ -270,9 +281,11 @@ class http_response
         {
             return 0;
         }
-        const std::string get_topic() const
+        size_t get_topics(std::vector<std::string>& topics) const
         {
-            return this->topic;
+            for(std::vector<std::string>::const_iterator it = this->topics.begin(); it != this->topics.end(); ++it)
+                topics.push_back(*it);
+            return topics.size();
         }
     protected:
         response_type_T response_type;
@@ -285,7 +298,11 @@ class http_response
         std::string filename;
         std::map<std::string, std::string, header_comparator> headers;
         std::map<std::string, std::string, header_comparator> footers;
-        std::string topic;
+        std::vector<std::string> topics;
+        int keepalive_secs;
+        std::string keepalive_msg;
+        std::string send_topic;
+        struct MHD_Connection* underlying_connection;
 
         virtual void get_raw_response(MHD_Response** res, bool* found, webserver* ws = 0x0);
 
@@ -393,8 +410,10 @@ class long_polling_receive_response : public http_response
             const std::string& content,
             int response_code,
             const std::string& content_type,
-            const std::string& topic
-        ) : http_response(http_response::LONG_POLLING_RECEIVE, content, response_code, content_type, "", "", false, topic)
+            const std::vector<std::string>& topics,
+            int keepalive_secs = -1,
+            std::string keepalive_msg = ""
+        ) : http_response(http_response::LONG_POLLING_RECEIVE, content, response_code, content_type, "", "", false, topics, keepalive_secs, keepalive_msg)
         {
         }
 
@@ -403,7 +422,9 @@ class long_polling_receive_response : public http_response
         virtual void get_raw_response(MHD_Response** res, bool* found, webserver* ws = 0x0);
     private:
         static ssize_t data_generator (void* cls, uint64_t pos, char* buf, size_t max);
-        static void free_callback(void* cls);
+
+        int connection_id;
+        webserver* ws;
 };
 
 class long_polling_send_response : public http_response
@@ -413,7 +434,7 @@ class long_polling_send_response : public http_response
         (
             const std::string& content,
             const std::string& topic
-        ) : http_response(http_response::LONG_POLLING_SEND, content, 200, "", "", "", false, topic)
+        ) : http_response(http_response::LONG_POLLING_SEND, content, 200, "", "", "", false, std::vector<std::string>(), -1, "", topic)
         {
         }
 
