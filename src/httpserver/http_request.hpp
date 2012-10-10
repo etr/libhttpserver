@@ -355,6 +355,14 @@ class http_request
         {
             result = this->content;
         }
+        const std::string get_querystring() const
+        {
+            return this->querystring;
+        }
+        void get_querystring(std::string& result) const
+        {
+            result = this->querystring;
+        }
         /**
          * Method used to get the version of the request.
          * @return the version in string representation
@@ -411,6 +419,7 @@ class http_request
             footers(b.footers),
             cookies(b.cookies),
             args(b.args),
+            querystring(b.querystring),
             content(b.content),
             version(b.version),
             requestor(b.requestor),
@@ -427,6 +436,7 @@ class http_request
         std::map<std::string, std::string, header_comparator> footers;
         std::map<std::string, std::string, header_comparator> cookies;
         std::map<std::string, std::string, arg_comparator> args;
+        std::string querystring;
         std::string content;
         std::string version;
         std::string requestor;

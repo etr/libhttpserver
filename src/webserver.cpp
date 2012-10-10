@@ -645,6 +645,19 @@ int webserver::build_request_footer (void *cls, enum MHD_ValueKind kind, const c
 int webserver::build_request_args (void *cls, enum MHD_ValueKind kind, const char *key, const char *value)
 {
     modded_request* mr = static_cast<modded_request*>(cls);
+    {
+        char buf[strlen(key) + strlen(value) + 3];
+        if(mr->dhr->querystring == "")
+        {
+            snprintf(buf, sizeof buf, "?%s=%s", key, value);
+            mr->dhr->querystring = buf;
+        }
+        else
+        {
+            snprintf(buf, sizeof buf, "&%s=%s", key, value);
+            mr->dhr->querystring += string(buf);
+        }
+    }
     int size = internal_unescaper((void*) mr->ws, (char*) value);
     mr->dhr->set_arg(key, string(value, size));
     return MHD_YES;
