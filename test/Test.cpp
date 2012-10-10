@@ -10,12 +10,13 @@ using namespace std;
 
 webserver* ws_ptr;
 
+/*
 void signal_callback_handler(int signum)
 {
     cout << "bye!" << endl;
     ws_ptr->stop();
 }
-
+*/
 Test::Test() : http_resource() 
 {
 }
@@ -26,7 +27,7 @@ Test2::Test2() : http_resource()
 
 http_response Test::render_GET(const http_request& r)
 {
-	cout << r.get_version() << endl;
+/*	cout << r.get_version() << endl;
 	cout << r.get_requestor() << endl;
 	cout << r.get_requestor_port() << endl;
 	cout << "PROVA: " << r.get_arg("prova") << endl;
@@ -37,13 +38,17 @@ http_response Test::render_GET(const http_request& r)
     r.get_headers(head);
     for(std::map<std::string, std::string, header_comparator>::const_iterator it = head.begin(); it != head.end(); ++it)
         cout << (*it).first <<  "-> " << (*it).second << endl;
-	string pp = r.get_arg("prova");
-	return http_file_response("/home/etr/progs/libhttpserver/test/noimg.png", 200, "image/png");
+	string pp = r.get_arg("prova"); */
+    std::vector<std::string> topics;
+    topics.push_back("prova");
+    //return long_polling_receive_response("", 200, "", topics, 10, "keepalive\n");
+    cout << r.get_querystring() << endl;
+    return http_file_response("/home/etr/progs/libhttpserver/test/noimg.png", 200, "image/png");
 }
 
 http_response Test::render_POST(const http_request& r)
 {
-	fstream filestr;
+/*	fstream filestr;
 	filestr.open("test.txt", fstream::out | fstream::app);
 	filestr << r.get_content() << endl;
 	filestr.close();
@@ -53,7 +58,11 @@ http_response Test::render_POST(const http_request& r)
     {
         cout << vv[i] << endl;
     }
-	return http_string_response("OK",200);
+	return http_string_response("OK",200);*/
+	http_string_response s("OK",200);
+    s.set_header(http_utils::http_header_location, "B");
+    return s;
+ //   return long_polling_send_response("<script type=\"text/javascript\">alert(\"ciao\")</script>\n", "prova");
 }
 
 http_response Test2::render_GET(const http_request& r)
@@ -69,7 +78,7 @@ http_response Test::render_PUT(const http_request& r)
 
 int main()
 {
-    signal(SIGINT, &signal_callback_handler);
+//    signal(SIGINT, &signal_callback_handler);
 	webserver ws = create_webserver(8080);
     ws_ptr = &ws;
 	Test dt = Test();
