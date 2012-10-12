@@ -850,12 +850,12 @@ int webserver::bodyfull_requests_answer_second_step(MHD_Connection* connection,
         cout << "Writing content: " << upload_data << endl;
 #endif //DEBUG
         mr->dhr->grow_content(upload_data, *upload_data_size);
+        if (mr->pp != NULL)
+        {
+            MHD_post_process(mr->pp, upload_data, *upload_data_size);
+        }
         *upload_data_size = 0;
         return MHD_YES;
-    }
-    if (mr->pp != NULL)
-    {
-        MHD_post_process(mr->pp, upload_data, *upload_data_size);
     }
 
     return complete_request(connection, mr, version, st_url.c_str(), method);
