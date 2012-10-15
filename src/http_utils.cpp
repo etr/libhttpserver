@@ -25,7 +25,6 @@
 #include <sstream>
 #include <iomanip>
 #include <fstream>
-#include <uuid/uuid.h>
 #include "string_utilities.hpp"
 #include "http_utils.hpp"
 
@@ -446,17 +445,6 @@ char* load_file (const char *filename)
     char* content = NULL;
     load_file(filename, &content);
     return content;
-}
-
-void generate_random_uuid(string& result)
-{
-    uuid_t out;
-    uuid_generate(out);
-    std::string ret;
-    ret.assign((const char*) out, 16);
-    char unparsed[37];
-    uuid_unparse((const unsigned char*) ret.c_str(), unparsed);
-    result.assign((const char*) unparsed, 37);
 }
 
 };

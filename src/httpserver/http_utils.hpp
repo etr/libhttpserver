@@ -342,8 +342,6 @@ char* load_file (const char *filename);
 
 size_t load_file (const char* filename, char** content);
 
-void generate_random_uuid(std::string& uuid);
-
 };
 };
 #endif
