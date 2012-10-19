@@ -323,6 +323,18 @@ class http_string_response : public http_response
         http_string_response(const http_response& b) : http_response(b) { }
 };
 
+class http_byte_response : public http_response
+{
+    public:
+        http_byte_response
+        (
+            const char* content,
+            size_t content_length,
+            int response_code,
+            const std::string& content_type = "text/plain"
+        ): http_response(http_response::STRING_CONTENT, std::string(content, content_length), response_code, content_type) { }
+};
+
 class http_file_response : public http_response
 {
     public:
