@@ -1,6 +1,7 @@
 libhttpserver (0.5.1) unstable; urgency=low
   * Stabilized comet support
   * Added features to manage requests easily
+  * Added response constructor with byte initializer
 
  -- Sebastiano Merlino <electrictwister2000@gmail.com> Tue, 10 Oct 2012 17:18:42 +0200
 
