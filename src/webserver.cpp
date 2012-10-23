@@ -149,9 +149,9 @@ webserver::webserver
     int memory_limit,
     int connection_timeout,
     int per_IP_connection_limit,
-    const logging_delegate* log_delegate,
-    const request_validator* validator,
-    const unescaper* unescaper_pointer,
+    logging_delegate* log_delegate,
+    request_validator* validator,
+    unescaper* unescaper_pointer,
     const struct sockaddr* bind_address,
     int bind_socket,
     int max_thread_stack_size,
@@ -695,10 +695,6 @@ void error_log(void* cls, const char* fmt, va_list ap)
     {
         dws->log_delegate->log_error(fmt);
     }
-    else
-    {
-        cout << fmt << endl;
-    }
 }
 
 void access_log(webserver* dws, string uri)
@@ -706,10 +702,6 @@ void access_log(webserver* dws, string uri)
     if(dws->log_delegate != 0x0)
     {
         dws->log_delegate->log_access(uri);
-    }
-    else
-    {
-        cout << uri << endl;
     }
 }
 
@@ -747,6 +739,42 @@ int webserver::post_iterator (void *cls, enum MHD_ValueKind kind,
     struct modded_request* mr = (struct modded_request*) cls;
     mr->dhr->set_arg(key, data, size);
     return MHD_YES;
+}
+
+const logging_delegate* webserver::get_logging_delegate() const
+{
+    return this->log_delegate;
+}
+
+void webserver::set_logging_delegate(logging_delegate* log_delegate, bool delete_old)
+{
+    if(delete_old && this->log_delegate != 0x0)
+        delete this->log_delegate;
+    this->log_delegate = log_delegate;
+}
+
+const request_validator* webserver::get_request_validator() const
+{
+    return this->validator;
+}
+
+void webserver::set_request_validator(request_validator* validator, bool delete_old)
+{
+    if(delete_old && this->validator != 0x0)
+        delete this->validator;
+    this->validator = validator;
+}
+
+const unescaper* webserver::get_unescaper() const
+{
+    return this->unescaper_pointer;
+}
+
+void webserver::set_unescaper(unescaper* u, bool delete_old)
+{
+    if(delete_old && this->unescaper_pointer != 0x0)
+        delete this->unescaper_pointer;
+    this->unescaper_pointer = unescaper_pointer;
 }
 
 void webserver::upgrade_handler (void *cls, struct MHD_Connection* connection,

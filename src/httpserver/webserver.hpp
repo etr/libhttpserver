@@ -173,9 +173,9 @@ class webserver
             int memory_limit = 0,
             int connection_timeout = DEFAULT_WS_TIMEOUT,
             int per_IP_connection_limit = 0,
-            const logging_delegate* log_delegate = 0x0,
-            const request_validator* validator = 0x0,
-            const unescaper* unescaper_pointer = 0x0,
+            logging_delegate* log_delegate = 0x0,
+            request_validator* validator = 0x0,
+            unescaper* unescaper_pointer = 0x0,
             const struct sockaddr* bind_address = 0x0,
             int bind_socket = 0,
             int max_thread_stack_size = 0,
@@ -249,6 +249,18 @@ class webserver
 
         bool pop_signaled(int consumer);
 
+        const logging_delegate* get_logging_delegate() const;
+        
+        void set_logging_delegate(logging_delegate* log_delegate, bool delete_old = false);
+
+        const request_validator* get_request_validator() const;
+
+        void set_request_validator(request_validator* validator, bool delete_old = false);
+
+        const unescaper* get_unescaper() const;
+
+        void set_unescaper(unescaper* unescaper_pointer, bool delete_old = false);
+
         /**
          * Method used to kill the webserver waiting for it to terminate
         **/
@@ -261,9 +273,9 @@ class webserver
         int memory_limit;
         int connection_timeout;
         int per_IP_connection_limit;
-        const logging_delegate* log_delegate;
-        const request_validator* validator;
-        const unescaper* unescaper_pointer;
+        logging_delegate* log_delegate;
+        request_validator* validator;
+        unescaper* unescaper_pointer;
         const struct sockaddr* bind_address;
         int bind_socket;
         int max_thread_stack_size;
@@ -491,9 +503,9 @@ class create_webserver
         create_webserver& memory_limit(int memory_limit) { _memory_limit = memory_limit; return *this; }
         create_webserver& connection_timeout(int connection_timeout) { _connection_timeout = connection_timeout; return *this; }
         create_webserver& per_IP_connection_limit(int per_IP_connection_limit) { _per_IP_connection_limit = per_IP_connection_limit; return *this; }
-        create_webserver& log_delegate(const logging_delegate* log_delegate) { _log_delegate = log_delegate; return *this; }
-        create_webserver& validator(const request_validator* validator) { _validator = validator; return *this; }
-        create_webserver& unescaper_pointer(const unescaper* unescaper_pointer) { _unescaper_pointer = unescaper_pointer; return *this; }
+        create_webserver& log_delegate(logging_delegate* log_delegate) { _log_delegate = log_delegate; return *this; }
+        create_webserver& validator(request_validator* validator) { _validator = validator; return *this; }
+        create_webserver& unescaper_pointer(unescaper* unescaper_pointer) { _unescaper_pointer = unescaper_pointer; return *this; }
         create_webserver& bind_address(const struct sockaddr* bind_address) { _bind_address = bind_address; return *this; }
         create_webserver& bind_socket(int bind_socket) { _bind_socket = bind_socket; return *this; }
         create_webserver& max_thread_stack_size(int max_thread_stack_size) { _max_thread_stack_size = max_thread_stack_size; return *this; }
@@ -539,9 +551,9 @@ class create_webserver
         int _memory_limit;
         int _connection_timeout;
         int _per_IP_connection_limit;
-        const logging_delegate* _log_delegate;
-        const request_validator* _validator;
-        const unescaper* _unescaper_pointer;
+        logging_delegate* _log_delegate;
+        request_validator* _validator;
+        unescaper* _unescaper_pointer;
         const struct sockaddr* _bind_address;
         int _bind_socket;
         int _max_thread_stack_size;
