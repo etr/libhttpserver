@@ -88,6 +88,9 @@ dist-hook:
 
 deb:
 	debuild -i -us -uc -b
+	mv ../libhttpserver_@VERSION@_* .
+	mv ../libhttpserver-dev_@VERSION@_* .
+	mv ../libhttpserver-dbg_@VERSION@_* .
 
 rpm: dist
 	mkdir -p redhat/SOURCES
