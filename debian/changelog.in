@@ -1,3 +1,8 @@
+libhttpserver (0.5.4) unstable; urgency=low
+  * Solved some problems with debian package building
+
+ -- Sebastiano Merlino <electrictwister2000@gmail.com> Tue, 30 Oct 2012 16:12:00 +0100
+
 libhttpserver (0.5.3) unstable; urgency=low
   * Added grow method to http_response
 
