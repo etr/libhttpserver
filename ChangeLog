@@ -1,3 +1,7 @@
+Tue Oct 30 12:52:04 2012 +0100
+	Changed version to 0.5.3
+	Added grow method to http_request - Sebastiano Merlino
+
 Tue Oct 23 12:46:48 2012 +0200
 	Changed version from 0.5.1 to 0.5.2 - Sebastiano Merlino
 
@@ -189,21 +193,5 @@ Sat Jul 7 16:18:56 2012 +0200
 
 Sat Jun 23 14:33:26 2012 +0200
 	Modified in order to standardize doxygen generation.
-	Altered file response management in order to avoid huge memory consumption
-	that was due to the usage of libmicrohttpd native file readers - Sebastiano Merlino
-
-Sun Jun 3 11:24:57 2012 +0200
-	Changed http_endpoint, http_request, http_resource, http_response visibility in order to avoid constructions.
-	Solved a problem (in ruby wrapper) due to the inlining of http_endpoint destructor
-	Changed Test.hpp/Test.cpp in order to follow new interface - Sebastiano Merlino
-
-Fri Jun 1 22:19:13 2012 +0200
-	Merge branch 'master' of github.com:etr/libhttpserver
-	Conflicts:
-	src/httpserver/http_request.hpp
-	src/httpserver/http_response.hpp
-	src/webserver.cpp - Sebastiano Merlino
-
-Fri Jun 1 22:02:06 2012 +0200
-	Modified in order to follow gnu guidelines for interfaces - Sebastiano Merlino
+	Altered file response management in order to avoid huge memory consumption - Sebastiano Merlino
 
