@@ -143,6 +143,14 @@ class http_response
         {
             this->content = content;
         }
+        void grow_content(const std::string& content)
+        {
+            this->content.append(content);
+        }
+        void grow_content(const char* content, size_t size)
+        {
+            this->content.append(content, size);
+        }
         /**
          * Method used to get a specified header defined for the response
          * @param key The header identification

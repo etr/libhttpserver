@@ -1,0 +1,209 @@
+Tue Oct 23 12:46:48 2012 +0200
+	Changed version from 0.5.1 to 0.5.2 - Sebastiano Merlino
+
+Tue Oct 23 12:46:07 2012 +0200
+	Changed default log behaviour to print nothing
+	Added getters and setters for dynamic components of WS - Sebastiano Merlino
+
+Mon Oct 22 12:13:11 2012 +0200
+	Modified version number and changelog in order to prepare tag - Sebastiano Merlino
+
+Fri Oct 19 17:11:21 2012 +0200
+	Added response constructor with byte - Sebastiano Merlino
+
+Mon Oct 15 11:16:22 2012 +0200
+	Removed unuseful dependency from libuuid - Sebastiano Merlino
+
+Fri Oct 12 15:42:21 2012 +0200
+	Solved a bug that made impossible to parse post data - Sebastiano Merlino
+
+Wed Oct 10 17:19:25 2012 +0200
+	Moved to version 0.5.1 - Sebastiano Merlino
+
+Wed Oct 10 17:16:26 2012 +0200
+	Added querystring to request attributes - Sebastiano Merlino
+
+Fri Oct 5 18:00:38 2012 +0200
+	Merge branch 'master' of https://github.com/etr/libhttpserver
+	Conflicts:
+	src/webserver.cpp - Sebastiano Merlino
+
+Fri Oct 5 17:55:42 2012 +0200
+	Added -D_REENTRANT to configuration.
+	Aligned debian changelog.
+	Added comet capabilities to the server. - Sebastiano Merlino
+
+Tue Sep 25 00:50:45 2012 +0200
+	Solved a bug with print in debug mode - Sebastiano Merlino
+
+Mon Sep 24 15:29:28 2012 +0200
+	Modified webserver in order to accept comet calls
+	Added ignored patters in gitignore - Sebastiano Merlino
+
+Sun Sep 23 19:10:28 2012 +0200
+	Partially solved undefined symbol in wrappers - Sebastiano Merlino
+
+Sun Sep 23 19:09:54 2012 +0200
+	Avoided the usage of the sole option MHD_USE_POLL - Sebastiano Merlino
+
+Thu Sep 20 08:47:24 2012 +0200
+	Added forgotten modded_request.hpp file - Sebastiano Merlino
+
+Thu Sep 20 08:46:33 2012 +0200
+	Added .gitignore file - Sebastiano Merlino
+
+Sat Sep 15 13:02:52 2012 +0200
+	Moved http_endpoint to details namespace - Sebastiano Merlino
+
+Sat Sep 15 02:39:47 2012 -0700
+	Merge pull request #35 from etr/cflags_for_swig_in_pcfile
+	add -I${includedir}/httpserver to CFLAGS - Sebastiano Merlino
+
+Tue Aug 28 16:33:45 2012 +0200
+	add -I${includedir}/httpserver to CFLAGS
+	This make swig file generation easier because HTTPSERVER_CFLAGS can be
+	directly used in swig file generation.
+	This fix affect only clients that use swing on their code. - Dario Mazza
+
+Sun Aug 26 19:03:44 2012 +0200
+	Changed version.
+	Aligned version and dependencies in pc and debian files
+	Updated debian changelog. - Sebastiano Merlino
+
+Sun Aug 26 18:55:05 2012 +0200
+	Changed visibility of http_endpoint methods to avoid them to be called
+	by external applications.
+	Avoided explicit usage of MHD constants in classes interface.
+	Changed http_resource interface in order to avoid copy-constructor calls
+	and improve performances.
+	Changed answer_to_connection method in order to avoid multiple checking
+	on methods and thus improve performances.
+	Added a way to register personalized error pages. - Sebastiano Merlino
+
+Wed Aug 8 17:33:39 2012 +0200
+	Removed code repetition in handle_request method - Sebastiano Merlino
+
+Wed Aug 8 12:31:44 2012 +0200
+	Added capability to compile with gcov
+	Changed infinite loop in ws to use wait conditions
+	Removed a bug from GET-like method handling - Sebastiano Merlino
+
+Sun Aug 5 18:26:25 2012 +0200
+	Modified in order to parse qs in POST/PUT cases - Sebastiano Merlino
+
+Fri Aug 3 23:36:14 2012 +0200
+	Avoid inclusion of internal headers - Sebastiano Merlino
+
+Thu Aug 2 00:43:02 2012 +0200
+	Changed in order to find libmicrohttpd in system - Sebastiano Merlino
+
+Thu Jul 26 14:08:47 2012 +0200
+	Solved some performance and style issues - Sebastiano Merlino
+
+Wed Jul 25 18:42:48 2012 +0200
+	Merge branch 'master' of github.com:etr/libhttpserver - Sebastiano Merlino
+
+Wed Jul 25 18:41:45 2012 +0200
+	Added some comments to http_endpoint and http_request - Sebastiano Merlino
+
+Wed Jul 25 08:58:04 2012 -0700
+	Merge pull request #29 from etr/libtool_version_number
+	using m4 to define major,minor and revision number in configure.ac - Sebastiano Merlino
+
+Wed Jul 25 17:50:05 2012 +0200
+	using m4 to define major,minor and revision number in configure.ac and send version number to libtool and AC_INIT - Dario Mazza
+
+Wed Jul 25 17:10:49 2012 +0200
+	Changed in order to solve some problems with deb package and rpm package - Sebastiano Merlino
+
+Tue Jul 24 16:55:51 2012 -0700
+	Merge pull request #28 from etr/debpkg_patch_deps
+	added parameter used to ignore dependecies during debpkg creation - Sebastiano Merlino
+
+Wed Jul 25 01:51:52 2012 +0200
+	added parameter used to ignore dependecies during debpkg creation - Dario Mazza
+
+Wed Jul 25 00:42:25 2012 +0200
+	Adjusted errors in debian rules - Sebastiano Merlino
+
+Tue Jul 24 16:37:07 2012 +0200
+	Modified rpm build in order to compile it
+	Lowered required version of libmicrohttpd to 0.9.7 - Sebastiano Merlino
+
+Tue Jul 24 13:28:38 2012 +0200
+	Changed also build default directory for debs - Sebastiano Merlino
+
+Tue Jul 24 13:22:59 2012 +0200
+	Changed rules.in in order to avoid relative paths in deb compile - Sebastiano Merlino
+
+Mon Jul 23 15:42:33 2012 +0200
+	Solved a logical error in http_resource route
+	Added some debug prints - Sebastiano Merlino
+
+Sun Jul 22 00:24:04 2012 +0200
+	Changed in order to add optional optimizations on ws - Sebastiano Merlino
+
+Sat Jul 21 17:46:03 2012 +0200
+	Changed in order to enhance deb packages generation
+	Added rpm packages generation - Sebastiano Merlino
+
+Sat Jul 21 00:43:39 2012 +0200
+	adjusted error in changelog - Sebastiano Merlino
+
+Sat Jul 21 00:41:43 2012 +0200
+	Changed in order to include debian package creation to makefile - Sebastiano Merlino
+
+Fri Jul 20 12:11:30 2012 -0700
+	Merge pull request #26 from etr/debpackage
+	project debianized - Sebastiano Merlino
+
+Fri Jul 20 21:03:43 2012 +0200
+	Merge branch 'master' of github.com:etr/libhttpserver - Sebastiano Merlino
+
+Fri Jul 20 21:03:24 2012 +0200
+	Changed version - Sebastiano Merlino
+
+Fri Jul 20 13:45:53 2012 +0300
+	adjusted bad comment - Sebastiano Merlino
+
+Fri Jul 20 12:44:18 2012 +0200
+	Added cmakemodule to support inclusion in cmake installers - Sebastiano Merlino
+
+Thu Jul 19 16:32:33 2012 +0200
+	Modified in order to avoid errors by autoconf - Sebastiano Merlino
+
+Thu Jul 19 11:47:23 2012 +0000
+	project debianized - Andrea Nicotra
+
+Sat Jul 14 17:33:10 2012 +0200
+	Adjusted methods signature in order to follow new interface. - Sebastiano Merlino
+
+Fri Jul 13 15:51:31 2012 +0200
+	Adjusted in order to avoid errors in regex matching - Sebastiano Merlino
+
+Fri Jul 13 13:20:28 2012 +0200
+	Added get single cookie method - Sebastiano Merlino
+
+Sat Jul 7 16:18:56 2012 +0200
+	Created new interface in order to optimize memory management - Sebastiano Merlino
+
+Sat Jun 23 14:33:26 2012 +0200
+	Modified in order to standardize doxygen generation.
+	Altered file response management in order to avoid huge memory consumption
+	that was due to the usage of libmicrohttpd native file readers - Sebastiano Merlino
+
+Sun Jun 3 11:24:57 2012 +0200
+	Changed http_endpoint, http_request, http_resource, http_response visibility in order to avoid constructions.
+	Solved a problem (in ruby wrapper) due to the inlining of http_endpoint destructor
+	Changed Test.hpp/Test.cpp in order to follow new interface - Sebastiano Merlino
+
+Fri Jun 1 22:19:13 2012 +0200
+	Merge branch 'master' of github.com:etr/libhttpserver
+	Conflicts:
+	src/httpserver/http_request.hpp
+	src/httpserver/http_response.hpp
+	src/webserver.cpp - Sebastiano Merlino
+
+Fri Jun 1 22:02:06 2012 +0200
+	Modified in order to follow gnu guidelines for interfaces - Sebastiano Merlino
+

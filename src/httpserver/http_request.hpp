@@ -509,7 +509,7 @@ class http_request
         **/
         void grow_content(const char* content, size_t size)
         {
-            this->content += std::string(content, size);
+            this->content.append(content, size);
         }
         /**
          * Method used to set the path requested.
