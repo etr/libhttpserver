@@ -303,7 +303,7 @@ void webserver::request_completed (void *cls, struct MHD_Connection *connection,
     }
     if(mr->second)
         delete mr->dhr; //TODO: verify. It could be an error
-    if(mr->dhrs)
+    if(mr->dhrs && mr->dhrs->autodelete)
         delete mr->dhrs;
     delete mr->complete_uri;
     free(mr);

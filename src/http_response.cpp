@@ -76,9 +76,10 @@ shoutCAST_response::shoutCAST_response
 (
     const std::string& content,
     int response_code,
-    const std::string& content_type
+    const std::string& content_type,
+    bool autodelete
 ):
-    http_response(http_response::SHOUTCAST_CONTENT, content, response_code | http_utils::shoutcast_response, content_type)
+    http_response(http_response::SHOUTCAST_CONTENT, content, response_code | http_utils::shoutcast_response, content_type, autodelete)
 {
 }
 

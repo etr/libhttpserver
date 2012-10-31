@@ -76,6 +76,7 @@ class http_response
             const std::string& content = "", 
             int response_code = 200,
             const std::string& content_type = "text/plain",
+            bool autodelete = true,
             const std::string& realm = "",
             const std::string& opaque = "",
             bool reload_nonce = false,
@@ -87,6 +88,7 @@ class http_response
             response_type(response_type),
             content(content),
             response_code(response_code),
+            autodelete(autodelete),
             realm(realm),
             opaque(opaque),
             reload_nonce(reload_nonce),
@@ -107,6 +109,7 @@ class http_response
             response_type(b.response_type),
             content(b.content),
             response_code(b.response_code),
+            autodelete(b.autodelete),
             realm(b.realm),
             opaque(b.opaque),
             reload_nonce(b.reload_nonce),
@@ -299,6 +302,7 @@ class http_response
         response_type_T response_type;
         std::string content;
         int response_code;
+        bool autodelete;
         std::string realm;
         std::string opaque;
         bool reload_nonce;
@@ -325,8 +329,9 @@ class http_string_response : public http_response
         (
             const std::string& content,
             int response_code,
-            const std::string& content_type = "text/plain"
-        ): http_response(http_response::STRING_CONTENT, content, response_code, content_type) { }
+            const std::string& content_type = "text/plain",
+            bool autodelete = true
+        ): http_response(http_response::STRING_CONTENT, content, response_code, content_type, autodelete) { }
 
         http_string_response(const http_response& b) : http_response(b) { }
 };
@@ -339,8 +344,9 @@ class http_byte_response : public http_response
             const char* content,
             size_t content_length,
             int response_code,
-            const std::string& content_type = "text/plain"
-        ): http_response(http_response::STRING_CONTENT, std::string(content, content_length), response_code, content_type) { }
+            const std::string& content_type = "text/plain",
+            bool autodelete = true
+        ): http_response(http_response::STRING_CONTENT, std::string(content, content_length), response_code, content_type, autodelete) { }
 };
 
 class http_file_response : public http_response
@@ -350,8 +356,9 @@ class http_file_response : public http_response
         (
             const std::string& filename,
             int response_code,
-            const std::string& content_type = "text/plain"
-        ) : http_response(http_response::FILE_CONTENT, filename, response_code, content_type)
+            const std::string& content_type = "text/plain",
+            bool autodelete = true
+        ) : http_response(http_response::FILE_CONTENT, filename, response_code, content_type, autodelete)
         {
         }
 
@@ -368,9 +375,10 @@ class http_basic_auth_fail_response : public http_response
             const std::string& content,
             int response_code,
             const std::string& content_type = "text/plain",
+            bool autodelete = true,
             const std::string& realm = "",
             const http_response::response_type_T& response_type = http_response::BASIC_AUTH_FAIL
-        ) : http_response(http_response::BASIC_AUTH_FAIL, content, response_code, content_type, realm) { }
+        ) : http_response(http_response::BASIC_AUTH_FAIL, content, response_code, content_type, autodelete, realm) { }
 
         http_basic_auth_fail_response(const http_response& b) : http_response(b) { }
 };
@@ -383,10 +391,11 @@ class http_digest_auth_fail_response : public http_response
             const std::string& content,
             int response_code,
             const std::string& content_type = "text/plain",
+            bool autodelete = true,
             const std::string& realm = "",
             const std::string& opaque = "",
             bool reload_nonce = false
-        ) : http_response(http_response::DIGEST_AUTH_FAIL, content, response_code, content_type, realm, opaque, reload_nonce)
+        ) : http_response(http_response::DIGEST_AUTH_FAIL, content, response_code, content_type, autodelete, realm, opaque, reload_nonce)
         { 
         }
 
@@ -400,7 +409,8 @@ class shoutCAST_response : public http_response
         (
             const std::string& content,
             int response_code,
-            const std::string& content_type = "text/plain"
+            const std::string& content_type = "text/plain",
+            bool autodelete = true
         );
 
         shoutCAST_response(const http_response& b) : http_response(b) { }
@@ -431,9 +441,10 @@ class long_polling_receive_response : public http_response
             int response_code,
             const std::string& content_type,
             const std::vector<std::string>& topics,
+            bool autodelete = true,
             int keepalive_secs = -1,
             std::string keepalive_msg = ""
-        ) : http_response(http_response::LONG_POLLING_RECEIVE, content, response_code, content_type, "", "", false, topics, keepalive_secs, keepalive_msg)
+        ) : http_response(http_response::LONG_POLLING_RECEIVE, content, response_code, content_type, autodelete, "", "", false, topics, keepalive_secs, keepalive_msg)
         {
         }
 
@@ -453,8 +464,9 @@ class long_polling_send_response : public http_response
         long_polling_send_response
         (
             const std::string& content,
-            const std::string& topic
-        ) : http_response(http_response::LONG_POLLING_SEND, content, 200, "", "", "", false, std::vector<std::string>(), -1, "", topic)
+            const std::string& topic,
+            bool autodelete = true
+        ) : http_response(http_response::LONG_POLLING_SEND, content, 200, "", autodelete, "", "", false, std::vector<std::string>(), -1, "", topic)
         {
         }
 
