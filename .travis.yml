@@ -1,4 +1,7 @@
 language: cpp
 compiler: gcc
 # Change this to your needs
+before_install:
+ - sudo apt-get update -qq
+ - sudo apt-get install -qq libmicrohttpd-dev
 script: ./bootstrap && mkdir build && cd build && ../configure && make
