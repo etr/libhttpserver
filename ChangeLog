@@ -1,3 +1,28 @@
+Wed Oct 31 17:59:40 2012 +0100
+	Added parameter in http_response to specify if it needs to be deleted by
+	WS - Sebastiano Merlino
+
+Wed Oct 31 14:23:57 2012 +0100
+	Changed dependency download method - Sebastiano Merlino
+
+Wed Oct 31 14:13:49 2012 +0100
+	Added dependency to travis - Sebastiano Merlino
+
+Wed Oct 31 14:07:30 2012 +0100
+	Changed travis build path - Sebastiano Merlino
+
+Wed Oct 31 14:02:59 2012 +0100
+	Added travis conf to repo - Sebastiano Merlino
+
+Tue Oct 30 16:13:10 2012 +0100
+	Changed the buggy debian changelog - Sebastiano Merlino
+
+Tue Oct 30 16:06:26 2012 +0100
+	Changed version to v0.5.4 - Sebastiano Merlino
+
+Tue Oct 30 15:59:45 2012 +0100
+	Adjusted debian build rules - Sebastiano Merlino
+
 Tue Oct 30 12:52:04 2012 +0100
 	Changed version to 0.5.3
 	Added grow method to http_request - Sebastiano Merlino
@@ -166,32 +191,4 @@ Fri Jul 20 21:03:43 2012 +0200
 
 Fri Jul 20 21:03:24 2012 +0200
 	Changed version - Sebastiano Merlino
-
-Fri Jul 20 13:45:53 2012 +0300
-	adjusted bad comment - Sebastiano Merlino
-
-Fri Jul 20 12:44:18 2012 +0200
-	Added cmakemodule to support inclusion in cmake installers - Sebastiano Merlino
-
-Thu Jul 19 16:32:33 2012 +0200
-	Modified in order to avoid errors by autoconf - Sebastiano Merlino
-
-Thu Jul 19 11:47:23 2012 +0000
-	project debianized - Andrea Nicotra
-
-Sat Jul 14 17:33:10 2012 +0200
-	Adjusted methods signature in order to follow new interface. - Sebastiano Merlino
-
-Fri Jul 13 15:51:31 2012 +0200
-	Adjusted in order to avoid errors in regex matching - Sebastiano Merlino
-
-Fri Jul 13 13:20:28 2012 +0200
-	Added get single cookie method - Sebastiano Merlino
-
-Sat Jul 7 16:18:56 2012 +0200
-	Created new interface in order to optimize memory management - Sebastiano Merlino
-
-Sat Jun 23 14:33:26 2012 +0200
-	Modified in order to standardize doxygen generation.
-	Altered file response management in order to avoid huge memory consumption - Sebastiano Merlino
 
