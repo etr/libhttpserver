@@ -59,6 +59,7 @@ class long_polling_send_response;
 namespace details
 {
     class http_endpoint;
+    struct cache_entry;
 }
 
 using namespace http;
@@ -135,6 +136,19 @@ class unescaper
         **/
         virtual void unescape(char* s) const;
 };
+
+/*
+class cache_object
+{
+    public:
+        enum mode_T { WRITE, READ };
+        ~cache_object();
+    private:
+        cache_entry* elem;
+        mode_T mode;
+        cache_object(const modeT& mode);
+};
+*/
 
 class create_webserver;
 
@@ -240,14 +254,17 @@ class webserver
 
         void send_message_to_topic(const std::string& topic, const std::string& message);
         void send_message_to_consumer(int connection_id, const std::string& message, bool to_lock = true);
-
         void register_to_topics(const std::vector<std::string>& topics, int connection_id, int keepalive_secs = -1, std::string keepalive_msg = "");
-
         size_t read_message(int connection_id, std::string& message);
-
         size_t get_topic_consumers(const std::string& topic, std::set<int>& consumers);
-
         bool pop_signaled(int consumer);
+
+        http_response* get_from_cache(const std::string& key, bool* valid, bool lock = false, bool write = false);
+        void lock_cache_element(const std::string& key, bool write = false);
+        void unlock_cache_element(const std::string& key);
+        void put_in_cache(const std::string& key, http_response* value, int validity = -1);
+        void remove_from_cache(const std::string& key);
+        void clean_cache();
 
         const logging_delegate* get_logging_delegate() const;
         
@@ -309,6 +326,9 @@ class webserver
         http_resource* internal_error_resource;
 
         std::map<details::http_endpoint, http_resource* > registered_resources;
+
+        std::map<std::string, details::cache_entry> response_cache; 
+        pthread_rwlock_t cache_guard;
 #ifdef USE_CPP_ZEROX
         std::unordered_set<ip_representation> bans;
         std::unordered_set<ip_representation> allowances;

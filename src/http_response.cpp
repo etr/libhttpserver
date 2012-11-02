@@ -29,6 +29,11 @@ using namespace std;
 namespace httpserver
 {
 
+cache_response::~cache_response()
+{
+    ws->unlock_cache_element(content);
+}
+
 const std::vector<std::pair<std::string, std::string> > http_response::get_headers()
 {
     std::vector<std::pair<std::string, std::string> > to_ret;
@@ -99,6 +104,11 @@ void http_file_response::get_raw_response(MHD_Response** response, bool* found, 
         *found = false;
 }
 
+void cache_response::get_raw_response(MHD_Response** response, bool* found, webserver* ws)
+{
+    ws->get_from_cache(content, 0x0, true)->get_raw_response(response, found, ws);
+}
+
 void long_polling_receive_response::get_raw_response(MHD_Response** response, bool* found, webserver* ws)
 {
 #ifdef USE_COMET
@@ -165,6 +175,9 @@ void clone_response(const http_response& hr, http_response** dhrs)
             return;
         case(http_response::LONG_POLLING_SEND):
             *dhrs = new long_polling_send_response(hr);
+            return;
+        case(http_response::CACHED_CONTENT):
+            *dhrs = new cache_response(hr);
             return;
     }
 }

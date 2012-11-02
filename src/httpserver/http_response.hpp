@@ -61,7 +61,8 @@ class http_response
             BASIC_AUTH_FAIL,
             SWITCH_PROTOCOL,
             LONG_POLLING_RECEIVE,
-            LONG_POLLING_SEND
+            LONG_POLLING_SEND,
+            CACHED_CONTENT
         };
 
         /**
@@ -320,6 +321,7 @@ class http_response
 
         friend class webserver;
         friend void clone_response(const http_response& hr, http_response** dhr);
+        friend class cache_response;
 };
 
 class http_string_response : public http_response
@@ -453,9 +455,8 @@ class long_polling_receive_response : public http_response
         virtual void get_raw_response(MHD_Response** res, bool* found, webserver* ws = 0x0);
     private:
         static ssize_t data_generator (void* cls, uint64_t pos, char* buf, size_t max);
-
         int connection_id;
-        webserver* ws;
+        httpserver::webserver* ws;
 };
 
 class long_polling_send_response : public http_response
@@ -473,6 +474,26 @@ class long_polling_send_response : public http_response
         long_polling_send_response(const http_response& b) : http_response(b) { }
     protected:
         virtual void get_raw_response(MHD_Response** res, bool* found, webserver* ws = 0x0);
+};
+
+class cache_response : public http_response
+{
+    public:
+        cache_response
+        (
+            const std::string& key
+        ) : http_response(http_response::CACHED_CONTENT, key)
+        {
+        }
+
+        cache_response(const http_response& b) : http_response(b) { }
+
+        ~cache_response();
+
+    protected:
+        virtual void get_raw_response(MHD_Response** res, bool* found, webserver* ws = 0x0);
+    private:
+        webserver* ws;
 };
 
 void clone_response(http_response* hr, http_response** dhr);

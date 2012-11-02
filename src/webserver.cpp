@@ -51,7 +51,29 @@
 
 using namespace std;
 
-namespace httpserver {
+namespace httpserver
+{
+
+namespace details
+{
+
+struct cache_entry
+{
+    long ts;
+    int validity;
+    http_response* response;
+    pthread_rwlock_t elem_guard;
+
+    cache_entry(http_response* response, long ts = -1, int validity = -1):
+        ts(ts),
+        validity(validity),
+        response(response)
+    {
+        pthread_rwlock_init(&elem_guard, NULL);
+    }
+};
+
+}
 
 using namespace http;
 
@@ -271,6 +293,7 @@ void webserver::init(http_resource* single_resource)
     pthread_mutex_init(&mutexwait, NULL);
     pthread_mutex_init(&runguard, NULL);
     pthread_cond_init(&mutexcond, NULL);
+    pthread_rwlock_init(&cache_guard, NULL);
 #ifdef USE_COMET
     pthread_rwlock_init(&comet_guard, NULL);
     pthread_mutex_init(&cleanmux, NULL);
@@ -1306,6 +1329,94 @@ bool webserver::pop_signaled(int consumer)
 #else //USE_COMET
     return false;
 #endif //USE_COMET
+}
+
+http_response* webserver::get_from_cache(const std::string& key, bool* valid, bool lock, bool write)
+{
+    pthread_rwlock_rdlock(&cache_guard);
+    *valid = true;
+    map<string, details::cache_entry>::iterator it(response_cache.find(key));
+    if(it != response_cache.end())
+    {
+        if(lock)
+        {
+            if(write)
+                pthread_rwlock_wrlock(&((*it).second.elem_guard));
+            else
+                pthread_rwlock_rdlock(&((*it).second.elem_guard));
+        }
+        if((*it).second.validity != -1)
+        {
+            timeval now;
+            gettimeofday(&now, NULL);
+            if( now.tv_sec - (*it).second.ts > (*it).second.validity)
+                *valid = false;
+        }
+        pthread_rwlock_unlock(&cache_guard);
+        return (*it).second.response;
+    }
+    else
+    {
+        pthread_rwlock_unlock(&cache_guard);
+        return 0x0;
+    }
+}
+
+void webserver::lock_cache_element(const std::string& key, bool write)
+{
+    pthread_rwlock_rdlock(&cache_guard);
+    map<string, details::cache_entry>::iterator it(response_cache.find(key));
+    if(it != response_cache.end())
+    {
+        if(write)
+            pthread_rwlock_wrlock(&((*it).second.elem_guard));
+        else
+            pthread_rwlock_rdlock(&((*it).second.elem_guard));
+    }
+    pthread_rwlock_unlock(&cache_guard);
+}
+
+void webserver::unlock_cache_element(const std::string& key)
+{
+    pthread_rwlock_rdlock(&cache_guard);
+    map<string, details::cache_entry>::iterator it(response_cache.find(key));
+    if(it != response_cache.end())
+        pthread_rwlock_unlock(&((*it).second.elem_guard));
+    pthread_rwlock_unlock(&cache_guard);
+}
+
+void webserver::put_in_cache(const std::string& key, http_response* value, int validity)
+{
+    if(validity == -1)
+    {
+        pthread_rwlock_wrlock(&cache_guard);
+        response_cache.insert(pair<string, details::cache_entry>(key, details::cache_entry(value)));
+        pthread_rwlock_unlock(&cache_guard);
+    }
+    else
+    {
+        pthread_rwlock_wrlock(&cache_guard);
+        timeval now;
+        gettimeofday(&now, NULL);
+        response_cache.insert(pair<string, details::cache_entry>(key, details::cache_entry(value, now.tv_sec, validity)));
+        pthread_rwlock_unlock(&cache_guard);
+    }
+}
+
+void webserver::remove_from_cache(const std::string& key)
+{
+    pthread_rwlock_wrlock(&cache_guard);
+    map<string, details::cache_entry>::iterator it(response_cache.find(key));
+    if(it != response_cache.end())
+        response_cache.erase(it);
+    pthread_rwlock_unlock(&cache_guard);
+}
+
+void webserver::clean_cache()
+{
+    pthread_rwlock_wrlock(&cache_guard);
+    response_cache.clear();
+    pthread_rwlock_unlock(&cache_guard);
 }
 
 };
