@@ -21,6 +21,7 @@
 //TODO: time extimations
 //TODO: personalized messages
 //TODO: statistics in runner closure
+//TODO: catch exceptions during set_up and tier_down
 
 #ifndef _LITTLETEST_HPP_
 #define _LITTLETEST_HPP_
@@ -29,6 +30,7 @@
 #include <iostream>
 #include <sstream>
 #include <algorithm>
+#include <sys/time.h>
 
 #define WARN 0
 #define CHECK 1
@@ -311,10 +313,12 @@ class test
     private:
         bool run_test(test_runner<suite_impl>* tr)
         {
+            timeval before, after;
             static_cast<test_impl* >(this)->suite_set_up();
             bool result = false;
             try
             {
+                gettimeofday(&before, NULL);
                 (*static_cast<test_impl*>(this))(tr);
                 result = true;
             }
@@ -334,6 +338,15 @@ class test
                 if(tr->last_checkpoint_line != -1)
                     std::cout << "Last checkpoint in " << tr->last_checkpoint_file << ":" << tr->last_checkpoint_line << std::endl;
             }
+            gettimeofday(&after, NULL);
+
+            double duration = ((after.tv_sec * 1000 + (after.tv_usec / 1000.0)) -
+                              (before.tv_sec * 1000 + (before.tv_usec / 1000.0)));
+
+            tr->add_good_time(duration);
+
+            std::cout << "Time spent during \"" << test_impl::name << "\": " << duration << std::endl;
+
             static_cast<test_impl* >(this)->suite_tier_down();
             return result;
         }
@@ -353,7 +366,8 @@ struct test_runner
             success_counter(0),
             failures_counter(0),
             last_checkpoint_file(""),
-            last_checkpoint_line(-1)
+            last_checkpoint_line(-1),
+            good_time_total(0.0)
         {
         }
 
@@ -379,6 +393,11 @@ struct test_runner
         test_runner& operator()()
         {
             std::cout << "** Runner terminated! **" << std::endl;
+            std::cout << test_counter << " tests executed" << std::endl;
+            std::cout << (failures_counter + success_counter) << " checks" << std::endl;
+            std::cout << "-> " << success_counter << " failures" << std::endl;
+            std::cout << "-> " << failures_counter << " failures" << std::endl;
+            std::cout << "Total time spent in tests: " << good_time_total << std::endl;
         }
 
         void add_failure()
@@ -397,6 +416,11 @@ struct test_runner
             last_checkpoint_line = line;
         }
 
+        void add_good_time(double t)
+        {
+            good_time_total += t;
+        }
+
         std::string last_checkpoint_file;
         int last_checkpoint_line;
 
@@ -404,6 +428,7 @@ struct test_runner
         int test_counter;
         int success_counter;
         int failures_counter;
+        double good_time_total;
 };
 
 #endif //_LITTLETEST_HPP_
