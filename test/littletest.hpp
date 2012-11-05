@@ -18,22 +18,32 @@
 
 */
 
+//TODO: time extimations
+//TODO: personalized messages
+//TODO: statistics in runner closure
+
 #ifndef _LITTLETEST_HPP_
 #define _LITTLETEST_HPP_
 
 #include <string>
 #include <iostream>
 #include <sstream>
+#include <algorithm>
 
-#define BEGIN_TEST_ENV() int main() {
-#define END_TEST_ENV() return 0; }
-#define TEST(name) name ## _obj
-#define CREATE_RUNNER(suite_name, runner_name) \
+#define WARN 0
+#define CHECK 1
+#define ASSERT 2
+
+#define LT_BEGIN_TEST_ENV() int main() {
+#define LT_END_TEST_ENV() return 0; }
+#define LT_TEST(name) name ## _obj
+#define LT_CREATE_RUNNER(suite_name, runner_name) \
     std::cout << "** Initializing Runner \"" << #runner_name << "\" for suite \"" << #suite_name << "\" **" << std::endl; \
     test_runner<suite_name> runner_name 
-#define RUNNER(runner_name) runner_name
-#define SUITE(name) struct name : public suite<name>
-#define BEGIN_TEST(suite_name, test_name) \
+#define LT_RUNNER(runner_name) runner_name
+#define LT_SUITE(name) struct name : public suite<name>
+#define LT_CHECKPOINT() tr->set_checkpoint(__FILE__, __LINE__)
+#define LT_BEGIN_TEST(suite_name, test_name) \
     struct test_name : public suite_name, test<suite_name, test_name> \
     { \
         public: \
@@ -41,29 +51,189 @@
             void operator()(test_runner<suite_name>* tr) \
             {
 
-#define END_TEST(test_name) \
+#define LT_END_TEST(test_name) \
             } \
     }; \
     const char* test_name::name = #test_name; \
     test_name test_name ## _obj;
 
-#define CHECK_EQ(a, b) \
-    try \
+#define LT_SWITCH_MODE(mode) \
+        switch(mode) \
+        { \
+            case(WARN): \
+                throw warn_unattended(ss.str()); \
+            case(CHECK): \
+                throw check_unattended(ss.str()); \
+            case(ASSERT): \
+                throw assert_unattended(ss.str()); \
+        }
+
+#define LT_SIMPLE_OP(name, val, file, line, mode) \
+    if(!(val)) \
     { \
-        check_eq(name, a, b, __FILE__, __LINE__); \
-        tr->add_success(); \
-    } \
-    catch(check_unattended& cu) \
-    { \
-        std::cout << cu.what() << std::endl; \
-        tr->add_failure(); \
+        std::stringstream ss; \
+        ss << "(" << file << ":" << line << ") - error in " << "\"" << name << "\""; \
+        LT_SWITCH_MODE(mode) \
     }
 
-//#define CHECK_NEQ((a), (b)) check_eq(a, b);
-//#define CHECK_GT((a), (b)) check_eq(a, b);
-//#define CHECK_GTE((a), (b)) check_eq(a, b);
-//#define CHECK_LT((a), (b)) check_eq(a, b);
-//#define CHECK_LTE((a), (b)) check_eq(a, b);
+#define LT_THROW_OP(name, operation, file, line, mode) \
+    bool thrown = false; \
+    std::stringstream ss; \
+    try \
+    { \
+        operation ;\
+        ss << "(" << file << ":" << line << ") - error in " << "\"" << name << "\": no exceptions thown by " << #operation; \
+        thrown = true; \
+    } \
+    catch(...) { } \
+    if(thrown) \
+        LT_SWITCH_MODE(mode)
+
+#define LT_NOTHROW_OP(name, operation, file, line, mode) \
+    try \
+    { \
+        operation ;\
+    } \
+    catch(...) \
+    { \
+        std::stringstream ss; \
+        ss << "(" << file << ":" << line << ") - error in " << "\"" << name << "\": exceptions thown by " << #operation; \
+        LT_SWITCH_MODE(mode) \
+    }
+
+#define LT_COLLEQ_OP(name, first_begin, first_end, second_begin, file, line, mode) \
+    if(! std::equal(first_begin, first_end, second_begin)) \
+    { \
+        std::stringstream ss; \
+        ss << "(" << file << ":" << line << ") - error in " << "\"" << name << "\": collections are different"; \
+        LT_SWITCH_MODE(mode) \
+    }
+
+#define LT_COLLNEQ_OP(name, first_begin, first_end, second_begin, file, line, mode) \
+    if(std::equal(first_begin, first_end, second_begin)) \
+    { \
+        std::stringstream ss; \
+        ss << "(" << file << ":" << line << ") - error in " << "\"" << name << "\": collections are equal"; \
+        LT_SWITCH_MODE(mode) \
+    }
+
+#define LT_OP(name, a, b, file, line, op, mode) \
+    if(a op b) \
+    { \
+        std::stringstream ss; \
+        ss << "(" << file << ":" << line << ") - error in " << "\"" << name << "\": " << a << #op << b; \
+        LT_SWITCH_MODE(mode) \
+    }
+
+#define LT_CATCH_ERRORS \
+    catch(check_unattended& cu) \
+    { \
+        std::cout << "[CHECK FAILURE] " << cu.what() << std::endl; \
+        tr->add_failure(); \
+    } \
+    catch(assert_unattended& au) \
+    { \
+        std::cout << "[ASSERT FAILURE] " << au.what() << std::endl; \
+        tr->add_failure(); \
+        throw au; \
+    } \
+    catch(warn_unattended& wu) \
+    { \
+        std::cout << "[WARN] " << wu.what() << std::endl; \
+    }
+
+#define LT_ADD_SUCCESS(mode) \
+    if(mode) \
+        tr->add_success();
+
+#define LT_EV(a, b, op, mode) \
+    try \
+    { \
+        LT_OP(name, a, b, __FILE__, __LINE__, op, mode); \
+        LT_ADD_SUCCESS(mode) \
+    } \
+    LT_CATCH_ERRORS
+
+#define LT_SIMPLE_EV(val, mode) \
+    try \
+    { \
+        LT_SIMPLE_OP(name, val, __FILE__, __LINE__, mode); \
+        LT_ADD_SUCCESS(mode) \
+    } \
+    LT_CATCH_ERRORS
+
+#define LT_THROW_EV(operation, mode) \
+    try \
+    { \
+        LT_THROW_OP(name, operation, __FILE__, __LINE__, mode); \
+        LT_ADD_SUCCESS(mode) \
+    } \
+    LT_CATCH_ERRORS
+
+#define LT_NOTHROW_EV(operation, mode) \
+    try \
+    { \
+        LT_NOTHROW_OP(name, operation, __FILE__, __LINE__, mode); \
+        LT_ADD_SUCCESS(mode) \
+    } \
+    LT_CATCH_ERRORS
+
+#define LT_COLLEQ_EV(first_begin, first_end, second_begin, mode) \
+    try \
+    { \
+        LT_COLLEQ_OP(name, first_begin, first_end, second_begin, __FILE__, __LINE__, mode); \
+        LT_ADD_SUCCESS(mode) \
+    } \
+    LT_CATCH_ERRORS
+
+#define LT_COLLNEQ_EV(first_begin, first_end, second_begin, mode) \
+    try \
+    { \
+        LT_COLLNEQ_OP(name, first_begin, first_end, second_begin, __FILE__, __LINE__, mode); \
+        LT_ADD_SUCCESS(mode) \
+    } \
+    LT_CATCH_ERRORS
+
+#define LT_WARN(val) LT_SIMPLE_EV(val, WARN)
+#define LT_WARN_EQ(a, b) LT_EV(a, b, !=, WARN)
+#define LT_WARN_NEQ(a, b) LT_EV(a, b, ==, WARN)
+#define LT_WARN_GT(a, b) LT_EV(a, b, <=, WARN)
+#define LT_WARN_GTE(a, b) LT_EV(a, b, <, WARN)
+#define LT_WARN_LT(a, b) LT_EV(a, b, >=, WARN)
+#define LT_WARN_LTE(a, b) LT_EV(a, b, >, WARN)
+#define LT_WARN_THROW(operation) LT_THROW_EV(operation, WARN)
+#define LT_WARN_NOTHROW(operation) LT_NOTHROW_EV(operation, WARN)
+#define LT_WARN_COLLECTIONS_EQ(first_begin, first_end, second_begin) LT_COLLEQ_EV(first_begin, first_end, second_begin, WARN)
+#define LT_WARN_COLLECTIONS_NEQ(first_begin, first_end, second_begin) LT_COLLNEQ_EV(first_begin, first_end, second_begin, WARN)
+
+#define LT_CHECK(val) LT_SIMPLE_EV(val, CHECK)
+#define LT_CHECK_EQ(a, b) LT_EV(a, b, !=, CHECK)
+#define LT_CHECK_NEQ(a, b) LT_EV(a, b, ==, CHECK)
+#define LT_CHECK_GT(a, b) LT_EV(a, b, <=, CHECK)
+#define LT_CHECK_GTE(a, b) LT_EV(a, b, <, CHECK)
+#define LT_CHECK_LT(a, b) LT_EV(a, b, >=, CHECK)
+#define LT_CHECK_LTE(a, b) LT_EV(a, b, >, CHECK)
+#define LT_CHECK_THROW(operation) LT_THROW_EV(operation, CHECK)
+#define LT_CHECK_NOTHROW(operation) LT_NOTHROW_EV(operation, CHECK)
+#define LT_CHECK_COLLECTIONS_EQ(first_begin, first_end, second_begin) LT_COLLEQ_EV(first_begin, first_end, second_begin, CHECK)
+#define LT_CHECK_COLLECTIONS_NEQ(first_begin, first_end, second_begin) LT_COLLNEQ_EV(first_begin, first_end, second_begin, CHECK)
+
+#define LT_ASSERT(val) LT_SIMPLE_EV(val, ASSERT)
+#define LT_ASSERT_EQ(a, b) LT_EV(a, b, !=, ASSERT)
+#define LT_ASSERT_NEQ(a, b) LT_EV(a, b, ==, ASSERT)
+#define LT_ASSERT_GT(a, b) LT_EV(a, b, <=, ASSERT)
+#define LT_ASSERT_GTE(a, b) LT_EV(a, b, <, ASSERT)
+#define LT_ASSERT_LT(a, b) LT_EV(a, b, >=, ASSERT)
+#define LT_ASSERT_LTE(a, b) LT_EV(a, b, >, ASSERT)
+#define LT_ASSERT_THROW(operation) LT_THROW_EV(operation, ASSERT)
+#define LT_ASSERT_NOTHROW(operation) LT_NOTHROW_EV(operation, ASSERT)
+#define LT_ASSERT_COLLECTIONS_EQ(first_begin, first_end, second_begin) LT_COLLEQ_EV(first_begin, first_end, second_begin, ASSERT)
+#define LT_ASSERT_COLLECTIONS_NEQ(first_begin, first_end, second_begin) LT_COLLNEQ_EV(first_begin, first_end, second_begin, ASSERT)
+
+#define LT_FAIL(message) \
+    std::cout << "[ASSERT FAILURE] (" << __FILE__ << ":" << __LINE__ << ") - error in " << "\"" << name << "\": " << message << std::endl; \
+    tr->add_failure(); \
+    throw assert_unattended("");
 
 struct check_unattended : public std::exception
 {
@@ -98,79 +268,21 @@ struct assert_unattended : public std::exception
         std::string message;
 };
 
-template <typename T1, typename T2>
-void check_eq(std::string name, T1 a, T2 b, const char* file, short line)
-    throw(check_unattended)
+struct warn_unattended : public std::exception
 {
-    if(a != b)
+    warn_unattended(const std::string& message):
+        message(message)
     {
-        std::stringstream ss;
-        ss << "(" << file << ":" << line << ") - error in " << "\"" << name << "\": " << a << " != " << b;
-        throw check_unattended(ss.str());
     }
-}
-
-/*
-template <typename T1, typename T2>
-void check_neq(T1 a, T2 b)
-    throw(check_unattended)
-{
-    if(a == b)
+    ~warn_unattended() throw() { }
+    virtual const char* what() const throw()
     {
-        std::stringstream ss;
-        ss << a << "==" << b;
-        throw check_unattended(ss.str());
-    }
-}
-
-template <typename T1, typename T2>
-void check_gt(T1 a, T2 b)
-    throw(check_unattended)
-{
-    if(a <= b)
-    {
-        std::stringstream ss;
-        ss << a << "<=" << b;
-        throw check_unattended(ss.str());
-    }
-}
-
-template <typename T1, typename T2>
-void check_gte(T1 a, T2 b)
-    throw(check_unattended)
-{
-    if(a < b)
-    {
-        std::stringstream ss;
-        ss << a << "<" << b;
-        throw check_unattended(ss.str());
-    }
-}
-
-template <typename T1, typename T2>
-void check_lt(T1 a, T2 b)
-    throw(check_unattended)
-{
-    if(a >= b)
-    {
-        std::stringstream ss;
-        ss << a << ">=" << b;
-        throw check_unattended(ss.str());
-    }
-}
-
-template <typename T1, typename T2>
-void check_lte(T1 a, T2 b)
-    throw(check_unattended)
-{
-    if(a > b)
-    {
-        std::stringstream ss;
-        ss << a << ">" << b;
-        throw check_unattended(ss.str());
-    }
-}
-*/
+        return message.c_str();
+    } 
+    
+    private:
+        std::string message;
+};
 
 template <class suite_impl>
 class suite
@@ -213,10 +325,14 @@ class test
             {
                 std::cout << "Exception during " << test_impl::name  << " run" << std::endl;
                 std::cout << e.what() << std::endl;
+                if(tr->last_checkpoint_line != -1)
+                    std::cout << "Last checkpoint in " << tr->last_checkpoint_file << ":" << tr->last_checkpoint_line << std::endl;
             }
             catch(...)
             {
                 std::cout << "Exception during " << test_impl::name  << " run" << std::endl;
+                if(tr->last_checkpoint_line != -1)
+                    std::cout << "Last checkpoint in " << tr->last_checkpoint_file << ":" << tr->last_checkpoint_line << std::endl;
             }
             static_cast<test_impl* >(this)->suite_tier_down();
             return result;
@@ -235,7 +351,9 @@ struct test_runner
         test_runner() :
             test_counter(1),
             success_counter(0),
-            failures_counter(0)
+            failures_counter(0),
+            last_checkpoint_file(""),
+            last_checkpoint_line(-1)
         {
         }
 
@@ -273,6 +391,14 @@ struct test_runner
             success_counter++;
         }
 
+        void set_checkpoint(const char* file, int line)
+        {
+            last_checkpoint_file = file;
+            last_checkpoint_line = line;
+        }
+
+        std::string last_checkpoint_file;
+        int last_checkpoint_line;
 
     private:
         int test_counter;
