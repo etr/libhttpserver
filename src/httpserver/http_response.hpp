@@ -41,6 +41,11 @@ namespace http
     class arg_comparator;
 };
 
+namespace details
+{
+    struct http_response_ptr;
+};
+
 using namespace http;
 
 /**
@@ -317,11 +322,12 @@ class http_response
         std::string send_topic;
         struct MHD_Connection* underlying_connection;
 
-        virtual void get_raw_response(MHD_Response** res, bool* found, webserver* ws = 0x0);
+        virtual void get_raw_response(MHD_Response** res, webserver* ws = 0x0);
         virtual void decorate_response(MHD_Response* res);
         virtual int enqueue_response(MHD_Connection* connection, MHD_Response* res);
 
         friend class webserver;
+        friend struct details::http_response_ptr;
         friend void clone_response(const http_response& hr, http_response** dhr);
         friend class cache_response;
 };
@@ -338,6 +344,8 @@ class http_string_response : public http_response
         ): http_response(http_response::STRING_CONTENT, content, response_code, content_type, autodelete) { }
 
         http_string_response(const http_response& b) : http_response(b) { }
+    private:
+        friend class webserver;
 };
 
 class http_byte_response : public http_response
@@ -351,6 +359,8 @@ class http_byte_response : public http_response
             const std::string& content_type = "text/plain",
             bool autodelete = true
         ): http_response(http_response::STRING_CONTENT, std::string(content, content_length), response_code, content_type, autodelete) { }
+    private:
+        friend class webserver;
 };
 
 class http_file_response : public http_response
@@ -368,7 +378,9 @@ class http_file_response : public http_response
 
         http_file_response(const http_response& b) : http_response(b) { }
     protected:
-        virtual void get_raw_response(MHD_Response** res, bool* found, webserver* ws = 0x0);
+        virtual void get_raw_response(MHD_Response** res, webserver* ws = 0x0);
+    private:
+        friend class webserver;
 };
 
 class http_basic_auth_fail_response : public http_response
@@ -387,6 +399,8 @@ class http_basic_auth_fail_response : public http_response
         http_basic_auth_fail_response(const http_response& b) : http_response(b) { }
     protected:
         virtual int enqueue_response(MHD_Connection* connection, MHD_Response* res);
+    private:
+        friend class webserver;
 };
 
 class http_digest_auth_fail_response : public http_response
@@ -408,6 +422,8 @@ class http_digest_auth_fail_response : public http_response
         http_digest_auth_fail_response(const http_response& b) : http_response(b) { }
     protected:
         virtual int enqueue_response(MHD_Connection* connection, MHD_Response* res);
+    private:
+        friend class webserver;
 };
 
 class shoutCAST_response : public http_response
@@ -422,6 +438,8 @@ class shoutCAST_response : public http_response
         );
 
         shoutCAST_response(const http_response& b) : http_response(b) { }
+    private:
+        friend class webserver;
 };
 
 class switch_protocol_response : public http_response
@@ -437,7 +455,9 @@ class switch_protocol_response : public http_response
         { 
         }
     protected:
-        virtual void get_raw_response(MHD_Response** res, bool* found, webserver* ws = 0x0) {}
+        virtual void get_raw_response(MHD_Response** res, webserver* ws = 0x0) {}
+    private:
+        friend class webserver;
 };
 
 class long_polling_receive_response : public http_response
@@ -458,11 +478,12 @@ class long_polling_receive_response : public http_response
 
         long_polling_receive_response(const http_response& b) : http_response(b) { }
     protected:
-        virtual void get_raw_response(MHD_Response** res, bool* found, webserver* ws = 0x0);
+        virtual void get_raw_response(MHD_Response** res, webserver* ws = 0x0);
     private:
         static ssize_t data_generator (void* cls, uint64_t pos, char* buf, size_t max);
         int connection_id;
         httpserver::webserver* ws;
+        friend class webserver;
 };
 
 class long_polling_send_response : public http_response
@@ -479,7 +500,9 @@ class long_polling_send_response : public http_response
 
         long_polling_send_response(const http_response& b) : http_response(b) { }
     protected:
-        virtual void get_raw_response(MHD_Response** res, bool* found, webserver* ws = 0x0);
+        virtual void get_raw_response(MHD_Response** res, webserver* ws = 0x0);
+    private:
+        friend class webserver;
 };
 
 class cache_response : public http_response
@@ -488,7 +511,9 @@ class cache_response : public http_response
         cache_response
         (
             const std::string& key
-        ) : http_response(http_response::CACHED_CONTENT, key)
+        ) : http_response(http_response::CACHED_CONTENT, key),
+            ws(0x0),
+            locked_element(false)
         {
         }
 
@@ -497,9 +522,12 @@ class cache_response : public http_response
         ~cache_response();
 
     protected:
-        virtual void get_raw_response(MHD_Response** res, bool* found, webserver* ws = 0x0);
+        virtual void get_raw_response(MHD_Response** res, webserver* ws = 0x0);
+        virtual void decorate_response(MHD_Response* res);
     private:
         webserver* ws;
+        bool locked_element;
+        friend class webserver;
 };
 
 void clone_response(http_response* hr, http_response** dhr);
