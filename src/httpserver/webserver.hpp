@@ -51,14 +51,17 @@ namespace httpserver {
 
 class http_resource;
 class http_response;
+class cache_response;
 class http_request;
-struct modded_request;
 class long_polling_receive_response;
 class long_polling_send_response;
 
 namespace details
 {
     class http_endpoint;
+    struct cache_entry;
+    struct modded_request;
+    struct cache_manager;
 }
 
 using namespace http;
@@ -135,6 +138,19 @@ class unescaper
         **/
         virtual void unescape(char* s) const;
 };
+
+/*
+class cache_object
+{
+    public:
+        enum mode_T { WRITE, READ };
+        ~cache_object();
+    private:
+        cache_entry* elem;
+        mode_T mode;
+        cache_object(const modeT& mode);
+};
+*/
 
 class create_webserver;
 
@@ -240,14 +256,18 @@ class webserver
 
         void send_message_to_topic(const std::string& topic, const std::string& message);
         void send_message_to_consumer(int connection_id, const std::string& message, bool to_lock = true);
-
         void register_to_topics(const std::vector<std::string>& topics, int connection_id, int keepalive_secs = -1, std::string keepalive_msg = "");
-
         size_t read_message(int connection_id, std::string& message);
-
         size_t get_topic_consumers(const std::string& topic, std::set<int>& consumers);
-
         bool pop_signaled(int consumer);
+
+        http_response* get_from_cache(const std::string& key, bool* valid, bool lock = false, bool write = false);
+        void lock_cache_element(const std::string& key, bool write = false);
+        void unlock_cache_element(const std::string& key);
+        void put_in_cache(const std::string& key, http_response* value, int validity = -1);
+        void remove_from_cache(const std::string& key);
+        bool is_valid(const std::string& key);
+        void clean_cache();
 
         const logging_delegate* get_logging_delegate() const;
         
@@ -309,6 +329,9 @@ class webserver
         http_resource* internal_error_resource;
 
         std::map<details::http_endpoint, http_resource* > registered_resources;
+
+        details::cache_manager* cache_m;
+        pthread_rwlock_t cache_guard;
 #ifdef USE_CPP_ZEROX
         std::unordered_set<ip_representation> bans;
         std::unordered_set<ip_representation> allowances;
@@ -335,9 +358,9 @@ class webserver
         static void* cleaner(void* self);
         void clean_connections();
 
-        void method_not_allowed_page(http_response** dhrs, modded_request* mr);
-        void internal_error_page(http_response** dhrs, modded_request* mr);
-        void not_found_page(http_response** dhrs, modded_request* mr);
+        void method_not_allowed_page(http_response** dhrs, details::modded_request* mr);
+        void internal_error_page(http_response** dhrs, details::modded_request* mr);
+        void not_found_page(http_response** dhrs, details::modded_request* mr);
 
         static int method_not_acceptable_page 
         (
@@ -375,30 +398,30 @@ class webserver
 
         int bodyless_requests_answer(MHD_Connection* connection,
             const char* url, const char* method,
-            const char* version, struct modded_request* mr
+            const char* version, struct details::modded_request* mr
         );
 
-        int bodyfull_requests_answer_first_step(MHD_Connection* connection, struct modded_request* mr);
+        int bodyfull_requests_answer_first_step(MHD_Connection* connection, struct details::modded_request* mr);
 
         int bodyfull_requests_answer_second_step(MHD_Connection* connection,
             const char* url, const char* method,
             const char* version, const char* upload_data,
-            size_t* upload_data_size, struct modded_request* mr
+            size_t* upload_data_size, struct details::modded_request* mr
         );
 
         void end_request_construction(MHD_Connection* connection, 
-                struct modded_request* mr, const char* version, 
+                struct details::modded_request* mr, const char* version, 
                 const char* st_url, const char* method, 
                 char* user, char* pass, char* digested_user
         );
 
         int finalize_answer(MHD_Connection* connection, 
-                struct modded_request* mr, const char* st_url, 
+                struct details::modded_request* mr, const char* st_url, 
                 const char* method
         );
 
         int complete_request(MHD_Connection* connection, 
-                struct modded_request* mr, const char* version, 
+                struct details::modded_request* mr, const char* version, 
                 const char* st_url, const char* method 
         );
 
@@ -413,6 +436,7 @@ class webserver
         friend void* uri_log(void* cls, const char* uri);
         friend size_t unescaper_func(void * cls, struct MHD_Connection *c, char *s);
         friend size_t internal_unescaper(void * cls, char *s);
+        friend class cache_response;
 };
 
 class create_webserver

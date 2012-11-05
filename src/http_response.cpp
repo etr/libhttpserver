@@ -29,6 +29,12 @@ using namespace std;
 namespace httpserver
 {
 
+cache_response::~cache_response()
+{
+    if(locked_element)
+        ws->unlock_cache_element(content);
+}
+
 const std::vector<std::pair<std::string, std::string> > http_response::get_headers()
 {
     std::vector<std::pair<std::string, std::string> > to_ret;
@@ -83,23 +89,62 @@ shoutCAST_response::shoutCAST_response
 {
 }
 
-void http_response::get_raw_response(MHD_Response** response, bool* found, webserver* ws)
+void http_response::get_raw_response(MHD_Response** response, webserver* ws)
 {
     size_t size = &(*content.end()) - &(*content.begin());
     *response = MHD_create_response_from_buffer(size, (void*) content.c_str(), MHD_RESPMEM_PERSISTENT);
 }
 
-void http_file_response::get_raw_response(MHD_Response** response, bool* found, webserver* ws)
+void http_response::decorate_response(MHD_Response* response)
+{
+    map<string, string, header_comparator>::iterator it;
+    for (it=headers.begin() ; it != headers.end(); ++it)
+        MHD_add_response_header(response, (*it).first.c_str(), (*it).second.c_str());
+    for (it=footers.begin() ; it != footers.end(); ++it)
+        MHD_add_response_footer(response, (*it).first.c_str(), (*it).second.c_str());
+}
+
+void cache_response::decorate_response(MHD_Response* response)
+{
+}
+
+int http_response::enqueue_response(MHD_Connection* connection, MHD_Response* response)
+{
+    return MHD_queue_response(connection, response_code, response);
+}
+
+int http_basic_auth_fail_response::enqueue_response(MHD_Connection* connection, MHD_Response* response)
+{
+    return MHD_queue_basic_auth_fail_response(connection, realm.c_str(), response);
+}
+
+int http_digest_auth_fail_response::enqueue_response(MHD_Connection* connection, MHD_Response* response)
+{
+    return MHD_queue_auth_fail_response(connection, realm.c_str(), opaque.c_str(), response, reload_nonce ? MHD_YES : MHD_NO);
+}
+
+void http_file_response::get_raw_response(MHD_Response** response, webserver* ws)
 {
     char* page = NULL;
     size_t size = http::load_file(filename.c_str(), &page);
     if(size)
         *response = MHD_create_response_from_buffer(size, page, MHD_RESPMEM_MUST_FREE);
-    else
-        *found = false;
+    //TODO: At the moment if the file does not exist the system returns empty response
 }
 
-void long_polling_receive_response::get_raw_response(MHD_Response** response, bool* found, webserver* ws)
+void cache_response::get_raw_response(MHD_Response** response, webserver* ws)
+{
+    this->ws = ws;
+    this->locked_element = true;
+    bool valid;
+    http_response* r = ws->get_from_cache(content, &valid, true);
+    r->get_raw_response(response, ws);
+    r->decorate_response(*response); //It is done here to avoid to search two times for the same element
+    
+    //TODO: Check if element is not in cache and throw exception
+}
+
+void long_polling_receive_response::get_raw_response(MHD_Response** response, webserver* ws)
 {
 #ifdef USE_COMET
     this->ws = ws;
@@ -108,7 +153,7 @@ void long_polling_receive_response::get_raw_response(MHD_Response** response, bo
         &long_polling_receive_response::data_generator, (void*) this, NULL);
     ws->register_to_topics(topics, connection_id, keepalive_secs, keepalive_msg);
 #else //USE_COMET
-    http_response::get_raw_response(response, found, ws);
+    http_response::get_raw_response(response, ws);
 #endif //USE_COMET
 }
 
@@ -130,9 +175,9 @@ ssize_t long_polling_receive_response::data_generator (void* cls, uint64_t pos, 
 #endif //USE_COMET
 }
 
-void long_polling_send_response::get_raw_response(MHD_Response** response, bool* found, webserver* ws)
+void long_polling_send_response::get_raw_response(MHD_Response** response, webserver* ws)
 {
-    http_response::get_raw_response(response, found, ws);
+    http_response::get_raw_response(response, ws);
 #ifdef USE_COMET
     ws->send_message_to_topic(send_topic, content);
 #endif //USE_COMET
@@ -165,6 +210,9 @@ void clone_response(const http_response& hr, http_response** dhrs)
             return;
         case(http_response::LONG_POLLING_SEND):
             *dhrs = new long_polling_send_response(hr);
+            return;
+        case(http_response::CACHED_CONTENT):
+            *dhrs = new cache_response(hr);
             return;
     }
 }
