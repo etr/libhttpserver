@@ -94,6 +94,30 @@ void http_response::get_raw_response(MHD_Response** response, bool* found, webse
     *response = MHD_create_response_from_buffer(size, (void*) content.c_str(), MHD_RESPMEM_PERSISTENT);
 }
 
+void http_response::decorate_response(MHD_Response* response)
+{
+    map<string, string, header_comparator>::iterator it;
+    for (it=headers.begin() ; it != headers.end(); ++it)
+        MHD_add_response_header(response, (*it).first.c_str(), (*it).second.c_str());
+    for (it=footers.begin() ; it != footers.end(); ++it)
+        MHD_add_response_footer(response, (*it).first.c_str(), (*it).second.c_str());
+}
+
+int http_response::enqueue_response(MHD_Connection* connection, MHD_Response* response)
+{
+    return MHD_queue_response(connection, response_code, response);
+}
+
+int http_basic_auth_fail_response::enqueue_response(MHD_Connection* connection, MHD_Response* response)
+{
+    return MHD_queue_basic_auth_fail_response(connection, realm.c_str(), response);
+}
+
+int http_digest_auth_fail_response::enqueue_response(MHD_Connection* connection, MHD_Response* response)
+{
+    return MHD_queue_auth_fail_response(connection, realm.c_str(), opaque.c_str(), response, reload_nonce ? MHD_YES : MHD_NO);
+}
+
 void http_file_response::get_raw_response(MHD_Response** response, bool* found, webserver* ws)
 {
     char* page = NULL;

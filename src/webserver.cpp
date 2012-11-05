@@ -1050,21 +1050,8 @@ int webserver::finalize_answer(MHD_Connection* connection, struct modded_request
     mr->dhrs = dhrs;
     mr->dhrs->underlying_connection = connection;
     dhrs->get_raw_response(&response, &found, this);
-    vector<pair<string,string> > response_headers;
-    dhrs->get_headers(response_headers);
-    vector<pair<string,string> > response_footers;
-    dhrs->get_footers(response_footers);
-    vector<pair<string,string> >::iterator it;
-    for (it=response_headers.begin() ; it != response_headers.end(); ++it)
-        MHD_add_response_header(response, (*it).first.c_str(), (*it).second.c_str());
-    for (it=response_footers.begin() ; it != response_footers.end(); ++it)
-        MHD_add_response_footer(response, (*it).first.c_str(), (*it).second.c_str());
-    if(dhrs->response_type == http_response::DIGEST_AUTH_FAIL)
-        to_ret = MHD_queue_auth_fail_response(connection, dhrs->get_realm().c_str(), dhrs->get_opaque().c_str(), response, dhrs->need_nonce_reload() ? MHD_YES : MHD_NO);
-    else if(dhrs->response_type == http_response::BASIC_AUTH_FAIL)
-        to_ret = MHD_queue_basic_auth_fail_response(connection, dhrs->get_realm().c_str(), response);
-    else
-        to_ret = MHD_queue_response(connection, dhrs->get_response_code(), response);
+    dhrs->decorate_response(response);
+    to_ret = dhrs->enqueue_response(connection, response);
     MHD_destroy_response (response);
     return to_ret;
 }

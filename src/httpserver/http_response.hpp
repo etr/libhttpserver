@@ -318,6 +318,8 @@ class http_response
         struct MHD_Connection* underlying_connection;
 
         virtual void get_raw_response(MHD_Response** res, bool* found, webserver* ws = 0x0);
+        virtual void decorate_response(MHD_Response* res);
+        virtual int enqueue_response(MHD_Connection* connection, MHD_Response* res);
 
         friend class webserver;
         friend void clone_response(const http_response& hr, http_response** dhr);
@@ -383,6 +385,8 @@ class http_basic_auth_fail_response : public http_response
         ) : http_response(http_response::BASIC_AUTH_FAIL, content, response_code, content_type, autodelete, realm) { }
 
         http_basic_auth_fail_response(const http_response& b) : http_response(b) { }
+    protected:
+        virtual int enqueue_response(MHD_Connection* connection, MHD_Response* res);
 };
 
 class http_digest_auth_fail_response : public http_response
@@ -402,6 +406,8 @@ class http_digest_auth_fail_response : public http_response
         }
 
         http_digest_auth_fail_response(const http_response& b) : http_response(b) { }
+    protected:
+        virtual int enqueue_response(MHD_Connection* connection, MHD_Response* res);
 };
 
 class shoutCAST_response : public http_response
