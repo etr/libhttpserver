@@ -31,33 +31,59 @@
 #include <sstream>
 #include <algorithm>
 #include <sys/time.h>
+#include <vector>
 
 #define WARN 0
 #define CHECK 1
 #define ASSERT 2
 
 #define LT_BEGIN_TEST_ENV() int main() {
+
 #define LT_END_TEST_ENV() return 0; }
+
+#define AUTORUN_TESTS() \
+    std::vector<test_base*>::iterator autorun_it; \
+    for(autorun_it = auto_test_vector.begin(); autorun_it != auto_test_vector.end(); ++autorun_it) \
+        auto_test_runner((*autorun_it)); \
+    auto_test_runner();
+
 #define LT_TEST(name) name ## _obj
+
 #define LT_CREATE_RUNNER(suite_name, runner_name) \
-    std::cout << "** Initializing Runner \"" << #runner_name << "\" for suite \"" << #suite_name << "\" **" << std::endl; \
-    test_runner<suite_name> runner_name 
+    std::cout << "** Initializing Runner \"" << #runner_name << "\" **" << std::endl; \
+    test_runner runner_name 
+
 #define LT_RUNNER(runner_name) runner_name
-#define LT_SUITE(name) struct name : public suite<name>
+
+#define LT_BEGIN_SUITE(name) \
+    struct name : public suite<name> \
+    {
+
+#define LT_END_SUITE(name) \
+    };
+
 #define LT_CHECKPOINT() tr->set_checkpoint(__FILE__, __LINE__)
+
 #define LT_BEGIN_TEST(suite_name, test_name) \
-    struct test_name : public suite_name, test<suite_name, test_name> \
+    struct test_name : public suite_name, test<test_name> \
     { \
-        public: \
-            static const char* name; \
-            void operator()(test_runner<suite_name>* tr) \
+            test_name() \
+            { \
+                name = #test_name; \
+                auto_test_vector.push_back(this); \
+            } \
+            void operator()(test_runner* tr) \
             {
 
 #define LT_END_TEST(test_name) \
             } \
     }; \
-    const char* test_name::name = #test_name; \
-    test_name test_name ## _obj;
+    test_name test_name ## _obj; \
+
+#define LT_BEGIN_AUTO_TEST(suite_name, test_name) LT_BEGIN_TEST(suite_name, test_name)
+
+#define LT_END_AUTO_TEST(test_name) \
+    LT_END_TEST(test_name) \
 
 #define LT_SWITCH_MODE(mode) \
         switch(mode) \
@@ -304,60 +330,12 @@ class suite
         suite(const suite<suite_impl>& s) { }
 };
 
-template <class suite_impl>
-struct test_runner;
-
-template <class suite_impl, class test_impl>
-class test
+double calculate_duration(timeval* before, timeval* after)
 {
-    private:
-        bool run_test(test_runner<suite_impl>* tr)
-        {
-            timeval before, after;
-            static_cast<test_impl* >(this)->suite_set_up();
-            bool result = false;
-            try
-            {
-                gettimeofday(&before, NULL);
-                (*static_cast<test_impl*>(this))(tr);
-                result = true;
-            }
-            catch(assert_unattended& au)
-            {
-            }
-            catch(std::exception& e)
-            {
-                std::cout << "Exception during " << test_impl::name  << " run" << std::endl;
-                std::cout << e.what() << std::endl;
-                if(tr->last_checkpoint_line != -1)
-                    std::cout << "Last checkpoint in " << tr->last_checkpoint_file << ":" << tr->last_checkpoint_line << std::endl;
-            }
-            catch(...)
-            {
-                std::cout << "Exception during " << test_impl::name  << " run" << std::endl;
-                if(tr->last_checkpoint_line != -1)
-                    std::cout << "Last checkpoint in " << tr->last_checkpoint_file << ":" << tr->last_checkpoint_line << std::endl;
-            }
-            gettimeofday(&after, NULL);
+    return ((after->tv_sec * 1000 + (after->tv_usec / 1000.0)) -
+           (before->tv_sec * 1000 + (before->tv_usec / 1000.0)));
+}
 
-            double duration = ((after.tv_sec * 1000 + (after.tv_usec / 1000.0)) -
-                              (before.tv_sec * 1000 + (before.tv_usec / 1000.0)));
-
-            tr->add_good_time(duration);
-
-            std::cout << "Time spent during \"" << test_impl::name << "\": " << duration << std::endl;
-
-            static_cast<test_impl* >(this)->suite_tier_down();
-            return result;
-        }
-    protected:
-        test() { }
-        test(const test<suite_impl, test_impl>& t) { }
-
-        friend class test_runner<suite_impl>;
-};
- 
-template <class suite_impl>
 struct test_runner
 {
     public:
@@ -367,25 +345,28 @@ struct test_runner
             failures_counter(0),
             last_checkpoint_file(""),
             last_checkpoint_line(-1),
-            good_time_total(0.0)
+            good_time_total(0.0),
+            total_set_up_time(0.0),
+            total_tier_down_time(0.0),
+            total_time(0.0)
         {
         }
 
         template <class test_impl>
-        test_runner& run(test<suite_impl, test_impl>& t)
+        test_runner& run(test_impl* t)
         {
             std::cout << "Running test (" << 
                 test_counter << "): " << 
-                static_cast<test_impl*>(&t)->name << std::endl;
+                t->name << std::endl;
 
-            t.run_test(this);
+            t->run_test(this);
 
             test_counter++;
             return *this;
         }
 
         template <class test_impl>
-        test_runner& operator()(test<suite_impl, test_impl>& t)
+        test_runner& operator()(test_impl* t)
         {
             return run(t);
         }
@@ -395,9 +376,12 @@ struct test_runner
             std::cout << "** Runner terminated! **" << std::endl;
             std::cout << test_counter << " tests executed" << std::endl;
             std::cout << (failures_counter + success_counter) << " checks" << std::endl;
-            std::cout << "-> " << success_counter << " failures" << std::endl;
+            std::cout << "-> " << success_counter << " successes" << std::endl;
             std::cout << "-> " << failures_counter << " failures" << std::endl;
-            std::cout << "Total time spent in tests: " << good_time_total << std::endl;
+            std::cout << "Total run time: " << total_time << std::endl;
+            std::cout << "Total time spent in tests: " << good_time_total << " ms" << std::endl;
+            std::cout << "Average set up time: " << (total_set_up_time / test_counter) << " ms" << std::endl;
+            std::cout << "Average tier down time: " << (total_tier_down_time / test_counter) << " ms" << std::endl;
         }
 
         void add_failure()
@@ -421,6 +405,21 @@ struct test_runner
             good_time_total += t;
         }
 
+        void add_set_up_time(double t)
+        {
+            total_set_up_time += t;
+        }
+
+        void add_tier_down_time(double t)
+        {
+            total_tier_down_time += t;
+        }
+
+        void add_total_time(double t)
+        {
+            total_time += t;
+        }
+
         std::string last_checkpoint_file;
         int last_checkpoint_line;
 
@@ -429,6 +428,104 @@ struct test_runner
         int success_counter;
         int failures_counter;
         double good_time_total;
+        double total_set_up_time;
+        double total_tier_down_time;
+        double total_time;
+};
+
+class test_base
+{
+    public:
+        const char* name;
+        virtual bool run_test(test_runner* tr) { }
+        virtual void operator()() { }
+};
+
+test_runner auto_test_runner;
+std::vector<test_base*> auto_test_vector;
+
+template <class test_impl>
+class test : public test_base
+{
+        virtual bool run_test(test_runner* tr)
+        {
+            double set_up_duration = 0.0, tier_down_duration = 0.0, test_duration = 0.0;
+            timeval before, after;
+            try
+            {
+                gettimeofday(&before, NULL);
+                static_cast<test_impl* >(this)->suite_set_up();
+                gettimeofday(&after, NULL);
+                set_up_duration = calculate_duration(&before, &after);
+                tr->add_set_up_time(set_up_duration);
+            }
+            catch(std::exception& e)
+            {
+                std::cout << "Exception during " << static_cast<test_impl* >(this)->name  << " set up" << std::endl;
+                std::cout << e.what() << std::endl;
+            }
+            catch(...)
+            {
+                std::cout << "Exception during " << static_cast<test_impl* >(this)->name  << " set up" << std::endl;
+            }
+            bool result = false;
+            try
+            {
+                gettimeofday(&before, NULL);
+                (*static_cast<test_impl*>(this))(tr);
+                result = true;
+            }
+            catch(assert_unattended& au)
+            {
+                ;
+            }
+            catch(std::exception& e)
+            {
+                std::cout << "Exception during " << static_cast<test_impl* >(this)->name  << " run" << std::endl;
+                std::cout << e.what() << std::endl;
+                if(tr->last_checkpoint_line != -1)
+                    std::cout << "Last checkpoint in " << tr->last_checkpoint_file << ":" << tr->last_checkpoint_line << std::endl;
+            }
+            catch(...)
+            {
+                std::cout << "Exception during " << static_cast<test_impl* >(this)->name  << " run" << std::endl;
+                if(tr->last_checkpoint_line != -1)
+                    std::cout << "Last checkpoint in " << tr->last_checkpoint_file << ":" << tr->last_checkpoint_line << std::endl;
+            }
+            gettimeofday(&after, NULL);
+
+            test_duration = calculate_duration(&before, &after);
+
+            tr->add_good_time(test_duration);
+
+            std::cout << "- Time spent during \"" << static_cast<test_impl* >(this)->name << "\": " << test_duration << std::endl;
+
+            try
+            {
+                gettimeofday(&before, NULL);
+                static_cast<test_impl* >(this)->suite_tier_down();
+                gettimeofday(&after, NULL);
+                tier_down_duration = calculate_duration(&before, &after);
+                tr->add_tier_down_time(tier_down_duration);
+            }
+            catch(std::exception& e)
+            {
+                std::cout << "Exception during " << static_cast<test_impl* >(this)->name  << " tier down" << std::endl;
+                std::cout << e.what() << std::endl;
+            }
+            catch(...)
+            {
+                std::cout << "Exception during " << static_cast<test_impl* >(this)->name  << " tier down" << std::endl;
+            }
+            double total = set_up_duration + test_duration + tier_down_duration;
+            tr->add_total_time(total);
+            return result;
+        }
+    protected:
+        test() { }
+        test(const test<test_impl>& t) { }
+
+        friend class test_runner;
 };
 
 #endif //_LITTLETEST_HPP_
