@@ -18,10 +18,7 @@
 
 */
 
-//TODO: time extimations
 //TODO: personalized messages
-//TODO: statistics in runner closure
-//TODO: catch exceptions during set_up and tier_down
 
 #ifndef _LITTLETEST_HPP_
 #define _LITTLETEST_HPP_
