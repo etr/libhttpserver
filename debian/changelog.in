@@ -1,3 +1,8 @@
+libhttpserver (0.6.0) unstable; urgency=low
+  * Added support for caching;
+
+ -- Sebastiano Merlino <electrictwister2000@gmail.com> Wed, 31 Oct 2012 18:02:40 +0100
+
 libhttpserver (0.5.5) unstable; urgency=low
   * Added a parameter to avoid http_response deletion by WS;
 
