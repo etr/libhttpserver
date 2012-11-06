@@ -39,21 +39,21 @@
 #define LT_END_TEST_ENV() return 0; }
 
 #define AUTORUN_TESTS() \
-    std::vector<test_base*>::iterator autorun_it; \
-    for(autorun_it = auto_test_vector.begin(); autorun_it != auto_test_vector.end(); ++autorun_it) \
-        auto_test_runner((*autorun_it)); \
-    auto_test_runner();
+    std::vector<littletest::test_base*>::iterator autorun_it; \
+    for(autorun_it = littletest::auto_test_vector.begin(); autorun_it != littletest::auto_test_vector.end(); ++autorun_it) \
+        littletest::auto_test_runner((*autorun_it)); \
+    littletest::auto_test_runner();
 
 #define LT_TEST(name) name ## _obj
 
 #define LT_CREATE_RUNNER(suite_name, runner_name) \
     std::cout << "** Initializing Runner \"" << #runner_name << "\" **" << std::endl; \
-    test_runner runner_name 
+    littletest::test_runner runner_name 
 
 #define LT_RUNNER(runner_name) runner_name
 
 #define LT_BEGIN_SUITE(name) \
-    struct name : public suite<name> \
+    struct name : public littletest::suite<name> \
     {
 
 #define LT_END_SUITE(name) \
@@ -62,14 +62,14 @@
 #define LT_CHECKPOINT() tr->set_checkpoint(__FILE__, __LINE__)
 
 #define LT_BEGIN_TEST(suite_name, test_name) \
-    struct test_name : public suite_name, test<test_name> \
+    struct test_name : public suite_name, littletest::test<test_name> \
     { \
             test_name() \
             { \
                 name = #test_name; \
-                auto_test_vector.push_back(this); \
+                littletest::auto_test_vector.push_back(this); \
             } \
-            void operator()(test_runner* tr) \
+            void operator()(littletest::test_runner* tr) \
             {
 
 #define LT_END_TEST(test_name) \
@@ -86,11 +86,11 @@
         switch(mode) \
         { \
             case(WARN): \
-                throw warn_unattended(ss.str()); \
+                throw littletest::warn_unattended(ss.str()); \
             case(CHECK): \
-                throw check_unattended(ss.str()); \
+                throw littletest::check_unattended(ss.str()); \
             case(ASSERT): \
-                throw assert_unattended(ss.str()); \
+                throw littletest::assert_unattended(ss.str()); \
         }
 
 #define LT_SIMPLE_OP(name, val, file, line, mode) \
@@ -151,18 +151,18 @@
     }
 
 #define LT_CATCH_ERRORS \
-    catch(check_unattended& cu) \
+    catch(littletest::check_unattended& cu) \
     { \
         std::cout << "[CHECK FAILURE] " << cu.what() << std::endl; \
         tr->add_failure(); \
     } \
-    catch(assert_unattended& au) \
+    catch(littletest::assert_unattended& au) \
     { \
         std::cout << "[ASSERT FAILURE] " << au.what() << std::endl; \
         tr->add_failure(); \
         throw au; \
     } \
-    catch(warn_unattended& wu) \
+    catch(littletest::warn_unattended& wu) \
     { \
         std::cout << "[WARN] " << wu.what() << std::endl; \
     }
@@ -258,7 +258,10 @@
 #define LT_FAIL(message) \
     std::cout << "[ASSERT FAILURE] (" << __FILE__ << ":" << __LINE__ << ") - error in " << "\"" << name << "\": " << message << std::endl; \
     tr->add_failure(); \
-    throw assert_unattended("");
+    throw littletest::assert_unattended("");
+
+namespace littletest
+{
 
 struct check_unattended : public std::exception
 {
@@ -523,6 +526,8 @@ class test : public test_base
         test(const test<test_impl>& t) { }
 
         friend class test_runner;
+};
+
 };
 
 #endif //_LITTLETEST_HPP_
