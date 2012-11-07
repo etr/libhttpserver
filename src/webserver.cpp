@@ -59,6 +59,10 @@ namespace details
 struct cache_manager
 {
     std::map<std::string, details::cache_entry> response_cache; 
+
+    cache_manager()
+    {
+    }
 };
 
 struct http_response_ptr
@@ -351,7 +355,8 @@ webserver::webserver
     not_found_resource(not_found_resource),
     method_not_allowed_resource(method_not_allowed_resource),
     method_not_acceptable_resource(method_not_acceptable_resource),
-    internal_error_resource(internal_error_resource)
+    internal_error_resource(internal_error_resource),
+    cache_m(new details::cache_manager())
 {
     init(single_resource);
 }
@@ -391,9 +396,51 @@ webserver::webserver(const create_webserver& params):
     not_found_resource(params._not_found_resource),
     method_not_allowed_resource(params._method_not_allowed_resource),
     method_not_acceptable_resource(params._method_not_acceptable_resource),
-    internal_error_resource(params._internal_error_resource)
+    internal_error_resource(params._internal_error_resource),
+    cache_m(new details::cache_manager())
 {
     init(params._single_resource);
+}
+
+webserver& webserver::operator=(const webserver& b)
+{
+    port = b.port;
+    start_method = b.start_method;
+    max_threads = b.max_threads;
+    max_connections = b.max_connections;
+    memory_limit = b.memory_limit;
+    connection_timeout = b.connection_timeout;
+    per_IP_connection_limit = b.per_IP_connection_limit;
+    log_delegate = b.log_delegate;
+    validator = b.validator;
+    unescaper_pointer = b.unescaper_pointer;
+    bind_address = b.bind_address;
+    bind_socket = b.bind_socket;
+    max_thread_stack_size = b.max_thread_stack_size;
+    use_ssl = b.use_ssl;
+    use_ipv6 = b.use_ipv6;
+    debug = b.debug;
+    pedantic = b.pedantic;
+    https_mem_key = b.https_mem_key;
+    https_mem_cert = b.https_mem_cert;
+    https_mem_trust = b.https_mem_trust;
+    https_priorities = b.https_priorities;
+    cred_type = b.cred_type;
+    digest_auth_random = b.digest_auth_random;
+    nonce_nc_size = b.nonce_nc_size;
+    running = b.running;
+    default_policy = b.default_policy;
+    basic_auth_enabled = b.basic_auth_enabled;
+    digest_auth_enabled = b.digest_auth_enabled;
+    regex_checking = b.regex_checking;
+    ban_system_enabled = b.ban_system_enabled;
+    post_process_enabled = b.post_process_enabled;
+    not_found_resource = b.not_found_resource;
+    method_not_allowed_resource = b.method_not_allowed_resource;
+    method_not_acceptable_resource = b.method_not_acceptable_resource;
+    internal_error_resource = b.internal_error_resource;
+    cache_m->response_cache = b.cache_m->response_cache;
+    return *this;
 }
 
 void webserver::init(http_resource* single_resource)
@@ -415,7 +462,6 @@ void webserver::init(http_resource* single_resource)
     pthread_mutex_init(&cleanmux, NULL);
     pthread_cond_init(&cleancond, NULL);
 #endif //USE_COMET
-    cache_m = new details::cache_manager();
 }
 
 webserver::~webserver()

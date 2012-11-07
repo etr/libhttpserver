@@ -219,6 +219,7 @@ class webserver
             http_resource* internal_error_resource = 0x0
         );
         webserver(const create_webserver& params);
+        webserver& operator=(const webserver& b);
         /**
          * Destructor of the class
         **/
