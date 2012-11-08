@@ -61,18 +61,12 @@ class closure_action
             deletable(b.deletable)
         {
         }
-        virtual void do_action() = 0;
+        virtual void do_action()
+        {
+        }
         bool deletable;
     private:
         friend class http_response;
-};
-
-class empty_closure : public closure_action
-{
-    public:
-        void do_action()
-        {
-        }
 };
 
 class unlock_on_close : public closure_action
@@ -146,7 +140,7 @@ class http_response
             keepalive_secs(keepalive_secs),
             keepalive_msg(keepalive_msg),
             send_topic(send_topic),
-            ca(new empty_closure())
+            ca(new closure_action())
         {
             set_header(http_utils::http_header_content_type, content_type);
         }
@@ -169,11 +163,10 @@ class http_response
             topics(b.topics),
             keepalive_secs(b.keepalive_secs),
             keepalive_msg(b.keepalive_msg),
-            send_topic(b.send_topic)
+            send_topic(b.send_topic),
+            ca(new closure_action())
         {
-            if(ca != 0x0 && ca->deletable)
-                delete ca;
-            ca = b.ca;
+            *ca = b.ca;
         }
         http_response& operator=(const http_response& b)
         {
@@ -193,14 +186,20 @@ class http_response
             keepalive_msg = b.keepalive_msg;
             send_topic = b.send_topic;
             if(ca != 0x0 && ca->deletable)
+            {
                 delete ca;
+                ca = 0x0;
+            }
             ca = b.ca;
             return *this;
         }
         virtual ~http_response()
         {
             if(ca != 0x0 && ca->deletable)
+            {
                 delete ca;
+                ca = 0x0;
+            }
         }
         /**
          * Method used to get the content from the response.
