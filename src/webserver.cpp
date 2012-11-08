@@ -1623,27 +1623,47 @@ cache_entry* webserver::put_in_cache(const std::string& key, http_response* valu
     pthread_rwlock_wrlock(&cache_guard);
     map<string, cache_entry>::iterator it(cache_m->response_cache.find(key));
     cache_entry* to_ret;
-    bool unlock = false;
+    bool already_in = false;
     if(it != cache_m->response_cache.end())
     {
         (*it).second.lock(true);
-        unlock = true;
+        already_in = true;
     }
     if(validity == -1)
     {
-        pair<map<string, cache_entry>::iterator, bool> res = cache_m->response_cache.insert(pair<string, cache_entry>(key, cache_entry(value)));
-        to_ret = &((*res.first).second);
-        *new_elem = res.second;
+        if(already_in)
+        {
+            (*it).second.response = value;
+            to_ret = &(*it).second;
+            *new_elem = false;
+        }
+        else
+        {
+            pair<map<string, cache_entry>::iterator, bool> res = cache_m->response_cache.insert(pair<string, cache_entry>(key, cache_entry(value)));
+            to_ret = &((*res.first).second);
+            *new_elem = res.second;
+        }
     }
     else
     {
         timeval now;
         gettimeofday(&now, NULL);
-        pair<map<string, cache_entry>::iterator, bool> res = cache_m->response_cache.insert(pair<string, cache_entry>(key, cache_entry(value, now.tv_sec, validity)));
-        to_ret = &((*res.first).second);
-        *new_elem = res.second;
+        if(already_in)
+        {
+            (*it).second.response = value;
+            (*it).second.ts = now.tv_sec;
+            (*it).second.validity = validity;
+            to_ret = &(*it).second;
+            *new_elem = false;
+        }
+        else
+        {
+            pair<map<string, cache_entry>::iterator, bool> res = cache_m->response_cache.insert(pair<string, cache_entry>(key, cache_entry(value, now.tv_sec, validity)));
+            to_ret = &((*res.first).second);
+            *new_elem = res.second;
+        }
     }
-    if(unlock)
+    if(already_in)
         (*it).second.unlock();
     if(lock)
         to_ret->lock(write);
