@@ -55,13 +55,15 @@ class cache_response;
 class http_request;
 class long_polling_receive_response;
 class long_polling_send_response;
+struct cache_entry;
 
 namespace details
 {
     class http_endpoint;
-    struct cache_entry;
     struct modded_request;
     struct cache_manager;
+    void unlock_cache_entry(cache_entry*);
+    http_response* get_response(cache_entry*);
 }
 
 using namespace http;
@@ -263,9 +265,10 @@ class webserver
         bool pop_signaled(int consumer);
 
         http_response* get_from_cache(const std::string& key, bool* valid, bool lock = false, bool write = false);
+        http_response* get_from_cache(const std::string& key, bool* valid, cache_entry** ce, bool lock = false, bool write = false);
         void lock_cache_element(const std::string& key, bool write = false);
         void unlock_cache_element(const std::string& key);
-        void put_in_cache(const std::string& key, http_response* value, int validity = -1);
+        cache_entry* put_in_cache(const std::string& key, http_response* value, bool* new_elem, bool lock = false, bool write = false, int validity = -1);
         void remove_from_cache(const std::string& key);
         bool is_valid(const std::string& key);
         void clean_cache();

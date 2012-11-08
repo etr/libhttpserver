@@ -29,10 +29,15 @@ using namespace std;
 namespace httpserver
 {
 
+void unlock_on_close::do_action()
+{
+    details::unlock_cache_entry(elem);
+}
+
 cache_response::~cache_response()
 {
-    if(locked_element)
-        ws->unlock_cache_element(content);
+    if(ce != 0x0 && locked_element)
+        details::unlock_cache_entry(ce);
 }
 
 const std::vector<std::pair<std::string, std::string> > http_response::get_headers()
@@ -134,10 +139,13 @@ void http_file_response::get_raw_response(MHD_Response** response, webserver* ws
 
 void cache_response::get_raw_response(MHD_Response** response, webserver* ws)
 {
-    this->ws = ws;
     this->locked_element = true;
     bool valid;
-    http_response* r = ws->get_from_cache(content, &valid, true);
+    http_response* r;
+    if(ce == 0x0)
+        r = ws->get_from_cache(content, &valid, &ce, true, false);
+    else
+        r = details::get_response(ce);
     r->get_raw_response(response, ws);
     r->decorate_response(*response); //It is done here to avoid to search two times for the same element
     

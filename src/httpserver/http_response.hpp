@@ -34,6 +34,8 @@ namespace httpserver
 {
 
 class webserver;
+class http_response;
+struct cache_entry;
 
 namespace http
 {
@@ -47,6 +49,46 @@ namespace details
 };
 
 using namespace http;
+
+class closure_action
+{
+    public:
+        closure_action(bool deletable = true):
+            deletable(deletable)
+        {
+        }
+        closure_action(const closure_action& b):
+            deletable(b.deletable)
+        {
+        }
+        virtual void do_action() = 0;
+        bool deletable;
+    private:
+        friend class http_response;
+};
+
+class empty_closure : public closure_action
+{
+    public:
+        void do_action()
+        {
+        }
+};
+
+class unlock_on_close : public closure_action
+{
+    public:
+        unlock_on_close(cache_entry* elem, bool deletable = true) : closure_action(deletable), elem(elem) { }
+        unlock_on_close(const unlock_on_close& b) : closure_action(elem), elem(b.elem) { }
+        unlock_on_close& operator = (const unlock_on_close& b)
+        {
+            elem = b.elem;
+            return *this;
+        }
+        virtual void do_action();
+    private:
+        cache_entry* elem;
+};
 
 /**
  * Class representing an abstraction for an Http Response. It is used from classes using these apis to send information through http protocol.
@@ -103,7 +145,8 @@ class http_response
             topics(topics),
             keepalive_secs(keepalive_secs),
             keepalive_msg(keepalive_msg),
-            send_topic(send_topic)
+            send_topic(send_topic),
+            ca(new empty_closure())
         {
             set_header(http_utils::http_header_content_type, content_type);
         }
@@ -128,9 +171,36 @@ class http_response
             keepalive_msg(b.keepalive_msg),
             send_topic(b.send_topic)
         {
+            if(ca != 0x0 && ca->deletable)
+                delete ca;
+            ca = b.ca;
+        }
+        http_response& operator=(const http_response& b)
+        {
+            response_type = b.response_type;
+            content = b.content;
+            response_code = b.response_code;
+            autodelete = b.autodelete;
+            realm = b.realm;
+            opaque = b.opaque;
+            reload_nonce = b.reload_nonce;
+            fp = b.fp;
+            filename = b.filename;
+            headers = b.headers;
+            footers = b.footers;
+            topics = b.topics;
+            keepalive_secs = b.keepalive_secs;
+            keepalive_msg = b.keepalive_msg;
+            send_topic = b.send_topic;
+            if(ca != 0x0 && ca->deletable)
+                delete ca;
+            ca = b.ca;
+            return *this;
         }
         virtual ~http_response()
         {
+            if(ca != 0x0 && ca->deletable)
+                delete ca;
         }
         /**
          * Method used to get the content from the response.
@@ -304,6 +374,10 @@ class http_response
                 topics.push_back(*it);
             return topics.size();
         }
+        void set_closure_action(closure_action* ca)
+        {
+            this->ca = ca;
+        }
     protected:
         response_type_T response_type;
         std::string content;
@@ -321,6 +395,7 @@ class http_response
         std::string keepalive_msg;
         std::string send_topic;
         struct MHD_Connection* underlying_connection;
+        closure_action* ca;
 
         virtual void get_raw_response(MHD_Response** res, webserver* ws = 0x0);
         virtual void decorate_response(MHD_Response* res);
@@ -510,10 +585,20 @@ class cache_response : public http_response
     public:
         cache_response
         (
-            const std::string& key
+            const std::string& key,
+            bool locked_element = false
         ) : http_response(http_response::CACHED_CONTENT, key),
-            ws(0x0),
-            locked_element(false)
+            ce(0x0),
+            locked_element(locked_element)
+        {
+        }
+        cache_response
+        (
+            cache_entry* ce,
+            bool locked_element = false
+        ) : http_response(http_response::CACHED_CONTENT, ""),
+            ce(ce),
+            locked_element(locked_element)
         {
         }
 
@@ -525,7 +610,7 @@ class cache_response : public http_response
         virtual void get_raw_response(MHD_Response** res, webserver* ws = 0x0);
         virtual void decorate_response(MHD_Response* res);
     private:
-        webserver* ws;
+        cache_entry* ce;
         bool locked_element;
         friend class webserver;
 };
