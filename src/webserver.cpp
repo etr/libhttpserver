@@ -156,24 +156,31 @@ struct cache_entry
     int validity;
     details::http_response_ptr response;
     pthread_rwlock_t elem_guard;
+    pthread_mutex_t lock_guard;
+    bool locked;
 
     cache_entry():
         ts(-1),
-        validity(-1)
+        validity(-1),
+        locked(false)
     {
         pthread_rwlock_init(&elem_guard, NULL);
+        pthread_mutex_init(&lock_guard, NULL);
     }
 
     ~cache_entry()
     {
         pthread_rwlock_destroy(&elem_guard);
+        pthread_mutex_destroy(&lock_guard);
     }
 
     cache_entry(const cache_entry& b):
         ts(b.ts),
         validity(b.validity),
         response(b.response),
-        elem_guard(b.elem_guard)
+        elem_guard(b.elem_guard),
+        lock_guard(b.lock_guard),
+        locked(b.locked)
     {
     }
 
@@ -183,15 +190,44 @@ struct cache_entry
         validity = b.validity;
         response = b.response;
         pthread_rwlock_destroy(&elem_guard);
+        pthread_mutex_destroy(&lock_guard);
         elem_guard = b.elem_guard;
+        locked = b.locked;
     }
 
     cache_entry(details::http_response_ptr response, long ts = -1, int validity = -1):
         ts(ts),
         validity(validity),
-        response(response)
+        response(response),
+        locked(false)
     {
         pthread_rwlock_init(&elem_guard, NULL);
+        pthread_mutex_init(&lock_guard, NULL);
+    }
+    
+    void lock(bool write = false)
+    {
+        pthread_mutex_lock(&lock_guard);
+        if(!locked)
+        {
+            if(write)
+                pthread_rwlock_wrlock(&elem_guard);
+            else
+                pthread_rwlock_rdlock(&elem_guard);
+            locked = true;
+        }
+        pthread_mutex_unlock(&lock_guard);
+    }
+
+    void unlock()
+    {
+        pthread_mutex_lock(&lock_guard);
+        if(locked)
+        {
+            pthread_rwlock_unlock(&elem_guard);
+            locked = false;
+        }
+        pthread_mutex_unlock(&lock_guard);
     }
 };
 
@@ -200,7 +236,7 @@ namespace details
 
 void unlock_cache_entry(cache_entry* ce)
 {
-    pthread_rwlock_unlock(&ce->elem_guard);
+    ce->unlock();
 }
 
 http_response* get_response(cache_entry* ce)
@@ -1518,12 +1554,7 @@ http_response* webserver::get_from_cache(const std::string& key, bool* valid, ca
     if(it != cache_m->response_cache.end())
     {
         if(lock)
-        {
-            if(write)
-                pthread_rwlock_wrlock(&((*it).second.elem_guard));
-            else
-                pthread_rwlock_rdlock(&((*it).second.elem_guard));
-        }
+            (*it).second.lock(write);
         if((*it).second.validity != -1)
         {
             timeval now;
@@ -1574,12 +1605,7 @@ void webserver::lock_cache_element(const std::string& key, bool write)
     pthread_rwlock_rdlock(&cache_guard);
     map<string, cache_entry>::iterator it(cache_m->response_cache.find(key));
     if(it != cache_m->response_cache.end())
-    {
-        if(write)
-            pthread_rwlock_wrlock(&((*it).second.elem_guard));
-        else
-            pthread_rwlock_rdlock(&((*it).second.elem_guard));
-    }
+        (*it).second.lock(write);
     pthread_rwlock_unlock(&cache_guard);
 }
 
@@ -1588,7 +1614,7 @@ void webserver::unlock_cache_element(const std::string& key)
     pthread_rwlock_rdlock(&cache_guard);
     map<string, cache_entry>::iterator it(cache_m->response_cache.find(key));
     if(it != cache_m->response_cache.end())
-        pthread_rwlock_unlock(&((*it).second.elem_guard));
+        (*it).second.unlock();
     pthread_rwlock_unlock(&cache_guard);
 }
 
@@ -1596,24 +1622,17 @@ cache_entry* webserver::put_in_cache(const std::string& key, http_response* valu
 {
     pthread_rwlock_wrlock(&cache_guard);
     map<string, cache_entry>::iterator it(cache_m->response_cache.find(key));
-    bool unlock = false;
     cache_entry* to_ret;
+    bool unlock = false;
     if(it != cache_m->response_cache.end())
     {
-        pthread_rwlock_wrlock(&((*it).second.elem_guard));
+        (*it).second.lock(true);
         unlock = true;
     }
     if(validity == -1)
     {
         pair<map<string, cache_entry>::iterator, bool> res = cache_m->response_cache.insert(pair<string, cache_entry>(key, cache_entry(value)));
         to_ret = &((*res.first).second);
-        if(lock)
-        {
-            if(write)
-                pthread_rwlock_wrlock(&to_ret->elem_guard);
-            else
-                pthread_rwlock_rdlock(&to_ret->elem_guard);
-        }
         *new_elem = res.second;
     }
     else
@@ -1622,17 +1641,12 @@ cache_entry* webserver::put_in_cache(const std::string& key, http_response* valu
         gettimeofday(&now, NULL);
         pair<map<string, cache_entry>::iterator, bool> res = cache_m->response_cache.insert(pair<string, cache_entry>(key, cache_entry(value, now.tv_sec, validity)));
         to_ret = &((*res.first).second);
-        if(lock)
-        {
-            if(write)
-                pthread_rwlock_wrlock(&to_ret->elem_guard);
-            else
-                pthread_rwlock_rdlock(&to_ret->elem_guard);
-        }
         *new_elem = res.second;
     }
     if(unlock)
-        pthread_rwlock_unlock(&((*it).second.elem_guard));
+        (*it).second.unlock();
+    if(lock)
+        to_ret->lock(write);
     pthread_rwlock_unlock(&cache_guard);
     return to_ret;
 }
