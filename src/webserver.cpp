@@ -1589,6 +1589,11 @@ bool webserver::is_valid(const std::string& key)
                 pthread_rwlock_unlock(&cache_guard);
                 return false;
             }
+            else
+            {
+                pthread_rwlock_unlock(&cache_guard);
+                return true;
+            }
         }
         else
         {
