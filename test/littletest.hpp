@@ -36,7 +36,13 @@
 
 #define LT_BEGIN_TEST_ENV() int main() {
 
-#define LT_END_TEST_ENV() return 0; }
+#define LT_END_TEST_ENV() }
+
+#define LT_BEGIN_AUTO_TEST_ENV() LT_BEGIN_TEST_ENV()
+
+#define LT_END_AUTO_TEST_ENV() \
+        return !littletest::auto_test_result; \
+    }
 
 #define AUTORUN_TESTS() \
     std::vector<littletest::test_base*>::iterator autorun_it; \
@@ -336,6 +342,11 @@ double calculate_duration(timeval* before, timeval* after)
            (before->tv_sec * 1000 + (before->tv_usec / 1000.0)));
 }
 
+class test_base;
+
+std::vector<test_base*> auto_test_vector;
+bool auto_test_result = true;
+
 struct test_runner
 {
     public:
@@ -387,6 +398,7 @@ struct test_runner
         void add_failure()
         {
             failures_counter++;
+            auto_test_result = false;
         }
 
         void add_success()
@@ -420,6 +432,36 @@ struct test_runner
             total_time += t;
         }
 
+        operator int()
+        {
+            return failures_counter;
+        }
+
+        int get_test_number()
+        {
+            return test_counter;
+        }
+
+        int get_successes()
+        {
+            return success_counter;
+        }
+
+        int get_failures()
+        {
+            return failures_counter;
+        }
+
+        double get_test_time()
+        {
+            return good_time_total;
+        }
+
+        double get_total_time()
+        {
+            return total_time;
+        }
+
         std::string last_checkpoint_file;
         int last_checkpoint_line;
 
@@ -437,17 +479,16 @@ class test_base
 {
     public:
         const char* name;
-        virtual bool run_test(test_runner* tr) { }
+        virtual void run_test(test_runner* tr) { }
         virtual void operator()() { }
 };
 
 test_runner auto_test_runner;
-std::vector<test_base*> auto_test_vector;
 
 template <class test_impl>
 class test : public test_base
 {
-        virtual bool run_test(test_runner* tr)
+        virtual void run_test(test_runner* tr)
         {
             double set_up_duration = 0.0, tier_down_duration = 0.0, test_duration = 0.0;
             timeval before, after;
@@ -468,12 +509,10 @@ class test : public test_base
             {
                 std::cout << "Exception during " << static_cast<test_impl* >(this)->name  << " set up" << std::endl;
             }
-            bool result = false;
             try
             {
                 gettimeofday(&before, NULL);
                 (*static_cast<test_impl*>(this))(tr);
-                result = true;
             }
             catch(assert_unattended& au)
             {
@@ -519,7 +558,6 @@ class test : public test_base
             }
             double total = set_up_duration + test_duration + tier_down_duration;
             tr->add_total_time(total);
-            return result;
         }
     protected:
         test() { }
