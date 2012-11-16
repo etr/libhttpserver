@@ -163,6 +163,7 @@ class http_response
             filename(b.filename),
             headers(b.headers),
             footers(b.footers),
+            cookies(b.cookies),
             topics(b.topics),
             keepalive_secs(b.keepalive_secs),
             keepalive_msg(b.keepalive_msg),
@@ -184,6 +185,7 @@ class http_response
             filename = b.filename;
             headers = b.headers;
             footers = b.footers;
+            cookies = b.cookies;
             topics = b.topics;
             keepalive_secs = b.keepalive_secs;
             keepalive_msg = b.keepalive_msg;
@@ -258,6 +260,14 @@ class http_response
         {
             result = this->footers[key];
         }
+        const std::string get_cookie(const std::string& key)
+        {
+            return this->cookies[key];
+        }
+        void get_cookie(const std::string& key, std::string& result)
+        {
+            result = this->cookies[key];
+        }
         /**
          * Method used to set an header value by key.
          * @param key The name identifying the header
@@ -276,6 +286,10 @@ class http_response
         {
             this->footers[key] = value;
         }
+        void set_cookie(const std::string& key, const std::string& value)
+        {
+            this->cookies[key] = value;
+        }
         /**
          * Method used to set the content type for the request. This is a shortcut of setting the corresponding header.
          * @param content_type the content type to use for the request
@@ -291,6 +305,14 @@ class http_response
         void remove_header(const std::string& key)
         {
             this->headers.erase(key);
+        }
+        void remove_footer(const std::string& key)
+        {
+            this->footers.erase(key);
+        }
+        void remove_cookie(const std::string& key)
+        {
+            this->cookies.erase(key);
         }
         /**
          * Method used to get all headers passed with the request.
@@ -309,6 +331,11 @@ class http_response
         size_t get_footers(std::vector<std::pair<std::string, std::string> >& result);
 #ifndef SWIG
         size_t get_footers(std::map<std::string, std::string, header_comparator>& result);
+#endif
+        const std::vector<std::pair<std::string, std::string> > get_cookies();
+        size_t get_cookies(std::vector<std::pair<std::string, std::string> >& result);
+#ifndef SWIG
+        size_t get_cookies(std::map<std::string, std::string, header_comparator>& result);
 #endif
         /**
          * Method used to set all headers of the response.
@@ -329,6 +356,12 @@ class http_response
             std::map<std::string, std::string>::const_iterator it;
             for(it = footers.begin(); it != footers.end(); ++it)
                 this->footers[it->first] = it->second;
+        }
+        void set_cookies(const std::map<std::string, std::string>& cookies)
+        {
+            std::map<std::string, std::string>::const_iterator it;
+            for(it = cookies.begin(); it != cookies.end(); ++it)
+                this->cookies[it->first] = it->second;
         }
         /**
          * Method used to set the response code of the response
@@ -392,6 +425,7 @@ class http_response
         std::string filename;
         std::map<std::string, std::string, header_comparator> headers;
         std::map<std::string, std::string, header_comparator> footers;
+        std::map<std::string, std::string, header_comparator> cookies;
         std::vector<std::string> topics;
         int keepalive_secs;
         std::string keepalive_msg;
