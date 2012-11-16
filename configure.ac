@@ -408,6 +408,7 @@ AC_OUTPUT(
       src/perl/Makefile
       src/ruby/Makefile
       src/guile/Makefile
+      test/Makefile
       debian/changelog
       debian/control
       debian/libhttpserver-dev.install

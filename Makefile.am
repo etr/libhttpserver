@@ -24,8 +24,8 @@ LIBTOOL_DEPS = @LIBTOOL_DEPS@
 AUTOMAKE_OPTIONS = foreign 1.4
 ACLOCAL_AMFLAGS = -I m4
 
-SUBDIRS = src $(PYTHON_DIR) $(JAVA_DIR) $(PHP_DIR) $(LUA_DIR) $(PERL_DIR) $(RUBY_DIR) $(GUILE_DIR)
-DIST_SUBDIRS = src $(PYTHON_DIST_DIR) $(JAVA_DIST_DIR) $(PHP_DIST_DIR) $(LUA_DIST_DIR) $(PERL_DIST_DIR) $(RUBY_DIST_DIR) $(GUILE_DIST_DIR)
+SUBDIRS = src test $(PYTHON_DIR) $(JAVA_DIR) $(PHP_DIR) $(LUA_DIR) $(PERL_DIR) $(RUBY_DIR) $(GUILE_DIR)
+DIST_SUBDIRS = src test $(PYTHON_DIST_DIR) $(JAVA_DIST_DIR) $(PHP_DIST_DIR) $(LUA_DIST_DIR) $(PERL_DIST_DIR) $(RUBY_DIST_DIR) $(GUILE_DIST_DIR)
 EXTRA_DIST = libhttpserver.pc.in debian/changelog.in debian/control.in debian/rules.in debian/libhttpserver-dev.install.in debian/libhttpserver.install.in redhat/libhttpserver.SPEC.in $(DX_CONFIG) $(PYTHON_EXTRA) $(PHP_EXTRA) $(PERL_EXTRA)
 
 JAVACLEANFILES = $(top_srcdir)/src/java/*.java $(top_srcdir)/src/java/webserver_wrap.*
