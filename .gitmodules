@@ -1,3 +1,0 @@
-[submodule "test/liblittletest"]
-	path = test/liblittletest
-	url = https://github.com/etr/liblittletest.git
