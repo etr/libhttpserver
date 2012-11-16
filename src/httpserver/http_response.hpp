@@ -61,6 +61,9 @@ class closure_action
             deletable(b.deletable)
         {
         }
+        virtual ~closure_action()
+        {
+        }
         virtual void do_action()
         {
         }
