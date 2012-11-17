@@ -149,7 +149,8 @@ void http_file_response::get_raw_response(MHD_Response** response, webserver* ws
     size_t size = http::load_file(filename.c_str(), &page);
     if(size)
         *response = MHD_create_response_from_buffer(size, page, MHD_RESPMEM_MUST_FREE);
-    //TODO: At the moment if the file does not exist the system returns empty response
+    else
+        *response = MHD_create_response_from_buffer(size, (void*) "", MHD_RESPMEM_PERSISTENT);
 }
 
 void cache_response::get_raw_response(MHD_Response** response, webserver* ws)

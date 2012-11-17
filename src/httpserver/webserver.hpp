@@ -363,7 +363,7 @@ class webserver
         void clean_connections();
 
         void method_not_allowed_page(http_response** dhrs, details::modded_request* mr);
-        void internal_error_page(http_response** dhrs, details::modded_request* mr);
+        void internal_error_page(http_response** dhrs, details::modded_request* mr, bool force_our = false);
         void not_found_page(http_response** dhrs, details::modded_request* mr);
 
         static int method_not_acceptable_page 
