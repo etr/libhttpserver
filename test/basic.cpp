@@ -21,8 +21,6 @@ LT_BEGIN_SUITE(basic_suite)
     void set_up()
     {
         ws = new webserver(create_webserver(8080));
-        res = new simple_resource();
-        ws->register_resource("base", res);
         ws->start(false);
     }
 
@@ -35,6 +33,8 @@ LT_BEGIN_SUITE(basic_suite)
 LT_END_SUITE(basic_suite)
 
 LT_BEGIN_AUTO_TEST(basic_suite, read_body)
+    res = new simple_resource();
+    ws->register_resource("base", res);
     curl_global_init(CURL_GLOBAL_ALL);
     CURL *curl = curl_easy_init();
     CURLcode res;
