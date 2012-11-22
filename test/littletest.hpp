@@ -30,8 +30,6 @@
 #include <sys/time.h>
 #include <vector>
 
-#define littletest_version 1_0
-
 #define WARN 0
 #define CHECK 1
 #define ASSERT 2
@@ -329,9 +327,9 @@ class suite
             static_cast<suite_impl*>(this)->set_up();
         }
 
-        void suite_tier_down()
+        void suite_tear_down()
         {
-            static_cast<suite_impl*>(this)->tier_down();
+            static_cast<suite_impl*>(this)->tear_down();
         }
 
         suite() { }
@@ -360,7 +358,7 @@ struct test_runner
             last_checkpoint_line(-1),
             good_time_total(0.0),
             total_set_up_time(0.0),
-            total_tier_down_time(0.0),
+            total_tear_down_time(0.0),
             total_time(0.0)
         {
         }
@@ -394,7 +392,7 @@ struct test_runner
             std::cout << "Total run time: " << total_time << std::endl;
             std::cout << "Total time spent in tests: " << good_time_total << " ms" << std::endl;
             std::cout << "Average set up time: " << (total_set_up_time / test_counter) << " ms" << std::endl;
-            std::cout << "Average tier down time: " << (total_tier_down_time / test_counter) << " ms" << std::endl;
+            std::cout << "Average tear down time: " << (total_tear_down_time / test_counter) << " ms" << std::endl;
         }
 
         void add_failure()
@@ -424,9 +422,9 @@ struct test_runner
             total_set_up_time += t;
         }
 
-        void add_tier_down_time(double t)
+        void add_tear_down_time(double t)
         {
-            total_tier_down_time += t;
+            total_tear_down_time += t;
         }
 
         void add_total_time(double t)
@@ -473,7 +471,7 @@ struct test_runner
         int failures_counter;
         double good_time_total;
         double total_set_up_time;
-        double total_tier_down_time;
+        double total_tear_down_time;
         double total_time;
 };
 
@@ -492,7 +490,7 @@ class test : public test_base
 {
         virtual void run_test(test_runner* tr)
         {
-            double set_up_duration = 0.0, tier_down_duration = 0.0, test_duration = 0.0;
+            double set_up_duration = 0.0, tear_down_duration = 0.0, test_duration = 0.0;
             timeval before, after;
             try
             {
@@ -544,21 +542,21 @@ class test : public test_base
             try
             {
                 gettimeofday(&before, NULL);
-                static_cast<test_impl* >(this)->suite_tier_down();
+                static_cast<test_impl* >(this)->suite_tear_down();
                 gettimeofday(&after, NULL);
-                tier_down_duration = calculate_duration(&before, &after);
-                tr->add_tier_down_time(tier_down_duration);
+                tear_down_duration = calculate_duration(&before, &after);
+                tr->add_tear_down_time(tear_down_duration);
             }
             catch(std::exception& e)
             {
-                std::cout << "Exception during " << static_cast<test_impl* >(this)->name  << " tier down" << std::endl;
+                std::cout << "Exception during " << static_cast<test_impl* >(this)->name  << " tear down" << std::endl;
                 std::cout << e.what() << std::endl;
             }
             catch(...)
             {
-                std::cout << "Exception during " << static_cast<test_impl* >(this)->name  << " tier down" << std::endl;
+                std::cout << "Exception during " << static_cast<test_impl* >(this)->name  << " tear down" << std::endl;
             }
-            double total = set_up_duration + test_duration + tier_down_duration;
+            double total = set_up_duration + test_duration + tear_down_duration;
             tr->add_total_time(total);
         }
     protected:
