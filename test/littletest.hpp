@@ -41,14 +41,14 @@
 #define LT_BEGIN_AUTO_TEST_ENV() LT_BEGIN_TEST_ENV()
 
 #define LT_END_AUTO_TEST_ENV() \
-        return !littletest::auto_test_result; \
+        return result; \
     }
 
 #define AUTORUN_TESTS() \
     std::vector<littletest::test_base*>::iterator autorun_it; \
     for(autorun_it = littletest::auto_test_vector.begin(); autorun_it != littletest::auto_test_vector.end(); ++autorun_it) \
         littletest::auto_test_runner((*autorun_it)); \
-    littletest::auto_test_runner();
+    int result = littletest::auto_test_runner();
 
 #define LT_TEST(name) name ## _obj
 
@@ -345,17 +345,16 @@ double calculate_duration(timeval* before, timeval* after)
 class test_base;
 
 std::vector<test_base*> auto_test_vector;
-bool auto_test_result = true;
 
 struct test_runner
 {
     public:
         test_runner() :
+            last_checkpoint_file(""),
+            last_checkpoint_line(-1),
             test_counter(1),
             success_counter(0),
             failures_counter(0),
-            last_checkpoint_file(""),
-            last_checkpoint_line(-1),
             good_time_total(0.0),
             total_set_up_time(0.0),
             total_tear_down_time(0.0),
@@ -382,7 +381,20 @@ struct test_runner
             return run(t);
         }
 
-        test_runner& operator()()
+        void clear_runner()
+        {
+            last_checkpoint_file = "";
+            last_checkpoint_line = -1;
+            test_counter = 1;
+            success_counter = 0;
+            failures_counter = 0;
+            good_time_total = 0.0,
+            total_set_up_time = 0.0;
+            total_tear_down_time = 0.0;
+            total_time = 0.0;
+        }
+
+        int operator()()
         {
             std::cout << "** Runner terminated! **" << std::endl;
             std::cout << (test_counter - 1) << " tests executed" << std::endl;
@@ -393,12 +405,14 @@ struct test_runner
             std::cout << "Total time spent in tests: " << good_time_total << " ms" << std::endl;
             std::cout << "Average set up time: " << (total_set_up_time / test_counter) << " ms" << std::endl;
             std::cout << "Average tear down time: " << (total_tear_down_time / test_counter) << " ms" << std::endl;
+            int to_ret = failures_counter;
+            clear_runner();
+            return to_ret;
         }
 
         void add_failure()
         {
             failures_counter++;
-            auto_test_result = false;
         }
 
         void add_success()

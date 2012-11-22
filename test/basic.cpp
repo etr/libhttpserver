@@ -26,7 +26,7 @@ LT_BEGIN_SUITE(basic_suite)
         ws->start(false);
     }
 
-    void tier_down()
+    void tear_down()
     {
         ws->stop();
         delete ws;
