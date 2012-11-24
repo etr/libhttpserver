@@ -94,7 +94,9 @@ deb:
 
 rpm: dist
 	mkdir -p redhat/SOURCES
-	mkdir -p redhar/BUILD
+	mkdir -p redhat/BUILD
+	mkdir -p redhat/RPMS
+	mkdir -p redhat/SRPMS
 	cp libhttpserver-@VERSION@.tar.gz redhat/SOURCES
 	rpmbuild -v -bb redhat/libhttpserver.SPEC
 	rpmbuild -v -ba redhat/libhttpserver.SPEC
