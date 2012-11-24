@@ -30,6 +30,8 @@
 #include <sys/time.h>
 #include <vector>
 
+#define LT_VERSION 1.0
+
 #define WARN 0
 #define CHECK 1
 #define ASSERT 2
@@ -41,229 +43,229 @@
 #define LT_BEGIN_AUTO_TEST_ENV() LT_BEGIN_TEST_ENV()
 
 #define LT_END_AUTO_TEST_ENV() \
-        return result; \
+        return (__lt_result__); \
     }
 
 #define AUTORUN_TESTS() \
-    std::vector<littletest::test_base*>::iterator autorun_it; \
-    for(autorun_it = littletest::auto_test_vector.begin(); autorun_it != littletest::auto_test_vector.end(); ++autorun_it) \
-        littletest::auto_test_runner((*autorun_it)); \
-    int result = littletest::auto_test_runner();
+    std::vector<littletest::test_base*>::iterator __lt_autorun_it__; \
+    for(__lt_autorun_it__ = littletest::auto_test_vector.begin(); __lt_autorun_it__ != littletest::auto_test_vector.end(); ++__lt_autorun_it__) \
+        littletest::auto_test_runner((*__lt_autorun_it__)); \
+    int __lt_result__ = littletest::auto_test_runner();
 
-#define LT_TEST(name) name ## _obj
+#define LT_TEST(__lt_name__) __lt_name__ ## _obj
 
-#define LT_CREATE_RUNNER(suite_name, runner_name) \
-    std::cout << "** Initializing Runner \"" << #runner_name << "\" **" << std::endl; \
-    littletest::test_runner runner_name 
+#define LT_CREATE_RUNNER(__lt_suite_name__, __lt_runner_name__) \
+    std::cout << "** Initializing Runner \"" << #__lt_runner_name__ << "\" **" << std::endl; \
+    littletest::test_runner __lt_runner_name__ 
 
-#define LT_RUNNER(runner_name) runner_name
+#define LT_RUNNER(__lt_runner_name__) __lt_runner_name__
 
-#define LT_BEGIN_SUITE(name) \
-    struct name : public littletest::suite<name> \
+#define LT_BEGIN_SUITE(__lt_name__) \
+    struct __lt_name__ : public littletest::suite<__lt_name__> \
     {
 
-#define LT_END_SUITE(name) \
+#define LT_END_SUITE(__lt_name__) \
     };
 
-#define LT_CHECKPOINT() tr->set_checkpoint(__FILE__, __LINE__)
+#define LT_CHECKPOINT() __lt_tr__->set_checkpoint(__FILE__, __LINE__)
 
-#define LT_BEGIN_TEST(suite_name, test_name) \
-    struct test_name : public suite_name, littletest::test<test_name> \
+#define LT_BEGIN_TEST(__lt_suite_name__, __lt_test_name__) \
+    struct __lt_test_name__ : public __lt_suite_name__, littletest::test<__lt_test_name__> \
     { \
-            test_name() \
+            __lt_test_name__() \
             { \
-                name = #test_name; \
+                __lt_name__ = #__lt_test_name__; \
                 littletest::auto_test_vector.push_back(this); \
             } \
-            void operator()(littletest::test_runner* tr) \
+            void operator()(littletest::test_runner* __lt_tr__) \
             {
 
-#define LT_END_TEST(test_name) \
+#define LT_END_TEST(__lt_test_name__) \
             } \
     }; \
-    test_name test_name ## _obj; \
+    __lt_test_name__ __lt_test_name__ ## _obj; \
 
-#define LT_BEGIN_AUTO_TEST(suite_name, test_name) LT_BEGIN_TEST(suite_name, test_name)
+#define LT_BEGIN_AUTO_TEST(__lt_suite_name__, __lt_test_name__) LT_BEGIN_TEST(__lt_suite_name__, __lt_test_name__)
 
-#define LT_END_AUTO_TEST(test_name) \
-    LT_END_TEST(test_name) \
+#define LT_END_AUTO_TEST(__lt_test_name__) \
+    LT_END_TEST(__lt_test_name__) \
 
-#define LT_SWITCH_MODE(mode) \
-        switch(mode) \
+#define LT_SWITCH_MODE(__lt_mode__) \
+        switch(__lt_mode__) \
         { \
             case(WARN): \
-                throw littletest::warn_unattended(ss.str()); \
+                throw littletest::warn_unattended(__lt_ss__.str()); \
             case(CHECK): \
-                throw littletest::check_unattended(ss.str()); \
+                throw littletest::check_unattended(__lt_ss__.str()); \
             case(ASSERT): \
-                throw littletest::assert_unattended(ss.str()); \
+                throw littletest::assert_unattended(__lt_ss__.str()); \
         }
 
-#define LT_SIMPLE_OP(name, val, file, line, mode) \
-    if(!(val)) \
+#define LT_SIMPLE_OP(__lt_name__, __lt_val__, __lt_file__, __lt_line__, __lt_mode__) \
+    if(!((__lt_val__))) \
     { \
-        std::stringstream ss; \
-        ss << "(" << file << ":" << line << ") - error in " << "\"" << name << "\""; \
-        LT_SWITCH_MODE(mode) \
+        std::stringstream __lt_ss__; \
+        __lt_ss__ << "(" << __lt_file__ << ":" << __lt_line__ << ") - error in " << "\"" << __lt_name__ << "\""; \
+        LT_SWITCH_MODE(__lt_mode__) \
     }
 
-#define LT_THROW_OP(name, operation, file, line, mode) \
-    bool thrown = false; \
-    std::stringstream ss; \
+#define LT_THROW_OP(__lt_name__, __lt_operation__, __lt_file__, __lt_line__, __lt_mode__) \
+    bool __lt_thrown__ = false; \
+    std::stringstream __lt_ss__; \
     try \
     { \
-        operation ;\
-        ss << "(" << file << ":" << line << ") - error in " << "\"" << name << "\": no exceptions thown by " << #operation; \
-        thrown = true; \
+        (__lt_operation__) ;\
+        __lt_ss__ << "(" << __lt_file__ << ":" << __lt_line__ << ") - error in " << "\"" << __lt_name__ << "\": no exceptions thown by " << #__lt_operation__; \
+        __lt_thrown__ = true; \
     } \
     catch(...) { } \
-    if(thrown) \
-        LT_SWITCH_MODE(mode)
+    if(__lt_thrown__) \
+        LT_SWITCH_MODE(__lt_mode__)
 
-#define LT_NOTHROW_OP(name, operation, file, line, mode) \
+#define LT_NOTHROW_OP(__lt_name__, __lt_operation__, __lt_file__, __lt_line__, __lt_mode__) \
     try \
     { \
-        operation ;\
+        (__lt_operation__) ;\
     } \
     catch(...) \
     { \
-        std::stringstream ss; \
-        ss << "(" << file << ":" << line << ") - error in " << "\"" << name << "\": exceptions thown by " << #operation; \
-        LT_SWITCH_MODE(mode) \
+        std::stringstream __lt_ss__; \
+        __lt_ss__ << "(" << __lt_file__ << ":" << __lt_line__ << ") - error in " << "\"" << __lt_name__ << "\": exceptions thown by " << #__lt_operation__; \
+        LT_SWITCH_MODE(__lt_mode__) \
     }
 
-#define LT_COLLEQ_OP(name, first_begin, first_end, second_begin, file, line, mode) \
-    if(! std::equal(first_begin, first_end, second_begin)) \
+#define LT_COLLEQ_OP(__lt_name__, __lt_first_begin__, __lt_first_end__, __lt_second_begin__, __lt_file__, __lt_line__, __lt_mode__) \
+    if(! std::equal((__lt_first_begin__), (__lt_first_end__), (__lt_second_begin__))) \
     { \
-        std::stringstream ss; \
-        ss << "(" << file << ":" << line << ") - error in " << "\"" << name << "\": collections are different"; \
-        LT_SWITCH_MODE(mode) \
+        std::stringstream __lt_ss__; \
+        __lt_ss__ << "(" << __lt_file__ << ":" << __lt_line__ << ") - error in " << "\"" << __lt_name__ << "\": collections are different"; \
+        LT_SWITCH_MODE(__lt_mode__) \
     }
 
-#define LT_COLLNEQ_OP(name, first_begin, first_end, second_begin, file, line, mode) \
-    if(std::equal(first_begin, first_end, second_begin)) \
+#define LT_COLLNEQ_OP(__lt_name__, __lt_first_begin__, __lt_first_end__, __lt_second_begin__, __lt_file__, __lt_line__, __lt_mode__) \
+    if(std::equal((__lt_first_begin__), (__lt_first_end__), (__lt_second_begin__))) \
     { \
-        std::stringstream ss; \
-        ss << "(" << file << ":" << line << ") - error in " << "\"" << name << "\": collections are equal"; \
-        LT_SWITCH_MODE(mode) \
+        std::stringstream __lt_ss__; \
+        __lt_ss__ << "(" << __lt_file__ << ":" << __lt_line__ << ") - error in " << "\"" << __lt_name__ << "\": collections are equal"; \
+        LT_SWITCH_MODE(__lt_mode__) \
     }
 
-#define LT_OP(name, a, b, file, line, op, mode) \
-    if(a op b) \
+#define LT_OP(__lt_name__, __lt_a__, __lt_b__, __lt_file__, __lt_line__, __lt_op__, __lt_mode__) \
+    if((__lt_a__) __lt_op__ (__lt_b__)) \
     { \
-        std::stringstream ss; \
-        ss << "(" << file << ":" << line << ") - error in " << "\"" << name << "\": " << a << #op << b; \
-        LT_SWITCH_MODE(mode) \
+        std::stringstream __lt_ss__; \
+        __lt_ss__ << "(" << __lt_file__ << ":" << __lt_line__ << ") - error in " << "\"" << __lt_name__ << "\": " << (__lt_a__) << #__lt_op__ << (__lt_b__); \
+        LT_SWITCH_MODE(__lt_mode__) \
     }
 
 #define LT_CATCH_ERRORS \
-    catch(littletest::check_unattended& cu) \
+    catch(littletest::check_unattended& __lt_cu__) \
     { \
-        std::cout << "[CHECK FAILURE] " << cu.what() << std::endl; \
-        tr->add_failure(); \
+        std::cout << "[CHECK FAILURE] " << __lt_cu__.what() << std::endl; \
+        __lt_tr__->add_failure(); \
     } \
-    catch(littletest::assert_unattended& au) \
+    catch(littletest::assert_unattended& __lt_au__) \
     { \
-        std::cout << "[ASSERT FAILURE] " << au.what() << std::endl; \
-        tr->add_failure(); \
-        throw au; \
+        std::cout << "[ASSERT FAILURE] " << __lt_au__.what() << std::endl; \
+        __lt_tr__->add_failure(); \
+        throw __lt_au__; \
     } \
-    catch(littletest::warn_unattended& wu) \
+    catch(littletest::warn_unattended& __lt_wu__) \
     { \
-        std::cout << "[WARN] " << wu.what() << std::endl; \
+        std::cout << "[WARN] " << __lt_wu__.what() << std::endl; \
     }
 
-#define LT_ADD_SUCCESS(mode) \
-    if(mode) \
-        tr->add_success();
+#define LT_ADD_SUCCESS(__lt_mode__) \
+    if(__lt_mode__) \
+        __lt_tr__->add_success();
 
-#define LT_EV(a, b, op, mode) \
+#define LT_EV(__lt_a__, __lt_b__, __lt_op__, __lt_mode__) \
     try \
     { \
-        LT_OP(name, a, b, __FILE__, __LINE__, op, mode); \
-        LT_ADD_SUCCESS(mode) \
+        LT_OP(__lt_name__, (__lt_a__), (__lt_b__), __FILE__, __LINE__, __lt_op__, __lt_mode__); \
+        LT_ADD_SUCCESS(__lt_mode__) \
     } \
     LT_CATCH_ERRORS
 
-#define LT_SIMPLE_EV(val, mode) \
+#define LT_SIMPLE_EV(__lt_val__, __lt_mode__) \
     try \
     { \
-        LT_SIMPLE_OP(name, val, __FILE__, __LINE__, mode); \
-        LT_ADD_SUCCESS(mode) \
+        LT_SIMPLE_OP(__lt_name__, (__lt_val__), __FILE__, __LINE__, __lt_mode__); \
+        LT_ADD_SUCCESS(__lt_mode__) \
     } \
     LT_CATCH_ERRORS
 
-#define LT_THROW_EV(operation, mode) \
+#define LT_THROW_EV(__lt_operation__, __lt_mode__) \
     try \
     { \
-        LT_THROW_OP(name, operation, __FILE__, __LINE__, mode); \
-        LT_ADD_SUCCESS(mode) \
+        LT_THROW_OP(__lt_name__, (__lt_operation__), __FILE__, __LINE__, __lt_mode__); \
+        LT_ADD_SUCCESS(__lt_mode__) \
     } \
     LT_CATCH_ERRORS
 
-#define LT_NOTHROW_EV(operation, mode) \
+#define LT_NOTHROW_EV(__lt_operation__, __lt_mode__) \
     try \
     { \
-        LT_NOTHROW_OP(name, operation, __FILE__, __LINE__, mode); \
-        LT_ADD_SUCCESS(mode) \
+        LT_NOTHROW_OP(__lt_name__, (__lt_operation__), __FILE__, __LINE__, __lt_mode__); \
+        LT_ADD_SUCCESS(__lt_mode__) \
     } \
     LT_CATCH_ERRORS
 
-#define LT_COLLEQ_EV(first_begin, first_end, second_begin, mode) \
+#define LT_COLLEQ_EV(__lt_first_begin__, __lt_first_end__, __lt_second_begin__, __lt_mode__) \
     try \
     { \
-        LT_COLLEQ_OP(name, first_begin, first_end, second_begin, __FILE__, __LINE__, mode); \
-        LT_ADD_SUCCESS(mode) \
+        LT_COLLEQ_OP(__lt_name__, (__lt_first_begin__), (__lt_first_end__), (__lt_second_begin__), __FILE__, __LINE__, __lt_mode__); \
+        LT_ADD_SUCCESS(__lt_mode__) \
     } \
     LT_CATCH_ERRORS
 
-#define LT_COLLNEQ_EV(first_begin, first_end, second_begin, mode) \
+#define LT_COLLNEQ_EV(__lt_first_begin__, __lt_first_end__, __lt_second_begin__, __lt_mode__) \
     try \
     { \
-        LT_COLLNEQ_OP(name, first_begin, first_end, second_begin, __FILE__, __LINE__, mode); \
-        LT_ADD_SUCCESS(mode) \
+        LT_COLLNEQ_OP(__lt_name__, (__lt_first_begin__), (__lt_first_end__), (__lt_second_begin__), __FILE__, __LINE__, __lt_mode__); \
+        LT_ADD_SUCCESS(__lt_mode__) \
     } \
     LT_CATCH_ERRORS
 
-#define LT_WARN(val) LT_SIMPLE_EV(val, WARN)
-#define LT_WARN_EQ(a, b) LT_EV(a, b, !=, WARN)
-#define LT_WARN_NEQ(a, b) LT_EV(a, b, ==, WARN)
-#define LT_WARN_GT(a, b) LT_EV(a, b, <=, WARN)
-#define LT_WARN_GTE(a, b) LT_EV(a, b, <, WARN)
-#define LT_WARN_LT(a, b) LT_EV(a, b, >=, WARN)
-#define LT_WARN_LTE(a, b) LT_EV(a, b, >, WARN)
-#define LT_WARN_THROW(operation) LT_THROW_EV(operation, WARN)
-#define LT_WARN_NOTHROW(operation) LT_NOTHROW_EV(operation, WARN)
-#define LT_WARN_COLLECTIONS_EQ(first_begin, first_end, second_begin) LT_COLLEQ_EV(first_begin, first_end, second_begin, WARN)
-#define LT_WARN_COLLECTIONS_NEQ(first_begin, first_end, second_begin) LT_COLLNEQ_EV(first_begin, first_end, second_begin, WARN)
+#define LT_WARN(__lt_val__) LT_SIMPLE_EV((__lt_val__), WARN)
+#define LT_WARN_EQ(__lt_a__, __lt_b__) LT_EV((__lt_a__), (__lt_b__), !=, WARN)
+#define LT_WARN_NEQ(__lt_a__, __lt_b__) LT_EV((__lt_a__), (__lt_b__), ==, WARN)
+#define LT_WARN_GT(__lt_a__, __lt_b__) LT_EV((__lt_a__), (__lt_b__), <=, WARN)
+#define LT_WARN_GTE(__lt_a__, __lt_b__) LT_EV((__lt_a__), (__lt_b__), <, WARN)
+#define LT_WARN_LT(__lt_a__, __lt_b__) LT_EV((__lt_a__), (__lt_b__), >=, WARN)
+#define LT_WARN_LTE(__lt_a__, __lt_b__) LT_EV((__lt_a__), (__lt_b__), >, WARN)
+#define LT_WARN_THROW(__lt_operation__) LT_THROW_EV((__lt_operation__), WARN)
+#define LT_WARN_NOTHROW(__lt_operation__) LT_NOTHROW_EV((__lt_operation__), WARN)
+#define LT_WARN_COLLECTIONS_EQ(__lt_first_begin__, __lt_first_end__, __lt_second_begin__) LT_COLLEQ_EV((__lt_first_begin__), (__lt_first_end__), (__lt_second_begin__), WARN)
+#define LT_WARN_COLLECTIONS_NEQ(__lt_first_begin__, __lt_first_end__, __lt_second_begin__) LT_COLLNEQ_EV((__lt_first_begin__), (__lt_first_end__), (__lt_second_begin__), WARN)
 
-#define LT_CHECK(val) LT_SIMPLE_EV(val, CHECK)
-#define LT_CHECK_EQ(a, b) LT_EV(a, b, !=, CHECK)
-#define LT_CHECK_NEQ(a, b) LT_EV(a, b, ==, CHECK)
-#define LT_CHECK_GT(a, b) LT_EV(a, b, <=, CHECK)
-#define LT_CHECK_GTE(a, b) LT_EV(a, b, <, CHECK)
-#define LT_CHECK_LT(a, b) LT_EV(a, b, >=, CHECK)
-#define LT_CHECK_LTE(a, b) LT_EV(a, b, >, CHECK)
-#define LT_CHECK_THROW(operation) LT_THROW_EV(operation, CHECK)
-#define LT_CHECK_NOTHROW(operation) LT_NOTHROW_EV(operation, CHECK)
-#define LT_CHECK_COLLECTIONS_EQ(first_begin, first_end, second_begin) LT_COLLEQ_EV(first_begin, first_end, second_begin, CHECK)
-#define LT_CHECK_COLLECTIONS_NEQ(first_begin, first_end, second_begin) LT_COLLNEQ_EV(first_begin, first_end, second_begin, CHECK)
+#define LT_CHECK(__lt_val__) LT_SIMPLE_EV((__lt_val__), CHECK)
+#define LT_CHECK_EQ(__lt_a__, __lt_b__) LT_EV((__lt_a__), (__lt_b__), !=, CHECK)
+#define LT_CHECK_NEQ(__lt_a__, __lt_b__) LT_EV((__lt_a__), (__lt_b__), ==, CHECK)
+#define LT_CHECK_GT(__lt_a__, __lt_b__) LT_EV((__lt_a__), (__lt_b__), <=, CHECK)
+#define LT_CHECK_GTE(__lt_a__, __lt_b__) LT_EV((__lt_a__), (__lt_b__), <, CHECK)
+#define LT_CHECK_LT(__lt_a__, __lt_b__) LT_EV((__lt_a__), (__lt_b__), >=, CHECK)
+#define LT_CHECK_LTE(__lt_a__, __lt_b__) LT_EV((__lt_a__), (__lt_b__), >, CHECK)
+#define LT_CHECK_THROW(__lt_operation__) LT_THROW_EV((__lt_operation__), CHECK)
+#define LT_CHECK_NOTHROW(__lt_operation__) LT_NOTHROW_EV((__lt_operation__), CHECK)
+#define LT_CHECK_COLLECTIONS_EQ(__lt_first_begin__, __lt_first_end__, __lt_second_begin__) LT_COLLEQ_EV((__lt_first_begin__), (__lt_first_end__), (__lt_second_begin__), CHECK)
+#define LT_CHECK_COLLECTIONS_NEQ(__lt_first_begin__, __lt_first_end__, __lt_second_begin__) LT_COLLNEQ_EV((__lt_first_begin__), (__lt_first_end__), (__lt_second_begin__), CHECK)
 
-#define LT_ASSERT(val) LT_SIMPLE_EV(val, ASSERT)
-#define LT_ASSERT_EQ(a, b) LT_EV(a, b, !=, ASSERT)
-#define LT_ASSERT_NEQ(a, b) LT_EV(a, b, ==, ASSERT)
-#define LT_ASSERT_GT(a, b) LT_EV(a, b, <=, ASSERT)
-#define LT_ASSERT_GTE(a, b) LT_EV(a, b, <, ASSERT)
-#define LT_ASSERT_LT(a, b) LT_EV(a, b, >=, ASSERT)
-#define LT_ASSERT_LTE(a, b) LT_EV(a, b, >, ASSERT)
-#define LT_ASSERT_THROW(operation) LT_THROW_EV(operation, ASSERT)
-#define LT_ASSERT_NOTHROW(operation) LT_NOTHROW_EV(operation, ASSERT)
-#define LT_ASSERT_COLLECTIONS_EQ(first_begin, first_end, second_begin) LT_COLLEQ_EV(first_begin, first_end, second_begin, ASSERT)
-#define LT_ASSERT_COLLECTIONS_NEQ(first_begin, first_end, second_begin) LT_COLLNEQ_EV(first_begin, first_end, second_begin, ASSERT)
+#define LT_ASSERT(__lt_val__) LT_SIMPLE_EV((__lt_val__), ASSERT)
+#define LT_ASSERT_EQ(__lt_a__, __lt_b__) LT_EV((__lt_a__), (__lt_b__), !=, ASSERT)
+#define LT_ASSERT_NEQ(__lt_a__, __lt_b__) LT_EV((__lt_a__), (__lt_b__), ==, ASSERT)
+#define LT_ASSERT_GT(__lt_a__, __lt_b__) LT_EV((__lt_a__), (__lt_b__), <=, ASSERT)
+#define LT_ASSERT_GTE(__lt_a__, __lt_b__) LT_EV((__lt_a__), (__lt_b__), <, ASSERT)
+#define LT_ASSERT_LT(__lt_a__, __lt_b__) LT_EV((__lt_a__), (__lt_b__), >=, ASSERT)
+#define LT_ASSERT_LTE(__lt_a__, __lt_b__) LT_EV((__lt_a__), (__lt_b__), >, ASSERT)
+#define LT_ASSERT_THROW(__lt_operation__) LT_THROW_EV((__lt_operation__), ASSERT)
+#define LT_ASSERT_NOTHROW(__lt_operation__) LT_NOTHROW_EV((__lt_operation__), ASSERT)
+#define LT_ASSERT_COLLECTIONS_EQ(__lt_first_begin__, __lt_first_end__, __lt_second_begin__) LT_COLLEQ_EV((__lt_first_begin__), (__lt_first_end__), (__lt_second_begin__), ASSERT)
+#define LT_ASSERT_COLLECTIONS_NEQ(__lt_first_begin__, __lt_first_end__, __lt_second_begin__) LT_COLLNEQ_EV((__lt_first_begin__), (__lt_first_end__), (__lt_second_begin__), ASSERT)
 
-#define LT_FAIL(message) \
-    std::cout << "[ASSERT FAILURE] (" << __FILE__ << ":" << __LINE__ << ") - error in " << "\"" << name << "\": " << message << std::endl; \
-    tr->add_failure(); \
+#define LT_FAIL(__lt_message__) \
+    std::cout << "[ASSERT FAILURE] (" << __FILE__ << ":" << __LINE__ << ") - error in " << "\"" << (__lt_name__) << "\": " << (__lt_message__) << std::endl; \
+    __lt_tr__->add_failure(); \
     throw littletest::assert_unattended("");
 
 namespace littletest
@@ -367,7 +369,7 @@ struct test_runner
         {
             std::cout << "Running test (" << 
                 test_counter << "): " << 
-                t->name << std::endl;
+                t->__lt_name__ << std::endl;
 
             t->run_test(this);
 
@@ -492,7 +494,7 @@ struct test_runner
 class test_base
 {
     public:
-        const char* name;
+        const char* __lt_name__;
         virtual void run_test(test_runner* tr) { }
         virtual void operator()() { }
 };
@@ -516,12 +518,12 @@ class test : public test_base
             }
             catch(std::exception& e)
             {
-                std::cout << "Exception during " << static_cast<test_impl* >(this)->name  << " set up" << std::endl;
+                std::cout << "Exception during " << static_cast<test_impl* >(this)->__lt_name__ << " set up" << std::endl;
                 std::cout << e.what() << std::endl;
             }
             catch(...)
             {
-                std::cout << "Exception during " << static_cast<test_impl* >(this)->name  << " set up" << std::endl;
+                std::cout << "Exception during " << static_cast<test_impl* >(this)->__lt_name__ << " set up" << std::endl;
             }
             try
             {
@@ -534,14 +536,14 @@ class test : public test_base
             }
             catch(std::exception& e)
             {
-                std::cout << "Exception during " << static_cast<test_impl* >(this)->name  << " run" << std::endl;
+                std::cout << "Exception during " << static_cast<test_impl* >(this)->__lt_name__ << " run" << std::endl;
                 std::cout << e.what() << std::endl;
                 if(tr->last_checkpoint_line != -1)
                     std::cout << "Last checkpoint in " << tr->last_checkpoint_file << ":" << tr->last_checkpoint_line << std::endl;
             }
             catch(...)
             {
-                std::cout << "Exception during " << static_cast<test_impl* >(this)->name  << " run" << std::endl;
+                std::cout << "Exception during " << static_cast<test_impl* >(this)->__lt_name__ << " run" << std::endl;
                 if(tr->last_checkpoint_line != -1)
                     std::cout << "Last checkpoint in " << tr->last_checkpoint_file << ":" << tr->last_checkpoint_line << std::endl;
             }
@@ -551,7 +553,7 @@ class test : public test_base
 
             tr->add_good_time(test_duration);
 
-            std::cout << "- Time spent during \"" << static_cast<test_impl* >(this)->name << "\": " << test_duration << std::endl;
+            std::cout << "- Time spent during \"" << static_cast<test_impl* >(this)->__lt_name__ << "\": " << test_duration << std::endl;
 
             try
             {
@@ -563,12 +565,12 @@ class test : public test_base
             }
             catch(std::exception& e)
             {
-                std::cout << "Exception during " << static_cast<test_impl* >(this)->name  << " tear down" << std::endl;
+                std::cout << "Exception during " << static_cast<test_impl* >(this)->__lt_name__ << " tear down" << std::endl;
                 std::cout << e.what() << std::endl;
             }
             catch(...)
             {
-                std::cout << "Exception during " << static_cast<test_impl* >(this)->name  << " tear down" << std::endl;
+                std::cout << "Exception during " << static_cast<test_impl* >(this)->__lt_name__ << " tear down" << std::endl;
             }
             double total = set_up_duration + test_duration + tear_down_duration;
             tr->add_total_time(total);
