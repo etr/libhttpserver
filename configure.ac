@@ -410,6 +410,7 @@ AC_OUTPUT(
       src/guile/Makefile
       test/Makefile
       debian/changelog
+      debian/copyright
       debian/control
       debian/libhttpserver-dev.install
       debian/libhttpserver.install
