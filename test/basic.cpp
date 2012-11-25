@@ -151,6 +151,27 @@ LT_BEGIN_AUTO_TEST(basic_suite, complete)
 
     curl = curl_easy_init();
     curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "PUT");
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    curl_easy_cleanup(curl);
+
+    curl = curl_easy_init();
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "HEAD");
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    curl_easy_cleanup(curl);
+
+    curl = curl_easy_init();
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "CONNECT");
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    curl_easy_cleanup(curl);
+
+    curl = curl_easy_init();
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
     curl_easy_setopt(curl, CURLOPT_POST, 1L);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, NULL);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, 0);
