@@ -437,7 +437,8 @@ size_t load_file (const char* filename, char** content)
         fp.close();
         return size;
     }
-    return 0;
+    else
+        throw file_access_exception();
 }
 
 char* load_file (const char *filename)

@@ -1063,9 +1063,9 @@ void webserver::method_not_allowed_page(http_response** dhrs, details::modded_re
         *dhrs = new http_string_response(METHOD_ERROR, http_utils::http_method_not_allowed);
 }
 
-void webserver::internal_error_page(http_response** dhrs, details::modded_request* mr)
+void webserver::internal_error_page(http_response** dhrs, details::modded_request* mr, bool force_our)
 {
-    if(internal_error_resource != 0x0)
+    if(internal_error_resource != 0x0 || !force_our)
         ((internal_error_resource)->*(mr->callback))(*mr->dhr, dhrs);
     else
         *dhrs = new http_string_response(GENERIC_ERROR, http_utils::http_internal_server_error);
@@ -1271,7 +1271,32 @@ int webserver::finalize_answer(MHD_Connection* connection, struct details::modde
 #endif //WITH_PYTHON
     mr->dhrs = dhrs;
     mr->dhrs->underlying_connection = connection;
-    dhrs->get_raw_response(&raw_response, this);
+    try
+    {
+        try
+        {
+            dhrs->get_raw_response(&raw_response, this);
+        }
+        catch(const file_access_exception& fae)
+        {
+            not_found_page(&dhrs, mr);
+            dhrs->get_raw_response(&raw_response, this);
+        }
+        catch(const std::exception& e)
+        {
+            internal_error_page(&dhrs, mr);
+            dhrs->get_raw_response(&raw_response, this);
+        }
+        catch(...)
+        {
+            internal_error_page(&dhrs, mr);
+            dhrs->get_raw_response(&raw_response, this);
+        }
+    }
+    catch(...)
+    {
+        internal_error_page(&dhrs, mr, true);
+    }
     dhrs->decorate_response(raw_response);
     to_ret = dhrs->enqueue_response(connection, raw_response);
     MHD_destroy_response (raw_response);
