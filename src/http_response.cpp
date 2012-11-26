@@ -83,6 +83,27 @@ size_t http_response::get_footers(std::map<std::string, std::string, header_comp
     return result.size();
 }
 
+const std::vector<std::pair<std::string, std::string> > http_response::get_cookies()
+{
+    std::vector<std::pair<std::string, std::string> > to_ret;
+    std::map<std::string, std::string, header_comparator>::const_iterator it;
+    for(it = cookies.begin(); it != cookies.end(); ++it)
+        to_ret.push_back(*it);
+    return to_ret;
+}
+size_t http_response::get_cookies(std::vector<std::pair<std::string, std::string> >& result)
+{
+    std::map<std::string, std::string, header_comparator>::const_iterator it;
+    for(it = cookies.begin(); it != cookies.end(); ++it)
+        result.push_back(*it);
+    return result.size();
+}
+size_t http_response::get_cookies(std::map<std::string, std::string, header_comparator>& result)
+{
+    result = this->cookies;
+    return result.size();
+}
+
 //RESPONSE
 shoutCAST_response::shoutCAST_response
 (
