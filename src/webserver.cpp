@@ -88,14 +88,17 @@ struct http_response_ptr
         }
         ~http_response_ptr()
         {
-            if((*num_references) == 0)
+            if(num_references)
             {
-                if(res->autodelete)
-                    delete res;
-                delete num_references;
+                if((*num_references) == 0)
+                {
+                    if(res && res->autodelete)
+                        delete res;
+                    delete num_references;
+                }
+                else
+                    (*num_references)--;
             }
-            else
-                (*num_references)--;
         }
         http_response& operator* ()
         {
@@ -538,8 +541,11 @@ void webserver::sweet_kill()
 void webserver::request_completed (void *cls, struct MHD_Connection *connection, void **con_cls, enum MHD_RequestTerminationCode toe) 
 {
     details::modded_request* mr = (struct details::modded_request*) *con_cls;
-    if(mr->dhrs->ca != 0x0)
-        mr->dhrs->ca->do_action();
+    if(mr != 0x0 && mr->dhrs.res != 0x0)
+    {
+        if(mr->dhrs->ca != 0x0)
+            mr->dhrs->ca->do_action();
+    }
     if (NULL == mr) 
     {
         return;
