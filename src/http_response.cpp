@@ -129,20 +129,8 @@ void http_response::decorate_response(MHD_Response* response)
         MHD_add_response_header(response, (*it).first.c_str(), (*it).second.c_str());
     for (it=footers.begin() ; it != footers.end(); ++it)
         MHD_add_response_footer(response, (*it).first.c_str(), (*it).second.c_str());
-    {
-        bool first = true;
-        stringstream ss;
-        for (it=cookies.begin(); it != cookies.end(); ++it)
-        {
-            if(!first)
-                ss << ", ";
-            else
-                first = false;
-            ss << (*it).first << "=" << (*it).second;
-        }
-        if(!first)
-            MHD_add_response_header(response, "Set-Cookie", ss.str().c_str());
-    }
+    for (it=cookies.begin(); it != cookies.end(); ++it)
+        MHD_add_response_header(response, "Set-Cookie", ((*it).first + "=" + (*it).second).c_str());
 }
 
 void cache_response::decorate_response(MHD_Response* response)
