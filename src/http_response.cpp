@@ -135,7 +135,7 @@ void http_response::decorate_response(MHD_Response* response)
         for (it=cookies.begin(); it != cookies.end(); ++it)
         {
             if(!first)
-                ss << "; ";
+                ss << ", ";
             else
                 first = false;
             ss << (*it).first << "=" << (*it).second;
