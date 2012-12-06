@@ -62,6 +62,7 @@ namespace details
     class http_endpoint;
     struct modded_request;
     struct cache_manager;
+    struct daemon_item;
     void unlock_cache_entry(cache_entry*);
     http_response* get_response(cache_entry*);
 }
@@ -353,7 +354,7 @@ class webserver
         std::map<int, std::pair<int, std::string> > q_keepalives_mem;
         pthread_rwlock_t comet_guard;
 
-        struct MHD_Daemon *daemon;
+        std::vector<details::daemon_item*> daemons;
         std::vector<pthread_t> threads;
 
         void init(http_resource* single_resource);

@@ -26,6 +26,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <netinet/ip.h>
 #include <signal.h>
 #include <fcntl.h>
 
@@ -55,6 +56,21 @@ namespace httpserver
 
 namespace details
 {
+
+struct daemon_item
+{
+    webserver* ws;
+    struct MHD_Daemon* daemon;
+    daemon_item(webserver* ws, struct MHD_Daemon* daemon):
+        ws(ws),
+        daemon(daemon)
+    {
+    }
+    ~daemon_item()
+    {
+        MHD_stop_daemon (this->daemon);
+    }
+};
 
 struct cache_manager
 {
@@ -531,6 +547,8 @@ webserver::~webserver()
     pthread_cond_destroy(&cleancond);
 #endif //USE_COMET
     delete cache_m;
+    for(vector<details::daemon_item*>::const_iterator it = daemons.begin(); it != daemons.end(); ++it)
+        delete *it;
 }
 
 void webserver::sweet_kill()
@@ -611,70 +629,95 @@ void webserver::clean_connections()
 
 void* webserver::select(void* self)
 {
-#ifdef USE_COMET
     fd_set rs;
     fd_set ws;
     fd_set es;
     struct timeval timeout_value;
     int max = 0;
-    webserver* _this = static_cast<webserver*>(self);
+    details::daemon_item* di = static_cast<details::daemon_item*>(self);
     while (true)
     {
         FD_ZERO (&rs);
         FD_ZERO (&ws);
         FD_ZERO (&es);
-        if (MHD_YES != MHD_get_fdset (_this->daemon, &rs, &ws, &es, &max))
+        if (MHD_YES != MHD_get_fdset (di->daemon, &rs, &ws, &es, &max))
             break; /* fatal internal error */
-        _this->clean_connections();
+        di->ws->clean_connections();
         //TODO: clean connection structures also when working with threads
 
         unsigned MHD_LONG_LONG mhd_timeout;
 
-        if (MHD_get_timeout (_this->daemon, &mhd_timeout) == MHD_YES)
+        if (MHD_get_timeout (di->daemon, &mhd_timeout) == MHD_YES)
         {
             timeout_value.tv_sec = mhd_timeout / 1000;
             timeout_value.tv_usec = (mhd_timeout - (timeout_value.tv_sec * 1000)) * 1000;
         }
         int min_wait = timeout_value.tv_sec + (timeout_value.tv_usec / 10E6);
 
-        pthread_rwlock_wrlock(&_this->comet_guard);
-        for(std::map<int, long>::iterator it = _this->q_keepalives.begin(); it != _this->q_keepalives.end(); ++it)
+#ifdef USE_COMET
+        pthread_rwlock_wrlock(&_di->ws>comet_guard);
+        for(std::map<int, long>::iterator it = di->ws->q_keepalives.begin(); it != di->ws->q_keepalives.end(); ++it)
         {
             struct timeval curtime;
             gettimeofday(&curtime, NULL);
             int waited_time = curtime.tv_sec - (*it).second;
-            if(waited_time >= _this->q_keepalives_mem[(*it).first].first)
-                _this->send_message_to_consumer((*it).first, _this->q_keepalives_mem[(*it).first].second);
+            if(waited_time >= di->ws->q_keepalives_mem[(*it).first].first)
+                di->ws->send_message_to_consumer((*it).first, di->ws->q_keepalives_mem[(*it).first].second);
             else
             {
-                int to_wait_time = _this->q_keepalives_mem[(*it).first].first - waited_time;
+                int to_wait_time = di->ws->q_keepalives_mem[(*it).first].first - waited_time;
                 if(to_wait_time < min_wait)
                     min_wait = to_wait_time;
             }
         }
-        pthread_rwlock_unlock(&_this->comet_guard);
+        pthread_rwlock_unlock(&di->ws->comet_guard);
 
-        pthread_rwlock_rdlock(&_this->comet_guard);
-        for(std::set<int>::const_iterator it = _this->q_signal.begin(); it != _this->q_signal.end(); ++it)
+        pthread_rwlock_rdlock(&di->ws->comet_guard);
+        for(std::set<int>::const_iterator it = di->ws->q_signal.begin(); it != di->ws->q_signal.end(); ++it)
         {
-            _this->schedule_fd(*it, &ws, &max);
+            di->ws->schedule_fd(*it, &ws, &max);
         }
+        pthread_rwlock_unlock(&di->ws->comet_guard);
+#endif //USE_COMET
+
         timeout_value.tv_sec = min_wait;
         timeout_value.tv_usec = 0;
-        pthread_rwlock_unlock(&_this->comet_guard);
 
         ::select (max + 1, &rs, &ws, &es, &timeout_value);
-
-        pthread_mutex_lock(&_this->runguard);
-        MHD_run (_this->daemon);
-        pthread_mutex_unlock(&_this->runguard);
+        MHD_run (di->daemon);
     }
-#endif //USE_COMET
     return 0x0;
+}
+
+int create_socket (int domain, int type, int protocol)
+{
+    int sock_cloexec = SOCK_CLOEXEC;
+    int ctype = SOCK_STREAM | sock_cloexec;
+    int fd;
+
+    /* use SOCK_STREAM rather than ai_socktype: some getaddrinfo
+    * implementations do not set ai_socktype, e.g. RHL6.2. */
+    fd = socket(domain, ctype, protocol);
+    if ( (-1 == fd) && (EINVAL == errno) && (0 != sock_cloexec) )
+    {
+        sock_cloexec = 0;
+        fd = socket(domain, type, protocol);
+    }
+    if (-1 == fd)
+        return -1;
+    return fd;
 }
 
 bool webserver::start(bool blocking)
 {
+
+#ifdef USE_COMET
+    if(start_method == http_utils::INTERNAL_SELECT)
+    {
+        start_method = http_utils::INTERNAL_REMANAGED;
+    }
+#endif
+
     struct {
         MHD_OptionItem operator ()(enum MHD_OPTION opt, intptr_t val, void *ptr = 0) {
             MHD_OptionItem x = {opt, val, ptr};
@@ -692,10 +735,11 @@ bool webserver::start(bool blocking)
         iov.push_back(gen(MHD_OPTION_SOCK_ADDR, (intptr_t) bind_address));
     if(bind_socket != 0)
         iov.push_back(gen(MHD_OPTION_LISTEN_SOCKET, bind_socket));
-#ifndef USE_COMET
-    if(max_threads != 0)
-        iov.push_back(gen(MHD_OPTION_THREAD_POOL_SIZE, max_threads));
-#endif //USE_COMET
+    if(! (start_method == http_utils::INTERNAL_REMANAGED))
+    {
+        if(max_threads != 0)
+            iov.push_back(gen(MHD_OPTION_THREAD_POOL_SIZE, max_threads));
+    }
     if(max_connections != 0)
         iov.push_back(gen(MHD_OPTION_CONNECTION_LIMIT, max_connections));
     if(memory_limit != 0)
@@ -721,6 +765,99 @@ bool webserver::start(bool blocking)
         iov.push_back(gen(MHD_OPTION_HTTPS_CRED_TYPE, cred_type));
 #endif //HAVE_GNUTLS
 
+    if(start_method == http_utils::INTERNAL_REMANAGED)
+    {
+#ifndef WINDOWS
+        const int on = 1; 
+#else
+        const char on = 1;
+#endif
+        bool bind_settled = true;
+        if(!bind_socket)
+        {
+            bind_settled = false;
+            struct sockaddr_in servaddr4;
+#if HAVE_INET6
+            struct sockaddr_in6 servaddr6;
+#endif
+            const struct sockaddr *servaddr = NULL;
+            socklen_t addrlen;
+#if HAVE_INET6
+            if (0 != (options & MHD_USE_IPv6))
+                addrlen = sizeof (struct sockaddr_in6);
+            else
+#endif
+                addrlen = sizeof (struct ::sockaddr_in);
+
+#if HAVE_INET6
+            if (0 != (options & MHD_USE_IPv6))
+            {
+              memset (&servaddr6, 0, sizeof (struct sockaddr_in6));
+              servaddr6.sin6_family = AF_INET6;
+              servaddr6.sin6_port = htons (port);
+#if HAVE_SOCKADDR_IN_SIN_LEN
+              servaddr6.sin6_len = sizeof (struct sockaddr_in6);
+#endif
+              servaddr = (struct sockaddr *) &servaddr6;
+            }
+            else
+#endif
+            {
+              memset (&servaddr4, 0, sizeof (struct ::sockaddr_in));
+              servaddr4.sin_family = AF_INET;
+              servaddr4.sin_port = htons (port);
+#if HAVE_SOCKADDR_IN_SIN_LEN
+              servaddr4.sin_len = sizeof (struct ::sockaddr_in);
+#endif
+              servaddr = (struct sockaddr *) &servaddr4;
+            }
+
+            if (use_ipv6)
+                bind_socket = create_socket (PF_INET6, SOCK_STREAM, 0);
+            else 
+                bind_socket = create_socket (PF_INET, SOCK_STREAM, 0);
+
+            setsockopt (bind_socket,
+               SOL_SOCKET,
+               SO_REUSEADDR,
+               &on, sizeof (on));
+
+            if(use_ipv6)
+            {
+#ifdef IPPROTO_IPV6
+#ifdef IPV6_V6ONLY
+#ifndef WINDOWS
+                setsockopt (bind_socket, 
+                    IPPROTO_IPV6, IPV6_V6ONLY, 
+                    &on, sizeof (on)
+                );
+#else
+                setsockopt (bind_socket, 
+                    IPPROTO_IPV6, IPV6_V6ONLY, 
+                    &on, sizeof (on)
+                );
+#endif
+#endif
+#endif
+            }
+            bind(bind_socket, servaddr, addrlen);
+        }
+        int flags = fcntl (bind_socket, F_GETFL);
+        flags |= O_NONBLOCK;
+        fcntl (bind_socket, F_SETFL, flags);
+        if(!bind_settled)
+            listen(bind_socket, 1);
+/*
+#ifndef WINDOWS
+        setsockopt (h->fd, IPPROTO_TCP, TCP_NODELAY, &value, sizeof (value));
+#else
+        const char* absval;
+        setsockopt (h->fd, IPPROTO_TCP, TCP_NODELAY, abs_value, sizeof (abs_value));
+#endif
+*/
+        iov.push_back(gen(MHD_OPTION_LISTEN_SOCKET, bind_socket));
+    }
+
     iov.push_back(gen(MHD_OPTION_END, 0, NULL ));
 
     struct MHD_OptionItem ops[iov.size()];
@@ -729,15 +866,7 @@ bool webserver::start(bool blocking)
         ops[i] = iov[i];
     }
 
-#ifdef USE_COMET
-    int start_conf;
-    if(start_method == http_utils::INTERNAL_SELECT)
-        start_conf = MHD_NO_FLAG;
-    else
-        start_conf = start_method;
-#else //USE_COMET
     int start_conf = start_method;
-#endif //USE_COMET
     if(use_ssl)
         start_conf |= MHD_USE_SSL;
     if(use_ipv6)
@@ -747,42 +876,58 @@ bool webserver::start(bool blocking)
     if(pedantic)
         start_conf |= MHD_USE_PEDANTIC_CHECKS;
 
-    this->daemon = MHD_start_daemon
-    (
-            start_conf, this->port, &policy_callback, this,
-            &answer_to_connection, this, MHD_OPTION_ARRAY, ops, MHD_OPTION_END
-    );
+    int num_threads = 1;
+    if(max_threads > num_threads)
+        num_threads = max_threads;
 
-    if(NULL == daemon)
+    if(start_method == http_utils::INTERNAL_REMANAGED)
     {
-        cout << gettext("Unable to connect daemon to port: ") << this->port << endl;
-        return false;
-    }
-    this->running = true;
-    bool value_onclose = false;
-#ifdef USE_COMET 
-    if(start_method == http_utils::INTERNAL_SELECT)
-    {
-        int num_threads = 1;
-        if(max_threads > num_threads)
-            num_threads = max_threads;
         for(int i = 0; i < num_threads; i++)
         {
+            struct MHD_Daemon* daemon = MHD_start_daemon
+            (
+                    start_conf, this->port, &policy_callback, this,
+                    &answer_to_connection, this, MHD_OPTION_ARRAY, ops, MHD_OPTION_END
+            );
+            if(NULL == daemon)
+            {
+                cout << gettext("Unable to connect daemon to port: ") << this->port << endl;
+                return false;
+            }
+            details::daemon_item* di = new details::daemon_item(this, daemon);
+            daemons.push_back(di);
+
             //RUN SELECT THREADS
             pthread_t t;
             threads.push_back(t);
-            pthread_create(&threads[i], NULL, &webserver::select, static_cast<void*>(this));
+            pthread_create(&threads[i], NULL, &webserver::select, static_cast<void*>(di));
             //TODO: do something if initialization fails
         }
     }
     else
     {
+        struct MHD_Daemon* daemon = MHD_start_daemon
+        (
+                start_conf, this->port, &policy_callback, this,
+                &answer_to_connection, this, MHD_OPTION_ARRAY, ops, MHD_OPTION_END
+        );
+        if(NULL == daemon)
+        {
+            cout << gettext("Unable to connect daemon to port: ") << this->port << endl;
+            return false;
+        }
+        details::daemon_item* di = new details::daemon_item(this, daemon);
+        daemons.push_back(di);
+#ifdef USE_COMET
         pthread_t c;
         threads.push_back(c);
         pthread_create(&threads[0], NULL, &webserver::cleaner, static_cast<void*>(this));
         //TODO: do something if initialization fails
+#endif
+
     }
-#endif //USE_COMET
+    this->running = true;
+    bool value_onclose = false;
     if(blocking)
     {
 #ifdef WITH_PYTHON
@@ -815,10 +960,7 @@ bool webserver::stop()
 {
     pthread_mutex_lock(&mutexwait);
     if(this->running)
-    {
-        MHD_stop_daemon (this->daemon);
         this->running = false;
-    }
     pthread_cond_signal(&mutexcond);
     pthread_mutex_unlock(&mutexwait);
     return true;
