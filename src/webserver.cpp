@@ -1213,7 +1213,7 @@ void webserver::method_not_allowed_page(http_response** dhrs, details::modded_re
 
 void webserver::internal_error_page(http_response** dhrs, details::modded_request* mr, bool force_our)
 {
-    if(internal_error_resource != 0x0 || !force_our)
+    if(internal_error_resource != 0x0 && !force_our)
         ((internal_error_resource)->*(mr->callback))(*mr->dhr, dhrs);
     else
         *dhrs = new http_string_response(GENERIC_ERROR, http_utils::http_internal_server_error);
