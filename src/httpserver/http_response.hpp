@@ -50,6 +50,15 @@ namespace details
 
 using namespace http;
 
+class bad_caching_attempt: public std::exception
+{
+    virtual const char* what() const throw()
+    {
+        return "You cannot pass ce = 0x0 without key!";
+    }
+};
+
+
 class closure_action
 {
     public:
@@ -636,6 +645,8 @@ class cache_response : public http_response
             ce(ce),
             locked_element(locked_element)
         {
+            if(ce == 0x0)
+                throw bad_caching_attempt();
         }
 
         cache_response(const http_response& b) : http_response(b) { }

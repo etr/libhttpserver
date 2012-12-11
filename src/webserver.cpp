@@ -72,15 +72,6 @@ struct daemon_item
     }
 };
 
-struct cache_manager
-{
-    std::map<std::string, cache_entry> response_cache; 
-
-    cache_manager()
-    {
-    }
-};
-
 struct http_response_ptr
 {
     public:
@@ -109,7 +100,10 @@ struct http_response_ptr
                 if((*num_references) == 0)
                 {
                     if(res && res->autodelete)
+                    {
                         delete res;
+                        res = 0x0;
+                    }
                     delete num_references;
                 }
                 else
@@ -137,7 +131,10 @@ struct http_response_ptr
                     if((*num_references) == 0)
                     {
                         if(res && res->autodelete)
+                        {
                             delete res;
+                            res = 0x0;
+                        }
                         delete num_references;
                     }
                     else
@@ -256,6 +253,11 @@ namespace details
 void unlock_cache_entry(cache_entry* ce)
 {
     ce->unlock();
+}
+
+void lock_cache_entry(cache_entry* ce)
+{
+    ce->lock();
 }
 
 http_response* get_response(cache_entry* ce)
@@ -425,8 +427,7 @@ webserver::webserver
     not_found_resource(not_found_resource),
     method_not_allowed_resource(method_not_allowed_resource),
     method_not_acceptable_resource(method_not_acceptable_resource),
-    internal_error_resource(internal_error_resource),
-    cache_m(new details::cache_manager())
+    internal_error_resource(internal_error_resource)
 {
     init(single_resource);
 }
@@ -466,8 +467,7 @@ webserver::webserver(const create_webserver& params):
     not_found_resource(params._not_found_resource),
     method_not_allowed_resource(params._method_not_allowed_resource),
     method_not_acceptable_resource(params._method_not_acceptable_resource),
-    internal_error_resource(params._internal_error_resource),
-    cache_m(new details::cache_manager())
+    internal_error_resource(params._internal_error_resource)
 {
     init(params._single_resource);
 }
@@ -509,7 +509,7 @@ webserver& webserver::operator=(const webserver& b)
     method_not_allowed_resource = b.method_not_allowed_resource;
     method_not_acceptable_resource = b.method_not_acceptable_resource;
     internal_error_resource = b.internal_error_resource;
-    cache_m->response_cache = b.cache_m->response_cache;
+    response_cache = b.response_cache;
     return *this;
 }
 
@@ -546,7 +546,6 @@ webserver::~webserver()
     pthread_mutex_destroy(&cleanmux);
     pthread_cond_destroy(&cleancond);
 #endif //USE_COMET
-    delete cache_m;
     for(vector<details::daemon_item*>::const_iterator it = daemons.begin(); it != daemons.end(); ++it)
         delete *it;
 }
@@ -1715,7 +1714,7 @@ bool webserver::pop_signaled(int consumer)
 
 http_response* webserver::get_from_cache(const std::string& key, bool* valid, bool lock, bool write)
 {
-    cache_entry* ce;
+    cache_entry* ce = 0x0;
     return get_from_cache(key, valid, &ce, lock, write);
 }
 
@@ -1723,21 +1722,21 @@ http_response* webserver::get_from_cache(const std::string& key, bool* valid, ca
 {
     pthread_rwlock_rdlock(&cache_guard);
     *valid = true;
-    map<string, cache_entry>::iterator it(cache_m->response_cache.find(key));
-    if(it != cache_m->response_cache.end())
+    map<string, cache_entry*>::iterator it(response_cache.find(key));
+    if(it != response_cache.end())
     {
         if(lock)
-            (*it).second.lock(write);
-        if((*it).second.validity != -1)
+            (*it).second->lock(write);
+        if((*it).second->validity != -1)
         {
             timeval now;
             gettimeofday(&now, NULL);
-            if( now.tv_sec - (*it).second.ts > (*it).second.validity)
+            if( now.tv_sec - (*it).second->ts > (*it).second->validity)
                 *valid = false;
         }
-        *ce = &((*it).second);
+        *ce = (*it).second;
         pthread_rwlock_unlock(&cache_guard);
-        return (*it).second.response.ptr();
+        return (*it).second->response.ptr();
     }
     else
     {
@@ -1750,14 +1749,14 @@ http_response* webserver::get_from_cache(const std::string& key, bool* valid, ca
 bool webserver::is_valid(const std::string& key)
 {
     pthread_rwlock_rdlock(&cache_guard);
-    map<string, cache_entry>::iterator it(cache_m->response_cache.find(key));
-    if(it != cache_m->response_cache.end())
+    map<string, cache_entry*>::iterator it(response_cache.find(key));
+    if(it != response_cache.end())
     {
-        if((*it).second.validity != -1)
+        if((*it).second->validity != -1)
         {
             timeval now;
             gettimeofday(&now, NULL);
-            if( now.tv_sec - (*it).second.ts > (*it).second.validity)
+            if( now.tv_sec - (*it).second->ts > (*it).second->validity)
             {
                 pthread_rwlock_unlock(&cache_guard);
                 return false;
@@ -1781,44 +1780,44 @@ bool webserver::is_valid(const std::string& key)
 void webserver::lock_cache_element(const std::string& key, bool write)
 {
     pthread_rwlock_rdlock(&cache_guard);
-    map<string, cache_entry>::iterator it(cache_m->response_cache.find(key));
-    if(it != cache_m->response_cache.end())
-        (*it).second.lock(write);
+    map<string, cache_entry*>::iterator it(response_cache.find(key));
+    if(it != response_cache.end())
+        (*it).second->lock(write);
     pthread_rwlock_unlock(&cache_guard);
 }
 
 void webserver::unlock_cache_element(const std::string& key)
 {
     pthread_rwlock_rdlock(&cache_guard);
-    map<string, cache_entry>::iterator it(cache_m->response_cache.find(key));
-    if(it != cache_m->response_cache.end())
-        (*it).second.unlock();
+    map<string, cache_entry*>::iterator it(response_cache.find(key));
+    if(it != response_cache.end())
+        (*it).second->unlock();
     pthread_rwlock_unlock(&cache_guard);
 }
 
 cache_entry* webserver::put_in_cache(const std::string& key, http_response* value, bool* new_elem, bool lock, bool write, int validity)
 {
     pthread_rwlock_wrlock(&cache_guard);
-    map<string, cache_entry>::iterator it(cache_m->response_cache.find(key));
+    map<string, cache_entry*>::iterator it(response_cache.find(key));
     cache_entry* to_ret;
     bool already_in = false;
-    if(it != cache_m->response_cache.end())
+    if(it != response_cache.end())
     {
-        (*it).second.lock(true);
+        (*it).second->lock(true);
         already_in = true;
     }
     if(validity == -1)
     {
         if(already_in)
         {
-            (*it).second.response = value;
-            to_ret = &(*it).second;
+            (*it).second->response = value;
+            to_ret = (*it).second;
             *new_elem = false;
         }
         else
         {
-            pair<map<string, cache_entry>::iterator, bool> res = cache_m->response_cache.insert(pair<string, cache_entry>(key, cache_entry(value)));
-            to_ret = &((*res.first).second);
+            pair<map<string, cache_entry*>::iterator, bool> res = response_cache.insert(pair<string, cache_entry*>(key, new cache_entry(value)));
+            to_ret = (*res.first).second;
             *new_elem = res.second;
         }
     }
@@ -1828,21 +1827,21 @@ cache_entry* webserver::put_in_cache(const std::string& key, http_response* valu
         gettimeofday(&now, NULL);
         if(already_in)
         {
-            (*it).second.response = value;
-            (*it).second.ts = now.tv_sec;
-            (*it).second.validity = validity;
-            to_ret = &(*it).second;
+            (*it).second->response = value;
+            (*it).second->ts = now.tv_sec;
+            (*it).second->validity = validity;
+            to_ret = (*it).second;
             *new_elem = false;
         }
         else
         {
-            pair<map<string, cache_entry>::iterator, bool> res = cache_m->response_cache.insert(pair<string, cache_entry>(key, cache_entry(value, now.tv_sec, validity)));
-            to_ret = &((*res.first).second);
+            pair<map<string, cache_entry*>::iterator, bool> res = response_cache.insert(pair<string, cache_entry*>(key, new cache_entry(value, now.tv_sec, validity)));
+            to_ret = (*res.first).second;
             *new_elem = res.second;
         }
     }
     if(already_in)
-        (*it).second.unlock();
+        (*it).second->unlock();
     if(lock)
         to_ret->lock(write);
     pthread_rwlock_unlock(&cache_guard);
@@ -1852,16 +1851,20 @@ cache_entry* webserver::put_in_cache(const std::string& key, http_response* valu
 void webserver::remove_from_cache(const std::string& key)
 {
     pthread_rwlock_wrlock(&cache_guard);
-    map<string, cache_entry>::iterator it(cache_m->response_cache.find(key));
-    if(it != cache_m->response_cache.end())
-        cache_m->response_cache.erase(it);
+    map<string, cache_entry*>::iterator it(response_cache.find(key));
+    if(it != response_cache.end())
+    {
+        cache_entry* ce = (*it).second;
+        response_cache.erase(it);
+        delete ce;
+    }
     pthread_rwlock_unlock(&cache_guard);
 }
 
 void webserver::clean_cache()
 {
     pthread_rwlock_wrlock(&cache_guard);
-    cache_m->response_cache.clear();
+    response_cache.clear(); //manage this because obviously causes leaks
     pthread_rwlock_unlock(&cache_guard);
 }
 

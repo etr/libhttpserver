@@ -64,6 +64,7 @@ namespace details
     struct cache_manager;
     struct daemon_item;
     void unlock_cache_entry(cache_entry*);
+    void lock_cache_entry(cache_entry*);
     http_response* get_response(cache_entry*);
 }
 
@@ -335,8 +336,8 @@ class webserver
 
         std::map<details::http_endpoint, http_resource* > registered_resources;
 
-        details::cache_manager* cache_m;
         pthread_rwlock_t cache_guard;
+        std::map<std::string, cache_entry*> response_cache;
 #ifdef USE_CPP_ZEROX
         std::unordered_set<ip_representation> bans;
         std::unordered_set<ip_representation> allowances;
