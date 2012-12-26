@@ -137,7 +137,8 @@ class http_response
             const std::vector<std::string>& topics = std::vector<std::string>(),
             int keepalive_secs = -1,
             const std::string keepalive_msg = "",
-            const std::string send_topic = ""
+            const std::string send_topic = "",
+            cache_entry* ce = 0x0
         ):
             response_type(response_type),
             content(content),
@@ -152,7 +153,8 @@ class http_response
             keepalive_secs(keepalive_secs),
             keepalive_msg(keepalive_msg),
             send_topic(send_topic),
-            ca(new closure_action())
+            ca(0x0),
+            ce(ce)
         {
             set_header(http_utils::http_header_content_type, content_type);
         }
@@ -177,9 +179,9 @@ class http_response
             keepalive_secs(b.keepalive_secs),
             keepalive_msg(b.keepalive_msg),
             send_topic(b.send_topic),
-            ca(new closure_action())
+            ca(0x0),
+            ce(b.ce)
         {
-            *ca = b.ca;
         }
         http_response& operator=(const http_response& b)
         {
@@ -205,6 +207,7 @@ class http_response
                 ca = 0x0;
             }
             ca = b.ca;
+            ce = b.ce;
             return *this;
         }
         virtual ~http_response()
@@ -441,6 +444,7 @@ class http_response
         std::string send_topic;
         struct MHD_Connection* underlying_connection;
         closure_action* ca;
+        cache_entry* ce;
 
         virtual void get_raw_response(MHD_Response** res, webserver* ws = 0x0);
         virtual void decorate_response(MHD_Response* res);
@@ -630,20 +634,14 @@ class cache_response : public http_response
     public:
         cache_response
         (
-            const std::string& key,
-            bool locked_element = false
-        ) : http_response(http_response::CACHED_CONTENT, key),
-            ce(0x0),
-            locked_element(locked_element)
+            const std::string& key
+        ) : http_response(http_response::CACHED_CONTENT, key, 200, "", true, "", "", false, std::vector<std::string>(), -1, "", "", 0x0)
         {
         }
         cache_response
         (
-            cache_entry* ce,
-            bool locked_element = false
-        ) : http_response(http_response::CACHED_CONTENT, ""),
-            ce(ce),
-            locked_element(locked_element)
+            cache_entry* ce
+        ) : http_response(http_response::CACHED_CONTENT, "", 200, "", true, "", "", false, std::vector<std::string>(), -1, "", "", ce)
         {
             if(ce == 0x0)
                 throw bad_caching_attempt();
@@ -656,9 +654,6 @@ class cache_response : public http_response
     protected:
         virtual void get_raw_response(MHD_Response** res, webserver* ws = 0x0);
         virtual void decorate_response(MHD_Response* res);
-    private:
-        cache_entry* ce;
-        bool locked_element;
         friend class webserver;
 };
 

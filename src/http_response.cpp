@@ -37,7 +37,7 @@ void unlock_on_close::do_action()
 
 cache_response::~cache_response()
 {
-    if(ce != 0x0 && locked_element)
+    if(ce != 0x0)
         details::unlock_cache_entry(ce);
 }
 
@@ -164,13 +164,12 @@ void http_file_response::get_raw_response(MHD_Response** response, webserver* ws
 
 void cache_response::get_raw_response(MHD_Response** response, webserver* ws)
 {
-    this->locked_element = true;
     bool valid;
     http_response* r;
     if(ce == 0x0)
         r = ws->get_from_cache(content, &valid, &ce, true, false);
     else
-        r = details::get_response(ce);
+        details::get_response(ce, &r);
     r->get_raw_response(response, ws);
     r->decorate_response(*response); //It is done here to avoid to search two times for the same element
     

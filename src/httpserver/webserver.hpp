@@ -65,7 +65,7 @@ namespace details
     struct daemon_item;
     void unlock_cache_entry(cache_entry*);
     void lock_cache_entry(cache_entry*);
-    http_response* get_response(cache_entry*);
+    void get_response(cache_entry*, http_response** res);
 }
 
 using namespace http;
@@ -269,7 +269,9 @@ class webserver
         http_response* get_from_cache(const std::string& key, bool* valid, bool lock = false, bool write = false);
         http_response* get_from_cache(const std::string& key, bool* valid, cache_entry** ce, bool lock = false, bool write = false);
         void lock_cache_element(const std::string& key, bool write = false);
+        void lock_cache_element(cache_entry* ce, bool write = false);
         void unlock_cache_element(const std::string& key);
+        void unlock_cache_element(cache_entry* ce);
         cache_entry* put_in_cache(const std::string& key, http_response* value, bool* new_elem, bool lock = false, bool write = false, int validity = -1);
         void remove_from_cache(const std::string& key);
         bool is_valid(const std::string& key);
@@ -336,8 +338,8 @@ class webserver
 
         std::map<details::http_endpoint, http_resource* > registered_resources;
 
-        pthread_rwlock_t cache_guard;
         std::map<std::string, cache_entry*> response_cache;
+        pthread_rwlock_t cache_guard;
 #ifdef USE_CPP_ZEROX
         std::unordered_set<ip_representation> bans;
         std::unordered_set<ip_representation> allowances;

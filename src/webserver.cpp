@@ -162,6 +162,27 @@ struct modded_request
     http_request* dhr;
     http_response_ptr dhrs;
     bool second;
+
+    modded_request():
+        pp(0x0),
+        complete_uri(0x0),
+        ws(0x0),
+        dhr(0x0),
+        dhrs(0x0),
+        second(false)
+    {
+    }
+    ~modded_request()
+    {
+        if (NULL != pp) 
+        {
+            MHD_destroy_post_processor (pp);
+        }
+        if(second)
+            delete dhr; //TODO: verify. It could be an error
+        delete complete_uri;
+    }
+
 };
 
 }
@@ -173,12 +194,11 @@ struct cache_entry
     details::http_response_ptr response;
     pthread_rwlock_t elem_guard;
     pthread_mutex_t lock_guard;
-    bool locked;
+    set<pthread_t> lockers;
 
     cache_entry():
         ts(-1),
-        validity(-1),
-        locked(false)
+        validity(-1)
     {
         pthread_rwlock_init(&elem_guard, NULL);
         pthread_mutex_init(&lock_guard, NULL);
@@ -195,8 +215,7 @@ struct cache_entry
         validity(b.validity),
         response(b.response),
         elem_guard(b.elem_guard),
-        lock_guard(b.lock_guard),
-        locked(b.locked)
+        lock_guard(b.lock_guard)
     {
     }
 
@@ -208,14 +227,12 @@ struct cache_entry
         pthread_rwlock_destroy(&elem_guard);
         pthread_mutex_destroy(&lock_guard);
         elem_guard = b.elem_guard;
-        locked = b.locked;
     }
 
     cache_entry(details::http_response_ptr response, long ts = -1, int validity = -1):
         ts(ts),
         validity(validity),
-        response(response),
-        locked(false)
+        response(response)
     {
         pthread_rwlock_init(&elem_guard, NULL);
         pthread_mutex_init(&lock_guard, NULL);
@@ -224,24 +241,32 @@ struct cache_entry
     void lock(bool write = false)
     {
         pthread_mutex_lock(&lock_guard);
-        if(!locked)
+        if(!lockers.count(pthread_self()))
         {
             if(write)
+            {
+                lockers.insert(pthread_self());
+                pthread_mutex_unlock(&lock_guard);
                 pthread_rwlock_wrlock(&elem_guard);
+            }
             else
+            {
+                lockers.insert(pthread_self());
+                pthread_mutex_unlock(&lock_guard);
                 pthread_rwlock_rdlock(&elem_guard);
-            locked = true;
+            }
         }
-        pthread_mutex_unlock(&lock_guard);
+        else
+            pthread_mutex_unlock(&lock_guard);
     }
 
     void unlock()
     {
         pthread_mutex_lock(&lock_guard);
-        if(locked)
+        if(lockers.count(pthread_self()))
         {
+            lockers.erase(pthread_self());
             pthread_rwlock_unlock(&elem_guard);
-            locked = false;
         }
         pthread_mutex_unlock(&lock_guard);
     }
@@ -260,9 +285,9 @@ void lock_cache_entry(cache_entry* ce)
     ce->lock();
 }
 
-http_response* get_response(cache_entry* ce)
+void get_response(cache_entry* ce, http_response** res)
 {
-    return ce->response.ptr();
+    *res = ce->response.ptr();
 }
 
 };
@@ -509,7 +534,6 @@ webserver& webserver::operator=(const webserver& b)
     method_not_allowed_resource = b.method_not_allowed_resource;
     method_not_acceptable_resource = b.method_not_acceptable_resource;
     internal_error_resource = b.internal_error_resource;
-    response_cache = b.response_cache;
     return *this;
 }
 
@@ -558,23 +582,12 @@ void webserver::sweet_kill()
 void webserver::request_completed (void *cls, struct MHD_Connection *connection, void **con_cls, enum MHD_RequestTerminationCode toe) 
 {
     details::modded_request* mr = (struct details::modded_request*) *con_cls;
-    if(mr != 0x0 && mr->dhrs.res != 0x0)
+    if (0x0 == mr) 
     {
-        if(mr->dhrs->ca != 0x0)
+        if(mr->dhrs.res != 0x0 && mr->dhrs->ca != 0x0)
             mr->dhrs->ca->do_action();
+        delete mr;
     }
-    if (NULL == mr) 
-    {
-        return;
-    }
-    if (NULL != mr->pp) 
-    {
-        MHD_destroy_post_processor (mr->pp);
-    }
-    if(mr->second)
-        delete mr->dhr; //TODO: verify. It could be an error
-    delete mr->complete_uri;
-    delete mr;
 }
 
 void webserver::schedule_fd(int fd, fd_set* schedule_list, int* max)
@@ -1443,6 +1456,7 @@ int webserver::finalize_answer(MHD_Connection* connection, struct details::modde
     catch(...)
     {
         internal_error_page(&dhrs, mr, true);
+        dhrs->get_raw_response(&raw_response, this);
     }
     dhrs->decorate_response(raw_response);
     to_ret = dhrs->enqueue_response(connection, raw_response);
@@ -1782,8 +1796,18 @@ void webserver::lock_cache_element(const std::string& key, bool write)
     pthread_rwlock_rdlock(&cache_guard);
     map<string, cache_entry*>::iterator it(response_cache.find(key));
     if(it != response_cache.end())
+    {
+        pthread_rwlock_unlock(&cache_guard);
         (*it).second->lock(write);
-    pthread_rwlock_unlock(&cache_guard);
+    }
+    else
+        pthread_rwlock_unlock(&cache_guard);
+}
+
+void webserver::lock_cache_element(cache_entry* ce, bool write)
+{
+    if(ce)
+        ce->lock(write);
 }
 
 void webserver::unlock_cache_element(const std::string& key)
@@ -1793,6 +1817,12 @@ void webserver::unlock_cache_element(const std::string& key)
     if(it != response_cache.end())
         (*it).second->unlock();
     pthread_rwlock_unlock(&cache_guard);
+}
+
+void webserver::unlock_cache_element(cache_entry* ce)
+{
+    if(ce)
+        ce->unlock();
 }
 
 cache_entry* webserver::put_in_cache(const std::string& key, http_response* value, bool* new_elem, bool lock, bool write, int validity)
