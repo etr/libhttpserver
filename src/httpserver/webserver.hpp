@@ -63,9 +63,6 @@ namespace details
     struct modded_request;
     struct cache_manager;
     struct daemon_item;
-    void unlock_cache_entry(cache_entry*);
-    void lock_cache_entry(cache_entry*);
-    void get_response(cache_entry*, http_response** res);
 }
 
 using namespace http;
@@ -401,6 +398,10 @@ class webserver
             struct MHD_Connection* connection,
             void **con_cls, int upgrade_socket
         );
+
+        static void unlock_cache_entry(cache_entry*);
+        static void lock_cache_entry(cache_entry*);
+        static void get_response(cache_entry*, http_response** res);
 
         int bodyless_requests_answer(MHD_Connection* connection,
             const char* url, const char* method,

@@ -81,21 +81,6 @@ class closure_action
         friend class http_response;
 };
 
-class unlock_on_close : public closure_action
-{
-    public:
-        unlock_on_close(cache_entry* elem, bool deletable = true) : closure_action(deletable), elem(elem) { }
-        unlock_on_close(const unlock_on_close& b) : closure_action(elem), elem(b.elem) { }
-        unlock_on_close& operator = (const unlock_on_close& b)
-        {
-            elem = b.elem;
-            return *this;
-        }
-        virtual void do_action();
-    private:
-        cache_entry* elem;
-};
-
 /**
  * Class representing an abstraction for an Http Response. It is used from classes using these apis to send information through http protocol.
 **/

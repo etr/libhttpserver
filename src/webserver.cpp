@@ -284,26 +284,6 @@ struct cache_entry
     }
 };
 
-namespace details
-{
-
-void unlock_cache_entry(cache_entry* ce)
-{
-    ce->unlock();
-}
-
-void lock_cache_entry(cache_entry* ce)
-{
-    ce->lock();
-}
-
-void get_response(cache_entry* ce, http_response** res)
-{
-    *res = ce->response.ptr();
-}
-
-};
-
 using namespace http;
 
 int policy_callback (void *, const struct sockaddr*, socklen_t);
@@ -1886,6 +1866,21 @@ void webserver::clean_cache()
     pthread_rwlock_wrlock(&cache_guard);
     response_cache.clear(); //manage this because obviously causes leaks
     pthread_rwlock_unlock(&cache_guard);
+}
+
+void webserver::unlock_cache_entry(cache_entry* ce)
+{
+    ce->unlock();
+}
+
+void webserver::lock_cache_entry(cache_entry* ce)
+{
+    ce->lock();
+}
+
+void webserver::get_response(cache_entry* ce, http_response** res)
+{
+    *res = ce->response.ptr();
 }
 
 };
