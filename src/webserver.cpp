@@ -1791,32 +1791,10 @@ bool webserver::is_valid(const std::string& key)
     return false;
 }
 
-void webserver::lock_cache_element(const std::string& key, bool write)
-{
-    pthread_rwlock_rdlock(&cache_guard);
-    map<string, cache_entry*>::iterator it(response_cache.find(key));
-    if(it != response_cache.end())
-    {
-        pthread_rwlock_unlock(&cache_guard);
-        (*it).second->lock(write);
-    }
-    else
-        pthread_rwlock_unlock(&cache_guard);
-}
-
 void webserver::lock_cache_element(cache_entry* ce, bool write)
 {
     if(ce)
         ce->lock(write);
-}
-
-void webserver::unlock_cache_element(const std::string& key)
-{
-    pthread_rwlock_rdlock(&cache_guard);
-    map<string, cache_entry*>::iterator it(response_cache.find(key));
-    if(it != response_cache.end())
-        (*it).second->unlock();
-    pthread_rwlock_unlock(&cache_guard);
 }
 
 void webserver::unlock_cache_element(cache_entry* ce)

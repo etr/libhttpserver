@@ -268,9 +268,7 @@ class webserver
 
         http_response* get_from_cache(const std::string& key, bool* valid, bool lock = false, bool write = false);
         http_response* get_from_cache(const std::string& key, bool* valid, cache_entry** ce, bool lock = false, bool write = false);
-        void lock_cache_element(const std::string& key, bool write = false);
         void lock_cache_element(cache_entry* ce, bool write = false);
-        void unlock_cache_element(const std::string& key);
         void unlock_cache_element(cache_entry* ce);
         cache_entry* put_in_cache(const std::string& key, http_response* value, bool* new_elem, bool lock = false, bool write = false, int validity = -1);
         void remove_from_cache(const std::string& key);
