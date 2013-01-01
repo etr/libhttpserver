@@ -187,6 +187,14 @@ struct modded_request
 
 }
 
+struct pthread_t_comparator
+{
+    bool operator()(const pthread_t& t1, const pthread_t& t2) const
+    {
+        return pthread_equal(t1, t2);
+    }
+};
+
 struct cache_entry
 {
     long ts;
@@ -194,7 +202,7 @@ struct cache_entry
     details::http_response_ptr response;
     pthread_rwlock_t elem_guard;
     pthread_mutex_t lock_guard;
-    set<pthread_t> lockers;
+    set<pthread_t, pthread_t_comparator> lockers;
 
     cache_entry():
         ts(-1),
@@ -241,17 +249,18 @@ struct cache_entry
     void lock(bool write = false)
     {
         pthread_mutex_lock(&lock_guard);
-        if(!lockers.count(pthread_self()))
+        pthread_t tid = pthread_self();
+        if(!lockers.count(tid))
         {
             if(write)
             {
-                lockers.insert(pthread_self());
+                lockers.insert(tid);
                 pthread_mutex_unlock(&lock_guard);
                 pthread_rwlock_wrlock(&elem_guard);
             }
             else
             {
-                lockers.insert(pthread_self());
+                lockers.insert(tid);
                 pthread_mutex_unlock(&lock_guard);
                 pthread_rwlock_rdlock(&elem_guard);
             }
@@ -263,10 +272,13 @@ struct cache_entry
     void unlock()
     {
         pthread_mutex_lock(&lock_guard);
-        if(lockers.count(pthread_self()))
         {
-            lockers.erase(pthread_self());
-            pthread_rwlock_unlock(&elem_guard);
+            pthread_t tid = pthread_self();
+            if(lockers.count(tid))
+            {
+                lockers.erase(tid);
+                pthread_rwlock_unlock(&elem_guard);
+            }
         }
         pthread_mutex_unlock(&lock_guard);
     }
