@@ -61,7 +61,6 @@ namespace details
 {
     class http_endpoint;
     struct modded_request;
-    struct cache_manager;
     struct daemon_item;
 }
 
@@ -140,18 +139,24 @@ class unescaper
         virtual void unescape(char* s) const;
 };
 
-/*
-class cache_object
+class event_supplier
 {
     public:
-        enum mode_T { WRITE, READ };
-        ~cache_object();
-    private:
-        cache_entry* elem;
-        mode_T mode;
-        cache_object(const modeT& mode);
+        event_supplier();
+
+        virtual ~event_supplier();
+
+        virtual void supply_events(
+                fd_set* read_fdset, 
+                fd_set* write_fdset, 
+                fd_set* exc_fdset, 
+                int* max
+        ) const ;
+
+        virtual long get_timeout() const;
+
+        virtual void dispatch_events() const;
 };
-*/
 
 class create_webserver;
 
@@ -284,6 +289,10 @@ class webserver
 
         void set_unescaper(unescaper* unescaper_pointer, bool delete_old = false);
 
+        void register_event_supplier(const std::string& id, event_supplier* ev_supplier);
+
+        void run();
+
         /**
          * Method used to kill the webserver waiting for it to terminate
         **/
@@ -322,7 +331,7 @@ class webserver
         bool post_process_enabled;
         bool single_resource;
         pthread_mutex_t mutexwait;
-        pthread_mutex_t runguard;
+        pthread_rwlock_t runguard;
         pthread_mutex_t cleanmux;
         pthread_cond_t mutexcond;
         pthread_cond_t cleancond;
@@ -334,6 +343,7 @@ class webserver
         std::map<details::http_endpoint, http_resource* > registered_resources;
 
         std::map<std::string, cache_entry*> response_cache;
+        int next_to_choose;
         pthread_rwlock_t cache_guard;
 #ifdef USE_CPP_ZEROX
         std::unordered_set<ip_representation> bans;
@@ -343,7 +353,6 @@ class webserver
         std::set<ip_representation> allowances;
 #endif
 
-//        std::map<std::string, std::string> q_messages;
         std::map<int, std::deque<std::string> > q_messages;
         std::map<std::string, std::set<int> > q_waitings;
         std::map<int, std::pair<pthread_mutex_t, pthread_cond_t> > q_blocks;
@@ -354,6 +363,8 @@ class webserver
 
         std::vector<details::daemon_item*> daemons;
         std::vector<pthread_t> threads;
+
+        std::map<std::string, event_supplier*> event_suppliers;
 
         void init(http_resource* single_resource);
         static void* select(void* self);

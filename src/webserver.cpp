@@ -29,6 +29,7 @@
 #include <netinet/ip.h>
 #include <signal.h>
 #include <fcntl.h>
+#include <algorithm>
 
 #ifdef WITH_PYTHON
 #include <Python.h>
@@ -345,6 +346,20 @@ unescaper::~unescaper() {}
 
 void unescaper::unescape(char* s) const {}
 
+//EVENT SUPPLIER
+event_supplier::event_supplier() {}
+
+event_supplier::~event_supplier() {}
+
+void event_supplier::supply_events(fd_set* read_fdset, fd_set* write_fdset, fd_set* exc_fdset, int* max) const {}
+
+long event_supplier::get_timeout() const
+{
+    return 0L;
+} 
+
+void event_supplier::dispatch_events() const {} 
+
 //WEBSERVER CREATOR
 create_webserver& create_webserver::https_mem_key(const std::string& https_mem_key)
 {
@@ -444,7 +459,8 @@ webserver::webserver
     not_found_resource(not_found_resource),
     method_not_allowed_resource(method_not_allowed_resource),
     method_not_acceptable_resource(method_not_acceptable_resource),
-    internal_error_resource(internal_error_resource)
+    internal_error_resource(internal_error_resource),
+    next_to_choose(0)
 {
     init(single_resource);
 }
@@ -484,7 +500,8 @@ webserver::webserver(const create_webserver& params):
     not_found_resource(params._not_found_resource),
     method_not_allowed_resource(params._method_not_allowed_resource),
     method_not_acceptable_resource(params._method_not_acceptable_resource),
-    internal_error_resource(params._internal_error_resource)
+    internal_error_resource(params._internal_error_resource),
+    next_to_choose(0)
 {
     init(params._single_resource);
 }
@@ -526,6 +543,7 @@ webserver& webserver::operator=(const webserver& b)
     method_not_allowed_resource = b.method_not_allowed_resource;
     method_not_acceptable_resource = b.method_not_acceptable_resource;
     internal_error_resource = b.internal_error_resource;
+    next_to_choose = b.next_to_choose;
     return *this;
 }
 
@@ -540,7 +558,7 @@ void webserver::init(http_resource* single_resource)
         this->single_resource = false;
     ignore_sigpipe();
     pthread_mutex_init(&mutexwait, NULL);
-    pthread_mutex_init(&runguard, NULL);
+    pthread_rwlock_init(&runguard, NULL);
     pthread_cond_init(&mutexcond, NULL);
     pthread_rwlock_init(&cache_guard, NULL);
 #ifdef USE_COMET
@@ -554,7 +572,7 @@ webserver::~webserver()
 {
     this->stop();
     pthread_mutex_destroy(&mutexwait);
-    pthread_mutex_destroy(&runguard);
+    pthread_rwlock_destroy(&runguard);
     pthread_rwlock_destroy(&cache_guard);
     pthread_cond_destroy(&mutexcond);
 #ifdef USE_COMET
@@ -646,19 +664,34 @@ void* webserver::select(void* self)
         FD_ZERO (&es);
         if (MHD_YES != MHD_get_fdset (di->daemon, &rs, &ws, &es, &max))
             break; /* fatal internal error */
+
+        unsigned MHD_LONG_LONG timeout;
+
+        if (!(MHD_get_timeout (di->daemon, &timeout) == MHD_YES))
+        {
+            //abort execution
+        }
+
+        {
+            std::map<std::string, event_supplier*>::const_iterator it;
+            pthread_rwlock_rdlock(&di->ws->runguard);
+            for(it = di->ws->event_suppliers.begin(); it != di->ws->event_suppliers.end(); ++it)
+            {
+                int local_max;
+                (*it).second->supply_events(&rs, &ws, &es, &local_max);
+
+                if(local_max > max)
+                    max = local_max;
+
+                unsigned long t = (*it).second->get_timeout();
+                if(t < timeout)
+                    timeout = t;
+            }
+            pthread_rwlock_unlock(&di->ws->runguard);
+        }
+#ifdef USE_COMET
         di->ws->clean_connections();
         //TODO: clean connection structures also when working with threads
-
-        unsigned MHD_LONG_LONG mhd_timeout;
-
-        if (MHD_get_timeout (di->daemon, &mhd_timeout) == MHD_YES)
-        {
-            timeout_value.tv_sec = mhd_timeout / 1000;
-            timeout_value.tv_usec = (mhd_timeout - (timeout_value.tv_sec * 1000)) * 1000;
-        }
-        int min_wait = timeout_value.tv_sec + (timeout_value.tv_usec / 10E6);
-
-#ifdef USE_COMET
         pthread_rwlock_wrlock(&_di->ws>comet_guard);
         for(std::map<int, long>::iterator it = di->ws->q_keepalives.begin(); it != di->ws->q_keepalives.end(); ++it)
         {
@@ -669,9 +702,9 @@ void* webserver::select(void* self)
                 di->ws->send_message_to_consumer((*it).first, di->ws->q_keepalives_mem[(*it).first].second);
             else
             {
-                int to_wait_time = di->ws->q_keepalives_mem[(*it).first].first - waited_time;
-                if(to_wait_time < min_wait)
-                    min_wait = to_wait_time;
+                unsigned long to_wait_time = di->ws->q_keepalives_mem[(*it).first].first - waited_time;
+                if(to_wait_time < (timeout / 1000))
+                    timeout = to_wait_time * 1000;
             }
         }
         pthread_rwlock_unlock(&di->ws->comet_guard);
@@ -684,13 +717,31 @@ void* webserver::select(void* self)
         pthread_rwlock_unlock(&di->ws->comet_guard);
 #endif //USE_COMET
 
-        timeout_value.tv_sec = min_wait;
-        timeout_value.tv_usec = 0;
+        timeout_value.tv_sec = timeout / 1000;
+        timeout_value.tv_usec = (timeout - (timeout_value.tv_sec * 1000)) * 1000;
 
         ::select (max + 1, &rs, &ws, &es, &timeout_value);
         MHD_run (di->daemon);
+        {
+            std::map<std::string, event_supplier*>::const_iterator it;
+            pthread_rwlock_rdlock(&di->ws->runguard);
+            for(it = di->ws->event_suppliers.begin(); it != di->ws->event_suppliers.end(); ++it)
+            {
+                (*it).second->dispatch_events();
+            }
+        }
     }
     return 0x0;
+}
+
+void webserver::run()
+{
+    if(start_method == http_utils::INTERNAL_REMANAGED)
+    {
+        MHD_run(daemons[next_to_choose]->daemon);
+        next_to_choose++;
+        next_to_choose %= max_threads;
+    }
 }
 
 int create_socket (int domain, int type, int protocol)
@@ -1881,6 +1932,13 @@ void webserver::lock_cache_entry(cache_entry* ce)
 void webserver::get_response(cache_entry* ce, http_response** res)
 {
     *res = ce->response.ptr();
+}
+
+void webserver::register_event_supplier(const std::string& id, event_supplier* ev)
+{
+    pthread_rwlock_wrlock(&runguard);
+    event_suppliers[id] = ev;
+    pthread_rwlock_unlock(&runguard);
 }
 
 };

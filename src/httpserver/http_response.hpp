@@ -46,6 +46,7 @@ namespace http
 namespace details
 {
     struct http_response_ptr;
+    ssize_t cb(void*, uint64_t, char*, size_t);
 };
 
 using namespace http;
@@ -100,7 +101,8 @@ class http_response
             SWITCH_PROTOCOL,
             LONG_POLLING_RECEIVE,
             LONG_POLLING_SEND,
-            CACHED_CONTENT
+            CACHED_CONTENT,
+            DEFERRED
         };
 
         /**
@@ -439,6 +441,7 @@ class http_response
         friend struct details::http_response_ptr;
         friend void clone_response(const http_response& hr, http_response** dhr);
         friend class cache_response;
+        friend class deferred_response;
 };
 
 class http_string_response : public http_response
@@ -640,6 +643,26 @@ class cache_response : public http_response
         virtual void get_raw_response(MHD_Response** res, webserver* ws = 0x0);
         virtual void decorate_response(MHD_Response* res);
         friend class webserver;
+};
+
+class deferred_response : public http_response
+{
+    public:
+        deferred_response
+        (
+        ) : http_response(http_response::DEFERRED), completed(false)
+        {
+        }
+        deferred_response(const http_response& b) : http_response(b) { }
+        ~deferred_response() { }
+        virtual ssize_t cycle_callback(const std::string& buf);
+    protected:
+        virtual void get_raw_response(MHD_Response** res, webserver* ws = 0x0);
+        virtual void decorate_response(MHD_Response* res);
+    private:
+        bool completed;
+        friend class webserver;
+        friend ssize_t details::cb(void*, uint64_t, char*, size_t); 
 };
 
 void clone_response(http_response* hr, http_response** dhr);

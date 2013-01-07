@@ -18,12 +18,12 @@
 
 */
 #include <cstdio>
+#include <functional>
+#include <iostream>
+#include <sstream>
 #include "http_utils.hpp"
 #include "webserver.hpp"
 #include "http_response.hpp"
-
-#include <iostream>
-#include <sstream>
 
 using namespace std;
 
@@ -111,6 +111,11 @@ shoutCAST_response::shoutCAST_response
 {
 }
 
+ssize_t deferred_response::cycle_callback(const std::string& buf)
+{
+    return -1;
+}
+
 void http_response::get_raw_response(MHD_Response** response, webserver* ws)
 {
     size_t size = &(*content.end()) - &(*content.begin());
@@ -169,6 +174,33 @@ void cache_response::get_raw_response(MHD_Response** response, webserver* ws)
     r->decorate_response(*response); //It is done here to avoid to search two times for the same element
     
     //TODO: Check if element is not in cache and throw exception
+}
+
+namespace details
+{
+
+ssize_t cb(void* cls, uint64_t pos, char* buf, size_t max)
+{
+    int val = static_cast<deferred_response*>(cls)->cycle_callback(buf);
+    if(val == -1)
+        static_cast<deferred_response*>(cls)->completed = true;
+    return val;
+}
+
+}
+
+void deferred_response::get_raw_response(MHD_Response** response, webserver* ws)
+{
+    if(!completed)
+        *response = MHD_create_response_from_callback(MHD_SIZE_UNKNOWN, 1024, &details::cb, this, NULL);
+    else
+        static_cast<http_response*>(this)->get_raw_response(response, ws);
+}
+
+void deferred_response::decorate_response(MHD_Response* response)
+{
+    if(completed)
+        static_cast<http_response*>(this)->decorate_response(response);
 }
 
 void long_polling_receive_response::get_raw_response(MHD_Response** response, webserver* ws)
@@ -240,6 +272,9 @@ void clone_response(const http_response& hr, http_response** dhrs)
             return;
         case(http_response::CACHED_CONTENT):
             *dhrs = new cache_response(hr);
+            return;
+        case(http_response::DEFERRED):
+            *dhrs = new deferred_response(hr);
             return;
     }
 }

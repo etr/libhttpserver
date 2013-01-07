@@ -59,8 +59,11 @@ http_response Test::render_POST(const http_request& r)
         cout << vv[i] << endl;
     }
 	return http_string_response("OK",200);*/
-	http_string_response s("OK",200);
+	http_string_response s("OK",100);
     s.set_header(http_utils::http_header_location, "B");
+    s.set_cookie("Ciccio", "Puppo");
+    s.set_cookie("Peppe", "Puppo");
+    cout << s.get_cookie("Ciccio") << endl;
     return s;
  //   return long_polling_send_response("<script type=\"text/javascript\">alert(\"ciao\")</script>\n", "prova");
 }
@@ -68,6 +71,12 @@ http_response Test::render_POST(const http_request& r)
 http_response Test2::render_GET(const http_request& r)
 {
 	cout << "D2" << endl;
+    typedef std::map<std::string, std::string,
+            httpserver::http::header_comparator> c_type;
+    c_type c;
+    r.get_cookies(c);
+    for(c_type::const_iterator it = c.begin(); it != c.end(); ++it)
+        cout << (*it).first << " -> " << (*it).second << endl;
 	return http_string_response("{\" var1 \" : \" "+r.get_arg("var1")+" \", \" var2 \" : \" "+r.get_arg("var2")+" \", \" var3 \" : \" "+r.get_arg("var3")+" \"}", 200);
 }
 
@@ -79,7 +88,7 @@ http_response Test::render_PUT(const http_request& r)
 int main()
 {
 //    signal(SIGINT, &signal_callback_handler);
-	webserver ws = create_webserver(8080);
+	webserver ws = create_webserver(8080).start_method(http_utils::INTERNAL_REMANAGED).max_threads(5);
     ws_ptr = &ws;
 	Test dt = Test();
 	Test2 dt2 = Test2();
