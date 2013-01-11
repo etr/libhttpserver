@@ -59,29 +59,6 @@ class bad_caching_attempt: public std::exception
     }
 };
 
-
-class closure_action
-{
-    public:
-        closure_action(bool deletable = true):
-            deletable(deletable)
-        {
-        }
-        closure_action(const closure_action& b):
-            deletable(b.deletable)
-        {
-        }
-        virtual ~closure_action()
-        {
-        }
-        virtual void do_action()
-        {
-        }
-        bool deletable;
-    private:
-        friend class http_response;
-};
-
 /**
  * Class representing an abstraction for an Http Response. It is used from classes using these apis to send information through http protocol.
 **/
@@ -141,6 +118,7 @@ class http_response
             keepalive_msg(keepalive_msg),
             send_topic(send_topic),
             ca(0x0),
+            closure_data(0x0),
             ce(ce)
         {
             set_header(http_utils::http_header_content_type, content_type);
@@ -167,6 +145,7 @@ class http_response
             keepalive_msg(b.keepalive_msg),
             send_topic(b.send_topic),
             ca(0x0),
+            closure_data(0x0),
             ce(b.ce)
         {
         }
@@ -188,22 +167,13 @@ class http_response
             keepalive_secs = b.keepalive_secs;
             keepalive_msg = b.keepalive_msg;
             send_topic = b.send_topic;
-            if(ca != 0x0 && ca->deletable)
-            {
-                delete ca;
-                ca = 0x0;
-            }
             ca = b.ca;
+            closure_data = b.closure_data;
             ce = b.ce;
             return *this;
         }
         virtual ~http_response()
         {
-            if(ca != 0x0 && ca->deletable)
-            {
-                delete ca;
-                ca = 0x0;
-            }
         }
         /**
          * Method used to get the content from the response.
@@ -408,9 +378,10 @@ class http_response
                 topics.push_back(*it);
             return topics.size();
         }
-        void set_closure_action(closure_action* ca)
+        void set_closure_action(void(*ca)(void*), void* closure_data)
         {
             this->ca = ca;
+            this->closure_data = closure_data;
         }
     protected:
         response_type_T response_type;
@@ -430,7 +401,8 @@ class http_response
         std::string keepalive_msg;
         std::string send_topic;
         struct MHD_Connection* underlying_connection;
-        closure_action* ca;
+        void(*ca)(void*);
+        void* closure_data;
         cache_entry* ce;
 
         virtual void get_raw_response(MHD_Response** res, webserver* ws = 0x0);

@@ -595,7 +595,7 @@ void webserver::request_completed (void *cls, struct MHD_Connection *connection,
     if (0x0 == mr) 
     {
         if(mr->dhrs.res != 0x0 && mr->dhrs->ca != 0x0)
-            mr->dhrs->ca->do_action();
+            mr->dhrs->ca(mr->dhrs->closure_data);
         delete mr;
     }
 }
