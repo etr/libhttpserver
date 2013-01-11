@@ -13,14 +13,13 @@ size_t writefunc(void *ptr, size_t size, size_t nmemb, std::string *s)
     return size*nmemb;
 }
 
-size_t headerfunc( void *ptr, size_t size, size_t nmemb, map<string, string>* ss)
+size_t headerfunc(void *ptr, size_t size, size_t nmemb, map<string, string>* ss)
 {
     string s_ptr((char*)ptr, size*nmemb);
     size_t pos = s_ptr.find(":");
     if(pos != string::npos)
-    {
-        (*ss)[s_ptr.substr(0, pos)] = s_ptr.substr(pos + 2, s_ptr.size() - pos - 4);
-    }
+        (*ss)[s_ptr.substr(0, pos)] = 
+            s_ptr.substr(pos + 2, s_ptr.size() - pos - 4);
     return size*nmemb;
 }
 
@@ -30,6 +29,12 @@ class simple_resource : public http_resource
         virtual void render_GET(const http_request& req, http_response** res)
         {
             *res = new http_string_response("OK", 200, "text/plain");
+        }
+        virtual void render_POST(const http_request& req, http_response** res)
+        {
+            *res = new http_string_response(
+                    req.get_arg("arg1")+req.get_arg("arg2"), 200, "text/plain"
+            );
         }
 };
 
@@ -179,6 +184,23 @@ LT_BEGIN_AUTO_TEST(basic_suite, complete)
     LT_ASSERT_EQ(res, 0);
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(complete)
+
+LT_BEGIN_AUTO_TEST(basic_suite, postprocessor)
+    simple_resource* resource = new simple_resource();
+    ws->register_resource("base", resource);
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, "arg1=lib&arg2=httpserver");
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "libhttpserver");
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(postprocessor)
 
 
 LT_BEGIN_AUTO_TEST_ENV()
