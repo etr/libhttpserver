@@ -96,29 +96,58 @@ class logging_delegate
         virtual void log_error(const std::string& s) const;
 };
 
+template <typename CHILD>
 class event_supplier
 {
     public:
-        event_supplier();
+        event_supplier()
+        {
+        }
 
-        virtual ~event_supplier();
+        ~event_supplier()
+        {
+        }
 
-        virtual void supply_events(
+        void supply_events(
                 fd_set* read_fdset, 
                 fd_set* write_fdset, 
                 fd_set* exc_fdset, 
                 int* max
-        ) const ;
+        ) const
+        {
+            static_cast<CHILD*>(this)->supply_events(
+                    read_fdset, write_fdset, exc_fdset, max
+            );
+        }
 
-        virtual long get_timeout() const;
+        long get_timeout() const
+        {
+            return static_cast<CHILD*>(this)->get_timeout();
+        }
 
-        virtual void dispatch_events() const;
+        void dispatch_events() const
+        {
+            static_cast<CHILD*>(this)->dispatch_events();
+        }
 };
 
 class create_webserver;
 
 typedef bool(*validator_ptr)(const std::string&);
 typedef void(*unescaper_ptr)(char*);
+
+typedef void(*supply_events_ptr)(
+                fd_set*, 
+                fd_set*, 
+                fd_set*, 
+                int*
+        );
+
+typedef long(*get_timeout_ptr)();
+
+typedef void(*dispatch_events_ptr)();
+
+struct event_tuple;
 
 /**
  * Class representing the webserver. Main class of the apis.
@@ -261,7 +290,9 @@ class webserver
             this->unescaper = unescaper;
         }
 
-        void register_event_supplier(const std::string& id, event_supplier* ev_supplier);
+        template<typename T>
+        void register_event_supplier(const std::string& id, event_supplier<T>* ev_supplier);
+        void remove_event_supplier(const std::string& id);
 
         void run();
 
@@ -336,7 +367,7 @@ class webserver
         std::vector<details::daemon_item*> daemons;
         std::vector<pthread_t> threads;
 
-        std::map<std::string, event_supplier*> event_suppliers;
+        std::map<std::string, event_tuple*> event_suppliers;
 
         void init(http_resource* single_resource);
         static void* select(void* self);
