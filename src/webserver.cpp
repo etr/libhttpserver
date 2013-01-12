@@ -294,7 +294,6 @@ void access_log(webserver*, string);
 size_t unescaper_func(void*, struct MHD_Connection*, char*);
 size_t internal_unescaper(void*, char*);
 
-
 struct compare_value
 {
     bool operator() (const std::pair<int, int>& left, const std::pair<int, int>& right) const
@@ -331,20 +330,6 @@ logging_delegate::~logging_delegate() {}
 void logging_delegate::log_access(const string& s) const {}
 
 void logging_delegate::log_error(const string& s) const {}
-
-//REQUEST VALIDATOR
-request_validator::request_validator() {}
-
-request_validator::~request_validator() {}
-
-bool request_validator::validate(const string& address) const { return true; }
-
-//UNESCAPER
-unescaper::unescaper() {}
-
-unescaper::~unescaper() {}
-
-void unescaper::unescape(char* s) const {}
 
 //EVENT SUPPLIER
 event_supplier::event_supplier() {}
@@ -396,8 +381,8 @@ webserver::webserver
     int connection_timeout,
     int per_IP_connection_limit,
     logging_delegate* log_delegate,
-    request_validator* validator,
-    unescaper* unescaper_pointer,
+    validator_ptr validator,
+    unescaper_ptr unescaper,
     const struct sockaddr* bind_address,
     int bind_socket,
     int max_thread_stack_size,
@@ -434,7 +419,7 @@ webserver::webserver
     per_IP_connection_limit(per_IP_connection_limit),
     log_delegate(log_delegate),
     validator(validator),
-    unescaper_pointer(unescaper_pointer),
+    unescaper(unescaper),
     bind_address(bind_address),
     bind_socket(bind_socket),
     max_thread_stack_size(max_thread_stack_size),
@@ -475,7 +460,7 @@ webserver::webserver(const create_webserver& params):
     per_IP_connection_limit(params._per_IP_connection_limit),
     log_delegate(params._log_delegate),
     validator(params._validator),
-    unescaper_pointer(params._unescaper_pointer),
+    unescaper(params._unescaper),
     bind_address(params._bind_address),
     bind_socket(params._bind_socket),
     max_thread_stack_size(params._max_thread_stack_size),
@@ -517,7 +502,7 @@ webserver& webserver::operator=(const webserver& b)
     per_IP_connection_limit = b.per_IP_connection_limit;
     log_delegate = b.log_delegate;
     validator = b.validator;
-    unescaper_pointer = b.unescaper_pointer;
+    unescaper = b.unescaper;
     bind_address = b.bind_address;
     bind_socket = b.bind_socket;
     max_thread_stack_size = b.max_thread_stack_size;
@@ -1165,9 +1150,9 @@ size_t unescaper_func(void * cls, struct MHD_Connection *c, char *s)
 size_t internal_unescaper(void* cls, char* s)
 {
     webserver* dws = static_cast<webserver*>(cls);
-    if(dws->unescaper_pointer != 0x0)
+    if(dws->unescaper != 0x0)
     {
-        dws->unescaper_pointer->unescape(s);
+        dws->unescaper(s);
         return strlen(s);
     }
     else
@@ -1199,30 +1184,6 @@ void webserver::set_logging_delegate(logging_delegate* log_delegate, bool delete
     if(delete_old && this->log_delegate != 0x0)
         delete this->log_delegate;
     this->log_delegate = log_delegate;
-}
-
-const request_validator* webserver::get_request_validator() const
-{
-    return this->validator;
-}
-
-void webserver::set_request_validator(request_validator* validator, bool delete_old)
-{
-    if(delete_old && this->validator != 0x0)
-        delete this->validator;
-    this->validator = validator;
-}
-
-const unescaper* webserver::get_unescaper() const
-{
-    return this->unescaper_pointer;
-}
-
-void webserver::set_unescaper(unescaper* u, bool delete_old)
-{
-    if(delete_old && this->unescaper_pointer != 0x0)
-        delete this->unescaper_pointer;
-    this->unescaper_pointer = unescaper_pointer;
 }
 
 void webserver::upgrade_handler (void *cls, struct MHD_Connection* connection,

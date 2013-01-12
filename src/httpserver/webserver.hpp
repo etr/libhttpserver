@@ -96,49 +96,6 @@ class logging_delegate
         virtual void log_error(const std::string& s) const;
 };
 
-/**
- * Delegate class used to validate requests before serve it
-**/
-class request_validator
-{
-    public:
-        /**
-         * Delegate constructor
-        **/
-        request_validator();
-        /**
-         * Destructor of the class
-        **/
-        virtual ~request_validator();
-        /**
-         * Method used to validate a request. The validation method is entirely based upon the requestor address.
-         * @param address The requestor address
-         * @return true if the request is considered to be valid, false otherwise.
-        **/
-        virtual bool validate(const std::string& address) const;
-};
-
-/**
- * Delegate class used to unescape requests uri before serving it.
-**/
-class unescaper
-{
-    public:
-        /**
-         * Delegate constructor
-        **/
-        unescaper();
-        /**
-         * Destructor of the class
-        **/
-        virtual ~unescaper();
-        /**
-         * Method used to unescape the uri.
-         * @param s pointer to the uri string representation to unescape.
-        **/
-        virtual void unescape(char* s) const;
-};
-
 class event_supplier
 {
     public:
@@ -159,6 +116,9 @@ class event_supplier
 };
 
 class create_webserver;
+
+typedef bool(*validator_ptr)(const std::string&);
+typedef void(*unescaper_ptr)(char*);
 
 /**
  * Class representing the webserver. Main class of the apis.
@@ -196,8 +156,8 @@ class webserver
             int connection_timeout = DEFAULT_WS_TIMEOUT,
             int per_IP_connection_limit = 0,
             logging_delegate* log_delegate = 0x0,
-            request_validator* validator = 0x0,
-            unescaper* unescaper_pointer = 0x0,
+            validator_ptr validator = 0x0,
+            unescaper_ptr unescaper = 0x0,
             const struct sockaddr* bind_address = 0x0,
             int bind_socket = 0,
             int max_thread_stack_size = 0,
@@ -281,13 +241,25 @@ class webserver
         
         void set_logging_delegate(logging_delegate* log_delegate, bool delete_old = false);
 
-        const request_validator* get_request_validator() const;
+        const validator_ptr get_request_validator() const
+        {
+            return this->validator;
+        }
 
-        void set_request_validator(request_validator* validator, bool delete_old = false);
+        void set_request_validator(validator_ptr validator)
+        {
+            this->validator = validator;
+        }
 
-        const unescaper* get_unescaper() const;
+        const unescaper_ptr get_unescaper() const
+        {
+            return this->unescaper;
+        }
 
-        void set_unescaper(unescaper* unescaper_pointer, bool delete_old = false);
+        void set_unescaper(unescaper_ptr unescaper)
+        {
+            this->unescaper = unescaper;
+        }
 
         void register_event_supplier(const std::string& id, event_supplier* ev_supplier);
 
@@ -306,8 +278,8 @@ class webserver
         int connection_timeout;
         int per_IP_connection_limit;
         logging_delegate* log_delegate;
-        request_validator* validator;
-        unescaper* unescaper_pointer;
+        validator_ptr validator;
+        unescaper_ptr unescaper;
         const struct sockaddr* bind_address;
         int bind_socket;
         int max_thread_stack_size;
@@ -470,7 +442,7 @@ class create_webserver
             _per_IP_connection_limit(0),
             _log_delegate(0x0),
             _validator(0x0),
-            _unescaper_pointer(0x0),
+            _unescaper(0x0),
             _bind_address(0x0),
             _bind_socket(0),
             _max_thread_stack_size(0),
@@ -509,7 +481,7 @@ class create_webserver
             _per_IP_connection_limit(0),
             _log_delegate(0x0),
             _validator(0x0),
-            _unescaper_pointer(0x0),
+            _unescaper(0x0),
             _bind_address(0x0),
             _bind_socket(0),
             _max_thread_stack_size(0),
@@ -546,8 +518,8 @@ class create_webserver
         create_webserver& connection_timeout(int connection_timeout) { _connection_timeout = connection_timeout; return *this; }
         create_webserver& per_IP_connection_limit(int per_IP_connection_limit) { _per_IP_connection_limit = per_IP_connection_limit; return *this; }
         create_webserver& log_delegate(logging_delegate* log_delegate) { _log_delegate = log_delegate; return *this; }
-        create_webserver& validator(request_validator* validator) { _validator = validator; return *this; }
-        create_webserver& unescaper_pointer(unescaper* unescaper_pointer) { _unescaper_pointer = unescaper_pointer; return *this; }
+        create_webserver& validator(validator_ptr validator) { _validator = validator; return *this; }
+        create_webserver& unescaper(unescaper_ptr unescaper) { _unescaper = unescaper; return *this; }
         create_webserver& bind_address(const struct sockaddr* bind_address) { _bind_address = bind_address; return *this; }
         create_webserver& bind_socket(int bind_socket) { _bind_socket = bind_socket; return *this; }
         create_webserver& max_thread_stack_size(int max_thread_stack_size) { _max_thread_stack_size = max_thread_stack_size; return *this; }
@@ -594,8 +566,8 @@ class create_webserver
         int _connection_timeout;
         int _per_IP_connection_limit;
         logging_delegate* _log_delegate;
-        request_validator* _validator;
-        unescaper* _unescaper_pointer;
+        validator_ptr _validator;
+        unescaper_ptr _unescaper;
         const struct sockaddr* _bind_address;
         int _bind_socket;
         int _max_thread_stack_size;
