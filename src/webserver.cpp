@@ -333,15 +333,6 @@ static void ignore_sigpipe ()
         fprintf (stderr, gettext("Failed to install SIGPIPE handler: %s\n"), strerror (errno));
 }
 
-//LOGGING DELEGATE
-logging_delegate::logging_delegate() {}
-
-logging_delegate::~logging_delegate() {}
-
-void logging_delegate::log_access(const string& s) const {}
-
-void logging_delegate::log_error(const string& s) const {}
-
 //WEBSERVER CREATOR
 create_webserver& create_webserver::https_mem_key(const std::string& https_mem_key)
 {
@@ -377,7 +368,8 @@ webserver::webserver
     int memory_limit,
     int connection_timeout,
     int per_IP_connection_limit,
-    logging_delegate* log_delegate,
+    log_access_ptr log_access,
+    log_error_ptr log_error,
     validator_ptr validator,
     unescaper_ptr unescaper,
     const struct sockaddr* bind_address,
@@ -414,7 +406,8 @@ webserver::webserver
     memory_limit(memory_limit),
     connection_timeout(connection_timeout),
     per_IP_connection_limit(per_IP_connection_limit),
-    log_delegate(log_delegate),
+    log_access(log_access),
+    log_error(log_error),
     validator(validator),
     unescaper(unescaper),
     bind_address(bind_address),
@@ -455,7 +448,8 @@ webserver::webserver(const create_webserver& params):
     memory_limit(params._memory_limit),
     connection_timeout(params._connection_timeout),
     per_IP_connection_limit(params._per_IP_connection_limit),
-    log_delegate(params._log_delegate),
+    log_access(params._log_access),
+    log_error(params._log_error),
     validator(params._validator),
     unescaper(params._unescaper),
     bind_address(params._bind_address),
@@ -497,7 +491,8 @@ webserver& webserver::operator=(const webserver& b)
     memory_limit = b.memory_limit;
     connection_timeout = b.connection_timeout;
     per_IP_connection_limit = b.per_IP_connection_limit;
-    log_delegate = b.log_delegate;
+    log_access = b.log_access;
+    log_error = b.log_error;
     validator = b.validator;
     unescaper = b.unescaper;
     bind_address = b.bind_address;
@@ -1109,18 +1104,14 @@ void* uri_log(void* cls, const char* uri)
 void error_log(void* cls, const char* fmt, va_list ap)
 {
     webserver* dws = static_cast<webserver*>(cls);
-    if(dws->log_delegate != 0x0)
-    {
-        dws->log_delegate->log_error(fmt);
-    }
+    if(dws->log_error != 0x0)
+        dws->log_error(fmt);
 }
 
 void access_log(webserver* dws, string uri)
 {
-    if(dws->log_delegate != 0x0)
-    {
-        dws->log_delegate->log_access(uri);
-    }
+    if(dws->log_access != 0x0)
+        dws->log_access(uri);
 }
 
 size_t unescaper_func(void * cls, struct MHD_Connection *c, char *s)
@@ -1157,18 +1148,6 @@ int webserver::post_iterator (void *cls, enum MHD_ValueKind kind,
     struct details::modded_request* mr = (struct details::modded_request*) cls;
     mr->dhr->set_arg(key, data, size);
     return MHD_YES;
-}
-
-const logging_delegate* webserver::get_logging_delegate() const
-{
-    return this->log_delegate;
-}
-
-void webserver::set_logging_delegate(logging_delegate* log_delegate, bool delete_old)
-{
-    if(delete_old && this->log_delegate != 0x0)
-        delete this->log_delegate;
-    this->log_delegate = log_delegate;
 }
 
 void webserver::upgrade_handler (void *cls, struct MHD_Connection* connection,

@@ -70,32 +70,6 @@ namespace http {
 struct ip_representation;
 };
 
-/**
- * Delegate class used to wrap callbacks dedicated to logging.
-**/
-class logging_delegate
-{
-    public:
-        /**
-         * Delegate constructor.
-        **/
-        logging_delegate();
-        /**
-         * Destructor of the class
-        **/
-        virtual ~logging_delegate();
-        /**
-         * Method used to log access to the webserver.
-         * @param s string to log
-        **/
-        virtual void log_access(const std::string& s) const;
-        /**
-         * Method used to log errors on the webserver.
-         * @param s string to log
-        **/
-        virtual void log_error(const std::string& s) const;
-};
-
 template <typename CHILD>
 class event_supplier
 {
@@ -135,7 +109,6 @@ class create_webserver;
 
 typedef bool(*validator_ptr)(const std::string&);
 typedef void(*unescaper_ptr)(char*);
-
 typedef void(*supply_events_ptr)(
                 fd_set*, 
                 fd_set*, 
@@ -144,8 +117,9 @@ typedef void(*supply_events_ptr)(
         );
 
 typedef long(*get_timeout_ptr)();
-
 typedef void(*dispatch_events_ptr)();
+typedef void(*log_access_ptr)(const std::string&);
+typedef void(*log_error_ptr)(const std::string&);
 
 struct event_tuple;
 
@@ -184,7 +158,8 @@ class webserver
             int memory_limit = 0,
             int connection_timeout = DEFAULT_WS_TIMEOUT,
             int per_IP_connection_limit = 0,
-            logging_delegate* log_delegate = 0x0,
+            log_access_ptr log_access = 0x0,
+            log_error_ptr log_error = 0x0,
             validator_ptr validator = 0x0,
             unescaper_ptr unescaper = 0x0,
             const struct sockaddr* bind_address = 0x0,
@@ -266,9 +241,25 @@ class webserver
         bool is_valid(const std::string& key);
         void clean_cache();
 
-        const logging_delegate* get_logging_delegate() const;
+        const log_access_ptr get_access_logger() const
+        {
+            return this->log_access;
+        }
+
+        const log_error_ptr get_error_logger() const
+        {
+            return this->log_error;
+        }
         
-        void set_logging_delegate(logging_delegate* log_delegate, bool delete_old = false);
+        void set_access_logger(log_access_ptr log_access)
+        {
+            this->log_access = log_access;
+        }
+
+        void set_error_logger(log_error_ptr log_error)
+        {
+            this->log_error = log_error;
+        }
 
         const validator_ptr get_request_validator() const
         {
@@ -308,7 +299,8 @@ class webserver
         int memory_limit;
         int connection_timeout;
         int per_IP_connection_limit;
-        logging_delegate* log_delegate;
+        log_access_ptr log_access;
+        log_error_ptr log_error;
         validator_ptr validator;
         unescaper_ptr unescaper;
         const struct sockaddr* bind_address;
@@ -471,7 +463,8 @@ class create_webserver
             _memory_limit(0),
             _connection_timeout(DEFAULT_WS_TIMEOUT),
             _per_IP_connection_limit(0),
-            _log_delegate(0x0),
+            _log_access(0x0),
+            _log_error(0x0),
             _validator(0x0),
             _unescaper(0x0),
             _bind_address(0x0),
@@ -510,7 +503,8 @@ class create_webserver
             _memory_limit(0),
             _connection_timeout(DEFAULT_WS_TIMEOUT),
             _per_IP_connection_limit(0),
-            _log_delegate(0x0),
+            _log_access(0x0),
+            _log_error(0x0),
             _validator(0x0),
             _unescaper(0x0),
             _bind_address(0x0),
@@ -548,7 +542,8 @@ class create_webserver
         create_webserver& memory_limit(int memory_limit) { _memory_limit = memory_limit; return *this; }
         create_webserver& connection_timeout(int connection_timeout) { _connection_timeout = connection_timeout; return *this; }
         create_webserver& per_IP_connection_limit(int per_IP_connection_limit) { _per_IP_connection_limit = per_IP_connection_limit; return *this; }
-        create_webserver& log_delegate(logging_delegate* log_delegate) { _log_delegate = log_delegate; return *this; }
+        create_webserver& log_access(log_access_ptr log_access) { _log_access = log_access; return *this; }
+        create_webserver& log_error(log_error_ptr log_error) { _log_error = log_error; return *this; }
         create_webserver& validator(validator_ptr validator) { _validator = validator; return *this; }
         create_webserver& unescaper(unescaper_ptr unescaper) { _unescaper = unescaper; return *this; }
         create_webserver& bind_address(const struct sockaddr* bind_address) { _bind_address = bind_address; return *this; }
@@ -596,7 +591,8 @@ class create_webserver
         int _memory_limit;
         int _connection_timeout;
         int _per_IP_connection_limit;
-        logging_delegate* _log_delegate;
+        log_access_ptr _log_access;
+        log_error_ptr _log_error;
         validator_ptr _validator;
         unescaper_ptr _unescaper;
         const struct sockaddr* _bind_address;
