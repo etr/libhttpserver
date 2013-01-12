@@ -24,56 +24,15 @@ LIBTOOL_DEPS = @LIBTOOL_DEPS@
 AUTOMAKE_OPTIONS = foreign 1.4
 ACLOCAL_AMFLAGS = -I m4
 
-SUBDIRS = src test $(PYTHON_DIR) $(JAVA_DIR) $(PHP_DIR) $(LUA_DIR) $(PERL_DIR) $(RUBY_DIR) $(GUILE_DIR)
-DIST_SUBDIRS = src test $(PYTHON_DIST_DIR) $(JAVA_DIST_DIR) $(PHP_DIST_DIR) $(LUA_DIST_DIR) $(PERL_DIST_DIR) $(RUBY_DIST_DIR) $(GUILE_DIST_DIR)
-EXTRA_DIST = libhttpserver.pc.in debian/changelog.in debian/control.in debian/copyright.in debian/rules.in debian/libhttpserver-dev.install.in debian/libhttpserver.install.in redhat/libhttpserver.SPEC.in $(DX_CONFIG) $(PYTHON_EXTRA) $(PHP_EXTRA) $(PERL_EXTRA)
+SUBDIRS = src test
+DIST_SUBDIRS = src test
+EXTRA_DIST = libhttpserver.pc.in debian/changelog.in debian/control.in debian/copyright.in debian/rules.in debian/libhttpserver-dev.install.in debian/libhttpserver.install.in redhat/libhttpserver.SPEC.in $(DX_CONFIG)
 
-JAVACLEANFILES = $(top_srcdir)/src/java/*.java $(top_srcdir)/src/java/webserver_wrap.*
-PYTHONCLEANFILES = $(top_srcdir)/src/python/*.py $(top_srcdir)/src/python/webserver_wrap.*
-
-MOSTLYCLEANFILES = $(DX_CLEANFILES) redhat/SOURCES/* $(JAVACLEANFILES) $(PYTHONCLEANFILES)
+MOSTLYCLEANFILES = $(DX_CLEANFILES) redhat/SOURCES/*
 DISTCLEANFILES = redhat/SOURCES/* redhat/SPEC/* redhat/RPMS/* redhat/SRPMS/* redhat/* debian/* DIST_REVISION
 
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = libhttpserver.pc
-
-PYTHON_DIST_DIR = src/python
-if PYTHON
-PYTHON_DIR = $(PYTHON_DIST_DIR)
-PYTHON_EXTRA = src/python/libhttpserver_python.py
-endif
-
-JAVA_DIST_DIR = src/java
-if JAVA
-JAVA_DIR = $(JAVA_DIST_DIR)
-endif
-
-PHP_DIST_DIR = src/php
-if PHP
-PHP_DIR = $(PHP_DIST_DIR)
-PHP_EXTRA = src/php/libhttpserver_php.php
-endif
-
-LUA_DIST_DIR = src/lua
-if LUA
-LUA_DIR = $(LUA_DIST_DIR)
-endif
-
-PERL_DIST_DIR = src/perl
-if PERL
-PERL_DIR = $(PERL_DIST_DIR)
-PERL_EXTRA = src/php/libhttpserver_perl.pm
-endif
-
-RUBY_DIST_DIR = src/ruby
-if RUBY
-RUBY_DIR = $(RUBY_DIST_DIR)
-endif
-
-GUILE_DIST_DIR = src/guile
-if GUILE
-GUILE_DIR = $(GUILE_DIST_DIR)
-endif
 
 include $(top_srcdir)/aminclude.am
 

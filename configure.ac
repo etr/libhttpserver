@@ -88,54 +88,6 @@ AC_TYPE_UINT64_T
 
 LHT_LIBDEPS="-lmicrohttpd"
 
-AC_ARG_WITH([python],
-     [  --with-python    Compile PYTHON libraries],
-     [python=true; swig=true])
-
-AC_ARG_WITH([php],
-     [  --with-php    Compile PHP libraries],
-     [php=true; swig=true])
-
-AC_ARG_WITH([ruby],
-	 [  --with-ruby   Compile RUBY libraries],
-	 [ruby=true; swig=true])
-
-AC_ARG_WITH([perl],
-	 [  --with-perl   Compile PERL libraries],
-	 [perl=true; swig=true])
-
-AC_ARG_WITH([lua],
-	 [  --with-lua   Compile LUA libraries],
-	 [lua=true; swig=true])
-
-AC_ARG_WITH(lua-include-dir,
-            [  --with-lua-include-dir=DIR        where to look for lua headers],
-            [   
-                luahead=""
-                if test -d "$withval"
-                then
-                        luahead="$withval"
-                fi
-           ])
-
-AC_ARG_WITH([java],
-     [  --with-java    Compile JAVA libraries],
-     [java=true; swig=true])
-
-AC_ARG_WITH(java-dir,
-            [  --with-java-dir=DIR        where to look for jni headers and libs. We search for jni.h in 'java-dir/include/'],
-            [   
-                javaloc=""
-                if test -d "$withval"
-                then
-                        javaloc="$withval"
-                fi
-           ])
-
-AC_ARG_WITH([guile],
-     [  --with-guile    Compile GUILE libraries],
-     [guile=true; swig=true])
-
 AC_MSG_CHECKING([whether to build with debug information])
 AC_ARG_ENABLE([debug],
     [AS_HELP_STRING([--enable-debug],
@@ -172,18 +124,6 @@ else
     AC_DEFINE([NCPP0X],[],[standard Mode])
 fi
 
-AM_CONDITIONAL([PYTHON], [test x$python = xtrue])
-AM_CONDITIONAL([JAVA], [test x$java = xtrue])
-AM_CONDITIONAL([PHP], [test x$php = xtrue])
-AM_CONDITIONAL([PERL], [test x$perl = xtrue])
-AM_CONDITIONAL([LUA], [test x$lua = xtrue])
-AM_CONDITIONAL([RUBY], [test x$ruby = xtrue])
-AM_CONDITIONAL([GUILE], [test x$guile = xtrue])
-AM_CONDITIONAL([DOC], [test x$doc = xtrue])
-
-LANGUAGES="C++"
-OUTPUT_LANG=""
-
 DX_HTML_FEATURE(ON)
 DX_CHM_FEATURE(OFF)
 DX_CHI_FEATURE(OFF)
@@ -193,199 +133,6 @@ DX_XML_FEATURE(OFF)
 DX_PDF_FEATURE(OFF)
 DX_PS_FEATURE(OFF)
 DX_INIT_DOXYGEN([$PACKAGE_NAME],[doxyconfig.in])
-
-if test x$swig = xtrue; then
-	AC_CHECK_PROG([SWIG], [swig], ["yes"], ["no"])
-	if test "SWIG" = "no"
-	then
-		AC_MSG_ERROR(swig not found)
-	fi
-fi
-
-if test x$python = xtrue; then
-	AC_CHECK_PROG([PYTHONCONFIG],[python-config],["yes"], ["no"])
-	if test "$PYTHONCONFIG" = "no"
-	then
-		AC_MSG_ERROR(python-config not found)
-	fi
-    AC_CHECK_PROG([PYTHONINT],[python],["yes"], ["no"])
-	if test "$PYTHONINT" = "no"
-	then
-		AC_MSG_ERROR(python interpreter not found)
-	fi
-
-    AM_PATH_PYTHON()
-    if test -n "$PYTHON" ; then
-        AC_MSG_CHECKING([$PYTHON include dir])
-        if $PYTHON -c 'import distutils.sysconfig' 2>/dev/null ; then
-            PYTHON_INC=`$PYTHON -c 'import os,distutils.sysconfig;print(distutils.sysconfig.get_python_inc().replace(os.sep,"/"))'`
-        AC_SUBST(PYTHON_INC)
-        else
-            if test yes = "$with_python" ; then
-            AC_MSG_ERROR([Could not import Python module distutils.sysconfig - you probably need to install a python-dev or python-devel package])
-        else
-            AC_MSG_WARN([Couldn not import Python module distutils.sysconfig - you probably do not have a python-dev or python-devel package installed])
-        fi
-        fi
-        AC_MSG_RESULT([$PYTHON_INC])
-        AC_MSG_CHECKING([for directory to install python wrapper in])
-        if test -z "$PYTHON_LIB" ; then
-          PYTHON_LIB=`$PYTHON -c 'import os,distutils.sysconfig;print(distutils.sysconfig.get_python_lib(1).replace(os.sep,"/"))'`
-        fi
-        AC_MSG_RESULT([$PYTHON_LIB])
-        AC_ARG_VAR(PYTHON_LIB, [Directory to install python wrapper in])
-
-        AC_MSG_CHECKING([for python libraries to link against])
-        PYTHON_LIBS=`$PYTHON -c 'import os,sys;print("-L"+os.path.join(sys.path[[3]],"config")+" -lpython"+sys.version[[:3]])'`
-        AC_SUBST(PYTHON_LIBS)
-        AC_MSG_RESULT([$PYTHON_LIBS])
-    fi
-    PYINCLUDES="`python-config --includes`"
-    PYDEFINES="-DWITHPYTHON"
-	PYLDFLAGS="$LDFLAGS -L`python-config --prefix`/lib"
-	PYLIBS="$LIBS `python-config --libs`"
-    AC_SUBST(PYINCLUDES)
-    AC_SUBST(PYDEFINES)
-    AC_SUBST(PYLDFLAGS)
-    AC_SUBST(PYLIBS)
-	AC_SUBST_FILE([PYTHON_AUTOGENERATION])
-	LANGUAGES="$LANGUAGES Python"
-    OUTPUT_LANG="$OUTPUT_LANG src/python/Makefile"
-fi 
-PYTHON_AUTOGENERATION=$srcdir/src/autogen_helpers/support_command
-
-if test x$java = xtrue; then
-    JAVAINCLUDES=""
-    JAVALDFLAGS="$LDFLAGS"
-    JAVALIBS="$LIBS"
-	found=""
-	for loc in $javaloc /usr /usr/local
-	do
-
-		if test "x$found" = "x" 
-		then
-			AC_MSG_CHECKING([for jni in])
-			AC_MSG_RESULT($loc)
-			AC_CHECK_FILE("$loc/include/jni.h", 
-			      [JAVAINCLUDES="$CXXFLAGS -I$loc/include -I$loc/include/linux"; found=1],[])
-
-		fi  
-
-	done
-	if test "x$found" = "x" 
-	then
-		AC_MSG_ERROR([Unable to find jni headers. Please provide a --with-java-dir=<dir> location])
-	fi
-    AC_SUBST(JAVAINCLUDES)
-    AC_SUBST(JAVALDFLAGS)
-    AC_SUBST(JABALIBS)
-	AC_SUBST_FILE([JAVA_AUTOGENERATION])
-	LANGUAGES="$LANGUAGES Java"
-    OUTPUT_LANG="$OUTPUT_LANG src/java/Makefile"
-fi 
-JAVA_AUTOGENERATION=$srcdir/src/autogen_helpers/support_command
-
-if test x$php = xtrue; then
-	AC_CHECK_PROG([PHPCONFIG],[php-config],["yes"], ["no"])
-	if test "$PHPCONFIG" = "no"
-	then
-		AC_MSG_ERROR(php-config not found)
-	fi
-	PHPINCLUDES="`php-config --includes`"
-	PHPLDFLAGS="$LDFLAGS -L`php-config --prefix`/lib"
-    AC_SUBST(PHPINCLUDES)
-    AC_SUBST(PHPLDFLAGS)
-	AC_SUBST_FILE([PHP_AUTOGENERATION])
-	LANGUAGES="$LANGUAGES PHP"
-    OUTPUT_LANG="$OUTPUT_LANG src/php/Makefile"
-fi 
-PHP_AUTOGENERATION=$srcdir/src/autogen_helpers/support_command
-
-if test x$lua = xtrue; then
-    LUAINCLUDES=""
-	found=""
-	for loc in $luahead /usr/include /usr/local/include
-	do
-
-		if test "x$found" = "x" 
-		then
-			AC_MSG_CHECKING([for lua.h in])
-			AC_MSG_RESULT($loc)
-			AC_CHECK_FILE("$loc/lua.h",
-			      [LUAINCLUDES="$LUACXXFLAGS -I$loc";
-			       found=1],[])
-
-		fi  
-	done
-	if test "x$found" = "x" 
-	then
-		AC_MSG_ERROR([Unable to find lua headers. Please provide a --with-lua-include-dir=<dir> location])
-	fi
-    AC_SUBST(LUAINCLUDES)
-	AC_SUBST_FILE([LUA_AUTOGENERATION])
-	LANGUAGES="$LANGUAGES LUA"
-    OUTPUT_LANG="$OUTPUT_LANG src/lua/Makefile"
-fi
-LUA_AUTOGENERATION=$srcdir/src/autogen_helpers/support_command
-
-if test x$perl = xtrue; then
-	AC_CHECK_PROG([PERLINT],[perl],["yes"], ["no"])
-	if test "$PERLINT" = "no"
-	then
-		AC_MSG_ERROR(perl interpreter not found)
-	fi
-	PERLINCLUDES="$PERLINCLUDES -I`perl -e 'use Config; print $Config{archlib};'`/CORE"
-    PERLDEFINES="-D_GNU_SOURCE"
-    AC_SUBST(PERLINCLUDES)
-    AC_SUBST(PERLDEFINES)
-	AC_SUBST_FILE([PERL_AUTOGENERATION])
-	LANGUAGES="$LANGUAGES Perl"
-    OUTPUT_LANG="$OUTPUT_LANG src/perl/Makefile"
-fi
-PERL_AUTOGENERATION=$srcdir/src/autogen_helpers/support_command
-
-if test x$ruby = xtrue; then
-	AC_CHECK_PROG([RUBYINT],[ruby],["yes"], ["no"])
-    RUBYINCLUDES=""
-	if test "$RUBYINT" = "no"
-	then
-		AC_MSG_ERROR(ruby interpreter not found)
-	fi
-	found=""
-	for loc in `ruby -e 'puts $:.join(" ")'`
-	do
-
-		if test "x$found" = "x" 
-		then
-			AC_MSG_CHECKING([for ruby.h in])
-			AC_MSG_RESULT($loc)
-			AC_CHECK_FILE("$loc/ruby.h", [RUBYINCLUDES="$RUBYINCLUDES -I$loc";found=1],[])
-		fi  
-	done
-	if test "x$found" = "x" 
-	then
-		AC_MSG_ERROR([Unable to find ruby headers.])
-	fi
-    RUBYDEFINES="-fno-strict-aliasing -D_FILE_OFFSET_BITS=64"
-    AC_SUBST(RUBYINCLUDES)
-    AC_SUBST(RUBYDEFINES)
-	AC_SUBST_FILE([RUBY_AUTOGENERATION])
-	LANGUAGES="$LANGUAGES Ruby"
-    OUTPUT_LANG="$OUTPUT_LANG src/ruby/Makefile"
-fi
-RUBY_AUTOGENERATION=$srcdir/src/autogen_helpers/support_command
-
-if test x$guile = xtrue; then
-	AC_CHECK_PROG([GUILEINT],[guile],["yes"], ["no"])
-	if test "$GUILEINT" = "no"
-	then
-		AC_MSG_ERROR(guile interpreter not found)
-	fi
-	AC_SUBST_FILE([GUILE_AUTOGENERATION])
-	LANGUAGES="$LANGUAGES Guile"
-    OUTPUT_LANG="$OUTPUT_LANG src/guile/Makefile"
-fi
-GUILE_AUTOGENERATION=$srcdir/src/autogen_helpers/support_command
 
 LDFLAGS="$LDFLAGS -version-number libhttpserver_LDF_VERSION"
 
@@ -401,13 +148,6 @@ AC_OUTPUT(
       libhttpserver.pc
       Makefile
       src/Makefile
-      src/python/Makefile
-      src/java/Makefile
-      src/php/Makefile
-      src/lua/Makefile
-      src/perl/Makefile
-      src/ruby/Makefile
-      src/guile/Makefile
       test/Makefile
       debian/changelog
       debian/copyright
@@ -422,7 +162,6 @@ AC_MSG_NOTICE([Configuration Summary:
   Operating System:  ${host_os}
   Target directory:  ${prefix}
   License         :  LGPL only
-  Languages       :  ${LANGUAGES}
   Debug	          :  ${debugit}
   TLS Enabled     :  ${have_gnutls}
   C++0x           :  ${cpp0x}
