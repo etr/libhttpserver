@@ -31,10 +31,6 @@
 #include <fcntl.h>
 #include <algorithm>
 
-#ifdef WITH_PYTHON
-#include <Python.h>
-#endif
-
 #include <microhttpd.h>
 
 #include "gettext.h"
@@ -970,22 +966,10 @@ bool webserver::start(bool blocking)
     bool value_onclose = false;
     if(blocking)
     {
-#ifdef WITH_PYTHON
-        if(PyEval_ThreadsInitialized())
-        {
-            Py_BEGIN_ALLOW_THREADS;
-        }
-#endif //WITH_PYTHON
         pthread_mutex_lock(&mutexwait);
         while(blocking && running)
             pthread_cond_wait(&mutexcond, &mutexwait);
         pthread_mutex_unlock(&mutexwait);
-#ifdef WITH_PYTHON
-        if(PyEval_ThreadsInitialized())
-        {
-            Py_END_ALLOW_THREADS;
-        }
-#endif //WITH_PYTHON
         value_onclose = true;
     }
     return value_onclose;
@@ -1396,13 +1380,6 @@ int webserver::finalize_answer(MHD_Connection* connection, struct details::modde
         cout << "Endpoint not found!" << endl;
 #endif //DEBUG
 
-#ifdef WITH_PYTHON
-    PyGILState_STATE gstate;
-    if(PyEval_ThreadsInitialized())
-    {
-        gstate = PyGILState_Ensure();
-    }
-#endif //WITH_PYTHON
     if(found)
     {
         try
@@ -1427,12 +1404,6 @@ int webserver::finalize_answer(MHD_Connection* connection, struct details::modde
     {
         not_found_page(&dhrs, mr);
     }
-#ifdef WITH_PYTHON
-    if(PyEval_ThreadsInitialized())
-    {
-        PyGILState_Release(gstate);
-    }
-#endif //WITH_PYTHON
     mr->dhrs = dhrs;
     mr->dhrs->underlying_connection = connection;
     try
