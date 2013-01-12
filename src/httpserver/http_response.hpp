@@ -378,7 +378,7 @@ class http_response
                 topics.push_back(*it);
             return topics.size();
         }
-        void set_closure_action(void(*ca)(void*), void* closure_data)
+        void set_closure_action(void(*ca)(void*), void* closure_data = 0x0)
         {
             this->ca = ca;
             this->closure_data = closure_data;
