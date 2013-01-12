@@ -288,11 +288,11 @@ struct event_tuple
     dispatch_events_ptr dispatch_events;
 
     template<typename T>
-    event_tuple(event_supplier<T>* es)
+    event_tuple(event_supplier<T>* es):
+        supply_events(std::bind1st(std::mem_fun(&T::supply_events), es)),
+        get_timeout(std::bind1st(std::mem_fun(&T::get_timeout), es)),
+        dispatch_events(std::bind1st(std::mem_fun(&T::dispatch_events), es))
     {
-        supply_events(std::bind1st(std::mem_fun(&T::supply_events), es));
-        get_timeout(std::bind1st(std::mem_fun(&T::get_timeout), es));
-        dispatch_events(std::bind1st(std::mem_fun(&T::dispatch_events), es));
     }
 };
 
