@@ -23,14 +23,14 @@ size_t headerfunc(void *ptr, size_t size, size_t nmemb, map<string, string>* ss)
     return size*nmemb;
 }
 
-class simple_resource : public http_resource
+class simple_resource : public http_resource<simple_resource>
 {
     public:
-        virtual void render_GET(const http_request& req, http_response** res)
+        void render_GET(const http_request& req, http_response** res)
         {
             *res = new http_string_response("OK", 200, "text/plain");
         }
-        virtual void render_POST(const http_request& req, http_response** res)
+        void render_POST(const http_request& req, http_response** res)
         {
             *res = new http_string_response(
                     req.get_arg("arg1")+req.get_arg("arg2"), 200, "text/plain"
@@ -38,40 +38,40 @@ class simple_resource : public http_resource
         }
 };
 
-class header_test_resource : public http_resource
+class header_test_resource : public http_resource<header_test_resource>
 {
     public:
-        virtual void render_GET(const http_request& req, http_response** res)
+        void render_GET(const http_request& req, http_response** res)
         {
             *res = new http_string_response("OK", 200, "text/plain");
             (*res)->set_header("KEY", "VALUE");
         }
 };
 
-class complete_test_resource : public http_resource
+class complete_test_resource : public http_resource<complete_test_resource>
 {
     public:
-        virtual void render_GET(const http_request& req, http_response** res)
+        void render_GET(const http_request& req, http_response** res)
         {
             *res = new http_string_response("OK", 200, "text/plain");
         }
-        virtual void render_POST(const http_request& req, http_response** res)
+        void render_POST(const http_request& req, http_response** res)
         {
             *res = new http_string_response("OK", 200, "text/plain");
         }
-        virtual void render_PUT(const http_request& req, http_response** res)
+        void render_PUT(const http_request& req, http_response** res)
         {
             *res = new http_string_response("OK", 200, "text/plain");
         }
-        virtual void render_DELETE(const http_request& req, http_response** res)
+        void render_DELETE(const http_request& req, http_response** res)
         {
             *res = new http_string_response("OK", 200, "text/plain");
         }
-        virtual void render_HEAD(const http_request& req, http_response** res)
+        void render_HEAD(const http_request& req, http_response** res)
         {
             *res = new http_string_response("OK", 200, "text/plain");
         }
-        virtual void render_CONNECT(const http_request& req, http_response** res)
+        void render_CONNECT(const http_request& req, http_response** res)
         {
             *res = new http_string_response("OK", 200, "text/plain");
         }

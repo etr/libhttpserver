@@ -155,7 +155,7 @@ struct modded_request
     struct MHD_PostProcessor *pp;
     std::string* complete_uri;
     webserver* ws;
-    void(http_resource::*callback)(const http_request&, http_response**);
+    binders::functor_two<const http_request&, http_response**, void> http_resource_mirror::*callback;
     http_request* dhr;
     http_response_ptr dhrs;
     bool second;
@@ -181,6 +181,21 @@ struct modded_request
     }
 
 };
+
+void empty_render(const http_request& r, http_response** res)
+{
+    *res = new http_string_response("", 200);
+}
+
+void empty_not_acceptable_render(const http_request& r, http_response** res)
+{
+    *res = new http_string_response(NOT_METHOD_ERROR, 200);
+}
+
+bool empty_is_allowed(const std::string& method)
+{
+    return true;
+}
 
 }
 
@@ -392,11 +407,11 @@ webserver::webserver
     bool regex_checking,
     bool ban_system_enabled,
     bool post_process_enabled,
-    http_resource* single_resource,
-    http_resource* not_found_resource,
-    http_resource* method_not_allowed_resource,
-    http_resource* method_not_acceptable_resource,
-    http_resource* internal_error_resource
+    render_ptr single_resource,
+    render_ptr not_found_resource,
+    render_ptr method_not_allowed_resource,
+    render_ptr method_not_acceptable_resource,
+    render_ptr internal_error_resource
 
 ) :
     port(port), 
@@ -524,13 +539,10 @@ webserver& webserver::operator=(const webserver& b)
     return *this;
 }
 
-void webserver::init(http_resource* single_resource)
+void webserver::init(render_ptr single_resource)
 {
     if(single_resource != 0x0)
-    {
         this->single_resource = true;
-        register_resource("", single_resource);
-    }
     else
         this->single_resource = false;
     ignore_sigpipe();
@@ -575,6 +587,13 @@ void webserver::request_completed (void *cls, struct MHD_Connection *connection,
             mr->dhrs->ca(mr->dhrs->closure_data);
         delete mr;
     }
+}
+
+void webserver::register_resource(const std::string& resource, details::http_resource_mirror hrm, bool family)
+{
+    if(method_not_acceptable_resource)
+        hrm.method_not_acceptable_resource = method_not_acceptable_resource; 
+    registered_resources[details::http_endpoint(resource, family, true, regex_checking)] = hrm;
 }
 
 void webserver::schedule_fd(int fd, fd_set* schedule_list, int* max)
@@ -986,13 +1005,6 @@ bool webserver::stop()
     return true;
 }
 
-void webserver::register_resource(const string& resource, http_resource* http_resource, bool family)
-{
-    this->registered_resources[details::http_endpoint(resource, family, true, regex_checking)] = http_resource;
-    if(method_not_acceptable_resource)
-        http_resource->method_not_acceptable_resource = method_not_acceptable_resource;
-}
-
 void webserver::unregister_resource(const string& resource)
 {
     this->registered_resources.erase(details::http_endpoint(resource));
@@ -1158,7 +1170,7 @@ void webserver::upgrade_handler (void *cls, struct MHD_Connection* connection,
 void webserver::not_found_page(http_response** dhrs, details::modded_request* mr)
 {
     if(not_found_resource != 0x0)
-        ((not_found_resource)->*(mr->callback))(*mr->dhr, dhrs);
+        not_found_resource(*mr->dhr, dhrs);
     else
         *dhrs = new http_string_response(NOT_FOUND_ERROR, http_utils::http_not_found);
 }
@@ -1180,13 +1192,14 @@ int webserver::method_not_acceptable_page (const void *cls,
         MHD_HTTP_HEADER_CONTENT_ENCODING,
         "text/plain");
     MHD_destroy_response (response);
+
     return ret;
 }
 
 void webserver::method_not_allowed_page(http_response** dhrs, details::modded_request* mr)
 {
-    if(method_not_allowed_resource != 0x0)
-        ((method_not_allowed_resource)->*(mr->callback))(*mr->dhr, dhrs);
+    if(method_not_acceptable_resource != 0x0)
+        method_not_allowed_resource(*mr->dhr, dhrs);
     else
         *dhrs = new http_string_response(METHOD_ERROR, http_utils::http_method_not_allowed);
 }
@@ -1194,7 +1207,7 @@ void webserver::method_not_allowed_page(http_response** dhrs, details::modded_re
 void webserver::internal_error_page(http_response** dhrs, details::modded_request* mr, bool force_our)
 {
     if(internal_error_resource != 0x0 && !force_our)
-        ((internal_error_resource)->*(mr->callback))(*mr->dhr, dhrs);
+        internal_error_resource(*mr->dhr, dhrs);
     else
         *dhrs = new http_string_response(GENERIC_ERROR, http_utils::http_internal_server_error);
 }
@@ -1300,7 +1313,7 @@ int webserver::finalize_answer(MHD_Connection* connection, struct details::modde
 {
     int to_ret = MHD_NO;
     http_response* dhrs = 0x0;
-    map<details::http_endpoint, http_resource* >::iterator found_endpoint;
+    map<details::http_endpoint, details::http_resource_mirror>::iterator found_endpoint;
     bool found = false;
     struct MHD_Response* raw_response;
     if(!single_resource)
@@ -1311,7 +1324,7 @@ int webserver::finalize_answer(MHD_Connection* connection, struct details::modde
         {
             if(regex_checking)
             {
-                map<details::http_endpoint, http_resource* >::iterator it;
+                map<details::http_endpoint, details::http_resource_mirror>::iterator it;
                 int len = -1;
                 int tot_len = -1;
                 for(it=registered_resources.begin(); it!=registered_resources.end(); ++it) 
@@ -1364,8 +1377,8 @@ int webserver::finalize_answer(MHD_Connection* connection, struct details::modde
     {
         try
         {
-            if(found_endpoint->second->is_allowed(method))
-                ((found_endpoint->second)->*(mr->callback))(*mr->dhr, &dhrs);
+            if(found_endpoint->second.is_allowed(method))
+                ((found_endpoint->second).*(mr->callback))(*mr->dhr, &dhrs);
             else
             {
                 method_not_allowed_page(&dhrs, mr);
@@ -1452,38 +1465,38 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
         access_log(static_cast<webserver*>(cls), *(mr->complete_uri) + " METHOD: " + method);
         if( 0 == strcmp(method, http_utils::http_method_get.c_str()))
         {
-            mr->callback = &http_resource::render_GET;
+            mr->callback = &details::http_resource_mirror::render_GET;
         }
         else if (0 == strcmp(method, http_utils::http_method_post.c_str()))
         {
-            mr->callback = &http_resource::render_POST;
+            mr->callback = &details::http_resource_mirror::render_POST;
             body = true;
         }
         else if (0 == strcmp(method, http_utils::http_method_put.c_str()))
         {
-            mr->callback = &http_resource::render_PUT;
+            mr->callback = &details::http_resource_mirror::render_PUT;
             body = true;
         }
         else if (0 == strcmp(method, http_utils::http_method_delete.c_str()))
         {
-            mr->callback = &http_resource::render_DELETE;
+            mr->callback = &details::http_resource_mirror::render_DELETE;
         }
         else if (0 == strcmp(method, http_utils::http_method_head.c_str()))
         {
-            mr->callback = &http_resource::render_HEAD;
+            mr->callback = &details::http_resource_mirror::render_HEAD;
         }
         else if (0 == strcmp(method, http_utils::http_method_connect.c_str()))
         {
-            mr->callback = &http_resource::render_CONNECT;
+            mr->callback = &details::http_resource_mirror::render_CONNECT;
         }
         else if (0 == strcmp(method, http_utils::http_method_trace.c_str()))
         {
-            mr->callback = &http_resource::render_TRACE;
+            mr->callback = &details::http_resource_mirror::render_TRACE;
         }
         else
         {
             if(static_cast<webserver*>(cls)->method_not_acceptable_resource)
-                mr->callback = &http_resource::render_not_acceptable;
+                mr->callback = &details::http_resource_mirror::method_not_acceptable_resource;
             else
                 return static_cast<webserver*>(cls)->method_not_acceptable_page(cls, connection);
         }
@@ -1844,17 +1857,6 @@ void webserver::lock_cache_entry(cache_entry* ce)
 void webserver::get_response(cache_entry* ce, http_response** res)
 {
     *res = ce->response.ptr();
-}
-
-template<typename T>
-void webserver::register_event_supplier(const std::string& id, event_supplier<T>* ev)
-{
-    pthread_rwlock_wrlock(&runguard);
-    map<string, event_tuple*>::iterator it = event_suppliers.find(id);
-    if(it != event_suppliers.end())
-        delete it->second;
-    event_suppliers[id] = new event_tuple(&ev);
-    pthread_rwlock_unlock(&runguard);
 }
 
 void webserver::remove_event_supplier(const std::string& id)

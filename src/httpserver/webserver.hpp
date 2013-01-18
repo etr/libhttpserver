@@ -32,6 +32,20 @@
 #define DEFAULT_WS_PORT 9898
 #define DEFAULT_WS_TIMEOUT 180
 
+#define CREATE_METHOD_DETECTOR(X) \
+    template<typename T, typename RESULT, typename ARG1, typename ARG2> \
+    class has_##X \
+    { \
+        template <typename U, RESULT (U::*)(ARG1, ARG2)> struct Check; \
+        template <typename U> static char func(Check<U, &U::X> *); \
+        template <typename U> static int func(...); \
+        public: \
+            enum { value = sizeof(func<T>(0)) == sizeof(char) }; \
+    };
+
+#define HAS_METHOD(X, T, RESULT, ARG1, ARG2) \
+    has_##X<T, RESULT, ARG1, ARG2>::value
+
 #include <cstring>
 #include <map>
 #include <vector>
@@ -49,6 +63,7 @@
 
 namespace httpserver {
 
+template<typename CHILD>
 class http_resource;
 class http_response;
 class cache_response;
@@ -56,12 +71,327 @@ class http_request;
 class long_polling_receive_response;
 class long_polling_send_response;
 struct cache_entry;
+class webserver;
+
+typedef void(*render_ptr)(const http_request&, http_response**);
 
 namespace details
 {
+    namespace binders
+    {
+        class generic_class;
+        const int MEMFUNC_SIZE = sizeof(void (generic_class::*)());
+
+        template<int N>
+        struct converter
+        {
+            template<typename X, typename func_type, typename generic_mem_func_type>
+            inline static generic_class* convert(X* pmem, func_type func, generic_mem_func_type &bound)
+            {
+                typedef char ERROR_your_compiler_does_not_support_this_member_pointer[N-100];
+                return 0;
+            }
+        };
+
+        template<>
+        struct converter<MEMFUNC_SIZE>
+        {
+            template<typename X, typename func_type, typename generic_mem_func_type>
+            inline static generic_class* convert(X* pmem, func_type func, generic_mem_func_type &bound)
+            {
+                bound = reinterpret_cast<generic_mem_func_type>(func);
+                return reinterpret_cast<generic_class*>(pmem);
+            }
+        };
+
+        template<typename generic_mem, typename static_function, typename void_static_function>
+        class binder
+        {
+            private:
+                typedef void (generic_class::*generic_mem_fun)();
+                generic_class *pmem;
+                generic_mem_fun _pfunc;
+
+                typedef void (*generic_mem_ptr)();
+                generic_mem_ptr _spfunc;
+
+            public:
+                template<typename X, typename Y>
+                inline void bind(X* pmem, Y fun)
+                {
+                    this->pmem = converter<sizeof(fun)>::convert(pmem, fun, _pfunc);
+                    _spfunc = 0;
+                }
+                template <class DC, class parent_invoker>
+                inline void bind_static(DC *pp, parent_invoker invoker, static_function fun )
+                {
+                    if (fun==0)
+                        _pfunc=0;
+                    else
+                        bind(pp, invoker);
+                    _spfunc = reinterpret_cast<generic_mem_ptr>(fun);
+                }
+                inline generic_class* exec() const
+                {
+                    return pmem;
+                }
+                inline generic_mem get_mem_ptr() const
+                {
+                    return reinterpret_cast<generic_mem>(_pfunc);
+                }
+                inline void_static_function get_static_func() const
+                {
+                    return reinterpret_cast<void_static_function>(_spfunc);
+                }
+        };
+
+        template<typename RET_TYPE=void>
+        class functor_zero
+        {
+            private:
+                typedef RET_TYPE (*static_function)();
+                typedef RET_TYPE (*void_static_function)();
+                typedef RET_TYPE (generic_class::*generic_mem)();
+                typedef binder<generic_mem, static_function, void_static_function> binder_type;
+                binder_type _binder;
+
+                RET_TYPE exec_static() const
+                {
+                    return (*(_binder.get_static_func()))();
+                }
+            public:
+                typedef functor_zero type;
+                functor_zero() { }
+
+                template <typename X, typename Y>
+                functor_zero(Y* pmem, RET_TYPE(X::*func)() )
+                {
+                    _binder.bind(reinterpret_cast<X*>(pmem), func);
+                }
+                functor_zero(RET_TYPE(*func)() )
+                {
+                    bind(func);
+                }
+                template < class X, class Y >
+                inline void bind(Y* pmem, RET_TYPE(X::*func)()) 
+                {
+                    _binder.bind(reinterpret_cast<X*>(pmem), func);
+                }
+                inline void bind(RET_TYPE(*func)())
+                {
+                    _binder.bind_static(this, &functor_zero::exec_static, func);
+                }
+                RET_TYPE operator() () const
+                {
+                    return (_binder.exec()->*(_binder.get_mem_ptr()))();
+                }
+        };
+
+        template<typename PAR1, typename RET_TYPE=void>
+        class functor_one
+        {
+            private:
+                typedef RET_TYPE (*static_function)(PAR1 p1);
+                typedef RET_TYPE (*void_static_function)(PAR1 p1);
+                typedef RET_TYPE (generic_class::*generic_mem)(PAR1 p1);
+                typedef binder<generic_mem, static_function, void_static_function> binder_type;
+                binder_type _binder;
+
+                RET_TYPE exec_static(PAR1 p1) const
+                {
+                    return (*(_binder.get_static_func()))(p1);
+                }
+            public:
+                typedef functor_one type;
+                functor_one() { }
+
+                template <typename X, typename Y>
+                functor_one(Y* pmem, RET_TYPE(X::*func)(PAR1 p1) )
+                {
+                    _binder.bind(reinterpret_cast<X*>(pmem), func);
+                }
+                functor_one(RET_TYPE(*func)(PAR1 p1) )
+                {
+                    bind(func);
+                }
+                template < class X, class Y >
+                inline void bind(Y* pmem, RET_TYPE(X::*func)(PAR1 p1)) 
+                {
+                    _binder.bind(reinterpret_cast<X*>(pmem), func);
+                }
+                inline void bind(RET_TYPE(*func)(PAR1 P1))
+                {
+                    _binder.bind_static(this, &functor_one::exec_static, func);
+                }
+                RET_TYPE operator() (PAR1 p1) const
+                {
+                    return (_binder.exec()->*(_binder.get_mem_ptr()))(p1);
+                }
+        };
+
+        template<typename PAR1, typename PAR2, typename RET_TYPE=void>
+        class functor_two
+        {
+            private:
+                typedef RET_TYPE (*static_function)(PAR1 p1, PAR2 p2);
+                typedef RET_TYPE (*void_static_function)(PAR1 p1, PAR2 p2);
+                typedef RET_TYPE (generic_class::*generic_mem)(PAR1 p1, PAR2 p2);
+                typedef binder<generic_mem, static_function, void_static_function> binder_type;
+                binder_type _binder;
+
+                RET_TYPE exec_static(PAR1 p1, PAR2 p2) const
+                {
+                    return (*(_binder.get_static_func()))(p1, p2);
+                }
+            public:
+                typedef functor_two type;
+                functor_two() { }
+
+                template <typename X, typename Y>
+                functor_two(Y* pmem, RET_TYPE(X::*func)(PAR1 p1, PAR2 p2) )
+                {
+                    _binder.bind(reinterpret_cast<X*>(pmem), func);
+                }
+                functor_two(RET_TYPE(*func)(PAR1 p1, PAR2 p2) )
+                {
+                    bind(func);
+                }
+                template < class X, class Y >
+                inline void bind(Y* pmem, RET_TYPE(X::*func)(PAR1 p1, PAR2 p2))
+                {
+                    _binder.bind(reinterpret_cast<X*>(pmem), func);
+                }
+                inline void bind(RET_TYPE(*func)(PAR1 P1, PAR2 p2))
+                {
+                    _binder.bind_static(this, &functor_two::exec_static, func);
+                }
+                RET_TYPE operator() (PAR1 p1, PAR2 p2) const
+                {
+                    return (_binder.exec()->*(_binder.get_mem_ptr()))(p1, p2);
+                }
+        };
+
+        template<typename PAR1, typename PAR2, typename PAR3, typename RET_TYPE=void>
+        class functor_three
+        {
+            private:
+                typedef RET_TYPE (*static_function)(PAR1 p1, PAR2 p2, PAR3 p3);
+                typedef RET_TYPE (*void_static_function)(PAR1 p1, PAR2 p2, PAR3 p3);
+                typedef RET_TYPE (generic_class::*generic_mem)(PAR1 p1, PAR2 p2, PAR3 p3);
+                typedef binder<generic_mem, static_function, void_static_function> binder_type;
+                binder_type _binder;
+
+                RET_TYPE exec_static(PAR1 p1, PAR2 p2, PAR3 p3) const
+                {
+                    return (*(_binder.get_static_func()))(p1, p2, p3);
+                }
+            public:
+                typedef functor_three type;
+                functor_three() { }
+
+                template <typename X, typename Y>
+                functor_three(Y* pmem, RET_TYPE(X::*func)(PAR1 p1, PAR2 p2, PAR3 p3) )
+                {
+                    _binder.bind(reinterpret_cast<X*>(pmem), func);
+                }
+                functor_three(RET_TYPE(*func)(PAR1 p1, PAR2 p2, PAR3 p3) )
+                {
+                    bind(func);
+                }
+                template < class X, class Y >
+                inline void bind(Y* pmem, RET_TYPE(X::*func)(PAR1 p1, PAR2 p2, PAR3 p3))
+                {
+                    _binder.bind(reinterpret_cast<X*>(pmem), func);
+                }
+                inline void bind(RET_TYPE(*func)(PAR1 P1, PAR2 p2, PAR3 p3))
+                {
+                    _binder.bind_static(this, &functor_three::exec_static, func);
+                }
+                RET_TYPE operator() (PAR1 p1, PAR2 p2, PAR3 p3) const
+                {
+                    return (_binder.exec()->*(_binder.get_mem_ptr()))(p1, p2, p3);
+                }
+        };
+    }
+
     class http_endpoint;
     struct modded_request;
     struct daemon_item;
+    typedef bool(*is_allowed_ptr)(const std::string&);
+
+    CREATE_METHOD_DETECTOR(render);
+    CREATE_METHOD_DETECTOR(render_GET);
+    CREATE_METHOD_DETECTOR(render_POST);
+    CREATE_METHOD_DETECTOR(render_PUT);
+    CREATE_METHOD_DETECTOR(render_HEAD);
+    CREATE_METHOD_DETECTOR(render_DELETE);
+    CREATE_METHOD_DETECTOR(render_TRACE);
+    CREATE_METHOD_DETECTOR(render_OPTIONS);
+    CREATE_METHOD_DETECTOR(render_CONNECT);
+    CREATE_METHOD_DETECTOR(render_not_acceptable);
+
+    void empty_render(const http_request& r, http_response** res);
+    void empty_not_acceptable_render(const http_request& r, http_response** res);
+    bool empty_is_allowed(const std::string& method);
+
+    struct http_resource_mirror
+    {
+        typedef binders::functor_two<const http_request&, http_response**, void> functor;
+        typedef binders::functor_one<const std::string&, bool> functor_allowed;
+        functor render;
+        functor render_GET;
+        functor render_POST;
+        functor render_PUT;
+        functor render_HEAD;
+        functor render_DELETE;
+        functor render_TRACE;
+        functor render_OPTIONS;
+        functor render_CONNECT;
+        functor_allowed is_allowed;
+        functor method_not_acceptable_resource;
+
+        template<typename T>
+        http_resource_mirror(http_resource<T>* res):
+            render(&empty_render),
+            render_GET(render),
+            render_POST(render),
+            render_PUT(render),
+            render_HEAD(render),
+            render_DELETE(render),
+            render_TRACE(render),
+            render_OPTIONS(render),
+            render_CONNECT(render),
+            is_allowed(&empty_is_allowed)
+        {
+            if(HAS_METHOD(render, T, void, const http_request&, http_response**))
+                render.bind(res, &T::render);
+            if(HAS_METHOD(render_GET, T, void, const http_request&, http_response**))
+                render_GET.bind(res, &T::render_GET);
+            if(HAS_METHOD(render_POST, T, void, const http_request&, http_response**))
+                render_POST.bind(res, &T::render_POST);
+            if(HAS_METHOD(render_PUT, T, void, const http_request&, http_response**))
+                render_PUT.bind(res, &T::render_PUT);
+            if(HAS_METHOD(render_HEAD, T, void, const http_request&, http_response**))
+                render_HEAD.bind(res, &T::render_HEAD);
+            if(HAS_METHOD(render_DELETE, T, void, const http_request&, http_response**))
+                render_DELETE.bind(res, &T::render_DELETE);
+            if(HAS_METHOD(render_TRACE, T, void, const http_request&, http_response**))
+                render_TRACE.bind(res, &T::render_TRACE);
+            if(HAS_METHOD(render_OPTIONS, T, void, const http_request&, http_response**))
+                render_OPTIONS.bind(res, &T::render_OPTIONS);
+            if(HAS_METHOD(render_CONNECT, T, void, const http_request&, http_response**))
+                render_CONNECT.bind(res, &T::render_CONNECT);
+            is_allowed.bind(res, &T::is_allowed);
+        }
+
+        http_resource_mirror()
+        {
+        }
+
+        ~http_resource_mirror()
+        {
+        }
+    };
 }
 
 using namespace http;
@@ -182,11 +512,11 @@ class webserver
             bool regex_checking = true,
             bool ban_system_enabled = true,
             bool post_process_enabled = true,
-            http_resource* single_resource = 0x0,
-            http_resource* not_found_resource = 0x0,
-            http_resource* method_not_allowed_resource = 0x0,
-            http_resource* method_not_acceptable_resource = 0x0,
-            http_resource* internal_error_resource = 0x0
+            render_ptr single_resource = 0x0,
+            render_ptr not_found_resource = 0x0,
+            render_ptr method_not_allowed_resource = 0x0,
+            render_ptr method_not_acceptable_resource = 0x0,
+            render_ptr internal_error_resource = 0x0
         );
         webserver(const create_webserver& params);
         webserver& operator=(const webserver& b);
@@ -218,7 +548,13 @@ class webserver
          * @param http_resource http_resource pointer to register.
          * @param family boolean indicating whether the resource is registered for the endpoint and its child or not.
         **/
-        void register_resource(const std::string& resource, http_resource* http_resource, bool family = false);
+        template <typename T>
+        void register_resource(const std::string& resource, http_resource<T>* res, bool family = false)
+        {
+            details::http_resource_mirror hrm(res);
+            register_resource(resource, hrm, family);
+        }
+
         void unregister_resource(const std::string& resource);
         void ban_ip(const std::string& ip);
         void allow_ip(const std::string& ip);
@@ -282,7 +618,17 @@ class webserver
         }
 
         template<typename T>
-        void register_event_supplier(const std::string& id, event_supplier<T>* ev_supplier);
+        void register_event_supplier(const std::string& id, event_supplier<T>* ev_supplier)
+        {
+            pthread_rwlock_wrlock(&runguard);
+            std::map<std::string, event_tuple*>::iterator it = event_suppliers.find(id);
+            if(it != event_suppliers.end())
+                delete it->second;
+            event_suppliers[id] = new event_tuple(&ev_supplier);
+            pthread_rwlock_unlock(&runguard);
+        }
+
+
         void remove_event_supplier(const std::string& id);
 
         void run();
@@ -330,12 +676,11 @@ class webserver
         pthread_mutex_t cleanmux;
         pthread_cond_t mutexcond;
         pthread_cond_t cleancond;
-        http_resource* not_found_resource;
-        http_resource* method_not_allowed_resource;
-        http_resource* method_not_acceptable_resource;
-        http_resource* internal_error_resource;
-
-        std::map<details::http_endpoint, http_resource* > registered_resources;
+        render_ptr not_found_resource;
+        render_ptr method_not_allowed_resource;
+        render_ptr method_not_acceptable_resource;
+        render_ptr internal_error_resource;
+        std::map<details::http_endpoint, details::http_resource_mirror> registered_resources;
 
         std::map<std::string, cache_entry*> response_cache;
         int next_to_choose;
@@ -361,11 +706,13 @@ class webserver
 
         std::map<std::string, event_tuple*> event_suppliers;
 
-        void init(http_resource* single_resource);
+        void init(render_ptr single_resource);
         static void* select(void* self);
         void schedule_fd(int fd, fd_set* schedule_list, int* max);
         static void* cleaner(void* self);
         void clean_connections();
+
+        void register_resource(const std::string& resource, details::http_resource_mirror hrm, bool family = false);
 
         void method_not_allowed_page(http_response** dhrs, details::modded_request* mr);
         void internal_error_page(http_response** dhrs, details::modded_request* mr, bool force_our = false);
@@ -578,11 +925,13 @@ class create_webserver
         create_webserver& no_ban_system() { _ban_system_enabled = false; return *this; }
         create_webserver& post_process() { _post_process_enabled = true; return *this; }
         create_webserver& no_post_process() { _post_process_enabled = false; return *this; }
-        create_webserver& single_resource(http_resource* single_resource) { _single_resource = single_resource; return *this; }
-        create_webserver& not_found_resource(http_resource* not_found_resource) { _not_found_resource = not_found_resource; return *this; }
-        create_webserver& method_not_allowed_resource(http_resource* method_not_allowed_resource) { _method_not_allowed_resource = method_not_allowed_resource; return *this; }
-        create_webserver& method_not_acceptable_resource(http_resource* method_not_acceptable_resource) { _method_not_acceptable_resource = method_not_acceptable_resource; return *this; }
-        create_webserver& internal_error_resource(http_resource* internal_error_resource) { _internal_error_resource = internal_error_resource; return *this; }
+
+        create_webserver& single_resource(render_ptr single_resource) { _single_resource = single_resource; return *this; }
+        create_webserver& not_found_resource(render_ptr not_found_resource) { _not_found_resource = not_found_resource; return *this; }
+        create_webserver& method_not_allowed_resource(render_ptr method_not_allowed_resource) { _method_not_allowed_resource = method_not_allowed_resource; return *this; }
+        create_webserver& method_not_acceptable_resource(render_ptr method_not_acceptable_resource) { _method_not_acceptable_resource = method_not_acceptable_resource; return *this; }
+        create_webserver& internal_error_resource(render_ptr internal_error_resource) { _internal_error_resource = internal_error_resource; return *this; }
+
     private:
         int _port;
         http_utils::start_method_T _start_method;
@@ -615,11 +964,11 @@ class create_webserver
         bool _regex_checking;
         bool _ban_system_enabled;
         bool _post_process_enabled;
-        http_resource* _single_resource;
-        http_resource* _not_found_resource;
-        http_resource* _method_not_allowed_resource;
-        http_resource* _method_not_acceptable_resource;
-        http_resource* _internal_error_resource;
+        render_ptr _single_resource;
+        render_ptr _not_found_resource;
+        render_ptr _method_not_allowed_resource;
+        render_ptr _method_not_acceptable_resource;
+        render_ptr _internal_error_resource;
 
         friend class webserver;
 };
