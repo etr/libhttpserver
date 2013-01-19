@@ -296,21 +296,6 @@ struct cache_entry
     }
 };
 
-struct event_tuple
-{
-    supply_events_ptr supply_events;
-    get_timeout_ptr get_timeout;
-    dispatch_events_ptr dispatch_events;
-
-    template<typename T>
-    event_tuple(event_supplier<T>* es):
-        supply_events(std::bind1st(std::mem_fun(&T::supply_events), es)),
-        get_timeout(std::bind1st(std::mem_fun(&T::get_timeout), es)),
-        dispatch_events(std::bind1st(std::mem_fun(&T::dispatch_events), es))
-    {
-    }
-};
-
 using namespace http;
 
 int policy_callback (void *, const struct sockaddr*, socklen_t);
@@ -669,17 +654,17 @@ void* webserver::select(void* self)
         }
 
         {
-            std::map<std::string, event_tuple*>::const_iterator it;
+            std::map<std::string, details::event_tuple>::const_iterator it;
             pthread_rwlock_rdlock(&di->ws->runguard);
             for(it = di->ws->event_suppliers.begin(); it != di->ws->event_suppliers.end(); ++it)
             {
                 int local_max;
-                (*it).second->supply_events(&rs, &ws, &es, &local_max);
+                (*it).second.supply_events(&rs, &ws, &es, &local_max);
 
                 if(local_max > max)
                     max = local_max;
 
-                unsigned long t = (*it).second->get_timeout();
+                unsigned long t = (*it).second.get_timeout();
                 if(t < timeout)
                     timeout = t;
             }
@@ -719,11 +704,11 @@ void* webserver::select(void* self)
         ::select (max + 1, &rs, &ws, &es, &timeout_value);
         MHD_run (di->daemon);
         {
-            std::map<std::string, event_tuple*>::const_iterator it;
+            std::map<std::string, details::event_tuple>::const_iterator it;
             pthread_rwlock_rdlock(&di->ws->runguard);
             for(it = di->ws->event_suppliers.begin(); it != di->ws->event_suppliers.end(); ++it)
             {
-                (*it).second->dispatch_events();
+                (*it).second.dispatch_events();
             }
         }
     }
@@ -1862,13 +1847,7 @@ void webserver::get_response(cache_entry* ce, http_response** res)
 void webserver::remove_event_supplier(const std::string& id)
 {
     pthread_rwlock_wrlock(&runguard);
-    map<string, event_tuple*>::iterator it = event_suppliers.find(id);
-    if(it != event_suppliers.end())
-    {
-        event_tuple* evp(it->second);
-        event_suppliers.erase(it);
-        delete evp;
-    }
+    event_suppliers.erase(id);
     pthread_rwlock_unlock(&runguard);
 }
 

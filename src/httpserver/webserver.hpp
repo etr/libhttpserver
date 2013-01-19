@@ -72,6 +72,8 @@ class long_polling_receive_response;
 class long_polling_send_response;
 struct cache_entry;
 class webserver;
+template<typename CHILD>
+class event_supplier;
 
 typedef void(*render_ptr)(const http_request&, http_response**);
 
@@ -312,6 +314,49 @@ namespace details
                     return (_binder.exec()->*(_binder.get_mem_ptr()))(p1, p2, p3);
                 }
         };
+
+        template<typename PAR1, typename PAR2, typename PAR3, typename PAR4, typename RET_TYPE=void>
+        class functor_four
+        {
+            private:
+                typedef RET_TYPE (*static_function)(PAR1 p1, PAR2 p2, PAR3 p3, PAR4 p4);
+                typedef RET_TYPE (*void_static_function)(PAR1 p1, PAR2 p2, PAR3 p3, PAR4 p4);
+                typedef RET_TYPE (generic_class::*generic_mem)(PAR1 p1, PAR2 p2, PAR3 p3, PAR4 p4);
+                typedef binder<generic_mem, static_function, void_static_function> binder_type;
+                binder_type _binder;
+
+                RET_TYPE exec_static(PAR1 p1, PAR2 p2, PAR3 p3, PAR4 p4) const
+                {
+                    return (*(_binder.get_static_func()))(p1, p2, p3, p4);
+                }
+            public:
+                typedef functor_four type;
+                functor_four() { }
+
+                template <typename X, typename Y>
+                functor_four(Y* pmem, RET_TYPE(X::*func)(PAR1 p1, PAR2 p2, PAR3 p3, PAR4 p4) )
+                {
+                    _binder.bind(reinterpret_cast<X*>(pmem), func);
+                }
+                functor_four(RET_TYPE(*func)(PAR1 p1, PAR2 p2, PAR3 p3, PAR4 p4) )
+                {
+                    bind(func);
+                }
+                template < class X, class Y >
+                inline void bind(Y* pmem, RET_TYPE(X::*func)(PAR1 p1, PAR2 p2, PAR3 p3, PAR4 p4))
+                {
+                    _binder.bind(reinterpret_cast<X*>(pmem), func);
+                }
+                inline void bind(RET_TYPE(*func)(PAR1 P1, PAR2 p2, PAR3 p3, PAR4 p4))
+                {
+                    _binder.bind_static(this, &functor_four::exec_static, func);
+                }
+                RET_TYPE operator() (PAR1 p1, PAR2 p2, PAR3 p3, PAR4 p4) const
+                {
+                    return (_binder.exec()->*(_binder.get_mem_ptr()))(p1, p2, p3, p4);
+                }
+        };
+
     }
 
     class http_endpoint;
@@ -334,63 +379,93 @@ namespace details
     void empty_not_acceptable_render(const http_request& r, http_response** res);
     bool empty_is_allowed(const std::string& method);
 
-    struct http_resource_mirror
+    class http_resource_mirror
     {
-        typedef binders::functor_two<const http_request&, http_response**, void> functor;
-        typedef binders::functor_one<const std::string&, bool> functor_allowed;
-        functor render;
-        functor render_GET;
-        functor render_POST;
-        functor render_PUT;
-        functor render_HEAD;
-        functor render_DELETE;
-        functor render_TRACE;
-        functor render_OPTIONS;
-        functor render_CONNECT;
-        functor_allowed is_allowed;
-        functor method_not_acceptable_resource;
+        public:
+            http_resource_mirror()
+            {
+            }
 
-        template<typename T>
-        http_resource_mirror(http_resource<T>* res):
-            render(&empty_render),
-            render_GET(render),
-            render_POST(render),
-            render_PUT(render),
-            render_HEAD(render),
-            render_DELETE(render),
-            render_TRACE(render),
-            render_OPTIONS(render),
-            render_CONNECT(render),
-            is_allowed(&empty_is_allowed)
-        {
-            if(HAS_METHOD(render, T, void, const http_request&, http_response**))
-                render.bind(res, &T::render);
-            if(HAS_METHOD(render_GET, T, void, const http_request&, http_response**))
-                render_GET.bind(res, &T::render_GET);
-            if(HAS_METHOD(render_POST, T, void, const http_request&, http_response**))
-                render_POST.bind(res, &T::render_POST);
-            if(HAS_METHOD(render_PUT, T, void, const http_request&, http_response**))
-                render_PUT.bind(res, &T::render_PUT);
-            if(HAS_METHOD(render_HEAD, T, void, const http_request&, http_response**))
-                render_HEAD.bind(res, &T::render_HEAD);
-            if(HAS_METHOD(render_DELETE, T, void, const http_request&, http_response**))
-                render_DELETE.bind(res, &T::render_DELETE);
-            if(HAS_METHOD(render_TRACE, T, void, const http_request&, http_response**))
-                render_TRACE.bind(res, &T::render_TRACE);
-            if(HAS_METHOD(render_OPTIONS, T, void, const http_request&, http_response**))
-                render_OPTIONS.bind(res, &T::render_OPTIONS);
-            if(HAS_METHOD(render_CONNECT, T, void, const http_request&, http_response**))
-                render_CONNECT.bind(res, &T::render_CONNECT);
-            is_allowed.bind(res, &T::is_allowed);
-        }
+            ~http_resource_mirror()
+            {
+            }
+        private:
+            typedef binders::functor_two<const http_request&, http_response**, void> functor;
+            typedef binders::functor_one<const std::string&, bool> functor_allowed;
+            functor render;
+            functor render_GET;
+            functor render_POST;
+            functor render_PUT;
+            functor render_HEAD;
+            functor render_DELETE;
+            functor render_TRACE;
+            functor render_OPTIONS;
+            functor render_CONNECT;
+            functor_allowed is_allowed;
+            functor method_not_acceptable_resource;
 
-        http_resource_mirror()
-        {
-        }
+            template<typename T>
+            http_resource_mirror(http_resource<T>* res):
+                render(&empty_render),
+                render_GET(render),
+                render_POST(render),
+                render_PUT(render),
+                render_HEAD(render),
+                render_DELETE(render),
+                render_TRACE(render),
+                render_OPTIONS(render),
+                render_CONNECT(render),
+                is_allowed(&empty_is_allowed)
+            {
+                if(HAS_METHOD(render, T, void, const http_request&, http_response**))
+                    render.bind(res, &T::render);
+                if(HAS_METHOD(render_GET, T, void, const http_request&, http_response**))
+                    render_GET.bind(res, &T::render_GET);
+                if(HAS_METHOD(render_POST, T, void, const http_request&, http_response**))
+                    render_POST.bind(res, &T::render_POST);
+                if(HAS_METHOD(render_PUT, T, void, const http_request&, http_response**))
+                    render_PUT.bind(res, &T::render_PUT);
+                if(HAS_METHOD(render_HEAD, T, void, const http_request&, http_response**))
+                    render_HEAD.bind(res, &T::render_HEAD);
+                if(HAS_METHOD(render_DELETE, T, void, const http_request&, http_response**))
+                    render_DELETE.bind(res, &T::render_DELETE);
+                if(HAS_METHOD(render_TRACE, T, void, const http_request&, http_response**))
+                    render_TRACE.bind(res, &T::render_TRACE);
+                if(HAS_METHOD(render_OPTIONS, T, void, const http_request&, http_response**))
+                    render_OPTIONS.bind(res, &T::render_OPTIONS);
+                if(HAS_METHOD(render_CONNECT, T, void, const http_request&, http_response**))
+                    render_CONNECT.bind(res, &T::render_CONNECT);
+                is_allowed.bind(res, &T::is_allowed);
+            }
 
-        ~http_resource_mirror()
-        {
-        }
+            friend class ::httpserver::webserver;
+    };
+
+    class event_tuple
+    {
+        private:
+            typedef void(*supply_events_ptr)(
+                            fd_set*, 
+                            fd_set*, 
+                            fd_set*, 
+                            int*
+                    );
+
+            typedef long(*get_timeout_ptr)();
+            typedef void(*dispatch_events_ptr)();
+            supply_events_ptr supply_events;
+            get_timeout_ptr get_timeout;
+            dispatch_events_ptr dispatch_events;
+            
+            friend class ::httpserver::webserver;
+        public: 
+            template<typename T>
+            event_tuple(event_supplier<T>* es):
+                supply_events(std::bind1st(std::mem_fun(&T::supply_events), es)),
+                get_timeout(std::bind1st(std::mem_fun(&T::get_timeout), es)),
+                dispatch_events(std::bind1st(std::mem_fun(&T::dispatch_events), es))
+            {
+            }
     };
 }
 
@@ -436,22 +511,10 @@ class event_supplier
 };
 
 class create_webserver;
-
 typedef bool(*validator_ptr)(const std::string&);
 typedef void(*unescaper_ptr)(char*);
-typedef void(*supply_events_ptr)(
-                fd_set*, 
-                fd_set*, 
-                fd_set*, 
-                int*
-        );
-
-typedef long(*get_timeout_ptr)();
-typedef void(*dispatch_events_ptr)();
 typedef void(*log_access_ptr)(const std::string&);
 typedef void(*log_error_ptr)(const std::string&);
-
-struct event_tuple;
 
 /**
  * Class representing the webserver. Main class of the apis.
@@ -621,10 +684,10 @@ class webserver
         void register_event_supplier(const std::string& id, event_supplier<T>* ev_supplier)
         {
             pthread_rwlock_wrlock(&runguard);
-            std::map<std::string, event_tuple*>::iterator it = event_suppliers.find(id);
+            std::map<std::string, details::event_tuple>::iterator it = event_suppliers.find(id);
             if(it != event_suppliers.end())
                 delete it->second;
-            event_suppliers[id] = new event_tuple(&ev_supplier);
+            event_suppliers[id] = details::event_tuple(&ev_supplier);
             pthread_rwlock_unlock(&runguard);
         }
 
@@ -704,7 +767,7 @@ class webserver
         std::vector<details::daemon_item*> daemons;
         std::vector<pthread_t> threads;
 
-        std::map<std::string, event_tuple*> event_suppliers;
+        std::map<std::string, details::event_tuple> event_suppliers;
 
         void init(render_ptr single_resource);
         static void* select(void* self);
