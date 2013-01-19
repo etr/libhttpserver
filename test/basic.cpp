@@ -67,10 +67,6 @@ class complete_test_resource : public http_resource<complete_test_resource>
         {
             *res = new http_string_response("OK", 200, "text/plain");
         }
-        void render_HEAD(const http_request& req, http_response** res)
-        {
-            *res = new http_string_response("OK", 200, "text/plain");
-        }
         void render_CONNECT(const http_request& req, http_response** res)
         {
             *res = new http_string_response("OK", 200, "text/plain");
@@ -133,7 +129,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, read_header)
 LT_END_AUTO_TEST(read_header)
 
 LT_BEGIN_AUTO_TEST(basic_suite, complete)
-    simple_resource* resource = new simple_resource();
+    complete_test_resource* resource = new complete_test_resource();
     ws->register_resource("base", resource);
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -157,13 +153,6 @@ LT_BEGIN_AUTO_TEST(basic_suite, complete)
     curl = curl_easy_init();
     curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
     curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "PUT");
-    res = curl_easy_perform(curl);
-    LT_ASSERT_EQ(res, 0);
-    curl_easy_cleanup(curl);
-
-    curl = curl_easy_init();
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
-    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "HEAD");
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
     curl_easy_cleanup(curl);

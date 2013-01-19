@@ -24,6 +24,6 @@ check_PROGRAMS = basic
 basic_SOURCES = basic.cpp 
 
 noinst_HEADERS = littletest.hpp
-AM_CXXFLAGS += -lcurl
+AM_CXXFLAGS += -lcurl -Wall -fPIC
 
 TESTS = $(check_PROGRAMS)
