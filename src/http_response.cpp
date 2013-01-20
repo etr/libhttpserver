@@ -30,7 +30,7 @@ using namespace std;
 namespace httpserver
 {
 
-cache_response::~cache_response()
+http_response::~http_response()
 {
     if(ce != 0x0)
         webserver::unlock_cache_entry(ce);
@@ -107,7 +107,7 @@ shoutCAST_response::shoutCAST_response
     const std::string& content_type,
     bool autodelete
 ):
-    http_response(http_response::SHOUTCAST_CONTENT, content, response_code | http_utils::shoutcast_response, content_type, autodelete)
+    http_response(this, content, response_code | http_utils::shoutcast_response, content_type, autodelete)
 {
 }
 
@@ -116,13 +116,13 @@ ssize_t deferred_response::cycle_callback(const std::string& buf)
     return -1;
 }
 
-void http_response::get_raw_response(MHD_Response** response, webserver* ws)
+void http_response::get_raw_response_str(MHD_Response** response, webserver* ws)
 {
     size_t size = &(*content.end()) - &(*content.begin());
     *response = MHD_create_response_from_buffer(size, (void*) content.c_str(), MHD_RESPMEM_PERSISTENT);
 }
 
-void http_response::decorate_response(MHD_Response* response)
+void http_response::decorate_response_str(MHD_Response* response)
 {
     map<string, string, header_comparator>::iterator it;
     for (it=headers.begin() ; it != headers.end(); ++it)
@@ -133,26 +133,26 @@ void http_response::decorate_response(MHD_Response* response)
         MHD_add_response_header(response, "Set-Cookie", ((*it).first + "=" + (*it).second).c_str());
 }
 
-void cache_response::decorate_response(MHD_Response* response)
-{
-}
-
-int http_response::enqueue_response(MHD_Connection* connection, MHD_Response* response)
+int http_response::enqueue_response_str(MHD_Connection* connection, MHD_Response* response)
 {
     return MHD_queue_response(connection, response_code, response);
 }
 
-int http_basic_auth_fail_response::enqueue_response(MHD_Connection* connection, MHD_Response* response)
+void http_response::decorate_response_cache(MHD_Response* response)
+{
+}
+
+int http_response::enqueue_response_basic(MHD_Connection* connection, MHD_Response* response)
 {
     return MHD_queue_basic_auth_fail_response(connection, realm.c_str(), response);
 }
 
-int http_digest_auth_fail_response::enqueue_response(MHD_Connection* connection, MHD_Response* response)
+int http_response::enqueue_response_digest(MHD_Connection* connection, MHD_Response* response)
 {
     return MHD_queue_auth_fail_response(connection, realm.c_str(), opaque.c_str(), response, reload_nonce ? MHD_YES : MHD_NO);
 }
 
-void http_file_response::get_raw_response(MHD_Response** response, webserver* ws)
+void http_response::get_raw_response_file(MHD_Response** response, webserver* ws)
 {
     char* page = NULL;
     size_t size = http::load_file(filename.c_str(), &page);
@@ -162,7 +162,7 @@ void http_file_response::get_raw_response(MHD_Response** response, webserver* ws
         *response = MHD_create_response_from_buffer(size, (void*) "", MHD_RESPMEM_PERSISTENT);
 }
 
-void cache_response::get_raw_response(MHD_Response** response, webserver* ws)
+void http_response::get_raw_response_cache(MHD_Response** response, webserver* ws)
 {
     bool valid;
     http_response* r;
@@ -189,7 +189,7 @@ ssize_t cb(void* cls, uint64_t pos, char* buf, size_t max)
 
 }
 
-void deferred_response::get_raw_response(MHD_Response** response, webserver* ws)
+void http_response::get_raw_response_deferred(MHD_Response** response, webserver* ws)
 {
     if(!completed)
         *response = MHD_create_response_from_callback(MHD_SIZE_UNKNOWN, 1024, &details::cb, this, NULL);
@@ -197,13 +197,13 @@ void deferred_response::get_raw_response(MHD_Response** response, webserver* ws)
         static_cast<http_response*>(this)->get_raw_response(response, ws);
 }
 
-void deferred_response::decorate_response(MHD_Response* response)
+void http_response::decorate_response_deferred(MHD_Response* response)
 {
     if(completed)
         static_cast<http_response*>(this)->decorate_response(response);
 }
 
-void long_polling_receive_response::get_raw_response(MHD_Response** response, webserver* ws)
+void http_response::get_raw_response_lp_receive(MHD_Response** response, webserver* ws)
 {
 #ifdef USE_COMET
     this->ws = ws;
@@ -234,49 +234,12 @@ ssize_t long_polling_receive_response::data_generator (void* cls, uint64_t pos, 
 #endif //USE_COMET
 }
 
-void long_polling_send_response::get_raw_response(MHD_Response** response, webserver* ws)
+void http_response::get_raw_response_lp_send(MHD_Response** response, webserver* ws)
 {
     http_response::get_raw_response(response, ws);
 #ifdef USE_COMET
     ws->send_message_to_topic(send_topic, content);
 #endif //USE_COMET
-}
-
-void clone_response(const http_response& hr, http_response** dhrs)
-{
-    switch(hr.response_type)
-    {
-        case(http_response::STRING_CONTENT):
-            *dhrs = new http_string_response(hr);
-            return;
-        case(http_response::FILE_CONTENT):
-            *dhrs = new http_file_response(hr);
-            return;
-        case(http_response::SHOUTCAST_CONTENT):
-            *dhrs = new shoutCAST_response(hr);
-            return;
-        case(http_response::DIGEST_AUTH_FAIL):
-            *dhrs = new http_digest_auth_fail_response(hr);
-            return;
-        case(http_response::BASIC_AUTH_FAIL):
-            *dhrs = new http_basic_auth_fail_response(hr);
-            return;
-        case(http_response::SWITCH_PROTOCOL):
-            *dhrs = new switch_protocol_response(hr);
-            return;
-        case(http_response::LONG_POLLING_RECEIVE):
-            *dhrs = new long_polling_receive_response(hr);
-            return;
-        case(http_response::LONG_POLLING_SEND):
-            *dhrs = new long_polling_send_response(hr);
-            return;
-        case(http_response::CACHED_CONTENT):
-            *dhrs = new cache_response(hr);
-            return;
-        case(http_response::DEFERRED):
-            *dhrs = new deferred_response(hr);
-            return;
-    }
 }
 
 };

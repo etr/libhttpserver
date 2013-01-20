@@ -27,6 +27,7 @@
 #include <map>
 #include <utility>
 #include <string>
+#include "httpserver/binders.hpp"
 
 struct MHD_Connection;
 
@@ -66,31 +67,15 @@ class http_response
 {
     public:
         /**
-         * Enumeration indicating whether the response content is got from a string or from a file
-        **/
-        enum response_type_T 
-        {
-            STRING_CONTENT = 0,
-            FILE_CONTENT,
-            SHOUTCAST_CONTENT,
-            DIGEST_AUTH_FAIL,
-            BASIC_AUTH_FAIL,
-            SWITCH_PROTOCOL,
-            LONG_POLLING_RECEIVE,
-            LONG_POLLING_SEND,
-            CACHED_CONTENT,
-            DEFERRED
-        };
-
-        /**
          * Constructor used to build an http_response with a content and a response_code
          * @param content The content to set for the request. (if the response_type is FILE_CONTENT, it represents the path to the file to read from).
          * @param response_code The response code to set for the request.
          * @param response_type param indicating if the content have to be read from a string or from a file
         **/
+        template <typename T>
         http_response
         (
-            const http_response::response_type_T& response_type = http_response::STRING_CONTENT,
+            const T* response_type = 0x0,
             const std::string& content = "", 
             int response_code = 200,
             const std::string& content_type = "text/plain",
@@ -104,7 +89,6 @@ class http_response
             const std::string send_topic = "",
             cache_entry* ce = 0x0
         ):
-            response_type(response_type),
             content(content),
             response_code(response_code),
             autodelete(autodelete),
@@ -119,7 +103,11 @@ class http_response
             send_topic(send_topic),
             ca(0x0),
             closure_data(0x0),
-            ce(ce)
+            ce(ce),
+            get_raw_response(this, &http_response::get_raw_response_str),
+            decorate_response(this, &http_response::decorate_response_str),
+            enqueue_response(this, &http_response::enqueue_response_str),
+            completed(false)
         {
             set_header(http_utils::http_header_content_type, content_type);
         }
@@ -128,7 +116,6 @@ class http_response
          * @param b The http_response object to copy attributes value from.
         **/
         http_response(const http_response& b):
-            response_type(b.response_type),
             content(b.content),
             response_code(b.response_code),
             autodelete(b.autodelete),
@@ -146,35 +133,15 @@ class http_response
             send_topic(b.send_topic),
             ca(0x0),
             closure_data(0x0),
-            ce(b.ce)
+            ce(b.ce),
+            get_raw_response(b.get_raw_response),
+            decorate_response(b.decorate_response),
+            enqueue_response(b.enqueue_response),
+            completed(b.completed)
         {
         }
-        http_response& operator=(const http_response& b)
-        {
-            response_type = b.response_type;
-            content = b.content;
-            response_code = b.response_code;
-            autodelete = b.autodelete;
-            realm = b.realm;
-            opaque = b.opaque;
-            reload_nonce = b.reload_nonce;
-            fp = b.fp;
-            filename = b.filename;
-            headers = b.headers;
-            footers = b.footers;
-            cookies = b.cookies;
-            topics = b.topics;
-            keepalive_secs = b.keepalive_secs;
-            keepalive_msg = b.keepalive_msg;
-            send_topic = b.send_topic;
-            ca = b.ca;
-            closure_data = b.closure_data;
-            ce = b.ce;
-            return *this;
-        }
-        virtual ~http_response()
-        {
-        }
+
+        ~http_response();
         /**
          * Method used to get the content from the response.
          * @return the content in string form
@@ -384,7 +351,10 @@ class http_response
             this->closure_data = closure_data;
         }
     protected:
-        response_type_T response_type;
+        typedef details::binders::functor_two<MHD_Response**, webserver*, void> get_raw_response_t;
+        typedef details::binders::functor_one<MHD_Response*, void> decorate_response_t;
+        typedef details::binders::functor_two<MHD_Connection*, MHD_Response*, int> enqueue_response_t;
+
         std::string content;
         int response_code;
         bool autodelete;
@@ -405,16 +375,366 @@ class http_response
         void* closure_data;
         cache_entry* ce;
 
-        virtual void get_raw_response(MHD_Response** res, webserver* ws = 0x0);
-        virtual void decorate_response(MHD_Response* res);
-        virtual int enqueue_response(MHD_Connection* connection, MHD_Response* res);
+        const get_raw_response_t get_raw_response;
+        const decorate_response_t decorate_response;
+        const enqueue_response_t enqueue_response;
+
+        bool completed;
+
+        void get_raw_response_str(MHD_Response** res, webserver* ws = 0x0);
+        void get_raw_response_file(MHD_Response** res, webserver* ws = 0x0);
+        void get_raw_response_switch(MHD_Response** res, webserver* ws = 0x0);
+        void get_raw_response_lp_receive(MHD_Response** res, webserver* ws = 0x0);
+        void get_raw_response_lp_send(MHD_Response** res, webserver* ws = 0x0);
+        void get_raw_response_cache(MHD_Response** res, webserver* ws = 0x0);
+        void get_raw_response_deferred(MHD_Response** res, webserver* ws = 0x0);
+        void decorate_response_str(MHD_Response* res);
+        void decorate_response_cache(MHD_Response* res);
+        void decorate_response_deferred(MHD_Response* res);
+        int enqueue_response_str(MHD_Connection* connection, MHD_Response* res);
+        int enqueue_response_basic(MHD_Connection* connection, MHD_Response* res);
+        int enqueue_response_digest(MHD_Connection* connection, MHD_Response* res);
 
         friend class webserver;
         friend struct details::http_response_ptr;
         friend void clone_response(const http_response& hr, http_response** dhr);
         friend class cache_response;
         friend class deferred_response;
+    private:
+        http_response& operator=(const http_response& b)
+        {
+            return *this;
+        }
 };
+
+class http_file_response;
+class http_basic_auth_fail_response;
+class http_digest_auth_fail_response;
+class switch_protocol_response;
+class long_polling_receive_response;
+class long_polling_send_response;
+class cache_response;
+class deferred_response;
+
+template <>
+inline http_response::http_response<http_file_response>
+(
+    const http_file_response* response_type,
+    const std::string& content, 
+    int response_code,
+    const std::string& content_type,
+    bool autodelete,
+    const std::string& realm,
+    const std::string& opaque,
+    bool reload_nonce,
+    const std::vector<std::string>& topics,
+    int keepalive_secs,
+    const std::string keepalive_msg,
+    const std::string send_topic,
+    cache_entry* ce
+):
+    content(content),
+    response_code(response_code),
+    autodelete(autodelete),
+    realm(realm),
+    opaque(opaque),
+    reload_nonce(reload_nonce),
+    fp(-1),
+    filename(content),
+    topics(topics),
+    keepalive_secs(keepalive_secs),
+    keepalive_msg(keepalive_msg),
+    send_topic(send_topic),
+    ca(0x0),
+    closure_data(0x0),
+    ce(ce),
+    get_raw_response(this, &http_response::get_raw_response_file),
+    decorate_response(this, &http_response::decorate_response_str),
+    enqueue_response(this, &http_response::enqueue_response_str),
+    completed(false)
+{
+    set_header(http_utils::http_header_content_type, content_type);
+}
+
+template <>
+inline http_response::http_response<http_basic_auth_fail_response>
+(
+    const http_basic_auth_fail_response* response_type,
+    const std::string& content, 
+    int response_code,
+    const std::string& content_type,
+    bool autodelete,
+    const std::string& realm,
+    const std::string& opaque,
+    bool reload_nonce,
+    const std::vector<std::string>& topics,
+    int keepalive_secs,
+    const std::string keepalive_msg,
+    const std::string send_topic,
+    cache_entry* ce
+):
+    content(content),
+    response_code(response_code),
+    autodelete(autodelete),
+    realm(realm),
+    opaque(opaque),
+    reload_nonce(reload_nonce),
+    fp(-1),
+    filename(content),
+    topics(topics),
+    keepalive_secs(keepalive_secs),
+    keepalive_msg(keepalive_msg),
+    send_topic(send_topic),
+    ca(0x0),
+    closure_data(0x0),
+    ce(ce),
+    get_raw_response(this, &http_response::get_raw_response_str),
+    decorate_response(this, &http_response::decorate_response_str),
+    enqueue_response(this, &http_response::enqueue_response_basic),
+    completed(false)
+{
+    set_header(http_utils::http_header_content_type, content_type);
+}
+
+template <>
+inline http_response::http_response<http_digest_auth_fail_response>
+(
+    const http_digest_auth_fail_response* response_type,
+    const std::string& content, 
+    int response_code,
+    const std::string& content_type,
+    bool autodelete,
+    const std::string& realm,
+    const std::string& opaque,
+    bool reload_nonce,
+    const std::vector<std::string>& topics,
+    int keepalive_secs,
+    const std::string keepalive_msg,
+    const std::string send_topic,
+    cache_entry* ce
+):
+    content(content),
+    response_code(response_code),
+    autodelete(autodelete),
+    realm(realm),
+    opaque(opaque),
+    reload_nonce(reload_nonce),
+    fp(-1),
+    filename(content),
+    topics(topics),
+    keepalive_secs(keepalive_secs),
+    keepalive_msg(keepalive_msg),
+    send_topic(send_topic),
+    ca(0x0),
+    closure_data(0x0),
+    ce(ce),
+    get_raw_response(this, &http_response::get_raw_response_str),
+    decorate_response(this, &http_response::decorate_response_str),
+    enqueue_response(this, &http_response::enqueue_response_digest),
+    completed(false)
+{
+    set_header(http_utils::http_header_content_type, content_type);
+}
+
+template <>
+inline http_response::http_response<switch_protocol_response>
+(
+    const switch_protocol_response* response_type,
+    const std::string& content, 
+    int response_code,
+    const std::string& content_type,
+    bool autodelete,
+    const std::string& realm,
+    const std::string& opaque,
+    bool reload_nonce,
+    const std::vector<std::string>& topics,
+    int keepalive_secs,
+    const std::string keepalive_msg,
+    const std::string send_topic,
+    cache_entry* ce
+):
+    content(content),
+    response_code(response_code),
+    autodelete(autodelete),
+    realm(realm),
+    opaque(opaque),
+    reload_nonce(reload_nonce),
+    fp(-1),
+    filename(content),
+    topics(topics),
+    keepalive_secs(keepalive_secs),
+    keepalive_msg(keepalive_msg),
+    send_topic(send_topic),
+    ca(0x0),
+    closure_data(0x0),
+    ce(ce),
+    get_raw_response(this, &http_response::get_raw_response_switch),
+    decorate_response(this, &http_response::decorate_response_str),
+    enqueue_response(this, &http_response::enqueue_response_str),
+    completed(false)
+{
+    set_header(http_utils::http_header_content_type, content_type);
+}
+
+template <>
+inline http_response::http_response<long_polling_receive_response>
+(
+    const long_polling_receive_response* response_type,
+    const std::string& content, 
+    int response_code,
+    const std::string& content_type,
+    bool autodelete,
+    const std::string& realm,
+    const std::string& opaque,
+    bool reload_nonce,
+    const std::vector<std::string>& topics,
+    int keepalive_secs,
+    const std::string keepalive_msg,
+    const std::string send_topic,
+    cache_entry* ce
+):
+    content(content),
+    response_code(response_code),
+    autodelete(autodelete),
+    realm(realm),
+    opaque(opaque),
+    reload_nonce(reload_nonce),
+    fp(-1),
+    filename(content),
+    topics(topics),
+    keepalive_secs(keepalive_secs),
+    keepalive_msg(keepalive_msg),
+    send_topic(send_topic),
+    ca(0x0),
+    closure_data(0x0),
+    ce(ce),
+    get_raw_response(this, &http_response::get_raw_response_lp_receive),
+    decorate_response(this, &http_response::decorate_response_str),
+    enqueue_response(this, &http_response::enqueue_response_str),
+    completed(false)
+{
+    set_header(http_utils::http_header_content_type, content_type);
+}
+
+template <>
+inline http_response::http_response<long_polling_send_response>
+(
+    const long_polling_send_response* response_type,
+    const std::string& content, 
+    int response_code,
+    const std::string& content_type,
+    bool autodelete,
+    const std::string& realm,
+    const std::string& opaque,
+    bool reload_nonce,
+    const std::vector<std::string>& topics,
+    int keepalive_secs,
+    const std::string keepalive_msg,
+    const std::string send_topic,
+    cache_entry* ce
+):
+    content(content),
+    response_code(response_code),
+    autodelete(autodelete),
+    realm(realm),
+    opaque(opaque),
+    reload_nonce(reload_nonce),
+    fp(-1),
+    filename(content),
+    topics(topics),
+    keepalive_secs(keepalive_secs),
+    keepalive_msg(keepalive_msg),
+    send_topic(send_topic),
+    ca(0x0),
+    closure_data(0x0),
+    ce(ce),
+    get_raw_response(this, &http_response::get_raw_response_lp_send),
+    decorate_response(this, &http_response::decorate_response_str),
+    enqueue_response(this, &http_response::enqueue_response_str),
+    completed(false)
+{
+    set_header(http_utils::http_header_content_type, content_type);
+}
+
+template <>
+inline http_response::http_response<cache_response>
+(
+    const cache_response* response_type,
+    const std::string& content, 
+    int response_code,
+    const std::string& content_type,
+    bool autodelete,
+    const std::string& realm,
+    const std::string& opaque,
+    bool reload_nonce,
+    const std::vector<std::string>& topics,
+    int keepalive_secs,
+    const std::string keepalive_msg,
+    const std::string send_topic,
+    cache_entry* ce
+):
+    content(content),
+    response_code(response_code),
+    autodelete(autodelete),
+    realm(realm),
+    opaque(opaque),
+    reload_nonce(reload_nonce),
+    fp(-1),
+    filename(content),
+    topics(topics),
+    keepalive_secs(keepalive_secs),
+    keepalive_msg(keepalive_msg),
+    send_topic(send_topic),
+    ca(0x0),
+    closure_data(0x0),
+    ce(ce),
+    get_raw_response(this, &http_response::get_raw_response_cache),
+    decorate_response(this, &http_response::decorate_response_cache),
+    enqueue_response(this, &http_response::enqueue_response_str),
+    completed(false)
+{
+    set_header(http_utils::http_header_content_type, content_type);
+}
+
+template <>
+inline http_response::http_response<deferred_response>
+(
+    const deferred_response* response_type,
+    const std::string& content, 
+    int response_code,
+    const std::string& content_type,
+    bool autodelete,
+    const std::string& realm,
+    const std::string& opaque,
+    bool reload_nonce,
+    const std::vector<std::string>& topics,
+    int keepalive_secs,
+    const std::string keepalive_msg,
+    const std::string send_topic,
+    cache_entry* ce
+):
+    content(content),
+    response_code(response_code),
+    autodelete(autodelete),
+    realm(realm),
+    opaque(opaque),
+    reload_nonce(reload_nonce),
+    fp(-1),
+    filename(content),
+    topics(topics),
+    keepalive_secs(keepalive_secs),
+    keepalive_msg(keepalive_msg),
+    send_topic(send_topic),
+    ca(0x0),
+    closure_data(0x0),
+    ce(ce),
+    get_raw_response(this, &http_response::get_raw_response_deferred),
+    decorate_response(this, &http_response::decorate_response_deferred),
+    enqueue_response(this, &http_response::enqueue_response_str),
+    completed(false)
+{
+    set_header(http_utils::http_header_content_type, content_type);
+}
 
 class http_string_response : public http_response
 {
@@ -425,7 +745,7 @@ class http_string_response : public http_response
             int response_code,
             const std::string& content_type = "text/plain",
             bool autodelete = true
-        ): http_response(http_response::STRING_CONTENT, content, response_code, content_type, autodelete) { }
+        ): http_response(this, content, response_code, content_type, autodelete) { }
 
         http_string_response(const http_response& b) : http_response(b) { }
     private:
@@ -442,7 +762,7 @@ class http_byte_response : public http_response
             int response_code,
             const std::string& content_type = "text/plain",
             bool autodelete = true
-        ): http_response(http_response::STRING_CONTENT, std::string(content, content_length), response_code, content_type, autodelete) { }
+        ): http_response(this, std::string(content, content_length), response_code, content_type, autodelete) { }
     private:
         friend class webserver;
 };
@@ -456,13 +776,11 @@ class http_file_response : public http_response
             int response_code,
             const std::string& content_type = "text/plain",
             bool autodelete = true
-        ) : http_response(http_response::FILE_CONTENT, filename, response_code, content_type, autodelete)
+        ) : http_response(this, filename, response_code, content_type, autodelete)
         {
         }
 
         http_file_response(const http_response& b) : http_response(b) { }
-    protected:
-        virtual void get_raw_response(MHD_Response** res, webserver* ws = 0x0);
     private:
         friend class webserver;
 };
@@ -476,13 +794,10 @@ class http_basic_auth_fail_response : public http_response
             int response_code,
             const std::string& content_type = "text/plain",
             bool autodelete = true,
-            const std::string& realm = "",
-            const http_response::response_type_T& response_type = http_response::BASIC_AUTH_FAIL
-        ) : http_response(http_response::BASIC_AUTH_FAIL, content, response_code, content_type, autodelete, realm) { }
+            const std::string& realm = ""
+        ) : http_response(this, content, response_code, content_type, autodelete, realm) { }
 
         http_basic_auth_fail_response(const http_response& b) : http_response(b) { }
-    protected:
-        virtual int enqueue_response(MHD_Connection* connection, MHD_Response* res);
     private:
         friend class webserver;
 };
@@ -499,13 +814,11 @@ class http_digest_auth_fail_response : public http_response
             const std::string& realm = "",
             const std::string& opaque = "",
             bool reload_nonce = false
-        ) : http_response(http_response::DIGEST_AUTH_FAIL, content, response_code, content_type, autodelete, realm, opaque, reload_nonce)
+        ) : http_response(this, content, response_code, content_type, autodelete, realm, opaque, reload_nonce)
         { 
         }
 
         http_digest_auth_fail_response(const http_response& b) : http_response(b) { }
-    protected:
-        virtual int enqueue_response(MHD_Connection* connection, MHD_Response* res);
     private:
         friend class webserver;
 };
@@ -529,9 +842,7 @@ class shoutCAST_response : public http_response
 class switch_protocol_response : public http_response
 {
     public:
-        switch_protocol_response
-        (
-        )
+        switch_protocol_response() : http_response(this)
         {
         }
 
@@ -556,13 +867,11 @@ class long_polling_receive_response : public http_response
             bool autodelete = true,
             int keepalive_secs = -1,
             std::string keepalive_msg = ""
-        ) : http_response(http_response::LONG_POLLING_RECEIVE, content, response_code, content_type, autodelete, "", "", false, topics, keepalive_secs, keepalive_msg)
+        ) : http_response(this, content, response_code, content_type, autodelete, "", "", false, topics, keepalive_secs, keepalive_msg)
         {
         }
 
         long_polling_receive_response(const http_response& b) : http_response(b) { }
-    protected:
-        virtual void get_raw_response(MHD_Response** res, webserver* ws = 0x0);
     private:
         static ssize_t data_generator (void* cls, uint64_t pos, char* buf, size_t max);
         int connection_id;
@@ -578,13 +887,11 @@ class long_polling_send_response : public http_response
             const std::string& content,
             const std::string& topic,
             bool autodelete = true
-        ) : http_response(http_response::LONG_POLLING_SEND, content, 200, "", autodelete, "", "", false, std::vector<std::string>(), -1, "", topic)
+        ) : http_response(this, content, 200, "", autodelete, "", "", false, std::vector<std::string>(), -1, "", topic)
         {
         }
 
         long_polling_send_response(const http_response& b) : http_response(b) { }
-    protected:
-        virtual void get_raw_response(MHD_Response** res, webserver* ws = 0x0);
     private:
         friend class webserver;
 };
@@ -595,25 +902,21 @@ class cache_response : public http_response
         cache_response
         (
             const std::string& key
-        ) : http_response(http_response::CACHED_CONTENT, key, 200, "", true, "", "", false, std::vector<std::string>(), -1, "", "", 0x0)
+        ) : http_response(this, key, 200, "", true, "", "", false, std::vector<std::string>(), -1, "", "", 0x0)
         {
         }
         cache_response
         (
             cache_entry* ce
-        ) : http_response(http_response::CACHED_CONTENT, "", 200, "", true, "", "", false, std::vector<std::string>(), -1, "", "", ce)
+        ) : http_response(this, "", 200, "", true, "", "", false, std::vector<std::string>(), -1, "", "", ce)
         {
             if(ce == 0x0)
                 throw bad_caching_attempt();
         }
 
         cache_response(const http_response& b) : http_response(b) { }
-
         ~cache_response();
-
     protected:
-        virtual void get_raw_response(MHD_Response** res, webserver* ws = 0x0);
-        virtual void decorate_response(MHD_Response* res);
         friend class webserver;
 };
 
@@ -622,22 +925,15 @@ class deferred_response : public http_response
     public:
         deferred_response
         (
-        ) : http_response(http_response::DEFERRED), completed(false)
+        ) : http_response(this)
         {
         }
         deferred_response(const http_response& b) : http_response(b) { }
-        ~deferred_response() { }
         virtual ssize_t cycle_callback(const std::string& buf);
-    protected:
-        virtual void get_raw_response(MHD_Response** res, webserver* ws = 0x0);
-        virtual void decorate_response(MHD_Response* res);
     private:
-        bool completed;
         friend class webserver;
         friend ssize_t details::cb(void*, uint64_t, char*, size_t); 
 };
-
-void clone_response(http_response* hr, http_response** dhr);
 
 };
 #endif
