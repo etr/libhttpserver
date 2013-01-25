@@ -61,136 +61,28 @@ bool http_request::check_digest_auth(
     return true;
 }
 
-const std::vector<std::pair<std::string, std::string> > http_request::get_headers() const
-{
-    std::vector<std::pair<std::string, std::string> > to_ret;
-    std::map<std::string, std::string, header_comparator>::const_iterator it;
-    for(it = headers.begin(); it != headers.end(); ++it)
-#ifdef USE_CPP_ZEROX
-        to_ret.push_back(std::make_pair((*it).first,(*it).second));
-#else
-        to_ret.push_back(std::make_pair<std::string, std::string>((*it).first,(*it).second));
-#endif
-    return to_ret;
-}
-size_t http_request::get_headers(std::vector<std::pair<std::string, std::string> >& result) const
-{
-    std::map<std::string, std::string, header_comparator>::const_iterator it;
-    for(it = headers.begin(); it != headers.end(); ++it)
-#ifdef USE_CPP_ZEROX
-        result.push_back(std::make_pair((*it).first,(*it).second));
-#else
-        result.push_back(std::make_pair<std::string, std::string>((*it).first,(*it).second));
-#endif
-    return result.size();
-}
-
-#ifndef SWIG
 size_t http_request::get_headers(std::map<std::string, std::string, header_comparator>& result) const
 {
     result = this->headers;
     return result.size();
 }
-#endif
 
-const std::vector<std::pair<std::string, std::string> > http_request::get_footers() const
-{
-    std::vector<std::pair<std::string, std::string> > to_ret;
-    std::map<std::string, std::string, header_comparator>::const_iterator it;
-    for(it = footers.begin(); it != footers.end(); ++it)
-#ifdef USE_CPP_ZEROX
-        to_ret.push_back(std::make_pair((*it).first,(*it).second));
-#else
-        to_ret.push_back(std::make_pair<std::string, std::string>((*it).first,(*it).second));
-#endif
-    return to_ret;
-}
-size_t http_request::get_footers(std::vector<std::pair<std::string, std::string> >& result) const
-{
-    std::map<std::string, std::string, header_comparator>::const_iterator it;
-    for(it = footers.begin(); it != footers.end(); ++it)
-#ifdef USE_CPP_ZEROX
-        result.push_back(std::make_pair((*it).first,(*it).second));
-#else
-        result.push_back(std::make_pair<std::string, std::string>((*it).first,(*it).second));
-#endif
-    return result.size();
-}
-
-#ifndef SWIG
 size_t http_request::get_footers(std::map<std::string, std::string, header_comparator>& result) const
 {
     result = this->footers;
     return result.size();
 }
-#endif
 
-const std::vector<std::pair<std::string, std::string> > http_request::get_cookies() const
-{
-    std::vector<std::pair<std::string, std::string> > to_ret;
-    std::map<std::string, std::string, header_comparator>::const_iterator it;
-    for(it = cookies.begin(); it != cookies.end(); ++it)
-#ifdef USE_CPP_ZEROX
-        to_ret.push_back(std::make_pair((*it).first,(*it).second));
-#else
-        to_ret.push_back(std::make_pair<std::string, std::string>((*it).first,(*it).second));
-#endif
-    return to_ret;
-}
-
-size_t http_request::get_cookies(std::vector<std::pair<std::string, std::string> >& result) const
-{
-    std::map<std::string, std::string, header_comparator>::const_iterator it;
-    for(it = cookies.begin(); it != cookies.end(); ++it)
-#ifdef USE_CPP_ZEROX
-        result.push_back(std::make_pair((*it).first,(*it).second));
-#else
-        result.push_back(std::make_pair<std::string, std::string>((*it).first,(*it).second));
-#endif
-    return result.size();
-}
-
-#ifndef SWIG
 size_t http_request::get_cookies(std::map<std::string, std::string, header_comparator>& result) const
 {
     result = this->cookies;
     return result.size();
 }
-#endif
 
-const std::vector<std::pair<std::string, std::string> > http_request::get_args() const
-{
-    std::vector<std::pair<std::string, std::string> > to_ret;
-    std::map<std::string, std::string, arg_comparator>::const_iterator it;
-    for(it = args.begin(); it != args.end(); ++it)
-#ifdef USE_CPP_ZEROX
-        to_ret.push_back(std::make_pair((*it).first,(*it).second));
-#else
-        to_ret.push_back(std::make_pair<std::string, std::string>((*it).first,(*it).second));
-#endif
-    return to_ret;
-}
-
-size_t http_request::get_args(std::vector<std::pair<std::string, std::string> >& result) const
-{
-    std::map<std::string, std::string, header_comparator>::const_iterator it;
-    for(it = args.begin(); it != args.end(); ++it)
-#ifdef USE_CPP_ZEROX
-        result.push_back(std::make_pair((*it).first,(*it).second));
-#else
-        result.push_back(std::make_pair<std::string, std::string>((*it).first,(*it).second));
-#endif
-    return result.size();
-}
-
-#ifndef SWIG
 size_t http_request::get_args(std::map<std::string, std::string, arg_comparator>& result) const
 {
     result = this->args;
     return result.size();
 }
-#endif
-
-
 
 };

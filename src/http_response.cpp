@@ -37,63 +37,18 @@ http_response::~http_response()
         webserver::unlock_cache_entry(ce);
 }
 
-const std::vector<std::pair<std::string, std::string> > http_response::get_headers()
-{
-    std::vector<std::pair<std::string, std::string> > to_ret;
-    std::map<std::string, std::string, header_comparator>::const_iterator it;
-    for(it = headers.begin(); it != headers.end(); ++it)
-        to_ret.push_back(*it);
-    return to_ret;
-}
-size_t http_response::get_headers(std::vector<std::pair<std::string, std::string> >& result)
-{
-    std::map<std::string, std::string, header_comparator>::const_iterator it;
-    for(it = headers.begin(); it != headers.end(); ++it)
-        result.push_back(*it);
-    return result.size();
-}
 size_t http_response::get_headers(std::map<std::string, std::string, header_comparator>& result)
 {
     result = this->headers;
     return result.size();
 }
 
-const std::vector<std::pair<std::string, std::string> > http_response::get_footers()
-{
-    std::vector<std::pair<std::string, std::string> > to_ret;
-    std::map<std::string, std::string, header_comparator>::const_iterator it;
-    for(it = footers.begin(); it != footers.end(); ++it)
-        to_ret.push_back(*it);
-    return to_ret;
-}
-size_t http_response::get_footers(std::vector<std::pair<std::string, std::string> >& result)
-{
-    std::map<std::string, std::string, arg_comparator>::const_iterator it;
-    for(it = footers.begin(); it != footers.end(); ++it)
-        result.push_back(*it);
-    return result.size();
-}
 size_t http_response::get_footers(std::map<std::string, std::string, header_comparator>& result)
 {
     result = this->footers;
     return result.size();
 }
 
-const std::vector<std::pair<std::string, std::string> > http_response::get_cookies()
-{
-    std::vector<std::pair<std::string, std::string> > to_ret;
-    std::map<std::string, std::string, header_comparator>::const_iterator it;
-    for(it = cookies.begin(); it != cookies.end(); ++it)
-        to_ret.push_back(*it);
-    return to_ret;
-}
-size_t http_response::get_cookies(std::vector<std::pair<std::string, std::string> >& result)
-{
-    std::map<std::string, std::string, header_comparator>::const_iterator it;
-    for(it = cookies.begin(); it != cookies.end(); ++it)
-        result.push_back(*it);
-    return result.size();
-}
 size_t http_response::get_cookies(std::map<std::string, std::string, header_comparator>& result)
 {
     result = this->cookies;

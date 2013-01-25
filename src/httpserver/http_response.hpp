@@ -254,37 +254,19 @@ class http_response
          * Method used to get all headers passed with the request.
          * @return a map<string,string> containing all headers.
         **/
-        const std::vector<std::pair<std::string, std::string> > get_headers();
-        size_t get_headers(
-                std::vector<std::pair<std::string, std::string> >& result
-        );
-#ifndef SWIG
         size_t get_headers(
                 std::map<std::string, std::string, header_comparator>& result
         );
-#endif
         /**
          * Method used to get all footers passed with the request.
          * @return a map<string,string> containing all footers.
         **/
-        const std::vector<std::pair<std::string, std::string> > get_footers();
-        size_t get_footers(
-                std::vector<std::pair<std::string, std::string> >& result
-        );
-#ifndef SWIG
         size_t get_footers(
                 std::map<std::string, std::string, header_comparator>& result
         );
-#endif
-        const std::vector<std::pair<std::string, std::string> > get_cookies();
-        size_t get_cookies(
-                std::vector<std::pair<std::string, std::string> >& result
-        );
-#ifndef SWIG
         size_t get_cookies(
                 std::map<std::string, std::string, header_comparator>& result
         );
-#endif
         /**
          * Method used to set all headers of the response.
          * @param headers The headers key-value map to set for the response.

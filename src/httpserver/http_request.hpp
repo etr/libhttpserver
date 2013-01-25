@@ -190,80 +190,28 @@ class http_request
         }
         /**
          * Method used to get all headers passed with the request.
-         * @return a vector<pair<string,string> > containing all headers.
-        **/
-        const std::vector<std::pair<std::string, std::string> > get_headers() const;
-        /**
-         * Method used to get all headers passed with the request.
-         * @param result a vector<pair<string, string> > that will be filled with all headers
-         * @result the size of the vector
-        **/
-        size_t get_headers(std::vector<std::pair<std::string, std::string> >& result) const;
-#ifndef SWIG
-        /**
-         * Method used to get all headers passed with the request.
          * @param result a map<string, string> > that will be filled with all headers
          * @result the size of the map
         **/
         size_t get_headers(std::map<std::string, std::string, header_comparator>& result) const;
-#endif
-        /**
-         * Method used to get all footers passed with the request.
-         * @return a vector<pair<string,string> > containing all footers.
-        **/
-        const std::vector<std::pair<std::string, std::string> > get_footers() const;
-        /**
-         * Method used to get all footers passed with the request.
-         * @param result a vector<pair<string, string> > that will be filled with all footers
-         * @result the size of the vector
-        **/
-        size_t get_footers(std::vector<std::pair<std::string, std::string> >& result) const;
-#ifndef SWIG
         /**
          * Method used to get all footers passed with the request.
          * @param result a map<string, string> > that will be filled with all footers
          * @result the size of the map
         **/
         size_t get_footers(std::map<std::string, std::string, header_comparator>& result) const;
-#endif
-        /**
-         * Method used to get all cookies passed with the request.
-         * @return a vector<pair<string, string> > containing all cookies.
-        **/
-        const std::vector<std::pair<std::string, std::string> > get_cookies() const;
-        /**
-         * Method used to get all cookies passed with the request.
-         * @param result a vector<pair<string, string> > that will be filled with all cookies
-         * @result the size of the vector
-        **/
-        size_t get_cookies(std::vector<std::pair<std::string, std::string> >& result) const;
-#ifndef SWIG
         /**
          * Method used to get all cookies passed with the request.
          * @param result a map<string, string> > that will be filled with all cookies
          * @result the size of the map
         **/
         size_t get_cookies(std::map<std::string, std::string, header_comparator>& result) const;
-#endif
-        /**
-         * Method used to get all parameters passed with the request. Usually parameters are passed with DELETE or GET methods.
-         * @return a map<string,string> containing all parameters.
-        **/
-        const std::vector<std::pair<std::string, std::string> > get_args() const;
-        /**
-         * Method used to get all args passed with the request.
-         * @param result a vector<pair<string, string> > that will be filled with all args
-         * @result the size of the vector
-        **/
-        size_t get_args(std::vector<std::pair<std::string, std::string> >& result) const;
-#ifndef SWIG
         /**
          * Method used to get all args passed with the request.
          * @param result a map<string, string> > that will be filled with all args
          * @result the size of the map
         **/
         size_t get_args(std::map<std::string, std::string, arg_comparator>& result) const;
-#endif
         /**
          * Method used to get a specific header passed with the request.
          * @param key the specific header to get the value from
