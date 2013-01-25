@@ -14,9 +14,10 @@
 
      You should have received a copy of the GNU Lesser General Public
      License along with this library; if not, write to the Free Software
-     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
-
+     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 
+     USA
 */
+
 #include <stdint.h>
 #include <inttypes.h>
 #include <iostream>
@@ -155,7 +156,11 @@ struct modded_request
     struct MHD_PostProcessor *pp;
     std::string* complete_uri;
     webserver* ws;
-    binders::functor_two<const http_request&, http_response**, void> http_resource_mirror::*callback;
+
+    binders::functor_two<
+        const http_request&, http_response**, void
+    > http_resource_mirror::*callback;
+
     http_request* dhr;
     http_response_ptr dhrs;
     bool second;
@@ -249,7 +254,11 @@ struct cache_entry
         elem_guard = b.elem_guard;
     }
 
-    cache_entry(details::http_response_ptr response, long ts = -1, int validity = -1):
+    cache_entry(
+            details::http_response_ptr response,
+            long ts = -1,
+            int validity = -1
+    ):
         ts(ts),
         validity(validity),
         response(response)
@@ -307,7 +316,9 @@ size_t internal_unescaper(void*, char*);
 
 struct compare_value
 {
-    bool operator() (const std::pair<int, int>& left, const std::pair<int, int>& right) const
+    bool operator() (const std::pair<int, int>& left,
+            const std::pair<int, int>& right
+    ) const
     {
         return left.second < right.second;
     }
@@ -330,11 +341,16 @@ static void ignore_sigpipe ()
     sig.sa_flags = SA_RESTART;
 #endif //SA_INTERRUPTT
     if (0 != sigaction (SIGPIPE, &sig, &oldsig))
-        fprintf (stderr, gettext("Failed to install SIGPIPE handler: %s\n"), strerror (errno));
+        fprintf (stderr,
+                gettext("Failed to install SIGPIPE handler: %s\n"),
+                strerror (errno)
+        );
 }
 
 //WEBSERVER CREATOR
-create_webserver& create_webserver::https_mem_key(const std::string& https_mem_key)
+create_webserver& create_webserver::https_mem_key(
+        const std::string& https_mem_key
+)
 {
     char* _https_mem_key_pt = http::load_file(https_mem_key.c_str());
     _https_mem_key = _https_mem_key_pt;
@@ -342,7 +358,9 @@ create_webserver& create_webserver::https_mem_key(const std::string& https_mem_k
     return *this;
 }
 
-create_webserver& create_webserver::https_mem_cert(const std::string& https_mem_cert)
+create_webserver& create_webserver::https_mem_cert(
+        const std::string& https_mem_cert
+)
 {
     char* _https_mem_cert_pt = http::load_file(https_mem_cert.c_str());
     _https_mem_cert = _https_mem_cert_pt;
@@ -350,7 +368,9 @@ create_webserver& create_webserver::https_mem_cert(const std::string& https_mem_
     return *this;
 }
 
-create_webserver& create_webserver::https_mem_trust(const std::string& https_mem_trust)
+create_webserver& create_webserver::https_mem_trust(
+        const std::string& https_mem_trust
+)
 {
     char* _https_mem_trust_pt = http::load_file(https_mem_trust.c_str());
     _https_mem_trust = _https_mem_trust_pt;
@@ -554,7 +574,8 @@ webserver::~webserver()
     pthread_mutex_destroy(&cleanmux);
     pthread_cond_destroy(&cleancond);
 #endif //USE_COMET
-    for(vector<details::daemon_item*>::const_iterator it = daemons.begin(); it != daemons.end(); ++it)
+    typedef vector<details::daemon_item*>::const_iterator daemon_item_it;
+    for(daemon_item_it it = daemons.begin(); it != daemons.end(); ++it)
         delete *it;
 }
 
@@ -563,7 +584,12 @@ void webserver::sweet_kill()
     this->stop();
 }
 
-void webserver::request_completed (void *cls, struct MHD_Connection *connection, void **con_cls, enum MHD_RequestTerminationCode toe) 
+void webserver::request_completed (
+        void *cls,
+        struct MHD_Connection *connection,
+        void **con_cls,
+        enum MHD_RequestTerminationCode toe
+)
 {
     details::modded_request* mr = (struct details::modded_request*) *con_cls;
     if (0x0 == mr) 
@@ -574,11 +600,18 @@ void webserver::request_completed (void *cls, struct MHD_Connection *connection,
     }
 }
 
-void webserver::register_resource(const std::string& resource, details::http_resource_mirror hrm, bool family)
+void webserver::register_resource(
+        const std::string& resource,
+        details::http_resource_mirror hrm,
+        bool family
+)
 {
     if(method_not_acceptable_resource)
         hrm.method_not_acceptable_resource = method_not_acceptable_resource; 
-    registered_resources[details::http_endpoint(resource, family, true, regex_checking)] = hrm;
+
+    registered_resources[
+        details::http_endpoint(resource, family, true, regex_checking)
+    ] = hrm;
 }
 
 void webserver::schedule_fd(int fd, fd_set* schedule_list, int* max)
@@ -607,7 +640,8 @@ void webserver::clean_connections()
 {
 #ifdef USE_COMET
     pthread_rwlock_wrlock(&comet_guard);
-    for(std::map<string, std::set<int> >::iterator it = q_waitings.begin(); it != q_waitings.end(); ++it)
+    typedef std::map<string, std::set<int> >::iterator conn_it;
+    for(conn_it it = q_waitings.begin(); it != q_waitings.end(); ++it)
     {
         std::set<int>::const_iterator itt;
         for(itt = (*it).second.begin(); itt != (*it).second.end(); )
@@ -656,7 +690,10 @@ void* webserver::select(void* self)
         {
             std::map<std::string, details::event_tuple>::const_iterator it;
             pthread_rwlock_rdlock(&di->ws->runguard);
-            for(it = di->ws->event_suppliers.begin(); it != di->ws->event_suppliers.end(); ++it)
+            for(it = di->ws->event_suppliers.begin();
+                    it != di->ws->event_suppliers.end();
+                    ++it
+            )
             {
                 int local_max;
                 (*it).second.supply_events(&rs, &ws, &es, &local_max);
@@ -674,16 +711,24 @@ void* webserver::select(void* self)
         di->ws->clean_connections();
         //TODO: clean connection structures also when working with threads
         pthread_rwlock_wrlock(&_di->ws>comet_guard);
-        for(std::map<int, long>::iterator it = di->ws->q_keepalives.begin(); it != di->ws->q_keepalives.end(); ++it)
+        for(std::map<int, long>::iterator it = di->ws->q_keepalives.begin();
+                it != di->ws->q_keepalives.end();
+                ++it
+        )
         {
             struct timeval curtime;
             gettimeofday(&curtime, NULL);
             int waited_time = curtime.tv_sec - (*it).second;
             if(waited_time >= di->ws->q_keepalives_mem[(*it).first].first)
-                di->ws->send_message_to_consumer((*it).first, di->ws->q_keepalives_mem[(*it).first].second);
+                di->ws->send_message_to_consumer(
+                        (*it).first,
+                        di->ws->q_keepalives_mem[(*it).first].second
+                );
             else
             {
-                unsigned long to_wait_time = di->ws->q_keepalives_mem[(*it).first].first - waited_time;
+                unsigned long to_wait_time = 
+                    di->ws->q_keepalives_mem[(*it).first].first - waited_time;
+
                 if(to_wait_time < (timeout / 1000))
                     timeout = to_wait_time * 1000;
             }
@@ -691,25 +736,28 @@ void* webserver::select(void* self)
         pthread_rwlock_unlock(&di->ws->comet_guard);
 
         pthread_rwlock_rdlock(&di->ws->comet_guard);
-        for(std::set<int>::const_iterator it = di->ws->q_signal.begin(); it != di->ws->q_signal.end(); ++it)
-        {
+
+        for(std::set<int>::const_iterator it = di->ws->q_signal.begin();
+                it != di->ws->q_signal.end();
+                ++it
+        )
             di->ws->schedule_fd(*it, &ws, &max);
-        }
         pthread_rwlock_unlock(&di->ws->comet_guard);
 #endif //USE_COMET
 
         timeout_value.tv_sec = timeout / 1000;
-        timeout_value.tv_usec = (timeout - (timeout_value.tv_sec * 1000)) * 1000;
+        timeout_value.tv_usec =(timeout - (timeout_value.tv_sec * 1000)) * 1000;
 
         ::select (max + 1, &rs, &ws, &es, &timeout_value);
         MHD_run (di->daemon);
         {
             std::map<std::string, details::event_tuple>::const_iterator it;
             pthread_rwlock_rdlock(&di->ws->runguard);
-            for(it = di->ws->event_suppliers.begin(); it != di->ws->event_suppliers.end(); ++it)
-            {
+            for(it = di->ws->event_suppliers.begin();
+                    it != di->ws->event_suppliers.end();
+                    ++it
+            )
                 (*it).second.dispatch_events();
-            }
         }
     }
     return 0x0;
@@ -755,17 +803,28 @@ bool webserver::start(bool blocking)
 #endif
 
     struct {
-        MHD_OptionItem operator ()(enum MHD_OPTION opt, intptr_t val, void *ptr = 0) {
+        MHD_OptionItem operator ()(
+                enum MHD_OPTION opt,
+                intptr_t val,
+                void *ptr = 0
+        )
+        {
             MHD_OptionItem x = {opt, val, ptr};
             return x;
         }
     } gen;
     vector<struct MHD_OptionItem> iov;
 
-    iov.push_back(gen(MHD_OPTION_NOTIFY_COMPLETED, (intptr_t) &request_completed, NULL ));
+    iov.push_back(gen(MHD_OPTION_NOTIFY_COMPLETED,
+                (intptr_t) &request_completed, 
+                NULL 
+    ));
     iov.push_back(gen(MHD_OPTION_URI_LOG_CALLBACK, (intptr_t) &uri_log, this));
     iov.push_back(gen(MHD_OPTION_EXTERNAL_LOGGER, (intptr_t) &error_log, this));
-    iov.push_back(gen(MHD_OPTION_UNESCAPE_CALLBACK, (intptr_t) &unescaper_func, this));
+    iov.push_back(gen(MHD_OPTION_UNESCAPE_CALLBACK,
+                (intptr_t) &unescaper_func,
+                this)
+    );
     iov.push_back(gen(MHD_OPTION_CONNECTION_TIMEOUT, connection_timeout));
     if(bind_address != 0x0)
         iov.push_back(gen(MHD_OPTION_SOCK_ADDR, (intptr_t) bind_address));
@@ -781,21 +840,38 @@ bool webserver::start(bool blocking)
     if(memory_limit != 0)
         iov.push_back(gen(MHD_OPTION_CONNECTION_MEMORY_LIMIT, memory_limit));
     if(per_IP_connection_limit != 0)
-        iov.push_back(gen(MHD_OPTION_PER_IP_CONNECTION_LIMIT, per_IP_connection_limit));
+        iov.push_back(gen(MHD_OPTION_PER_IP_CONNECTION_LIMIT,
+                    per_IP_connection_limit)
+        );
     if(max_thread_stack_size != 0)
         iov.push_back(gen(MHD_OPTION_THREAD_STACK_SIZE, max_thread_stack_size));
     if(nonce_nc_size != 0)
         iov.push_back(gen(MHD_OPTION_NONCE_NC_SIZE, nonce_nc_size));
     if(use_ssl)
-        iov.push_back(gen(MHD_OPTION_HTTPS_MEM_KEY, 0, (void*)https_mem_key.c_str()));
+        iov.push_back(gen(MHD_OPTION_HTTPS_MEM_KEY,
+                    0,
+                    (void*)https_mem_key.c_str())
+        );
     if(use_ssl)
-        iov.push_back(gen(MHD_OPTION_HTTPS_MEM_CERT, 0, (void*)https_mem_cert.c_str()));
+        iov.push_back(gen(MHD_OPTION_HTTPS_MEM_CERT,
+                    0,
+                    (void*)https_mem_cert.c_str())
+        );
     if(https_mem_trust != "" && use_ssl)
-        iov.push_back(gen(MHD_OPTION_HTTPS_MEM_TRUST, 0, (void*)https_mem_trust.c_str()));
+        iov.push_back(gen(MHD_OPTION_HTTPS_MEM_TRUST,
+                    0,
+                    (void*)https_mem_trust.c_str())
+        );
     if(https_priorities != "" && use_ssl)
-        iov.push_back(gen(MHD_OPTION_HTTPS_PRIORITIES, 0, (void*)https_priorities.c_str()));
+        iov.push_back(gen(MHD_OPTION_HTTPS_PRIORITIES,
+                    0,
+                    (void*)https_priorities.c_str())
+        );
     if(digest_auth_random != "")
-        iov.push_back(gen(MHD_OPTION_DIGEST_AUTH_RANDOM, digest_auth_random.size(), (char*)digest_auth_random.c_str()));
+        iov.push_back(gen(MHD_OPTION_DIGEST_AUTH_RANDOM,
+                    digest_auth_random.size(),
+                    (char*)digest_auth_random.c_str())
+        );
 #ifdef HAVE_GNUTLS
     if(cred_type != http_utils::NONE)
         iov.push_back(gen(MHD_OPTION_HTTPS_CRED_TYPE, cred_type));
@@ -883,14 +959,6 @@ bool webserver::start(bool blocking)
         fcntl (bind_socket, F_SETFL, flags);
         if(!bind_settled)
             listen(bind_socket, 1);
-/*
-#ifndef WINDOWS
-        setsockopt (h->fd, IPPROTO_TCP, TCP_NODELAY, &value, sizeof (value));
-#else
-        const char* absval;
-        setsockopt (h->fd, IPPROTO_TCP, TCP_NODELAY, abs_value, sizeof (abs_value));
-#endif
-*/
         iov.push_back(gen(MHD_OPTION_LISTEN_SOCKET, bind_socket));
     }
 
@@ -923,11 +991,14 @@ bool webserver::start(bool blocking)
             struct MHD_Daemon* daemon = MHD_start_daemon
             (
                     start_conf, this->port, &policy_callback, this,
-                    &answer_to_connection, this, MHD_OPTION_ARRAY, ops, MHD_OPTION_END
+                    &answer_to_connection, this, MHD_OPTION_ARRAY,
+                    ops, MHD_OPTION_END
             );
             if(NULL == daemon)
             {
-                cout << gettext("Unable to connect daemon to port: ") << this->port << endl;
+                cout << gettext("Unable to connect daemon to port: ") <<
+                    this->port << endl;
+
                 return false;
             }
             details::daemon_item* di = new details::daemon_item(this, daemon);
@@ -936,7 +1007,13 @@ bool webserver::start(bool blocking)
             //RUN SELECT THREADS
             pthread_t t;
             threads.push_back(t);
-            pthread_create(&threads[i], NULL, &webserver::select, static_cast<void*>(di));
+
+            pthread_create(
+                    &threads[i],
+                    NULL,
+                    &webserver::select,
+                    static_cast<void*>(di)
+            );
             //TODO: do something if initialization fails
         }
     }
@@ -945,11 +1022,13 @@ bool webserver::start(bool blocking)
         struct MHD_Daemon* daemon = MHD_start_daemon
         (
                 start_conf, this->port, &policy_callback, this,
-                &answer_to_connection, this, MHD_OPTION_ARRAY, ops, MHD_OPTION_END
+                &answer_to_connection, this, MHD_OPTION_ARRAY, 
+                ops, MHD_OPTION_END
         );
         if(NULL == daemon)
         {
-            cout << gettext("Unable to connect daemon to port: ") << this->port << endl;
+            cout << gettext("Unable to connect daemon to port: ") << 
+                this->port << endl;
             return false;
         }
         details::daemon_item* di = new details::daemon_item(this, daemon);
@@ -957,7 +1036,11 @@ bool webserver::start(bool blocking)
 #ifdef USE_COMET
         pthread_t c;
         threads.push_back(c);
-        pthread_create(&threads[0], NULL, &webserver::cleaner, static_cast<void*>(this));
+        pthread_create(&threads[0], 
+                NULL,
+                &webserver::cleaner,
+                static_cast<void*>(this)
+        );
         //TODO: do something if initialization fails
 #endif
 
@@ -1031,28 +1114,48 @@ void webserver::disallow_ip(const string& ip)
     this->allowances.erase(ip);
 }
 
-int webserver::build_request_header (void *cls, enum MHD_ValueKind kind, const char *key, const char *value)
+int webserver::build_request_header (
+        void *cls,
+        enum MHD_ValueKind kind,
+        const char *key,
+        const char *value
+)
 {
     http_request* dhr = static_cast<http_request*>(cls);
     dhr->set_header(key, value);
     return MHD_YES;
 }
 
-int webserver::build_request_cookie (void *cls, enum MHD_ValueKind kind, const char *key, const char *value)
+int webserver::build_request_cookie (
+        void *cls,
+        enum MHD_ValueKind kind,
+        const char *key,
+        const char *value
+)
 {
     http_request* dhr = static_cast<http_request*>(cls);
     dhr->set_cookie(key, value);
     return MHD_YES;
 }
 
-int webserver::build_request_footer (void *cls, enum MHD_ValueKind kind, const char *key, const char *value)
+int webserver::build_request_footer (
+        void *cls,
+        enum MHD_ValueKind kind,
+        const char *key,
+        const char *value
+)
 {
     http_request* dhr = static_cast<http_request*>(cls);
     dhr->set_footer(key, value);
     return MHD_YES;
 }
 
-int webserver::build_request_args (void *cls, enum MHD_ValueKind kind, const char *key, const char *value)
+int webserver::build_request_args (
+        void *cls,
+        enum MHD_ValueKind kind,
+        const char *key,
+        const char *value
+)
 {
     details::modded_request* mr = static_cast<details::modded_request*>(cls);
     {
@@ -1081,8 +1184,8 @@ int policy_callback (void *cls, const struct sockaddr* addr, socklen_t addrlen)
            ((static_cast<webserver*>(cls))->bans.count(addr)) && 
            (!(static_cast<webserver*>(cls))->allowances.count(addr))
         ) ||
-        (((static_cast<webserver*>(cls))->default_policy == http_utils::REJECT) &&
-           ((!(static_cast<webserver*>(cls))->allowances.count(addr)) ||
+        (((static_cast<webserver*>(cls))->default_policy == http_utils::REJECT)
+           && ((!(static_cast<webserver*>(cls))->allowances.count(addr)) ||
            ((static_cast<webserver*>(cls))->bans.count(addr)))
         ))
             return MHD_NO;
@@ -1152,12 +1255,18 @@ void webserver::upgrade_handler (void *cls, struct MHD_Connection* connection,
 {
 }
 
-void webserver::not_found_page(http_response** dhrs, details::modded_request* mr)
+void webserver::not_found_page(
+        http_response** dhrs,
+        details::modded_request* mr
+)
 {
     if(not_found_resource != 0x0)
         not_found_resource(*mr->dhr, dhrs);
     else
-        *dhrs = new http_string_response(NOT_FOUND_ERROR, http_utils::http_not_found);
+        *dhrs = new http_string_response(
+                NOT_FOUND_ERROR, 
+                http_utils::http_not_found
+        );
 }
 
 int webserver::method_not_acceptable_page (const void *cls,
@@ -1181,20 +1290,33 @@ int webserver::method_not_acceptable_page (const void *cls,
     return ret;
 }
 
-void webserver::method_not_allowed_page(http_response** dhrs, details::modded_request* mr)
+void webserver::method_not_allowed_page(
+        http_response** dhrs,
+        details::modded_request* mr
+)
 {
     if(method_not_acceptable_resource != 0x0)
         method_not_allowed_resource(*mr->dhr, dhrs);
     else
-        *dhrs = new http_string_response(METHOD_ERROR, http_utils::http_method_not_allowed);
+        *dhrs = new http_string_response(
+                METHOD_ERROR,
+                http_utils::http_method_not_allowed
+        );
 }
 
-void webserver::internal_error_page(http_response** dhrs, details::modded_request* mr, bool force_our)
+void webserver::internal_error_page(
+        http_response** dhrs,
+        details::modded_request* mr,
+        bool force_our
+)
 {
     if(internal_error_resource != 0x0 && !force_our)
         internal_error_resource(*mr->dhr, dhrs);
     else
-        *dhrs = new http_string_response(GENERIC_ERROR, http_utils::http_internal_server_error);
+        *dhrs = new http_string_response(
+                GENERIC_ERROR,
+                http_utils::http_internal_server_error
+        );
 }
 
 int webserver::bodyless_requests_answer(MHD_Connection* connection,
@@ -1211,21 +1333,38 @@ int webserver::bodyless_requests_answer(MHD_Connection* connection,
     return complete_request(connection, mr, version, st_url.c_str(), method);
 }
 
-int webserver::bodyfull_requests_answer_first_step(MHD_Connection* connection, struct details::modded_request* mr)
+int webserver::bodyfull_requests_answer_first_step(
+        MHD_Connection* connection,
+        struct details::modded_request* mr
+)
 {
     mr->second = true;
     mr->dhr = new http_request();
-    const char *encoding = MHD_lookup_connection_value (connection, MHD_HEADER_KIND, http_utils::http_header_content_type.c_str());
+    const char *encoding = MHD_lookup_connection_value (
+            connection,
+            MHD_HEADER_KIND,
+            http_utils::http_header_content_type.c_str()
+    );
     if(encoding != 0x0)
         mr->dhr->set_header(http_utils::http_header_content_type, encoding);
     if ( post_process_enabled &&
         (   
             0x0 != encoding && 
-            ((0 == strncasecmp (MHD_HTTP_POST_ENCODING_FORM_URLENCODED, encoding, strlen (MHD_HTTP_POST_ENCODING_FORM_URLENCODED))))
+            ((0 == strncasecmp (
+                                MHD_HTTP_POST_ENCODING_FORM_URLENCODED, 
+                                encoding, 
+                                strlen (MHD_HTTP_POST_ENCODING_FORM_URLENCODED)
+                                )
+            ))
         )
     ) 
     {
-        mr->pp = MHD_create_post_processor (connection, 1024, &post_iterator, mr);
+        mr->pp = MHD_create_post_processor (
+                connection,
+                1024,
+                &post_iterator,
+                mr
+        );
     } 
     else 
     {
@@ -1260,13 +1399,42 @@ int webserver::bodyfull_requests_answer_second_step(MHD_Connection* connection,
     return complete_request(connection, mr, version, st_url.c_str(), method);
 }
 
-void webserver::end_request_construction(MHD_Connection* connection, struct details::modded_request* mr, const char* version, const char* st_url, const char* method, char* user, char* pass, char* digested_user)
+void webserver::end_request_construction(
+        MHD_Connection* connection,
+        struct details::modded_request* mr,
+        const char* version,
+        const char* st_url,
+        const char* method,
+        char* user,
+        char* pass,
+        char* digested_user
+)
 {
     mr->ws = this;
-    MHD_get_connection_values (connection, MHD_GET_ARGUMENT_KIND, &build_request_args, (void*) mr);
-    MHD_get_connection_values (connection, MHD_HEADER_KIND, &build_request_header, (void*) mr->dhr);
-    MHD_get_connection_values (connection, MHD_FOOTER_KIND, &build_request_footer, (void*) mr->dhr);
-    MHD_get_connection_values (connection, MHD_COOKIE_KIND, &build_request_cookie, (void*) mr->dhr);
+    MHD_get_connection_values (
+            connection,
+            MHD_GET_ARGUMENT_KIND,
+            &build_request_args,
+            (void*) mr
+    );
+    MHD_get_connection_values (
+            connection,
+            MHD_HEADER_KIND,
+            &build_request_header,
+            (void*) mr->dhr
+    );
+    MHD_get_connection_values (
+            connection,
+            MHD_FOOTER_KIND,
+            &build_request_footer,
+            (void*) mr->dhr
+    );
+    MHD_get_connection_values (
+            connection,
+            MHD_COOKIE_KIND,
+            &build_request_cookie,
+            (void*) mr->dhr
+    );
 
     mr->dhr->set_path(st_url);
     mr->dhr->set_method(method);
@@ -1278,7 +1446,10 @@ void webserver::end_request_construction(MHD_Connection* connection, struct deta
     if(digest_auth_enabled)
         digested_user = MHD_digest_auth_get_username(connection);
     mr->dhr->set_version(version);
-    const MHD_ConnectionInfo * conninfo = MHD_get_connection_info(connection, MHD_CONNECTION_INFO_CLIENT_ADDRESS);
+    const MHD_ConnectionInfo * conninfo = MHD_get_connection_info(
+            connection,
+            MHD_CONNECTION_INFO_CLIENT_ADDRESS
+    );
     std::string ip_str;
     get_ip_str(conninfo->client_addr, ip_str);
     mr->dhr->set_requestor(ip_str);
@@ -1294,11 +1465,20 @@ void webserver::end_request_construction(MHD_Connection* connection, struct deta
     }
 }
 
-int webserver::finalize_answer(MHD_Connection* connection, struct details::modded_request* mr, const char* st_url, const char* method)
+int webserver::finalize_answer(
+        MHD_Connection* connection,
+        struct details::modded_request* mr,
+        const char* st_url,
+        const char* method
+)
 {
     int to_ret = MHD_NO;
     http_response* dhrs = 0x0;
-    map<details::http_endpoint, details::http_resource_mirror>::iterator found_endpoint;
+
+    map<
+        details::http_endpoint, details::http_resource_mirror
+    >::iterator found_endpoint;
+
     bool found = false;
     struct MHD_Response* raw_response;
     if(!single_resource)
@@ -1309,14 +1489,29 @@ int webserver::finalize_answer(MHD_Connection* connection, struct details::modde
         {
             if(regex_checking)
             {
-                map<details::http_endpoint, details::http_resource_mirror>::iterator it;
+                map<
+                    details::http_endpoint,
+                    details::http_resource_mirror
+                >::iterator it;
+
                 int len = -1;
                 int tot_len = -1;
-                for(it=registered_resources.begin(); it!=registered_resources.end(); ++it) 
+                for(
+                        it=registered_resources.begin();
+                        it!=registered_resources.end();
+                        ++it
+                )
                 {
                     int endpoint_pieces_len = (*it).first.get_url_pieces_num();
                     int endpoint_tot_len = (*it).first.get_url_complete_size();
-                    if(tot_len == -1 || len == -1 || endpoint_pieces_len > len || (endpoint_pieces_len == len && endpoint_tot_len > tot_len))
+                    if(tot_len == -1 || 
+                        len == -1 ||
+                        endpoint_pieces_len > len ||
+                        (
+                            endpoint_pieces_len == len &&
+                            endpoint_tot_len > tot_len
+                        )
+                    )
                     {
                         if((*it).first.match(endpoint))
                         {
@@ -1330,7 +1525,10 @@ int webserver::finalize_answer(MHD_Connection* connection, struct details::modde
                 if(found) 
                 {
                     vector<string> url_pars;
-                    unsigned int pars_size = found_endpoint->first.get_url_pars(url_pars);
+
+                    unsigned int pars_size =
+                        found_endpoint->first.get_url_pars(url_pars);
+
                     vector<string> url_pieces;
                     endpoint.get_url_pieces(url_pieces);
                     vector<int> chunkes;
@@ -1417,13 +1615,28 @@ int webserver::finalize_answer(MHD_Connection* connection, struct details::modde
     return to_ret;
 }
 
-int webserver::complete_request(MHD_Connection* connection, struct details::modded_request* mr, const char* version, const char* st_url, const char* method)
+int webserver::complete_request(
+        MHD_Connection* connection,
+        struct details::modded_request* mr,
+        const char* version,
+        const char* st_url,
+        const char* method
+)
 {
     char* pass = 0x0;
     char* user = 0x0;
     char* digested_user = 0x0;
 
-    end_request_construction(connection, mr, version, st_url, method, pass, user, digested_user);
+    end_request_construction(
+            connection,
+            mr,
+            version,
+            st_url,
+            method,
+            pass,
+            user,
+            digested_user
+    );
 
     int to_ret = finalize_answer(connection, mr, st_url, method);
 
@@ -1443,11 +1656,18 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
     size_t* upload_data_size, void** con_cls
     )
 {
-    struct details::modded_request* mr = static_cast<struct details::modded_request*>(*con_cls);
+    struct details::modded_request* mr = 
+        static_cast<struct details::modded_request*>(*con_cls);
+
     if(mr->second == false)
     {
         bool body = false;
-        access_log(static_cast<webserver*>(cls), *(mr->complete_uri) + " METHOD: " + method);
+
+        access_log(
+                static_cast<webserver*>(cls),
+                *(mr->complete_uri) + " METHOD: " + method
+        );
+
         if( 0 == strcmp(method, http_utils::http_method_get.c_str()))
         {
             mr->callback = &details::http_resource_mirror::render_GET;
@@ -1480,24 +1700,44 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
         }
         else
         {
+            using namespace details;
             if(static_cast<webserver*>(cls)->method_not_acceptable_resource)
-                mr->callback = &details::http_resource_mirror::method_not_acceptable_resource;
+                mr->callback =
+                    &http_resource_mirror::method_not_acceptable_resource;
             else
-                return static_cast<webserver*>(cls)->method_not_acceptable_page(cls, connection);
+                return static_cast<webserver*>(cls)->method_not_acceptable_page(
+                        cls,
+                        connection
+                );
         }
 
         if(body)
-            return static_cast<webserver*>(cls)->bodyfull_requests_answer_first_step(connection, mr);
+            return static_cast<webserver*>(cls)->
+                bodyfull_requests_answer_first_step(connection, mr);
         else
-            return static_cast<webserver*>(cls)->bodyless_requests_answer(connection, url, method, version, mr);
+            return static_cast<webserver*>(cls)->
+                bodyless_requests_answer(connection, url, method, version, mr);
     }
     else
     {
-        return static_cast<webserver*>(cls)->bodyfull_requests_answer_second_step(connection, url, method, version, upload_data, upload_data_size, mr);
+        return static_cast<webserver*>(cls)->
+            bodyfull_requests_answer_second_step(
+                    connection,
+                    url,
+                    method,
+                    version,
+                    upload_data,
+                    upload_data_size,
+                    mr
+            );
     }
 }
 
-void webserver::send_message_to_consumer(int connection_id, const std::string& message, bool to_lock)
+void webserver::send_message_to_consumer(
+        int connection_id,
+        const std::string& message,
+        bool to_lock
+)
 {
 #ifdef USE_COMET
     //This function need to be externally locked on write
@@ -1521,11 +1761,17 @@ void webserver::send_message_to_consumer(int connection_id, const std::string& m
 #endif //USE_COMET
 }
 
-void webserver::send_message_to_topic(const std::string& topic, const std::string& message)
+void webserver::send_message_to_topic(
+        const std::string& topic,
+        const std::string& message
+)
 {
 #ifdef USE_COMET
     pthread_rwlock_wrlock(&comet_guard);
-    for(std::set<int>::const_iterator it = q_waitings[topic].begin(); it != q_waitings[topic].end(); ++it)
+    for(std::set<int>::const_iterator it = q_waitings[topic].begin();
+            it != q_waitings[topic].end();
+            ++it
+    )
     {
         q_messages[(*it)].push_back(message);
         q_signal.insert((*it));
@@ -1553,18 +1799,27 @@ void webserver::send_message_to_topic(const std::string& topic, const std::strin
 #endif //USE_COMET
 }
 
-void webserver::register_to_topics(const std::vector<std::string>& topics, int connection_id, int keepalive_secs, string keepalive_msg)
+void webserver::register_to_topics(
+        const std::vector<std::string>& topics,
+        int connection_id,
+        int keepalive_secs,
+        string keepalive_msg
+)
 {
 #ifdef USE_COMET
     pthread_rwlock_wrlock(&comet_guard);
-    for(std::vector<std::string>::const_iterator it = topics.begin(); it != topics.end(); ++it)
+    for(std::vector<std::string>::const_iterator it = topics.begin();
+            it != topics.end(); ++it
+    )
         q_waitings[*it].insert(connection_id);
     if(keepalive_secs != -1)
     {
         struct timeval curtime;
         gettimeofday(&curtime, NULL);
         q_keepalives[connection_id] = curtime.tv_sec;
-        q_keepalives_mem[connection_id] = make_pair<int, string>(keepalive_secs, keepalive_msg);
+        q_keepalives_mem[connection_id] = make_pair<int, string>(
+                keepalive_secs, keepalive_msg
+        );
     }
     if(start_method != http_utils::INTERNAL_SELECT)
     {
@@ -1572,7 +1827,8 @@ void webserver::register_to_topics(const std::vector<std::string>& topics, int c
         pthread_cond_t c;
         pthread_mutex_init(&m, NULL);
         pthread_cond_init(&c, NULL);
-        q_blocks[connection_id] = std::make_pair<pthread_mutex_t, pthread_cond_t>(m, c);
+        q_blocks[connection_id] =
+            std::make_pair<pthread_mutex_t, pthread_cond_t>(m, c);
     }
     pthread_rwlock_unlock(&comet_guard);
 #endif //USE_COMET
@@ -1592,12 +1848,20 @@ size_t webserver::read_message(int connection_id, std::string& message)
 #endif //USE_COMET
 }
 
-size_t webserver::get_topic_consumers(const std::string& topic, std::set<int>& consumers)
+size_t webserver::get_topic_consumers(
+        const std::string& topic,
+        std::set<int>& consumers
+)
 {
 #ifdef USE_COMET
     pthread_rwlock_rdlock(&comet_guard);
-    for(std::set<int>::const_iterator it = q_waitings[topic].begin(); it != q_waitings[topic].end(); ++it)
+
+    for(std::set<int>::const_iterator it = q_waitings[topic].begin();
+            it != q_waitings[topic].end(); ++it
+    )
+    {
         consumers.insert((*it));
+    }
     int size = consumers.size();
     pthread_rwlock_unlock(&comet_guard);
     return size;
@@ -1649,11 +1913,15 @@ bool webserver::pop_signaled(int consumer)
                 gettimeofday(&curtime, NULL);
                 t.tv_sec = curtime.tv_sec + q_keepalives_mem[consumer].first;
                 t.tv_nsec = 0;
-                int rslt = pthread_cond_timedwait(&q_blocks[consumer].second, &q_blocks[consumer].first, &t);
+                int rslt = pthread_cond_timedwait(&q_blocks[consumer].second,
+                        &q_blocks[consumer].first, &t
+                );
                 if(rslt == ETIMEDOUT)
                 {
                     pthread_rwlock_wrlock(&comet_guard);
-                    send_message_to_consumer(consumer, q_keepalives_mem[consumer].second, false);
+                    send_message_to_consumer(consumer, 
+                            q_keepalives_mem[consumer].second, false
+                    );
                     pthread_rwlock_unlock(&comet_guard);
                 }
             }
@@ -1679,13 +1947,24 @@ bool webserver::pop_signaled(int consumer)
 #endif //USE_COMET
 }
 
-http_response* webserver::get_from_cache(const std::string& key, bool* valid, bool lock, bool write)
+http_response* webserver::get_from_cache(
+        const std::string& key,
+        bool* valid,
+        bool lock,
+        bool write
+)
 {
     cache_entry* ce = 0x0;
     return get_from_cache(key, valid, &ce, lock, write);
 }
 
-http_response* webserver::get_from_cache(const std::string& key, bool* valid, cache_entry** ce, bool lock, bool write)
+http_response* webserver::get_from_cache(
+        const std::string& key,
+        bool* valid,
+        cache_entry** ce,
+        bool lock,
+        bool write
+)
 {
     pthread_rwlock_rdlock(&cache_guard);
     *valid = true;
@@ -1756,7 +2035,14 @@ void webserver::unlock_cache_element(cache_entry* ce)
         ce->unlock();
 }
 
-cache_entry* webserver::put_in_cache(const std::string& key, http_response* value, bool* new_elem, bool lock, bool write, int validity)
+cache_entry* webserver::put_in_cache(
+        const std::string& key,
+        http_response* value,
+        bool* new_elem,
+        bool lock,
+        bool write,
+        int validity
+)
 {
     pthread_rwlock_wrlock(&cache_guard);
     map<string, cache_entry*>::iterator it(response_cache.find(key));
@@ -1777,7 +2063,11 @@ cache_entry* webserver::put_in_cache(const std::string& key, http_response* valu
         }
         else
         {
-            pair<map<string, cache_entry*>::iterator, bool> res = response_cache.insert(pair<string, cache_entry*>(key, new cache_entry(value)));
+            pair<map<string, cache_entry*>::iterator, bool> res =
+                response_cache.insert(pair<string, cache_entry*>(
+                            key, new cache_entry(value))
+                );
+
             to_ret = (*res.first).second;
             *new_elem = res.second;
         }
@@ -1796,7 +2086,10 @@ cache_entry* webserver::put_in_cache(const std::string& key, http_response* valu
         }
         else
         {
-            pair<map<string, cache_entry*>::iterator, bool> res = response_cache.insert(pair<string, cache_entry*>(key, new cache_entry(value, now.tv_sec, validity)));
+            pair<map<string, cache_entry*>::iterator, bool> res =
+                response_cache.insert(pair<string, cache_entry*>(
+                            key, new cache_entry(value, now.tv_sec, validity))
+                );
             to_ret = (*res.first).second;
             *new_elem = res.second;
         }

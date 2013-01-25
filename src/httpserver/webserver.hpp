@@ -14,8 +14,8 @@
 
      You should have received a copy of the GNU Lesser General Public
      License along with this library; if not, write to the Free Software
-     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
-
+     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 
+     USA
 */
 
 #if !defined (_HTTPSERVER_HPP_INSIDE_) && !defined (HTTPSERVER_COMPILATION)
@@ -97,7 +97,9 @@ namespace details
     CREATE_METHOD_DETECTOR(render_not_acceptable);
 
     void empty_render(const http_request& r, http_response** res);
-    void empty_not_acceptable_render(const http_request& r, http_response** res);
+    void empty_not_acceptable_render(
+            const http_request& r, http_response** res
+    );
     bool empty_is_allowed(const std::string& method);
 
     class http_resource_mirror
@@ -111,8 +113,12 @@ namespace details
             {
             }
         private:
-            typedef binders::functor_two<const http_request&, http_response**, void> functor;
-            typedef binders::functor_one<const std::string&, bool> functor_allowed;
+            typedef binders::functor_two<const http_request&,
+                    http_response**, void> functor;
+
+            typedef binders::functor_one<const std::string&,
+                    bool> functor_allowed;
+
             functor render;
             functor render_GET;
             functor render_POST;
@@ -138,23 +144,41 @@ namespace details
                 render_CONNECT(render),
                 is_allowed(&empty_is_allowed)
             {
-                if(HAS_METHOD(render, T, void, const http_request&, http_response**))
+                if(HAS_METHOD(render, T, void, 
+                    const http_request&, http_response**)
+                )
                     render.bind(res, &T::render);
-                if(HAS_METHOD(render_GET, T, void, const http_request&, http_response**))
+                if(HAS_METHOD(render_GET, T, void,
+                    const http_request&, http_response**)
+                )
                     render_GET.bind(res, &T::render_GET);
-                if(HAS_METHOD(render_POST, T, void, const http_request&, http_response**))
+                if(HAS_METHOD(render_POST, T, void,
+                    const http_request&, http_response**)
+                )
                     render_POST.bind(res, &T::render_POST);
-                if(HAS_METHOD(render_PUT, T, void, const http_request&, http_response**))
+                if(HAS_METHOD(render_PUT, T, void,
+                    const http_request&, http_response**)
+                )
                     render_PUT.bind(res, &T::render_PUT);
-                if(HAS_METHOD(render_HEAD, T, void, const http_request&, http_response**))
+                if(HAS_METHOD(render_HEAD, T, void,
+                    const http_request&, http_response**)
+                )
                     render_HEAD.bind(res, &T::render_HEAD);
-                if(HAS_METHOD(render_DELETE, T, void, const http_request&, http_response**))
+                if(HAS_METHOD(render_DELETE, T, void,
+                    const http_request&, http_response**)
+                )
                     render_DELETE.bind(res, &T::render_DELETE);
-                if(HAS_METHOD(render_TRACE, T, void, const http_request&, http_response**))
+                if(HAS_METHOD(render_TRACE, T, void,
+                    const http_request&, http_response**)
+                )
                     render_TRACE.bind(res, &T::render_TRACE);
-                if(HAS_METHOD(render_OPTIONS, T, void, const http_request&, http_response**))
+                if(HAS_METHOD(render_OPTIONS, T, void,
+                    const http_request&, http_response**)
+                )
                     render_OPTIONS.bind(res, &T::render_OPTIONS);
-                if(HAS_METHOD(render_CONNECT, T, void, const http_request&, http_response**))
+                if(HAS_METHOD(render_CONNECT, T, void,
+                    const http_request&, http_response**)
+                )
                     render_CONNECT.bind(res, &T::render_CONNECT);
                 is_allowed.bind(res, &T::is_allowed);
             }
@@ -182,9 +206,11 @@ namespace details
         public: 
             template<typename T>
             event_tuple(event_supplier<T>* es):
-                supply_events(std::bind1st(std::mem_fun(&T::supply_events), es)),
+                supply_events(std::bind1st(std::mem_fun(&T::supply_events),es)),
                 get_timeout(std::bind1st(std::mem_fun(&T::get_timeout), es)),
-                dispatch_events(std::bind1st(std::mem_fun(&T::dispatch_events), es))
+                dispatch_events(std::bind1st(
+                            std::mem_fun(&T::dispatch_events), es)
+                )
             {
             }
     };
@@ -333,7 +359,9 @@ class webserver
          * @param family boolean indicating whether the resource is registered for the endpoint and its child or not.
         **/
         template <typename T>
-        void register_resource(const std::string& resource, http_resource<T>* res, bool family = false)
+        void register_resource(const std::string& resource,
+                http_resource<T>* res, bool family = false
+        )
         {
             details::http_resource_mirror hrm(res);
             register_resource(resource, hrm, family);
@@ -345,18 +373,34 @@ class webserver
         void unban_ip(const std::string& ip);
         void disallow_ip(const std::string& ip);
 
-        void send_message_to_topic(const std::string& topic, const std::string& message);
-        void send_message_to_consumer(int connection_id, const std::string& message, bool to_lock = true);
-        void register_to_topics(const std::vector<std::string>& topics, int connection_id, int keepalive_secs = -1, std::string keepalive_msg = "");
+        void send_message_to_topic(const std::string& topic,
+                const std::string& message
+        );
+        void send_message_to_consumer(int connection_id,
+                const std::string& message, bool to_lock = true
+        );
+        void register_to_topics(const std::vector<std::string>& topics, 
+                int connection_id, int keepalive_secs = -1, 
+                std::string keepalive_msg = ""
+        );
         size_t read_message(int connection_id, std::string& message);
-        size_t get_topic_consumers(const std::string& topic, std::set<int>& consumers);
+        size_t get_topic_consumers(const std::string& topic,
+                std::set<int>& consumers
+        );
         bool pop_signaled(int consumer);
 
-        http_response* get_from_cache(const std::string& key, bool* valid, bool lock = false, bool write = false);
-        http_response* get_from_cache(const std::string& key, bool* valid, cache_entry** ce, bool lock = false, bool write = false);
+        http_response* get_from_cache(const std::string& key, bool* valid,
+                bool lock = false, bool write = false
+        );
+        http_response* get_from_cache(const std::string& key, bool* valid,
+                cache_entry** ce, bool lock = false, bool write = false
+        );
         void lock_cache_element(cache_entry* ce, bool write = false);
         void unlock_cache_element(cache_entry* ce);
-        cache_entry* put_in_cache(const std::string& key, http_response* value, bool* new_elem, bool lock = false, bool write = false, int validity = -1);
+        cache_entry* put_in_cache(const std::string& key, http_response* value,
+                bool* new_elem, bool lock = false,
+                bool write = false, int validity = -1
+        );
         void remove_from_cache(const std::string& key);
         bool is_valid(const std::string& key);
         void clean_cache();
@@ -402,10 +446,13 @@ class webserver
         }
 
         template<typename T>
-        void register_event_supplier(const std::string& id, event_supplier<T>* ev_supplier)
+        void register_event_supplier(const std::string& id,
+                event_supplier<T>* ev_supplier
+        )
         {
             pthread_rwlock_wrlock(&runguard);
-            std::map<std::string, details::event_tuple>::iterator it = event_suppliers.find(id);
+            std::map<std::string, details::event_tuple>::iterator it =
+                event_suppliers.find(id);
             if(it != event_suppliers.end())
                 delete it->second;
             event_suppliers[id] = details::event_tuple(&ev_supplier);
@@ -496,10 +543,16 @@ class webserver
         static void* cleaner(void* self);
         void clean_connections();
 
-        void register_resource(const std::string& resource, details::http_resource_mirror hrm, bool family = false);
+        void register_resource(const std::string& resource,
+                details::http_resource_mirror hrm, bool family = false
+        );
 
-        void method_not_allowed_page(http_response** dhrs, details::modded_request* mr);
-        void internal_error_page(http_response** dhrs, details::modded_request* mr, bool force_our = false);
+        void method_not_allowed_page(http_response** dhrs,
+                details::modded_request* mr
+        );
+        void internal_error_page(http_response** dhrs,
+                details::modded_request* mr, bool force_our = false
+        );
         void not_found_page(http_response** dhrs, details::modded_request* mr);
 
         static int method_not_acceptable_page 
@@ -507,11 +560,22 @@ class webserver
             const void *cls,
             struct MHD_Connection *connection
         );
-        static void request_completed(void *cls, struct MHD_Connection *connection, void **con_cls, enum MHD_RequestTerminationCode toe);
-        static int build_request_header (void *cls, enum MHD_ValueKind kind, const char *key, const char *value);
-        static int build_request_footer (void *cls, enum MHD_ValueKind kind, const char *key, const char *value);
-        static int build_request_cookie (void *cls, enum MHD_ValueKind kind, const char *key, const char *value);
-        static int build_request_args (void *cls, enum MHD_ValueKind kind, const char *key, const char *value);
+        static void request_completed(void *cls, 
+                struct MHD_Connection *connection, void **con_cls, 
+                enum MHD_RequestTerminationCode toe
+        );
+        static int build_request_header (void *cls, enum MHD_ValueKind kind, 
+                const char *key, const char *value
+        );
+        static int build_request_footer (void *cls, enum MHD_ValueKind kind,
+                const char *key, const char *value
+        );
+        static int build_request_cookie (void *cls, enum MHD_ValueKind kind,
+                const char *key, const char *value
+        );
+        static int build_request_args (void *cls, enum MHD_ValueKind kind,
+                const char *key, const char *value
+        );
         static int answer_to_connection
         (
             void* cls, MHD_Connection* connection,
@@ -545,7 +609,9 @@ class webserver
             const char* version, struct details::modded_request* mr
         );
 
-        int bodyfull_requests_answer_first_step(MHD_Connection* connection, struct details::modded_request* mr);
+        int bodyfull_requests_answer_first_step(MHD_Connection* connection,
+                struct details::modded_request* mr
+        );
 
         int bodyfull_requests_answer_second_step(MHD_Connection* connection,
             const char* url, const char* method,
@@ -574,11 +640,15 @@ class webserver
             return this->start_method == http_utils::INTERNAL_SELECT;
         }
 
-        friend int policy_callback (void *cls, const struct sockaddr* addr, socklen_t addrlen);
+        friend int policy_callback (void *cls, 
+                const struct sockaddr* addr, socklen_t addrlen
+        );
         friend void error_log(void* cls, const char* fmt, va_list ap);
         friend void access_log(webserver* cls, std::string uri);
         friend void* uri_log(void* cls, const char* uri);
-        friend size_t unescaper_func(void * cls, struct MHD_Connection *c, char *s);
+        friend size_t unescaper_func(void * cls,
+                struct MHD_Connection *c, char *s
+        );
         friend size_t internal_unescaper(void * cls, char *s);
         friend class http_response;
 };
@@ -667,19 +737,60 @@ class create_webserver
         }
 
         create_webserver& port(int port) { _port = port; return *this; }
-        create_webserver& start_method(const http_utils::start_method_T& start_method) { _start_method = start_method; return *this; }
-        create_webserver& max_threads(int max_threads) { _max_threads = max_threads; return *this; }
-        create_webserver& max_connections(int max_connections) { _max_connections = max_connections; return *this; }
-        create_webserver& memory_limit(int memory_limit) { _memory_limit = memory_limit; return *this; }
-        create_webserver& connection_timeout(int connection_timeout) { _connection_timeout = connection_timeout; return *this; }
-        create_webserver& per_IP_connection_limit(int per_IP_connection_limit) { _per_IP_connection_limit = per_IP_connection_limit; return *this; }
-        create_webserver& log_access(log_access_ptr log_access) { _log_access = log_access; return *this; }
-        create_webserver& log_error(log_error_ptr log_error) { _log_error = log_error; return *this; }
-        create_webserver& validator(validator_ptr validator) { _validator = validator; return *this; }
-        create_webserver& unescaper(unescaper_ptr unescaper) { _unescaper = unescaper; return *this; }
-        create_webserver& bind_address(const struct sockaddr* bind_address) { _bind_address = bind_address; return *this; }
-        create_webserver& bind_socket(int bind_socket) { _bind_socket = bind_socket; return *this; }
-        create_webserver& max_thread_stack_size(int max_thread_stack_size) { _max_thread_stack_size = max_thread_stack_size; return *this; }
+        create_webserver& start_method(
+                const http_utils::start_method_T& start_method
+        )
+        {
+            _start_method = start_method; return *this;
+        }
+        create_webserver& max_threads(int max_threads)
+        {
+            _max_threads = max_threads; return *this;
+        }
+        create_webserver& max_connections(int max_connections)
+        {
+            _max_connections = max_connections; return *this;
+        }
+        create_webserver& memory_limit(int memory_limit)
+        {
+            _memory_limit = memory_limit; return *this;
+        }
+        create_webserver& connection_timeout(int connection_timeout)
+        {
+            _connection_timeout = connection_timeout; return *this;
+        }
+        create_webserver& per_IP_connection_limit(int per_IP_connection_limit)
+        {
+            _per_IP_connection_limit = per_IP_connection_limit; return *this;
+        }
+        create_webserver& log_access(log_access_ptr log_access)
+        {
+            _log_access = log_access; return *this;
+        }
+        create_webserver& log_error(log_error_ptr log_error)
+        {
+            _log_error = log_error; return *this;
+        }
+        create_webserver& validator(validator_ptr validator)
+        {
+            _validator = validator; return *this;
+        }
+        create_webserver& unescaper(unescaper_ptr unescaper)
+        {
+            _unescaper = unescaper; return *this;
+        }
+        create_webserver& bind_address(const struct sockaddr* bind_address)
+        {
+            _bind_address = bind_address; return *this;
+        }
+        create_webserver& bind_socket(int bind_socket)
+        {
+            _bind_socket = bind_socket; return *this;
+        }
+        create_webserver& max_thread_stack_size(int max_thread_stack_size)
+        {
+            _max_thread_stack_size = max_thread_stack_size; return *this;
+        }
         create_webserver& use_ssl() { _use_ssl = true; return *this; }
         create_webserver& no_ssl() { _use_ssl = false; return *this; }
         create_webserver& use_ipv6() { _use_ipv6 = true; return *this; }
@@ -691,30 +802,113 @@ class create_webserver
         create_webserver& https_mem_key(const std::string& https_mem_key);
         create_webserver& https_mem_cert(const std::string& https_mem_cert);
         create_webserver& https_mem_trust(const std::string& https_mem_trust);
-        create_webserver& raw_https_mem_key(const std::string& https_mem_key) { _https_mem_key = https_mem_key; return *this; }
-        create_webserver& raw_https_mem_cert(const std::string& https_mem_cert) { _https_mem_cert = https_mem_cert; return *this; }
-        create_webserver& raw_https_mem_trust(const std::string& https_mem_trust) { _https_mem_trust = https_mem_trust; return *this; }
-        create_webserver& https_priorities(const std::string& https_priorities) { _https_priorities = https_priorities; return *this; }
-        create_webserver& cred_type(const http_utils::cred_type_T& cred_type) { _cred_type = cred_type; return *this; }
-        create_webserver& digest_auth_random(const std::string& digest_auth_random) { _digest_auth_random = digest_auth_random; return *this; }
-        create_webserver& nonce_nc_size(int nonce_nc_size) { _nonce_nc_size = nonce_nc_size; return *this; }
-        create_webserver& default_policy(const http_utils::policy_T& default_policy) { _default_policy = default_policy; return *this; }
-        create_webserver& basic_auth() { _basic_auth_enabled = true; return *this; }
-        create_webserver& no_basic_auth() { _basic_auth_enabled = false; return *this; }
-        create_webserver& digest_auth() { _digest_auth_enabled = true; return *this; }
-        create_webserver& no_digest_auth() { _digest_auth_enabled = false; return *this; }
-        create_webserver& regex_checking() { _regex_checking = true; return *this; }
-        create_webserver& no_regex_checking() { _regex_checking = false; return *this; }
-        create_webserver& ban_system() { _ban_system_enabled = true; return *this; }
-        create_webserver& no_ban_system() { _ban_system_enabled = false; return *this; }
-        create_webserver& post_process() { _post_process_enabled = true; return *this; }
-        create_webserver& no_post_process() { _post_process_enabled = false; return *this; }
+        create_webserver& raw_https_mem_key(const std::string& https_mem_key)
+        {
+            _https_mem_key = https_mem_key; return *this;
+        }
+        create_webserver& raw_https_mem_cert(const std::string& https_mem_cert)
+        {
+            _https_mem_cert = https_mem_cert; return *this;
+        }
+        create_webserver& raw_https_mem_trust(
+                const std::string& https_mem_trust
+        )
+        {
+            _https_mem_trust = https_mem_trust; return *this;
+        }
+        create_webserver& https_priorities(const std::string& https_priorities)
+        {
+            _https_priorities = https_priorities; return *this;
+        }
+        create_webserver& cred_type(const http_utils::cred_type_T& cred_type)
+        {
+            _cred_type = cred_type; return *this;
+        }
+        create_webserver& digest_auth_random(
+                const std::string& digest_auth_random
+        )
+        {
+            _digest_auth_random = digest_auth_random; return *this;
+        }
+        create_webserver& nonce_nc_size(int nonce_nc_size)
+        {
+            _nonce_nc_size = nonce_nc_size; return *this;
+        }
+        create_webserver& default_policy(
+                const http_utils::policy_T& default_policy
+        )
+        {
+            _default_policy = default_policy; return *this;
+        }
+        create_webserver& basic_auth()
+        {
+            _basic_auth_enabled = true; return *this;
+        }
+        create_webserver& no_basic_auth()
+        {
+            _basic_auth_enabled = false; return *this;
+        }
+        create_webserver& digest_auth()
+        {
+            _digest_auth_enabled = true; return *this;
+        }
+        create_webserver& no_digest_auth()
+        {
+            _digest_auth_enabled = false; return *this;
+        }
+        create_webserver& regex_checking()
+        {
+            _regex_checking = true; return *this;
+        }
+        create_webserver& no_regex_checking()
+        {
+            _regex_checking = false; return *this;
+        }
+        create_webserver& ban_system()
+        {
+            _ban_system_enabled = true; return *this;
+        }
+        create_webserver& no_ban_system()
+        {
+            _ban_system_enabled = false; return *this;
+        }
+        create_webserver& post_process()
+        {
+            _post_process_enabled = true; return *this;
+        }
+        create_webserver& no_post_process()
+        {
+            _post_process_enabled = false; return *this;
+        }
 
-        create_webserver& single_resource(render_ptr single_resource) { _single_resource = single_resource; return *this; }
-        create_webserver& not_found_resource(render_ptr not_found_resource) { _not_found_resource = not_found_resource; return *this; }
-        create_webserver& method_not_allowed_resource(render_ptr method_not_allowed_resource) { _method_not_allowed_resource = method_not_allowed_resource; return *this; }
-        create_webserver& method_not_acceptable_resource(render_ptr method_not_acceptable_resource) { _method_not_acceptable_resource = method_not_acceptable_resource; return *this; }
-        create_webserver& internal_error_resource(render_ptr internal_error_resource) { _internal_error_resource = internal_error_resource; return *this; }
+        create_webserver& single_resource(render_ptr single_resource)
+        {
+            _single_resource = single_resource; return *this;
+        }
+        create_webserver& not_found_resource(render_ptr not_found_resource)
+        {
+            _not_found_resource = not_found_resource; return *this;
+        }
+        create_webserver& method_not_allowed_resource(
+                render_ptr method_not_allowed_resource
+        )
+        {
+            _method_not_allowed_resource = method_not_allowed_resource;
+            return *this;
+        }
+        create_webserver& method_not_acceptable_resource(
+                render_ptr method_not_acceptable_resource
+        )
+        {
+            _method_not_acceptable_resource = method_not_acceptable_resource;
+            return *this;
+        }
+        create_webserver& internal_error_resource(
+                render_ptr internal_error_resource
+        )
+        {
+            _internal_error_resource = internal_error_resource; return *this; 
+        }
 
     private:
         int _port;

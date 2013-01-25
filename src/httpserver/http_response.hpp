@@ -14,8 +14,8 @@
 
      You should have received a copy of the GNU Lesser General Public
      License along with this library; if not, write to the Free Software
-     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
-
+     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 
+     USA
 */
 
 #if !defined (_HTTPSERVER_HPP_INSIDE_) && !defined (HTTPSERVER_COMPILATION)
@@ -255,23 +255,35 @@ class http_response
          * @return a map<string,string> containing all headers.
         **/
         const std::vector<std::pair<std::string, std::string> > get_headers();
-        size_t get_headers(std::vector<std::pair<std::string, std::string> >& result);
+        size_t get_headers(
+                std::vector<std::pair<std::string, std::string> >& result
+        );
 #ifndef SWIG
-        size_t get_headers(std::map<std::string, std::string, header_comparator>& result);
+        size_t get_headers(
+                std::map<std::string, std::string, header_comparator>& result
+        );
 #endif
         /**
          * Method used to get all footers passed with the request.
          * @return a map<string,string> containing all footers.
         **/
         const std::vector<std::pair<std::string, std::string> > get_footers();
-        size_t get_footers(std::vector<std::pair<std::string, std::string> >& result);
+        size_t get_footers(
+                std::vector<std::pair<std::string, std::string> >& result
+        );
 #ifndef SWIG
-        size_t get_footers(std::map<std::string, std::string, header_comparator>& result);
+        size_t get_footers(
+                std::map<std::string, std::string, header_comparator>& result
+        );
 #endif
         const std::vector<std::pair<std::string, std::string> > get_cookies();
-        size_t get_cookies(std::vector<std::pair<std::string, std::string> >& result);
+        size_t get_cookies(
+                std::vector<std::pair<std::string, std::string> >& result
+        );
 #ifndef SWIG
-        size_t get_cookies(std::map<std::string, std::string, header_comparator>& result);
+        size_t get_cookies(
+                std::map<std::string, std::string, header_comparator>& result
+        );
 #endif
         /**
          * Method used to set all headers of the response.
@@ -341,7 +353,8 @@ class http_response
         }
         size_t get_topics(std::vector<std::string>& topics) const
         {
-            for(std::vector<std::string>::const_iterator it = this->topics.begin(); it != this->topics.end(); ++it)
+            typedef std::vector<std::string>::const_iterator topics_it;
+            for(topics_it it=this->topics.begin();it != this->topics.end();++it)
                 topics.push_back(*it);
             return topics.size();
         }
@@ -351,9 +364,14 @@ class http_response
             this->closure_data = closure_data;
         }
     protected:
-        typedef details::binders::functor_two<MHD_Response**, webserver*, void> get_raw_response_t;
-        typedef details::binders::functor_one<MHD_Response*, void> decorate_response_t;
-        typedef details::binders::functor_two<MHD_Connection*, MHD_Response*, int> enqueue_response_t;
+        typedef details::binders::functor_two<MHD_Response**, 
+                webserver*, void> get_raw_response_t;
+
+        typedef details::binders::functor_one<MHD_Response*,
+                void> decorate_response_t;
+
+        typedef details::binders::functor_two<MHD_Connection*,
+                MHD_Response*, int> enqueue_response_t;
 
         std::string content;
         int response_code;
@@ -384,7 +402,10 @@ class http_response
         void get_raw_response_str(MHD_Response** res, webserver* ws = 0x0);
         void get_raw_response_file(MHD_Response** res, webserver* ws = 0x0);
         void get_raw_response_switch(MHD_Response** res, webserver* ws = 0x0);
-        void get_raw_response_lp_receive(MHD_Response** res, webserver* ws = 0x0);
+        
+        void get_raw_response_lp_receive(MHD_Response** res,
+                webserver* ws = 0x0);
+        
         void get_raw_response_lp_send(MHD_Response** res, webserver* ws = 0x0);
         void get_raw_response_cache(MHD_Response** res, webserver* ws = 0x0);
         void get_raw_response_deferred(MHD_Response** res, webserver* ws = 0x0);
@@ -392,12 +413,22 @@ class http_response
         void decorate_response_cache(MHD_Response* res);
         void decorate_response_deferred(MHD_Response* res);
         int enqueue_response_str(MHD_Connection* connection, MHD_Response* res);
-        int enqueue_response_basic(MHD_Connection* connection, MHD_Response* res);
-        int enqueue_response_digest(MHD_Connection* connection, MHD_Response* res);
+
+        int enqueue_response_basic(MHD_Connection* connection,
+                MHD_Response* res
+        );
+
+        int enqueue_response_digest(MHD_Connection* connection,
+                MHD_Response* res
+        );
 
         friend class webserver;
         friend struct details::http_response_ptr;
-        friend void clone_response(const http_response& hr, http_response** dhr);
+
+        friend void clone_response(const http_response& hr,
+                http_response** dhr
+        );
+
         friend class cache_response;
         friend class deferred_response;
     private:
@@ -745,7 +776,9 @@ class http_string_response : public http_response
             int response_code,
             const std::string& content_type = "text/plain",
             bool autodelete = true
-        ): http_response(this, content, response_code, content_type, autodelete) { }
+        ): http_response(this, content, response_code, content_type, autodelete)
+        {
+        }
 
         http_string_response(const http_response& b) : http_response(b) { }
     private:
@@ -762,7 +795,11 @@ class http_byte_response : public http_response
             int response_code,
             const std::string& content_type = "text/plain",
             bool autodelete = true
-        ): http_response(this, std::string(content, content_length), response_code, content_type, autodelete) { }
+        ): http_response(
+            this, std::string(content, content_length), 
+            response_code, content_type, autodelete) 
+        {
+        }
     private:
         friend class webserver;
 };
@@ -776,7 +813,7 @@ class http_file_response : public http_response
             int response_code,
             const std::string& content_type = "text/plain",
             bool autodelete = true
-        ) : http_response(this, filename, response_code, content_type, autodelete)
+        ) : http_response(this,filename,response_code,content_type,autodelete)
         {
         }
 
@@ -795,9 +832,13 @@ class http_basic_auth_fail_response : public http_response
             const std::string& content_type = "text/plain",
             bool autodelete = true,
             const std::string& realm = ""
-        ) : http_response(this, content, response_code, content_type, autodelete, realm) { }
+        ) : http_response(this, content, response_code, 
+            content_type, autodelete, realm)
+        {
+        }
 
-        http_basic_auth_fail_response(const http_response& b) : http_response(b) { }
+        http_basic_auth_fail_response(const http_response& b) :
+            http_response(b) { }
     private:
         friend class webserver;
 };
@@ -814,11 +855,13 @@ class http_digest_auth_fail_response : public http_response
             const std::string& realm = "",
             const std::string& opaque = "",
             bool reload_nonce = false
-        ) : http_response(this, content, response_code, content_type, autodelete, realm, opaque, reload_nonce)
+        ) : http_response(this, content, response_code,
+            content_type, autodelete, realm, opaque, reload_nonce)
         { 
         }
 
-        http_digest_auth_fail_response(const http_response& b) : http_response(b) { }
+        http_digest_auth_fail_response(const http_response& b) :
+            http_response(b) { }
     private:
         friend class webserver;
 };
@@ -849,8 +892,6 @@ class switch_protocol_response : public http_response
         switch_protocol_response(const http_response& b) : http_response(b)
         { 
         }
-    protected:
-        virtual void get_raw_response(MHD_Response** res, webserver* ws = 0x0) {}
     private:
         friend class webserver;
 };
@@ -867,13 +908,19 @@ class long_polling_receive_response : public http_response
             bool autodelete = true,
             int keepalive_secs = -1,
             std::string keepalive_msg = ""
-        ) : http_response(this, content, response_code, content_type, autodelete, "", "", false, topics, keepalive_secs, keepalive_msg)
+        ) : http_response(this, content, response_code, content_type,
+                autodelete, "", "", false, topics, keepalive_secs, keepalive_msg
+            )
         {
         }
 
-        long_polling_receive_response(const http_response& b) : http_response(b) { }
+        long_polling_receive_response(const http_response& b) : http_response(b)
+        {
+        }
     private:
-        static ssize_t data_generator (void* cls, uint64_t pos, char* buf, size_t max);
+        static ssize_t data_generator (void* cls, uint64_t pos,
+                char* buf, size_t max
+        );
         int connection_id;
         httpserver::webserver* ws;
         friend class webserver;
@@ -887,11 +934,15 @@ class long_polling_send_response : public http_response
             const std::string& content,
             const std::string& topic,
             bool autodelete = true
-        ) : http_response(this, content, 200, "", autodelete, "", "", false, std::vector<std::string>(), -1, "", topic)
+        ) : http_response(this, content, 200, "", autodelete, "", "", false,
+                std::vector<std::string>(), -1, "", topic
+            )
         {
         }
 
-        long_polling_send_response(const http_response& b) : http_response(b) { }
+        long_polling_send_response(const http_response& b) : http_response(b)
+        {
+        }
     private:
         friend class webserver;
 };
@@ -902,13 +953,17 @@ class cache_response : public http_response
         cache_response
         (
             const std::string& key
-        ) : http_response(this, key, 200, "", true, "", "", false, std::vector<std::string>(), -1, "", "", 0x0)
+        ) : http_response(this, key, 200, "", true, "", "", false,
+                std::vector<std::string>(), -1, "", "", 0x0
+            )
         {
         }
         cache_response
         (
             cache_entry* ce
-        ) : http_response(this, "", 200, "", true, "", "", false, std::vector<std::string>(), -1, "", "", ce)
+        ) : http_response(this, "", 200, "", true, "", "", false,
+                std::vector<std::string>(), -1, "", "", ce
+            )
         {
             if(ce == 0x0)
                 throw bad_caching_attempt();

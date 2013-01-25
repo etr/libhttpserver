@@ -14,8 +14,8 @@
 
      You should have received a copy of the GNU Lesser General Public
      License along with this library; if not, write to the Free Software
-     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
-
+     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 
+     USA
 */
 
 #if !defined (_HTTPSERVER_HPP_INSIDE_) && !defined (HTTPSERVER_COMPILATION)
@@ -41,8 +41,13 @@ namespace string_utilities
 **/
 void to_upper_copy(const std::string& str, std::string& result);
 void to_lower_copy(const std::string& str, std::string& result);
-size_t string_split(const std::string& s, std::vector<std::string>& result, char sep = ' ', bool collapse = true);
-void regex_replace(const std::string& str, const std::string& pattern, const std::string& replace_str, std::string& result);
+size_t string_split(const std::string& s,
+        std::vector<std::string>& result,
+        char sep = ' ', bool collapse = true
+);
+void regex_replace(const std::string& str, const std::string& pattern,
+        const std::string& replace_str, std::string& result
+);
 void to_upper(std::string& str);
 };
 };

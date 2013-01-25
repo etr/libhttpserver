@@ -14,8 +14,8 @@
 
      You should have received a copy of the GNU Lesser General Public
      License along with this library; if not, write to the Free Software
-     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
-
+     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 
+     USA
 */
 
 #if !defined (_HTTPSERVER_HPP_INSIDE_) && !defined (HTTPSERVER_COMPILATION)
@@ -196,7 +196,11 @@ class http_endpoint
          *                     or it is simply an endpoint to be used for comparisons. Default is false.
          * @param use_regex boolean that indicates if regexes are checked or not. Default is true.
         **/
-        http_endpoint(const std::string& url, bool family = false, bool registration = false, bool use_regex = true);
+        http_endpoint(const std::string& url,
+                bool family = false,
+                bool registration = false,
+                bool use_regex = true
+        );
         /**
          * The complete url extracted
         **/
@@ -230,7 +234,12 @@ class http_endpoint
         **/
         bool reg_compiled;
         friend class httpserver::webserver;
-        friend void _register_resource(webserver*, const std::string&, details::http_resource_mirror&, bool);
+        friend void _register_resource(
+                webserver*,
+                const std::string&,
+                details::http_resource_mirror&,
+                bool
+        );
         template<typename, typename> friend struct std::pair;
         template<typename> friend struct std::less;
 };

@@ -14,8 +14,8 @@
 
      You should have received a copy of the GNU Lesser General Public
      License along with this library; if not, write to the Free Software
-     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
-
+     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 
+     USA
 */
 
 #if !defined (_HTTPSERVER_HPP_INSIDE_) && !defined (HTTPSERVER_COMPILATION)
@@ -231,7 +231,9 @@ class http_utils
 #ifdef SWIG
         %mutable;
 #endif
-        static size_t tokenize_url(const std::string&, std::vector<std::string>& result, const char separator = '/');
+        static size_t tokenize_url(const std::string&, 
+                std::vector<std::string>& result, const char separator = '/'
+        );
         static void standardize_url(const std::string&, std::string& result);
 };
 
@@ -301,7 +303,8 @@ struct ip_representation
     unsigned short pieces[16];
     unsigned int mask:16;
 
-    ip_representation(http_utils::IP_version_T ip_version) : ip_version(ip_version)
+    ip_representation(http_utils::IP_version_T ip_version) :
+        ip_version(ip_version)
     {
         mask = DEFAULT_MASK_VALUE;
         std::fill(pieces, pieces + 16, 0);
@@ -327,7 +330,9 @@ struct ip_representation
  * @param maxlen Maxlen of the address (automatically discovered if not passed)
  * @return string containing the ip address
 **/
-void get_ip_str(const struct sockaddr *sa, std::string& result, socklen_t maxlen = 0);
+void get_ip_str(const struct sockaddr *sa,
+        std::string& result, socklen_t maxlen = 0
+);
 /**
  * Method used to get a port from a sockaddr
  * @param sa The sockaddr object to find the port from

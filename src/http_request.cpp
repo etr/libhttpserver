@@ -14,9 +14,11 @@
 
      You should have received a copy of the GNU Lesser General Public
      License along with this library; if not, write to the Free Software
-     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 
+     USA
 
 */
+
 #include "http_utils.hpp"
 #include "http_request.hpp"
 #include "string_utilities.hpp"
@@ -25,15 +27,26 @@ using namespace std;
 
 namespace httpserver
 {
-//REQUEST
+
 void http_request::set_method(const std::string& method)
 {
     string_utilities::to_upper_copy(method, this->method);
 }
 
-bool http_request::check_digest_auth(const std::string& realm, const std::string& password, int nonce_timeout, bool& reload_nonce) const
+bool http_request::check_digest_auth(
+        const std::string& realm,
+        const std::string& password,
+        int nonce_timeout,
+        bool& reload_nonce
+) const
 {
-    int val = MHD_digest_auth_check(underlying_connection, realm.c_str(), digested_user.c_str(), password.c_str(), nonce_timeout);
+    int val = MHD_digest_auth_check(
+            underlying_connection,
+            realm.c_str(),
+            digested_user.c_str(),
+            password.c_str(),
+            nonce_timeout
+    );
     if(val == MHD_INVALID_NONCE)
     {
         reload_nonce = true;
