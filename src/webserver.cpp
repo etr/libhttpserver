@@ -1698,6 +1698,10 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
         {
             mr->callback = &details::http_resource_mirror::render_TRACE;
         }
+        else if (0 == strcmp(method, http_utils::http_method_options.c_str()))
+        {
+            mr->callback = &details::http_resource_mirror::render_OPTIONS;
+        }
         else
         {
             using namespace details;
