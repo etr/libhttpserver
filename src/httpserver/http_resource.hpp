@@ -37,7 +37,6 @@ namespace httpserver
 class webserver;
 class http_request;
 class http_response;
-typedef void(*render_ptr)(const http_request&, http_response**);
 
 /**
  * Class representing a callable http resource.

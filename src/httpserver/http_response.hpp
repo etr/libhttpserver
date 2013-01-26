@@ -101,6 +101,7 @@ class http_response
             keepalive_secs(keepalive_secs),
             keepalive_msg(keepalive_msg),
             send_topic(send_topic),
+            underlying_connection(0x0),
             ca(0x0),
             closure_data(0x0),
             ce(ce),
@@ -131,6 +132,7 @@ class http_response
             keepalive_secs(b.keepalive_secs),
             keepalive_msg(b.keepalive_msg),
             send_topic(b.send_topic),
+            underlying_connection(b.underlying_connection),
             ca(0x0),
             closure_data(0x0),
             ce(b.ce),
@@ -414,10 +416,7 @@ class http_response
         friend class cache_response;
         friend class deferred_response;
     private:
-        http_response& operator=(const http_response& b)
-        {
-            return *this;
-        }
+        http_response& operator=(const http_response& b);
 };
 
 class http_file_response;

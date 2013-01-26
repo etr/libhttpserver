@@ -201,6 +201,8 @@ namespace details
             supply_events_ptr supply_events;
             get_timeout_ptr get_timeout;
             dispatch_events_ptr dispatch_events;
+
+            event_tuple();
             
             friend class ::httpserver::webserver;
         public: 
