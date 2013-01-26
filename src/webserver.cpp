@@ -1668,7 +1668,7 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
                 *(mr->complete_uri) + " METHOD: " + method
         );
 
-        if( 0 == strcmp(method, http_utils::http_method_get.c_str()))
+        if( 0 == strcasecmp(method, http_utils::http_method_get.c_str()))
         {
             mr->callback = &details::http_resource_mirror::render_GET;
         }
@@ -1677,28 +1677,28 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
             mr->callback = &details::http_resource_mirror::render_POST;
             body = true;
         }
-        else if (0 == strcmp(method, http_utils::http_method_put.c_str()))
+        else if (0 == strcasecmp(method, http_utils::http_method_put.c_str()))
         {
             mr->callback = &details::http_resource_mirror::render_PUT;
             body = true;
         }
-        else if (0 == strcmp(method, http_utils::http_method_delete.c_str()))
+        else if (0 == strcasecmp(method,http_utils::http_method_delete.c_str()))
         {
             mr->callback = &details::http_resource_mirror::render_DELETE;
         }
-        else if (0 == strcmp(method, http_utils::http_method_head.c_str()))
+        else if (0 == strcasecmp(method, http_utils::http_method_head.c_str()))
         {
             mr->callback = &details::http_resource_mirror::render_HEAD;
         }
-        else if (0 == strcmp(method, http_utils::http_method_connect.c_str()))
+        else if (0 ==strcasecmp(method,http_utils::http_method_connect.c_str()))
         {
             mr->callback = &details::http_resource_mirror::render_CONNECT;
         }
-        else if (0 == strcmp(method, http_utils::http_method_trace.c_str()))
+        else if (0 == strcasecmp(method, http_utils::http_method_trace.c_str()))
         {
             mr->callback = &details::http_resource_mirror::render_TRACE;
         }
-        else if (0 == strcmp(method, http_utils::http_method_options.c_str()))
+        else if (0 ==strcasecmp(method,http_utils::http_method_options.c_str()))
         {
             mr->callback = &details::http_resource_mirror::render_OPTIONS;
         }
