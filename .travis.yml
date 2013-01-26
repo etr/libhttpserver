@@ -2,7 +2,7 @@ language: cpp
 compiler: gcc
 # Change this to your needs
 before_install:
- - wget http://mirror.pnl.gov/ubuntu//pool/universe/libm/libmicrohttpd/libmicrohttpd10_0.9.20-1_i386.deb
- - wget http://mirror.pnl.gov/ubuntu//pool/universe/libm/libmicrohttpd/libmicrohttpd-dev_0.9.20-1_i386.deb
+ - wget http://mirror.anl.gov/pub/ubuntu//pool/universe/libm/libmicrohttpd/libmicrohttpd10_0.9.20-1_i386.deb
+ - wget http://mirror.anl.gov/pub/ubuntu//pool/universe/libm/libmicrohttpd/libmicrohttpd-dev_0.9.20-1_i386.deb
  - sudo dpkg -i libmicrohttpd10_0.9.20-1_i386.deb libmicrohttpd-dev_0.9.20-1_i386.deb
 script: ./bootstrap && mkdir build && cd build && ../configure && make && make check
