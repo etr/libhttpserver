@@ -230,6 +230,23 @@ class http_utils
         static void standardize_url(const std::string&, std::string& result);
 };
 
+#define COMPARATOR(x, y, op) \
+    { \
+        size_t l1 = (x).size();\
+        size_t l2 = (y).size();\
+        if (l1 < l2) return true;\
+        if (l1 > l2) return false;\
+        \
+        for (size_t n = 0; n < l1; n++)\
+        {\
+            char xc = op((x)[n]);\
+            char yc = op((y)[n]);\
+            if (xc < yc) return true;\
+            if (xc > yc) return false;\
+        }\
+        return false;\
+    }
+
 class header_comparator {
     public:
         /**
@@ -239,19 +256,7 @@ class header_comparator {
         **/
         bool operator()(const std::string& x,const std::string& y) const 
         { 
-            size_t l1 = x.size();
-            size_t l2 = y.size();
-            if (l1 < l2) return true;
-            if (l1 > l2) return false;
-
-            for (size_t n = 0; n < l1; n++)
-            {
-                char a = toupper(x[n]);
-                char b = toupper(y[n]);
-                if (a < b) return true;
-                if (a > b) return false;
-            }
-            return false;
+            COMPARATOR(x, y, toupper);
         }
 };
 
@@ -269,24 +274,11 @@ class arg_comparator {
         **/
         bool operator()(const std::string& x,const std::string& y) const 
         { 
-            size_t l1 = x.size();
-            size_t l2 = y.size();
-            if (l1 < l2) return true;
-            if (l1 > l2) return false;
-
-            for (size_t n = 0; n < l1; n++)
-            {
 #ifdef CASE_INSENSITIVE
-                char a = toupper(x[n]);
-                char b = toupper(y[n]);
+            COMPARATOR(x, y, toupper);
 #else
-                char a = x[n];
-                char b = y[n];
+            COMPARATOR(x, y, );
 #endif
-                if (a < b) return true;
-                if (a > b) return false;
-            }
-            return false;
         }
 };
 

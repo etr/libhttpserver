@@ -192,11 +192,7 @@ http_endpoint& http_endpoint::operator =(const http_endpoint& h)
 
 bool http_endpoint::operator <(const http_endpoint& b) const 
 {
-    string url_modded_l;
-    string url_modded_r;
-    string_utilities::to_lower_copy(this->url_modded, url_modded_l);
-    string_utilities::to_lower_copy(b.url_modded, url_modded_r);
-    return url_modded_l < url_modded_r;
+    COMPARATOR(this->url_modded, b.url_modded, toupper);
 }
 
 bool http_endpoint::match(const http_endpoint& url) const 
