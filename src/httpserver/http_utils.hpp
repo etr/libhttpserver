@@ -91,10 +91,6 @@ class http_utils
         IPV4 = 4, IPV6 = 16
     };
 
-#ifdef SWIG
-        %immutable;
-#endif
-
         static const short http_method_connect_code;
         static const short http_method_delete_code;
         static const short http_method_get_code;
@@ -228,9 +224,6 @@ class http_utils
 
         static const std::string http_post_encoding_form_urlencoded;
         static const std::string http_post_encoding_multipart_formdata;
-#ifdef SWIG
-        %mutable;
-#endif
         static size_t tokenize_url(const std::string&, 
                 std::vector<std::string>& result, const char separator = '/'
         );
