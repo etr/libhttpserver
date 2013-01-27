@@ -513,6 +513,7 @@ class webserver
         render_ptr method_not_acceptable_resource;
         render_ptr internal_error_resource;
         std::map<details::http_endpoint, details::http_resource_mirror> registered_resources;
+        std::map<std::string, details::http_resource_mirror*> registered_resources_str;
 
         std::map<std::string, cache_entry*> response_cache;
         int next_to_choose;

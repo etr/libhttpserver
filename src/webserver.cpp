@@ -567,9 +567,10 @@ void webserver::register_resource(
     if(method_not_acceptable_resource)
         hrm.method_not_acceptable_resource = method_not_acceptable_resource; 
 
-    registered_resources[
-        details::http_endpoint(resource, family, true, regex_checking)
-    ] = hrm;
+    details::http_endpoint idx(resource, family, true, regex_checking);
+
+    registered_resources[idx] = hrm;
+    registered_resources_str[idx.url_complete] = &registered_resources[idx];
 }
 
 void webserver::schedule_fd(int fd, fd_set* schedule_list, int* max)
@@ -1033,7 +1034,9 @@ bool webserver::stop()
 
 void webserver::unregister_resource(const string& resource)
 {
-    this->registered_resources.erase(details::http_endpoint(resource));
+    details::http_endpoint he(resource);
+    this->registered_resources.erase(he);
+    this->registered_resources.erase(he.url_complete);
 }
 
 void webserver::ban_ip(const string& ip)
@@ -1433,20 +1436,28 @@ int webserver::finalize_answer(
     int to_ret = MHD_NO;
     http_response* dhrs = 0x0;
 
-    map<
-        details::http_endpoint, details::http_resource_mirror
-    >::iterator found_endpoint;
+    map<string, details::http_resource_mirror*>::iterator fe;
+
+    details::http_resource_mirror* hrm;
 
     bool found = false;
     struct MHD_Response* raw_response;
     if(!single_resource)
     {
-        details::http_endpoint endpoint(st_url, false, false, regex_checking);
-        found_endpoint = registered_resources.find(endpoint);
-        if(found_endpoint == registered_resources.end())
+        fe = registered_resources_str.find(st_url);
+        if(fe == registered_resources_str.end())
         {
             if(regex_checking)
             {
+
+                map<
+                    details::http_endpoint, details::http_resource_mirror
+                >::iterator found_endpoint;
+
+                details::http_endpoint endpoint(
+                        st_url, false, false, regex_checking
+                );
+
                 map<
                     details::http_endpoint,
                     details::http_resource_mirror
@@ -1495,31 +1506,30 @@ int webserver::finalize_answer(
                     {
                         mr->dhr->set_arg(url_pars[i], url_pieces[chunkes[i]]);
                     }
+
+                    hrm = &found_endpoint->second;
                 }
             }
         }
         else
+        {
+            hrm = fe->second;
             found = true;
+        }
     }
     else
     {
-        found_endpoint = registered_resources.begin();
+        hrm = &registered_resources.begin()->second;
         found = true;
     }
     mr->dhr->set_underlying_connection(connection);
-#ifdef DEBUG
-    if(found)
-        cout << "Using: " << found_endpoint->first.get_url_complete() << endl;
-    else
-        cout << "Endpoint not found!" << endl;
-#endif //DEBUG
 
     if(found)
     {
         try
         {
-            if(found_endpoint->second.is_allowed(method))
-                ((found_endpoint->second).*(mr->callback))(*mr->dhr, &dhrs);
+            if(hrm->is_allowed(method))
+                ((hrm)->*(mr->callback))(*mr->dhr, &dhrs);
             else
             {
                 method_not_allowed_page(&dhrs, mr);

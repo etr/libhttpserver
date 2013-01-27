@@ -56,6 +56,10 @@ http_endpoint::http_endpoint
         this->url_modded = "/";
     vector<string> parts;
     string_utilities::to_lower_copy(url, url_complete);
+
+    if(url_complete[0] != '/')
+        url_complete = "/" + url_complete;
+
     http_utils::tokenize_url(url, parts);
     string buffered;
     bool first = true;
