@@ -502,48 +502,6 @@ webserver::webserver(const create_webserver& params):
     init(params._single_resource);
 }
 
-webserver& webserver::operator=(const webserver& b)
-{
-    port = b.port;
-    start_method = b.start_method;
-    max_threads = b.max_threads;
-    max_connections = b.max_connections;
-    memory_limit = b.memory_limit;
-    connection_timeout = b.connection_timeout;
-    per_IP_connection_limit = b.per_IP_connection_limit;
-    log_access = b.log_access;
-    log_error = b.log_error;
-    validator = b.validator;
-    unescaper = b.unescaper;
-    bind_address = b.bind_address;
-    bind_socket = b.bind_socket;
-    max_thread_stack_size = b.max_thread_stack_size;
-    use_ssl = b.use_ssl;
-    use_ipv6 = b.use_ipv6;
-    debug = b.debug;
-    pedantic = b.pedantic;
-    https_mem_key = b.https_mem_key;
-    https_mem_cert = b.https_mem_cert;
-    https_mem_trust = b.https_mem_trust;
-    https_priorities = b.https_priorities;
-    cred_type = b.cred_type;
-    digest_auth_random = b.digest_auth_random;
-    nonce_nc_size = b.nonce_nc_size;
-    running = b.running;
-    default_policy = b.default_policy;
-    basic_auth_enabled = b.basic_auth_enabled;
-    digest_auth_enabled = b.digest_auth_enabled;
-    regex_checking = b.regex_checking;
-    ban_system_enabled = b.ban_system_enabled;
-    post_process_enabled = b.post_process_enabled;
-    not_found_resource = b.not_found_resource;
-    method_not_allowed_resource = b.method_not_allowed_resource;
-    method_not_acceptable_resource = b.method_not_acceptable_resource;
-    internal_error_resource = b.internal_error_resource;
-    next_to_choose = b.next_to_choose;
-    return *this;
-}
-
 void webserver::init(render_ptr single_resource)
 {
     if(single_resource != 0x0)

@@ -331,7 +331,6 @@ class webserver
             render_ptr internal_error_resource = 0x0
         );
         webserver(const create_webserver& params);
-        webserver& operator=(const webserver& b);
         /**
          * Destructor of the class
         **/
@@ -471,38 +470,38 @@ class webserver
         **/
         void sweet_kill();
     private:
-        int port;
-        http_utils::start_method_T start_method;
-        int max_threads;
-        int max_connections;
-        int memory_limit;
-        int connection_timeout;
-        int per_IP_connection_limit;
+        const int port;
+        const http_utils::start_method_T start_method;
+        const int max_threads;
+        const int max_connections;
+        const int memory_limit;
+        const int connection_timeout;
+        const int per_IP_connection_limit;
         log_access_ptr log_access;
         log_error_ptr log_error;
         validator_ptr validator;
         unescaper_ptr unescaper;
         const struct sockaddr* bind_address;
         int bind_socket;
-        int max_thread_stack_size;
-        bool use_ssl;
-        bool use_ipv6;
-        bool debug;
-        bool pedantic;
-        std::string https_mem_key;
-        std::string https_mem_cert;
-        std::string https_mem_trust;
-        std::string https_priorities;
-        http_utils::cred_type_T cred_type;
-        std::string digest_auth_random;
-        int nonce_nc_size;
+        const int max_thread_stack_size;
+        const bool use_ssl;
+        const bool use_ipv6;
+        const bool debug;
+        const bool pedantic;
+        const std::string https_mem_key;
+        const std::string https_mem_cert;
+        const std::string https_mem_trust;
+        const std::string https_priorities;
+        const http_utils::cred_type_T cred_type;
+        const std::string digest_auth_random;
+        const int nonce_nc_size;
         bool running;
-        http_utils::policy_T default_policy;
-        bool basic_auth_enabled;
-        bool digest_auth_enabled;
-        bool regex_checking;
-        bool ban_system_enabled;
-        bool post_process_enabled;
+        const http_utils::policy_T default_policy;
+        const bool basic_auth_enabled;
+        const bool digest_auth_enabled;
+        const bool regex_checking;
+        const bool ban_system_enabled;
+        const bool post_process_enabled;
         bool single_resource;
         pthread_mutex_t mutexwait;
         pthread_rwlock_t runguard;
@@ -538,6 +537,8 @@ class webserver
         std::vector<pthread_t> threads;
 
         std::map<std::string, details::event_tuple> event_suppliers;
+
+        webserver& operator=(const webserver& b);
 
         void init(render_ptr single_resource);
         static void* select(void* self);
