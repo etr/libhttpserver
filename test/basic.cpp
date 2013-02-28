@@ -73,6 +73,15 @@ class complete_test_resource : public http_resource<complete_test_resource>
         }
 };
 
+class only_render_resource : public http_resource<only_render_resource>
+{
+    public:
+        void render(const http_request& req, http_response** res)
+        {
+            *res = new http_string_response("OK", 200, "text/plain");
+        }
+};
+
 LT_BEGIN_SUITE(basic_suite)
 
     webserver* ws;
@@ -173,6 +182,53 @@ LT_BEGIN_AUTO_TEST(basic_suite, complete)
     LT_ASSERT_EQ(res, 0);
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(complete)
+
+LT_BEGIN_AUTO_TEST(basic_suite, only_render)
+    only_render_resource* resource = new only_render_resource();
+    ws->register_resource("base", resource);
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL* curl;
+    CURLcode res;
+
+    curl = curl_easy_init();
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    curl_easy_cleanup(curl);
+
+    curl = curl_easy_init();
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "DELETE");
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    curl_easy_cleanup(curl);
+
+    curl = curl_easy_init();
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "PUT");
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    curl_easy_cleanup(curl);
+
+    curl = curl_easy_init();
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "CONNECT");
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    curl_easy_cleanup(curl);
+
+    curl = curl_easy_init();
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_POST, 1L);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, NULL);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, 0);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    curl_easy_cleanup(curl);
+
+LT_END_AUTO_TEST(only_render)
 
 LT_BEGIN_AUTO_TEST(basic_suite, postprocessor)
     simple_resource* resource = new simple_resource();
