@@ -134,20 +134,30 @@ namespace details
             template<typename T>
             http_resource_mirror(http_resource<T>* res):
                 render(&empty_render),
-                render_GET(render),
-                render_POST(render),
-                render_PUT(render),
-                render_HEAD(render),
-                render_DELETE(render),
-                render_TRACE(render),
-                render_OPTIONS(render),
-                render_CONNECT(render),
+                render_GET(&empty_render),
+                render_POST(&empty_render),
+                render_PUT(&empty_render),
+                render_HEAD(&empty_render),
+                render_DELETE(&empty_render),
+                render_TRACE(&empty_render),
+                render_OPTIONS(&empty_render),
+                render_CONNECT(&empty_render),
                 is_allowed(&empty_is_allowed)
             {
                 if(HAS_METHOD(render, T, void, 
                     const http_request&, http_response**)
                 )
+                {
                     render.bind(res, &T::render);
+                    render_GET.bind(res, &T::render);
+                    render_POST.bind(res, &T::render);
+                    render_PUT.bind(res, &T::render);
+                    render_HEAD.bind(res, &T::render);
+                    render_DELETE.bind(res, &T::render);
+                    render_TRACE.bind(res, &T::render);
+                    render_OPTIONS.bind(res, &T::render);
+                    render_CONNECT.bind(res, &T::render);
+                }
                 if(HAS_METHOD(render_GET, T, void,
                     const http_request&, http_response**)
                 )
