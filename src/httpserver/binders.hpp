@@ -81,6 +81,17 @@ namespace details
                 generic_mem_ptr _spfunc;
 
             public:
+                binder()
+                {
+                }
+
+                binder(const binder& o):
+                    pmem(o.pmem),
+                    _pfunc(o._pfunc),
+                    _spfunc(o._spfunc)
+                {
+                }
+
                 template<typename X, typename Y>
                 inline void bind(X* pmem, Y fun)
                 {
@@ -223,6 +234,11 @@ namespace details
             public:
                 typedef functor_two type;
                 functor_two() { }
+
+                functor_two(const functor_two& o):
+                    _binder(o._binder)
+                {
+                }
 
                 template <typename X, typename Y>
                 functor_two(Y* pmem, RET_TYPE(X::*func)(PAR1 p1, PAR2 p2) )

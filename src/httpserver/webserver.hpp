@@ -133,64 +133,93 @@ namespace details
 
             template<typename T>
             http_resource_mirror(http_resource<T>* res):
-                render(&empty_render),
-                render_GET(&empty_render),
-                render_POST(&empty_render),
-                render_PUT(&empty_render),
-                render_HEAD(&empty_render),
-                render_DELETE(&empty_render),
-                render_TRACE(&empty_render),
-                render_OPTIONS(&empty_render),
-                render_CONNECT(&empty_render),
-                is_allowed(&empty_is_allowed)
+                render(
+                    HAS_METHOD(render, T, void, 
+                        const http_request&, http_response**
+                    ) ? functor(res, &T::render) : functor(&empty_render)
+                ),
+                render_GET(
+                    HAS_METHOD(render_GET, T, void, 
+                        const http_request&, http_response**
+                    ) ? functor(res, &T::render_GET) :
+                    (
+                        HAS_METHOD(render, T, void,
+                            const http_request&, http_response**
+                        ) ? functor(res, &T::render) : functor(&empty_render)
+                    )
+                ),
+                render_POST(
+                    HAS_METHOD(render_POST, T, void, 
+                        const http_request&, http_response**
+                    ) ? functor(res, &T::render_POST) :
+                    (
+                        HAS_METHOD(render, T, void,
+                            const http_request&, http_response**
+                        ) ? functor(res, &T::render) : functor(&empty_render)
+                    )
+                ),
+                render_PUT(
+                    HAS_METHOD(render_PUT, T, void, 
+                        const http_request&, http_response**
+                    ) ? functor(res, &T::render_PUT) :
+                    (
+                        HAS_METHOD(render, T, void,
+                            const http_request&, http_response**
+                        ) ? functor(res, &T::render) : functor(&empty_render)
+                    )
+                ),
+                render_HEAD(
+                    HAS_METHOD(render_HEAD, T, void, 
+                        const http_request&, http_response**
+                    ) ? functor(res, &T::render_HEAD) :
+                    (
+                        HAS_METHOD(render, T, void,
+                            const http_request&, http_response**
+                        ) ? functor(res, &T::render) : functor(&empty_render)
+                    )
+                ),
+                render_DELETE(
+                    HAS_METHOD(render_DELETE, T, void, 
+                        const http_request&, http_response**
+                    ) ? functor(res, &T::render_DELETE) :
+                    (
+                        HAS_METHOD(render, T, void,
+                            const http_request&, http_response**
+                        ) ? functor(res, &T::render) : functor(&empty_render)
+                    )
+                ),
+                render_TRACE(
+                    HAS_METHOD(render_TRACE, T, void, 
+                        const http_request&, http_response**
+                    ) ? functor(res, &T::render_TRACE) :
+                    (
+                        HAS_METHOD(render, T, void,
+                            const http_request&, http_response**
+                        ) ? functor(res, &T::render) : functor(&empty_render)
+                    )
+                ),
+                render_OPTIONS(
+                    HAS_METHOD(render_OPTIONS, T, void, 
+                        const http_request&, http_response**
+                    ) ? functor(res, &T::render_OPTIONS) :
+                    (
+                        HAS_METHOD(render, T, void,
+                            const http_request&, http_response**
+                        ) ? functor(res, &T::render) : functor(&empty_render)
+                    )
+                ),
+                render_CONNECT(
+                    HAS_METHOD(render_CONNECT, T, void, 
+                        const http_request&, http_response**
+                    ) ? functor(res, &T::render_CONNECT) :
+                    (
+                        HAS_METHOD(render, T, void,
+                            const http_request&, http_response**
+                        ) ? functor(res, &T::render) : functor(&empty_render)
+                    )
+                ),
+                is_allowed(res, &T::is_allowed)
             {
-                if(HAS_METHOD(render, T, void, 
-                    const http_request&, http_response**)
-                )
-                {
-                    render.bind(res, &T::render);
-                    render_GET.bind(res, &T::render);
-                    render_POST.bind(res, &T::render);
-                    render_PUT.bind(res, &T::render);
-                    render_HEAD.bind(res, &T::render);
-                    render_DELETE.bind(res, &T::render);
-                    render_TRACE.bind(res, &T::render);
-                    render_OPTIONS.bind(res, &T::render);
-                    render_CONNECT.bind(res, &T::render);
-                }
-                if(HAS_METHOD(render_GET, T, void,
-                    const http_request&, http_response**)
-                )
-                    render_GET.bind(res, &T::render_GET);
-                if(HAS_METHOD(render_POST, T, void,
-                    const http_request&, http_response**)
-                )
-                    render_POST.bind(res, &T::render_POST);
-                if(HAS_METHOD(render_PUT, T, void,
-                    const http_request&, http_response**)
-                )
-                    render_PUT.bind(res, &T::render_PUT);
-                if(HAS_METHOD(render_HEAD, T, void,
-                    const http_request&, http_response**)
-                )
-                    render_HEAD.bind(res, &T::render_HEAD);
-                if(HAS_METHOD(render_DELETE, T, void,
-                    const http_request&, http_response**)
-                )
-                    render_DELETE.bind(res, &T::render_DELETE);
-                if(HAS_METHOD(render_TRACE, T, void,
-                    const http_request&, http_response**)
-                )
-                    render_TRACE.bind(res, &T::render_TRACE);
-                if(HAS_METHOD(render_OPTIONS, T, void,
-                    const http_request&, http_response**)
-                )
-                    render_OPTIONS.bind(res, &T::render_OPTIONS);
-                if(HAS_METHOD(render_CONNECT, T, void,
-                    const http_request&, http_response**)
-                )
-                    render_CONNECT.bind(res, &T::render_CONNECT);
-                is_allowed.bind(res, &T::is_allowed);
             }
 
             friend class ::httpserver::webserver;
