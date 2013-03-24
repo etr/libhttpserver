@@ -157,7 +157,7 @@ struct modded_request
     std::string* complete_uri;
     webserver* ws;
 
-    binders::functor_two<
+    const binders::functor_two<
         const http_request&, http_response**, void
     > http_resource_mirror::*callback;
 
