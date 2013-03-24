@@ -2,8 +2,11 @@ language: cpp
 compiler: gcc
 # Change this to your needs
 before_install:
- - wget http://199.231.187.83/resources/libmicrohttpd10_0.9.20-1_i386.deb
- - wget http://199.231.187.83/resources/libmicrohttpd-dev_0.9.20-1_i386.deb
- - sudo apt-get install libc6 libgcrypt11 libgnutls26
- - sudo dpkg -i libmicrohttpd10_0.9.20-1_i386.deb libmicrohttpd-dev_0.9.20-1_i386.deb
+ - wget http://199.231.187.83/resources/libmicrohttpd-0.9.20.tar.gz
+ - tar -xvzf libmicrohttpd-0.9.20.tar.gz
+ - cd libmicrohttpd-0.9.20
+ - ./configure
+ - make
+ - make install
+ - cd ..
 script: ./bootstrap && mkdir build && cd build && ../configure && make && make check
