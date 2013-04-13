@@ -2,6 +2,7 @@ language: cpp
 compiler: gcc
 # Change this to your needs
 before_install:
+ - sudo apt-get install makeinfo
  - wget http://199.231.187.83/resources/libmicrohttpd-0.9.20.tar.gz
  - tar -xvzf libmicrohttpd-0.9.20.tar.gz
  - cd libmicrohttpd-0.9.20
