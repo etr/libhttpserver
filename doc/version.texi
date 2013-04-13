@@ -1,0 +1,4 @@
+@set UPDATED 13 April 2013
+@set UPDATED-MONTH April 2013
+@set EDITION 0.6.3
+@set VERSION 0.6.3
