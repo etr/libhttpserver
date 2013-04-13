@@ -119,17 +119,23 @@ namespace details
             typedef binders::functor_one<const std::string&,
                     bool> functor_allowed;
 
-            functor render;
-            functor render_GET;
-            functor render_POST;
-            functor render_PUT;
-            functor render_HEAD;
-            functor render_DELETE;
-            functor render_TRACE;
-            functor render_OPTIONS;
-            functor render_CONNECT;
-            functor_allowed is_allowed;
+            const functor render;
+            const functor render_GET;
+            const functor render_POST;
+            const functor render_PUT;
+            const functor render_HEAD;
+            const functor render_DELETE;
+            const functor render_TRACE;
+            const functor render_OPTIONS;
+            const functor render_CONNECT;
+            const functor_allowed is_allowed;
+
             functor method_not_acceptable_resource;
+
+            http_resource_mirror& operator= (const http_resource_mirror& o)
+            {
+                return *this;
+            }
 
             template<typename T>
             http_resource_mirror(http_resource<T>* res):

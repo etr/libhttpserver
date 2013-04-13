@@ -569,7 +569,9 @@ void webserver::register_resource(
 
     details::http_endpoint idx(resource, family, true, regex_checking);
 
-    registered_resources[idx] = hrm;
+    registered_resources.insert(
+        pair<details::http_endpoint, details::http_resource_mirror>(idx,hrm)
+    );
     registered_resources_str[idx.url_complete] = &registered_resources[idx];
 }
 
