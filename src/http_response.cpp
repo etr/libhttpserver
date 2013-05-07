@@ -229,8 +229,6 @@ void http_response::get_raw_response_lp_receive(
         webserver* ws
 )
 {
-
-#ifdef USE_COMET
     this->ws = ws;
     this->connection_id = MHD_get_connection_info(
             this->underlying_connection,
@@ -246,13 +244,6 @@ void http_response::get_raw_response_lp_receive(
             keepalive_secs,
             keepalive_msg
     );
-
-#else //USE_COMET
-
-    http_response::get_raw_response(response, ws);
-
-#endif //USE_COMET
-
 }
 
 ssize_t long_polling_receive_response::data_generator(
@@ -262,7 +253,6 @@ ssize_t long_polling_receive_response::data_generator(
         size_t max
 )
 {
-#ifdef USE_COMET
     long_polling_receive_response* _this = 
         static_cast<long_polling_receive_response*>(cls);
 
@@ -275,9 +265,6 @@ ssize_t long_polling_receive_response::data_generator(
     }
     else
         return 0;
-#else //USE_COMET
-    return 0;
-#endif //USE_COMET
 }
 
 void http_response::get_raw_response_lp_send(
@@ -285,10 +272,8 @@ void http_response::get_raw_response_lp_send(
         webserver* ws
 )
 {
-    http_response::get_raw_response(response, ws);
-#ifdef USE_COMET
+    http_response::get_raw_response_str(response, ws);
     ws->send_message_to_topic(send_topic, content);
-#endif //USE_COMET
 }
 
 };

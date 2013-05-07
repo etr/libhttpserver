@@ -241,7 +241,7 @@ namespace details
                             int*
                     );
 
-            typedef long(*get_timeout_ptr)();
+            typedef struct timeval(*get_timeout_ptr)();
             typedef void(*dispatch_events_ptr)();
             supply_events_ptr supply_events;
             get_timeout_ptr get_timeout;
@@ -293,7 +293,7 @@ class event_supplier
             );
         }
 
-        long get_timeout() const
+        struct timeval get_timeout() const
         {
             return static_cast<CHILD*>(this)->get_timeout();
         }
@@ -508,15 +508,13 @@ class webserver
 
         void remove_event_supplier(const std::string& id);
 
-        void run();
-
         /**
          * Method used to kill the webserver waiting for it to terminate
         **/
         void sweet_kill();
     private:
         const int port;
-        const http_utils::start_method_T start_method;
+        http_utils::start_method_T start_method;
         const int max_threads;
         const int max_connections;
         const int memory_limit;
@@ -588,7 +586,7 @@ class webserver
 
         void init(render_ptr single_resource);
         static void* select(void* self);
-        void schedule_fd(int fd, fd_set* schedule_list, int* max);
+//        void schedule_fd(int fd, fd_set* schedule_list, int* max);
         static void* cleaner(void* self);
         void clean_connections();
 

@@ -108,7 +108,9 @@ class http_response
             get_raw_response(this, &http_response::get_raw_response_str),
             decorate_response(this, &http_response::decorate_response_str),
             enqueue_response(this, &http_response::enqueue_response_str),
-            completed(false)
+            completed(false),
+            ws(0x0),
+            connection_id(-1)
         {
             set_header(http_utils::http_header_content_type, content_type);
         }
@@ -139,7 +141,9 @@ class http_response
             get_raw_response(b.get_raw_response),
             decorate_response(b.decorate_response),
             enqueue_response(b.enqueue_response),
-            completed(b.completed)
+            completed(b.completed),
+            ws(b.ws),
+            connection_id(b.connection_id)
         {
         }
 
@@ -383,6 +387,9 @@ class http_response
 
         bool completed;
 
+        webserver* ws;
+        int connection_id;
+
         void get_raw_response_str(MHD_Response** res, webserver* ws = 0x0);
         void get_raw_response_file(MHD_Response** res, webserver* ws = 0x0);
         void get_raw_response_switch_r(MHD_Response** res, webserver* ws = 0x0);
@@ -465,7 +472,9 @@ inline http_response::http_response<TYPE> \
     get_raw_response(this, &http_response::get_raw_response_## S1),\
     decorate_response(this, &http_response::decorate_response_## S2),\
     enqueue_response(this, &http_response::enqueue_response_## S3),\
-    completed(false)\
+    completed(false),\
+    ws(0x0),\
+    connection_id(-1)\
 {\
     set_header(http_utils::http_header_content_type, content_type);\
 }
@@ -629,12 +638,11 @@ class long_polling_receive_response : public http_response
         long_polling_receive_response(const http_response& b) : http_response(b)
         {
         }
-    private:
+
         static ssize_t data_generator (void* cls, uint64_t pos,
                 char* buf, size_t max
         );
-        int connection_id;
-        httpserver::webserver* ws;
+
         friend class webserver;
 };
 

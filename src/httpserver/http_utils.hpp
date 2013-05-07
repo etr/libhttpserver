@@ -74,10 +74,9 @@ class http_utils
 
     enum start_method_T
     {
-        INTERNAL_SELECT = MHD_USE_SELECT_INTERNALLY,
+        INTERNAL_SELECT = MHD_NO_FLAG,
         THREADS = MHD_USE_THREAD_PER_CONNECTION,
-        POLL = MHD_USE_THREAD_PER_CONNECTION | MHD_USE_POLL,
-        INTERNAL_REMANAGED = MHD_NO_FLAG
+        POLL = MHD_USE_THREAD_PER_CONNECTION | MHD_USE_POLL
     };
 
     enum policy_T

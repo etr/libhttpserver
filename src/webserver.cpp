@@ -43,9 +43,7 @@
 #include "string_utilities.hpp"
 #include "webserver.hpp"
 
-#ifdef USE_COMET
 #define _REENTRANT 1
-#endif //USE_COMET
 
 using namespace std;
 
@@ -513,11 +511,9 @@ void webserver::init(render_ptr single_resource)
     pthread_rwlock_init(&runguard, NULL);
     pthread_cond_init(&mutexcond, NULL);
     pthread_rwlock_init(&cache_guard, NULL);
-#ifdef USE_COMET
     pthread_rwlock_init(&comet_guard, NULL);
     pthread_mutex_init(&cleanmux, NULL);
     pthread_cond_init(&cleancond, NULL);
-#endif //USE_COMET
 }
 
 webserver::~webserver()
@@ -527,14 +523,9 @@ webserver::~webserver()
     pthread_rwlock_destroy(&runguard);
     pthread_rwlock_destroy(&cache_guard);
     pthread_cond_destroy(&mutexcond);
-#ifdef USE_COMET
     pthread_rwlock_destroy(&comet_guard);
     pthread_mutex_destroy(&cleanmux);
     pthread_cond_destroy(&cleancond);
-#endif //USE_COMET
-    typedef vector<details::daemon_item*>::const_iterator daemon_item_it;
-    for(daemon_item_it it = daemons.begin(); it != daemons.end(); ++it)
-        delete *it;
 }
 
 void webserver::sweet_kill()
@@ -575,31 +566,30 @@ void webserver::register_resource(
     registered_resources_str[idx.url_complete] = &registered_resources[idx];
 }
 
+/*
 void webserver::schedule_fd(int fd, fd_set* schedule_list, int* max)
 {
     FD_SET(fd, schedule_list);
     if(fd > *max)
         *max = fd;
 }
+*/
 
 void* webserver::cleaner(void* self)
 {
-#ifdef USE_COMET
     webserver* _this = static_cast<webserver*>(self);
-    while(true)
+    while(_this->is_running())
     {
         pthread_mutex_lock(&_this->cleanmux);
         pthread_cond_wait(&_this->cleancond, &_this->cleanmux); //there are no problems with spurious wake-ups
         pthread_mutex_unlock(&_this->cleanmux);
         _this->clean_connections();
     }
-#endif //USE_COMET
     return 0x0;
 } 
 
 void webserver::clean_connections()
 {
-#ifdef USE_COMET
     pthread_rwlock_wrlock(&comet_guard);
     typedef std::map<string, std::set<int> >::iterator conn_it;
     for(conn_it it = q_waitings.begin(); it != q_waitings.end(); ++it)
@@ -622,7 +612,6 @@ void webserver::clean_connections()
         }
     }
     pthread_rwlock_unlock(&comet_guard);
-#endif //USE_COMET
 }
 
 void* webserver::select(void* self)
@@ -631,23 +620,36 @@ void* webserver::select(void* self)
     fd_set ws;
     fd_set es;
     struct timeval timeout_value;
-    int max = 0;
     details::daemon_item* di = static_cast<details::daemon_item*>(self);
-    while (true)
+    int max;
+    while (di->ws->is_running())
     {
+        max = 0;
         FD_ZERO (&rs);
         FD_ZERO (&ws);
         FD_ZERO (&es);
         if (MHD_YES != MHD_get_fdset (di->daemon, &rs, &ws, &es, &max))
-            break; /* fatal internal error */
+            abort(); /* fatal internal error */
 
-        unsigned MHD_LONG_LONG timeout;
+        unsigned MHD_LONG_LONG timeout_microsecs = 0;
+        unsigned MHD_LONG_LONG timeout_secs = 0;
 
-        if (!(MHD_get_timeout (di->daemon, &timeout) == MHD_YES))
+        if (!(MHD_get_timeout (di->daemon, &timeout_microsecs) == MHD_YES))
         {
-            //abort execution
+            timeout_secs = 1;
+            timeout_microsecs = 0;
+        }
+        else
+        {
+            if(timeout_microsecs < 1000)
+            {
+                timeout_microsecs = timeout_microsecs * 1000;
+                timeout_secs = 0;
+            }
         }
 
+/*
+        // SUPPLIERS MANAGEMENT
         {
             std::map<std::string, details::event_tuple>::const_iterator it;
             pthread_rwlock_rdlock(&di->ws->runguard);
@@ -662,16 +664,26 @@ void* webserver::select(void* self)
                 if(local_max > max)
                     max = local_max;
 
-                unsigned long t = (*it).second.get_timeout();
-                if(t < timeout)
-                    timeout = t;
+                struct timeval t = (*it).second.get_timeout();
+                if((unsigned MHD_LONG_LONG) t.tv_sec < timeout_secs || 
+                    ((unsigned MHD_LONG_LONG) t.tv_sec == timeout_secs 
+                        && (unsigned MHD_LONG_LONG) t.tv_usec < timeout_microsecs
+                    )
+                )
+                {
+                    timeout_secs = t.tv_sec;
+                    timeout_microsecs = t.tv_usec;
+                }
             }
             pthread_rwlock_unlock(&di->ws->runguard);
         }
-#ifdef USE_COMET
+*/
+
+/*
+        // COMET CONNECTIONS MANAGEMENT
         di->ws->clean_connections();
         //TODO: clean connection structures also when working with threads
-        pthread_rwlock_wrlock(&_di->ws>comet_guard);
+        pthread_rwlock_wrlock(&di->ws->comet_guard);
         for(std::map<int, long>::iterator it = di->ws->q_keepalives.begin();
                 it != di->ws->q_keepalives.end();
                 ++it
@@ -687,30 +699,27 @@ void* webserver::select(void* self)
                 );
             else
             {
-                unsigned long to_wait_time = 
+                unsigned MHD_LONG_LONG to_wait_time = 
                     di->ws->q_keepalives_mem[(*it).first].first - waited_time;
 
-                if(to_wait_time < (timeout / 1000))
-                    timeout = to_wait_time * 1000;
+                if(to_wait_time < timeout_secs)
+                {
+                    timeout_secs = to_wait_time;
+                    timeout_microsecs = 0;
+                }
             }
         }
         pthread_rwlock_unlock(&di->ws->comet_guard);
+*/
 
-        pthread_rwlock_rdlock(&di->ws->comet_guard);
-
-        for(std::set<int>::const_iterator it = di->ws->q_signal.begin();
-                it != di->ws->q_signal.end();
-                ++it
-        )
-            di->ws->schedule_fd(*it, &ws, &max);
-        pthread_rwlock_unlock(&di->ws->comet_guard);
-#endif //USE_COMET
-
-        timeout_value.tv_sec = timeout / 1000;
-        timeout_value.tv_usec =(timeout - (timeout_value.tv_sec * 1000)) * 1000;
+        timeout_value.tv_sec = timeout_secs;
+        timeout_value.tv_usec = timeout_microsecs;
 
         ::select (max + 1, &rs, &ws, &es, &timeout_value);
         MHD_run (di->daemon);
+
+/*
+        //EVENT SUPPLIERS DISPATCHING
         {
             std::map<std::string, details::event_tuple>::const_iterator it;
             pthread_rwlock_rdlock(&di->ws->runguard);
@@ -720,18 +729,9 @@ void* webserver::select(void* self)
             )
                 (*it).second.dispatch_events();
         }
+*/
     }
     return 0x0;
-}
-
-void webserver::run()
-{
-    if(start_method == http_utils::INTERNAL_REMANAGED)
-    {
-        MHD_run(daemons[next_to_choose]->daemon);
-        next_to_choose++;
-        next_to_choose %= max_threads;
-    }
 }
 
 int create_socket (int domain, int type, int protocol)
@@ -755,13 +755,6 @@ int create_socket (int domain, int type, int protocol)
 
 bool webserver::start(bool blocking)
 {
-
-#ifdef USE_COMET
-    if(start_method == http_utils::INTERNAL_SELECT)
-    {
-        start_method = http_utils::INTERNAL_REMANAGED;
-    }
-#endif
 
     struct {
         MHD_OptionItem operator ()(
@@ -791,7 +784,7 @@ bool webserver::start(bool blocking)
         iov.push_back(gen(MHD_OPTION_SOCK_ADDR, (intptr_t) bind_address));
     if(bind_socket != 0)
         iov.push_back(gen(MHD_OPTION_LISTEN_SOCKET, bind_socket));
-    if(! (start_method == http_utils::INTERNAL_REMANAGED))
+    if(! (start_method == http_utils::INTERNAL_SELECT))
     {
         if(max_threads != 0)
             iov.push_back(gen(MHD_OPTION_THREAD_POOL_SIZE, max_threads));
@@ -838,13 +831,9 @@ bool webserver::start(bool blocking)
         iov.push_back(gen(MHD_OPTION_HTTPS_CRED_TYPE, cred_type));
 #endif //HAVE_GNUTLS
 
-    if(start_method == http_utils::INTERNAL_REMANAGED)
+    if(start_method == http_utils::INTERNAL_SELECT)
     {
-#ifndef WINDOWS
-        const int on = 1; 
-#else
-        const char on = 1;
-#endif
+        int on = 1;
         bool bind_settled = true;
         if(!bind_socket)
         {
@@ -899,17 +888,10 @@ bool webserver::start(bool blocking)
             {
 #ifdef IPPROTO_IPV6
 #ifdef IPV6_V6ONLY
-#ifndef WINDOWS
                 setsockopt (bind_socket, 
                     IPPROTO_IPV6, IPV6_V6ONLY, 
                     &on, sizeof (on)
                 );
-#else
-                setsockopt (bind_socket, 
-                    IPPROTO_IPV6, IPV6_V6ONLY, 
-                    &on, sizeof (on)
-                );
-#endif
 #endif
 #endif
             }
@@ -945,7 +927,7 @@ bool webserver::start(bool blocking)
     if(max_threads > num_threads)
         num_threads = max_threads;
 
-    if(start_method == http_utils::INTERNAL_REMANAGED)
+    if(start_method == http_utils::INTERNAL_SELECT)
     {
         for(int i = 0; i < num_threads; i++)
         {
@@ -959,8 +941,7 @@ bool webserver::start(bool blocking)
             {
                 cout << gettext("Unable to connect daemon to port: ") <<
                     this->port << endl;
-
-                return false;
+                abort();
             }
             details::daemon_item* di = new details::daemon_item(this, daemon);
             daemons.push_back(di);
@@ -969,13 +950,15 @@ bool webserver::start(bool blocking)
             pthread_t t;
             threads.push_back(t);
 
-            pthread_create(
+            if(pthread_create(
                     &threads[i],
                     NULL,
                     &webserver::select,
                     static_cast<void*>(di)
-            );
-            //TODO: do something if initialization fails
+            ))
+            {
+                abort();
+            }
         }
     }
     else
@@ -990,20 +973,20 @@ bool webserver::start(bool blocking)
         {
             cout << gettext("Unable to connect daemon to port: ") << 
                 this->port << endl;
-            return false;
+            abort();
         }
         details::daemon_item* di = new details::daemon_item(this, daemon);
         daemons.push_back(di);
-#ifdef USE_COMET
         pthread_t c;
         threads.push_back(c);
-        pthread_create(&threads[0], 
+        if(pthread_create(&threads[0], 
                 NULL,
                 &webserver::cleaner,
                 static_cast<void*>(this)
-        );
-        //TODO: do something if initialization fails
-#endif
+        ))
+        {
+            abort();
+        }
 
     }
     this->running = true;
@@ -1027,10 +1010,19 @@ bool webserver::is_running()
 bool webserver::stop()
 {
     pthread_mutex_lock(&mutexwait);
-    if(this->running)
-        this->running = false;
+    this->running = false;
     pthread_cond_signal(&mutexcond);
     pthread_mutex_unlock(&mutexwait);
+    for(unsigned int i = 0; i < threads.size(); ++i)
+    {
+        int t_res;
+        pthread_join(threads[i], (void**) &t_res);
+    }
+    threads.clear();
+    typedef vector<details::daemon_item*>::const_iterator daemon_item_it;
+    for(daemon_item_it it = daemons.begin(); it != daemons.end(); ++it)
+        delete *it;
+    daemons.clear();
     return true;
 }
 
@@ -1713,7 +1705,6 @@ void webserver::send_message_to_consumer(
         bool to_lock
 )
 {
-#ifdef USE_COMET
     //This function need to be externally locked on write
     q_messages[connection_id].push_back(message);
     map<int, long>::const_iterator it;
@@ -1732,7 +1723,6 @@ void webserver::send_message_to_consumer(
         if(to_lock)
             pthread_mutex_unlock(&q_blocks[connection_id].first);
     }
-#endif //USE_COMET
 }
 
 void webserver::send_message_to_topic(
@@ -1740,7 +1730,6 @@ void webserver::send_message_to_topic(
         const std::string& message
 )
 {
-#ifdef USE_COMET
     pthread_rwlock_wrlock(&comet_guard);
     for(std::set<int>::const_iterator it = q_waitings[topic].begin();
             it != q_waitings[topic].end();
@@ -1770,7 +1759,6 @@ void webserver::send_message_to_topic(
         pthread_cond_signal(&cleancond);
         pthread_mutex_unlock(&cleanmux);
     }
-#endif //USE_COMET
 }
 
 void webserver::register_to_topics(
@@ -1780,7 +1768,6 @@ void webserver::register_to_topics(
         string keepalive_msg
 )
 {
-#ifdef USE_COMET
     pthread_rwlock_wrlock(&comet_guard);
     for(std::vector<std::string>::const_iterator it = topics.begin();
             it != topics.end(); ++it
@@ -1805,21 +1792,16 @@ void webserver::register_to_topics(
             std::make_pair<pthread_mutex_t, pthread_cond_t>(m, c);
     }
     pthread_rwlock_unlock(&comet_guard);
-#endif //USE_COMET
 }
 
 size_t webserver::read_message(int connection_id, std::string& message)
 {
-#ifdef USE_COMET
     pthread_rwlock_wrlock(&comet_guard);
     std::deque<std::string>& t_deq = q_messages[connection_id];
     message.assign(t_deq.front());
     t_deq.pop_front();
     pthread_rwlock_unlock(&comet_guard);
     return message.size();
-#else //USE_COMET
-    return 0;
-#endif //USE_COMET
 }
 
 size_t webserver::get_topic_consumers(
@@ -1827,7 +1809,6 @@ size_t webserver::get_topic_consumers(
         std::set<int>& consumers
 )
 {
-#ifdef USE_COMET
     pthread_rwlock_rdlock(&comet_guard);
 
     for(std::set<int>::const_iterator it = q_waitings[topic].begin();
@@ -1839,14 +1820,10 @@ size_t webserver::get_topic_consumers(
     int size = consumers.size();
     pthread_rwlock_unlock(&comet_guard);
     return size;
-#else //USE_COMET
-    return 0;
-#endif //USE_COMET
 }
 
 bool webserver::pop_signaled(int consumer)
 {
-#ifdef USE_COMET
     if(start_method == http_utils::INTERNAL_SELECT)
     {
         pthread_rwlock_wrlock(&comet_guard);
@@ -1916,9 +1893,6 @@ bool webserver::pop_signaled(int consumer)
         pthread_rwlock_unlock(&comet_guard);
         return true;
     }
-#else //USE_COMET
-    return false;
-#endif //USE_COMET
 }
 
 http_response* webserver::get_from_cache(
