@@ -110,7 +110,7 @@ class http_response
             enqueue_response(this, &http_response::enqueue_response_str),
             completed(false),
             ws(0x0),
-            connection_id(-1)
+            connection_id(0x0)
         {
             set_header(http_utils::http_header_content_type, content_type);
         }
@@ -388,7 +388,7 @@ class http_response
         bool completed;
 
         webserver* ws;
-        int connection_id;
+        struct httpserver_ska connection_id;
 
         void get_raw_response_str(MHD_Response** res, webserver* ws = 0x0);
         void get_raw_response_file(MHD_Response** res, webserver* ws = 0x0);
@@ -474,7 +474,7 @@ inline http_response::http_response<TYPE> \
     enqueue_response(this, &http_response::enqueue_response_## S3),\
     completed(false),\
     ws(0x0),\
-    connection_id(-1)\
+    connection_id(0x0)\
 {\
     set_header(http_utils::http_header_content_type, content_type);\
 }

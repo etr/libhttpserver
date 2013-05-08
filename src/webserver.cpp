@@ -541,6 +541,20 @@ void webserver::request_completed (
 )
 {
     details::modded_request* mr = (struct details::modded_request*) *con_cls;
+
+    pthread_rwlock_wrlock(&mr->ws->comet_guard);
+    mr->ws->q_messages.erase(mr->dhrs->connection_id);
+    mr->ws->q_blocks.erase(mr->dhrs->connection_id);
+    mr->ws->q_signal.erase(mr->dhrs->connection_id);
+    mr->ws->q_keepalives.erase(mr->dhrs->connection_id);
+
+    typedef std::map<string, std::set<httpserver_ska> >::iterator conn_it;
+    for(conn_it it = mr->ws->q_waitings.begin(); it != mr->ws->q_waitings.end(); ++it)
+    {
+        it->second.erase(mr->dhrs->connection_id);
+    }
+    pthread_rwlock_unlock(&mr->ws->comet_guard);
+
     if (0x0 == mr) 
     {
         if(mr->dhrs.res != 0x0 && mr->dhrs->ca != 0x0)
@@ -564,54 +578,6 @@ void webserver::register_resource(
         pair<details::http_endpoint, details::http_resource_mirror>(idx,hrm)
     );
     registered_resources_str[idx.url_complete] = &registered_resources[idx];
-}
-
-/*
-void webserver::schedule_fd(int fd, fd_set* schedule_list, int* max)
-{
-    FD_SET(fd, schedule_list);
-    if(fd > *max)
-        *max = fd;
-}
-*/
-
-void* webserver::cleaner(void* self)
-{
-    webserver* _this = static_cast<webserver*>(self);
-    while(_this->is_running())
-    {
-        pthread_mutex_lock(&_this->cleanmux);
-        pthread_cond_wait(&_this->cleancond, &_this->cleanmux); //there are no problems with spurious wake-ups
-        pthread_mutex_unlock(&_this->cleanmux);
-        _this->clean_connections();
-    }
-    return 0x0;
-} 
-
-void webserver::clean_connections()
-{
-    pthread_rwlock_wrlock(&comet_guard);
-    typedef std::map<string, std::set<int> >::iterator conn_it;
-    for(conn_it it = q_waitings.begin(); it != q_waitings.end(); ++it)
-    {
-        std::set<int>::const_iterator itt;
-        for(itt = (*it).second.begin(); itt != (*it).second.end(); )
-        {
-            if(fcntl(*itt, F_GETFL) != -1 || errno != EBADF)
-            {
-                ++itt;
-            }
-            else
-            {
-                q_messages.erase(*itt);
-                q_blocks.erase(*itt);
-                q_signal.erase(*itt);
-                q_keepalives.erase(*itt);
-                (*it).second.erase(itt++);
-            }
-        }
-    }
-    pthread_rwlock_unlock(&comet_guard);
 }
 
 void* webserver::select(void* self)
@@ -648,7 +614,6 @@ void* webserver::select(void* self)
             }
         }
 
-/*
         // SUPPLIERS MANAGEMENT
         {
             std::map<std::string, details::event_tuple>::const_iterator it;
@@ -677,14 +642,10 @@ void* webserver::select(void* self)
             }
             pthread_rwlock_unlock(&di->ws->runguard);
         }
-*/
 
-/*
         // COMET CONNECTIONS MANAGEMENT
-        di->ws->clean_connections();
-        //TODO: clean connection structures also when working with threads
         pthread_rwlock_wrlock(&di->ws->comet_guard);
-        for(std::map<int, long>::iterator it = di->ws->q_keepalives.begin();
+        for(std::map<httpserver_ska, long>::iterator it = di->ws->q_keepalives.begin();
                 it != di->ws->q_keepalives.end();
                 ++it
         )
@@ -710,7 +671,6 @@ void* webserver::select(void* self)
             }
         }
         pthread_rwlock_unlock(&di->ws->comet_guard);
-*/
 
         timeout_value.tv_sec = timeout_secs;
         timeout_value.tv_usec = timeout_microsecs;
@@ -718,7 +678,6 @@ void* webserver::select(void* self)
         ::select (max + 1, &rs, &ws, &es, &timeout_value);
         MHD_run (di->daemon);
 
-/*
         //EVENT SUPPLIERS DISPATCHING
         {
             std::map<std::string, details::event_tuple>::const_iterator it;
@@ -729,7 +688,6 @@ void* webserver::select(void* self)
             )
                 (*it).second.dispatch_events();
         }
-*/
     }
     return 0x0;
 }
@@ -977,17 +935,6 @@ bool webserver::start(bool blocking)
         }
         details::daemon_item* di = new details::daemon_item(this, daemon);
         daemons.push_back(di);
-        pthread_t c;
-        threads.push_back(c);
-        if(pthread_create(&threads[0], 
-                NULL,
-                &webserver::cleaner,
-                static_cast<void*>(this)
-        ))
-        {
-            abort();
-        }
-
     }
     this->running = true;
     bool value_onclose = false;
@@ -1700,14 +1647,14 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
 }
 
 void webserver::send_message_to_consumer(
-        int connection_id,
+        const httpserver_ska& connection_id,
         const std::string& message,
         bool to_lock
 )
 {
     //This function need to be externally locked on write
     q_messages[connection_id].push_back(message);
-    map<int, long>::const_iterator it;
+    map<httpserver_ska, long>::const_iterator it;
     if((it = q_keepalives.find(connection_id)) != q_keepalives.end())
     {
         struct timeval curtime;
@@ -1731,7 +1678,7 @@ void webserver::send_message_to_topic(
 )
 {
     pthread_rwlock_wrlock(&comet_guard);
-    for(std::set<int>::const_iterator it = q_waitings[topic].begin();
+    for(std::set<httpserver_ska>::const_iterator it = q_waitings[topic].begin();
             it != q_waitings[topic].end();
             ++it
     )
@@ -1744,7 +1691,7 @@ void webserver::send_message_to_topic(
             pthread_cond_signal(&q_blocks[(*it)].second);
             pthread_mutex_unlock(&q_blocks[(*it)].first);
         }
-        map<int, long>::const_iterator itt;
+        map<httpserver_ska, long>::const_iterator itt;
         if((itt = q_keepalives.find(*it)) != q_keepalives.end())
         {
             struct timeval curtime;
@@ -1763,7 +1710,7 @@ void webserver::send_message_to_topic(
 
 void webserver::register_to_topics(
         const std::vector<std::string>& topics,
-        int connection_id,
+        const httpserver_ska& connection_id,
         int keepalive_secs,
         string keepalive_msg
 )
@@ -1794,7 +1741,9 @@ void webserver::register_to_topics(
     pthread_rwlock_unlock(&comet_guard);
 }
 
-size_t webserver::read_message(int connection_id, std::string& message)
+size_t webserver::read_message(const httpserver_ska& connection_id,
+    std::string& message
+)
 {
     pthread_rwlock_wrlock(&comet_guard);
     std::deque<std::string>& t_deq = q_messages[connection_id];
@@ -1806,12 +1755,12 @@ size_t webserver::read_message(int connection_id, std::string& message)
 
 size_t webserver::get_topic_consumers(
         const std::string& topic,
-        std::set<int>& consumers
+        std::set<httpserver_ska>& consumers
 )
 {
     pthread_rwlock_rdlock(&comet_guard);
 
-    for(std::set<int>::const_iterator it = q_waitings[topic].begin();
+    for(std::set<httpserver_ska>::const_iterator it = q_waitings[topic].begin();
             it != q_waitings[topic].end(); ++it
     )
     {
@@ -1822,12 +1771,12 @@ size_t webserver::get_topic_consumers(
     return size;
 }
 
-bool webserver::pop_signaled(int consumer)
+bool webserver::pop_signaled(const httpserver_ska& consumer)
 {
     if(start_method == http_utils::INTERNAL_SELECT)
     {
         pthread_rwlock_wrlock(&comet_guard);
-        std::set<int>::iterator it = q_signal.find(consumer);
+        std::set<httpserver_ska>::iterator it = q_signal.find(consumer);
         if(it != q_signal.end())
         {
             if(q_messages[consumer].empty())

@@ -422,18 +422,20 @@ class webserver
         void send_message_to_topic(const std::string& topic,
                 const std::string& message
         );
-        void send_message_to_consumer(int connection_id,
+        void send_message_to_consumer(const httpserver_ska& connection_id,
                 const std::string& message, bool to_lock = true
         );
         void register_to_topics(const std::vector<std::string>& topics, 
-                int connection_id, int keepalive_secs = -1, 
+                const httpserver_ska& connection_id, int keepalive_secs = -1, 
                 std::string keepalive_msg = ""
         );
-        size_t read_message(int connection_id, std::string& message);
-        size_t get_topic_consumers(const std::string& topic,
-                std::set<int>& consumers
+        size_t read_message(const httpserver_ska& connection_id,
+            std::string& message
         );
-        bool pop_signaled(int consumer);
+        size_t get_topic_consumers(const std::string& topic,
+                std::set<httpserver_ska>& consumers
+        );
+        bool pop_signaled(const httpserver_ska& consumer);
 
         http_response* get_from_cache(const std::string& key, bool* valid,
                 bool lock = false, bool write = false
@@ -569,12 +571,12 @@ class webserver
         std::set<ip_representation> allowances;
 #endif
 
-        std::map<int, std::deque<std::string> > q_messages;
-        std::map<std::string, std::set<int> > q_waitings;
-        std::map<int, std::pair<pthread_mutex_t, pthread_cond_t> > q_blocks;
-        std::set<int> q_signal;
-        std::map<int, long> q_keepalives;
-        std::map<int, std::pair<int, std::string> > q_keepalives_mem;
+        std::map<httpserver_ska, std::deque<std::string> > q_messages;
+        std::map<std::string, std::set<httpserver_ska> > q_waitings;
+        std::map<httpserver_ska, std::pair<pthread_mutex_t, pthread_cond_t> > q_blocks;
+        std::set<httpserver_ska> q_signal;
+        std::map<httpserver_ska, long> q_keepalives;
+        std::map<httpserver_ska, std::pair<int, std::string> > q_keepalives_mem;
         pthread_rwlock_t comet_guard;
 
         std::vector<details::daemon_item*> daemons;
@@ -586,9 +588,7 @@ class webserver
 
         void init(render_ptr single_resource);
         static void* select(void* self);
-//        void schedule_fd(int fd, fd_set* schedule_list, int* max);
         static void* cleaner(void* self);
-        void clean_connections();
 
         void register_resource(const std::string& resource,
                 details::http_resource_mirror hrm, bool family = false

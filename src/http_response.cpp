@@ -232,8 +232,8 @@ void http_response::get_raw_response_lp_receive(
     this->ws = ws;
     this->connection_id = MHD_get_connection_info(
             this->underlying_connection,
-            MHD_CONNECTION_INFO_FD
-    )->socket_fd;
+            MHD_CONNECTION_INFO_CLIENT_ADDRESS
+    )->client_addr;
 
     *response = MHD_create_response_from_callback(MHD_SIZE_UNKNOWN, 80,
         &long_polling_receive_response::data_generator, (void*) this, NULL);
