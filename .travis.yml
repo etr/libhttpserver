@@ -4,7 +4,7 @@ compiler: gcc
 before_install:
  - wget http://199.231.187.83/resources/libmicrohttpd-0.9.26.tar.gz
  - tar -xvzf libmicrohttpd-0.9.26.tar.gz
- - cd libmicrohttpd-0.9.20
+ - cd libmicrohttpd-0.9.26
  - ./configure --prefix=/usr
  - make
  - sudo make install
