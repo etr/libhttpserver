@@ -956,21 +956,29 @@ bool webserver::is_running()
 
 bool webserver::stop()
 {
-    pthread_mutex_lock(&mutexwait);
-    this->running = false;
-    pthread_cond_signal(&mutexcond);
-    pthread_mutex_unlock(&mutexwait);
-    for(unsigned int i = 0; i < threads.size(); ++i)
+    if(this->running)
     {
-        int t_res;
-        pthread_join(threads[i], (void**) &t_res);
+        pthread_mutex_lock(&mutexwait);
+        this->running = false;
+        pthread_cond_signal(&mutexcond);
+        pthread_mutex_unlock(&mutexwait);
+        for(unsigned int i = 0; i < threads.size(); ++i)
+        {
+            void* t_res;
+            pthread_join(threads[i], &t_res);
+            free(t_res);
+        }
+        threads.clear();
+        typedef vector<details::daemon_item*>::const_iterator daemon_item_it;
+        for(daemon_item_it it = daemons.begin(); it != daemons.end(); ++it)
+            delete *it;
+        daemons.clear();
+        return true;
     }
-    threads.clear();
-    typedef vector<details::daemon_item*>::const_iterator daemon_item_it;
-    for(daemon_item_it it = daemons.begin(); it != daemons.end(); ++it)
-        delete *it;
-    daemons.clear();
-    return true;
+    else
+    {
+        return false;
+    }
 }
 
 void webserver::unregister_resource(const string& resource)
