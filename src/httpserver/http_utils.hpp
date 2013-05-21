@@ -355,7 +355,12 @@ struct httpserver_ska
 
         httpserver_ska(): addr(0x0) { }
 
-        httpserver_ska(const httpserver_ska& o): addr(o.addr) { }
+        httpserver_ska(const httpserver_ska& o):
+            addr(o.addr),
+            ip(o.ip),
+            port(o.port)
+        {
+        }
 
         bool operator<(const httpserver_ska& o) const
         {
@@ -372,6 +377,16 @@ struct httpserver_ska
         httpserver_ska& operator=(const httpserver_ska& o)
         {
             this->addr = o.addr;
+            this->ip = o.ip;
+            this->port = o.port;
+            return *this;
+        }
+
+        httpserver_ska& operator=(struct sockaddr* addr)
+        {
+            this->addr = addr;
+            this->ip = get_ip_str_new(addr);
+            this->port = get_port(addr);
             return *this;
         }
 
