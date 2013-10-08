@@ -14,7 +14,7 @@
 
      You should have received a copy of the GNU Lesser General Public
      License along with this library; if not, write to the Free Software
-     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 
+     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
      USA
 */
 
@@ -153,6 +153,7 @@ struct modded_request
 {
     struct MHD_PostProcessor *pp;
     std::string* complete_uri;
+    std::string* standardized_url;
     webserver* ws;
 
     const binders::functor_two<
@@ -166,6 +167,7 @@ struct modded_request
     modded_request():
         pp(0x0),
         complete_uri(0x0),
+        standardized_url(0x0),
         ws(0x0),
         dhr(0x0),
         dhrs(0x0),
@@ -174,13 +176,14 @@ struct modded_request
     }
     ~modded_request()
     {
-        if (NULL != pp) 
+        if (NULL != pp)
         {
             MHD_destroy_post_processor (pp);
         }
         if(second)
             delete dhr; //TODO: verify. It could be an error
         delete complete_uri;
+        delete standardized_url;
     }
 
 };
@@ -264,7 +267,7 @@ struct cache_entry
         pthread_rwlock_init(&elem_guard, NULL);
         pthread_mutex_init(&lock_guard, NULL);
     }
-    
+
     void lock(bool write = false)
     {
         pthread_mutex_lock(&lock_guard);
@@ -377,11 +380,11 @@ create_webserver& create_webserver::https_mem_trust(
 }
 
 //WEBSERVER
-webserver::webserver 
+webserver::webserver
 (
-    int port, 
+    int port,
     const http_utils::start_method_T& start_method,
-    int max_threads, 
+    int max_threads,
     int max_connections,
     int memory_limit,
     int connection_timeout,
@@ -417,9 +420,9 @@ webserver::webserver
     render_ptr internal_error_resource
 
 ) :
-    port(port), 
+    port(port),
     start_method(start_method),
-    max_threads(max_threads), 
+    max_threads(max_threads),
     max_connections(max_connections),
     memory_limit(memory_limit),
     connection_timeout(connection_timeout),
@@ -555,7 +558,7 @@ void webserver::request_completed (
     }
     pthread_rwlock_unlock(&mr->ws->comet_guard);
 
-    if (0x0 == mr) 
+    if (0x0 == mr)
     {
         if(mr->dhrs.res != 0x0 && mr->dhrs->ca != 0x0)
             mr->dhrs->ca(mr->dhrs->closure_data);
@@ -570,7 +573,7 @@ void webserver::register_resource(
 )
 {
     if(method_not_acceptable_resource)
-        hrm.method_not_acceptable_resource = method_not_acceptable_resource; 
+        hrm.method_not_acceptable_resource = method_not_acceptable_resource;
 
     details::http_endpoint idx(resource, family, true, regex_checking);
 
@@ -630,8 +633,8 @@ void* webserver::select(void* self)
                     max = local_max;
 
                 struct timeval t = (*it).second.get_timeout();
-                if((unsigned MHD_LONG_LONG) t.tv_sec < timeout_secs || 
-                    ((unsigned MHD_LONG_LONG) t.tv_sec == timeout_secs 
+                if((unsigned MHD_LONG_LONG) t.tv_sec < timeout_secs ||
+                    ((unsigned MHD_LONG_LONG) t.tv_sec == timeout_secs
                         && (unsigned MHD_LONG_LONG) t.tv_usec < timeout_microsecs
                     )
                 )
@@ -660,7 +663,7 @@ void* webserver::select(void* self)
                 );
             else
             {
-                unsigned MHD_LONG_LONG to_wait_time = 
+                unsigned MHD_LONG_LONG to_wait_time =
                     di->ws->q_keepalives_mem[(*it).first].first - waited_time;
 
                 if(to_wait_time < timeout_secs)
@@ -728,8 +731,8 @@ bool webserver::start(bool blocking)
     vector<struct MHD_OptionItem> iov;
 
     iov.push_back(gen(MHD_OPTION_NOTIFY_COMPLETED,
-                (intptr_t) &request_completed, 
-                NULL 
+                (intptr_t) &request_completed,
+                NULL
     ));
     iov.push_back(gen(MHD_OPTION_URI_LOG_CALLBACK, (intptr_t) &uri_log, this));
     iov.push_back(gen(MHD_OPTION_EXTERNAL_LOGGER, (intptr_t) &error_log, this));
@@ -834,7 +837,7 @@ bool webserver::start(bool blocking)
 
             if (use_ipv6)
                 bind_socket = create_socket (PF_INET6, SOCK_STREAM, 0);
-            else 
+            else
                 bind_socket = create_socket (PF_INET, SOCK_STREAM, 0);
 
             setsockopt (bind_socket,
@@ -846,8 +849,8 @@ bool webserver::start(bool blocking)
             {
 #ifdef IPPROTO_IPV6
 #ifdef IPV6_V6ONLY
-                setsockopt (bind_socket, 
-                    IPPROTO_IPV6, IPV6_V6ONLY, 
+                setsockopt (bind_socket,
+                    IPPROTO_IPV6, IPV6_V6ONLY,
                     &on, sizeof (on)
                 );
 #endif
@@ -924,12 +927,12 @@ bool webserver::start(bool blocking)
         struct MHD_Daemon* daemon = MHD_start_daemon
         (
                 start_conf, this->port, &policy_callback, this,
-                &answer_to_connection, this, MHD_OPTION_ARRAY, 
+                &answer_to_connection, this, MHD_OPTION_ARRAY,
                 ops, MHD_OPTION_END
         );
         if(NULL == daemon)
         {
-            cout << gettext("Unable to connect daemon to port: ") << 
+            cout << gettext("Unable to connect daemon to port: ") <<
                 this->port << endl;
             abort();
         }
@@ -1090,8 +1093,8 @@ int policy_callback (void *cls, const struct sockaddr* addr, socklen_t addrlen)
 {
     if((static_cast<webserver*>(cls))->ban_system_enabled)
     {
-        if((((static_cast<webserver*>(cls))->default_policy == http_utils::ACCEPT) && 
-           ((static_cast<webserver*>(cls))->bans.count(addr)) && 
+        if((((static_cast<webserver*>(cls))->default_policy == http_utils::ACCEPT) &&
+           ((static_cast<webserver*>(cls))->bans.count(addr)) &&
            (!(static_cast<webserver*>(cls))->allowances.count(addr))
         ) ||
         (((static_cast<webserver*>(cls))->default_policy == http_utils::REJECT)
@@ -1174,7 +1177,7 @@ void webserver::not_found_page(
         not_found_resource(*mr->dhr, dhrs);
     else
         *dhrs = new http_string_response(
-                NOT_FOUND_ERROR, 
+                NOT_FOUND_ERROR,
                 http_utils::http_not_found
         );
 }
@@ -1189,8 +1192,8 @@ int webserver::method_not_acceptable_page (const void *cls,
     response = MHD_create_response_from_buffer (strlen (NOT_METHOD_ERROR),
         (void *) NOT_METHOD_ERROR,
         MHD_RESPMEM_PERSISTENT);
-    ret = MHD_queue_response (connection, 
-        MHD_HTTP_METHOD_NOT_ACCEPTABLE, 
+    ret = MHD_queue_response (connection,
+        MHD_HTTP_METHOD_NOT_ACCEPTABLE,
         response);
     MHD_add_response_header (response,
         MHD_HTTP_HEADER_CONTENT_ENCODING,
@@ -1229,18 +1232,14 @@ void webserver::internal_error_page(
         );
 }
 
-int webserver::bodyless_requests_answer(MHD_Connection* connection,
-    const char* url, const char* method,
+int webserver::bodyless_requests_answer(
+    MHD_Connection* connection, const char* method,
     const char* version, struct details::modded_request* mr
     )
 {
-    string st_url;
-    internal_unescaper((void*) this, (char*) url);
-    http_utils::standardize_url(url, st_url);
     http_request req;
     mr->dhr = &(req);
-
-    return complete_request(connection, mr, version, st_url.c_str(), method);
+    return complete_request(connection, mr, version, method);
 }
 
 int webserver::bodyfull_requests_answer_first_step(
@@ -1258,16 +1257,16 @@ int webserver::bodyfull_requests_answer_first_step(
     if(encoding != 0x0)
         mr->dhr->set_header(http_utils::http_header_content_type, encoding);
     if ( post_process_enabled &&
-        (   
-            0x0 != encoding && 
+        (
+            0x0 != encoding &&
             ((0 == strncasecmp (
-                                MHD_HTTP_POST_ENCODING_FORM_URLENCODED, 
-                                encoding, 
+                                MHD_HTTP_POST_ENCODING_FORM_URLENCODED,
+                                encoding,
                                 strlen (MHD_HTTP_POST_ENCODING_FORM_URLENCODED)
                                 )
             ))
         )
-    ) 
+    )
     {
         mr->pp = MHD_create_post_processor (
                 connection,
@@ -1275,23 +1274,20 @@ int webserver::bodyfull_requests_answer_first_step(
                 &post_iterator,
                 mr
         );
-    } 
-    else 
+    }
+    else
     {
         mr->pp = NULL;
     }
     return MHD_YES;
 }
 
-int webserver::bodyfull_requests_answer_second_step(MHD_Connection* connection,
-    const char* url, const char* method,
+int webserver::bodyfull_requests_answer_second_step(
+    MHD_Connection* connection, const char* method,
     const char* version, const char* upload_data,
     size_t* upload_data_size, struct details::modded_request* mr
 )
 {
-    string st_url;
-    internal_unescaper((void*) this, (char*) url);
-    http_utils::standardize_url(url, st_url);
     if ( 0 != *upload_data_size)
     {
 #ifdef DEBUG
@@ -1306,14 +1302,13 @@ int webserver::bodyfull_requests_answer_second_step(MHD_Connection* connection,
         return MHD_YES;
     }
 
-    return complete_request(connection, mr, version, st_url.c_str(), method);
+    return complete_request(connection, mr, version, method);
 }
 
 void webserver::end_request_construction(
         MHD_Connection* connection,
         struct details::modded_request* mr,
         const char* version,
-        const char* st_url,
         const char* method,
         char* user,
         char* pass,
@@ -1346,7 +1341,7 @@ void webserver::end_request_construction(
             (void*) mr->dhr
     );
 
-    mr->dhr->set_path(st_url);
+    mr->dhr->set_path(mr->standardized_url->c_str());
     mr->dhr->set_method(method);
 
     if(basic_auth_enabled)
@@ -1378,7 +1373,6 @@ void webserver::end_request_construction(
 int webserver::finalize_answer(
         MHD_Connection* connection,
         struct details::modded_request* mr,
-        const char* st_url,
         const char* method
 )
 {
@@ -1393,6 +1387,7 @@ int webserver::finalize_answer(
     struct MHD_Response* raw_response;
     if(!single_resource)
     {
+        const char* st_url = mr->standardized_url->c_str();
         fe = registered_resources_str.find(st_url);
         if(fe == registered_resources_str.end())
         {
@@ -1422,7 +1417,7 @@ int webserver::finalize_answer(
                 {
                     int endpoint_pieces_len = (*it).first.get_url_pieces_num();
                     int endpoint_tot_len = (*it).first.get_url_complete_size();
-                    if(tot_len == -1 || 
+                    if(tot_len == -1 ||
                         len == -1 ||
                         endpoint_pieces_len > len ||
                         (
@@ -1440,7 +1435,7 @@ int webserver::finalize_answer(
                         }
                     }
                 }
-                if(found) 
+                if(found)
                 {
                     vector<string> url_pars;
 
@@ -1451,7 +1446,7 @@ int webserver::finalize_answer(
                     endpoint.get_url_pieces(url_pieces);
                     vector<int> chunkes;
                     found_endpoint->first.get_chunk_positions(chunkes);
-                    for(unsigned int i = 0; i < pars_size; i++) 
+                    for(unsigned int i = 0; i < pars_size; i++)
                     {
                         mr->dhr->set_arg(url_pars[i], url_pieces[chunkes[i]]);
                     }
@@ -1536,7 +1531,6 @@ int webserver::complete_request(
         MHD_Connection* connection,
         struct details::modded_request* mr,
         const char* version,
-        const char* st_url,
         const char* method
 )
 {
@@ -1548,14 +1542,13 @@ int webserver::complete_request(
             connection,
             mr,
             version,
-            st_url,
             method,
             pass,
             user,
             digested_user
     );
 
-    int to_ret = finalize_answer(connection, mr, st_url, method);
+    int to_ret = finalize_answer(connection, mr, method);
 
     if (user != 0x0)
         free (user);
@@ -1573,11 +1566,15 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
     size_t* upload_data_size, void** con_cls
     )
 {
-    struct details::modded_request* mr = 
+    struct details::modded_request* mr =
         static_cast<struct details::modded_request*>(*con_cls);
 
     if(mr->second == false)
     {
+        mr->standardized_url = new string();
+        internal_unescaper((void*) static_cast<webserver*>(cls), (char*) url);
+        http_utils::standardize_url(url, *mr->standardized_url);
+
         bool body = false;
 
         access_log(
@@ -1637,14 +1634,13 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
                 bodyfull_requests_answer_first_step(connection, mr);
         else
             return static_cast<webserver*>(cls)->
-                bodyless_requests_answer(connection, url, method, version, mr);
+                bodyless_requests_answer(connection, method, version, mr);
     }
     else
     {
         return static_cast<webserver*>(cls)->
             bodyfull_requests_answer_second_step(
                     connection,
-                    url,
                     method,
                     version,
                     upload_data,
@@ -1827,7 +1823,7 @@ bool webserver::pop_signaled(const httpserver_ska& consumer)
                 if(rslt == ETIMEDOUT)
                 {
                     pthread_rwlock_wrlock(&comet_guard);
-                    send_message_to_consumer(consumer, 
+                    send_message_to_consumer(consumer,
                             q_keepalives_mem[consumer].second, false
                     );
                     pthread_rwlock_unlock(&comet_guard);

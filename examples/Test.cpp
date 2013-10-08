@@ -96,7 +96,7 @@ void Test::render_PUT(const http_request& r, http_response** res)
 int main()
 {
 //    signal(SIGINT, &signal_callback_handler);
-	webserver ws = create_webserver(8080).max_threads(5);
+	webserver ws = create_webserver(8080)/*.max_threads(5)*/;
     ws_ptr = &ws;
 	Test dt = Test();
 	Test2 dt2 = Test2();

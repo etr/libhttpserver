@@ -14,7 +14,7 @@
 
      You should have received a copy of the GNU Lesser General Public
      License along with this library; if not, write to the Free Software
-     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 
+     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
      USA
 */
 
@@ -140,12 +140,12 @@ namespace details
             template<typename T>
             http_resource_mirror(http_resource<T>* res):
                 render(
-                    HAS_METHOD(render, T, void, 
+                    HAS_METHOD(render, T, void,
                         const http_request&, http_response**
                     ) ? functor(res, &T::render) : functor(&empty_render)
                 ),
                 render_GET(
-                    HAS_METHOD(render_GET, T, void, 
+                    HAS_METHOD(render_GET, T, void,
                         const http_request&, http_response**
                     ) ? functor(res, &T::render_GET) :
                     (
@@ -155,7 +155,7 @@ namespace details
                     )
                 ),
                 render_POST(
-                    HAS_METHOD(render_POST, T, void, 
+                    HAS_METHOD(render_POST, T, void,
                         const http_request&, http_response**
                     ) ? functor(res, &T::render_POST) :
                     (
@@ -165,7 +165,7 @@ namespace details
                     )
                 ),
                 render_PUT(
-                    HAS_METHOD(render_PUT, T, void, 
+                    HAS_METHOD(render_PUT, T, void,
                         const http_request&, http_response**
                     ) ? functor(res, &T::render_PUT) :
                     (
@@ -175,7 +175,7 @@ namespace details
                     )
                 ),
                 render_HEAD(
-                    HAS_METHOD(render_HEAD, T, void, 
+                    HAS_METHOD(render_HEAD, T, void,
                         const http_request&, http_response**
                     ) ? functor(res, &T::render_HEAD) :
                     (
@@ -185,7 +185,7 @@ namespace details
                     )
                 ),
                 render_DELETE(
-                    HAS_METHOD(render_DELETE, T, void, 
+                    HAS_METHOD(render_DELETE, T, void,
                         const http_request&, http_response**
                     ) ? functor(res, &T::render_DELETE) :
                     (
@@ -195,7 +195,7 @@ namespace details
                     )
                 ),
                 render_TRACE(
-                    HAS_METHOD(render_TRACE, T, void, 
+                    HAS_METHOD(render_TRACE, T, void,
                         const http_request&, http_response**
                     ) ? functor(res, &T::render_TRACE) :
                     (
@@ -205,7 +205,7 @@ namespace details
                     )
                 ),
                 render_OPTIONS(
-                    HAS_METHOD(render_OPTIONS, T, void, 
+                    HAS_METHOD(render_OPTIONS, T, void,
                         const http_request&, http_response**
                     ) ? functor(res, &T::render_OPTIONS) :
                     (
@@ -215,7 +215,7 @@ namespace details
                     )
                 ),
                 render_CONNECT(
-                    HAS_METHOD(render_CONNECT, T, void, 
+                    HAS_METHOD(render_CONNECT, T, void,
                         const http_request&, http_response**
                     ) ? functor(res, &T::render_CONNECT) :
                     (
@@ -235,9 +235,9 @@ namespace details
     {
         private:
             typedef void(*supply_events_ptr)(
-                            fd_set*, 
-                            fd_set*, 
-                            fd_set*, 
+                            fd_set*,
+                            fd_set*,
+                            fd_set*,
                             int*
                     );
 
@@ -248,9 +248,9 @@ namespace details
             dispatch_events_ptr dispatch_events;
 
             event_tuple();
-            
+
             friend class ::httpserver::webserver;
-        public: 
+        public:
             template<typename T>
             event_tuple(event_supplier<T>* es):
                 supply_events(std::bind1st(std::mem_fun(&T::supply_events),es)),
@@ -282,9 +282,9 @@ class event_supplier
         }
 
         void supply_events(
-                fd_set* read_fdset, 
-                fd_set* write_fdset, 
-                fd_set* exc_fdset, 
+                fd_set* read_fdset,
+                fd_set* write_fdset,
+                fd_set* exc_fdset,
                 int* max
         ) const
         {
@@ -313,7 +313,7 @@ typedef void(*log_error_ptr)(const std::string&);
 /**
  * Class representing the webserver. Main class of the apis.
 **/
-class webserver 
+class webserver
 {
     public:
         /**
@@ -338,9 +338,9 @@ class webserver
         **/
         explicit webserver
         (
-            int port = DEFAULT_WS_PORT, 
+            int port = DEFAULT_WS_PORT,
             const http_utils::start_method_T& start_method = http_utils::INTERNAL_SELECT,
-            int max_threads = 0, 
+            int max_threads = 0,
             int max_connections = 0,
             int memory_limit = 0,
             int connection_timeout = DEFAULT_WS_TIMEOUT,
@@ -425,8 +425,8 @@ class webserver
         void send_message_to_consumer(const httpserver_ska& connection_id,
                 const std::string& message, bool to_lock = true
         );
-        void register_to_topics(const std::vector<std::string>& topics, 
-                const httpserver_ska& connection_id, int keepalive_secs = -1, 
+        void register_to_topics(const std::vector<std::string>& topics,
+                const httpserver_ska& connection_id, int keepalive_secs = -1,
                 std::string keepalive_msg = ""
         );
         size_t read_message(const httpserver_ska& connection_id,
@@ -462,7 +462,7 @@ class webserver
         {
             return this->log_error;
         }
-        
+
         void set_access_logger(log_access_ptr log_access)
         {
             this->log_access = log_access;
@@ -602,16 +602,16 @@ class webserver
         );
         void not_found_page(http_response** dhrs, details::modded_request* mr);
 
-        static int method_not_acceptable_page 
+        static int method_not_acceptable_page
         (
             const void *cls,
             struct MHD_Connection *connection
         );
-        static void request_completed(void *cls, 
-                struct MHD_Connection *connection, void **con_cls, 
+        static void request_completed(void *cls,
+                struct MHD_Connection *connection, void **con_cls,
                 enum MHD_RequestTerminationCode toe
         );
-        static int build_request_header (void *cls, enum MHD_ValueKind kind, 
+        static int build_request_header (void *cls, enum MHD_ValueKind kind,
                 const char *key, const char *value
         );
         static int build_request_footer (void *cls, enum MHD_ValueKind kind,
@@ -630,7 +630,7 @@ class webserver
             const char* version, const char* upload_data,
             size_t* upload_data_size, void** con_cls
         );
-        static int post_iterator 
+        static int post_iterator
         (
             void *cls,
             enum MHD_ValueKind kind,
@@ -640,9 +640,9 @@ class webserver
             const char *transfer_encoding,
             const char *data, uint64_t off, size_t size
         );
-        static void upgrade_handler 
+        static void upgrade_handler
         (
-            void *cls, 
+            void *cls,
             struct MHD_Connection* connection,
             void **con_cls, int upgrade_socket
         );
@@ -652,8 +652,8 @@ class webserver
         static void get_response(cache_entry*, http_response** res);
 
         int bodyless_requests_answer(MHD_Connection* connection,
-            const char* url, const char* method,
-            const char* version, struct details::modded_request* mr
+            const char* method, const char* version,
+            struct details::modded_request* mr
         );
 
         int bodyfull_requests_answer_first_step(MHD_Connection* connection,
@@ -661,25 +661,22 @@ class webserver
         );
 
         int bodyfull_requests_answer_second_step(MHD_Connection* connection,
-            const char* url, const char* method,
-            const char* version, const char* upload_data,
+            const char* method, const char* version, const char* upload_data,
             size_t* upload_data_size, struct details::modded_request* mr
         );
 
-        void end_request_construction(MHD_Connection* connection, 
-                struct details::modded_request* mr, const char* version, 
-                const char* st_url, const char* method, 
-                char* user, char* pass, char* digested_user
+        void end_request_construction(MHD_Connection* connection,
+                struct details::modded_request* mr, const char* version,
+                const char* method, char* user, char* pass, char* digested_user
         );
 
-        int finalize_answer(MHD_Connection* connection, 
-                struct details::modded_request* mr, const char* st_url, 
-                const char* method
+        int finalize_answer(MHD_Connection* connection,
+                struct details::modded_request* mr, const char* method
         );
 
-        int complete_request(MHD_Connection* connection, 
-                struct details::modded_request* mr, const char* version, 
-                const char* st_url, const char* method 
+        int complete_request(MHD_Connection* connection,
+                struct details::modded_request* mr,
+                const char* version, const char* method
         );
 
         bool use_internal_select()
@@ -687,7 +684,7 @@ class webserver
             return this->start_method == http_utils::INTERNAL_SELECT;
         }
 
-        friend int policy_callback (void *cls, 
+        friend int policy_callback (void *cls,
                 const struct sockaddr* addr, socklen_t addrlen
         );
         friend void error_log(void* cls, const char* fmt, va_list ap);
@@ -954,7 +951,7 @@ class create_webserver
                 render_ptr internal_error_resource
         )
         {
-            _internal_error_resource = internal_error_resource; return *this; 
+            _internal_error_resource = internal_error_resource; return *this;
         }
 
     private:
