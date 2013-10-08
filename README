@@ -47,3 +47,5 @@ For further information:
 visit our website www.zencoders.org
 
 Author: Sebastiano Merlino
+
+[![Build Status](https://travis-ci.org/etr/libhttpserver.png?branch=master)](https://travis-ci.org/etr/libhttpserver)
