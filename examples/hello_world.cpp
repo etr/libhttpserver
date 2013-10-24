@@ -1,15 +1,25 @@
 #include <httpserver.hpp>
+#include <iostream>
 
 using namespace httpserver;
 
 class hello_world_resource : public http_resource<hello_world_resource> {
 	public:
         void render(const http_request&, http_response**);
+        void set_some_data(const std::string &s) {data = s;}
+        std::string data;
 };
 
 //using the render method you are able to catch each type of request you receive
 void hello_world_resource::render(const http_request& req, http_response** res)
 {
+    //it is possible to store data inside the resource object that can be altered
+    //through the requests
+    std::cout << "Data was: " << data << std::endl;
+    std::string datapar = req.get_arg("data");
+    set_some_data(datapar == "" ? "no data passed!!!" : datapar);
+    std::cout << "Now data is:" << data << std::endl;
+
     //it is possible to send a response initializing an http_string_response
     //that reads the content to send in response from a string.
     *res = new http_string_response("Hello World!!!", 200);
