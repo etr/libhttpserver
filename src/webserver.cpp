@@ -558,11 +558,12 @@ void webserver::request_completed (
     }
     pthread_rwlock_unlock(&mr->ws->comet_guard);
 
-    if (0x0 == mr)
+    if (0x0 != mr)
     {
         if(mr->dhrs.res != 0x0 && mr->dhrs->ca != 0x0)
             mr->dhrs->ca(mr->dhrs->closure_data);
         delete mr;
+        mr = 0x0;
     }
 }
 
