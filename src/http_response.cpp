@@ -14,7 +14,7 @@
 
      You should have received a copy of the GNU Lesser General Public
      License along with this library; if not, write to the Free Software
-     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 
+     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
      USA
 */
 
@@ -22,6 +22,8 @@
 #include <functional>
 #include <iostream>
 #include <sstream>
+#include <fcntl.h>
+#include <unistd.h>
 #include "http_utils.hpp"
 #include "webserver.hpp"
 #include "http_response.hpp"
@@ -155,20 +157,20 @@ void http_response::get_raw_response_file(
         webserver* ws
 )
 {
-    char* page = NULL;
-    size_t size = http::load_file(filename.c_str(), &page);
+    int fd = open(filename.c_str(), O_RDONLY);
+    size_t size = lseek(fd, 0, SEEK_END);
     if(size)
-        *response = MHD_create_response_from_buffer(
-                size,
-                page,
-                MHD_RESPMEM_MUST_FREE
-        );
+    {
+        *response = MHD_create_response_from_fd(size, fd);
+    }
     else
+    {
         *response = MHD_create_response_from_buffer(
-                size,
+                0,
                 (void*) "",
                 MHD_RESPMEM_PERSISTENT
         );
+    }
 }
 
 void http_response::get_raw_response_cache(
@@ -184,7 +186,7 @@ void http_response::get_raw_response_cache(
         webserver::get_response(ce, &r);
     r->get_raw_response(response, ws);
     r->decorate_response(*response); //It is done here to avoid to search two times for the same element
-    
+
     //TODO: Check if element is not in cache and throw exception
 }
 
@@ -253,7 +255,7 @@ ssize_t long_polling_receive_response::data_generator(
         size_t max
 )
 {
-    long_polling_receive_response* _this = 
+    long_polling_receive_response* _this =
         static_cast<long_polling_receive_response*>(cls);
 
     if(_this->ws->pop_signaled(_this->connection_id))
