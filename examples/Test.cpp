@@ -39,11 +39,15 @@ void Test::render_GET(const http_request& r, http_response** res)
     for(std::map<std::string, std::string, header_comparator>::const_iterator it = head.begin(); it != head.end(); ++it)
         cout << (*it).first <<  "-> " << (*it).second << endl;
 	string pp = r.get_arg("prova"); */
-    std::vector<std::string> topics;
-    topics.push_back("prova");
-    //return long_polling_receive_response("", 200, "", topics, 10, "keepalive\n");
+
+/*
     cout << r.get_querystring() << endl;
     *res = new http_file_response("/home/etr/progs/libhttpserver/test/noimg.png", 200, "image/png");
+*/
+
+    std::vector<std::string> topics;
+    topics.push_back("prova");
+    *res = new long_polling_receive_response("", 200, "", topics, false, 10, "keepalive\n");
 }
 
 void Test::render_POST(const http_request& r, http_response** res)
@@ -59,13 +63,17 @@ void Test::render_POST(const http_request& r, http_response** res)
         cout << vv[i] << endl;
     }
 	return http_string_response("OK",200);*/
+
+    /*
 	http_string_response* s = new http_string_response("OK",100);
     s->set_header(http_utils::http_header_location, "B");
     s->set_cookie("Ciccio", "Puppo");
     s->set_cookie("Peppe", "Puppo");
     cout << s->get_cookie("Ciccio") << endl;
     *res = s;
- //   return long_polling_send_response("<script type=\"text/javascript\">alert(\"ciao\")</script>\n", "prova");
+    */
+
+    *res = new long_polling_send_response("hi!!!!\n", "prova");
 }
 
 void Test2::render_GET(const http_request& r, http_response** res)
@@ -88,7 +96,7 @@ void Test::render_PUT(const http_request& r, http_response** res)
 int main()
 {
 //    signal(SIGINT, &signal_callback_handler);
-	webserver ws = create_webserver(8080).max_threads(5);
+	webserver ws = create_webserver(8080)/*.max_threads(5)*/;
     ws_ptr = &ws;
 	Test dt = Test();
 	Test2 dt2 = Test2();

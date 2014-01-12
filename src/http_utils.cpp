@@ -226,42 +226,55 @@ void http_utils::standardize_url(const std::string& url, std::string& result)
 }
 
 void get_ip_str(
-        const struct sockaddr *sa,
-        std::string& result,
-        socklen_t maxlen
+    const struct sockaddr *sa,
+    std::string& result,
+    socklen_t maxlen
 )
 {
-    char to_ret[INET6_ADDRSTRLEN] = { '\0' };
-    switch(sa->sa_family) 
+    if(sa)
     {
-        case AF_INET:
-            if(maxlen == 0)
-                maxlen = INET_ADDRSTRLEN;
+        char to_ret[INET6_ADDRSTRLEN] = { '\0' };
+        switch(sa->sa_family) 
+        {
+            case AF_INET:
+                if(maxlen == 0)
+                    maxlen = INET_ADDRSTRLEN;
 
-            inet_ntop(AF_INET,
-                    &(((struct sockaddr_in *)sa)->sin_addr),
-                    to_ret,
-                    maxlen
-            );
+                inet_ntop(AF_INET,
+                        &(((struct sockaddr_in *)sa)->sin_addr),
+                        to_ret,
+                        maxlen
+                );
 
-            break;
+                break;
 
-        case AF_INET6:
-            if(maxlen == 0)
-                maxlen = INET6_ADDRSTRLEN;
+            case AF_INET6:
+                if(maxlen == 0)
+                    maxlen = INET6_ADDRSTRLEN;
 
-            inet_ntop(AF_INET6,
-                    &(((struct sockaddr_in6 *)sa)->sin6_addr),
-                    to_ret,
-                    maxlen
-            );
+                inet_ntop(AF_INET6,
+                        &(((struct sockaddr_in6 *)sa)->sin6_addr),
+                        to_ret,
+                        maxlen
+                );
 
-            break;
-        default:
-            strncpy(to_ret, "Unknown AF", 11);
-            return;
+                break;
+            default:
+                strncpy(to_ret, "Unknown AF", 11);
+                return;
+        }
+        result = to_ret;
     }
-    result = to_ret;
+}
+
+std::string get_ip_str_new(
+    const struct sockaddr* sa,
+    socklen_t maxlen
+)
+{
+    std::string to_ret;
+    get_ip_str(sa, to_ret, maxlen);
+    return to_ret;
 }
 
 const struct sockaddr str_to_ip(const std::string& src)
@@ -280,15 +293,19 @@ const struct sockaddr str_to_ip(const std::string& src)
 
 short get_port(const struct sockaddr* sa)
 {
-    switch(sa->sa_family)
+    if(sa)
     {
-        case AF_INET:
-            return ((struct sockaddr_in *)sa)->sin_port;
-        case AF_INET6:
-            return ((struct sockaddr_in *)sa)->sin_port;
-        default:
-            return 0;
+        switch(sa->sa_family)
+        {
+            case AF_INET:
+                return ((struct sockaddr_in *)sa)->sin_port;
+            case AF_INET6:
+                return ((struct sockaddr_in *)sa)->sin_port;
+            default:
+                return 0;
+        }
     }
+    return 0;
 }
 
 size_t http_unescape (char *val)

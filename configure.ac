@@ -37,6 +37,7 @@ AC_PROG_CXX
 AC_PROG_LN_S
 CXXFLAGS=$OLD_CXXFLAGS
 AC_LANG([C++])
+AC_SYS_LARGEFILE
 
 if test "`cd $srcdir; /bin/pwd`" = "`/bin/pwd`"; then 
 	AC_MSG_ERROR("you must configure in a separate build directory")

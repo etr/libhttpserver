@@ -74,10 +74,9 @@ class http_utils
 
     enum start_method_T
     {
-        INTERNAL_SELECT = MHD_USE_SELECT_INTERNALLY,
+        INTERNAL_SELECT = MHD_NO_FLAG,
         THREADS = MHD_USE_THREAD_PER_CONNECTION,
-        POLL = MHD_USE_THREAD_PER_CONNECTION | MHD_USE_POLL,
-        INTERNAL_REMANAGED = MHD_NO_FLAG
+        POLL = MHD_USE_THREAD_PER_CONNECTION | MHD_USE_POLL
     };
 
     enum policy_T
@@ -316,7 +315,11 @@ struct ip_representation
  * @return string containing the ip address
 **/
 void get_ip_str(const struct sockaddr *sa,
-        std::string& result, socklen_t maxlen = 0
+    std::string& result, socklen_t maxlen = 0
+);
+
+std::string get_ip_str_new(const struct sockaddr* sa,
+    socklen_t maxlen = 0
 );
 /**
  * Method used to get a port from a sockaddr
@@ -340,6 +343,59 @@ const struct sockaddr str_to_ip(const std::string& src);
 char* load_file (const char *filename);
 
 size_t load_file (const char* filename, char** content);
+
+struct httpserver_ska
+{
+        httpserver_ska(struct sockaddr* addr):
+            addr(addr),
+            ip(get_ip_str_new(addr)),
+            port(get_port(addr))
+        {
+        }
+
+        httpserver_ska(): addr(0x0) { }
+
+        httpserver_ska(const httpserver_ska& o):
+            addr(o.addr),
+            ip(o.ip),
+            port(o.port)
+        {
+        }
+
+        bool operator<(const httpserver_ska& o) const
+        {
+            if(this->ip < o.ip)
+                return true;
+            else if(this->ip > o.ip)
+                return false;
+            else if(this->port < o.port)
+                return true;
+            else
+                return false;
+        }
+
+        httpserver_ska& operator=(const httpserver_ska& o)
+        {
+            this->addr = o.addr;
+            this->ip = o.ip;
+            this->port = o.port;
+            return *this;
+        }
+
+        httpserver_ska& operator=(struct sockaddr* addr)
+        {
+            this->addr = addr;
+            this->ip = get_ip_str_new(addr);
+            this->port = get_port(addr);
+            return *this;
+        }
+
+        struct sockaddr* addr;
+        std::string ip;
+        int port;
+};
+
+
 
 };
 };
