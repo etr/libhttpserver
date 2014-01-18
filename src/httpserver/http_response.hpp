@@ -59,6 +59,58 @@ class bad_caching_attempt: public std::exception
     }
 };
 
+class http_file_response;
+class http_basic_auth_fail_response;
+class http_digest_auth_fail_response;
+class switch_protocol_response;
+class long_polling_receive_response;
+class long_polling_send_response;
+class cache_response;
+class deferred_response;
+
+#define SPECIALIZE_RESPONSE_FOR(TYPE, S1, S2, S3) \
+http_response \
+( \
+    const TYPE* response_type, \
+    const std::string& content, \
+    int response_code,\
+    const std::string& content_type,\
+    bool autodelete,\
+    const std::string& realm,\
+    const std::string& opaque,\
+    bool reload_nonce,\
+    const std::vector<std::string>& topics,\
+    int keepalive_secs,\
+    const std::string keepalive_msg,\
+    const std::string send_topic,\
+    cache_entry* ce\
+):\
+    content(content),\
+    response_code(response_code),\
+    autodelete(autodelete),\
+    realm(realm),\
+    opaque(opaque),\
+    reload_nonce(reload_nonce),\
+    fp(-1),\
+    filename(content),\
+    topics(topics),\
+    keepalive_secs(keepalive_secs),\
+    keepalive_msg(keepalive_msg),\
+    send_topic(send_topic),\
+    underlying_connection(0x0),\
+    ca(0x0),\
+    closure_data(0x0),\
+    ce(ce),\
+    get_raw_response(this, &http_response::get_raw_response_## S1),\
+    decorate_response(this, &http_response::decorate_response_## S2),\
+    enqueue_response(this, &http_response::enqueue_response_## S3),\
+    completed(false),\
+    ws(0x0),\
+    connection_id(0x0)\
+{\
+    set_header(http_utils::http_header_content_type, content_type);\
+}
+
 /**
  * Class representing an abstraction for an Http Response. It is used from classes using these apis to send information through http protocol.
 **/
@@ -71,10 +123,10 @@ class http_response
          * @param response_code The response code to set for the request.
          * @param response_type param indicating if the content have to be read from a string or from a file
         **/
-        template <typename T>
+        template <class TYPE>
         http_response
         (
-            const T* response_type = 0x0,
+            const TYPE* t,
             const std::string& content = "",
             int response_code = 200,
             const std::string& content_type = "text/plain",
@@ -113,6 +165,16 @@ class http_response
         {
             set_header(http_utils::http_header_content_type, content_type);
         }
+
+        SPECIALIZE_RESPONSE_FOR(http_file_response, file, str, str);
+        SPECIALIZE_RESPONSE_FOR(http_basic_auth_fail_response, str, str, basic);
+        SPECIALIZE_RESPONSE_FOR(http_digest_auth_fail_response, str, str, digest);
+        SPECIALIZE_RESPONSE_FOR(switch_protocol_response, switch_r, str, str);
+        SPECIALIZE_RESPONSE_FOR(long_polling_receive_response, lp_receive, str, str);
+        SPECIALIZE_RESPONSE_FOR(long_polling_send_response, lp_send, str, str);
+        SPECIALIZE_RESPONSE_FOR(cache_response, cache, cache, str);
+        SPECIALIZE_RESPONSE_FOR(deferred_response, deferred, deferred, str);
+
         /**
          * Copy constructor
          * @param b The http_response object to copy attributes value from.
@@ -424,68 +486,6 @@ class http_response
     private:
         http_response& operator=(const http_response& b);
 };
-
-class http_file_response;
-class http_basic_auth_fail_response;
-class http_digest_auth_fail_response;
-class switch_protocol_response;
-class long_polling_receive_response;
-class long_polling_send_response;
-class cache_response;
-class deferred_response;
-
-#define SPECIALIZE_RESPONSE_FOR(TYPE, S1, S2, S3) \
-template <> \
-inline http_response::http_response<TYPE> \
-( \
-    const TYPE* response_type, \
-    const std::string& content, \
-    int response_code,\
-    const std::string& content_type,\
-    bool autodelete,\
-    const std::string& realm,\
-    const std::string& opaque,\
-    bool reload_nonce,\
-    const std::vector<std::string>& topics,\
-    int keepalive_secs,\
-    const std::string keepalive_msg,\
-    const std::string send_topic,\
-    cache_entry* ce\
-):\
-    content(content),\
-    response_code(response_code),\
-    autodelete(autodelete),\
-    realm(realm),\
-    opaque(opaque),\
-    reload_nonce(reload_nonce),\
-    fp(-1),\
-    filename(content),\
-    topics(topics),\
-    keepalive_secs(keepalive_secs),\
-    keepalive_msg(keepalive_msg),\
-    send_topic(send_topic),\
-    underlying_connection(0x0),\
-    ca(0x0),\
-    closure_data(0x0),\
-    ce(ce),\
-    get_raw_response(this, &http_response::get_raw_response_## S1),\
-    decorate_response(this, &http_response::decorate_response_## S2),\
-    enqueue_response(this, &http_response::enqueue_response_## S3),\
-    completed(false),\
-    ws(0x0),\
-    connection_id(0x0)\
-{\
-    set_header(http_utils::http_header_content_type, content_type);\
-}
-
-SPECIALIZE_RESPONSE_FOR(http_file_response, file, str, str);
-SPECIALIZE_RESPONSE_FOR(http_basic_auth_fail_response, str, str, basic);
-SPECIALIZE_RESPONSE_FOR(http_digest_auth_fail_response, str, str, digest);
-SPECIALIZE_RESPONSE_FOR(switch_protocol_response, switch_r, str, str);
-SPECIALIZE_RESPONSE_FOR(long_polling_receive_response, lp_receive, str, str);
-SPECIALIZE_RESPONSE_FOR(long_polling_send_response, lp_send, str, str);
-SPECIALIZE_RESPONSE_FOR(cache_response, cache, cache, str);
-SPECIALIZE_RESPONSE_FOR(deferred_response, deferred, deferred, str);
 
 class http_string_response : public http_response
 {
