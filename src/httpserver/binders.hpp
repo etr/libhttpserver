@@ -14,7 +14,7 @@
 
      You should have received a copy of the GNU Lesser General Public
      License along with this library; if not, write to the Free Software
-     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 
+     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
      USA
 */
 
@@ -45,7 +45,6 @@ namespace details
                     generic_mem_func_type &bound
             )
             {
-                typedef char ERROR_member_pointer_not_supported[N-100];
                 return 0;
             }
         };
@@ -54,7 +53,7 @@ namespace details
         struct converter<MEMFUNC_SIZE>
         {
             template<typename X,
-                typename func_type, 
+                typename func_type,
                 typename generic_mem_func_type>
             inline static generic_class* convert(
                     X* pmem,
@@ -168,7 +167,7 @@ namespace details
                 typedef RET_TYPE (*static_function)(PAR1 p1, PAR2 p2);
                 typedef RET_TYPE (*void_static_function)(PAR1 p1, PAR2 p2);
 
-                typedef RET_TYPE 
+                typedef RET_TYPE
                     (generic_class::*generic_mem)(PAR1 p1, PAR2 p2);
 
                 typedef binder<
