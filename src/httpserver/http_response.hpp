@@ -14,7 +14,7 @@
 
      You should have received a copy of the GNU Lesser General Public
      License along with this library; if not, write to the Free Software
-     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 
+     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
      USA
 */
 
@@ -35,7 +35,6 @@ namespace httpserver
 {
 
 class webserver;
-class http_response;
 struct cache_entry;
 
 namespace http
@@ -63,7 +62,7 @@ class bad_caching_attempt: public std::exception
 /**
  * Class representing an abstraction for an Http Response. It is used from classes using these apis to send information through http protocol.
 **/
-class http_response 
+class http_response
 {
     public:
         /**
@@ -76,7 +75,7 @@ class http_response
         http_response
         (
             const T* response_type = 0x0,
-            const std::string& content = "", 
+            const std::string& content = "",
             int response_code = 200,
             const std::string& content_type = "text/plain",
             bool autodelete = true,
@@ -352,7 +351,7 @@ class http_response
             this->closure_data = closure_data;
         }
     protected:
-        typedef details::binders::functor_two<MHD_Response**, 
+        typedef details::binders::functor_two<MHD_Response**,
                 webserver*, void> get_raw_response_t;
 
         typedef details::binders::functor_one<MHD_Response*,
@@ -393,10 +392,10 @@ class http_response
         void get_raw_response_str(MHD_Response** res, webserver* ws = 0x0);
         void get_raw_response_file(MHD_Response** res, webserver* ws = 0x0);
         void get_raw_response_switch_r(MHD_Response** res, webserver* ws = 0x0);
-        
+
         void get_raw_response_lp_receive(MHD_Response** res,
                 webserver* ws = 0x0);
-        
+
         void get_raw_response_lp_send(MHD_Response** res, webserver* ws = 0x0);
         void get_raw_response_cache(MHD_Response** res, webserver* ws = 0x0);
         void get_raw_response_deferred(MHD_Response** res, webserver* ws = 0x0);
@@ -517,8 +516,8 @@ class http_byte_response : public http_response
             const std::string& content_type = "text/plain",
             bool autodelete = true
         ): http_response(
-            this, std::string(content, content_length), 
-            response_code, content_type, autodelete) 
+            this, std::string(content, content_length),
+            response_code, content_type, autodelete)
         {
         }
     private:
@@ -553,7 +552,7 @@ class http_basic_auth_fail_response : public http_response
             const std::string& content_type = "text/plain",
             bool autodelete = true,
             const std::string& realm = ""
-        ) : http_response(this, content, response_code, 
+        ) : http_response(this, content, response_code,
             content_type, autodelete, realm)
         {
         }
@@ -578,7 +577,7 @@ class http_digest_auth_fail_response : public http_response
             bool reload_nonce = false
         ) : http_response(this, content, response_code,
             content_type, autodelete, realm, opaque, reload_nonce)
-        { 
+        {
         }
 
         http_digest_auth_fail_response(const http_response& b) :
@@ -611,7 +610,7 @@ class switch_protocol_response : public http_response
         }
 
         switch_protocol_response(const http_response& b) : http_response(b)
-        { 
+        {
         }
     private:
         friend class webserver;
@@ -707,7 +706,7 @@ class deferred_response : public http_response
         virtual ssize_t cycle_callback(const std::string& buf);
     private:
         friend class webserver;
-        friend ssize_t details::cb(void*, uint64_t, char*, size_t); 
+        friend ssize_t details::cb(void*, uint64_t, char*, size_t);
 };
 
 };
