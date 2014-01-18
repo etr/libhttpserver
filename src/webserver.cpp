@@ -45,6 +45,10 @@
 
 #define _REENTRANT 1
 
+#ifndef SOCK_CLOEXEC
+#define SOCK_CLOEXEC 02000000
+#endif
+
 using namespace std;
 
 namespace httpserver
