@@ -27,7 +27,8 @@
 #include <map>
 #include <utility>
 #include <string>
-#include "httpserver/binders.hpp"
+
+#include "httpserver/details/http_resource_mirror.hpp"
 
 struct MHD_Connection;
 
