@@ -197,7 +197,7 @@ class webserver
                 event_supplier<T>* ev_supplier
         )
         {
-            //TODO: implement method
+            register_event_supplier(id, details::event_tuple(&ev_supplier));
         }
 
         void remove_event_supplier(const std::string& id);
@@ -369,6 +369,8 @@ class webserver
                 struct details::modded_request* mr,
                 const char* version, const char* method
         );
+
+        void register_event_supplier(const std::string& id, const details::event_tuple& evt);
 
         bool use_internal_select()
         {

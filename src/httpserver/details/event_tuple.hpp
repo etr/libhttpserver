@@ -28,6 +28,7 @@
 #include "httpserver/event_supplier.hpp"
 
 namespace httpserver {
+
 namespace details
 {
     class http_endpoint;

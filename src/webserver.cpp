@@ -1936,4 +1936,11 @@ void webserver::remove_event_supplier(const std::string& id)
     pthread_rwlock_unlock(&runguard);
 }
 
+void webserver::register_event_supplier(const std::string& id, const details::event_tuple& evt)
+{
+    pthread_rwlock_wrlock(&runguard);
+    event_suppliers.insert(std::pair<std::string, details::event_tuple>(id, evt));
+    pthread_rwlock_unlock(&runguard);
+}
+
 };
