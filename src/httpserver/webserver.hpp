@@ -29,8 +29,6 @@
 #define METHOD_ERROR "Method not Allowed"
 #define NOT_METHOD_ERROR "Method not Acceptable"
 #define GENERIC_ERROR "Internal Error"
-#define DEFAULT_WS_PORT 9898
-#define DEFAULT_WS_TIMEOUT 180
 
 #include <cstring>
 #include <map>
@@ -47,8 +45,6 @@
 
 #include <pthread.h>
 
-#include "httpserver/details/http_resource_mirror.hpp"
-#include "httpserver/details/event_tuple.hpp"
 #include "httpserver/create_webserver.hpp"
 
 namespace httpserver {
@@ -57,10 +53,20 @@ template<typename CHILD> class http_resource;
 class http_response;
 struct cache_entry;
 template<typename CHILD> class event_supplier;
+class create_webserver;
 
 namespace http {
 struct ip_representation;
+struct httpserver_ska;
 };
+
+namespace details {
+    class http_resource_mirror;
+    class event_tuple;
+    class http_endpoint;
+    class daemon_item;
+    class modded_request;
+}
 
 /**
  * Class representing the webserver. Main class of the apis.
@@ -68,65 +74,6 @@ struct ip_representation;
 class webserver
 {
     public:
-        /**
-         * Constructor of the class.
-         * @param port Integer representing the port the webserver is listening on.
-         * @param start_method
-         * @param max_threads max number of serving threads (0 -> infty)
-         * @param max_connections max number of allowed connections (0 -> infty).
-         * @param memory_limit max memory allocated to serve requests (0 -> infty).
-         * @param per_IP_connection_limit max number of connections allowed for a single IP (0 -> infty).
-         * @param log_delegate logging_delegate object used to log
-         * @param validator request_validator object used to validate requestors
-         * @param unescaper unescaper object used to unescape urls.
-         * @param max_thread_stack_size max dimesion of request stack
-         * @param https_mem_key used with https. Private key used for requests.
-         * @param https_mem_cert used with https. Certificate used for requests.
-         * @param https_mem_trust used with https. CA Certificate used to trust request certificates.
-         * @param https_priorities used with https. Determinates the SSL/TLS version to be used.
-         * @param cred_type used with https. Daemon credential type. Can be NONE, certificate or anonymous.
-         * @param digest_auth_random used with https. Digest authentication nonce's seed.
-         * @param nonce_nc_size used with https. Size of an array of nonce and nonce counter map.
-        **/
-        explicit webserver
-        (
-            int port = DEFAULT_WS_PORT,
-            const http_utils::start_method_T& start_method = http_utils::INTERNAL_SELECT,
-            int max_threads = 0,
-            int max_connections = 0,
-            int memory_limit = 0,
-            int connection_timeout = DEFAULT_WS_TIMEOUT,
-            int per_IP_connection_limit = 0,
-            log_access_ptr log_access = 0x0,
-            log_error_ptr log_error = 0x0,
-            validator_ptr validator = 0x0,
-            unescaper_ptr unescaper = 0x0,
-            const struct sockaddr* bind_address = 0x0,
-            int bind_socket = 0,
-            int max_thread_stack_size = 0,
-            bool use_ssl = false,
-            bool use_ipv6 = false,
-            bool debug = false,
-            bool pedantic = false,
-            const std::string& https_mem_key = "",
-            const std::string& https_mem_cert = "",
-            const std::string& https_mem_trust = "",
-            const std::string& https_priorities = "",
-            const http_utils::cred_type_T& cred_type= http_utils::NONE,
-            const std::string digest_auth_random = "", //IT'S CORRECT TO PASS THIS PARAMETER BY VALUE
-            int nonce_nc_size = 0,
-            const http_utils::policy_T& default_policy = http_utils::ACCEPT,
-            bool basic_auth_enabled = true,
-            bool digest_auth_enabled = true,
-            bool regex_checking = true,
-            bool ban_system_enabled = true,
-            bool post_process_enabled = true,
-            render_ptr single_resource = 0x0,
-            render_ptr not_found_resource = 0x0,
-            render_ptr method_not_allowed_resource = 0x0,
-            render_ptr method_not_acceptable_resource = 0x0,
-            render_ptr internal_error_resource = 0x0
-        );
         webserver(const create_webserver& params);
         /**
          * Destructor of the class
@@ -174,20 +121,20 @@ class webserver
         void send_message_to_topic(const std::string& topic,
                 const std::string& message
         );
-        void send_message_to_consumer(const httpserver_ska& connection_id,
+        void send_message_to_consumer(const http::httpserver_ska& connection_id,
                 const std::string& message, bool to_lock = true
         );
         void register_to_topics(const std::vector<std::string>& topics,
-                const httpserver_ska& connection_id, int keepalive_secs = -1,
+                const http::httpserver_ska& connection_id, int keepalive_secs = -1,
                 std::string keepalive_msg = ""
         );
-        size_t read_message(const httpserver_ska& connection_id,
+        size_t read_message(const http::httpserver_ska& connection_id,
             std::string& message
         );
         size_t get_topic_consumers(const std::string& topic,
-                std::set<httpserver_ska>& consumers
+                std::set<http::httpserver_ska>& consumers
         );
-        bool pop_signaled(const httpserver_ska& consumer);
+        bool pop_signaled(const http::httpserver_ska& consumer);
 
         http_response* get_from_cache(const std::string& key, bool* valid,
                 bool lock = false, bool write = false
@@ -250,13 +197,7 @@ class webserver
                 event_supplier<T>* ev_supplier
         )
         {
-            pthread_rwlock_wrlock(&runguard);
-            std::map<std::string, details::event_tuple>::iterator it =
-                event_suppliers.find(id);
-            if(it != event_suppliers.end())
-                delete it->second;
-            event_suppliers[id] = details::event_tuple(&ev_supplier);
-            pthread_rwlock_unlock(&runguard);
+            //TODO: implement method
         }
 
         void remove_event_supplier(const std::string& id);
@@ -267,7 +208,7 @@ class webserver
         void sweet_kill();
     private:
         const int port;
-        http_utils::start_method_T start_method;
+        http::http_utils::start_method_T start_method;
         const int max_threads;
         const int max_connections;
         const int memory_limit;
@@ -288,11 +229,11 @@ class webserver
         const std::string https_mem_cert;
         const std::string https_mem_trust;
         const std::string https_priorities;
-        const http_utils::cred_type_T cred_type;
+        const http::http_utils::cred_type_T cred_type;
         const std::string digest_auth_random;
         const int nonce_nc_size;
         bool running;
-        const http_utils::policy_T default_policy;
+        const http::http_utils::policy_T default_policy;
         const bool basic_auth_enabled;
         const bool digest_auth_enabled;
         const bool regex_checking;
@@ -315,19 +256,19 @@ class webserver
         int next_to_choose;
         pthread_rwlock_t cache_guard;
 #ifdef USE_CPP_ZEROX
-        std::unordered_set<ip_representation> bans;
-        std::unordered_set<ip_representation> allowances;
+        std::unordered_set<http::ip_representation> bans;
+        std::unordered_set<http::ip_representation> allowances;
 #else
-        std::set<ip_representation> bans;
-        std::set<ip_representation> allowances;
+        std::set<http::ip_representation> bans;
+        std::set<http::ip_representation> allowances;
 #endif
 
-        std::map<httpserver_ska, std::deque<std::string> > q_messages;
-        std::map<std::string, std::set<httpserver_ska> > q_waitings;
-        std::map<httpserver_ska, std::pair<pthread_mutex_t, pthread_cond_t> > q_blocks;
-        std::set<httpserver_ska> q_signal;
-        std::map<httpserver_ska, long> q_keepalives;
-        std::map<httpserver_ska, std::pair<int, std::string> > q_keepalives_mem;
+        std::map<http::httpserver_ska, std::deque<std::string> > q_messages;
+        std::map<std::string, std::set<http::httpserver_ska> > q_waitings;
+        std::map<http::httpserver_ska, std::pair<pthread_mutex_t, pthread_cond_t> > q_blocks;
+        std::set<http::httpserver_ska> q_signal;
+        std::map<http::httpserver_ska, long> q_keepalives;
+        std::map<http::httpserver_ska, std::pair<int, std::string> > q_keepalives_mem;
         pthread_rwlock_t comet_guard;
 
         std::vector<details::daemon_item*> daemons;
@@ -337,7 +278,6 @@ class webserver
 
         webserver& operator=(const webserver& b);
 
-        void init(render_ptr single_resource);
         static void* select(void* self);
         static void* cleaner(void* self);
 
@@ -432,7 +372,7 @@ class webserver
 
         bool use_internal_select()
         {
-            return this->start_method == http_utils::INTERNAL_SELECT;
+            return this->start_method == http::http_utils::INTERNAL_SELECT;
         }
 
         friend int policy_callback (void *cls,

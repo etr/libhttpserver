@@ -27,13 +27,14 @@
 
 #include "httpserver/http_utils.hpp"
 
+#define DEFAULT_WS_TIMEOUT 180
+#define DEFAULT_WS_PORT 9898
+
 namespace httpserver {
 
 class webserver;
 class http_request;
 class http_response;
-
-using namespace http;
 
 typedef void(*render_ptr)(const http_request&, http_response**);
 typedef bool(*validator_ptr)(const std::string&);
@@ -46,7 +47,7 @@ class create_webserver
     public:
         create_webserver():
             _port(DEFAULT_WS_PORT),
-            _start_method(http_utils::INTERNAL_SELECT),
+            _start_method(http::http_utils::INTERNAL_SELECT),
             _max_threads(0),
             _max_connections(0),
             _memory_limit(0),
@@ -67,10 +68,10 @@ class create_webserver
             _https_mem_cert(""),
             _https_mem_trust(""),
             _https_priorities(""),
-            _cred_type(http_utils::NONE),
+            _cred_type(http::http_utils::NONE),
             _digest_auth_random(""),
             _nonce_nc_size(0),
-            _default_policy(http_utils::ACCEPT),
+            _default_policy(http::http_utils::ACCEPT),
             _basic_auth_enabled(true),
             _digest_auth_enabled(true),
             _regex_checking(true),
@@ -86,7 +87,7 @@ class create_webserver
 
         explicit create_webserver(int port):
             _port(port),
-            _start_method(http_utils::INTERNAL_SELECT),
+            _start_method(http::http_utils::INTERNAL_SELECT),
             _max_threads(0),
             _max_connections(0),
             _memory_limit(0),
@@ -107,10 +108,10 @@ class create_webserver
             _https_mem_cert(""),
             _https_mem_trust(""),
             _https_priorities(""),
-            _cred_type(http_utils::NONE),
+            _cred_type(http::http_utils::NONE),
             _digest_auth_random(""),
             _nonce_nc_size(0),
-            _default_policy(http_utils::ACCEPT),
+            _default_policy(http::http_utils::ACCEPT),
             _basic_auth_enabled(true),
             _digest_auth_enabled(true),
             _regex_checking(true),
@@ -126,7 +127,7 @@ class create_webserver
 
         create_webserver& port(int port) { _port = port; return *this; }
         create_webserver& start_method(
-                const http_utils::start_method_T& start_method
+                const http::http_utils::start_method_T& start_method
         )
         {
             _start_method = start_method; return *this;
@@ -226,7 +227,7 @@ class create_webserver
         {
             _https_priorities = https_priorities; return *this;
         }
-        create_webserver& cred_type(const http_utils::cred_type_T& cred_type)
+        create_webserver& cred_type(const http::http_utils::cred_type_T& cred_type)
         {
             _cred_type = cred_type; return *this;
         }
@@ -241,7 +242,7 @@ class create_webserver
             _nonce_nc_size = nonce_nc_size; return *this;
         }
         create_webserver& default_policy(
-                const http_utils::policy_T& default_policy
+                const http::http_utils::policy_T& default_policy
         )
         {
             _default_policy = default_policy; return *this;
@@ -317,7 +318,7 @@ class create_webserver
 
     private:
         int _port;
-        http_utils::start_method_T _start_method;
+        http::http_utils::start_method_T _start_method;
         int _max_threads;
         int _max_connections;
         int _memory_limit;
@@ -338,10 +339,10 @@ class create_webserver
         std::string _https_mem_cert;
         std::string _https_mem_trust;
         std::string _https_priorities;
-        http_utils::cred_type_T _cred_type;
+        http::http_utils::cred_type_T _cred_type;
         std::string _digest_auth_random;
         int _nonce_nc_size;
-        http_utils::policy_T _default_policy;
+        http::http_utils::policy_T _default_policy;
         bool _basic_auth_enabled;
         bool _digest_auth_enabled;
         bool _regex_checking;

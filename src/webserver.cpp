@@ -41,6 +41,9 @@
 #include "http_request.hpp"
 #include "http_endpoint.hpp"
 #include "string_utilities.hpp"
+#include "details/http_resource_mirror.hpp"
+#include "details/event_tuple.hpp"
+#include "create_webserver.hpp"
 #include "webserver.hpp"
 
 #define _REENTRANT 1
@@ -353,87 +356,6 @@ static void ignore_sigpipe ()
 }
 
 //WEBSERVER
-webserver::webserver
-(
-    int port,
-    const http_utils::start_method_T& start_method,
-    int max_threads,
-    int max_connections,
-    int memory_limit,
-    int connection_timeout,
-    int per_IP_connection_limit,
-    log_access_ptr log_access,
-    log_error_ptr log_error,
-    validator_ptr validator,
-    unescaper_ptr unescaper,
-    const struct sockaddr* bind_address,
-    int bind_socket,
-    int max_thread_stack_size,
-    bool use_ssl,
-    bool use_ipv6,
-    bool debug,
-    bool pedantic,
-    const string& https_mem_key,
-    const string& https_mem_cert,
-    const string& https_mem_trust,
-    const string& https_priorities,
-    const http_utils::cred_type_T& cred_type,
-    const string digest_auth_random,
-    int nonce_nc_size,
-    const http_utils::policy_T& default_policy,
-    bool basic_auth_enabled,
-    bool digest_auth_enabled,
-    bool regex_checking,
-    bool ban_system_enabled,
-    bool post_process_enabled,
-    render_ptr single_resource,
-    render_ptr not_found_resource,
-    render_ptr method_not_allowed_resource,
-    render_ptr method_not_acceptable_resource,
-    render_ptr internal_error_resource
-
-) :
-    port(port),
-    start_method(start_method),
-    max_threads(max_threads),
-    max_connections(max_connections),
-    memory_limit(memory_limit),
-    connection_timeout(connection_timeout),
-    per_IP_connection_limit(per_IP_connection_limit),
-    log_access(log_access),
-    log_error(log_error),
-    validator(validator),
-    unescaper(unescaper),
-    bind_address(bind_address),
-    bind_socket(bind_socket),
-    max_thread_stack_size(max_thread_stack_size),
-    use_ssl(use_ssl),
-    use_ipv6(use_ipv6),
-    debug(debug),
-    pedantic(pedantic),
-    https_mem_key(https_mem_key),
-    https_mem_cert(https_mem_cert),
-    https_mem_trust(https_mem_trust),
-    https_priorities(https_priorities),
-    cred_type(cred_type),
-    digest_auth_random(digest_auth_random),
-    nonce_nc_size(nonce_nc_size),
-    running(false),
-    default_policy(default_policy),
-    basic_auth_enabled(basic_auth_enabled),
-    digest_auth_enabled(digest_auth_enabled),
-    regex_checking(regex_checking),
-    ban_system_enabled(ban_system_enabled),
-    post_process_enabled(post_process_enabled),
-    not_found_resource(not_found_resource),
-    method_not_allowed_resource(method_not_allowed_resource),
-    method_not_acceptable_resource(method_not_acceptable_resource),
-    internal_error_resource(internal_error_resource),
-    next_to_choose(0)
-{
-    init(single_resource);
-}
-
 webserver::webserver(const create_webserver& params):
     port(params._port),
     start_method(params._start_method),
@@ -472,11 +394,6 @@ webserver::webserver(const create_webserver& params):
     method_not_acceptable_resource(params._method_not_acceptable_resource),
     internal_error_resource(params._internal_error_resource),
     next_to_choose(0)
-{
-    init(params._single_resource);
-}
-
-void webserver::init(render_ptr single_resource)
 {
     if(single_resource != 0x0)
         this->single_resource = true;
