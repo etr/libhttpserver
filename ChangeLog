@@ -1,3 +1,8 @@
+Sat Jan 25 16:31:03 2014 +0100
+	Cleaned-up webserver.cpp code to extract secondary classes
+	Enforced immutability of webserver class
+	Enabled library to compile on g++ 4.1.2
+
 Wed Oct 31 17:59:40 2012 +0100
 	Added parameter in http_response to specify if it needs to be deleted by
 	WS - Sebastiano Merlino

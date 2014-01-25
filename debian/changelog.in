@@ -1,3 +1,10 @@
+libhttpserver (0.7.0) unstable; urgency=low
+  * Cleaned-up webserver.cpp code to extract secondary classes
+  * Enforced immutability of webserver class
+  * Enabled library to compile on g++ 4.1.2
+
+ -- Sebastiano Merlino <electrictwister2000@gmail.com> Sat, 25 Jan 2014 16:31:03 +0100
+
 libhttpserver (0.6.3) unstable; urgency=low
   * Fixed some bugs in exception management
 
