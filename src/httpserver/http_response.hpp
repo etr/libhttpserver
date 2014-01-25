@@ -36,7 +36,6 @@ namespace httpserver
 {
 
 class webserver;
-struct cache_entry;
 
 namespace http
 {
@@ -48,6 +47,7 @@ namespace details
 {
     struct http_response_ptr;
     ssize_t cb(void*, uint64_t, char*, size_t);
+    struct cache_entry;
 };
 
 using namespace http;
@@ -84,7 +84,7 @@ http_response \
     int keepalive_secs,\
     const std::string keepalive_msg,\
     const std::string send_topic,\
-    cache_entry* ce\
+    details::cache_entry* ce\
 ):\
     content(content),\
     response_code(response_code),\
@@ -139,7 +139,7 @@ class http_response
             int keepalive_secs = -1,
             const std::string keepalive_msg = "",
             const std::string send_topic = "",
-            cache_entry* ce = 0x0
+            details::cache_entry* ce = 0x0
         ):
             content(content),
             response_code(response_code),
@@ -441,7 +441,7 @@ class http_response
         struct MHD_Connection* underlying_connection;
         void(*ca)(void*);
         void* closure_data;
-        cache_entry* ce;
+        details::cache_entry* ce;
 
         const get_raw_response_t get_raw_response;
         const decorate_response_t decorate_response;
@@ -680,7 +680,7 @@ class cache_response : public http_response
         }
         cache_response
         (
-            cache_entry* ce
+            details::cache_entry* ce
         ) : http_response(this, "", 200, "", true, "", "", false,
                 std::vector<std::string>(), -1, "", "", ce
             )

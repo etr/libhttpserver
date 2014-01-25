@@ -51,7 +51,6 @@ namespace httpserver {
 
 template<typename CHILD> class http_resource;
 class http_response;
-struct cache_entry;
 template<typename CHILD> class event_supplier;
 class create_webserver;
 
@@ -66,6 +65,7 @@ namespace details {
     class http_endpoint;
     class daemon_item;
     class modded_request;
+    struct cache_entry;
 }
 
 /**
@@ -140,11 +140,11 @@ class webserver
                 bool lock = false, bool write = false
         );
         http_response* get_from_cache(const std::string& key, bool* valid,
-                cache_entry** ce, bool lock = false, bool write = false
+                details::cache_entry** ce, bool lock = false, bool write = false
         );
-        void lock_cache_element(cache_entry* ce, bool write = false);
-        void unlock_cache_element(cache_entry* ce);
-        cache_entry* put_in_cache(const std::string& key, http_response* value,
+        void lock_cache_element(details::cache_entry* ce, bool write = false);
+        void unlock_cache_element(details::cache_entry* ce);
+        details::cache_entry* put_in_cache(const std::string& key, http_response* value,
                 bool* new_elem, bool lock = false,
                 bool write = false, int validity = -1
         );
@@ -252,7 +252,7 @@ class webserver
         std::map<details::http_endpoint, details::http_resource_mirror> registered_resources;
         std::map<std::string, details::http_resource_mirror*> registered_resources_str;
 
-        std::map<std::string, cache_entry*> response_cache;
+        std::map<std::string, details::cache_entry*> response_cache;
         int next_to_choose;
         pthread_rwlock_t cache_guard;
 #ifdef USE_CPP_ZEROX
@@ -338,9 +338,9 @@ class webserver
             void **con_cls, int upgrade_socket
         );
 
-        static void unlock_cache_entry(cache_entry*);
-        static void lock_cache_entry(cache_entry*);
-        static void get_response(cache_entry*, http_response** res);
+        static void unlock_cache_entry(details::cache_entry*);
+        static void lock_cache_entry(details::cache_entry*);
+        static void get_response(details::cache_entry*, http_response** res);
 
         int bodyless_requests_answer(MHD_Connection* connection,
             const char* method, const char* version,
