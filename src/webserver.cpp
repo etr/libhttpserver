@@ -39,7 +39,7 @@
 #include "http_resource.hpp"
 #include "http_response.hpp"
 #include "http_request.hpp"
-#include "http_endpoint.hpp"
+#include "details/http_endpoint.hpp"
 #include "string_utilities.hpp"
 #include "details/http_resource_mirror.hpp"
 #include "details/event_tuple.hpp"

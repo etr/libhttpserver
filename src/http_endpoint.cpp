@@ -14,11 +14,11 @@
 
      You should have received a copy of the GNU Lesser General Public
      License along with this library; if not, write to the Free Software
-     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 
+     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
      USA
 */
 
-#include "http_endpoint.hpp"
+#include "details/http_endpoint.hpp"
 #include "http_utils.hpp"
 #include "string_utilities.hpp"
 
@@ -67,7 +67,7 @@ http_endpoint::http_endpoint
     {
         for(unsigned int i = 0; i< parts.size(); i++)
         {
-            if((parts[i] != "") && (parts[i][0] != '{')) 
+            if((parts[i] != "") && (parts[i][0] != '{'))
             {
                 if(first)
                 {
@@ -85,14 +85,14 @@ http_endpoint::http_endpoint
                 {
                     this->url_modded += "/" + parts[i];
                 }
-            } 
-            else 
+            }
+            else
             {
                 if(
-                    (parts[i].size() >= 3) && 
-                    (parts[i][0] == '{') && 
-                    (parts[i][parts[i].size() - 1] == '}') 
-                ) 
+                    (parts[i].size() >= 3) &&
+                    (parts[i][0] == '{') &&
+                    (parts[i][parts[i].size() - 1] == '}')
+                )
                 {
                     int bar = parts[i].find_first_of('|');
                     if(bar != (int)string::npos)
@@ -128,8 +128,8 @@ http_endpoint::http_endpoint
                         }
                     }
                     this->chunk_positions.push_back(i);
-                } 
-                else 
+                }
+                else
                 {
                     throw bad_http_endpoint();
                 }
@@ -156,7 +156,7 @@ http_endpoint::http_endpoint
     if(use_regex)
     {
         this->url_modded += "$";
-        regcomp(&(this->re_url_modded), url_modded.c_str(), 
+        regcomp(&(this->re_url_modded), url_modded.c_str(),
                 REG_EXTENDED|REG_ICASE|REG_NOSUB
         );
         reg_compiled = true;
@@ -173,7 +173,7 @@ http_endpoint::http_endpoint(const http_endpoint& h):
     reg_compiled(h.reg_compiled)
 {
     if(this->reg_compiled)
-        regcomp(&(this->re_url_modded), url_modded.c_str(), 
+        regcomp(&(this->re_url_modded), url_modded.c_str(),
                 REG_EXTENDED|REG_ICASE|REG_NOSUB
         );
 }
@@ -185,7 +185,7 @@ http_endpoint& http_endpoint::operator =(const http_endpoint& h)
     this->family_url = h.family_url;
     this->reg_compiled = h.reg_compiled;
     if(this->reg_compiled)
-        regcomp(&(this->re_url_modded), url_modded.c_str(), 
+        regcomp(&(this->re_url_modded), url_modded.c_str(),
                 REG_EXTENDED|REG_ICASE|REG_NOSUB
         );
     this->url_pars = h.url_pars;
@@ -194,12 +194,12 @@ http_endpoint& http_endpoint::operator =(const http_endpoint& h)
     return *this;
 }
 
-bool http_endpoint::operator <(const http_endpoint& b) const 
+bool http_endpoint::operator <(const http_endpoint& b) const
 {
     COMPARATOR(this->url_modded, b.url_modded, toupper);
 }
 
-bool http_endpoint::match(const http_endpoint& url) const 
+bool http_endpoint::match(const http_endpoint& url) const
 {
     if(this->family_url && (url.url_pieces.size() >= this->url_pieces.size()))
     {
@@ -220,7 +220,7 @@ bool http_endpoint::match(const http_endpoint& url) const
         return regexec(&(this->re_url_modded), nn.c_str(), 0, NULL, 0) == 0;
     }
     else
-        return regexec(&(this->re_url_modded), 
+        return regexec(&(this->re_url_modded),
                 url.url_modded.c_str(), 0, NULL, 0) == 0;
 }
 
