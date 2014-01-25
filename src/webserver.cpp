@@ -45,6 +45,7 @@
 #include "details/event_tuple.hpp"
 #include "create_webserver.hpp"
 #include "webserver.hpp"
+#include "details/modded_request.hpp"
 
 #define _REENTRANT 1
 
@@ -73,126 +74,6 @@ struct daemon_item
     {
         MHD_stop_daemon (this->daemon);
     }
-};
-
-struct http_response_ptr
-{
-    public:
-        http_response_ptr():
-            res(0x0),
-            num_references(0x0)
-        {
-            num_references = new int(0);
-        }
-        http_response_ptr(http_response* res):
-            res(res),
-            num_references(0x0)
-        {
-            num_references = new int(0);
-        }
-        http_response_ptr(const http_response_ptr& b):
-            res(b.res),
-            num_references(b.num_references)
-        {
-            (*num_references)++;
-        }
-        ~http_response_ptr()
-        {
-            if(num_references)
-            {
-                if((*num_references) == 0)
-                {
-                    if(res && res->autodelete)
-                    {
-                        delete res;
-                        res = 0x0;
-                    }
-                    delete num_references;
-                }
-                else
-                    (*num_references)--;
-            }
-        }
-        http_response& operator* ()
-        {
-            return *res;
-        }
-        http_response* operator-> ()
-        {
-            return res;
-        }
-        http_response* ptr()
-        {
-            return res;
-        }
-        http_response_ptr& operator= (const http_response_ptr& b)
-        {
-            if( this != &b)
-            {
-                if(num_references)
-                {
-                    if((*num_references) == 0)
-                    {
-                        if(res && res->autodelete)
-                        {
-                            delete res;
-                            res = 0x0;
-                        }
-                        delete num_references;
-                    }
-                    else
-                        (*num_references)--;
-                }
-
-                res = b.res;
-                num_references = b.num_references;
-                (*num_references)++;
-            }
-            return *this;
-        }
-    private:
-        http_response* res;
-        int* num_references;
-        friend class ::httpserver::webserver;
-};
-
-struct modded_request
-{
-    struct MHD_PostProcessor *pp;
-    std::string* complete_uri;
-    std::string* standardized_url;
-    webserver* ws;
-
-    const binders::functor_two<
-        const http_request&, http_response**, void
-    > http_resource_mirror::*callback;
-
-    http_request* dhr;
-    http_response_ptr dhrs;
-    bool second;
-
-    modded_request():
-        pp(0x0),
-        complete_uri(0x0),
-        standardized_url(0x0),
-        ws(0x0),
-        dhr(0x0),
-        dhrs(0x0),
-        second(false)
-    {
-    }
-    ~modded_request()
-    {
-        if (NULL != pp)
-        {
-            MHD_destroy_post_processor (pp);
-        }
-        if(second)
-            delete dhr; //TODO: verify. It could be an error
-        delete complete_uri;
-        delete standardized_url;
-    }
-
 };
 
 void empty_render(const http_request& r, http_response** res)
