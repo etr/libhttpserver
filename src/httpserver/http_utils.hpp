@@ -1,6 +1,6 @@
 /*
      This file is part of libhttpserver
-     Copyright (C) 2011 Sebastiano Merlino
+     Copyright (C) 2011, 2012, 2013, 2014 Sebastiano Merlino
 
      This library is free software; you can redistribute it and/or
      modify it under the terms of the GNU Lesser General Public
@@ -14,7 +14,7 @@
 
      You should have received a copy of the GNU Lesser General Public
      License along with this library; if not, write to the Free Software
-     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 
+     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
      USA
 */
 
@@ -54,13 +54,13 @@ class file_access_exception: public std::exception
     {
         return "Unable to open file!";
     }
-}; 
+};
 
-class http_utils 
+class http_utils
 {
     public:
 
-    enum cred_type_T 
+    enum cred_type_T
     {
         NONE = -1
 #ifdef HAVE_GNUTLS
@@ -223,7 +223,7 @@ class http_utils
 
         static const std::string http_post_encoding_form_urlencoded;
         static const std::string http_post_encoding_multipart_formdata;
-        static size_t tokenize_url(const std::string&, 
+        static size_t tokenize_url(const std::string&,
                 std::vector<std::string>& result, const char separator = '/'
         );
         static void standardize_url(const std::string&, std::string& result);
@@ -253,8 +253,8 @@ class header_comparator {
          * @param first string
          * @param second string
         **/
-        bool operator()(const std::string& x,const std::string& y) const 
-        { 
+        bool operator()(const std::string& x,const std::string& y) const
+        {
             COMPARATOR(x, y, toupper);
         }
 };
@@ -271,8 +271,8 @@ class arg_comparator {
          * @param first string
          * @param second string
         **/
-        bool operator()(const std::string& x,const std::string& y) const 
-        { 
+        bool operator()(const std::string& x,const std::string& y) const
+        {
 #ifdef CASE_INSENSITIVE
             COMPARATOR(x, y, toupper);
 #else

@@ -1,6 +1,6 @@
 /*
      This file is part of libhttpserver
-     Copyright (C) 2011 Sebastiano Merlino
+     Copyright (C) 2011, 2012, 2013, 2014 Sebastiano Merlino
 
      This library is free software; you can redistribute it and/or
      modify it under the terms of the GNU Lesser General Public
@@ -26,7 +26,7 @@
 
 using namespace std;
 
-namespace httpserver 
+namespace httpserver
 {
 //RESOURCE
 void resource_init(map<string, bool>& allowed_methods)
