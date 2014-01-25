@@ -162,34 +162,14 @@ class webserver
             return this->log_error;
         }
 
-        void set_access_logger(log_access_ptr log_access)
-        {
-            this->log_access = log_access;
-        }
-
-        void set_error_logger(log_error_ptr log_error)
-        {
-            this->log_error = log_error;
-        }
-
         const validator_ptr get_request_validator() const
         {
             return this->validator;
         }
 
-        void set_request_validator(validator_ptr validator)
-        {
-            this->validator = validator;
-        }
-
         const unescaper_ptr get_unescaper() const
         {
             return this->unescaper;
-        }
-
-        void set_unescaper(unescaper_ptr unescaper)
-        {
-            this->unescaper = unescaper;
         }
 
         template<typename T>
