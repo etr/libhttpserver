@@ -17,10 +17,14 @@
      Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
 */
+
+#include <stdlib.h>
+
 #include "http_resource.hpp"
 #include "http_utils.hpp"
 #include "http_request.hpp"
 #include "http_response.hpp"
+#include "details/event_tuple.hpp"
 #include "webserver.hpp"
 #include "string_utilities.hpp"
 

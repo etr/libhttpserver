@@ -38,7 +38,7 @@ class webserver;
 namespace details
 {
 
-struct http_resource_mirror;
+class http_resource_mirror;
 
 /**
  * Exception class throwed when a bad formatted http url is used
@@ -60,7 +60,7 @@ class bad_http_endpoint : public std::exception
 **/
 class http_endpoint
 {
-    private:
+   public:
         /**
          * Copy constructor. It is useful expecially to copy regex_t structure that contains dinamically allocated data.
          * @param h The http_endpoint to copy
@@ -75,6 +75,7 @@ class http_endpoint
          * @param b The http_endpoint to compare to
          * @return boolean indicating if this is less than b.
         **/
+    private:
         bool operator <(const http_endpoint& b) const;
         /**
          * Operator overload for "assignment operator". It is used to copy endpoints to existing objects.

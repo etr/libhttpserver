@@ -60,11 +60,11 @@ struct httpserver_ska;
 };
 
 namespace details {
+    class http_endpoint;
     class http_resource_mirror;
     class event_tuple;
-    class http_endpoint;
-    class daemon_item;
-    class modded_request;
+    struct daemon_item;
+    struct modded_request;
     struct cache_entry;
 }
 

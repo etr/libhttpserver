@@ -509,7 +509,7 @@ class http_request
          * Method used to set the requestor port
          * @param requestor The requestor port to set
         **/
-        void set_requestor_port(short requestor)
+        void set_requestor_port(short requestor_port)
         {
             this->requestor_port = requestor_port;
         }
