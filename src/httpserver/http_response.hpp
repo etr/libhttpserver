@@ -322,9 +322,7 @@ class http_response
          * Method used to get all headers passed with the request.
          * @return a map<string,string> containing all headers.
         **/
-        size_t get_headers(
-                std::map<std::string, std::string, header_comparator>& result
-        );
+        size_t get_headers(std::map<std::string, std::string, header_comparator>& result) const;
         /**
          * Method used to get all footers passed with the request.
          * @return a map<string,string> containing all footers.
