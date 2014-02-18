@@ -39,10 +39,6 @@ CXXFLAGS=$OLD_CXXFLAGS
 AC_LANG([C++])
 AC_SYS_LARGEFILE
 
-if test "`cd $srcdir; /bin/pwd`" = "`/bin/pwd`"; then 
-	AC_MSG_ERROR("you must configure in a separate build directory")
-fi
-
 # Checks for header files.
 AC_HEADER_STDC
 AC_CHECK_HEADER([string],[],[AC_MSG_ERROR("C++ strings not found")])
