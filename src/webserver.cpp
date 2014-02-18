@@ -376,7 +376,7 @@ int create_socket (int domain, int type, int protocol)
     /* use SOCK_STREAM rather than ai_socktype: some getaddrinfo
     * implementations do not set ai_socktype, e.g. RHL6.2. */
     fd = socket(domain, ctype, protocol);
-    if ( (-1 == fd) && (EINVAL == errno) && (0 != sock_cloexec) )
+    if ( (fd == -1) && (errno == EINVAL || errno == EPROTONOSUPPORT) && (sock_cloexec != 0) )
     {
         sock_cloexec = 0;
         fd = socket(domain, type, protocol);
@@ -512,6 +512,12 @@ bool webserver::start(bool blocking)
             else
                 bind_socket = create_socket (PF_INET, SOCK_STREAM, 0);
 
+            if(bind_socket == -1)
+            {
+               perror("Unable to create socket");
+               abort();
+            }
+
             setsockopt (bind_socket,
                SOL_SOCKET,
                SO_REUSEADDR,
@@ -528,7 +534,11 @@ bool webserver::start(bool blocking)
 #endif
 #endif
             }
-            bind(bind_socket, servaddr, addrlen);
+            if(bind(bind_socket, servaddr, addrlen) == -1)
+            {
+               perror("Unable to bind specified server address");
+               abort();
+            }
         }
         int flags = fcntl (bind_socket, F_GETFL);
         flags |= O_NONBLOCK;
