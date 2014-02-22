@@ -324,17 +324,17 @@ class http_response
         **/
         size_t get_headers(
                 std::map<std::string, std::string, header_comparator>& result
-        );
+        ) const;
         /**
          * Method used to get all footers passed with the request.
          * @return a map<string,string> containing all footers.
         **/
         size_t get_footers(
                 std::map<std::string, std::string, header_comparator>& result
-        );
+        ) const;
         size_t get_cookies(
                 std::map<std::string, std::string, header_comparator>& result
-        );
+        ) const;
         /**
          * Method used to set all headers of the response.
          * @param headers The headers key-value map to set for the response.
