@@ -56,7 +56,7 @@
 
 #define LT_CREATE_RUNNER(__lt_suite_name__, __lt_runner_name__) \
     std::cout << "** Initializing Runner \"" << #__lt_runner_name__ << "\" **" << std::endl; \
-    littletest::test_runner __lt_runner_name__ 
+    littletest::test_runner __lt_runner_name__
 
 #define LT_RUNNER(__lt_runner_name__) __lt_runner_name__
 
@@ -283,7 +283,7 @@ struct check_unattended : public std::exception
     {
         return message.c_str();
     }
-    
+
     private:
         std::string message;
 };
@@ -298,8 +298,8 @@ struct assert_unattended : public std::exception
     virtual const char* what() const throw()
     {
         return message.c_str();
-    } 
-    
+    }
+
     private:
         std::string message;
 };
@@ -314,8 +314,8 @@ struct warn_unattended : public std::exception
     virtual const char* what() const throw()
     {
         return message.c_str();
-    } 
-    
+    }
+
     private:
         std::string message;
 };
@@ -367,8 +367,8 @@ struct test_runner
         template <class test_impl>
         test_runner& run(test_impl* t)
         {
-            std::cout << "Running test (" << 
-                test_counter << "): " << 
+            std::cout << "Running test (" <<
+                test_counter << "): " <<
                 t->__lt_name__ << std::endl;
 
             t->run_test(this);
@@ -579,7 +579,7 @@ class test : public test_base
         test() { }
         test(const test<test_impl>& t) { }
 
-        friend class test_runner;
+        friend struct test_runner;
 };
 
 };
