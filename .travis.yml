@@ -1,5 +1,7 @@
 language: cpp
-compiler: gcc
+compiler: 
+ - gcc
+ - clang
 # Change this to your needs
 before_install:
  - wget http://199.231.187.83/resources/libmicrohttpd-0.9.26.tar.gz
