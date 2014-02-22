@@ -39,8 +39,18 @@ CXXFLAGS=$OLD_CXXFLAGS
 AC_LANG([C++])
 AC_SYS_LARGEFILE
 
-if test "`cd $srcdir; /bin/pwd`" = "`/bin/pwd`"; then 
-	AC_MSG_ERROR("you must configure in a separate build directory")
+AC_MSG_CHECKING([whether it is possible to compile in the same directory])
+AC_ARG_ENABLE([same-directory-build],
+    [AS_HELP_STRING([--enable-same-directory-build],
+        [enable to compile in the same directory. This is heavily discouraged. (def=no)])],
+    [samedirectory="$enableval"],
+    [samedirectory=no])
+AC_MSG_RESULT([$samedirectory])
+
+if test x"$samedirectory" = x"no"; then
+    if test "`cd $srcdir; /bin/pwd`" = "`/bin/pwd`"; then 
+        AC_MSG_ERROR("you must configure in a separate build directory")
+    fi
 fi
 
 # Checks for header files.
