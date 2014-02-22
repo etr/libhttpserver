@@ -38,7 +38,7 @@ class webserver;
 namespace details
 {
 
-struct http_resource_mirror;
+class http_resource_mirror;
 
 /**
  * Exception class throwed when a bad formatted http url is used
