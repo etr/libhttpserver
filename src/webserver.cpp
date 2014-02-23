@@ -249,11 +249,16 @@ void webserver::register_resource(
 
     details::http_endpoint idx(resource, family, true, regex_checking);
 
-    registered_resources.insert(
+    pair<map<details::http_endpoint, details::http_resource_mirror>::iterator, bool> result = registered_resources.insert(
         pair<details::http_endpoint, details::http_resource_mirror>(idx,hrm)
     );
-    registered_resources[idx] = hrm;
-    registered_resources_str[idx.url_complete] = &registered_resources[idx];
+
+    if(result.second)
+    {
+        registered_resources_str.insert(
+            pair<string, details::http_resource_mirror*>(idx.get_url_complete(), &(result.first->second))
+        );
+    }
 }
 
 void* webserver::select(void* self)
