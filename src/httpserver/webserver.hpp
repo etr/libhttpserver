@@ -261,7 +261,7 @@ class webserver
         static void* select(void* self);
         static void* cleaner(void* self);
 
-        void register_resource(const std::string& resource,
+        bool register_resource(const std::string& resource,
                 details::http_resource_mirror hrm, bool family = false
         );
 

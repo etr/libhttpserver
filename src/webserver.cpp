@@ -238,7 +238,7 @@ void webserver::request_completed (
     }
 }
 
-void webserver::register_resource(
+bool webserver::register_resource(
         const std::string& resource,
         details::http_resource_mirror hrm,
         bool family
@@ -250,7 +250,7 @@ void webserver::register_resource(
     details::http_endpoint idx(resource, family, true, regex_checking);
 
     pair<map<details::http_endpoint, details::http_resource_mirror>::iterator, bool> result = registered_resources.insert(
-        pair<details::http_endpoint, details::http_resource_mirror>(idx,hrm)
+        pair<details::http_endpoint, details::http_resource_mirror>(idx, hrm)
     );
 
     if(result.second)
@@ -259,6 +259,8 @@ void webserver::register_resource(
             pair<string, details::http_resource_mirror*>(idx.get_url_complete(), &(result.first->second))
         );
     }
+
+    return result.second;
 }
 
 void* webserver::select(void* self)
