@@ -21,7 +21,7 @@ size_t headerfunc(void *ptr, size_t size, size_t nmemb, map<string, string>* ss)
     string s_ptr((char*)ptr, size*nmemb);
     size_t pos = s_ptr.find(":");
     if(pos != string::npos)
-        (*ss)[s_ptr.substr(0, pos)] = 
+        (*ss)[s_ptr.substr(0, pos)] =
             s_ptr.substr(pos + 2, s_ptr.size() - pos - 4);
     return size*nmemb;
 }
@@ -276,6 +276,19 @@ LT_BEGIN_AUTO_TEST(basic_suite, postprocessor)
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(postprocessor)
 
+LT_BEGIN_AUTO_TEST(basic_suite, empty_arg)
+    simple_resource* resource = new simple_resource();
+    ws->register_resource("base", resource);
+    curl_global_init(CURL_GLOBAL_ALL);
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, "arg1");
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(empty_arg)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

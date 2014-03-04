@@ -749,10 +749,11 @@ int webserver::build_request_args (
         void *cls,
         enum MHD_ValueKind kind,
         const char *key,
-        const char *value
+        const char *arg_value
 )
 {
     details::modded_request* mr = static_cast<details::modded_request*>(cls);
+    char* value = (char*) ((arg_value == NULL) ? "" : arg_value);
     {
         char buf[strlen(key) + strlen(value) + 3];
         if(mr->dhr->querystring == "")
@@ -766,7 +767,7 @@ int webserver::build_request_args (
             mr->dhr->querystring += string(buf);
         }
     }
-    int size = internal_unescaper((void*) mr->ws, (char*) value);
+    int size = internal_unescaper((void*) mr->ws, value);
     mr->dhr->set_arg(key, string(value, size));
     return MHD_YES;
 }
@@ -820,6 +821,8 @@ size_t unescaper_func(void * cls, struct MHD_Connection *c, char *s)
 
 size_t internal_unescaper(void* cls, char* s)
 {
+    if(strlen(s) == 0) return 0;
+
     webserver* dws = static_cast<webserver*>(cls);
     if(dws->unescaper != 0x0)
     {
