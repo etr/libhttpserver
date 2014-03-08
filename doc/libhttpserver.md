@@ -73,7 +73,7 @@ involves running
 > ./bootstrap  
 > mkdir build  
 > cd build  
-> ./configure  
+> ../configure  
 > make  
 > make install  
 
