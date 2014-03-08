@@ -70,10 +70,10 @@ Compilation
 ===========
 libhttpserver uses the standard system where the usual build process
 involves running
-> ./bootstrap
-> mkdir build
-> cd build
-> ./configure
-> make
-> make install
+> ./bootstrap  
+> mkdir build  
+> cd build  
+> ./configure  
+> make  
+> make install  
 
