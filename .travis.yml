@@ -4,6 +4,7 @@ compiler:
  - clang
 # Change this to your needs
 before_install:
+ - sudo apt-get install texinfo
  - wget http://199.231.187.83/resources/libmicrohttpd-0.9.26.tar.gz
  - tar -xvzf libmicrohttpd-0.9.26.tar.gz
  - cd libmicrohttpd-0.9.26

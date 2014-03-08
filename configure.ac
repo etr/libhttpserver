@@ -158,6 +158,7 @@ AC_SUBST(EXT_LIBS)
 AC_OUTPUT(
       libhttpserver.pc
       Makefile
+      doc/Makefile
       src/Makefile
       test/Makefile
       debian/changelog
