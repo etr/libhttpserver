@@ -33,11 +33,7 @@
 #include <cstring>
 #include <map>
 #include <vector>
-#ifdef USE_CPP_ZEROX
-#include <unordered_set>
-#else
 #include <set>
-#endif
 #include <string>
 #include <utility>
 #include <memory>
@@ -235,13 +231,8 @@ class webserver
         std::map<std::string, details::cache_entry*> response_cache;
         int next_to_choose;
         pthread_rwlock_t cache_guard;
-#ifdef USE_CPP_ZEROX
-        std::unordered_set<http::ip_representation> bans;
-        std::unordered_set<http::ip_representation> allowances;
-#else
         std::set<http::ip_representation> bans;
         std::set<http::ip_representation> allowances;
-#endif
 
         std::map<http::httpserver_ska, std::deque<std::string> > q_messages;
         std::map<std::string, std::set<http::httpserver_ska> > q_waitings;

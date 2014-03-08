@@ -121,18 +121,18 @@ if test x"have_gnutls" = x"yes"; then
 fi
 
 AC_MSG_CHECKING([whether to use c++0x std classes])
-AC_ARG_ENABLE([cpp0x],
-              [AS_HELP_STRING([--enable-cpp0x],
-              [enable c++0x std classes (def=no)])],
-              [cpp0x="$enableval"],
-              [cpp0x=no])
-AC_MSG_RESULT([$cpp0x])
+AC_ARG_ENABLE([cpp11],
+              [AS_HELP_STRING([--enable-cpp11],
+              [enable c++11 std classes (def=no)])],
+              [cpp11="$enableval"],
+              [cpp11=no])
+AC_MSG_RESULT([$cpp11])
 
-if test x"$cpp0x" = x"yes"; then
-    AC_DEFINE([CPP0X],[],[c++0x Mode])
-    AM_CXXFLAGS="$AM_CXXFLAGS -DUSE_CPP_ZEROX -std=c++0x"
+if test x"$cpp11" = x"yes"; then
+    AC_DEFINE([CPP11],[],[c++11 Mode])
+    AM_CXXFLAGS="$AM_CXXFLAGS -DUSE_CPP_11 --std=c++11"
 else
-    AC_DEFINE([NCPP0X],[],[standard Mode])
+    AC_DEFINE([NCPP11],[],[standard Mode])
 fi
 
 DX_HTML_FEATURE(ON)
@@ -176,5 +176,5 @@ AC_MSG_NOTICE([Configuration Summary:
   License         :  LGPL only
   Debug	          :  ${debugit}
   TLS Enabled     :  ${have_gnutls}
-  C++0x           :  ${cpp0x}
+  C++11           :  ${cpp11}
 ])

@@ -250,7 +250,7 @@ bool webserver::register_resource(
     details::http_endpoint idx(resource, family, true, regex_checking);
 
     pair<map<details::http_endpoint, details::http_resource_mirror>::iterator, bool> result = registered_resources.insert(
-        pair<details::http_endpoint, details::http_resource_mirror>(idx, hrm)
+        map<details::http_endpoint, details::http_resource_mirror>::value_type(idx, hrm)
     );
 
     if(result.second)
@@ -1414,7 +1414,7 @@ void webserver::register_to_topics(
         struct timeval curtime;
         gettimeofday(&curtime, NULL);
         q_keepalives[connection_id] = curtime.tv_sec;
-        q_keepalives_mem[connection_id] = make_pair<int, string>(
+        q_keepalives_mem[connection_id] = make_pair(
                 keepalive_secs, keepalive_msg
         );
     }
@@ -1425,7 +1425,7 @@ void webserver::register_to_topics(
         pthread_mutex_init(&m, NULL);
         pthread_cond_init(&c, NULL);
         q_blocks[connection_id] =
-            std::make_pair<pthread_mutex_t, pthread_cond_t>(m, c);
+            std::make_pair(m, c);
     }
     pthread_rwlock_unlock(&comet_guard);
 }
