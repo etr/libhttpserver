@@ -12,4 +12,18 @@ before_install:
  - make
  - sudo make install
  - cd ..
-script: ./bootstrap && mkdir build && cd build && ../configure && make && make check
+script:
+ - ./bootstrap
+ - mkdir build
+ - cd build
+ - ../configure
+ - make
+ - make check
+ - cd ..
+ - rm -rf build
+ - mkdir build
+ - cd build
+ - ../configure --enable-cpp11
+ - make
+ - make check
+ - cd ..
