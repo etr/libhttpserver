@@ -1,4 +1,5 @@
 ================================= libhttpserver ===================================
+[![Build Status](https://travis-ci.org/etr/libhttpserver.png?branch=master)](https://travis-ci.org/etr/libhttpserver)
 
             When you see this tree, know that you've came across ZenCoders.org
     
@@ -48,4 +49,5 @@ visit our website www.zencoders.org
 
 Author: Sebastiano Merlino
 
-[![Build Status](https://travis-ci.org/etr/libhttpserver.png?branch=master)](https://travis-ci.org/etr/libhttpserver)
+A more comprehensive documentation about the library can be found in the doc subdir or
+following the link https://github.com/etr/libhttpserver/blob/master/doc/libhttpserver.md
