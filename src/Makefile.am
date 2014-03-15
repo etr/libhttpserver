@@ -16,7 +16,7 @@
 #     License along with this library; if not, write to the Free Software
 #     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-INCLUDES = -I../ -I$(srcdir)/httpserver/
+AM_CPPFLAGS = -I../ -I$(srcdir)/httpserver/
 METASOURCES = AUTO
 lib_LTLIBRARIES = libhttpserver.la
 libhttpserver_la_SOURCES = string_utilities.cpp webserver.cpp http_utils.cpp http_endpoint.cpp http_request.cpp http_response.cpp http_resource.cpp

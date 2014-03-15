@@ -17,7 +17,7 @@
 #     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
 LDADD = $(top_builddir)/src/libhttpserver.la
-INCLUDES = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/
+AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/
 METASOURCES = AUTO
 check_PROGRAMS = basic
 
