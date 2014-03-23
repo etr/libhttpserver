@@ -1,3 +1,9 @@
+libhttpserver (0.7.2) unstable; urgency=low
+  * Documentation updates
+  * Reduced responsibilities of webserver class
+
+ -- Sebastiano Merlino <electrictwister2000@gmail.com> Sat, 23 Mar 2014 15:23:40 +0100
+
 libhttpserver (0.7.1) unstable; urgency=low
   * Improved methods constness
 
