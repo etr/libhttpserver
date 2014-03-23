@@ -44,6 +44,7 @@
 #include "details/http_resource_mirror.hpp"
 #include "details/event_tuple.hpp"
 #include "create_webserver.hpp"
+#include "details/comet_manager.hpp"
 #include "webserver.hpp"
 #include "details/modded_request.hpp"
 #include "details/cache_entry.hpp"
@@ -174,7 +175,8 @@ webserver::webserver(const create_webserver& params):
     method_not_allowed_resource(params._method_not_allowed_resource),
     method_not_acceptable_resource(params._method_not_acceptable_resource),
     internal_error_resource(params._internal_error_resource),
-    next_to_choose(0)
+    next_to_choose(0),
+    internal_comet_manager(new details::comet_manager())
 {
     if(single_resource != 0x0)
         this->single_resource = true;
@@ -185,9 +187,6 @@ webserver::webserver(const create_webserver& params):
     pthread_rwlock_init(&runguard, NULL);
     pthread_cond_init(&mutexcond, NULL);
     pthread_rwlock_init(&cache_guard, NULL);
-    pthread_rwlock_init(&comet_guard, NULL);
-    pthread_mutex_init(&cleanmux, NULL);
-    pthread_cond_init(&cleancond, NULL);
 }
 
 webserver::~webserver()
@@ -197,9 +196,7 @@ webserver::~webserver()
     pthread_rwlock_destroy(&runguard);
     pthread_rwlock_destroy(&cache_guard);
     pthread_cond_destroy(&mutexcond);
-    pthread_rwlock_destroy(&comet_guard);
-    pthread_mutex_destroy(&cleanmux);
-    pthread_cond_destroy(&cleancond);
+    delete internal_comet_manager;
 }
 
 void webserver::sweet_kill()
@@ -214,21 +211,8 @@ void webserver::request_completed (
         enum MHD_RequestTerminationCode toe
 )
 {
-    details::modded_request* mr = (struct details::modded_request*) *con_cls;
-
-    pthread_rwlock_wrlock(&mr->ws->comet_guard);
-    mr->ws->q_messages.erase(mr->dhrs->connection_id);
-    mr->ws->q_blocks.erase(mr->dhrs->connection_id);
-    mr->ws->q_signal.erase(mr->dhrs->connection_id);
-    mr->ws->q_keepalives.erase(mr->dhrs->connection_id);
-
-    typedef std::map<string, std::set<httpserver_ska> >::iterator conn_it;
-    for(conn_it it = mr->ws->q_waitings.begin(); it != mr->ws->q_waitings.end(); ++it)
-    {
-        it->second.erase(mr->dhrs->connection_id);
-    }
-    pthread_rwlock_unlock(&mr->ws->comet_guard);
-
+    details::modded_request* mr = static_cast<details::modded_request*>(*con_cls);
+    mr->ws->internal_comet_manager->complete_request(mr->dhrs->connection_id);
     if (0x0 != mr)
     {
         if(mr->dhrs.res != 0x0 && mr->dhrs->ca != 0x0)
@@ -280,8 +264,8 @@ void* webserver::select(void* self)
         if (MHD_YES != MHD_get_fdset (di->daemon, &rs, &ws, &es, &max))
             abort(); /* fatal internal error */
 
-        unsigned MHD_LONG_LONG timeout_microsecs = 0;
-        unsigned MHD_LONG_LONG timeout_secs = 0;
+        unsigned long long timeout_microsecs = 0;
+        unsigned long long timeout_secs = 0;
 
         if (!(MHD_get_timeout (di->daemon, &timeout_microsecs) == MHD_YES))
         {
@@ -327,33 +311,7 @@ void* webserver::select(void* self)
         }
 
         // COMET CONNECTIONS MANAGEMENT
-        pthread_rwlock_wrlock(&di->ws->comet_guard);
-        for(std::map<httpserver_ska, long>::iterator it = di->ws->q_keepalives.begin();
-                it != di->ws->q_keepalives.end();
-                ++it
-        )
-        {
-            struct timeval curtime;
-            gettimeofday(&curtime, NULL);
-            int waited_time = curtime.tv_sec - (*it).second;
-            if(waited_time >= di->ws->q_keepalives_mem[(*it).first].first)
-                di->ws->send_message_to_consumer(
-                        (*it).first,
-                        di->ws->q_keepalives_mem[(*it).first].second
-                );
-            else
-            {
-                unsigned MHD_LONG_LONG to_wait_time =
-                    di->ws->q_keepalives_mem[(*it).first].first - waited_time;
-
-                if(to_wait_time < timeout_secs)
-                {
-                    timeout_secs = to_wait_time;
-                    timeout_microsecs = 0;
-                }
-            }
-        }
-        pthread_rwlock_unlock(&di->ws->comet_guard);
+        di->ws->internal_comet_manager->comet_select(&timeout_secs, &timeout_microsecs, di->ws->start_method);
 
         timeout_value.tv_sec = timeout_secs;
         timeout_value.tv_usec = timeout_microsecs;
@@ -1341,24 +1299,7 @@ void webserver::send_message_to_consumer(
         bool to_lock
 )
 {
-    //This function need to be externally locked on write
-    q_messages[connection_id].push_back(message);
-    map<httpserver_ska, long>::const_iterator it;
-    if((it = q_keepalives.find(connection_id)) != q_keepalives.end())
-    {
-        struct timeval curtime;
-        gettimeofday(&curtime, NULL);
-        q_keepalives[connection_id] = curtime.tv_sec;
-    }
-    q_signal.insert(connection_id);
-    if(start_method != http_utils::INTERNAL_SELECT)
-    {
-        if(to_lock)
-            pthread_mutex_lock(&q_blocks[connection_id].first);
-        pthread_cond_signal(&q_blocks[connection_id].second);
-        if(to_lock)
-            pthread_mutex_unlock(&q_blocks[connection_id].first);
-    }
+    internal_comet_manager->send_message_to_consumer(connection_id, message, to_lock, start_method);
 }
 
 void webserver::send_message_to_topic(
@@ -1366,35 +1307,7 @@ void webserver::send_message_to_topic(
         const std::string& message
 )
 {
-    pthread_rwlock_wrlock(&comet_guard);
-    for(std::set<httpserver_ska>::const_iterator it = q_waitings[topic].begin();
-            it != q_waitings[topic].end();
-            ++it
-    )
-    {
-        q_messages[(*it)].push_back(message);
-        q_signal.insert((*it));
-        if(start_method != http_utils::INTERNAL_SELECT)
-        {
-            pthread_mutex_lock(&q_blocks[(*it)].first);
-            pthread_cond_signal(&q_blocks[(*it)].second);
-            pthread_mutex_unlock(&q_blocks[(*it)].first);
-        }
-        map<httpserver_ska, long>::const_iterator itt;
-        if((itt = q_keepalives.find(*it)) != q_keepalives.end())
-        {
-            struct timeval curtime;
-            gettimeofday(&curtime, NULL);
-            q_keepalives[*it] = curtime.tv_sec;
-        }
-    }
-    pthread_rwlock_unlock(&comet_guard);
-    if(start_method != http_utils::INTERNAL_SELECT)
-    {
-        pthread_mutex_lock(&cleanmux);
-        pthread_cond_signal(&cleancond);
-        pthread_mutex_unlock(&cleanmux);
-    }
+    internal_comet_manager->send_message_to_topic(topic, message, start_method);
 }
 
 void webserver::register_to_topics(
@@ -1404,42 +1317,14 @@ void webserver::register_to_topics(
         string keepalive_msg
 )
 {
-    pthread_rwlock_wrlock(&comet_guard);
-    for(std::vector<std::string>::const_iterator it = topics.begin();
-            it != topics.end(); ++it
-    )
-        q_waitings[*it].insert(connection_id);
-    if(keepalive_secs != -1)
-    {
-        struct timeval curtime;
-        gettimeofday(&curtime, NULL);
-        q_keepalives[connection_id] = curtime.tv_sec;
-        q_keepalives_mem[connection_id] = make_pair(
-                keepalive_secs, keepalive_msg
-        );
-    }
-    if(start_method != http_utils::INTERNAL_SELECT)
-    {
-        pthread_mutex_t m;
-        pthread_cond_t c;
-        pthread_mutex_init(&m, NULL);
-        pthread_cond_init(&c, NULL);
-        q_blocks[connection_id] =
-            std::make_pair(m, c);
-    }
-    pthread_rwlock_unlock(&comet_guard);
+    internal_comet_manager->register_to_topics(topics, connection_id, keepalive_secs, keepalive_msg, start_method);
 }
 
 size_t webserver::read_message(const httpserver_ska& connection_id,
     std::string& message
 )
 {
-    pthread_rwlock_wrlock(&comet_guard);
-    std::deque<std::string>& t_deq = q_messages[connection_id];
-    message.assign(t_deq.front());
-    t_deq.pop_front();
-    pthread_rwlock_unlock(&comet_guard);
-    return message.size();
+    return internal_comet_manager->read_message(connection_id, message);
 }
 
 size_t webserver::get_topic_consumers(
@@ -1447,90 +1332,12 @@ size_t webserver::get_topic_consumers(
         std::set<httpserver_ska>& consumers
 )
 {
-    pthread_rwlock_rdlock(&comet_guard);
-
-    for(std::set<httpserver_ska>::const_iterator it = q_waitings[topic].begin();
-            it != q_waitings[topic].end(); ++it
-    )
-    {
-        consumers.insert((*it));
-    }
-    int size = consumers.size();
-    pthread_rwlock_unlock(&comet_guard);
-    return size;
+    return internal_comet_manager->get_topic_consumers(topic, consumers);
 }
 
 bool webserver::pop_signaled(const httpserver_ska& consumer)
 {
-    if(start_method == http_utils::INTERNAL_SELECT)
-    {
-        pthread_rwlock_wrlock(&comet_guard);
-        std::set<httpserver_ska>::iterator it = q_signal.find(consumer);
-        if(it != q_signal.end())
-        {
-            if(q_messages[consumer].empty())
-            {
-                q_signal.erase(it);
-                pthread_rwlock_unlock(&comet_guard);
-                return false;
-            }
-            pthread_rwlock_unlock(&comet_guard);
-            return true;
-        }
-        else
-        {
-            pthread_rwlock_unlock(&comet_guard);
-            return false;
-        }
-    }
-    else
-    {
-        pthread_rwlock_rdlock(&comet_guard);
-        pthread_mutex_lock(&q_blocks[consumer].first);
-        struct timespec t;
-        struct timeval curtime;
-
-        {
-            bool to_unlock = true;
-            while(q_signal.find(consumer) == q_signal.end())
-            {
-                if(to_unlock)
-                {
-                    pthread_rwlock_unlock(&comet_guard);
-                    to_unlock = false;
-                }
-                gettimeofday(&curtime, NULL);
-                t.tv_sec = curtime.tv_sec + q_keepalives_mem[consumer].first;
-                t.tv_nsec = 0;
-                int rslt = pthread_cond_timedwait(&q_blocks[consumer].second,
-                        &q_blocks[consumer].first, &t
-                );
-                if(rslt == ETIMEDOUT)
-                {
-                    pthread_rwlock_wrlock(&comet_guard);
-                    send_message_to_consumer(consumer,
-                            q_keepalives_mem[consumer].second, false
-                    );
-                    pthread_rwlock_unlock(&comet_guard);
-                }
-            }
-            if(to_unlock)
-                pthread_rwlock_unlock(&comet_guard);
-        }
-
-        if(q_messages[consumer].size() == 0)
-        {
-            pthread_rwlock_wrlock(&comet_guard);
-            q_signal.erase(consumer);
-            pthread_mutex_unlock(&q_blocks[consumer].first);
-            pthread_rwlock_unlock(&comet_guard);
-            return false;
-        }
-        pthread_rwlock_rdlock(&comet_guard);
-        pthread_mutex_unlock(&q_blocks[consumer].first);
-        pthread_rwlock_unlock(&comet_guard);
-        return true;
-    }
+    return internal_comet_manager->pop_signaled(consumer, start_method);
 }
 
 http_response* webserver::get_from_cache(

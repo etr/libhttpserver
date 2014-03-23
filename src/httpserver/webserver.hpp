@@ -62,6 +62,7 @@ namespace details {
     struct daemon_item;
     struct modded_request;
     struct cache_entry;
+    class comet_manager;
 }
 
 /**
@@ -182,6 +183,10 @@ class webserver
          * Method used to kill the webserver waiting for it to terminate
         **/
         void sweet_kill();
+
+    protected:
+        webserver& operator=(const webserver& other);
+
     private:
         const int port;
         http::http_utils::start_method_T start_method;
@@ -218,9 +223,7 @@ class webserver
         bool single_resource;
         pthread_mutex_t mutexwait;
         pthread_rwlock_t runguard;
-        pthread_mutex_t cleanmux;
         pthread_cond_t mutexcond;
-        pthread_cond_t cleancond;
         render_ptr not_found_resource;
         render_ptr method_not_allowed_resource;
         render_ptr method_not_acceptable_resource;
@@ -234,20 +237,12 @@ class webserver
         std::set<http::ip_representation> bans;
         std::set<http::ip_representation> allowances;
 
-        std::map<http::httpserver_ska, std::deque<std::string> > q_messages;
-        std::map<std::string, std::set<http::httpserver_ska> > q_waitings;
-        std::map<http::httpserver_ska, std::pair<pthread_mutex_t, pthread_cond_t> > q_blocks;
-        std::set<http::httpserver_ska> q_signal;
-        std::map<http::httpserver_ska, long> q_keepalives;
-        std::map<http::httpserver_ska, std::pair<int, std::string> > q_keepalives_mem;
-        pthread_rwlock_t comet_guard;
-
         std::vector<details::daemon_item*> daemons;
         std::vector<pthread_t> threads;
 
         std::map<std::string, details::event_tuple> event_suppliers;
 
-        webserver& operator=(const webserver& b);
+        details::comet_manager* internal_comet_manager;
 
         static void* select(void* self);
         static void* cleaner(void* self);
