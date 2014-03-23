@@ -779,7 +779,7 @@ size_t unescaper_func(void * cls, struct MHD_Connection *c, char *s)
 
 size_t internal_unescaper(void* cls, char* s)
 {
-    if(strlen(s) == 0) return 0;
+    if(s[0] == 0) return 0;
 
     webserver* dws = static_cast<webserver*>(cls);
     if(dws->unescaper != 0x0)
