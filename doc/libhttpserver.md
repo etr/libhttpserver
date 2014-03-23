@@ -76,16 +76,53 @@ Additionally, clients can specify resource limits on the overall
 number of connections, number of connections per IP address and memory
 used per connection to avoid resource exhaustion.
 
+Requirements
+============
+g++ >= 4.1.2
+libmicrohttpd >= 0.9.7
+doxygen (if you want to build code reference)
+
 Compilation
 ===========
 libhttpserver uses the standard system where the usual build process
 involves running
-> ./bootstrap  
-> mkdir build  
-> cd build  
-> ../configure  
-> make  
-> make install  
+> ./bootstrap
+> mkdir build
+> cd build
+> ../configure
+> make
+> make install
+
+Optional parameters to configure script
+---------------------------------------
+A complete list of parameters can be obtained running 'configure --help'.
+Here are listed the libhttpserver specific options (the canonical configure options are also supported).
+
+* --enable-same-directory-build: enable to compile in the same directory. This is heavily discouraged. (def=no)
+* --enable-debug: enable debug data generation (def=no)
+* --enable-cpp11: enable c++11 std classes (def=no)
+* --disable-doxygen-doc: don't generate any doxygen documentation
+* --disable-doxygen-dot: don't generate graphics for doxygen documentation
+* --disable-doxygen-man: don't generate doxygen manual pages
+* --enable-doxygen-rtf: generate doxygen RTF documentation
+* --enable-doxygen-xml: generate doxygen XML documentation
+* --enable-doxygen-chm: generate doxygen compressed HTML help documentation
+* --enable-doxygen-chi: generate doxygen seperate compressed HTML help index file
+* --disable-doxygen-html: don't generate doxygen plain HTML documentation
+* --enable-doxygen-ps: generate doxygen PostScript documentation
+* --enable-doxygen-pdf: generate doxygen PDF documentation
+
+Constants
+=========
+W.I.P.
+
+Structures and classes type definition
+======================================
+* http_resource (CPP class): Represents the resource associated with a specific http endpoint.
+* http_request (CPP class): Represents the request received by the resource that process it.
+* http_response (CPP class): Represents the response sent by the server once the resource finished its work.
+* event_supplier (CPP class): Represents a class that supplies events to the webserver. It can be used to trigger the internal select of it.
+* webserver (CPP class): Represents the daemon listening on a socket for HTTP traffic.
 
 GNU Lesser General Public License
 =================================
