@@ -26,6 +26,7 @@ embedded Rest HTTP server (and more).
 Contents
 ========
 * Introduction.
+* Requirements.
 * Compilation.
 * Constants.
 * Structures and classes type definition.
@@ -78,9 +79,9 @@ used per connection to avoid resource exhaustion.
 
 Requirements
 ============
-g++ >= 4.1.2
-libmicrohttpd >= 0.9.7
-doxygen (if you want to build code reference)
+* g++ >= 4.1.2
+* libmicrohttpd >= 0.9.7
+* doxygen (if you want to build code reference)
 
 Compilation
 ===========
