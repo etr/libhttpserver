@@ -18,6 +18,10 @@
      USA
 */
 
+#if !defined (_HTTPSERVER_HPP_INSIDE_) && !defined (HTTPSERVER_COMPILATION)
+#error "Only <httpserver.hpp> or <httpserverpp> can be included directly."
+#endif
+
 #ifndef _MODDED_REQUEST_HPP_
 #define _MODDED_REQUEST_HPP_
 

@@ -18,6 +18,13 @@
      USA
 */
 
+#if !defined (_HTTPSERVER_HPP_INSIDE_) && !defined (HTTPSERVER_COMPILATION)
+#error "Only <httpserver.hpp> or <httpserverpp> can be included directly."
+#endif
+
+#ifndef _COMET_MANAGER_HPP_
+#define _COMET_MANAGER_HPP_
+
 #include <pthread.h>
 #include <vector>
 #include <set>
@@ -95,3 +102,5 @@ class comet_manager
 } //details
 
 } //httpserver
+
+#endif //_COMET_MANAGER_HPP_
