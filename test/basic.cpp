@@ -113,6 +113,24 @@ class only_render_resource : public http_resource<only_render_resource>
         }
 };
 
+class ok_resource : public http_resource<ok_resource>
+{
+    public:
+        void render_GET(const http_request& req, http_response** res)
+        {
+            *res = new http_string_response("OK", 200, "text/plain");
+        }
+};
+
+class nok_resource : public http_resource<nok_resource>
+{
+    public:
+        void render_GET(const http_request& req, http_response** res)
+        {
+            *res = new http_string_response("NOK", 200, "text/plain");
+        }
+};
+
 LT_BEGIN_SUITE(basic_suite)
 
     webserver* ws;
@@ -129,6 +147,44 @@ LT_BEGIN_SUITE(basic_suite)
         delete ws;
     }
 LT_END_SUITE(basic_suite)
+
+LT_BEGIN_AUTO_TEST(basic_suite, two_endpoints)
+
+    ok_resource* ok = new ok_resource();
+    ws->register_resource("OK", ok);
+    nok_resource* nok = new nok_resource();
+    ws->register_resource("NOK", nok);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    {
+        CURL *curl = curl_easy_init();
+        CURLcode res;
+        curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/OK");
+        curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+        res = curl_easy_perform(curl);
+        LT_ASSERT_EQ(res, 0);
+        LT_CHECK_EQ(s, "OK");
+        curl_easy_cleanup(curl);
+    }
+
+    std::string t;
+    {
+        CURL *curl = curl_easy_init();
+        CURLcode res;
+        curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/NOK");
+        curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &t);
+        res = curl_easy_perform(curl);
+        LT_ASSERT_EQ(res, 0);
+        LT_CHECK_EQ(t, "NOK");
+        curl_easy_cleanup(curl);
+    }
+
+LT_END_AUTO_TEST(two_endpoints)
 
 LT_BEGIN_AUTO_TEST(basic_suite, read_body)
     simple_resource* resource = new simple_resource();
