@@ -55,7 +55,12 @@ http_endpoint::http_endpoint
     else
         this->url_modded = "/";
     vector<string> parts;
+
+#ifdef CASE_INSENSITIVE
     string_utilities::to_lower_copy(url, url_complete);
+#else
+    url_complete = url;
+#endif
 
     if(url_complete[0] != '/')
         url_complete = "/" + url_complete;
