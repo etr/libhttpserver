@@ -171,6 +171,7 @@ webserver::webserver(const create_webserver& params):
     regex_checking(params._regex_checking),
     ban_system_enabled(params._ban_system_enabled),
     post_process_enabled(params._post_process_enabled),
+    single_resource(params._single_resource),
     not_found_resource(params._not_found_resource),
     method_not_allowed_resource(params._method_not_allowed_resource),
     method_not_acceptable_resource(params._method_not_acceptable_resource),
