@@ -213,9 +213,9 @@ void webserver::request_completed (
 )
 {
     details::modded_request* mr = static_cast<details::modded_request*>(*con_cls);
-    mr->ws->internal_comet_manager->complete_request(mr->dhrs->connection_id);
-    if (0x0 != mr)
+    if (mr != 0x0)
     {
+        mr->ws->internal_comet_manager->complete_request(mr->dhrs->connection_id);
         if(mr->dhrs.res != 0x0 && mr->dhrs->ca != 0x0)
             mr->dhrs->ca(mr->dhrs->closure_data);
         delete mr;
