@@ -325,6 +325,13 @@ LT_BEGIN_AUTO_TEST(basic_suite, only_render)
 
     curl = curl_easy_init();
     curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "NOT_EXISTENT");
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    curl_easy_cleanup(curl);
+
+    curl = curl_easy_init();
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
     curl_easy_setopt(curl, CURLOPT_POST, 1L);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, NULL);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, 0);

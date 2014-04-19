@@ -21,7 +21,7 @@ AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/
 METASOURCES = AUTO
 check_PROGRAMS = basic
 
-basic_SOURCES = basic.cpp 
+basic_SOURCES = integ/basic.cpp 
 
 noinst_HEADERS = littletest.hpp
 AM_CXXFLAGS += -lcurl -Wall -fPIC
