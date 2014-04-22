@@ -36,6 +36,8 @@
 namespace httpserver
 {
 
+class webserver;
+
 namespace http
 {
 struct httpserver_ska;
@@ -46,7 +48,7 @@ namespace details
 
 class comet_manager
 {
-    public:
+    private:
         comet_manager();
 
         ~comet_manager();
@@ -82,12 +84,10 @@ class comet_manager
                 const httpserver::http::http_utils::start_method_T& start_method
         );
 
-    protected:
         comet_manager(const comet_manager&)
         {
         }
 
-    private:
         std::map<http::httpserver_ska, std::deque<std::string> > q_messages;
         std::map<std::string, std::set<http::httpserver_ska> > q_waitings;
         std::map<http::httpserver_ska, std::pair<pthread_mutex_t, pthread_cond_t> > q_blocks;
@@ -97,6 +97,7 @@ class comet_manager
         pthread_rwlock_t comet_guard;
         pthread_mutex_t cleanmux;
         pthread_cond_t cleancond;
+        friend class httpserver::webserver;
 };
 
 } //details
