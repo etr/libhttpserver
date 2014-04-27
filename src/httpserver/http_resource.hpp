@@ -51,7 +51,7 @@ class http_resource
         /**
          * Class destructor
         **/
-        ~http_resource()
+        virtual ~http_resource()
         {
         }
         /**
