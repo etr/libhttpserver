@@ -49,12 +49,6 @@ class http_resource
 {
     public:
         /**
-         * Class destructor
-        **/
-        ~http_resource()
-        {
-        }
-        /**
          * Method used to answer to a generic request
          * @param req Request passed through http
          * @return A http_response object
@@ -205,6 +199,13 @@ class http_resource
         {
             allowed_methods = b.allowed_methods;
             return (*this);
+        }
+
+        /**
+         * Class destructor
+        **/
+        ~http_resource()
+        {
         }
 
     private:
