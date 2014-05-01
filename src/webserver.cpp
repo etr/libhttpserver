@@ -532,6 +532,7 @@ bool webserver::start(bool blocking)
     if(max_threads > num_threads)
         num_threads = max_threads;
 
+    this->running = true;
     if(start_method == http_utils::INTERNAL_SELECT)
     {
         for(int i = 0; i < num_threads; i++)
@@ -583,7 +584,6 @@ bool webserver::start(bool blocking)
         details::daemon_item* di = new details::daemon_item(this, daemon);
         daemons.push_back(di);
     }
-    this->running = true;
     bool value_onclose = false;
     if(blocking)
     {
