@@ -209,7 +209,7 @@ class http_response
         {
         }
 
-        virtual ~http_response();
+        ~http_response();
         /**
          * Method used to get the content from the response.
          * @return the content in string form
