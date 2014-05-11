@@ -50,12 +50,12 @@ class simple_resource : public http_resource<simple_resource>
     public:
         void render_GET(const http_request& req, http_response** res)
         {
-            *res = new http_string_response("OK", 200, "text/plain");
+            *res = new http_response(http_response_builder("OK", 200, "text/plain").string_response());
         }
         void render_POST(const http_request& req, http_response** res)
         {
-            *res = new http_string_response(
-                    req.get_arg("arg1")+req.get_arg("arg2"), 200, "text/plain"
+            *res = new http_response(
+                http_response_builder(req.get_arg("arg1")+req.get_arg("arg2"), 200, "text/plain").string_response()
             );
         }
 };
@@ -65,7 +65,7 @@ class long_content_resource : public http_resource<long_content_resource>
     public:
         void render_GET(const http_request& req, http_response** res)
         {
-            *res = new http_string_response(lorem_ipsum, 200, "text/plain");
+            *res = new http_response(http_response_builder(lorem_ipsum, 200, "text/plain").string_response());
         }
 };
 
@@ -74,8 +74,9 @@ class header_test_resource : public http_resource<header_test_resource>
     public:
         void render_GET(const http_request& req, http_response** res)
         {
-            *res = new http_string_response("OK", 200, "text/plain");
-            (*res)->set_header("KEY", "VALUE");
+            http_response_builder hrb("OK", 200, "text/plain");
+            hrb.with_header("KEY", "VALUE");
+            *res = new http_response(hrb.string_response());
         }
 };
 
@@ -84,23 +85,23 @@ class complete_test_resource : public http_resource<complete_test_resource>
     public:
         void render_GET(const http_request& req, http_response** res)
         {
-            *res = new http_string_response("OK", 200, "text/plain");
+            *res = new http_response(http_response_builder("OK", 200, "text/plain").string_response());
         }
         void render_POST(const http_request& req, http_response** res)
         {
-            *res = new http_string_response("OK", 200, "text/plain");
+            *res = new http_response(http_response_builder("OK", 200, "text/plain").string_response());
         }
         void render_PUT(const http_request& req, http_response** res)
         {
-            *res = new http_string_response("OK", 200, "text/plain");
+            *res = new http_response(http_response_builder("OK", 200, "text/plain").string_response());
         }
         void render_DELETE(const http_request& req, http_response** res)
         {
-            *res = new http_string_response("OK", 200, "text/plain");
+            *res = new http_response(http_response_builder("OK", 200, "text/plain").string_response());
         }
         void render_CONNECT(const http_request& req, http_response** res)
         {
-            *res = new http_string_response("OK", 200, "text/plain");
+            *res = new http_response(http_response_builder("OK", 200, "text/plain").string_response());
         }
 };
 
@@ -109,7 +110,7 @@ class only_render_resource : public http_resource<only_render_resource>
     public:
         void render(const http_request& req, http_response** res)
         {
-            *res = new http_string_response("OK", 200, "text/plain");
+            *res = new http_response(http_response_builder("OK", 200, "text/plain").string_response());
         }
 };
 
@@ -118,7 +119,7 @@ class ok_resource : public http_resource<ok_resource>
     public:
         void render_GET(const http_request& req, http_response** res)
         {
-            *res = new http_string_response("OK", 200, "text/plain");
+            *res = new http_response(http_response_builder("OK", 200, "text/plain").string_response());
         }
 };
 
@@ -127,7 +128,7 @@ class nok_resource : public http_resource<nok_resource>
     public:
         void render_GET(const http_request& req, http_response** res)
         {
-            *res = new http_string_response("NOK", 200, "text/plain");
+            *res = new http_response(http_response_builder("NOK", 200, "text/plain").string_response());
         }
 };
 

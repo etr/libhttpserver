@@ -27,6 +27,7 @@
 #include "httpserver/details/http_endpoint.hpp"
 #include "httpserver/http_resource.hpp"
 #include "httpserver/http_response.hpp"
+#include "httpserver/http_response_builder.hpp"
 #include "httpserver/http_request.hpp"
 #include "httpserver/event_supplier.hpp"
 #include "httpserver/details/event_tuple.hpp"

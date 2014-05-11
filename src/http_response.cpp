@@ -29,11 +29,42 @@
 #include "details/event_tuple.hpp"
 #include "webserver.hpp"
 #include "http_response.hpp"
+#include "http_response_builder.hpp"
 
 using namespace std;
 
 namespace httpserver
 {
+
+http_response::http_response(const http_response_builder& builder):
+    content(builder._content_hook),
+    response_code(builder._response_code),
+    autodelete(builder._autodelete),
+    realm(builder._realm),
+    opaque(builder._opaque),
+    reload_nonce(builder._reload_nonce),
+    fp(-1),
+    filename(builder._content_hook),
+    headers(builder._headers),
+    footers(builder._footers),
+    cookies(builder._cookies),
+    topics(builder._topics),
+    keepalive_secs(builder._keepalive_secs),
+    keepalive_msg(builder._keepalive_msg),
+    send_topic(builder._send_topic),
+    underlying_connection(0x0),
+    ca(0x0),
+    closure_data(0x0),
+    ce(builder._ce),
+    cycle_callback(builder._cycle_callback),
+    get_raw_response(this, builder._get_raw_response),
+    decorate_response(this, builder._decorate_response),
+    enqueue_response(this, builder._enqueue_response),
+    completed(false),
+    ws(0x0),
+    connection_id(0x0)
+{
+}
 
 http_response::~http_response()
 {
@@ -60,27 +91,6 @@ size_t http_response::get_cookies(std::map<std::string, std::string, header_comp
 }
 
 //RESPONSE
-shoutCAST_response::shoutCAST_response
-(
-    const std::string& content,
-    int response_code,
-    const std::string& content_type,
-    bool autodelete
-):
-    http_response(
-            this,
-            content,
-            response_code | http_utils::shoutcast_response,
-            content_type,autodelete
-    )
-{
-}
-
-ssize_t deferred_response::cycle_callback(const std::string& buf)
-{
-    return -1;
-}
-
 void http_response::get_raw_response_str(MHD_Response** response, webserver* ws)
 {
     size_t size = &(*content.end()) - &(*content.begin());
@@ -197,9 +207,9 @@ namespace details
 
 ssize_t cb(void* cls, uint64_t pos, char* buf, size_t max)
 {
-    int val = static_cast<deferred_response*>(cls)->cycle_callback(buf);
+    int val = static_cast<http_response*>(cls)->cycle_callback(buf);
     if(val == -1)
-        static_cast<deferred_response*>(cls)->completed = true;
+        static_cast<http_response*>(cls)->completed = true;
     return val;
 }
 
@@ -240,7 +250,7 @@ void http_response::get_raw_response_lp_receive(
     )->client_addr;
 
     *response = MHD_create_response_from_callback(MHD_SIZE_UNKNOWN, 80,
-        &long_polling_receive_response::data_generator, (void*) this, NULL);
+        &http_response::data_generator, (void*) this, NULL);
 
     ws->register_to_topics(
             topics,
@@ -250,15 +260,14 @@ void http_response::get_raw_response_lp_receive(
     );
 }
 
-ssize_t long_polling_receive_response::data_generator(
+ssize_t http_response::data_generator(
         void* cls,
         uint64_t pos,
         char* buf,
         size_t max
 )
 {
-    long_polling_receive_response* _this =
-        static_cast<long_polling_receive_response*>(cls);
+    http_response* _this = static_cast<http_response*>(cls);
 
     if(_this->ws->pop_signaled(_this->connection_id))
     {

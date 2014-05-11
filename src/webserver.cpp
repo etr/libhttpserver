@@ -39,6 +39,7 @@
 #include "http_resource.hpp"
 #include "http_response.hpp"
 #include "http_request.hpp"
+#include "http_response_builder.hpp"
 #include "details/http_endpoint.hpp"
 #include "string_utilities.hpp"
 #include "details/http_resource_mirror.hpp"
@@ -80,12 +81,12 @@ struct daemon_item
 
 void empty_render(const http_request& r, http_response** res)
 {
-    *res = new http_string_response("", 200);
+    *res = new http_response(http_response_builder("", 200).string_response());
 }
 
 void empty_not_acceptable_render(const http_request& r, http_response** res)
 {
-    *res = new http_string_response(NOT_METHOD_ERROR, 200);
+    *res = new http_response(http_response_builder(NOT_METHOD_ERROR, 200).string_response());
 }
 
 bool empty_is_allowed(const std::string& method)
@@ -823,10 +824,7 @@ void webserver::not_found_page(
     if(not_found_resource != 0x0)
         not_found_resource(*mr->dhr, dhrs);
     else
-        *dhrs = new http_string_response(
-                NOT_FOUND_ERROR,
-                http_utils::http_not_found
-        );
+        *dhrs = new http_response(http_response_builder(NOT_FOUND_ERROR, http_utils::http_not_found).string_response());
 }
 
 int webserver::method_not_acceptable_page (const void *cls,
@@ -858,10 +856,7 @@ void webserver::method_not_allowed_page(
     if(method_not_acceptable_resource != 0x0)
         method_not_allowed_resource(*mr->dhr, dhrs);
     else
-        *dhrs = new http_string_response(
-                METHOD_ERROR,
-                http_utils::http_method_not_allowed
-        );
+        *dhrs = new http_response(http_response_builder(METHOD_ERROR, http_utils::http_method_not_allowed).string_response());
 }
 
 void webserver::internal_error_page(
@@ -873,10 +868,7 @@ void webserver::internal_error_page(
     if(internal_error_resource != 0x0 && !force_our)
         internal_error_resource(*mr->dhr, dhrs);
     else
-        *dhrs = new http_string_response(
-                GENERIC_ERROR,
-                http_utils::http_internal_server_error
-        );
+        *dhrs = new http_response(http_response_builder(GENERIC_ERROR, http_utils::http_internal_server_error).string_response());
 }
 
 int webserver::bodyless_requests_answer(

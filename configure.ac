@@ -21,7 +21,7 @@
 
 AC_PREREQ(2.57)
 m4_define([libhttpserver_MAJOR_VERSION],[0])dnl
-m4_define([libhttpserver_MINOR_VERSION],[7])dnl
+m4_define([libhttpserver_MINOR_VERSION],[8])dnl
 m4_define([libhttpserver_REVISION],[2])dnl
 m4_define([libhttpserver_PKG_VERSION],[libhttpserver_MAJOR_VERSION.libhttpserver_MINOR_VERSION.libhttpserver_REVISION])dnl
 m4_define([libhttpserver_LDF_VERSION],[libhttpserver_MAJOR_VERSION:libhttpserver_MINOR_VERSION:libhttpserver_REVISION])dnl

@@ -25,6 +25,8 @@
 #ifndef _HTTP_RESPONSE_PTR_HPP_
 #define _HTTP_RESPONSE_PTR_HPP_
 
+#include "httpserver/http_response.hpp"
+
 namespace httpserver
 {
 
@@ -60,7 +62,7 @@ struct http_response_ptr
             {
                 if((*num_references) == 0)
                 {
-                    if(res && res->autodelete)
+                    if(res && res->is_autodelete())
                     {
                         delete res;
                         res = 0x0;
