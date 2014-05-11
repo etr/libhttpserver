@@ -291,7 +291,7 @@ class http_response_builder
             return *this;
         }
 
-        friend struct http_response;
+        friend class http_response;
 };
 
 };
