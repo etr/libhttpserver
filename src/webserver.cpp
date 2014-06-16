@@ -27,7 +27,15 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/time.h>
+
+#if defined(__MINGW32__) || defined(__CYGWIN32__)
+#include <winsock2.h>
+#define _WINDOWS
+#else
 #include <netinet/ip.h>
+#endif
+
 #include <signal.h>
 #include <fcntl.h>
 #include <algorithm>
@@ -115,12 +123,16 @@ struct compare_value
     }
 };
 
+#ifndef __MINGW32__
 static void catcher (int sig)
 {
 }
+#endif
 
 static void ignore_sigpipe ()
 {
+//Mingw doesn't implement SIGPIPE
+#ifndef __MINGW32__
     struct sigaction oldsig;
     struct sigaction sig;
 
@@ -136,6 +148,7 @@ static void ignore_sigpipe ()
                 gettext("Failed to install SIGPIPE handler: %s\n"),
                 strerror (errno)
         );
+#endif
 }
 
 //WEBSERVER
@@ -259,7 +272,7 @@ void* webserver::select(void* self)
     fd_set es;
     struct timeval timeout_value;
     details::daemon_item* di = static_cast<details::daemon_item*>(self);
-    int max;
+    MHD_socket max;
     while (di->ws->is_running())
     {
         max = 0;
@@ -298,7 +311,7 @@ void* webserver::select(void* self)
                 int local_max;
                 (*it).second.supply_events(&rs, &ws, &es, &local_max);
 
-                if(local_max > max)
+                if((MHD_socket) local_max > max)
                     max = local_max;
 
                 struct timeval t = (*it).second.get_timeout();
@@ -321,7 +334,9 @@ void* webserver::select(void* self)
         timeout_value.tv_sec = timeout_secs;
         timeout_value.tv_usec = timeout_microsecs;
 
-        ::select (max + 1, &rs, &ws, &es, &timeout_value);
+		/*On unix, MHD_socket will be an int anyway.
+		On windows, the cast is safe because winsock ignores first argument to select*/
+        ::select ((int) max + 1, &rs, &ws, &es, &timeout_value);
         MHD_run (di->daemon);
 
         //EVENT SUPPLIERS DISPATCHING
@@ -338,24 +353,25 @@ void* webserver::select(void* self)
     return 0x0;
 }
 
-int create_socket (int domain, int type, int protocol)
+MHD_socket create_socket (int domain, int type, int protocol)
 {
     int sock_cloexec = SOCK_CLOEXEC;
     int ctype = SOCK_STREAM | sock_cloexec;
-    int fd;
-
-    /* use SOCK_STREAM rather than ai_socktype: some getaddrinfo
+	
+	/* use SOCK_STREAM rather than ai_socktype: some getaddrinfo
     * implementations do not set ai_socktype, e.g. RHL6.2. */
-    fd = socket(domain, ctype, protocol);
+    MHD_socket fd = socket(domain, ctype, protocol);
+	
+#ifdef _WINDOWS
+	if (fd == INVALID_SOCKET)
+#else
     if ((fd == -1) &&
         (errno == EINVAL || errno == EPROTONOSUPPORT) && (sock_cloexec != 0)
     )
+#endif
     {
-        sock_cloexec = 0;
         fd = socket(domain, type, protocol);
     }
-    if (-1 == fd)
-        return -1;
     return fd;
 }
 
@@ -488,7 +504,7 @@ bool webserver::start(bool blocking)
             setsockopt (bind_socket,
                SOL_SOCKET,
                SO_REUSEADDR,
-               &on, sizeof (on));
+               (const char*) &on, sizeof (on));
 
             if(use_ipv6)
             {
@@ -496,16 +512,21 @@ bool webserver::start(bool blocking)
 #ifdef IPV6_V6ONLY
                 setsockopt (bind_socket,
                     IPPROTO_IPV6, IPV6_V6ONLY,
-                    &on, sizeof (on)
+                    (const char*) &on, sizeof (on)
                 );
 #endif
 #endif
             }
             bind(bind_socket, servaddr, addrlen);
         }
+#ifdef _WINDOWS
+		unsigned long ioarg = 1;
+        ioctlsocket(bind_socket, FIONBIO, &ioarg); 
+#else
         int flags = fcntl (bind_socket, F_GETFL);
         flags |= O_NONBLOCK;
         fcntl (bind_socket, F_SETFL, flags);
+#endif
         if(!bind_settled)
             listen(bind_socket, 1);
         iov.push_back(gen(MHD_OPTION_LISTEN_SOCKET, bind_socket));
@@ -730,7 +751,7 @@ int webserver::build_request_args (
             mr->dhr->querystring += string(buf);
         }
     }
-    int size = internal_unescaper((void*) mr->ws, value);
+    size_t size = internal_unescaper((void*) mr->ws, value);
     mr->dhr->set_arg(key, string(value, size));
     return MHD_YES;
 }
@@ -1046,18 +1067,17 @@ int webserver::finalize_answer(
                     details::http_resource_mirror
                 >::iterator it;
 
-                int len = -1;
-                int tot_len = -1;
+                size_t len = 0;
+                size_t tot_len = 0;
                 for(
                         it=registered_resources.begin();
                         it!=registered_resources.end();
                         ++it
                 )
                 {
-                    int endpoint_pieces_len = (*it).first.get_url_pieces_num();
-                    int endpoint_tot_len = (*it).first.get_url_complete_size();
-                    if(tot_len == -1 ||
-                        len == -1 ||
+                    size_t endpoint_pieces_len = (*it).first.get_url_pieces_num();
+                    size_t endpoint_tot_len = (*it).first.get_url_complete_size();
+                    if(!found ||
                         endpoint_pieces_len > len ||
                         (
                             endpoint_pieces_len == len &&
@@ -1078,7 +1098,7 @@ int webserver::finalize_answer(
                 {
                     vector<string> url_pars;
 
-                    unsigned int pars_size =
+                    size_t pars_size =
                         found_endpoint->first.get_url_pars(url_pars);
 
                     vector<string> url_pieces;

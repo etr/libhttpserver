@@ -207,7 +207,7 @@ namespace details
 
 ssize_t cb(void* cls, uint64_t pos, char* buf, size_t max)
 {
-    int val = static_cast<http_response*>(cls)->cycle_callback(buf);
+    ssize_t val = static_cast<http_response*>(cls)->cycle_callback(buf);
     if(val == -1)
         static_cast<http_response*>(cls)->completed = true;
     return val;
@@ -272,7 +272,7 @@ ssize_t http_response::data_generator(
     if(_this->ws->pop_signaled(_this->connection_id))
     {
         string message;
-        int size = _this->ws->read_message(_this->connection_id, message);
+        size_t size = _this->ws->read_message(_this->connection_id, message);
         memcpy(buf, message.c_str(), size);
         return size;
     }

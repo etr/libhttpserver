@@ -188,7 +188,7 @@ class webserver
         webserver& operator=(const webserver& other);
 
     private:
-        const int port;
+        const uint16_t port;
         http::http_utils::start_method_T start_method;
         const int max_threads;
         const int max_connections;
@@ -200,7 +200,9 @@ class webserver
         validator_ptr validator;
         unescaper_ptr unescaper;
         const struct sockaddr* bind_address;
-        int bind_socket;
+		/* Changed type to MHD_socket because this type will always reflect the
+		platform's actual socket type (e.g. SOCKET on windows, int on unixes)*/
+        MHD_socket bind_socket;
         const int max_thread_stack_size;
         const bool use_ssl;
         const bool use_ipv6;

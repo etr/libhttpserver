@@ -99,8 +99,8 @@ http_endpoint::http_endpoint
                     (parts[i][parts[i].size() - 1] == '}')
                 )
                 {
-                    int bar = parts[i].find_first_of('|');
-                    if(bar != (int)string::npos)
+                    std::string::size_type bar = parts[i].find_first_of('|');
+                    if(bar != string::npos)
                     {
                         this->url_pars.push_back(parts[i].substr(1, bar - 1));
                         if(first)
@@ -201,7 +201,7 @@ http_endpoint& http_endpoint::operator =(const http_endpoint& h)
 
 bool http_endpoint::operator <(const http_endpoint& b) const
 {
-    COMPARATOR(this->url_modded, b.url_modded, toupper);
+    COMPARATOR(this->url_modded, b.url_modded, std::toupper);
 }
 
 bool http_endpoint::match(const http_endpoint& url) const

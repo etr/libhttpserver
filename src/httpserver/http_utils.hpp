@@ -27,7 +27,7 @@
 
 #include <microhttpd.h>
 #include <string>
-#include <ctype.h>
+#include <cctype>
 #include <vector>
 #include <algorithm>
 #include <exception>
@@ -238,8 +238,8 @@ class http_utils
         \
         for (size_t n = 0; n < l1; n++)\
         {\
-            char xc = op((x)[n]);\
-            char yc = op((y)[n]);\
+            int xc = op((x)[n]);\
+            int yc = op((y)[n]);\
             if (xc < yc) return true;\
             if (xc > yc) return false;\
         }\
@@ -255,7 +255,7 @@ class header_comparator {
         **/
         bool operator()(const std::string& x,const std::string& y) const
         {
-            COMPARATOR(x, y, toupper);
+            COMPARATOR(x, y, std::toupper);
         }
 };
 
@@ -274,7 +274,7 @@ class arg_comparator {
         bool operator()(const std::string& x,const std::string& y) const
         {
 #ifdef CASE_INSENSITIVE
-            COMPARATOR(x, y, toupper);
+            COMPARATOR(x, y, std::toupper);
 #else
             COMPARATOR(x, y, );
 #endif
