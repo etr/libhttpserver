@@ -308,10 +308,10 @@ void* webserver::select(void* self)
                     ++it
             )
             {
-                int local_max;
+                MHD_socket local_max;
                 (*it).second.supply_events(&rs, &ws, &es, &local_max);
 
-                if((MHD_socket) local_max > max)
+                if(local_max > max)
                     max = local_max;
 
                 struct timeval t = (*it).second.get_timeout();

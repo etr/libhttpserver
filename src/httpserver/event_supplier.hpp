@@ -43,7 +43,7 @@ class event_supplier
                 fd_set* read_fdset,
                 fd_set* write_fdset,
                 fd_set* exc_fdset,
-                int* max
+                MHD_socket* max
         ) const
         {
             static_cast<CHILD*>(this)->supply_events(
