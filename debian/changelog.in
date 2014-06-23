@@ -1,3 +1,10 @@
+libhttpserver (0.8.0) unstable; urgency=low
+    * Support for building on MinGW/Cygwin systems
+    * min libmicrohttpd version moved to 0.9.37
+    * Moved to version 0.8.0
+
+ -- Sebastiano Merlino <electrictwister2000@gmail.com> Sat, 23 Jul 2014 02:46:20 +0100
+
 libhttpserver (0.7.2) unstable; urgency=low
   * Documentation updates
   * Reduced responsibilities of webserver class
