@@ -8,7 +8,7 @@ Copyright (C)  2014  Sebastiano Merlino.
     Free Documentation License".
 -->
 
-The libhttpserver (0.7.2) reference manual
+The libhttpserver (0.8.0) reference manual
 ==========================================
 
 [![Build Status](https://travis-ci.org/etr/libhttpserver.png?branch=master)](https://travis-ci.org/etr/libhttpserver)
