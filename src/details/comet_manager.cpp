@@ -21,6 +21,7 @@
 #include <errno.h>
 #include <iostream>
 #include "details/comet_manager.hpp"
+#include <sys/time.h>
 
 using namespace std;
 
@@ -140,7 +141,7 @@ size_t comet_manager::get_topic_consumers(
     {
         consumers.insert((*it));
     }
-    int size = consumers.size();
+    std::set<httpserver::http::httpserver_ska>::size_type size = consumers.size();
     pthread_rwlock_unlock(&comet_guard);
     return size;
 }

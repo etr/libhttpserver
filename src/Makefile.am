@@ -26,7 +26,7 @@ AM_CXXFLAGS += -fPIC -Wall
 libhttpserver_la_LIBADD = -lmicrohttpd
 libhttpserver_la_LDFLAGS =
 
-install-exec-hook:
+install-data-hook:
 	(mkdir -p $(DESTDIR)$(includedir) && cd $(DESTDIR)$(includedir) && $(LN_S) -f httpserver.hpp httpserverpp)
 
 uninstall-hook:

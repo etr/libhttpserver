@@ -21,7 +21,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#if defined(__MINGW32__) || defined(__CYGWIN32__)
+#define _WINDOWS
+#undef _WIN32_WINNT
+#define _WIN32_WINNT 0x600
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#else
 #include <arpa/inet.h>
+#endif
 #include <sstream>
 #include <iomanip>
 #include <fstream>

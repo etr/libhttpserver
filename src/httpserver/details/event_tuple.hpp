@@ -42,7 +42,7 @@ namespace details
                             fd_set*,
                             fd_set*,
                             fd_set*,
-                            int*
+                            MHD_socket*
                     );
 
             typedef struct timeval(*get_timeout_ptr)();

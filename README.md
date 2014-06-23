@@ -135,6 +135,10 @@ Requirements
 * libmicrohttpd >= 0.9.7
 * doxygen (if you want to build code reference)
 
+Additionally, for MinGW on windows you will need:
+* libwinpthread (For MinGW-w64, if you use thread model posix then you have this)
+* libgnurx >= 2.5.1
+
 Compilation
 ===========
 libhttpserver uses the standard system where the usual build process

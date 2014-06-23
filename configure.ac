@@ -26,7 +26,7 @@ m4_define([libhttpserver_REVISION],[2])dnl
 m4_define([libhttpserver_PKG_VERSION],[libhttpserver_MAJOR_VERSION.libhttpserver_MINOR_VERSION.libhttpserver_REVISION])dnl
 m4_define([libhttpserver_LDF_VERSION],[libhttpserver_MAJOR_VERSION:libhttpserver_MINOR_VERSION:libhttpserver_REVISION])dnl
 AC_INIT([libhttpserver], libhttpserver_PKG_VERSION, [electrictwister2000@gmail.com])
-AM_INIT_AUTOMAKE
+AM_INIT_AUTOMAKE([subdir-objects])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIR([m4])
 
@@ -53,6 +53,21 @@ if test x"$samedirectory" = x"no"; then
     fi
 fi
 
+case "$host" in
+    *-mingw*)
+	    NETWORK_HEADER="winsock2.h"
+		REGEX_LIBS="-lregex -no-undefined"
+        ;;
+    *-cygwin*)
+	    NETWORK_HEADER="winsock2.h"
+		REGEX_LIBS="-lregex -no-undefined"
+        ;;
+    *)
+	    NETWORK_HEADER="arpa/inet.h"
+		REGEX_LIBS=""
+        ;;
+esac
+
 # Checks for header files.
 AC_HEADER_STDC
 AC_CHECK_HEADER([string],[],[AC_MSG_ERROR("C++ strings not found")])
@@ -73,7 +88,7 @@ AC_CHECK_HEADER([ctype.h],[],[AC_MSG_ERROR("cctype not found")])
 AC_CHECK_HEADER([regex.h],[],[AC_MSG_ERROR("regex.h not found")])
 AC_CHECK_HEADER([sys/stat.h],[],[AC_MSG_ERROR("sys/stat.h not found")])
 AC_CHECK_HEADER([sys/types.h],[],[AC_MSG_ERROR("sys/types.h not found")])
-AC_CHECK_HEADER([arpa/inet.h],[],[AC_MSG_ERROR("arpa/inet.h not found")])
+AC_CHECK_HEADER([$NETWORK_HEADER],[],[AC_MSG_ERROR("$NETWORK_HEADER not found")])
 AC_CHECK_HEADER([signal.h],[],[AC_MSG_ERROR("signal.h not found")])
 
 AC_CHECK_HEADER([gnutls/gnutls.h],[have_gnutls="yes"],[AC_MSG_WARN("gnutls/gnutls.h not found. TLS will be disabled"); have_gnutls="no"])
@@ -84,7 +99,7 @@ PKG_CHECK_MODULES([LIBMICROHTTPD],[libmicrohttpd >= 0.9.7],[],[AC_MSG_ERROR("lib
 #AC_CHECK_LIB([microhttpd],[MHD_start_daemon],[],[AC_MSG_ERROR("Microhttpd header files not found. Please use a version >= 0.9.9.")])
 
 CXXFLAGS="-DHTTPSERVER_COMPILATION -D_REENTRANT $LIBMICROHTTPD_CFLAGS $CXXFLAGS"
-LDFLAGS="$LIBMICROHTTPD_LIBS $LD_FLAGS"
+LDFLAGS="$LIBMICROHTTPD_LIBS $REGEX_LIBS $LD_FLAGS"
 
 m4_pattern_allow([AC_TYPE_SIZE_T])
 m4_pattern_allow([AC_TYPE_UINT16_T])

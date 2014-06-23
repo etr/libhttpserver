@@ -85,7 +85,7 @@ class create_webserver
         {
         }
 
-        explicit create_webserver(int port):
+        explicit create_webserver(uint16_t port):
             _port(port),
             _start_method(http::http_utils::INTERNAL_SELECT),
             _max_threads(0),
@@ -125,7 +125,7 @@ class create_webserver
         {
         }
 
-        create_webserver& port(int port) { _port = port; return *this; }
+        create_webserver& port(uint16_t port) { _port = port; return *this; }
         create_webserver& start_method(
                 const http::http_utils::start_method_T& start_method
         )
@@ -317,7 +317,7 @@ class create_webserver
         }
 
     private:
-        int _port;
+        uint16_t _port;
         http::http_utils::start_method_T _start_method;
         int _max_threads;
         int _max_connections;
