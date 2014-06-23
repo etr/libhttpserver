@@ -1,7 +1,10 @@
-Primary developer:
+- Primary developer:
 Sebastiano Merlino <electrictwister2000@gmail.com> (maintainer)
 
-Code contributions also came from:
+- Code contributions also came from:
 Dario Mazza <dariomzz@gmail.com>
 Andrea Nicotra <nicotra.andrea@gmail.com>
 Jeff Waller <truthset@gmail.com>
+
+- Support for building on MinGW/Cygwin systems
+Shane Peelar <lookatyouhacker@gmail.com>
