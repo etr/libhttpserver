@@ -132,7 +132,7 @@ used per connection to avoid resource exhaustion.
 Requirements
 ============
 * g++ >= 4.1.2
-* libmicrohttpd >= 0.9.7
+* libmicrohttpd >= 0.9.37
 * doxygen (if you want to build code reference)
 
 Additionally, for MinGW on windows you will need:
