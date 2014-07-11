@@ -19,9 +19,10 @@
 LDADD = $(top_builddir)/src/libhttpserver.la
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/
 METASOURCES = AUTO
-check_PROGRAMS = basic
+check_PROGRAMS = basic http_utils
 
 basic_SOURCES = integ/basic.cpp 
+http_utils_SOURCES = unit/http_utils_test.cpp
 
 noinst_HEADERS = littletest.hpp
 AM_CXXFLAGS += -lcurl -Wall -fPIC
