@@ -176,6 +176,7 @@ AC_OUTPUT(
       doc/Makefile
       src/Makefile
       test/Makefile
+      examples/Makefile
       debian/changelog
       debian/copyright
       debian/control
