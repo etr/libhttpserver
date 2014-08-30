@@ -33,6 +33,7 @@
 #include <sstream>
 #include <iomanip>
 #include <fstream>
+#include <iostream>
 #include "string_utilities.hpp"
 #include "http_utils.hpp"
 
@@ -541,5 +542,36 @@ char* load_file (const char *filename)
     return content;
 }
 
+void dump_header_map(std::ostream &os, const std::string &prefix,
+                     const std::map<std::string,std::string,header_comparator> &map)
+{
+    std::map<std::string,std::string,header_comparator>::const_iterator it = map.begin(); 
+    std::map<std::string,std::string,header_comparator>::const_iterator end = map.end();
+
+    if (map.size()) {
+        os << "    " << prefix << " [";
+        for (; it != end; ++it) {
+            os << (*it).first << ":\"" << (*it).second << "\" ";
+        }
+        os << "]" << std::endl;
+    }
+}
+
+void dump_arg_map(std::ostream &os, const std::string &prefix,
+                  const std::map<std::string,std::string,arg_comparator> &map)
+{
+    std::map<std::string,std::string,arg_comparator>::const_iterator it = map.begin(); 
+    std::map<std::string,std::string,arg_comparator>::const_iterator end = map.end();
+
+    if (map.size()) {
+        os << "    " << prefix << " [";
+        for (; it != end; ++it) {
+            os << (*it).first << ":\"" << (*it).second << "\" ";
+        }
+        os << "]" << std::endl;
+    }
+}
+    
+    
 };
 };

@@ -29,6 +29,7 @@
 #include <vector>
 #include <string>
 #include <utility>
+#include <iosfwd>
 
 struct MHD_Connection;
 
@@ -355,6 +356,8 @@ class http_request
                 const std::string& password,
                 int nonce_timeout, bool& reload_nonce
         ) const;
+
+		friend std::ostream &operator<< (std::ostream &os, const http_request &r);    
     private:
         /**
          * Default constructor of the class. It is a specific responsibility of apis to initialize this type of objects.
@@ -584,6 +587,8 @@ class http_request
 
         friend class webserver;
 };
+
+std::ostream &operator<< (std::ostream &os, const http_request &r);
 
 };
 #endif
