@@ -25,10 +25,10 @@ Creating Certificates
 Self-signed certificates can be created using OpenSSL using the
 following steps:
 
-$ openssl genrsa -des3 -passout pass:x -out serer.pass.key 2048
-$ openssl rsa -passin pass:x -in server.pass.key -out server.key
-$ openssl req -new -key server.key -out server.csr
-$ openssl x509 -req -days 365 -in server.csr -signkey server.key -out server.crt
+> openssl genrsa -des3 -passout pass:x -out serer.pass.key 2048
+> openssl rsa -passin pass:x -in server.pass.key -out server.key
+> openssl req -new -key server.key -out server.csr
+> openssl x509 -req -days 365 -in server.csr -signkey server.key -out server.crt
 
 On the last step when prompted for a challenge password it can be left
 empty.
@@ -38,7 +38,8 @@ for these instructions.
 
 Keystore configuration
 ======================
-If using a local client such as RestClient for testing the Rest server
+If using a local client such as RestClient
+(https://github.com/wiztools/rest-client) for testing the Rest server
 then a keystore needs to be established.  These commands should be
 bundled with your Java installation.
 
