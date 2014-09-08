@@ -8,3 +8,6 @@ Jeff Waller <truthset@gmail.com>
 
 - Support for building on MinGW/Cygwin systems
 Shane Peelar <lookatyouhacker@gmail.com>
+
+- Example of SSL usage and operator<< on http_request and http_response
+Chris Love <cjlove@san.rr.com>
