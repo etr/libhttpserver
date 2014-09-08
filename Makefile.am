@@ -24,8 +24,8 @@ LIBTOOL_DEPS = @LIBTOOL_DEPS@
 AUTOMAKE_OPTIONS = foreign 1.4
 ACLOCAL_AMFLAGS = -I m4
 
-SUBDIRS = src test
-DIST_SUBDIRS = src test
+SUBDIRS = src test examples
+DIST_SUBDIRS = src test examples
 EXTRA_DIST = libhttpserver.pc.in debian/changelog.in debian/control.in debian/copyright.in debian/rules.in debian/libhttpserver-dev.install.in debian/libhttpserver.install.in redhat/libhttpserver.SPEC.in $(DX_CONFIG)
 
 MOSTLYCLEANFILES = $(DX_CLEANFILES) redhat/SOURCES/*

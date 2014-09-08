@@ -289,4 +289,16 @@ void http_response::get_raw_response_lp_send(
     ws->send_message_to_topic(send_topic, content);
 }
 
+std::ostream &operator<< (std::ostream &os, const http_response &r)
+{
+    os << "Response [response_code:" << r.response_code << "]" << std::endl;
+
+    http::dump_header_map(os,"Headers",r.headers);
+    http::dump_header_map(os,"Footers",r.footers);
+    http::dump_header_map(os,"Cookies",r.cookies);
+
+    return os;
+}
+
+    
 };

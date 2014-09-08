@@ -27,6 +27,7 @@
 #include <map>
 #include <utility>
 #include <string>
+#include <iosfwd>
 
 #include "httpserver/details/http_resource_mirror.hpp"
 
@@ -69,6 +70,7 @@ typedef ssize_t(*cycle_callback_ptr)(const std::string&);
 class http_response
 {
     public:
+    
         http_response(const http_response_builder& builder);
 
         /**
@@ -296,11 +298,14 @@ class http_response
         friend class http_response_builder;
         friend void clone_response(const http_response& hr, http_response** dhr);
         friend ssize_t details::cb(void* cls, uint64_t pos, char* buf, size_t max);
+    	friend std::ostream &operator<< (std::ostream &os, const http_response &r);    
     private:
         http_response& operator=(const http_response& b);
 
         static ssize_t data_generator (void* cls, uint64_t pos, char* buf, size_t max);
 };
+
+std::ostream &operator<< (std::ostream &os, const http_response &r);    
 
 };
 #endif

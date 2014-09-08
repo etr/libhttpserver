@@ -22,6 +22,7 @@
 #include "http_utils.hpp"
 #include "http_request.hpp"
 #include "string_utilities.hpp"
+#include <iostream>
 
 using namespace std;
 
@@ -85,4 +86,21 @@ size_t http_request::get_args(std::map<std::string, std::string, arg_comparator>
     return result.size();
 }
 
-};
+std::ostream &operator<< (std::ostream &os, const http_request &r)
+{
+    os << r.method << " Request [user:\"" << r.user << "\" pass:\"" << r.pass << "\"] path:\""
+       << r.path << "\"" << std::endl;
+
+    http::dump_header_map(os,"Headers",r.headers);
+    http::dump_header_map(os,"Footers",r.footers);
+    http::dump_header_map(os,"Cookies",r.cookies);
+    http::dump_arg_map(os,"Query Args",r.args);
+
+    os << "    Version [ " << r.version << " ] Requestor [ " << r.requestor
+       << " ] Port [ " << r.requestor_port << " ]" << std::endl;
+
+    return os;
+}
+    
+
+}

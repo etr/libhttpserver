@@ -29,8 +29,10 @@
 #include <string>
 #include <cctype>
 #include <vector>
+#include <map>
 #include <algorithm>
 #include <exception>
+#include <iosfwd>
 #ifdef HAVE_GNUTLS
 #include <gnutls/gnutls.h>
 #endif
@@ -327,6 +329,25 @@ std::string get_ip_str_new(const struct sockaddr* sa,
  * @return short representing the port
 **/
 short get_port(const struct sockaddr* sa);
+
+/**
+ * Method to output the contents of a headers map to a std::ostream
+ * @param os The ostream
+ * @param prefix Prefix to identify the map
+ * @param map
+**/
+void dump_header_map(std::ostream &os, const std::string &prefix,
+                     const std::map<std::string,std::string,header_comparator> &map);
+
+/**
+ * Method to output the contents of an arguments map to a std::ostream
+ * @param os The ostream
+ * @param prefix Prefix to identify the map
+ * @param map
+**/
+void dump_arg_map(std::ostream &os, const std::string &prefix,
+                     const std::map<std::string,std::string,arg_comparator> &map);
+    
 /**
  * Process escape sequences ('+'=space, %HH) Updates val in place; the
  * result should be UTF-8 encoded and cannot be larger than the input.
