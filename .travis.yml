@@ -20,7 +20,6 @@ script:
  - ../configure --enable-gcov
  - make
  - make check
- - cd ..
    # - rm -rf build
    # - mkdir build
    # - cd build
