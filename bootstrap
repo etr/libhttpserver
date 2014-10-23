@@ -19,7 +19,11 @@
 
 aclocal -I m4
 autoheader
-libtoolize --automake
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    glibtoolize --automake
+else
+    libtoolize --automake
+fi
 automake --add-missing
 autoconf
 
