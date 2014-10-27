@@ -17,7 +17,7 @@ script:
  - ./bootstrap
  - mkdir build
  - cd build
- - ../configure --enable-gcov
+ - ../configure --enable-debug
  - make
  - make check
    # - rm -rf build

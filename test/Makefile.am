@@ -21,10 +21,23 @@ AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/
 METASOURCES = AUTO
 check_PROGRAMS = basic http_utils
 
+MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
+
 basic_SOURCES = integ/basic.cpp 
 http_utils_SOURCES = unit/http_utils_test.cpp
 
 noinst_HEADERS = littletest.hpp
 AM_CXXFLAGS += -lcurl -Wall -fPIC
 
+if COND_GCOV
+
+TESTS = rmgcda $(check_PROGRAMS) gcov
+#basic.log: rmgcda.log
+#http_utils.log: rmgcda.log
+#gcov.log: basic.log http_utils.log
+
+else
+
 TESTS = $(check_PROGRAMS)
+
+endif

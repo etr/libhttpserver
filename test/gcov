@@ -1,0 +1,7 @@
+#!/bin/sh
+
+for srcfile in ../src/*.cpp
+do
+  ( gcov -r $srcfile || gcov $srcfile ) > /dev/null 2> /dev/null
+done
+exit 0

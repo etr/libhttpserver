@@ -28,7 +28,7 @@ SUBDIRS = src test examples
 DIST_SUBDIRS = src test examples
 EXTRA_DIST = libhttpserver.pc.in debian/changelog.in debian/control.in debian/copyright.in debian/rules.in debian/libhttpserver-dev.install.in debian/libhttpserver.install.in redhat/libhttpserver.SPEC.in $(DX_CONFIG)
 
-MOSTLYCLEANFILES = $(DX_CLEANFILES) redhat/SOURCES/*
+MOSTLYCLEANFILES = $(DX_CLEANFILES) redhat/SOURCES/* *.gcda *.gcno *.gcov
 DISTCLEANFILES = redhat/SOURCES/* redhat/SPEC/* redhat/RPMS/* redhat/SRPMS/* redhat/* debian/* DIST_REVISION
 
 pkgconfigdir = $(libdir)/pkgconfig
