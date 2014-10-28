@@ -30,14 +30,7 @@ noinst_HEADERS = littletest.hpp
 AM_CXXFLAGS += -lcurl -Wall -fPIC
 
 if COND_GCOV
-
 TESTS = rmgcda $(check_PROGRAMS) gcov
-#basic.log: rmgcda.log
-#http_utils.log: rmgcda.log
-#gcov.log: basic.log http_utils.log
-
 else
-
 TESTS = $(check_PROGRAMS)
-
 endif

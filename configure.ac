@@ -33,7 +33,7 @@ AC_CONFIG_MACRO_DIR([m4])
 OLD_CXXFLAGS=$CXXFLAGS
 LT_INIT
 AC_PROG_CC
-AC_PROG_CXX
+AC_PROG_CXX([clang])
 AC_PROG_LN_S
 CXXFLAGS=$OLD_CXXFLAGS
 AC_LANG([C++])
@@ -126,8 +126,9 @@ AM_CONDITIONAL([COND_GCOV],[test x"$debugit" = x"yes"])
 
 if test x"$debugit" = x"yes"; then
     AC_DEFINE([DEBUG],[],[Debug Mode])
-    AM_CXXFLAGS="$AM_CXXFLAGS -DDEBUG -g -Wall -Wno-uninitialized -O0 -fprofile-arcs -ftest-coverage"
-    LDFLAGS="-lgcov $LDFLAGS"
+    AM_CXXFLAGS="$AM_CXXFLAGS -DDEBUG -g -Wall -Wno-uninitialized -O0"
+#    LDFLAGS="$LDFLAGS -fprofile-arcs -ftest-coverage"
+#    LIBS="-lgcov"
 else
     AC_DEFINE([NDEBUG],[],[No-debug Mode])
     AM_CXXFLAGS="$AM_CXXFLAGS -O3"
