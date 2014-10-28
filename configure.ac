@@ -126,7 +126,7 @@ AM_CONDITIONAL([COND_GCOV],[test x"$debugit" = x"yes"])
 
 if test x"$debugit" = x"yes"; then
     AC_DEFINE([DEBUG],[],[Debug Mode])
-    AM_CXXFLAGS="$AM_CXXFLAGS -DDEBUG -g -Wall -Wno-uninitialized -O0 -fprofile-arcs -ftest-coverage --coverage"
+    AM_CXXFLAGS="$AM_CXXFLAGS -DDEBUG -g -Wall -Wno-uninitialized -O0 -fprofile-arcs -ftest-coverage"
     LDFLAGS="-lgcov $LDFLAGS"
 else
     AC_DEFINE([NDEBUG],[],[No-debug Mode])
