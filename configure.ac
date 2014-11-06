@@ -56,11 +56,11 @@ fi
 case "$host" in
     *-mingw*)
 	    NETWORK_HEADER="winsock2.h"
-		REGEX_LIBS="-lregex -no-undefined"
+		REGEX_LIBS="-lregex -lpthread -no-undefined"
         ;;
     *-cygwin*)
 	    NETWORK_HEADER="winsock2.h"
-		REGEX_LIBS="-lregex -no-undefined"
+		REGEX_LIBS="-lregex -lpthread -no-undefined"
         ;;
     *)
 	    NETWORK_HEADER="arpa/inet.h"
