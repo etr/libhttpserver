@@ -23,7 +23,7 @@ script:
  - ./bootstrap
  - mkdir build
  - cd build
- - ../ci-configure
+ - if [ $DEBUG = "debug" ]; then ../configure --enable-debug; else ../configure; fi
  - make
  - make check
 after_success:
