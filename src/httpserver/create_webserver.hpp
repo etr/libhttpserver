@@ -25,6 +25,7 @@
 #ifndef _CREATE_WEBSERVER_HPP_
 #define _CREATE_WEBSERVER_HPP_
 
+#include <stdlib.h>
 #include "httpserver/http_utils.hpp"
 
 #define DEFAULT_WS_TIMEOUT 180
