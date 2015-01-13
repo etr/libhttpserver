@@ -27,4 +27,4 @@ after_success:
 matrix:
   exclude:
     - compiler: clang
-      env: CONF_COMMAND=../configure --enable-debug
+      env: CONF_COMMAND=../configure --enable-debug; DEBUG="debug"
