@@ -3,8 +3,8 @@ compiler:
  - gcc
  - clang
 env:
- - CONF_COMMAND=../configure --enable-debug; DEBUG="debug"
- - CONF_COMMAND=../configure
+ - DEBUG="debug"
+ - DEBUG="nodebug"
 before_install:
  - sudo apt-get install texinfo
  - sudo pip install cpp-coveralls
@@ -23,7 +23,7 @@ script:
  - ./bootstrap
  - mkdir build
  - cd build
- - $(echo $CONF_COMMAND)
+ - ../ci-configure
  - make
  - make check
 after_success:
@@ -31,4 +31,4 @@ after_success:
 matrix:
   exclude:
     - compiler: clang
-      env: CONF_COMMAND=../configure --enable-debug; DEBUG="debug"
+      env: DEBUG="debug"
