@@ -2,7 +2,9 @@ language: cpp
 compiler: 
  - gcc
  - clang
-# Change this to your needs
+env:
+ - CONF_COMMAND=../configure --enable-debug; DEBUG="debug"
+ - CONF_COMMAND=../configure
 before_install:
  - sudo apt-get install texinfo
  - sudo pip install cpp-coveralls
@@ -17,15 +19,12 @@ script:
  - ./bootstrap
  - mkdir build
  - cd build
- - ../configure --enable-debug
+ - $(echo $CONF_COMMAND)
  - make
  - make check
-   # - rm -rf build
-   # - mkdir build
-   # - cd build
-   # - ../configure --enable-cpp11
-   # - make
-   # - make check
-   # - cd ..
 after_success:
-  - coveralls --no-gcov --extension cpp --build-root src/ --exclude lib --exclude tests --gcov-options '\-lp'
+  - if [ $DEBUG = "debug" ]; then coveralls --no-gcov --extension cpp --build-root src/ --exclude lib --exclude tests --gcov-options '\-lp'; fi
+matrix:
+  exclude:
+    - compiler: clang
+      env: CONF_COMMAND=../configure --enable-debug
