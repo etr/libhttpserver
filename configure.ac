@@ -33,7 +33,7 @@ AC_CONFIG_MACRO_DIR([m4])
 OLD_CXXFLAGS=$CXXFLAGS
 LT_INIT
 AC_PROG_CC
-AC_PROG_CXX([clang])
+AC_PROG_CXX([clang++])
 AC_PROG_LN_S
 CXXFLAGS=$OLD_CXXFLAGS
 AC_LANG([C++])
@@ -122,18 +122,25 @@ AC_MSG_RESULT([$debugit])
 
 AM_CONDITIONAL([COND_GCOV],[test x"$debugit" = x"yes"])
 
+AM_LDFLAGS="-lstdc++"
+
 if test x"$debugit" = x"yes"; then
+    AC_CHECK_PROG(GCOV, gcov, gcov)
+
     AC_DEFINE([DEBUG],[],[Debug Mode])
     AM_CXXFLAGS="$AM_CXXFLAGS -DDEBUG -g -Wall -Wno-uninitialized -O0"
-#    LDFLAGS="$LDFLAGS -fprofile-arcs -ftest-coverage"
-#    LIBS="-lgcov"
+    AM_CFLAGS="$AM_CXXFLAGS -DDEBUG -g -Wall -Wno-uninitialized -O0"
+
+    AC_SUBST(GCOV)
 else
     AC_DEFINE([NDEBUG],[],[No-debug Mode])
     AM_CXXFLAGS="$AM_CXXFLAGS -O3"
+    AM_CFLAGS="$AM_CXXFLAGS -O3"
 fi
 
 if test x"have_gnutls" = x"yes"; then
     AM_CXXFLAGS="$AM_CXXFLAGS -DHAVE_GNUTLS"
+    AM_CFLAGS="$AM_CXXFLAGS -DHAVE_GNUTLS"
 fi
 
 AC_MSG_CHECKING([whether to use c++0x std classes])
@@ -147,6 +154,7 @@ AC_MSG_RESULT([$cpp11])
 if test x"$cpp11" = x"yes"; then
     AC_DEFINE([CPP11],[],[c++11 Mode])
     AM_CXXFLAGS="$AM_CXXFLAGS -DUSE_CPP_11 --std=c++11"
+    AM_CFLAGS="$AM_CXXFLAGS -DUSE_CPP_11 --std=c++11"
 else
     AC_DEFINE([NCPP11],[],[standard Mode])
 fi
@@ -165,6 +173,8 @@ LDFLAGS="$LDFLAGS -version-number libhttpserver_LDF_VERSION"
 
 AC_SUBST(LHT_LIBDEPS)
 AC_SUBST(AM_CXXFLAGS)
+AC_SUBST(AM_CFLAGS)
+AC_SUBST(AM_LDFLAGS)
 AC_SUBST(CPPFLAGS)
 AC_SUBST(LIBS)
 AC_SUBST(LDFLAGS)
