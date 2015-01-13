@@ -27,9 +27,9 @@ script:
  - make
  - make check
 after_success:
-  - cp ../src/* ./src/
-  - cp ../src/details/* ./src/details/
-  - cp ../src/httpserver/* ./src/httpserver/
+  - cp -R ../src/* ./src/
+  - cp -R ../src/details/* ./src/details/
+  - cp -R ../src/httpserver/* ./src/httpserver/
   - if [ $DEBUG = "debug" ]; then ../ci-report-coverage; fi
 matrix:
   exclude:
