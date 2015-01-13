@@ -3,7 +3,7 @@
 export EXCLUDE_COVERAGE="--exclude .libs"
 
 gcov -v
-gcovr -r .
+gcovr -r ../
 
 coveralls $EXCLUDE_COVERAGE --gcov-options '\-lp' --dump coveralls.json
 
