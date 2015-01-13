@@ -29,6 +29,7 @@ AC_INIT([libhttpserver], libhttpserver_PKG_VERSION, [electrictwister2000@gmail.c
 AM_INIT_AUTOMAKE([subdir-objects])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIR([m4])
+AC_CANONICAL_HOST
 
 OLD_CXXFLAGS=$CXXFLAGS
 LT_INIT
@@ -119,6 +120,12 @@ AC_ARG_ENABLE([debug],
     [debugit="$enableval"],
     [debugit=no])
 AC_MSG_RESULT([$debugit])
+
+case $host_os in
+    darwin* )
+        debugit="no"
+        ;;
+esac
 
 AM_CONDITIONAL([COND_GCOV],[test x"$debugit" = x"yes"])
 
