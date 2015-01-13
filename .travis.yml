@@ -23,7 +23,7 @@ script:
  - make
  - make check
 after_success:
-  - if [ $DEBUG = "debug" ]; then ./ci-report-coverage; fi
+  - if [ $DEBUG = "debug" ]; then ../ci-report-coverage; fi
 matrix:
   exclude:
     - compiler: clang

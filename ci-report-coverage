@@ -7,6 +7,6 @@ gcovr -r .
 
 coveralls $EXCLUDE_COVERAGE --gcov-options '\-lp' --dump coveralls.json
 
-./coveralls-debug
+../coveralls-debug
 
 coveralls $EXCLUDE_COVERAGE --gcov-options '\-lp'
