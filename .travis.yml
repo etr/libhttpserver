@@ -24,15 +24,8 @@ script:
  - mkdir build
  - cd build
  - if [ $DEBUG = "debug" ]; then ../configure --enable-debug; else ../configure; fi
- - make
- - make check
+ - if [ $DEBUG = "debug" ]; then make check; else make; make check; fi
 after_success:
-  - cp -R ../src/* ./src/
-  - cp -R ../src/details/* ./src/details/
-  - cp -R ../src/httpserver/* ./src/httpserver/
-  - cp -R ../test/* ./test/
-  - cp -R ../test/integ/* ./test/integ/
-  - cp -R ../test/unit/* ./test/unit/
   - if [ $DEBUG = "debug" ]; then ../ci-report-coverage; fi
 matrix:
   exclude:

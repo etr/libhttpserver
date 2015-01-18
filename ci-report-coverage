@@ -3,5 +3,15 @@
 export EXCLUDE_COVERAGE="--exclude .libs"
 
 find ../ -name *.gcda
+
+echo "Copying files to the correct locations for correct gcov analysis"
+cp -R ../src/* ./src/
+cp -R ../src/details/* ./src/details/
+cp -R ../src/httpserver/* ./src/httpserver/
+cp -R ./src/.libs/*.gcda ./src/
+cp -R ../test/* ./test/
+cp -R ../test/integ/* ./test/integ/
+cp -R ../test/unit/* ./test/unit/
+
 echo "Sending coveralls json report"
 coveralls $EXCLUDE_COVERAGE --gcov-options '\-lp'
