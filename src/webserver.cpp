@@ -534,12 +534,6 @@ bool webserver::start(bool blocking)
 
     iov.push_back(gen(MHD_OPTION_END, 0, NULL ));
 
-    struct MHD_OptionItem ops[iov.size()];
-    for(unsigned int i = 0; i < iov.size(); i++)
-    {
-        ops[i] = iov[i];
-    }
-
     int start_conf = start_method;
     if(use_ssl)
         start_conf |= MHD_USE_SSL;
@@ -563,7 +557,7 @@ bool webserver::start(bool blocking)
             (
                     start_conf, this->port, &policy_callback, this,
                     &answer_to_connection, this, MHD_OPTION_ARRAY,
-                    ops, MHD_OPTION_END
+                    &iov[0], MHD_OPTION_END
             );
             if(NULL == daemon)
             {
@@ -595,7 +589,7 @@ bool webserver::start(bool blocking)
         (
                 start_conf, this->port, &policy_callback, this,
                 &answer_to_connection, this, MHD_OPTION_ARRAY,
-                ops, MHD_OPTION_END
+                &iov[0], MHD_OPTION_END
         );
         if(NULL == daemon)
         {
