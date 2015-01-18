@@ -23,8 +23,9 @@ script:
  - ./bootstrap
  - mkdir build
  - cd build
- - if [ $DEBUG = "debug" ]; then ../configure --enable-debug; else ../configure; fi
- - if [ $DEBUG = "debug" ]; then make check; else make; make check; fi
+ - if [ $DEBUG = "debug" ]; then ../configure --enable-debug --disable-shared; else ../configure; fi
+ - make
+ - make check
 after_success:
   - if [ $DEBUG = "debug" ]; then ../ci-report-coverage; fi
 matrix:
