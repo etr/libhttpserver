@@ -29,4 +29,10 @@ http_utils_SOURCES = unit/http_utils_test.cpp
 noinst_HEADERS = littletest.hpp
 AM_CXXFLAGS += -lcurl -Wall -fPIC
 
+if COND_GCOV
+AM_CFLAGS += -O0 --coverage
+AM_CXXFLAGS += -O0 --coverage
+AM_LDFLAGS += -O0 --coverage -lgcov
+endif
+
 TESTS = $(check_PROGRAMS)
