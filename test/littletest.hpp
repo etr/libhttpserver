@@ -52,8 +52,6 @@
         littletest::auto_test_runner((*__lt_autorun_it__)); \
     int __lt_result__ = littletest::auto_test_runner();
 
-#define LT_TEST(__lt_name__) __lt_name__ ## _obj
-
 #define LT_CREATE_RUNNER(__lt_suite_name__, __lt_runner_name__) \
     std::cout << "** Initializing Runner \"" << #__lt_runner_name__ << "\" **" << std::endl; \
     littletest::test_runner __lt_runner_name__
@@ -70,9 +68,9 @@
 #define LT_CHECKPOINT() __lt_tr__->set_checkpoint(__FILE__, __LINE__)
 
 #define LT_BEGIN_TEST(__lt_suite_name__, __lt_test_name__) \
-    struct __lt_test_name__ : public __lt_suite_name__, littletest::test<__lt_test_name__> \
+    struct __lt_test_name__ ## _class: public __lt_suite_name__, littletest::test<__lt_test_name__ ## _class> \
     { \
-            __lt_test_name__() \
+            __lt_test_name__ ## _class() \
             { \
                 __lt_name__ = #__lt_test_name__; \
                 littletest::auto_test_vector.push_back(this); \
@@ -83,7 +81,7 @@
 #define LT_END_TEST(__lt_test_name__) \
             } \
     }; \
-    __lt_test_name__ __lt_test_name__ ## _obj; \
+    __lt_test_name__ ## _class __lt_test_name__; \
 
 #define LT_BEGIN_AUTO_TEST(__lt_suite_name__, __lt_test_name__) LT_BEGIN_TEST(__lt_suite_name__, __lt_test_name__)
 
@@ -348,7 +346,7 @@ class test_base;
 
 std::vector<test_base*> auto_test_vector;
 
-struct test_runner
+class test_runner
 {
     public:
         test_runner() :
@@ -378,6 +376,12 @@ struct test_runner
         }
 
         template <class test_impl>
+        test_runner& operator()(test_impl& t)
+        {
+            return run(&t);
+        }
+
+        template <class test_impl>
         test_runner& operator()(test_impl* t)
         {
             return run(t);
@@ -403,7 +407,7 @@ struct test_runner
             std::cout << (failures_counter + success_counter) << " checks" << std::endl;
             std::cout << "-> " << success_counter << " successes" << std::endl;
             std::cout << "-> " << failures_counter << " failures" << std::endl;
-            std::cout << "Total run time: " << total_time << std::endl;
+            std::cout << "Total run time: " << total_time << " ms"<< std::endl;
             std::cout << "Total time spent in tests: " << good_time_total << " ms" << std::endl;
             std::cout << "Average set up time: " << (total_set_up_time / test_counter) << " ms" << std::endl;
             std::cout << "Average tear down time: " << (total_tear_down_time / test_counter) << " ms" << std::endl;
@@ -553,7 +557,7 @@ class test : public test_base
 
             tr->add_good_time(test_duration);
 
-            std::cout << "- Time spent during \"" << static_cast<test_impl* >(this)->__lt_name__ << "\": " << test_duration << std::endl;
+            std::cout << "- Time spent during \"" << static_cast<test_impl* >(this)->__lt_name__ << "\": " << test_duration << " ms"<< std::endl;
 
             try
             {
@@ -579,7 +583,7 @@ class test : public test_base
         test() { }
         test(const test<test_impl>& t) { }
 
-        friend struct test_runner;
+        friend class test_runner;
 };
 
 };
