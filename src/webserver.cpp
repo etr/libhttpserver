@@ -357,11 +357,11 @@ MHD_socket create_socket (int domain, int type, int protocol)
 {
     int sock_cloexec = SOCK_CLOEXEC;
     int ctype = SOCK_STREAM | sock_cloexec;
-	
+
 	/* use SOCK_STREAM rather than ai_socktype: some getaddrinfo
     * implementations do not set ai_socktype, e.g. RHL6.2. */
     MHD_socket fd = socket(domain, ctype, protocol);
-	
+
 #ifdef _WINDOWS
 	if (fd == INVALID_SOCKET)
 #else
@@ -521,7 +521,7 @@ bool webserver::start(bool blocking)
         }
 #ifdef _WINDOWS
 		unsigned long ioarg = 1;
-        ioctlsocket(bind_socket, FIONBIO, &ioarg); 
+        ioctlsocket(bind_socket, FIONBIO, &ioarg);
 #else
         int flags = fcntl (bind_socket, F_GETFL);
         flags |= O_NONBLOCK;
@@ -1132,7 +1132,10 @@ int webserver::finalize_answer(
         try
         {
             if(hrm->is_allowed(method))
+            {
                 ((hrm)->*(mr->callback))(*mr->dhr, &dhrs);
+                if (dhrs == 0x0) internal_error_page(&dhrs, mr);
+            }
             else
             {
                 method_not_allowed_page(&dhrs, mr);
