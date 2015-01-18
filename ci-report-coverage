@@ -3,10 +3,15 @@
 export EXCLUDE_COVERAGE="--exclude .libs"
 
 gcov -v
+
+echo "Running gcovr"
 gcovr -r .
 
+echo "Creating coveralls json report"
 coveralls $EXCLUDE_COVERAGE --gcov-options '\-lp' --dump coveralls.json
 
+echo "Analyzing coveralls report"
 ../coveralls-debug
 
+echo "Sending coveralls json report"
 coveralls $EXCLUDE_COVERAGE --gcov-options '\-lp'
