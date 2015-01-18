@@ -26,9 +26,9 @@ nobase_include_HEADERS = httpserver.hpp httpserver/create_webserver.hpp httpserv
 AM_CXXFLAGS += -fPIC -Wall
 
 if COND_GCOV
-AM_CFLAGS += -O0 --coverage
-AM_CXXFLAGS += -O0 --coverage
-AM_LDFLAGS += -O0 --coverage -lgcov
+AM_CFLAGS += -O0 --coverage --no-inline
+AM_CXXFLAGS += -O0 --coverage --no-inline
+AM_LDFLAGS += -O0 --coverage -lgcov --no-inline
 endif
 
 libhttpserver_la_LIBADD = -lmicrohttpd

@@ -30,9 +30,9 @@ noinst_HEADERS = littletest.hpp
 AM_CXXFLAGS += -lcurl -Wall -fPIC
 
 if COND_GCOV
-AM_CFLAGS += -O0 --coverage
-AM_CXXFLAGS += -O0 --coverage
-AM_LDFLAGS += -O0 --coverage -lgcov
+AM_CFLAGS += -O0 --coverage --no-inline
+AM_CXXFLAGS += -O0 --coverage --no-inline
+AM_LDFLAGS += -O0 --coverage -lgcov --no-inline
 endif
 
 TESTS = $(check_PROGRAMS)
