@@ -121,29 +121,31 @@ AC_ARG_ENABLE([debug],
     [debugit=no])
 AC_MSG_RESULT([$debugit])
 
-case $host_os in
-    darwin* )
-        debugit="no"
-        ;;
-esac
-
-AM_CONDITIONAL([COND_GCOV],[test x"$debugit" = x"yes"])
-
 AM_LDFLAGS="-lstdc++"
 
 if test x"$debugit" = x"yes"; then
-    AC_CHECK_PROG(GCOV, gcov, gcov)
+    case $host_os in
+        darwin* )
+            echo "Coverage not supported on OSX"
+            cond_gcov="no"
+            ;;
+        *)
+            AC_CHECK_PROG(GCOV, gcov, gcov)
+            cond_gcov="yes"
+            ;;
+    esac
 
     AC_DEFINE([DEBUG],[],[Debug Mode])
     AM_CXXFLAGS="$AM_CXXFLAGS -DDEBUG -g -Wall -Wno-uninitialized -O0"
     AM_CFLAGS="$AM_CXXFLAGS -DDEBUG -g -Wall -Wno-uninitialized -O0"
-
-    AC_SUBST(GCOV)
 else
     AC_DEFINE([NDEBUG],[],[No-debug Mode])
     AM_CXXFLAGS="$AM_CXXFLAGS -O3"
     AM_CFLAGS="$AM_CXXFLAGS -O3"
 fi
+
+AM_CONDITIONAL([COND_GCOV],[test x"$cond_gcov" = x"yes"])
+AC_SUBST(COND_GCOV)
 
 if test x"have_gnutls" = x"yes"; then
     AM_CXXFLAGS="$AM_CXXFLAGS -DHAVE_GNUTLS"
@@ -187,7 +189,6 @@ AC_SUBST(LIBS)
 AC_SUBST(LDFLAGS)
 AC_SUBST(EXT_LIB_PATH)
 AC_SUBST(EXT_LIBS)
-AC_SUBST(COND_GCOV)
 
 AC_OUTPUT(
       libhttpserver.pc
