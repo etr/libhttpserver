@@ -3,4 +3,4 @@
 export EXCLUDE_COVERAGE="--exclude .libs"
 
 echo "Sending coveralls json report"
-coveralls $EXCLUDE_COVERAGE --gcov-options '\-lp' -b .
+coveralls $EXCLUDE_COVERAGE --gcov-options '\-lp' -b ./src
