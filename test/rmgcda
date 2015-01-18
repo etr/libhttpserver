@@ -1,4 +1,0 @@
-#!/bin/sh
-
-rm -f *.gcov *.gcda
-exit 0

@@ -29,8 +29,4 @@ http_utils_SOURCES = unit/http_utils_test.cpp
 noinst_HEADERS = littletest.hpp
 AM_CXXFLAGS += -lcurl -Wall -fPIC
 
-if COND_GCOV
-TESTS = rmgcda $(check_PROGRAMS) gcov
-else
 TESTS = $(check_PROGRAMS)
-endif
