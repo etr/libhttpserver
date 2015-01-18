@@ -27,6 +27,7 @@ script:
  - make
  - make check
 after_success:
+  - cp src/.libs/*.gcda ./src/
   - cp -R ../src/* ./src/
   - cp -R ../src/details/* ./src/details/
   - cp -R ../src/httpserver/* ./src/httpserver/
