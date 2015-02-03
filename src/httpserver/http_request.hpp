@@ -357,7 +357,7 @@ class http_request
                 int nonce_timeout, bool& reload_nonce
         ) const;
 
-		friend std::ostream &operator<< (std::ostream &os, const http_request &r);    
+		friend std::ostream &operator<< (std::ostream &os, const http_request &r);
     private:
         /**
          * Default constructor of the class. It is a specific responsibility of apis to initialize this type of objects.
@@ -572,7 +572,7 @@ class http_request
         {
             this->user = user;
         }
-        void set_digested_user(const std::string& user)
+        void set_digested_user(const std::string& digested_user)
         {
             this->digested_user = digested_user;
         }
