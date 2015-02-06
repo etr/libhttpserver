@@ -149,6 +149,7 @@ involves running
 > ../configure  
 > make  
 > make install  
+> make doxygen-doc # if you want to build documentation
 
 Optional parameters to configure script
 ---------------------------------------
