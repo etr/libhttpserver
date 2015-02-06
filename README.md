@@ -149,7 +149,7 @@ involves running
 > ../configure  
 > make  
 > make install  
-> make doxygen-doc # if you want to build documentation
+> make doxygen-doc # if you want to build the code reference
 
 Optional parameters to configure script
 ---------------------------------------
