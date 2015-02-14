@@ -119,6 +119,53 @@ namespace details
                 }
         };
 
+        template<typename RET_TYPE=void>
+        class functor_zero
+        {
+            private:
+                typedef RET_TYPE (*static_function)();
+                typedef RET_TYPE (*void_static_function)();
+                typedef RET_TYPE (generic_class::*generic_mem)();
+                typedef binder<generic_mem,
+                        static_function, void_static_function> binder_type;
+                binder_type _binder;
+
+                RET_TYPE exec_static() const
+                {
+                    return (*(_binder.get_static_func()))();
+                }
+
+                functor_zero& operator=(const functor_zero&)
+                {
+                    return *this;
+                }
+            public:
+                typedef functor_zero type;
+                functor_zero() { }
+
+                template <typename X, typename Y>
+                functor_zero(Y* pmem, RET_TYPE(X::*func)()):
+                    _binder(reinterpret_cast<X*>(pmem), func)
+                {
+                }
+
+                template <typename X, typename Y>
+                functor_zero(Y* pmem, RET_TYPE(X::*func)() const ):
+                    _binder(reinterpret_cast<X*>(pmem), func)
+                {
+                }
+
+                functor_zero(RET_TYPE(*func)() ):
+                    _binder(this, &functor_zero::exec_static, func)
+                {
+                }
+
+                RET_TYPE operator() () const
+                {
+                    return (_binder.exec()->*(_binder.get_mem_ptr()))();
+                }
+        };
+
         template<typename PAR1, typename RET_TYPE=void>
         class functor_one
         {
@@ -145,6 +192,12 @@ namespace details
 
                 template <typename X, typename Y>
                 functor_one(Y* pmem, RET_TYPE(X::*func)(PAR1 p1) ):
+                    _binder(reinterpret_cast<X*>(pmem), func)
+                {
+                }
+
+                template <typename X, typename Y>
+                functor_one(Y* pmem, RET_TYPE(X::*func)(PAR1 p1) const ):
                     _binder(reinterpret_cast<X*>(pmem), func)
                 {
                 }
@@ -190,10 +243,17 @@ namespace details
                 }
 
                 template <typename X, typename Y>
+                functor_two(Y* pmem, RET_TYPE(X::*func)(PAR1 p1, PAR2 p2) const ):
+                    _binder(reinterpret_cast<X*>(pmem), func)
+                {
+                }
+
+                template <typename X, typename Y>
                 functor_two(Y* pmem, RET_TYPE(X::*func)(PAR1 p1, PAR2 p2) ):
                     _binder(reinterpret_cast<X*>(pmem), func)
                 {
                 }
+
                 functor_two(RET_TYPE(*func)(PAR1 p1, PAR2 p2) ):
                     _binder(this, &functor_two::exec_static, func)
                 {
@@ -202,6 +262,110 @@ namespace details
                 RET_TYPE operator() (PAR1 p1, PAR2 p2) const
                 {
                     return (_binder.exec()->*(_binder.get_mem_ptr()))(p1, p2);
+                }
+        };
+
+        template<typename PAR1, typename PAR2, typename PAR3, typename RET_TYPE=void>
+        class functor_three
+        {
+            private:
+                typedef RET_TYPE (*static_function)(PAR1 p1, PAR2 p2, PAR3 p3);
+                typedef RET_TYPE (*void_static_function)(PAR1 p1, PAR2 p2, PAR3 p3);
+
+                typedef RET_TYPE
+                    (generic_class::*generic_mem)(PAR1 p1, PAR2 p2, PAR3 p3);
+
+                typedef binder<
+                    generic_mem, static_function, void_static_function
+                > binder_type;
+
+                binder_type _binder;
+
+                RET_TYPE exec_static(PAR1 p1, PAR2 p2, PAR3 p3) const
+                {
+                    return (*(_binder.get_static_func()))(p1, p2, p3);
+                }
+            public:
+                typedef functor_three type;
+                functor_three() { }
+
+                functor_three(const functor_three& o):
+                    _binder(o._binder)
+                {
+                }
+
+                template <typename X, typename Y>
+                functor_three(Y* pmem, RET_TYPE(X::*func)(PAR1 p1, PAR2 p2, PAR3 p3) const ):
+                    _binder(reinterpret_cast<X*>(pmem), func)
+                {
+                }
+
+                template <typename X, typename Y>
+                functor_three(Y* pmem, RET_TYPE(X::*func)(PAR1 p1, PAR2 p2, PAR3 p3) ):
+                    _binder(reinterpret_cast<X*>(pmem), func)
+                {
+                }
+
+                functor_three(RET_TYPE(*func)(PAR1 p1, PAR2 p2, PAR3 p3) ):
+                    _binder(this, &functor_three::exec_static, func)
+                {
+                }
+
+                RET_TYPE operator() (PAR1 p1, PAR2 p2, PAR3 p3) const
+                {
+                    return (_binder.exec()->*(_binder.get_mem_ptr()))(p1, p2, p3);
+                }
+        };
+
+        template<typename PAR1, typename PAR2, typename PAR3, typename PAR4, typename RET_TYPE=void>
+        class functor_four
+        {
+            private:
+                typedef RET_TYPE (*static_function)(PAR1 p1, PAR2 p2, PAR3 p3, PAR4 p4);
+                typedef RET_TYPE (*void_static_function)(PAR1 p1, PAR2 p2, PAR3 p3, PAR4 p4);
+
+                typedef RET_TYPE
+                    (generic_class::*generic_mem)(PAR1 p1, PAR2 p2, PAR3 p3, PAR4 p4);
+
+                typedef binder<
+                    generic_mem, static_function, void_static_function
+                > binder_type;
+
+                binder_type _binder;
+
+                RET_TYPE exec_static(PAR1 p1, PAR2 p2, PAR3 p3, PAR4 p4) const
+                {
+                    return (*(_binder.get_static_func()))(p1, p2, p3, p4);
+                }
+            public:
+                typedef functor_four type;
+                functor_four() { }
+
+                functor_four(const functor_four& o):
+                    _binder(o._binder)
+                {
+                }
+
+                template <typename X, typename Y>
+                functor_four(Y* pmem, RET_TYPE(X::*func)(PAR1 p1, PAR2 p2, PAR3 p3, PAR4 p4) const ):
+                    _binder(reinterpret_cast<X*>(pmem), func)
+                {
+                }
+
+                template <typename X, typename Y>
+                functor_four(Y* pmem, RET_TYPE(X::*func)(PAR1 p1, PAR2 p2, PAR3 p3, PAR4 p4) ):
+                    _binder(reinterpret_cast<X*>(pmem), func)
+                {
+                }
+
+                functor_four(RET_TYPE(*func)(PAR1 p1, PAR2 p2, PAR3 p3, PAR4 p4) ):
+                    _binder(this, &functor_four::exec_static, func)
+                {
+                }
+
+                RET_TYPE operator() (PAR1 p1, PAR2 p2, PAR3 p3, PAR4 p4) const
+                {
+                    return (_binder.exec()->*(_binder.get_mem_ptr()))(p1, p2, p3, p4);
                 }
         };
     }

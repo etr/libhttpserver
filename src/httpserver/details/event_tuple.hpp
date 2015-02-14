@@ -26,6 +26,7 @@
 #define _EVENT_TUPLE_HPP_
 
 #include "httpserver/event_supplier.hpp"
+#include "httpserver/binders.hpp"
 
 namespace httpserver {
 
@@ -45,11 +46,9 @@ namespace details
                             MHD_socket*
                     );
 
-            typedef struct timeval(*get_timeout_ptr)();
-            typedef void(*dispatch_events_ptr)();
-            supply_events_ptr supply_events;
-            get_timeout_ptr get_timeout;
-            dispatch_events_ptr dispatch_events;
+            binders::functor_four<fd_set*, fd_set*, fd_set*, MHD_socket*, void> supply_events;
+            binders::functor_zero<struct timeval> get_timeout;
+            binders::functor_zero<void> dispatch_events;
 
             event_tuple();
 
@@ -57,11 +56,9 @@ namespace details
         public:
             template<typename T>
             event_tuple(event_supplier<T>* es):
-                supply_events(std::bind1st(std::mem_fun(&T::supply_events),es)),
-                get_timeout(std::bind1st(std::mem_fun(&T::get_timeout), es)),
-                dispatch_events(std::bind1st(
-                            std::mem_fun(&T::dispatch_events), es)
-                )
+                supply_events(binders::functor_four<fd_set*, fd_set*, fd_set*, MHD_socket*, void>(es, &T::supply_events)),
+                get_timeout(binders::functor_zero<struct timeval>(es, &T::get_timeout)),
+                dispatch_events(binders::functor_zero<void>(es, &T::dispatch_events))
             {
             }
     };

@@ -175,7 +175,7 @@ class webserver
                 event_supplier<T>* ev_supplier
         )
         {
-            register_event_supplier(id, details::event_tuple(&ev_supplier));
+            register_event_supplier(id, details::event_tuple(ev_supplier));
         }
 
         void remove_event_supplier(const std::string& id);
