@@ -224,9 +224,11 @@ void http_utils::standardize_url(const std::string& url, std::string& result)
 {
     std::string n_url;
     string_utilities::regex_replace(url, "(\\/)+", "/", n_url);
-    if(n_url[n_url.size() - 1] == '/')
+    std::string::size_type n_url_length = n_url.length();
+
+    if (n_url_length > 1 && n_url[n_url_length - 1] == '/')
     {
-        result = n_url.substr(0, n_url.size() -1);
+        result = n_url.substr(0, n_url_length - 1);
     }
     else
     {
@@ -545,7 +547,7 @@ char* load_file (const char *filename)
 void dump_header_map(std::ostream &os, const std::string &prefix,
                      const std::map<std::string,std::string,header_comparator> &map)
 {
-    std::map<std::string,std::string,header_comparator>::const_iterator it = map.begin(); 
+    std::map<std::string,std::string,header_comparator>::const_iterator it = map.begin();
     std::map<std::string,std::string,header_comparator>::const_iterator end = map.end();
 
     if (map.size()) {
@@ -560,7 +562,7 @@ void dump_header_map(std::ostream &os, const std::string &prefix,
 void dump_arg_map(std::ostream &os, const std::string &prefix,
                   const std::map<std::string,std::string,arg_comparator> &map)
 {
-    std::map<std::string,std::string,arg_comparator>::const_iterator it = map.begin(); 
+    std::map<std::string,std::string,arg_comparator>::const_iterator it = map.begin();
     std::map<std::string,std::string,arg_comparator>::const_iterator end = map.end();
 
     if (map.size()) {
@@ -571,7 +573,7 @@ void dump_arg_map(std::ostream &os, const std::string &prefix,
         os << "]" << std::endl;
     }
 }
-    
-    
+
+
 };
 };
