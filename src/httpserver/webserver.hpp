@@ -95,19 +95,20 @@ class webserver
         **/
         bool is_running();
         /**
-         * Method used to registrate a resource to the webserver.
+         * Method used to register a resource with the webserver.
          * @param resource The url pointing to the resource. This url could be also parametrized in the form /path/to/url/{par1}/and/{par2}
          *                 or a regular expression.
          * @param http_resource http_resource pointer to register.
          * @param family boolean indicating whether the resource is registered for the endpoint and its child or not.
+         * @return true if the resource was registered
         **/
         template <typename T>
-        void register_resource(const std::string& resource,
+        bool register_resource(const std::string& resource,
                 http_resource<T>* res, bool family = false
         )
         {
             details::http_resource_mirror hrm(res);
-            register_resource(resource, hrm, family);
+            return register_resource(resource, hrm, family);
         }
 
         void unregister_resource(const std::string& resource);
@@ -201,8 +202,8 @@ class webserver
         validator_ptr validator;
         unescaper_ptr unescaper;
         const struct sockaddr* bind_address;
-		/* Changed type to MHD_socket because this type will always reflect the
-		platform's actual socket type (e.g. SOCKET on windows, int on unixes)*/
+        /* Changed type to MHD_socket because this type will always reflect the
+        platform's actual socket type (e.g. SOCKET on windows, int on unixes)*/
         MHD_socket bind_socket;
         const int max_thread_stack_size;
         const bool use_ssl;
