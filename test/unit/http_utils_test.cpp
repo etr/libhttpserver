@@ -47,6 +47,28 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, unescape)
     LT_CHECK_EQ(expected_size, 3);
 LT_END_AUTO_TEST(unescape)
 
+LT_BEGIN_AUTO_TEST(http_utils_suite, standardize_url)
+    string url = "/", result;
+    http::http_utils::standardize_url(url, result);
+    LT_CHECK_EQ(result, "/");
+
+    url = "/abc/", result = "";
+    http::http_utils::standardize_url(url, result);
+    LT_CHECK_EQ(result, "/abc");
+
+    url = "/abc", result = "";
+    http::http_utils::standardize_url(url, result);
+    LT_CHECK_EQ(result, "/abc");
+
+    url = "/abc/pqr/", result = "";
+    http::http_utils::standardize_url(url, result);
+    LT_CHECK_EQ(result, "/abc/pqr");
+
+    url = "/abc/pqr", result = "";
+    http::http_utils::standardize_url(url, result);
+    LT_CHECK_EQ(result, "/abc/pqr");
+LT_END_AUTO_TEST(standardize_url)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()
