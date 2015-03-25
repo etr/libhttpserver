@@ -71,18 +71,8 @@ esac
 
 # Checks for header files.
 AC_HEADER_STDC
-AC_CHECK_HEADER([string],[],[AC_MSG_ERROR("C++ strings not found")])
-AC_CHECK_HEADER([vector],[],[AC_MSG_ERROR("C++ vector not found")])
-AC_CHECK_HEADER([map],[],[AC_MSG_ERROR("C++ map not found")])
-AC_CHECK_HEADER([algorithm],[],[AC_MSG_ERROR("C++ algorithm not found")])
-AC_CHECK_HEADER([istream],[],[AC_MSG_ERROR("C++ istream not found")])
-AC_CHECK_HEADER([sstream],[],[AC_MSG_ERROR("C++ sstream not found")])
-AC_CHECK_HEADER([iostream],[],[AC_MSG_ERROR("C++ iostream not found")])
 AC_CHECK_HEADER([stdint.h],[],[AC_MSG_ERROR("stdint.h not found")])
 AC_CHECK_HEADER([inttypes.h],[],[AC_MSG_ERROR("inttypes.h not found")])
-AC_CHECK_HEADER([stdlib.h],[],[AC_MSG_ERROR("stdlib.h not found")])
-AC_CHECK_HEADER([string.h],[],[AC_MSG_ERROR("cstring not found")])
-AC_CHECK_HEADER([stdio.h],[],[AC_MSG_ERROR("cstdio not found")])
 AC_CHECK_HEADER([errno.h],[],[AC_MSG_ERROR("errno.h not found")])
 AC_CHECK_HEADER([unistd.h],[],[AC_MSG_ERROR("unistd.h not found")])
 AC_CHECK_HEADER([ctype.h],[],[AC_MSG_ERROR("cctype not found")])
@@ -152,22 +142,6 @@ if test x"have_gnutls" = x"yes"; then
     AM_CFLAGS="$AM_CXXFLAGS -DHAVE_GNUTLS"
 fi
 
-AC_MSG_CHECKING([whether to use c++0x std classes])
-AC_ARG_ENABLE([cpp11],
-              [AS_HELP_STRING([--enable-cpp11],
-              [enable c++11 std classes (def=no)])],
-              [cpp11="$enableval"],
-              [cpp11=no])
-AC_MSG_RESULT([$cpp11])
-
-if test x"$cpp11" = x"yes"; then
-    AC_DEFINE([CPP11],[],[c++11 Mode])
-    AM_CXXFLAGS="$AM_CXXFLAGS -DUSE_CPP_11 --std=c++11"
-    AM_CFLAGS="$AM_CXXFLAGS -DUSE_CPP_11 --std=c++11"
-else
-    AC_DEFINE([NCPP11],[],[standard Mode])
-fi
-
 DX_HTML_FEATURE(ON)
 DX_CHM_FEATURE(OFF)
 DX_CHI_FEATURE(OFF)
@@ -212,5 +186,4 @@ AC_MSG_NOTICE([Configuration Summary:
   License         :  LGPL only
   Debug	          :  ${debugit}
   TLS Enabled     :  ${have_gnutls}
-  C++11           :  ${cpp11}
 ])
