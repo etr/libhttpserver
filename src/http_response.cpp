@@ -207,7 +207,7 @@ namespace details
 
 ssize_t cb(void* cls, uint64_t pos, char* buf, size_t max)
 {
-    ssize_t val = static_cast<http_response*>(cls)->cycle_callback(buf);
+    ssize_t val = static_cast<http_response*>(cls)->cycle_callback(buf, max);
     if(val == -1)
         static_cast<http_response*>(cls)->completed = true;
     return val;
