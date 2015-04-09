@@ -347,7 +347,7 @@ void dump_header_map(std::ostream &os, const std::string &prefix,
 **/
 void dump_arg_map(std::ostream &os, const std::string &prefix,
                      const std::map<std::string,std::string,arg_comparator> &map);
-    
+
 /**
  * Process escape sequences ('+'=space, %HH) Updates val in place; the
  * result should be UTF-8 encoded and cannot be larger than the input.
@@ -358,8 +358,6 @@ void dump_arg_map(std::ostream &os, const std::string &prefix,
  *  shorter afterwards due to elimination of escape sequences)
  */
 size_t http_unescape (char *val);
-
-const struct sockaddr str_to_ip(const std::string& src);
 
 char* load_file (const char *filename);
 
