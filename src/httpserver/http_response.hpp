@@ -62,7 +62,7 @@ class bad_caching_attempt: public std::exception
     }
 };
 
-typedef ssize_t(*cycle_callback_ptr)(const std::string&);
+typedef ssize_t(*cycle_callback_ptr)(char*, size_t);
 
 /**
  * Class representing an abstraction for an Http Response. It is used from classes using these apis to send information through http protocol.
