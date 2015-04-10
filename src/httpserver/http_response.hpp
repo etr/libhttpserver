@@ -49,6 +49,7 @@ namespace details
 {
     struct http_response_ptr;
     ssize_t cb(void*, uint64_t, char*, size_t);
+    void free_cb(void*);
     struct cache_entry;
 };
 
@@ -314,6 +315,7 @@ class http_response
         friend class http_response_builder;
         friend void clone_response(const http_response& hr, http_response** dhr);
         friend ssize_t details::cb(void* cls, uint64_t pos, char* buf, size_t max);
+        friend void details::free_cb(void* cls);
     	friend std::ostream &operator<< (std::ostream &os, const http_response &r);    
     private:
         http_response& operator=(const http_response& b);

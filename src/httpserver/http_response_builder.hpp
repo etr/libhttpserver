@@ -145,7 +145,7 @@ class http_response_builder
             _keepalive_msg(b._keepalive_msg),
             _send_topic(b._send_topic),
             // Is copying the pointer a good idea?
-            // (since it is deleted in ~http_response)
+            // (since it is deleted in details::free_cb)
             _data_callback(b._data_callback),
             _ce(b._ce),
             _get_raw_response(b._get_raw_response),

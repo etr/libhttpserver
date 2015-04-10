@@ -70,7 +70,6 @@ http_response::~http_response()
 {
     if(ce != 0x0)
         webserver::unlock_cache_entry(ce);
-    delete data_callback;
 }
 
 size_t http_response::get_headers(std::map<std::string, std::string, header_comparator>& result) const
@@ -214,6 +213,11 @@ ssize_t cb(void* cls, uint64_t pos, char* buf, size_t max)
     return val;
 }
 
+void free_cb(void* cls)
+{
+    delete static_cast<http_response*>(cls)->data_callback;
+}
+
 }
 
 void http_response::get_raw_response_deferred(
@@ -227,7 +231,7 @@ void http_response::get_raw_response_deferred(
                 1024,
                 &details::cb,
                 this,
-                NULL
+                &details::free_cb
         );
     else
         static_cast<http_response*>(this)->get_raw_response(response, ws);
