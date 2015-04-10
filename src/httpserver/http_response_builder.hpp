@@ -93,6 +93,7 @@ class http_response_builder
             _keepalive_secs(-1),
             _keepalive_msg(""),
             _send_topic(""),
+            _data_callback(NULL),
             _ce(0x0),
             _get_raw_response(&http_response::get_raw_response_str),
             _decorate_response(&http_response::decorate_response_str),
@@ -120,6 +121,7 @@ class http_response_builder
             _keepalive_secs(-1),
             _keepalive_msg(""),
             _send_topic(""),
+            _data_callback(NULL),
             _ce(0x0),
             _get_raw_response(&http_response::get_raw_response_str),
             _decorate_response(&http_response::decorate_response_str),
@@ -142,6 +144,9 @@ class http_response_builder
             _keepalive_secs(b._keepalive_secs),
             _keepalive_msg(b._keepalive_msg),
             _send_topic(b._send_topic),
+            // Is copying the pointer a good idea?
+            // (since it is deleted in ~http_response)
+            _data_callback(b._data_callback),
             _ce(b._ce),
             _get_raw_response(b._get_raw_response),
             _decorate_response(b._decorate_response),
@@ -164,6 +169,7 @@ class http_response_builder
             _keepalive_secs = b._keepalive_secs;
             _keepalive_msg = b._keepalive_msg;
             _send_topic = b._send_topic;
+            _data_callback = b._data_callback;
             _ce = b._ce;
             _get_raw_response = b._get_raw_response;
             _decorate_response = b._decorate_response;
@@ -233,9 +239,9 @@ class http_response_builder
             return *this;
         }
 
-        http_response_builder& deferred_response(cycle_callback_ptr cycle_callback)
+        http_response_builder& deferred_response(data_callback* data_callback)
         {
-            _cycle_callback = cycle_callback;
+            _data_callback = data_callback;
             _get_raw_response = &http_response::get_raw_response_deferred;
             _decorate_response = &http_response::decorate_response_deferred;
             return *this;
@@ -276,7 +282,7 @@ class http_response_builder
         int _keepalive_secs;
         std::string _keepalive_msg;
         std::string _send_topic;
-        cycle_callback_ptr _cycle_callback;
+        data_callback* _data_callback;
         details::cache_entry* _ce;
 
         void (http_response::*_get_raw_response)(MHD_Response**, webserver*);

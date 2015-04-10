@@ -56,7 +56,7 @@ http_response::http_response(const http_response_builder& builder):
     ca(0x0),
     closure_data(0x0),
     ce(builder._ce),
-    cycle_callback(builder._cycle_callback),
+    data_callback(builder._data_callback),
     get_raw_response(this, builder._get_raw_response),
     decorate_response(this, builder._decorate_response),
     enqueue_response(this, builder._enqueue_response),
@@ -70,6 +70,7 @@ http_response::~http_response()
 {
     if(ce != 0x0)
         webserver::unlock_cache_entry(ce);
+    delete data_callback;
 }
 
 size_t http_response::get_headers(std::map<std::string, std::string, header_comparator>& result) const
@@ -207,7 +208,7 @@ namespace details
 
 ssize_t cb(void* cls, uint64_t pos, char* buf, size_t max)
 {
-    ssize_t val = static_cast<http_response*>(cls)->cycle_callback(buf, max);
+    ssize_t val = (*static_cast<http_response*>(cls)->data_callback)(buf, max);
     if(val == -1)
         static_cast<http_response*>(cls)->completed = true;
     return val;

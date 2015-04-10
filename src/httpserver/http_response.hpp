@@ -62,7 +62,23 @@ class bad_caching_attempt: public std::exception
     }
 };
 
-typedef ssize_t(*cycle_callback_ptr)(char*, size_t);
+/**
+ * Callback called to obtain data from a deferred_response
+**/
+class data_callback
+{
+public:
+    /**
+     * @param buf Buffer to copy data to
+     * @param max Maximum number of bytes allowed to be copied
+     * @return number of bytes copied, or
+     *         -1 for end of stream, or
+     *         -2 for end with error
+    **/
+    virtual ssize_t operator() (char* buf, size_t max) = 0;
+
+    virtual ~data_callback() {}
+};
 
 /**
  * Class representing an abstraction for an Http Response. It is used from classes using these apis to send information through http protocol.
@@ -97,7 +113,7 @@ class http_response
             ca(0x0),
             closure_data(0x0),
             ce(b.ce),
-            cycle_callback(b.cycle_callback),
+            data_callback(b.data_callback),
             get_raw_response(b.get_raw_response),
             decorate_response(b.decorate_response),
             enqueue_response(b.enqueue_response),
@@ -259,7 +275,7 @@ class http_response
         void(*ca)(void*);
         void* closure_data;
         details::cache_entry* ce;
-        cycle_callback_ptr cycle_callback;
+        data_callback* data_callback;
 
         const get_raw_response_t get_raw_response;
         const decorate_response_t decorate_response;
