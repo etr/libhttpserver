@@ -18,8 +18,19 @@
      USA
 */
 
+#if defined(__MINGW32__) || defined(__CYGWIN32__)
+#define _WINDOWS
+#undef _WIN32_WINNT
+#define _WIN32_WINNT 0x600
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#else
+#include <arpa/inet.h>
+#endif
+
 #include "littletest.hpp"
 #include "http_utils.hpp"
+
 #include <cstdio>
 
 using namespace httpserver;
@@ -68,6 +79,19 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, standardize_url)
     http::http_utils::standardize_url(url, result);
     LT_CHECK_EQ(result, "/abc/pqr");
 LT_END_AUTO_TEST(standardize_url)
+
+LT_BEGIN_AUTO_TEST(http_utils_suite, ip_to_str)
+    struct sockaddr_in ip4addr;
+
+    ip4addr.sin_family = AF_INET;
+    ip4addr.sin_port = htons(3490);
+    ip4addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+
+    string result = "";
+    http::get_ip_str((struct sockaddr *) &ip4addr, result);
+
+    LT_CHECK_EQ(result, "127.0.0.1");
+LT_END_AUTO_TEST(ip_to_str)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

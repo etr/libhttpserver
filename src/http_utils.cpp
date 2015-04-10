@@ -28,7 +28,8 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #else
-#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <netdb.h>
 #endif
 #include <sstream>
 #include <iomanip>
@@ -244,36 +245,8 @@ void get_ip_str(
 {
     if(sa)
     {
-        char to_ret[INET6_ADDRSTRLEN] = { '\0' };
-        switch(sa->sa_family)
-        {
-            case AF_INET:
-                if(maxlen == 0)
-                    maxlen = INET_ADDRSTRLEN;
-
-                inet_ntop(AF_INET,
-                        &(((struct sockaddr_in *)sa)->sin_addr),
-                        to_ret,
-                        maxlen
-                );
-
-                break;
-
-            case AF_INET6:
-                if(maxlen == 0)
-                    maxlen = INET6_ADDRSTRLEN;
-
-                inet_ntop(AF_INET6,
-                        &(((struct sockaddr_in6 *)sa)->sin6_addr),
-                        to_ret,
-                        maxlen
-                );
-
-                break;
-            default:
-                strncpy(to_ret, "Unknown AF", 11);
-                return;
-        }
+        char to_ret[NI_MAXHOST];
+        getnameinfo(sa, sizeof (struct sockaddr), to_ret, NI_MAXHOST, NULL, 0, NI_NUMERICHOST);
         result = to_ret;
     }
 }
@@ -286,20 +259,6 @@ std::string get_ip_str_new(
     std::string to_ret;
     get_ip_str(sa, to_ret, maxlen);
     return to_ret;
-}
-
-const struct sockaddr str_to_ip(const std::string& src)
-{
-    struct sockaddr s;
-    if(src.find(":") != std::string::npos)
-    {
-        inet_pton(AF_INET6, src.c_str(), (void*) &s);
-    }
-    else
-    {
-        inet_pton(AF_INET, src.c_str(), (void*) &s);
-    }
-    return s;
 }
 
 short get_port(const struct sockaddr* sa)
