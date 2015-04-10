@@ -276,7 +276,7 @@ class http_response
         void(*ca)(void*);
         void* closure_data;
         details::cache_entry* ce;
-        data_callback* data_callback;
+        class data_callback* data_callback;
 
         const get_raw_response_t get_raw_response;
         const decorate_response_t decorate_response;
