@@ -5,9 +5,16 @@ Sebastiano Merlino <electrictwister2000@gmail.com> (maintainer)
 Dario Mazza <dariomzz@gmail.com>
 Andrea Nicotra <nicotra.andrea@gmail.com>
 Jeff Waller <truthset@gmail.com>
+Craig Minihan <craig@ripcordsoftware.com>
+Guo Xiao <guoxiao08@gmail.com>
+Philipp Claßen <philipp.classen@gmx.net>
+Vitaut Bajaryn <vitaut.bayaryn@gmail.com>
 
 - Support for building on MinGW/Cygwin systems
 Shane Peelar <lookatyouhacker@gmail.com>
+
+- Support for building on MaxOsX
+Jan Klimke <jan.klimke@hpi.uni-potsdam.de>
 
 - Example of SSL usage and operator<< on http_request and http_response
 Chris Love <cjlove@san.rr.com>
