@@ -1,3 +1,11 @@
+Wed Apr 15 01:40:11 2015 +0000
+	Support build on MacOsX
+	Improved support for CI on travis
+	Solved bug on event_supplier registering
+	Solved bug on standardize_url to avoid removing root
+	Change cycle_callback_ptr so that buffer can be modified
+	Moved to version 0.9.0
+
 Sun Jul 23 02:46:20 2014 +0100
 	Support for building on MinGW/Cygwin systems
 	min libmicrohttpd version moved to 0.9.37

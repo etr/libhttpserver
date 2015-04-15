@@ -1,3 +1,13 @@
+libhttpserver (0.9.0) unstable; urgency=low
+    * Support build on MacOsX
+    * Improved support for CI on travis
+    * Solved bug on event_supplier registering
+    * Solved bug on standardize_url to avoid removing root
+    * Change cycle_callback_ptr so that buffer can be modified
+    * Moved to version 0.9.0
+
+ -- Sebastiano Merlino <electrictwister2000@gmail.com> Wed, 15 Apr 2015 01:40:11 +0000
+
 libhttpserver (0.8.0) unstable; urgency=low
     * Support for building on MinGW/Cygwin systems
     * min libmicrohttpd version moved to 0.9.37
