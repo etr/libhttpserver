@@ -34,6 +34,9 @@ DISTCLEANFILES = redhat/SOURCES/* redhat/SPEC/* redhat/RPMS/* redhat/SRPMS/* red
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = libhttpserver.pc
 
+cmakemoduledir = $(datadir)/cmake/Modules
+cmakemodule_DATA = cmakemodule/FindLibHttpServer.cmake
+
 include $(top_srcdir)/aminclude.am
 
 # Update libtool, if needed.
