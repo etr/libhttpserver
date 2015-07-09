@@ -10,8 +10,7 @@ FORK="vozhyk-" # use "etr" for original version
 
 DESCRIPTION="C++ library for creating an embedded Rest HTTP server (and more)"
 HOMEPAGE="http://github.com/${FORK}/${PN}"
-#EGIT_REPO_URI="git://github.com/${FORK}/${PN}.git"
-EGIT_REPO_URI="/home/vozhyk/dev/cpp/${PN}"
+EGIT_REPO_URI="git://github.com/${FORK}/${PN}.git"
 
 LICENSE="LGPL-2.1"
 SLOT="0"
