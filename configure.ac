@@ -22,7 +22,7 @@
 AC_PREREQ(2.57)
 m4_define([libhttpserver_MAJOR_VERSION],[0])dnl
 m4_define([libhttpserver_MINOR_VERSION],[9])dnl
-m4_define([libhttpserver_REVISION],[0])dnl
+m4_define([libhttpserver_REVISION],[1])dnl
 m4_define([libhttpserver_PKG_VERSION],[libhttpserver_MAJOR_VERSION.libhttpserver_MINOR_VERSION.libhttpserver_REVISION])dnl
 m4_define([libhttpserver_LDF_VERSION],[libhttpserver_MAJOR_VERSION:libhttpserver_MINOR_VERSION:libhttpserver_REVISION])dnl
 AC_INIT([libhttpserver], libhttpserver_PKG_VERSION, [electrictwister2000@gmail.com])
@@ -39,6 +39,8 @@ AC_PROG_LN_S
 CXXFLAGS=$OLD_CXXFLAGS
 AC_LANG([C++])
 AC_SYS_LARGEFILE
+
+native_srcdir=$srcdir
 
 AC_MSG_CHECKING([whether it is possible to compile in the same directory])
 AC_ARG_ENABLE([same-directory-build],
@@ -58,6 +60,7 @@ case "$host" in
     *-mingw*)
 	    NETWORK_HEADER="winsock2.h"
 		REGEX_LIBS="-lregex -lpthread -no-undefined"
+        native_srcdir=$(cd $srcdir; pwd -W)
         ;;
     *-cygwin*)
 	    NETWORK_HEADER="winsock2.h"
@@ -85,7 +88,25 @@ AC_CHECK_HEADER([signal.h],[],[AC_MSG_ERROR("signal.h not found")])
 AC_CHECK_HEADER([gnutls/gnutls.h],[have_gnutls="yes"],[AC_MSG_WARN("gnutls/gnutls.h not found. TLS will be disabled"); have_gnutls="no"])
 
 # Checks for libmicrohttpd
-PKG_CHECK_MODULES([LIBMICROHTTPD],[libmicrohttpd >= 0.9.37],[],[AC_MSG_ERROR("libmicrohttpd not present or too old - install libmicrohttpd >= 0.9.37")])
+AC_CHECK_HEADER([microhttpd.h],
+    AC_CHECK_LIB([microhttpd], [MHD_get_fdset2],
+        [AC_MSG_CHECKING([for libmicrohttpd >= 0.9.37])
+            AC_COMPILE_IFELSE(
+                [AC_LANG_SOURCE([
+                    #include <microhttpd.h>
+                    #if (MHD_VERSION < 0x0093700)
+                    #error needs at least version 0.9.37
+                    #endif
+                    int main () { return 0; }
+                ])],
+            [],
+            [AC_MSG_ERROR("libmicrohttpd is too old - install libmicrohttpd >= 0.9.37")]
+            )
+        ],
+        [AC_MSG_ERROR(["libmicrohttpd not found"])]
+    ),
+    [AC_MSG_ERROR(["microhttpd.h not found"])]
+)
 
 CXXFLAGS="-DHTTPSERVER_COMPILATION -D_REENTRANT $LIBMICROHTTPD_CFLAGS $CXXFLAGS"
 LDFLAGS="$LIBMICROHTTPD_LIBS $REGEX_LIBS $LD_FLAGS"

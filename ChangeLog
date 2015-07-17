@@ -1,3 +1,6 @@
+Fri Jul 17 21:38:54 2015 +0000
+	Removed build dependency on pkg-config
+
 Wed Apr 15 01:40:11 2015 +0000
 	Support build on MacOsX
 	Improved support for CI on travis
