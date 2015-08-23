@@ -45,8 +45,6 @@ namespace details
     struct cache_entry;
 };
 
-using namespace http;
-
 struct byte_string
 {
     public:
@@ -86,9 +84,9 @@ class http_response_builder
             _realm(""),
             _opaque(""),
             _reload_nonce(false),
-            _headers(std::map<std::string, std::string, header_comparator>()),
-            _footers(std::map<std::string, std::string, header_comparator>()),
-            _cookies(std::map<std::string, std::string, header_comparator>()),
+            _headers(std::map<std::string, std::string, http::header_comparator>()),
+            _footers(std::map<std::string, std::string, http::header_comparator>()),
+            _cookies(std::map<std::string, std::string, http::header_comparator>()),
             _topics(std::vector<std::string>()),
             _keepalive_secs(-1),
             _keepalive_msg(""),
@@ -98,7 +96,7 @@ class http_response_builder
             _decorate_response(&http_response::decorate_response_str),
             _enqueue_response(&http_response::enqueue_response_str)
         {
-            _headers[http_utils::http_header_content_type] = content_type;
+            _headers[http::http_utils::http_header_content_type] = content_type;
         }
 
         http_response_builder(
@@ -113,9 +111,9 @@ class http_response_builder
             _realm(""),
             _opaque(""),
             _reload_nonce(false),
-            _headers(std::map<std::string, std::string, header_comparator>()),
-            _footers(std::map<std::string, std::string, header_comparator>()),
-            _cookies(std::map<std::string, std::string, header_comparator>()),
+            _headers(std::map<std::string, std::string, http::header_comparator>()),
+            _footers(std::map<std::string, std::string, http::header_comparator>()),
+            _cookies(std::map<std::string, std::string, http::header_comparator>()),
             _topics(std::vector<std::string>()),
             _keepalive_secs(-1),
             _keepalive_msg(""),
@@ -125,7 +123,7 @@ class http_response_builder
             _decorate_response(&http_response::decorate_response_str),
             _enqueue_response(&http_response::enqueue_response_str)
         {
-            _headers[http_utils::http_header_content_type] = content_type;
+            _headers[http::http_utils::http_header_content_type] = content_type;
         }
 
         http_response_builder(const http_response_builder& b):
@@ -243,7 +241,7 @@ class http_response_builder
 
         http_response_builder& shoutCAST_response()
         {
-            _response_code |= http_utils::shoutcast_response;
+            _response_code |= http::http_utils::shoutcast_response;
             return *this;
         }
 
@@ -269,9 +267,9 @@ class http_response_builder
         std::string _realm;
         std::string _opaque;
         bool _reload_nonce;
-        std::map<std::string, std::string, header_comparator> _headers;
-        std::map<std::string, std::string, header_comparator> _footers;
-        std::map<std::string, std::string, header_comparator> _cookies;
+        std::map<std::string, std::string, http::header_comparator> _headers;
+        std::map<std::string, std::string, http::header_comparator> _footers;
+        std::map<std::string, std::string, http::header_comparator> _cookies;
         std::vector<std::string> _topics;
         int _keepalive_secs;
         std::string _keepalive_msg;

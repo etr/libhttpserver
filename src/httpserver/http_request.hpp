@@ -44,8 +44,6 @@ namespace http
     class arg_comparator;
 };
 
-using namespace http;
-
 /**
  * Class representing an abstraction for an Http Request. It is used from classes using these apis to receive information through http protocol.
 **/
@@ -194,25 +192,25 @@ class http_request
          * @param result a map<string, string> > that will be filled with all headers
          * @result the size of the map
         **/
-        size_t get_headers(std::map<std::string, std::string, header_comparator>& result) const;
+        size_t get_headers(std::map<std::string, std::string, http::header_comparator>& result) const;
         /**
          * Method used to get all footers passed with the request.
          * @param result a map<string, string> > that will be filled with all footers
          * @result the size of the map
         **/
-        size_t get_footers(std::map<std::string, std::string, header_comparator>& result) const;
+        size_t get_footers(std::map<std::string, std::string, http::header_comparator>& result) const;
         /**
          * Method used to get all cookies passed with the request.
          * @param result a map<string, string> > that will be filled with all cookies
          * @result the size of the map
         **/
-        size_t get_cookies(std::map<std::string, std::string, header_comparator>& result) const;
+        size_t get_cookies(std::map<std::string, std::string, http::header_comparator>& result) const;
         /**
          * Method used to get all args passed with the request.
          * @param result a map<string, string> > that will be filled with all args
          * @result the size of the map
         **/
-        size_t get_args(std::map<std::string, std::string, arg_comparator>& result) const;
+        size_t get_args(std::map<std::string, std::string, http::arg_comparator>& result) const;
         /**
          * Method used to get a specific header passed with the request.
          * @param key the specific header to get the value from
@@ -394,10 +392,10 @@ class http_request
         std::string digested_user;
         std::string method;
         std::vector<std::string> post_path;
-        std::map<std::string, std::string, header_comparator> headers;
-        std::map<std::string, std::string, header_comparator> footers;
-        std::map<std::string, std::string, header_comparator> cookies;
-        std::map<std::string, std::string, arg_comparator> args;
+        std::map<std::string, std::string, http::header_comparator> headers;
+        std::map<std::string, std::string, http::header_comparator> footers;
+        std::map<std::string, std::string, http::header_comparator> cookies;
+        std::map<std::string, std::string, http::arg_comparator> args;
         std::string querystring;
         std::string content;
         std::string version;
@@ -481,7 +479,7 @@ class http_request
         {
             this->path = path;
             std::vector<std::string> complete_path;
-            http_utils::tokenize_url(this->path, complete_path);
+            http::http_utils::tokenize_url(this->path, complete_path);
             for(unsigned int i = 0; i < complete_path.size(); i++)
             {
                 this->post_path.push_back(complete_path[i]);

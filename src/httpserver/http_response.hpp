@@ -52,8 +52,6 @@ namespace details
     struct cache_entry;
 };
 
-using namespace http;
-
 class bad_caching_attempt: public std::exception
 {
     virtual const char* what() const throw()
@@ -70,7 +68,7 @@ typedef ssize_t(*cycle_callback_ptr)(char*, size_t);
 class http_response
 {
     public:
-    
+
         http_response(const http_response_builder& builder);
 
         /**
@@ -167,7 +165,7 @@ class http_response
          * @return a map<string,string> containing all headers.
         **/
         size_t get_headers(
-                std::map<std::string, std::string, header_comparator>& result
+                std::map<std::string, std::string, http::header_comparator>& result
         ) const;
 
         /**
@@ -175,11 +173,11 @@ class http_response
          * @return a map<string,string> containing all footers.
         **/
         size_t get_footers(
-                std::map<std::string, std::string, header_comparator>& result
+                std::map<std::string, std::string, http::header_comparator>& result
         ) const;
 
         size_t get_cookies(
-                std::map<std::string, std::string, header_comparator>& result
+                std::map<std::string, std::string, http::header_comparator>& result
         ) const;
 
         /**
@@ -248,9 +246,9 @@ class http_response
         bool reload_nonce;
         int fp;
         std::string filename;
-        std::map<std::string, std::string, header_comparator> headers;
-        std::map<std::string, std::string, header_comparator> footers;
-        std::map<std::string, std::string, header_comparator> cookies;
+        std::map<std::string, std::string, http::header_comparator> headers;
+        std::map<std::string, std::string, http::header_comparator> footers;
+        std::map<std::string, std::string, http::header_comparator> cookies;
         std::vector<std::string> topics;
         int keepalive_secs;
         std::string keepalive_msg;
@@ -268,7 +266,7 @@ class http_response
         bool completed;
 
         webserver* ws;
-        struct httpserver_ska connection_id;
+        struct http::httpserver_ska connection_id;
 
         void get_raw_response_str(MHD_Response** res, webserver* ws = 0x0);
         void get_raw_response_file(MHD_Response** res, webserver* ws = 0x0);
@@ -298,14 +296,14 @@ class http_response
         friend class http_response_builder;
         friend void clone_response(const http_response& hr, http_response** dhr);
         friend ssize_t details::cb(void* cls, uint64_t pos, char* buf, size_t max);
-    	friend std::ostream &operator<< (std::ostream &os, const http_response &r);    
+    	friend std::ostream &operator<< (std::ostream &os, const http_response &r);
     private:
         http_response& operator=(const http_response& b);
 
         static ssize_t data_generator (void* cls, uint64_t pos, char* buf, size_t max);
 };
 
-std::ostream &operator<< (std::ostream &os, const http_response &r);    
+std::ostream &operator<< (std::ostream &os, const http_response &r);
 
 };
 #endif
