@@ -41,6 +41,7 @@
 #include <deque>
 
 #include <pthread.h>
+#include <stdexcept>
 
 #include "httpserver/create_webserver.hpp"
 
@@ -65,6 +66,15 @@ namespace details {
     struct cache_entry;
     class comet_manager;
 }
+
+class webserver_exception : public std::runtime_error
+{
+public:
+	webserver_exception()
+	: std::runtime_error("httpserver runtime error")
+	{
+	}
+};
 
 /**
  * Class representing the webserver. Main class of the apis.

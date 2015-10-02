@@ -280,7 +280,7 @@ void* webserver::select(void* self)
         FD_ZERO (&ws);
         FD_ZERO (&es);
         if (MHD_YES != MHD_get_fdset (di->daemon, &rs, &ws, &es, &max))
-            abort(); /* fatal internal error */
+            throw ::httpserver::webserver_exception(); /* fatal internal error */
 
         unsigned long long timeout_microsecs = 0;
         unsigned long long timeout_secs = 0;
@@ -563,7 +563,7 @@ bool webserver::start(bool blocking)
             {
                 cout << gettext("Unable to connect daemon to port: ") <<
                     this->port << endl;
-                abort();
+                throw ::httpserver::webserver_exception();
             }
             details::daemon_item* di = new details::daemon_item(this, daemon);
             daemons.push_back(di);
@@ -579,7 +579,7 @@ bool webserver::start(bool blocking)
                     static_cast<void*>(di)
             ))
             {
-                abort();
+                throw ::httpserver::webserver_exception();
             }
         }
     }
@@ -595,7 +595,7 @@ bool webserver::start(bool blocking)
         {
             cout << gettext("Unable to connect daemon to port: ") <<
                 this->port << endl;
-            abort();
+            throw ::httpserver::webserver_exception();
         }
         details::daemon_item* di = new details::daemon_item(this, daemon);
         daemons.push_back(di);
