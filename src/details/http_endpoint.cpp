@@ -226,7 +226,7 @@ bool http_endpoint::match(const http_endpoint& url) const
     }
     else
         return regexec(&(this->re_url_modded),
-                url.url_modded.c_str(), 0, NULL, 0) == 0;
+                url.url_complete.c_str(), 0, NULL, 0) == 0;
 }
 
 };
