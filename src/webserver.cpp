@@ -586,7 +586,7 @@ bool webserver::start(bool blocking)
         } catch (::httpserver::webserver_exception &e) {
             this->running = false;
             for (;i >= 0; --i) {
-                pthread_kill(&threads[i], 9);
+                pthread_kill(threads[i], 9);
             }
             threads.clear();
             throw e;
