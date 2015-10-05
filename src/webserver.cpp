@@ -551,36 +551,45 @@ bool webserver::start(bool blocking)
     this->running = true;
     if(start_method == http_utils::INTERNAL_SELECT)
     {
-        for(int i = 0; i < num_threads; i++)
-        {
-            struct MHD_Daemon* daemon = MHD_start_daemon
-            (
-                    start_conf, this->port, &policy_callback, this,
-                    &answer_to_connection, this, MHD_OPTION_ARRAY,
-                    &iov[0], MHD_OPTION_END
-            );
-            if(NULL == daemon)
+        int i;
+        try {
+            for(i = 0; i < num_threads; i++)
             {
-                cout << gettext("Unable to connect daemon to port: ") <<
-                    this->port << endl;
-                throw ::httpserver::webserver_exception();
-            }
-            details::daemon_item* di = new details::daemon_item(this, daemon);
-            daemons.push_back(di);
+                struct MHD_Daemon* daemon = MHD_start_daemon
+                (
+                     start_conf, this->port, &policy_callback, this,
+                     &answer_to_connection, this, MHD_OPTION_ARRAY,
+                     &iov[0], MHD_OPTION_END
+                );
+                if(NULL == daemon)
+                {
+                    cout << gettext("Unable to connect daemon to port: ") << this->port << endl;
+                    throw ::httpserver::webserver_exception();
+                }
+                details::daemon_item* di = new details::daemon_item(this, daemon);
+                daemons.push_back(di);
 
-            //RUN SELECT THREADS
-            pthread_t t;
-            threads.push_back(t);
+                //RUN SELECT THREADS
+                pthread_t t;
+                threads.push_back(t);
 
-            if(pthread_create(
+                if(pthread_create(
                     &threads[i],
                     NULL,
                     &webserver::select,
                     static_cast<void*>(di)
-            ))
-            {
-                throw ::httpserver::webserver_exception();
+                ))
+                {
+                    throw ::httpserver::webserver_exception();
+                }
             }
+        } catch (::httpserver::webserver_exception &e) {
+            this->running = false;
+            for (;i >= 0; --i) {
+                pthread_kill(&threads[i], 9);
+            }
+            threads.clear();
+            throw e;
         }
     }
     else
