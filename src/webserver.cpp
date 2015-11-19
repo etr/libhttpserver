@@ -457,6 +457,7 @@ bool webserver::start(bool blocking)
     {
         int on = 1;
         bool bind_settled = true;
+        int result = 0;
         if(!bind_socket)
         {
             bind_settled = false;
@@ -501,10 +502,22 @@ bool webserver::start(bool blocking)
             else
                 bind_socket = create_socket (PF_INET, SOCK_STREAM, 0);
 
-            setsockopt (bind_socket,
+            if (bind_socket == -1)
+            {
+                cout << "Unable to create socket" << endl;
+                throw ::httpserver::webserver_exception();
+            }
+
+            result = setsockopt (bind_socket,
                SOL_SOCKET,
                SO_REUSEADDR,
                (const char*) &on, sizeof (on));
+
+            if (result != 0)
+            {
+                cout << "Unable to set socket option SO_REUSEADDR" << endl;
+                throw ::httpserver::webserver_exception();
+            }
 
             if(use_ipv6)
             {
@@ -517,7 +530,13 @@ bool webserver::start(bool blocking)
 #endif
 #endif
             }
-            bind(bind_socket, servaddr, addrlen);
+            result = bind(bind_socket, servaddr, addrlen);
+
+            if (result != 0)
+            {
+                cout << gettext("Unable to bind socket to port: ") << port << endl;
+                throw ::httpserver::webserver_exception(); 
+            }   
         }
 #ifdef _WINDOWS
 		unsigned long ioarg = 1;
@@ -528,7 +547,14 @@ bool webserver::start(bool blocking)
         fcntl (bind_socket, F_SETFL, flags);
 #endif
         if(!bind_settled)
-            listen(bind_socket, 1);
+        {
+            result = listen(bind_socket, 1);
+            if (result != 0)
+            {
+                cout << gettext("Unable to listen on port: ") << port << endl;
+                throw ::httpserver::webserver_exception(); 
+            }
+        }
         iov.push_back(gen(MHD_OPTION_LISTEN_SOCKET, bind_socket));
     }
 
