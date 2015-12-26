@@ -6,7 +6,7 @@ env:
  - DEBUG="debug"
  - DEBUG="nodebug"
 before_install:
- - sudo apt-get install texinfo
+ - sudo apt-get install info install-info
  - sudo pip install cpp-coveralls
  - sudo pip install gcovr
  - sudo apt-get install libjson-perl
