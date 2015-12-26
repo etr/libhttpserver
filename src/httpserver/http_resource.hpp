@@ -38,96 +38,109 @@ class webserver;
 class http_request;
 class http_response;
 
+namespace details
+{
+
+void empty_render(const http_request& r, http_response** res);
+
+};
+
 /**
  * Class representing a callable http resource.
 **/
 
 void resource_init(std::map<std::string, bool>& res);
 
-template<typename CHILD>
 class http_resource
 {
     public:
+        /**
+         * Class destructor
+        **/
+        virtual ~http_resource()
+        {
+        }
+
         /**
          * Method used to answer to a generic request
          * @param req Request passed through http
          * @return A http_response object
         **/
-        void render(const http_request& r, http_response** res)
+        virtual void render(const http_request& r, http_response** res)
         {
-            static_cast<CHILD*>(this)->render(r, res);
+            details::empty_render(r, res);
         }
         /**
          * Method used to answer to a GET request
          * @param req Request passed through http
          * @return A http_response object
         **/
-        void render_GET(const http_request& req, http_response** res)
+        virtual void render_GET(const http_request& req, http_response** res)
         {
-            static_cast<CHILD*>(this)->render_GET(req, res);
+            details::empty_render(req, res);
         }
         /**
          * Method used to answer to a POST request
          * @param req Request passed through http
          * @return A http_response object
         **/
-        void render_POST(const http_request& req, http_response** res)
+        virtual void render_POST(const http_request& req, http_response** res)
         {
-            static_cast<CHILD*>(this)->render_POST(req, res);
+            details::empty_render(req, res);
         }
         /**
          * Method used to answer to a PUT request
          * @param req Request passed through http
          * @return A http_response object
         **/
-        void render_PUT(const http_request& req, http_response** res)
+        virtual void render_PUT(const http_request& req, http_response** res)
         {
-            static_cast<CHILD*>(this)->render_PUT(req, res);
+            details::empty_render(req, res);
         }
         /**
          * Method used to answer to a HEAD request
          * @param req Request passed through http
          * @return A http_response object
         **/
-        void render_HEAD(const http_request& req, http_response** res)
+        virtual void render_HEAD(const http_request& req, http_response** res)
         {
-            static_cast<CHILD*>(this)->render_HEAD(req, res);
+            details::empty_render(req, res);
         }
         /**
          * Method used to answer to a DELETE request
          * @param req Request passed through http
          * @return A http_response object
         **/
-        void render_DELETE(const http_request& req, http_response** res)
+        virtual void render_DELETE(const http_request& req, http_response** res)
         {
-            static_cast<CHILD*>(this)->render_DELETE(req, res);
+            details::empty_render(req, res);
         }
         /**
          * Method used to answer to a TRACE request
          * @param req Request passed through http
          * @return A http_response object
         **/
-        void render_TRACE(const http_request& req, http_response** res)
+        virtual void render_TRACE(const http_request& req, http_response** res)
         {
-            static_cast<CHILD*>(this)->render_TRACE(req, res);
+            details::empty_render(req, res);
         }
         /**
          * Method used to answer to a OPTIONS request
          * @param req Request passed through http
          * @return A http_response object
         **/
-        void render_OPTIONS(const http_request& req, http_response** res)
+        virtual void render_OPTIONS(const http_request& req, http_response** res)
         {
-            static_cast<CHILD*>(this)->render_OPTIONS(req, res);
+            details::empty_render(req, res);
         }
         /**
          * Method used to answer to a CONNECT request
          * @param req Request passed through http
          * @return A http_response object
         **/
-        void render_CONNECT(const http_request& req, http_response** res)
+        virtual void render_CONNECT(const http_request& req, http_response** res)
         {
-            static_cast<CHILD*>(this)->render_CONNECT(req, res);
+            details::empty_render(req, res);
         }
         /**
          * Method used to set if a specific method is allowed or not on this request
@@ -199,13 +212,6 @@ class http_resource
         {
             allowed_methods = b.allowed_methods;
             return (*this);
-        }
-
-        /**
-         * Class destructor
-        **/
-        ~http_resource()
-        {
         }
 
     private:

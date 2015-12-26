@@ -25,8 +25,6 @@
 #ifndef _HTTP_RESPONSE_PTR_HPP_
 #define _HTTP_RESPONSE_PTR_HPP_
 
-#include "httpserver/http_response.hpp"
-
 namespace httpserver
 {
 

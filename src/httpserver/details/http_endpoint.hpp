@@ -34,11 +34,10 @@ namespace httpserver
 {
 
 class webserver;
+class http_resource;
 
 namespace details
 {
-
-class http_resource_mirror;
 
 /**
  * Exception class throwed when a bad formatted http url is used
@@ -237,7 +236,7 @@ class http_endpoint
         friend void _register_resource(
                 webserver*,
                 const std::string&,
-                details::http_resource_mirror&,
+                const http_resource&,
                 bool
         );
         template<typename, typename> friend struct std::pair;

@@ -30,6 +30,8 @@
 
 namespace httpserver {
 
+class webserver;
+
 namespace details
 {
     class http_endpoint;

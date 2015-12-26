@@ -25,7 +25,6 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include "http_utils.hpp"
-#include "details/http_resource_mirror.hpp"
 #include "details/event_tuple.hpp"
 #include "webserver.hpp"
 #include "http_response.hpp"
@@ -35,6 +34,8 @@ using namespace std;
 
 namespace httpserver
 {
+
+class webserver;
 
 http_response::http_response(const http_response_builder& builder):
     content(builder._content_hook),

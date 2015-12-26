@@ -31,7 +31,6 @@
 #include "httpserver/http_request.hpp"
 #include "httpserver/event_supplier.hpp"
 #include "httpserver/details/event_tuple.hpp"
-#include "httpserver/details/http_resource_mirror.hpp"
 #include "httpserver/webserver.hpp"
 
 #endif

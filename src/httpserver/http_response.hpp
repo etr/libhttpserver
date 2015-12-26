@@ -28,8 +28,10 @@
 #include <utility>
 #include <string>
 #include <iosfwd>
+#include <stdint.h>
+#include <vector>
 
-#include "httpserver/details/http_resource_mirror.hpp"
+#include "httpserver/binders.hpp"
 
 struct MHD_Connection;
 

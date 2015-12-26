@@ -1,3 +1,8 @@
+libhttpserver (0.10.0) unstable; urgency=low
+    * Changed http_resource to use classic C++ polymorphism using virtual instead of CRTP
+
+ -- Sebastiano Merlino <electrictwister2000@gmail.com> Sat, 26 Jan 2016 15:08:22 +0100
+
 libhttpserver (0.9.1) unstable; urgency=low
     * Eliminated build dependency on pkg-config
 

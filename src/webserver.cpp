@@ -50,7 +50,6 @@
 #include "http_response_builder.hpp"
 #include "details/http_endpoint.hpp"
 #include "string_utilities.hpp"
-#include "details/http_resource_mirror.hpp"
 #include "details/event_tuple.hpp"
 #include "create_webserver.hpp"
 #include "details/comet_manager.hpp"
@@ -86,21 +85,6 @@ struct daemon_item
         MHD_stop_daemon (this->daemon);
     }
 };
-
-void empty_render(const http_request& r, http_response** res)
-{
-    *res = new http_response(http_response_builder("", 200).string_response());
-}
-
-void empty_not_acceptable_render(const http_request& r, http_response** res)
-{
-    *res = new http_response(http_response_builder(NOT_METHOD_ERROR, 200).string_response());
-}
-
-bool empty_is_allowed(const std::string& method)
-{
-    return true;
-}
 
 }
 
@@ -240,25 +224,18 @@ void webserver::request_completed (
     }
 }
 
-bool webserver::register_resource(
-        const std::string& resource,
-        details::http_resource_mirror hrm,
-        bool family
-)
+bool webserver::register_resource(const std::string& resource, http_resource* hrm, bool family)
 {
-    if(method_not_acceptable_resource)
-        hrm.method_not_acceptable_resource = method_not_acceptable_resource;
-
     details::http_endpoint idx(resource, family, true, regex_checking);
 
-    pair<map<details::http_endpoint, details::http_resource_mirror>::iterator, bool> result = registered_resources.insert(
-        map<details::http_endpoint, details::http_resource_mirror>::value_type(idx, hrm)
+    pair<map<details::http_endpoint, http_resource*>::iterator, bool> result = registered_resources.insert(
+        map<details::http_endpoint, http_resource*>::value_type(idx, hrm)
     );
 
     if(result.second)
     {
         registered_resources_str.insert(
-            pair<string, details::http_resource_mirror*>(idx.get_url_complete(), &(result.first->second))
+            pair<string, http_resource*>(idx.get_url_complete(), result.first->second)
         );
     }
 
@@ -877,27 +854,6 @@ void webserver::not_found_page(
         *dhrs = new http_response(http_response_builder(NOT_FOUND_ERROR, http_utils::http_not_found).string_response());
 }
 
-int webserver::method_not_acceptable_page (const void *cls,
-    struct MHD_Connection *connection)
-{
-    int ret;
-    struct MHD_Response *response;
-
-    /* unsupported HTTP method */
-    response = MHD_create_response_from_buffer (strlen (NOT_METHOD_ERROR),
-        (void *) NOT_METHOD_ERROR,
-        MHD_RESPMEM_PERSISTENT);
-    ret = MHD_queue_response (connection,
-        MHD_HTTP_METHOD_NOT_ACCEPTABLE,
-        response);
-    MHD_add_response_header (response,
-        MHD_HTTP_HEADER_CONTENT_ENCODING,
-        "text/plain");
-    MHD_destroy_response (response);
-
-    return ret;
-}
-
 void webserver::method_not_allowed_page(
         http_response** dhrs,
         details::modded_request* mr
@@ -1068,9 +1024,9 @@ int webserver::finalize_answer(
     int to_ret = MHD_NO;
     http_response* dhrs = 0x0;
 
-    map<string, details::http_resource_mirror*>::iterator fe;
+    map<string, http_resource*>::iterator fe;
 
-    details::http_resource_mirror* hrm;
+    http_resource* hrm;
 
     bool found = false;
     struct MHD_Response* raw_response;
@@ -1084,7 +1040,7 @@ int webserver::finalize_answer(
             {
 
                 map<
-                    details::http_endpoint, details::http_resource_mirror
+                    details::http_endpoint, http_resource*
                 >::iterator found_endpoint;
 
                 details::http_endpoint endpoint(
@@ -1093,7 +1049,7 @@ int webserver::finalize_answer(
 
                 map<
                     details::http_endpoint,
-                    details::http_resource_mirror
+                    http_resource*
                 >::iterator it;
 
                 size_t len = 0;
@@ -1139,7 +1095,7 @@ int webserver::finalize_answer(
                         mr->dhr->set_arg(url_pars[i], url_pieces[chunkes[i]]);
                     }
 
-                    hrm = &found_endpoint->second;
+                    hrm = found_endpoint->second;
                 }
             }
         }
@@ -1151,7 +1107,7 @@ int webserver::finalize_answer(
     }
     else
     {
-        hrm = &registered_resources.begin()->second;
+        hrm = registered_resources.begin()->second;
         found = true;
     }
     mr->dhr->set_underlying_connection(connection);
@@ -1275,49 +1231,37 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
 
         if( 0 == strcasecmp(method, http_utils::http_method_get.c_str()))
         {
-            mr->callback = &details::http_resource_mirror::render_GET;
+            mr->callback = &http_resource::render_GET;
         }
         else if (0 == strcmp(method, http_utils::http_method_post.c_str()))
         {
-            mr->callback = &details::http_resource_mirror::render_POST;
+            mr->callback = &http_resource::render_POST;
             body = true;
         }
         else if (0 == strcasecmp(method, http_utils::http_method_put.c_str()))
         {
-            mr->callback = &details::http_resource_mirror::render_PUT;
+            mr->callback = &http_resource::render_PUT;
             body = true;
         }
         else if (0 == strcasecmp(method,http_utils::http_method_delete.c_str()))
         {
-            mr->callback = &details::http_resource_mirror::render_DELETE;
+            mr->callback = &http_resource::render_DELETE;
         }
         else if (0 == strcasecmp(method, http_utils::http_method_head.c_str()))
         {
-            mr->callback = &details::http_resource_mirror::render_HEAD;
+            mr->callback = &http_resource::render_HEAD;
         }
         else if (0 ==strcasecmp(method,http_utils::http_method_connect.c_str()))
         {
-            mr->callback = &details::http_resource_mirror::render_CONNECT;
+            mr->callback = &http_resource::render_CONNECT;
         }
         else if (0 == strcasecmp(method, http_utils::http_method_trace.c_str()))
         {
-            mr->callback = &details::http_resource_mirror::render_TRACE;
+            mr->callback = &http_resource::render_TRACE;
         }
         else if (0 ==strcasecmp(method,http_utils::http_method_options.c_str()))
         {
-            mr->callback = &details::http_resource_mirror::render_OPTIONS;
-        }
-        else
-        {
-            using namespace details;
-            if(static_cast<webserver*>(cls)->method_not_acceptable_resource)
-                mr->callback =
-                    &http_resource_mirror::method_not_acceptable_resource;
-            else
-                return static_cast<webserver*>(cls)->method_not_acceptable_page(
-                        cls,
-                        connection
-                );
+            mr->callback = &http_resource::render_OPTIONS;
         }
 
         if(body)

@@ -41,9 +41,7 @@ struct modded_request
     std::string* standardized_url;
     webserver* ws;
 
-    const binders::functor_two<
-        const http_request&, http_response**, void
-    > http_resource_mirror::*callback;
+    void (httpserver::http_resource::*callback)(const httpserver::http_request&, httpserver::http_response**);
 
     http_request* dhr;
     http_response_ptr dhrs;

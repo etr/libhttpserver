@@ -27,7 +27,7 @@ using namespace httpserver;
 
 bool verbose=false;
 
-class service_resource: public http_resource<service_resource> {
+class service_resource: public http_resource {
 public:
 	service_resource();
 

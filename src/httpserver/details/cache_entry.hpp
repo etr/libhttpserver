@@ -28,7 +28,6 @@
 #include <pthread.h>
 #include <set>
 #include "httpserver/details/http_response_ptr.hpp"
-#include "httpserver/http_response.hpp"
 
 namespace httpserver
 {

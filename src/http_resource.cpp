@@ -27,6 +27,7 @@
 #include "details/event_tuple.hpp"
 #include "webserver.hpp"
 #include "string_utilities.hpp"
+#include "http_response_builder.hpp"
 
 using namespace std;
 
@@ -44,5 +45,15 @@ void resource_init(map<string, bool>& allowed_methods)
     allowed_methods[MHD_HTTP_METHOD_CONNECT] = true;
     allowed_methods[MHD_HTTP_METHOD_OPTIONS] = true;
 }
+
+namespace details
+{
+
+void empty_render(const http_request& r, http_response** res)
+{
+    *res = new http_response(http_response_builder("", 200).string_response());
+}
+
+};
 
 };

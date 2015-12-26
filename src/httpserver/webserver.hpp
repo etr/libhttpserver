@@ -47,7 +47,7 @@
 
 namespace httpserver {
 
-template<typename CHILD> class http_resource;
+class http_resource;
 class http_response;
 template<typename CHILD> class event_supplier;
 class create_webserver;
@@ -58,7 +58,6 @@ struct httpserver_ska;
 };
 
 namespace details {
-    class http_resource_mirror;
     class event_tuple;
     class http_endpoint;
     struct daemon_item;
@@ -112,14 +111,9 @@ class webserver
          * @param family boolean indicating whether the resource is registered for the endpoint and its child or not.
          * @return true if the resource was registered
         **/
-        template <typename T>
         bool register_resource(const std::string& resource,
-                http_resource<T>* res, bool family = false
-        )
-        {
-            details::http_resource_mirror hrm(res);
-            return register_resource(resource, hrm, family);
-        }
+                http_resource* res, bool family = false
+        );
 
         void unregister_resource(const std::string& resource);
         void ban_ip(const std::string& ip);
@@ -242,8 +236,8 @@ class webserver
         render_ptr method_not_allowed_resource;
         render_ptr method_not_acceptable_resource;
         render_ptr internal_error_resource;
-        std::map<details::http_endpoint, details::http_resource_mirror> registered_resources;
-        std::map<std::string, details::http_resource_mirror*> registered_resources_str;
+        std::map<details::http_endpoint, http_resource*> registered_resources;
+        std::map<std::string, http_resource*> registered_resources_str;
 
         std::map<std::string, details::cache_entry*> response_cache;
         int next_to_choose;
@@ -260,10 +254,6 @@ class webserver
 
         static void* select(void* self);
         static void* cleaner(void* self);
-
-        bool register_resource(const std::string& resource,
-                details::http_resource_mirror hrm, bool family = false
-        );
 
         void method_not_allowed_page(http_response** dhrs,
                 details::modded_request* mr

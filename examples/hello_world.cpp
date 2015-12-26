@@ -23,7 +23,7 @@
 
 using namespace httpserver;
 
-class hello_world_resource : public http_resource<hello_world_resource> {
+class hello_world_resource : public http_resource {
 	public:
         void render(const http_request&, http_response**);
         void set_some_data(const std::string &s) {data = s;}
