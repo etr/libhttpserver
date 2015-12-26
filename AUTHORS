@@ -18,3 +18,9 @@ Jan Klimke <jan.klimke@hpi.uni-potsdam.de>
 
 - Example of SSL usage and operator<< on http_request and http_response
 Chris Love <cjlove@san.rr.com>
+
+- Added proper error handling to tcp socket creation and binding
+Marcel Pursche <marcel.pursche@3dcontentlogistics.com>
+
+- Fixed error management and regex handling
+Julian Picht <julian.picht@4Com.de>
