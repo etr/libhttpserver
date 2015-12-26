@@ -77,7 +77,7 @@ class http_resource
         **/
         virtual void render_GET(const http_request& req, http_response** res)
         {
-            details::empty_render(req, res);
+            render(req, res);
         }
         /**
          * Method used to answer to a POST request
@@ -86,7 +86,7 @@ class http_resource
         **/
         virtual void render_POST(const http_request& req, http_response** res)
         {
-            details::empty_render(req, res);
+            render(req, res);
         }
         /**
          * Method used to answer to a PUT request
@@ -95,7 +95,7 @@ class http_resource
         **/
         virtual void render_PUT(const http_request& req, http_response** res)
         {
-            details::empty_render(req, res);
+            render(req, res);
         }
         /**
          * Method used to answer to a HEAD request
@@ -104,7 +104,7 @@ class http_resource
         **/
         virtual void render_HEAD(const http_request& req, http_response** res)
         {
-            details::empty_render(req, res);
+            render(req, res);
         }
         /**
          * Method used to answer to a DELETE request
@@ -113,7 +113,7 @@ class http_resource
         **/
         virtual void render_DELETE(const http_request& req, http_response** res)
         {
-            details::empty_render(req, res);
+            render(req, res);
         }
         /**
          * Method used to answer to a TRACE request
@@ -122,7 +122,7 @@ class http_resource
         **/
         virtual void render_TRACE(const http_request& req, http_response** res)
         {
-            details::empty_render(req, res);
+            render(req, res);
         }
         /**
          * Method used to answer to a OPTIONS request
@@ -131,7 +131,7 @@ class http_resource
         **/
         virtual void render_OPTIONS(const http_request& req, http_response** res)
         {
-            details::empty_render(req, res);
+            render(req, res);
         }
         /**
          * Method used to answer to a CONNECT request
@@ -140,7 +140,7 @@ class http_resource
         **/
         virtual void render_CONNECT(const http_request& req, http_response** res)
         {
-            details::empty_render(req, res);
+            render(req, res);
         }
         /**
          * Method used to set if a specific method is allowed or not on this request
