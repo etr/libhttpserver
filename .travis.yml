@@ -20,7 +20,7 @@ script:
  - ./bootstrap
  - mkdir build
  - cd build
- - if [ $DEBUG = "debug" ]; then ../configure --enable-debug --disable-shared; else ../configure; fi
+ - if [ $DEBUG = "debug" ]; then ../configure --enable-debug --disable-shared --disable-fastopen; else ../configure --disable-fastopen; fi
  - make
  - make check
 after_success:
