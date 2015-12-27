@@ -77,8 +77,11 @@ class http_utils
     enum start_method_T
     {
         INTERNAL_SELECT = MHD_NO_FLAG,
-        THREADS = MHD_USE_THREAD_PER_CONNECTION,
-        POLL = MHD_USE_THREAD_PER_CONNECTION | MHD_USE_POLL
+#if defined(__MINGW32__) || defined(__CYGWIN32__)
+        THREAD = MHD_USE_THREAD_PER_CONNECTION | MHD_USE_POLL
+#else
+        THREAD = MHD_USE_THREAD_PER_CONNECTION | MHD_USE_EPOLL_LINUX_ONLY
+#endif
     };
 
     enum policy_T

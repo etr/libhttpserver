@@ -1,3 +1,9 @@
+libhttpserver (0.10.1) unstable; urgency=low
+    * Removed POLL start configuration (THREAD now defaults to POLL or EPOLL on Linux)
+    * Use TCP_FASTOPEN on linux >= 3.6
+
+ -- Sebastiano Merlino <electrictwister2000@gmail.com> Sat, 27 Jan 2016 19:39:01 +0100
+
 libhttpserver (0.10.0) unstable; urgency=low
     * Changed http_resource to use classic C++ polymorphism using virtual instead of CRTP
 

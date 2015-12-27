@@ -547,6 +547,10 @@ bool webserver::start(bool blocking)
     if(pedantic)
         start_conf |= MHD_USE_PEDANTIC_CHECKS;
 
+#ifdef USE_FASTOPEN
+    start_conf |= MHD_USE_TCP_FASTOPEN;
+#endif
+
     int num_threads = 1;
     if(max_threads > num_threads)
         num_threads = max_threads;
