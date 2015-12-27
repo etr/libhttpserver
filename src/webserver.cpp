@@ -649,9 +649,19 @@ bool webserver::stop()
         }
         threads.clear();
         typedef vector<details::daemon_item*>::const_iterator daemon_item_it;
+
+        if(start_method == http_utils::INTERNAL_SELECT)
+        {
+            for(daemon_item_it it = daemons.begin(); it != daemons.end(); ++it)
+                MHD_quiesce_daemon((*it)->daemon);
+        }
+
         for(daemon_item_it it = daemons.begin(); it != daemons.end(); ++it)
             delete *it;
         daemons.clear();
+
+        shutdown(bind_socket, 2);
+
         return true;
     }
     else
