@@ -115,7 +115,7 @@ LDFLAGS="$LIBMICROHTTPD_LIBS $REGEX_LIBS $LD_FLAGS"
 
 if test x"$is_windows" = x"no"; then
     if test `uname -r |cut -d. -f1` -ge 3; then
-        if test `uname -r |cut -d. -f2` -ge 6; then
+        if test `uname -r |cut -d. -f2` -ge 7; then
             CXXFLAGS="-DUSE_FASTOPEN $CXXFLAGS"
         fi
     fi
