@@ -311,10 +311,10 @@ void* webserver::select(void* self)
         timeout_value.tv_sec = timeout_secs;
         timeout_value.tv_usec = timeout_microsecs;
 
-		/*On unix, MHD_socket will be an int anyway.
-		On windows, the cast is safe because winsock ignores first argument to select*/
+        /*On unix, MHD_socket will be an int anyway.
+        On windows, the cast is safe because winsock ignores first argument to select*/
         ::select ((int) max + 1, &rs, &ws, &es, &timeout_value);
-        MHD_run (di->daemon);
+        MHD_run_from_select (di->daemon, &rs, &ws, &es);
 
         //EVENT SUPPLIERS DISPATCHING
         {
