@@ -383,11 +383,12 @@ bool webserver::start(bool blocking)
         iov.push_back(gen(MHD_OPTION_SOCK_ADDR, (intptr_t) bind_address));
     if(bind_socket != 0)
         iov.push_back(gen(MHD_OPTION_LISTEN_SOCKET, bind_socket));
-    if(! (start_method == http_utils::INTERNAL_SELECT))
+    if(start_method == http_utils::THREAD_PER_CONNECTION && max_threads != 0)
     {
-        if(max_threads != 0)
-            iov.push_back(gen(MHD_OPTION_THREAD_POOL_SIZE, max_threads));
+        cout << "Cannot specify maximum number of threads when using a thread per connection" << endl;
+        throw ::httpserver::webserver_exception();
     }
+
     if(max_connections != 0)
         iov.push_back(gen(MHD_OPTION_CONNECTION_LIMIT, max_connections));
     if(memory_limit != 0)
