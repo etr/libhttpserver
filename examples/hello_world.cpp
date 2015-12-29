@@ -49,7 +49,7 @@ int main()
 {
     //it is possible to create a webserver passing a great number of parameters.
     //In this case we are just passing the port and the number of thread running.
-	webserver ws = create_webserver(8080).max_threads(5);
+    webserver ws = create_webserver(8080).start_method(http::http_utils::INTERNAL_SELECT).max_threads(5);
 
     hello_world_resource hwr;
     //this way we are registering the hello_world_resource to answer for the endpoint
@@ -62,5 +62,5 @@ int main()
     //a blocking call; if we want the call to be non-blocking we can just pass false to the
     //method.
     ws.start(true);
-	return 0;
+    return 0;
 }

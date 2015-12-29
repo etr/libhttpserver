@@ -268,7 +268,7 @@ class http_response
         bool completed;
 
         webserver* ws;
-        struct http::httpserver_ska connection_id;
+        MHD_Connection* connection_id;
 
         void get_raw_response_str(MHD_Response** res, webserver* ws = 0x0);
         void get_raw_response_file(MHD_Response** res, webserver* ws = 0x0);

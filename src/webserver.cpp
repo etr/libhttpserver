@@ -50,7 +50,6 @@
 #include "http_response_builder.hpp"
 #include "details/http_endpoint.hpp"
 #include "string_utilities.hpp"
-#include "details/event_tuple.hpp"
 #include "create_webserver.hpp"
 #include "details/comet_manager.hpp"
 #include "webserver.hpp"
@@ -169,6 +168,7 @@ webserver::webserver(const create_webserver& params):
     regex_checking(params._regex_checking),
     ban_system_enabled(params._ban_system_enabled),
     post_process_enabled(params._post_process_enabled),
+    comet_enabled(params._comet_enabled),
     single_resource(params._single_resource),
     not_found_resource(params._not_found_resource),
     method_not_allowed_resource(params._method_not_allowed_resource),
@@ -242,94 +242,6 @@ bool webserver::register_resource(const std::string& resource, http_resource* hr
     return result.second;
 }
 
-void* webserver::select(void* self)
-{
-    fd_set rs;
-    fd_set ws;
-    fd_set es;
-    struct timeval timeout_value;
-    details::daemon_item* di = static_cast<details::daemon_item*>(self);
-    MHD_socket max;
-    while (di->ws->is_running())
-    {
-        max = 0;
-        FD_ZERO (&rs);
-        FD_ZERO (&ws);
-        FD_ZERO (&es);
-        if (MHD_YES != MHD_get_fdset (di->daemon, &rs, &ws, &es, &max))
-            throw ::httpserver::webserver_exception(); /* fatal internal error */
-
-        unsigned long long timeout_microsecs = 0;
-        unsigned long long timeout_secs = 0;
-
-        if (!(MHD_get_timeout (di->daemon, &timeout_microsecs) == MHD_YES))
-        {
-            timeout_secs = 1;
-            timeout_microsecs = 0;
-        }
-        else
-        {
-            if(timeout_microsecs < 1000)
-            {
-                timeout_microsecs = timeout_microsecs * 1000;
-                timeout_secs = 0;
-            }
-        }
-
-        // SUPPLIERS MANAGEMENT
-        {
-            std::map<std::string, details::event_tuple>::const_iterator it;
-            pthread_rwlock_rdlock(&di->ws->runguard);
-            for(it = di->ws->event_suppliers.begin();
-                    it != di->ws->event_suppliers.end();
-                    ++it
-            )
-            {
-                MHD_socket local_max;
-                (*it).second.supply_events(&rs, &ws, &es, &local_max);
-
-                if(local_max > max)
-                    max = local_max;
-
-                struct timeval t = (*it).second.get_timeout();
-                if((unsigned MHD_LONG_LONG) t.tv_sec < timeout_secs ||
-                    ((unsigned MHD_LONG_LONG) t.tv_sec == timeout_secs
-                        && (unsigned MHD_LONG_LONG) t.tv_usec < timeout_microsecs
-                    )
-                )
-                {
-                    timeout_secs = t.tv_sec;
-                    timeout_microsecs = t.tv_usec;
-                }
-            }
-            pthread_rwlock_unlock(&di->ws->runguard);
-        }
-
-        // COMET CONNECTIONS MANAGEMENT
-        di->ws->internal_comet_manager->comet_select(&timeout_secs, &timeout_microsecs, di->ws->start_method);
-
-        timeout_value.tv_sec = timeout_secs;
-        timeout_value.tv_usec = timeout_microsecs;
-
-        /*On unix, MHD_socket will be an int anyway.
-        On windows, the cast is safe because winsock ignores first argument to select*/
-        ::select ((int) max + 1, &rs, &ws, &es, &timeout_value);
-        MHD_run_from_select (di->daemon, &rs, &ws, &es);
-
-        //EVENT SUPPLIERS DISPATCHING
-        {
-            std::map<std::string, details::event_tuple>::const_iterator it;
-            pthread_rwlock_rdlock(&di->ws->runguard);
-            for(it = di->ws->event_suppliers.begin();
-                    it != di->ws->event_suppliers.end();
-                    ++it
-            )
-                (*it).second.dispatch_events();
-        }
-    }
-    return 0x0;
-}
-
 MHD_socket create_socket (int domain, int type, int protocol)
 {
     int sock_cloexec = SOCK_CLOEXEC;
@@ -389,6 +301,8 @@ bool webserver::start(bool blocking)
         throw ::httpserver::webserver_exception();
     }
 
+    if(max_threads != 0)
+        iov.push_back(gen(MHD_OPTION_THREAD_POOL_SIZE, max_threads));
     if(max_connections != 0)
         iov.push_back(gen(MHD_OPTION_CONNECTION_LIMIT, max_connections));
     if(memory_limit != 0)
@@ -431,111 +345,6 @@ bool webserver::start(bool blocking)
         iov.push_back(gen(MHD_OPTION_HTTPS_CRED_TYPE, cred_type));
 #endif //HAVE_GNUTLS
 
-    if(start_method == http_utils::INTERNAL_SELECT)
-    {
-        int on = 1;
-        bool bind_settled = true;
-        int result = 0;
-        if(!bind_socket)
-        {
-            bind_settled = false;
-            struct sockaddr_in servaddr4;
-#if HAVE_INET6
-            struct sockaddr_in6 servaddr6;
-#endif
-            const struct sockaddr *servaddr = NULL;
-            socklen_t addrlen;
-#if HAVE_INET6
-            if (0 != (options & MHD_USE_IPv6))
-                addrlen = sizeof (struct sockaddr_in6);
-            else
-#endif
-                addrlen = sizeof (struct ::sockaddr_in);
-
-#if HAVE_INET6
-            if (0 != (options & MHD_USE_IPv6))
-            {
-              memset (&servaddr6, 0, sizeof (struct sockaddr_in6));
-              servaddr6.sin6_family = AF_INET6;
-              servaddr6.sin6_port = htons (port);
-#if HAVE_SOCKADDR_IN_SIN_LEN
-              servaddr6.sin6_len = sizeof (struct sockaddr_in6);
-#endif
-              servaddr = (struct sockaddr *) &servaddr6;
-            }
-            else
-#endif
-            {
-              memset (&servaddr4, 0, sizeof (struct ::sockaddr_in));
-              servaddr4.sin_family = AF_INET;
-              servaddr4.sin_port = htons (port);
-#if HAVE_SOCKADDR_IN_SIN_LEN
-              servaddr4.sin_len = sizeof (struct ::sockaddr_in);
-#endif
-              servaddr = (struct sockaddr *) &servaddr4;
-            }
-
-            if (use_ipv6)
-                bind_socket = create_socket (PF_INET6, SOCK_STREAM, 0);
-            else
-                bind_socket = create_socket (PF_INET, SOCK_STREAM, 0);
-
-            if (bind_socket == -1)
-            {
-                cout << "Unable to create socket" << endl;
-                throw ::httpserver::webserver_exception();
-            }
-
-            result = setsockopt (bind_socket,
-               SOL_SOCKET,
-               SO_REUSEADDR,
-               (const char*) &on, sizeof (on));
-
-            if (result != 0)
-            {
-                cout << "Unable to set socket option SO_REUSEADDR" << endl;
-                throw ::httpserver::webserver_exception();
-            }
-
-            if(use_ipv6)
-            {
-#ifdef IPPROTO_IPV6
-#ifdef IPV6_V6ONLY
-                setsockopt (bind_socket,
-                    IPPROTO_IPV6, IPV6_V6ONLY,
-                    (const char*) &on, sizeof (on)
-                );
-#endif
-#endif
-            }
-            result = bind(bind_socket, servaddr, addrlen);
-
-            if (result != 0)
-            {
-                cout << gettext("Unable to bind socket to port: ") << port << endl;
-                throw ::httpserver::webserver_exception(); 
-            }   
-        }
-#ifdef _WINDOWS
-		unsigned long ioarg = 1;
-        ioctlsocket(bind_socket, FIONBIO, &ioarg);
-#else
-        int flags = fcntl (bind_socket, F_GETFL);
-        flags |= O_NONBLOCK;
-        fcntl (bind_socket, F_SETFL, flags);
-#endif
-        if(!bind_settled)
-        {
-            result = listen(bind_socket, 1);
-            if (result != 0)
-            {
-                cout << gettext("Unable to listen on port: ") << port << endl;
-                throw ::httpserver::webserver_exception(); 
-            }
-        }
-        iov.push_back(gen(MHD_OPTION_LISTEN_SOCKET, bind_socket));
-    }
-
     iov.push_back(gen(MHD_OPTION_END, 0, NULL ));
 
     int start_conf = start_method;
@@ -547,76 +356,30 @@ bool webserver::start(bool blocking)
         start_conf |= MHD_USE_DEBUG;
     if(pedantic)
         start_conf |= MHD_USE_PEDANTIC_CHECKS;
+    if(comet_enabled)
+        start_conf |= MHD_USE_SUSPEND_RESUME;
 
 #ifdef USE_FASTOPEN
     start_conf |= MHD_USE_TCP_FASTOPEN;
 #endif
 
-    int num_threads = 1;
-    if(max_threads > num_threads)
-        num_threads = max_threads;
-
     this->running = true;
-    if(start_method == http_utils::INTERNAL_SELECT)
-    {
-        int i;
-        try {
-            for(i = 0; i < num_threads; i++)
-            {
-                struct MHD_Daemon* daemon = MHD_start_daemon
-                (
-                     start_conf, this->port, &policy_callback, this,
-                     &answer_to_connection, this, MHD_OPTION_ARRAY,
-                     &iov[0], MHD_OPTION_END
-                );
-                if(NULL == daemon)
-                {
-                    cout << gettext("Unable to connect daemon to port: ") << this->port << endl;
-                    throw ::httpserver::webserver_exception();
-                }
-                details::daemon_item* di = new details::daemon_item(this, daemon);
-                daemons.push_back(di);
 
-                //RUN SELECT THREADS
-                pthread_t t;
-                threads.push_back(t);
-
-                if(pthread_create(
-                    &threads[i],
-                    NULL,
-                    &webserver::select,
-                    static_cast<void*>(di)
-                ))
-                {
-                    throw ::httpserver::webserver_exception();
-                }
-            }
-        } catch (::httpserver::webserver_exception &e) {
-            this->running = false;
-            for (;i >= 0; --i) {
-                pthread_kill(threads[i], 9);
-            }
-            threads.clear();
-            throw e;
-        }
-    }
-    else
+    struct MHD_Daemon* daemon = MHD_start_daemon
+    (
+            start_conf, this->port, &policy_callback, this,
+            &answer_to_connection, this, MHD_OPTION_ARRAY,
+            &iov[0], MHD_OPTION_END
+    );
+    if(NULL == daemon)
     {
-        struct MHD_Daemon* daemon = MHD_start_daemon
-        (
-                start_conf, this->port, &policy_callback, this,
-                &answer_to_connection, this, MHD_OPTION_ARRAY,
-                &iov[0], MHD_OPTION_END
-        );
-        if(NULL == daemon)
-        {
-            cout << gettext("Unable to connect daemon to port: ") <<
-                this->port << endl;
-            throw ::httpserver::webserver_exception();
-        }
-        details::daemon_item* di = new details::daemon_item(this, daemon);
-        daemons.push_back(di);
+        cout << gettext("Unable to connect daemon to port: ") <<
+            this->port << endl;
+        throw ::httpserver::webserver_exception();
     }
+    details::daemon_item* di = new details::daemon_item(this, daemon);
+    daemons.push_back(di);
+
     bool value_onclose = false;
     if(blocking)
     {
@@ -650,12 +413,6 @@ bool webserver::stop()
         }
         threads.clear();
         typedef vector<details::daemon_item*>::const_iterator daemon_item_it;
-
-        if(start_method == http_utils::INTERNAL_SELECT)
-        {
-            for(daemon_item_it it = daemons.begin(); it != daemons.end(); ++it)
-                MHD_quiesce_daemon((*it)->daemon);
-        }
 
         for(daemon_item_it it = daemons.begin(); it != daemons.end(); ++it)
             delete *it;
@@ -1300,51 +1057,27 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
     }
 }
 
-void webserver::send_message_to_consumer(
-        const httpserver_ska& connection_id,
-        const std::string& message,
-        bool to_lock
-)
-{
-    internal_comet_manager->send_message_to_consumer(connection_id, message, to_lock, start_method);
-}
-
 void webserver::send_message_to_topic(
         const std::string& topic,
         const std::string& message
 )
 {
-    internal_comet_manager->send_message_to_topic(topic, message, start_method);
+    internal_comet_manager->send_message_to_topic(topic, message);
 }
 
 void webserver::register_to_topics(
         const std::vector<std::string>& topics,
-        const httpserver_ska& connection_id,
-        int keepalive_secs,
-        string keepalive_msg
+        MHD_Connection* connection_id
 )
 {
-    internal_comet_manager->register_to_topics(topics, connection_id, keepalive_secs, keepalive_msg, start_method);
+    internal_comet_manager->register_to_topics(topics, connection_id);
 }
 
-size_t webserver::read_message(const httpserver_ska& connection_id,
+size_t webserver::read_message(MHD_Connection* connection_id,
     std::string& message
 )
 {
     return internal_comet_manager->read_message(connection_id, message);
-}
-
-size_t webserver::get_topic_consumers(
-        const std::string& topic,
-        std::set<httpserver_ska>& consumers
-)
-{
-    return internal_comet_manager->get_topic_consumers(topic, consumers);
-}
-
-bool webserver::pop_signaled(const httpserver_ska& consumer)
-{
-    return internal_comet_manager->pop_signaled(consumer, start_method);
 }
 
 http_response* webserver::get_from_cache(
@@ -1535,20 +1268,6 @@ void webserver::lock_cache_entry(details::cache_entry* ce)
 void webserver::get_response(details::cache_entry* ce, http_response** res)
 {
     *res = ce->response.ptr();
-}
-
-void webserver::remove_event_supplier(const std::string& id)
-{
-    pthread_rwlock_wrlock(&runguard);
-    event_suppliers.erase(id);
-    pthread_rwlock_unlock(&runguard);
-}
-
-void webserver::register_event_supplier(const std::string& id, const details::event_tuple& evt)
-{
-    pthread_rwlock_wrlock(&runguard);
-    event_suppliers.insert(std::pair<std::string, details::event_tuple>(id, evt));
-    pthread_rwlock_unlock(&runguard);
 }
 
 };

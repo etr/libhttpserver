@@ -25,7 +25,6 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include "http_utils.hpp"
-#include "details/event_tuple.hpp"
 #include "webserver.hpp"
 #include "http_response.hpp"
 #include "http_response_builder.hpp"
@@ -245,19 +244,14 @@ void http_response::get_raw_response_lp_receive(
 )
 {
     this->ws = ws;
-    this->connection_id = MHD_get_connection_info(
-            this->underlying_connection,
-            MHD_CONNECTION_INFO_CLIENT_ADDRESS
-    )->client_addr;
+    this->connection_id = this->underlying_connection;
 
     *response = MHD_create_response_from_callback(MHD_SIZE_UNKNOWN, 80,
         &http_response::data_generator, (void*) this, NULL);
 
     ws->register_to_topics(
             topics,
-            connection_id,
-            keepalive_secs,
-            keepalive_msg
+            connection_id
     );
 }
 
@@ -270,15 +264,10 @@ ssize_t http_response::data_generator(
 {
     http_response* _this = static_cast<http_response*>(cls);
 
-    if(_this->ws->pop_signaled(_this->connection_id))
-    {
-        string message;
-        size_t size = _this->ws->read_message(_this->connection_id, message);
-        memcpy(buf, message.c_str(), size);
-        return size;
-    }
-    else
-        return 0;
+    string message;
+    size_t size = _this->ws->read_message(_this->connection_id, message);
+    memcpy(buf, message.c_str(), size);
+    return size;
 }
 
 void http_response::get_raw_response_lp_send(

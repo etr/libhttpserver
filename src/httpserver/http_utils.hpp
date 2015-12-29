@@ -77,9 +77,9 @@ class http_utils
     enum start_method_T
     {
 #if defined(__MINGW32__) || defined(__CYGWIN32__)
-        INTERNAL_SELECT = MHD_NO_FLAG,
+        INTERNAL_SELECT = MHD_USE_SELECT_INTERNALLY | MHD_USE_POLL,
 #else
-        INTERNAL_SELECT = MHD_NO_FLAG/* | MHD_USE_EPOLL_LINUX_ONLY | MHD_USE_EPOLL_TURBO*/,
+        INTERNAL_SELECT = MHD_USE_SELECT_INTERNALLY | MHD_USE_EPOLL_LINUX_ONLY | MHD_USE_EPOLL_TURBO, 
 #endif
         THREAD_PER_CONNECTION = MHD_USE_THREAD_PER_CONNECTION | MHD_USE_POLL
     };
@@ -365,59 +365,6 @@ size_t http_unescape (char *val);
 char* load_file (const char *filename);
 
 size_t load_file (const char* filename, char** content);
-
-struct httpserver_ska
-{
-        httpserver_ska(struct sockaddr* addr):
-            addr(addr),
-            ip(get_ip_str_new(addr)),
-            port(get_port(addr))
-        {
-        }
-
-        httpserver_ska(): addr(0x0) { }
-
-        httpserver_ska(const httpserver_ska& o):
-            addr(o.addr),
-            ip(o.ip),
-            port(o.port)
-        {
-        }
-
-        bool operator<(const httpserver_ska& o) const
-        {
-            if(this->ip < o.ip)
-                return true;
-            else if(this->ip > o.ip)
-                return false;
-            else if(this->port < o.port)
-                return true;
-            else
-                return false;
-        }
-
-        httpserver_ska& operator=(const httpserver_ska& o)
-        {
-            this->addr = o.addr;
-            this->ip = o.ip;
-            this->port = o.port;
-            return *this;
-        }
-
-        httpserver_ska& operator=(struct sockaddr* addr)
-        {
-            this->addr = addr;
-            this->ip = get_ip_str_new(addr);
-            this->port = get_port(addr);
-            return *this;
-        }
-
-        struct sockaddr* addr;
-        std::string ip;
-        int port;
-};
-
-
 
 };
 };

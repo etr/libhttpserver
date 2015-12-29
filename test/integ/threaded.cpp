@@ -42,7 +42,7 @@ LT_BEGIN_SUITE(threaded_suite)
 
     void set_up()
     {
-        ws = new webserver(create_webserver(8080).max_threads(5));
+        ws = new webserver(create_webserver(8080).start_method(http::http_utils::INTERNAL_SELECT).max_threads(5));
         ws->start(false);
     }
 

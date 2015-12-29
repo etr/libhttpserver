@@ -1,8 +1,13 @@
-Sun Jan 27 19:39:01 2016 +0100
+Tue Dec 29 18:56:31 2015 +0100
+	Removed support for event supplier (badly defined, complicated and almost useless)
+	Eliminated custom selection logic (simplified overall code in webserver.cpp)
+	Changed comet to use a lock-free implementation
+
+Sun Dec 27 19:39:01 2015 +0100
 	Removed POLL start configuration (THREAD now defaults to POLL or EPOLL on Linux)
 	Use TCP_FASTOPEN on linux >= 3.6
 
-Sat Jan 26 15:08:22 2016 +0100
+Sat Dec 26 15:08:22 2015 +0100
 	Changed http_resource to use classic C++ polymorphism using virtual instead of CRTP
 
 Fri Jul 17 21:38:54 2015 +0000

@@ -47,7 +47,7 @@ int main()
 {
     //it is possible to create a webserver passing a great number of parameters.
     //In this case we are just passing the port and the number of thread running.
-    webserver ws = create_webserver(8080).start_method(http::http_utils::INTERNAL_SELECT);
+    webserver ws = create_webserver(8080).comet();
 
     comet_send_resource csr;
     comet_listen_resource clr;

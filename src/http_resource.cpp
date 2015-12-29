@@ -24,7 +24,6 @@
 #include "http_utils.hpp"
 #include "http_request.hpp"
 #include "http_response.hpp"
-#include "details/event_tuple.hpp"
 #include "webserver.hpp"
 #include "string_utilities.hpp"
 #include "http_response_builder.hpp"

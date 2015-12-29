@@ -49,7 +49,6 @@ namespace httpserver {
 
 class http_resource;
 class http_response;
-template<typename CHILD> class event_supplier;
 class create_webserver;
 
 namespace http {
@@ -58,7 +57,6 @@ struct httpserver_ska;
 };
 
 namespace details {
-    class event_tuple;
     class http_endpoint;
     struct daemon_item;
     struct modded_request;
@@ -124,20 +122,12 @@ class webserver
         void send_message_to_topic(const std::string& topic,
                 const std::string& message
         );
-        void send_message_to_consumer(const http::httpserver_ska& connection_id,
-                const std::string& message, bool to_lock = true
-        );
         void register_to_topics(const std::vector<std::string>& topics,
-                const http::httpserver_ska& connection_id, int keepalive_secs = -1,
-                std::string keepalive_msg = ""
+                MHD_Connection* connection_id
         );
-        size_t read_message(const http::httpserver_ska& connection_id,
+        size_t read_message(MHD_Connection* connection_id,
             std::string& message
         );
-        size_t get_topic_consumers(const std::string& topic,
-                std::set<http::httpserver_ska>& consumers
-        );
-        bool pop_signaled(const http::httpserver_ska& consumer);
 
         http_response* get_from_cache(const std::string& key, bool* valid,
                 bool lock = false, bool write = false
@@ -174,16 +164,6 @@ class webserver
         {
             return this->unescaper;
         }
-
-        template<typename T>
-        void register_event_supplier(const std::string& id,
-                event_supplier<T>* ev_supplier
-        )
-        {
-            register_event_supplier(id, details::event_tuple(ev_supplier));
-        }
-
-        void remove_event_supplier(const std::string& id);
 
         /**
          * Method used to kill the webserver waiting for it to terminate
@@ -228,6 +208,7 @@ class webserver
         const bool regex_checking;
         const bool ban_system_enabled;
         const bool post_process_enabled;
+        const bool comet_enabled;
         bool single_resource;
         pthread_mutex_t mutexwait;
         pthread_rwlock_t runguard;
@@ -247,8 +228,6 @@ class webserver
 
         std::vector<details::daemon_item*> daemons;
         std::vector<pthread_t> threads;
-
-        std::map<std::string, details::event_tuple> event_suppliers;
 
         details::comet_manager* internal_comet_manager;
 
@@ -339,13 +318,6 @@ class webserver
                 struct details::modded_request* mr,
                 const char* version, const char* method
         );
-
-        void register_event_supplier(const std::string& id, const details::event_tuple& evt);
-
-        bool use_internal_select()
-        {
-            return this->start_method == http::http_utils::INTERNAL_SELECT;
-        }
 
         friend int policy_callback (void *cls,
                 const struct sockaddr* addr, socklen_t addrlen
