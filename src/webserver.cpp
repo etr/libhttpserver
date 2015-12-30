@@ -211,16 +211,12 @@ void webserver::request_completed (
 )
 {
     details::modded_request* mr = static_cast<details::modded_request*>(*con_cls);
-    if (mr != 0x0)
-    {
-        if(mr->ws != 0x0)
-        {
-            mr->ws->internal_comet_manager->complete_request(mr->dhrs->connection_id);
-        }
+    if (mr == 0x0) return;
 
-        delete mr;
-        mr = 0x0;
-    }
+    if (mr->ws != 0x0) mr->ws->internal_comet_manager->complete_request(mr->dhrs->connection_id);
+
+    delete mr;
+    mr = 0x0;
 }
 
 bool webserver::register_resource(const std::string& resource, http_resource* hrm, bool family)
@@ -246,12 +242,12 @@ MHD_socket create_socket (int domain, int type, int protocol)
     int sock_cloexec = SOCK_CLOEXEC;
     int ctype = SOCK_STREAM | sock_cloexec;
 
-	/* use SOCK_STREAM rather than ai_socktype: some getaddrinfo
+    /* use SOCK_STREAM rather than ai_socktype: some getaddrinfo
     * implementations do not set ai_socktype, e.g. RHL6.2. */
     MHD_socket fd = socket(domain, ctype, protocol);
 
 #ifdef _WINDOWS
-	if (fd == INVALID_SOCKET)
+    if (fd == INVALID_SOCKET)
 #else
     if ((fd == -1) &&
         (errno == EINVAL || errno == EPROTONOSUPPORT) && (sock_cloexec != 0)
@@ -398,33 +394,28 @@ bool webserver::is_running()
 
 bool webserver::stop()
 {
-    if(this->running)
+    if(!this->running) return false;
+
+    pthread_mutex_lock(&mutexwait);
+    this->running = false;
+    pthread_cond_signal(&mutexcond);
+    pthread_mutex_unlock(&mutexwait);
+    for(unsigned int i = 0; i < threads.size(); ++i)
     {
-        pthread_mutex_lock(&mutexwait);
-        this->running = false;
-        pthread_cond_signal(&mutexcond);
-        pthread_mutex_unlock(&mutexwait);
-        for(unsigned int i = 0; i < threads.size(); ++i)
-        {
-            void* t_res;
-            pthread_join(threads[i], &t_res);
-            free(t_res);
-        }
-        threads.clear();
-        typedef vector<details::daemon_item*>::const_iterator daemon_item_it;
-
-        for(daemon_item_it it = daemons.begin(); it != daemons.end(); ++it)
-            delete *it;
-        daemons.clear();
-
-        shutdown(bind_socket, 2);
-
-        return true;
+        void* t_res;
+        pthread_join(threads[i], &t_res);
+        free(t_res);
     }
-    else
-    {
-        return false;
-    }
+    threads.clear();
+    typedef vector<details::daemon_item*>::const_iterator daemon_item_it;
+
+    for(daemon_item_it it = daemons.begin(); it != daemons.end(); ++it)
+        delete *it;
+    daemons.clear();
+
+    shutdown(bind_socket, 2);
+
+    return true;
 }
 
 void webserver::unregister_resource(const string& resource)
@@ -535,18 +526,20 @@ int webserver::build_request_args (
 
 int policy_callback (void *cls, const struct sockaddr* addr, socklen_t addrlen)
 {
-    if((static_cast<webserver*>(cls))->ban_system_enabled)
+    if(!(static_cast<webserver*>(cls))->ban_system_enabled) return MHD_YES;
+
+    if((((static_cast<webserver*>(cls))->default_policy == http_utils::ACCEPT) &&
+       ((static_cast<webserver*>(cls))->bans.count(addr)) &&
+       (!(static_cast<webserver*>(cls))->allowances.count(addr))
+    ) ||
+    (((static_cast<webserver*>(cls))->default_policy == http_utils::REJECT)
+       && ((!(static_cast<webserver*>(cls))->allowances.count(addr)) ||
+       ((static_cast<webserver*>(cls))->bans.count(addr)))
+    ))
     {
-        if((((static_cast<webserver*>(cls))->default_policy == http_utils::ACCEPT) &&
-           ((static_cast<webserver*>(cls))->bans.count(addr)) &&
-           (!(static_cast<webserver*>(cls))->allowances.count(addr))
-        ) ||
-        (((static_cast<webserver*>(cls))->default_policy == http_utils::REJECT)
-           && ((!(static_cast<webserver*>(cls))->allowances.count(addr)) ||
-           ((static_cast<webserver*>(cls))->bans.count(addr)))
-        ))
-            return MHD_NO;
+        return MHD_NO;
     }
+
     return MHD_YES;
 }
 
@@ -561,14 +554,12 @@ void* uri_log(void* cls, const char* uri)
 void error_log(void* cls, const char* fmt, va_list ap)
 {
     webserver* dws = static_cast<webserver*>(cls);
-    if(dws->log_error != 0x0)
-        dws->log_error(fmt);
+    if(dws->log_error != 0x0) dws->log_error(fmt);
 }
 
 void access_log(webserver* dws, string uri)
 {
-    if(dws->log_access != 0x0)
-        dws->log_access(uri);
+    if(dws->log_access != 0x0) dws->log_access(uri);
 }
 
 size_t unescaper_func(void * cls, struct MHD_Connection *c, char *s)
@@ -590,10 +581,8 @@ size_t internal_unescaper(void* cls, char* s)
         dws->unescaper(s);
         return strlen(s);
     }
-    else
-    {
-        return http_unescape(s);
-    }
+
+    return http_unescape(s);
 }
 
 int webserver::post_iterator (void *cls, enum MHD_ValueKind kind,
@@ -704,21 +693,16 @@ int webserver::bodyfull_requests_answer_second_step(
     size_t* upload_data_size, struct details::modded_request* mr
 )
 {
-    if ( 0 != *upload_data_size)
-    {
-#ifdef DEBUG
-        cout << "Writing content: " << upload_data << endl;
-#endif //DEBUG
-        mr->dhr->grow_content(upload_data, *upload_data_size);
-        if (mr->pp != NULL)
-        {
-            MHD_post_process(mr->pp, upload_data, *upload_data_size);
-        }
-        *upload_data_size = 0;
-        return MHD_YES;
-    }
+    if (0 == *upload_data_size) return complete_request(connection, mr, version, method);
 
-    return complete_request(connection, mr, version, method);
+#ifdef DEBUG
+    cout << "Writing content: " << upload_data << endl;
+#endif //DEBUG
+    mr->dhr->grow_content(upload_data, *upload_data_size);
+
+    if (mr->pp != NULL) MHD_post_process(mr->pp, upload_data, *upload_data_size);
+    *upload_data_size = 0;
+    return MHD_YES;
 }
 
 void webserver::end_request_construction(
@@ -987,62 +971,7 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
     struct details::modded_request* mr =
         static_cast<struct details::modded_request*>(*con_cls);
 
-    if(mr->second == false)
-    {
-        mr->standardized_url = new string();
-        internal_unescaper((void*) static_cast<webserver*>(cls), (char*) url);
-        http_utils::standardize_url(url, *mr->standardized_url);
-
-        bool body = false;
-
-        access_log(
-                static_cast<webserver*>(cls),
-                *(mr->complete_uri) + " METHOD: " + method
-        );
-
-        if( 0 == strcasecmp(method, http_utils::http_method_get.c_str()))
-        {
-            mr->callback = &http_resource::render_GET;
-        }
-        else if (0 == strcmp(method, http_utils::http_method_post.c_str()))
-        {
-            mr->callback = &http_resource::render_POST;
-            body = true;
-        }
-        else if (0 == strcasecmp(method, http_utils::http_method_put.c_str()))
-        {
-            mr->callback = &http_resource::render_PUT;
-            body = true;
-        }
-        else if (0 == strcasecmp(method,http_utils::http_method_delete.c_str()))
-        {
-            mr->callback = &http_resource::render_DELETE;
-        }
-        else if (0 == strcasecmp(method, http_utils::http_method_head.c_str()))
-        {
-            mr->callback = &http_resource::render_HEAD;
-        }
-        else if (0 ==strcasecmp(method,http_utils::http_method_connect.c_str()))
-        {
-            mr->callback = &http_resource::render_CONNECT;
-        }
-        else if (0 == strcasecmp(method, http_utils::http_method_trace.c_str()))
-        {
-            mr->callback = &http_resource::render_TRACE;
-        }
-        else if (0 ==strcasecmp(method,http_utils::http_method_options.c_str()))
-        {
-            mr->callback = &http_resource::render_OPTIONS;
-        }
-
-        if(body)
-            return static_cast<webserver*>(cls)->
-                bodyfull_requests_answer_first_step(connection, mr);
-        else
-            return static_cast<webserver*>(cls)->
-                bodyless_requests_answer(connection, method, version, mr);
-    }
-    else
+    if(mr->second != false)
     {
         return static_cast<webserver*>(cls)->
             bodyfull_requests_answer_second_step(
@@ -1054,6 +983,54 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
                     mr
             );
     }
+
+    mr->standardized_url = new string();
+    internal_unescaper((void*) static_cast<webserver*>(cls), (char*) url);
+    http_utils::standardize_url(url, *mr->standardized_url);
+
+    bool body = false;
+
+    access_log(
+            static_cast<webserver*>(cls),
+            *(mr->complete_uri) + " METHOD: " + method
+    );
+
+    if( 0 == strcasecmp(method, http_utils::http_method_get.c_str()))
+    {
+        mr->callback = &http_resource::render_GET;
+    }
+    else if (0 == strcmp(method, http_utils::http_method_post.c_str()))
+    {
+        mr->callback = &http_resource::render_POST;
+        body = true;
+    }
+    else if (0 == strcasecmp(method, http_utils::http_method_put.c_str()))
+    {
+        mr->callback = &http_resource::render_PUT;
+        body = true;
+    }
+    else if (0 == strcasecmp(method,http_utils::http_method_delete.c_str()))
+    {
+        mr->callback = &http_resource::render_DELETE;
+    }
+    else if (0 == strcasecmp(method, http_utils::http_method_head.c_str()))
+    {
+        mr->callback = &http_resource::render_HEAD;
+    }
+    else if (0 ==strcasecmp(method,http_utils::http_method_connect.c_str()))
+    {
+        mr->callback = &http_resource::render_CONNECT;
+    }
+    else if (0 == strcasecmp(method, http_utils::http_method_trace.c_str()))
+    {
+        mr->callback = &http_resource::render_TRACE;
+    }
+    else if (0 ==strcasecmp(method,http_utils::http_method_options.c_str()))
+    {
+        mr->callback = &http_resource::render_OPTIONS;
+    }
+
+    return body ? static_cast<webserver*>(cls)->bodyfull_requests_answer_first_step(connection, mr) : static_cast<webserver*>(cls)->bodyless_requests_answer(connection, method, version, mr);
 }
 
 void webserver::send_message_to_topic(
