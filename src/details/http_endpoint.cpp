@@ -50,10 +50,7 @@ http_endpoint::http_endpoint
     family_url(family),
     reg_compiled(false)
 {
-    if(use_regex)
-        this->url_modded = "^/";
-    else
-        this->url_modded = "/";
+    this->url_modded = use_regex ? "^/" : "/";
     vector<string> parts;
 
 #ifdef CASE_INSENSITIVE
@@ -68,103 +65,49 @@ http_endpoint::http_endpoint
     http_utils::tokenize_url(url, parts);
     string buffered;
     bool first = true;
-    if(registration)
+
+    for (unsigned int i = 0; i < parts.size(); i++)
     {
-        for(unsigned int i = 0; i< parts.size(); i++)
+        if(!registration)
         {
-            if((parts[i] != "") && (parts[i][0] != '{'))
-            {
-                if(first)
-                {
-                    if(parts[i][0] == '^')
-                    {
-                        this->url_modded = parts[i];
-                    }
-                    else
-                    {
-                        this->url_modded += parts[i];
-                    }
-                    first = false;
-                }
-                else
-                {
-                    this->url_modded += "/" + parts[i];
-                }
-            }
-            else
-            {
-                if(
-                    (parts[i].size() >= 3) &&
-                    (parts[i][0] == '{') &&
-                    (parts[i][parts[i].size() - 1] == '}')
-                )
-                {
-                    std::string::size_type bar = parts[i].find_first_of('|');
-                    if(bar != string::npos)
-                    {
-                        this->url_pars.push_back(parts[i].substr(1, bar - 1));
-                        if(first)
-                        {
-                            this->url_modded += parts[i].substr(
-                                    bar + 1, parts[i].size() - bar - 2
-                            );
-                            first = false;
-                        }
-                        else
-                        {
-                            this->url_modded += "/"+parts[i].substr(
-                                    bar + 1, parts[i].size() - bar - 2
-                            );
-                        }
-                    }
-                    else
-                    {
-                        this->url_pars.push_back(
-                                parts[i].substr(1,parts[i].size() - 2)
-                        );
-                        if(first)
-                        {
-                            this->url_modded += "([^\\/]+)";
-                            first = false;
-                        }
-                        else
-                        {
-                            this->url_modded += "/([^\\/]+)";
-                        }
-                    }
-                    this->chunk_positions.push_back(i);
-                }
-                else
-                {
-                    throw bad_http_endpoint();
-                }
-            }
+            this->url_modded += (first ? "" : "/") + parts[i];
+            first = false;
+
             this->url_pieces.push_back(parts[i]);
+
+            continue;
         }
-    }
-    else
-    {
-        for(unsigned int i = 0; i< parts.size(); i++)
+
+        if((parts[i] != "") && (parts[i][0] != '{'))
         {
-            if(first)
-            {
-                this->url_modded += parts[i];
-                first = false;
-            }
-            else
-            {
-                this->url_modded += "/" + parts[i];
-            }
+            this->url_modded = (first ? "" : "/") + (parts[i][0] == '^' ? "" : this->url_modded) + parts[i];
+            first = false;
             this->url_pieces.push_back(parts[i]);
+
+            continue;
         }
+
+        if((parts[i].size() < 3) || (parts[i][0] != '{') || (parts[i][parts[i].size() - 1] != '}'))
+            throw bad_http_endpoint();
+
+        std::string::size_type bar = parts[i].find_first_of('|');
+        this->url_pars.push_back(parts[i].substr(1, bar != string::npos ? bar - 1 : parts[i].size() - bar - 2));
+        this->url_modded += (first ? "" : "/") + (bar != string::npos ? parts[i].substr(bar + 1, parts[i].size() - bar - 2) : "([^\\/]+)");
+
+        first = false;
+
+        this->chunk_positions.push_back(i);
+
+        this->url_pieces.push_back(parts[i]);
     }
+
     if(use_regex)
     {
         this->url_modded += "$";
         regcomp(&(this->re_url_modded), url_modded.c_str(),
                 REG_EXTENDED|REG_ICASE|REG_NOSUB
         );
-        reg_compiled = true;
+        this->reg_compiled = true;
     }
 }
 
@@ -206,27 +149,18 @@ bool http_endpoint::operator <(const http_endpoint& b) const
 
 bool http_endpoint::match(const http_endpoint& url) const
 {
-    if(this->family_url && (url.url_pieces.size() >= this->url_pieces.size()))
+
+    if(!this->family_url || url.url_pieces.size() < this->url_pieces.size())  
+        return regexec(&(this->re_url_modded), url.url_complete.c_str(), 0, NULL, 0) == 0;
+
+    string nn = "/";
+    bool first = true;
+    for(unsigned int i = 0; i < this->url_pieces.size(); i++)
     {
-        string nn = "/";
-        bool first = true;
-        for(unsigned int i = 0; i < this->url_pieces.size(); i++)
-        {
-            if(first)
-            {
-                nn += url.url_pieces[i];
-                first = false;
-            }
-            else
-            {
-                nn += "/" + url.url_pieces[i];
-            }
-        }
-        return regexec(&(this->re_url_modded), nn.c_str(), 0, NULL, 0) == 0;
+        nn += (first ? "" : "/") + url.url_pieces[i];
+        first = false;
     }
-    else
-        return regexec(&(this->re_url_modded),
-                url.url_complete.c_str(), 0, NULL, 0) == 0;
+    return regexec(&(this->re_url_modded), nn.c_str(), 0, NULL, 0) == 0;
 }
 
 };
