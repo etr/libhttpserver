@@ -94,8 +94,6 @@ class http_response
             keepalive_msg(b.keepalive_msg),
             send_topic(b.send_topic),
             underlying_connection(b.underlying_connection),
-            ca(0x0),
-            closure_data(0x0),
             ce(b.ce),
             cycle_callback(b.cycle_callback),
             get_raw_response(b.get_raw_response),
@@ -256,8 +254,6 @@ class http_response
         std::string keepalive_msg;
         std::string send_topic;
         struct MHD_Connection* underlying_connection;
-        void(*ca)(void*);
-        void* closure_data;
         details::cache_entry* ce;
         cycle_callback_ptr cycle_callback;
 

@@ -217,8 +217,7 @@ void webserver::request_completed (
         {
             mr->ws->internal_comet_manager->complete_request(mr->dhrs->connection_id);
         }
-        if(mr->dhrs.res != 0x0 && mr->dhrs->ca != 0x0)
-            mr->dhrs->ca(mr->dhrs->closure_data);
+
         delete mr;
         mr = 0x0;
     }

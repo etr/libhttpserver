@@ -53,8 +53,6 @@ http_response::http_response(const http_response_builder& builder):
     keepalive_msg(builder._keepalive_msg),
     send_topic(builder._send_topic),
     underlying_connection(0x0),
-    ca(0x0),
-    closure_data(0x0),
     ce(builder._ce),
     cycle_callback(builder._cycle_callback),
     get_raw_response(this, builder._get_raw_response),
