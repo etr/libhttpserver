@@ -25,6 +25,26 @@
 #ifndef _HTTP_RESPONSE_PTR_HPP_
 #define _HTTP_RESPONSE_PTR_HPP_
 
+#include "http_response.hpp"
+
+#if defined(__CLANG_ATOMICS)
+
+#define atomic_increment(object) \
+    __c11_atomicadd_fetch(object, 1, __ATOMIC_RELAXED)
+
+#define atomic_decrement(object) \
+    __c11_atomic_sub_fetch(object, 1, __ATOMIC_ACQ_REL)
+
+#else
+
+#define atomic_increment(object) \
+    __atomic_add_fetch(object, 1, __ATOMIC_RELAXED)
+
+#define atomic_decrement(object) \
+    __atomic_sub_fetch(object, 1, __ATOMIC_ACQ_REL)
+
+#endif
+
 namespace httpserver
 {
 
@@ -36,78 +56,55 @@ namespace details
 struct http_response_ptr
 {
     public:
-        http_response_ptr():
-            res(0x0),
-            num_references(0x0)
+        http_response_ptr(http_response* res = 0x0):
+            res(res)
         {
-            num_references = new int(0);
+            num_references = new int(1);
         }
-        http_response_ptr(http_response* res):
-            res(res),
-            num_references(0x0)
-        {
-            num_references = new int(0);
-        }
+
         http_response_ptr(const http_response_ptr& b):
             res(b.res),
             num_references(b.num_references)
         {
-            (*num_references)++;
+            atomic_increment(b.num_references);
         }
+
         ~http_response_ptr()
         {
-            if(num_references)
-            {
-                if((*num_references) == 0)
-                {
-                    if(res && res->is_autodelete())
-                    {
-                        delete res;
-                        res = 0x0;
-                    }
-                    delete num_references;
-                }
-                else
-                    (*num_references)--;
-            }
+            if (atomic_decrement(num_references) != 0 || res == 0x0) return;
+
+            delete res;
+            delete num_references;
+
+            res = 0x0;
+            num_references = 0x0;
         }
+
+        http_response_ptr& operator=(http_response_ptr b)
+        {
+            using std::swap;
+
+            swap(this->num_references, b.num_references);
+            swap(this->res, b.res);
+
+            return *this;
+        }
+
         http_response& operator* ()
         {
             return *res;
         }
+
         http_response* operator-> ()
         {
             return res;
         }
+
         http_response* ptr()
         {
             return res;
         }
-        http_response_ptr& operator= (const http_response_ptr& b)
-        {
-            if( this != &b)
-            {
-                if(num_references)
-                {
-                    if((*num_references) == 0)
-                    {
-                        if(res && res->autodelete)
-                        {
-                            delete res;
-                            res = 0x0;
-                        }
-                        delete num_references;
-                    }
-                    else
-                        (*num_references)--;
-                }
 
-                res = b.res;
-                num_references = b.num_references;
-                (*num_references)++;
-            }
-            return *this;
-        }
     private:
         http_response* res;
         int* num_references;
