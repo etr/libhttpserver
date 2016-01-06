@@ -369,6 +369,6 @@ class create_webserver
         friend class webserver;
 };
 
-} //httpserver
+} // namespace httpserver
 
 #endif //_CREATE_WEBSERVER_HPP_

@@ -366,7 +366,7 @@ char* load_file (const char *filename);
 
 size_t load_file (const char* filename, char** content);
 
-};
-};
+} // namespace http
+} // namespace httpserver
 #endif
 

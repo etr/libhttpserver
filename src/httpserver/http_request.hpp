@@ -33,16 +33,16 @@
 
 struct MHD_Connection;
 
-namespace httpserver
-{
+namespace httpserver {
 
 class webserver;
 
-namespace http
-{
-    class header_comparator;
-    class arg_comparator;
-};
+namespace http {
+
+class header_comparator;
+class arg_comparator;
+
+} // namespace http
 
 /**
  * Class representing an abstraction for an Http Request. It is used from classes using these apis to receive information through http protocol.
@@ -588,5 +588,5 @@ class http_request
 
 std::ostream &operator<< (std::ostream &os, const http_request &r);
 
-};
+} // namespace httpserver
 #endif

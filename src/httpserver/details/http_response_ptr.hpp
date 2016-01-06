@@ -45,13 +45,11 @@
 
 #endif
 
-namespace httpserver
-{
+namespace httpserver {
 
 class webserver;
 
-namespace details
-{
+namespace details {
 
 struct http_response_ptr
 {
@@ -111,7 +109,7 @@ struct http_response_ptr
         friend class ::httpserver::webserver;
 };
 
-} //details
-} //httpserver
+} // namespace details
+} // namespace httpserver
 
 #endif //_HTTP_RESPONSE_PTR_HPP_

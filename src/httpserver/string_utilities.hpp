@@ -28,10 +28,8 @@
 #include <string>
 #include <vector>
 
-namespace httpserver
-{
-namespace string_utilities
-{
+namespace httpserver {
+namespace string_utilities {
 
 /**
  * Function used to convert a string to its uppercase version.
@@ -49,7 +47,8 @@ void regex_replace(const std::string& str, const std::string& pattern,
         const std::string& replace_str, std::string& result
 );
 void to_upper(std::string& str);
-};
-};
+
+} // namespace string_utilities
+} // namespace httpserver
 
 #endif

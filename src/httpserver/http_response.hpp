@@ -35,24 +35,21 @@
 
 struct MHD_Connection;
 
-namespace httpserver
-{
+namespace httpserver {
 
 class webserver;
 class http_response_builder;
 
-namespace http
-{
+namespace http {
     class header_comparator;
     class arg_comparator;
-};
+} // namespace http
 
-namespace details
-{
+namespace details {
     struct http_response_ptr;
     ssize_t cb(void*, uint64_t, char*, size_t);
     struct cache_entry;
-};
+} // namespace details
 
 class bad_caching_attempt: public std::exception
 {
@@ -294,7 +291,7 @@ class http_response
         friend class http_response_builder;
         friend void clone_response(const http_response& hr, http_response** dhr);
         friend ssize_t details::cb(void* cls, uint64_t pos, char* buf, size_t max);
-    	friend std::ostream &operator<< (std::ostream &os, const http_response &r);
+        friend std::ostream &operator<< (std::ostream &os, const http_response &r);
     private:
         http_response& operator=(const http_response& b);
 
@@ -303,5 +300,5 @@ class http_response
 
 std::ostream &operator<< (std::ostream &os, const http_response &r);
 
-};
+} // namespace httpserver
 #endif

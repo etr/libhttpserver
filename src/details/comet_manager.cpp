@@ -25,11 +25,9 @@
 
 using namespace std;
 
-namespace httpserver
-{
+namespace httpserver {
 
-namespace details
-{
+namespace details {
 
 comet_manager::comet_manager()
 {
@@ -101,6 +99,6 @@ void comet_manager::complete_request(MHD_Connection* connection_id)
     q_subscriptions.erase(connection_id);
 }
 
-} //details
+} // namespace details
 
-} //httpserver
+} // namespace httpserver

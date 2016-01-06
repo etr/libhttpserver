@@ -52,9 +52,10 @@ class http_response;
 class create_webserver;
 
 namespace http {
+
 struct ip_representation;
 struct httpserver_ska;
-};
+} // namespace http
 
 namespace details {
     class http_endpoint;
@@ -332,5 +333,5 @@ class webserver
         friend class http_response;
 };
 
-};
+} // namespace httpserver
 #endif //_FRAMEWORK_WEBSERVER_HPP__

@@ -28,11 +28,8 @@
 #include "binders.hpp"
 #include "details/http_response_ptr.hpp"
 
-namespace httpserver
-{
-
-namespace details
-{
+namespace httpserver {
+namespace details {
 
 struct modded_request
 {
@@ -71,8 +68,7 @@ struct modded_request
 
 };
 
-} //details
-
-} //httpserver
+} // namespace details
+} // namespace httpserver
 
 #endif //_MODDED_REQUEST_HPP_

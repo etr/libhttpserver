@@ -30,20 +30,17 @@
 
 struct MHD_Connection;
 
-namespace httpserver
-{
+namespace httpserver {
 
 class webserver;
 
-namespace http
-{
+namespace http {
     class header_comparator;
-};
+} // namespace http
 
-namespace details
-{
+namespace details {
     struct cache_entry;
-};
+} // namespace
 
 struct byte_string
 {
@@ -292,5 +289,5 @@ class http_response_builder
         friend class http_response;
 };
 
-};
+} // namespace httpserver
 #endif //_HTTP_RESPONSE_BUILDER_HPP_

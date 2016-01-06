@@ -31,19 +31,17 @@
 #include <iostream>
 #endif
 
-namespace httpserver
-{
+namespace httpserver {
 
 class webserver;
 class http_request;
 class http_response;
 
-namespace details
-{
+namespace details {
 
 void empty_render(const http_request& r, http_response** res);
 
-};
+} // namespace details
 
 /**
  * Class representing a callable http resource.
@@ -220,5 +218,5 @@ class http_resource
         std::map<std::string, bool> allowed_methods;
 };
 
-};
+} // namespace httpserver
 #endif

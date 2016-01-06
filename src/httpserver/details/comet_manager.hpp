@@ -33,13 +33,11 @@
 #include <string>
 #include "http_utils.hpp"
 
-namespace httpserver
-{
+namespace httpserver {
 
 class webserver;
 
-namespace details
-{
+namespace details {
 
 class comet_manager
 {
@@ -66,8 +64,8 @@ class comet_manager
         friend class httpserver::webserver;
 };
 
-} //details
+} // namespace details
 
-} //httpserver
+} // namespace httpserver
 
 #endif //_COMET_MANAGER_HPP_

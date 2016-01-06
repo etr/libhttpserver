@@ -29,10 +29,8 @@
 #include <set>
 #include "httpserver/details/http_response_ptr.hpp"
 
-namespace httpserver
-{
-namespace details
-{
+namespace httpserver {
+namespace details {
 
 struct pthread_t_comparator
 {
@@ -135,7 +133,7 @@ struct cache_entry
     }
 };
 
-} //details
-} //httpserver
+} // namespace details
+} // namespace httpserver
 
 #endif //_CACHE_ENTRY_HPP_
