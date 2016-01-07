@@ -30,12 +30,14 @@
 #include <regex.h>
 #include <string>
 
-namespace httpserver {
+namespace httpserver
+{
 
 class webserver;
 class http_resource;
 
-namespace details {
+namespace details
+{
 
 /**
  * Exception class throwed when a bad formatted http url is used

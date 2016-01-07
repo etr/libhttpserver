@@ -33,11 +33,13 @@
 
 struct MHD_Connection;
 
-namespace httpserver {
+namespace httpserver
+{
 
 class webserver;
 
-namespace http {
+namespace http
+{
 
 class header_comparator;
 class arg_comparator;

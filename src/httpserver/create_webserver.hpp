@@ -31,7 +31,8 @@
 #define DEFAULT_WS_TIMEOUT 180
 #define DEFAULT_WS_PORT 9898
 
-namespace httpserver {
+namespace httpserver
+{
 
 class webserver;
 class http_request;

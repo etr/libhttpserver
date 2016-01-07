@@ -45,19 +45,22 @@
 
 #include "httpserver/create_webserver.hpp"
 
-namespace httpserver {
+namespace httpserver
+{
 
 class http_resource;
 class http_response;
 class create_webserver;
 
-namespace http {
+namespace http
+{
 
 struct ip_representation;
 struct httpserver_ska;
 } // namespace http
 
-namespace details {
+namespace details
+{
     class http_endpoint;
     struct daemon_item;
     struct modded_request;

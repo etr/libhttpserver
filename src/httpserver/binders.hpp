@@ -25,9 +25,12 @@
 #ifndef _BINDERS_HPP_
 #define _BINDERS_HPP_
 
-namespace httpserver {
-namespace details {
-namespace binders {
+namespace httpserver
+{
+namespace details
+{
+namespace binders
+{
 
 class generic_class;
 const int MEMFUNC_SIZE = sizeof(void (generic_class::*)());

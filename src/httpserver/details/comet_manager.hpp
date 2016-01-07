@@ -33,11 +33,13 @@
 #include <string>
 #include "http_utils.hpp"
 
-namespace httpserver {
+namespace httpserver
+{
 
 class webserver;
 
-namespace details {
+namespace details
+{
 
 class comet_manager
 {

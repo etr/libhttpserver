@@ -39,8 +39,10 @@
 
 #define DEFAULT_MASK_VALUE 0xFFFF
 
-namespace httpserver {
-namespace http {
+namespace httpserver
+{
+namespace http
+{
 
 class bad_ip_format_exception: public std::exception
 {

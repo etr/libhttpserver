@@ -45,11 +45,13 @@
 
 #endif
 
-namespace httpserver {
+namespace httpserver
+{
 
 class webserver;
 
-namespace details {
+namespace details
+{
 
 struct http_response_ptr
 {

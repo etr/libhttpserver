@@ -35,17 +35,20 @@
 
 struct MHD_Connection;
 
-namespace httpserver {
+namespace httpserver
+{
 
 class webserver;
 class http_response_builder;
 
-namespace http {
+namespace http
+{
     class header_comparator;
     class arg_comparator;
 } // namespace http
 
-namespace details {
+namespace details
+{
     struct http_response_ptr;
     ssize_t cb(void*, uint64_t, char*, size_t);
     struct cache_entry;

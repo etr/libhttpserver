@@ -28,8 +28,10 @@
 #include "binders.hpp"
 #include "details/http_response_ptr.hpp"
 
-namespace httpserver {
-namespace details {
+namespace httpserver
+{
+namespace details
+{
 
 struct modded_request
 {

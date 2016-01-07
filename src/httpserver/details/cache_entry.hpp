@@ -29,8 +29,10 @@
 #include <set>
 #include "httpserver/details/http_response_ptr.hpp"
 
-namespace httpserver {
-namespace details {
+namespace httpserver
+{
+namespace details
+{
 
 struct pthread_t_comparator
 {

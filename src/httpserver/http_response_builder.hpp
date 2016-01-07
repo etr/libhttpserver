@@ -30,15 +30,18 @@
 
 struct MHD_Connection;
 
-namespace httpserver {
+namespace httpserver
+{
 
 class webserver;
 
-namespace http {
+namespace http
+{
     class header_comparator;
 } // namespace http
 
-namespace details {
+namespace details
+{
     struct cache_entry;
 } // namespace
 

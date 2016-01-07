@@ -28,8 +28,10 @@
 #include <string>
 #include <vector>
 
-namespace httpserver {
-namespace string_utilities {
+namespace httpserver
+{
+namespace string_utilities
+{
 
 /**
  * Function used to convert a string to its uppercase version.
