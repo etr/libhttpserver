@@ -35,13 +35,21 @@
 #define atomic_decrement(object) \
     __c11_atomic_sub_fetch(object, 1, __ATOMIC_ACQ_REL)
 
-#else
+#elif defined(__GNUC_ATOMICS)
 
 #define atomic_increment(object) \
     __atomic_add_fetch(object, 1, __ATOMIC_RELAXED)
 
 #define atomic_decrement(object) \
     __atomic_sub_fetch(object, 1, __ATOMIC_ACQ_REL)
+
+#else
+
+#define atomic_increment(object) \
+    __sync_add_and_fetch(object, 1)
+
+#define atomic_decrement(object) \
+    __sync_sub_and_fetch(object, 1)
 
 #endif
 
