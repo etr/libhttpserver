@@ -25,9 +25,11 @@
 
 using namespace std;
 
-namespace httpserver {
+namespace httpserver
+{
 
-namespace details {
+namespace details
+{
 
 comet_manager::comet_manager()
 {

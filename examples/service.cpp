@@ -29,25 +29,25 @@ bool verbose=false;
 
 class service_resource: public http_resource {
 public:
-	service_resource();
+    service_resource();
 
-	~service_resource();
-	
-	void render_GET(const http_request &req, http_response** res);
+    ~service_resource();
+    
+    void render_GET(const http_request &req, http_response** res);
 
-	void render_PUT(const http_request &req, http_response** res);
+    void render_PUT(const http_request &req, http_response** res);
 
-	void render_POST(const http_request &req, http_response** res);	
+    void render_POST(const http_request &req, http_response** res); 
 
-	void render(const http_request &req, http_response** res);
+    void render(const http_request &req, http_response** res);
 
-	void render_HEAD(const http_request &req, http_response** res);
+    void render_HEAD(const http_request &req, http_response** res);
 
-	void render_OPTIONS(const http_request &req, http_response** res);
+    void render_OPTIONS(const http_request &req, http_response** res);
 
-	void render_CONNECT(const http_request &req, http_response** res);
+    void render_CONNECT(const http_request &req, http_response** res);
 
-	void render_DELETE(const http_request &req, http_response** res);
+    void render_DELETE(const http_request &req, http_response** res);
 
 private:
 
@@ -63,11 +63,11 @@ service_resource::~service_resource()
 void
 service_resource::render_GET(const http_request &req, http_response** res)
 {
-	std::cout << "service_resource::render_GET()" << std::endl;
+    std::cout << "service_resource::render_GET()" << std::endl;
 
     if (verbose) std::cout << req;
 
-	*res = new http_response(http_response_builder("GET response", 200).string_response());
+    *res = new http_response(http_response_builder("GET response", 200).string_response());
 
     if (verbose) std::cout << **res;    
 }
@@ -76,11 +76,11 @@ service_resource::render_GET(const http_request &req, http_response** res)
 void
 service_resource::render_PUT(const http_request &req, http_response** res)
 {
-	std::cout << "service_resource::render_PUT()" << std::endl;	
+    std::cout << "service_resource::render_PUT()" << std::endl; 
 
     if (verbose) std::cout << req;
     
-	*res = new http_response(http_response_builder("PUT response", 200).string_response());
+    *res = new http_response(http_response_builder("PUT response", 200).string_response());
 
     if (verbose) std::cout << **res;
 }
@@ -89,22 +89,22 @@ service_resource::render_PUT(const http_request &req, http_response** res)
 void
 service_resource::render_POST(const http_request &req, http_response** res)
 {
-	std::cout << "service_resource::render_POST()" << std::endl;	
+    std::cout << "service_resource::render_POST()" << std::endl;    
 
     if (verbose) std::cout << req;
     
-	*res = new http_response(http_response_builder("POST response", 200).string_response());
+    *res = new http_response(http_response_builder("POST response", 200).string_response());
 
     if (verbose) std::cout << **res;    
 }
 void
 service_resource::render(const http_request &req, http_response** res)
 {
-	std::cout << "service_resource::render()" << std::endl;	
+    std::cout << "service_resource::render()" << std::endl; 
 
     if (verbose) std::cout << req;
 
-	*res = new http_response(http_response_builder("generic response", 200).string_response());
+    *res = new http_response(http_response_builder("generic response", 200).string_response());
 
     if (verbose) std::cout << **res;    
 }
@@ -113,11 +113,11 @@ service_resource::render(const http_request &req, http_response** res)
 void
 service_resource::render_HEAD(const http_request &req, http_response** res)
 {
-	std::cout << "service_resource::render_HEAD()" << std::endl;
+    std::cout << "service_resource::render_HEAD()" << std::endl;
 
     if (verbose) std::cout << req;
     
-	*res = new http_response(http_response_builder("HEAD response", 200).string_response());
+    *res = new http_response(http_response_builder("HEAD response", 200).string_response());
 
     if (verbose) std::cout << **res;    
 }
@@ -125,11 +125,11 @@ service_resource::render_HEAD(const http_request &req, http_response** res)
 void
 service_resource::render_OPTIONS(const http_request &req, http_response** res)
 {
-	std::cout << "service_resource::render_OPTIONS()" << std::endl;
+    std::cout << "service_resource::render_OPTIONS()" << std::endl;
 
     if (verbose) std::cout << req;
     
-	*res = new http_response(http_response_builder("OPTIONS response", 200).string_response());
+    *res = new http_response(http_response_builder("OPTIONS response", 200).string_response());
 
     if (verbose) std::cout << **res;    
 }
@@ -137,11 +137,11 @@ service_resource::render_OPTIONS(const http_request &req, http_response** res)
 void
 service_resource::render_CONNECT(const http_request &req, http_response** res)
 {
-	std::cout << "service_resource::render_CONNECT()" << std::endl;	
+    std::cout << "service_resource::render_CONNECT()" << std::endl; 
 
     if (verbose) std::cout << req;
     
-	*res = new http_response(http_response_builder("CONNECT response", 200).string_response());
+    *res = new http_response(http_response_builder("CONNECT response", 200).string_response());
 
     if (verbose) std::cout << **res;    
 }
@@ -149,11 +149,11 @@ service_resource::render_CONNECT(const http_request &req, http_response** res)
 void
 service_resource::render_DELETE(const http_request &req, http_response** res)
 {
-	std::cout << "service_resource::render_DELETE()" << std::endl;	
+    std::cout << "service_resource::render_DELETE()" << std::endl;  
 
     if (verbose) std::cout << req;
     
-	*res = new http_response(http_response_builder("DELETE response", 200).string_response());
+    *res = new http_response(http_response_builder("DELETE response", 200).string_response());
 
     if (verbose) std::cout << **res;    
 }
@@ -166,17 +166,17 @@ void usage()
 
 int main(int argc, char **argv)
 {
-	uint16_t port=8080;
-	int c;
+    uint16_t port=8080;
+    int c;
     const char *key="key.pem";
     const char *cert="cert.pem";
     bool secure=false;
 
-	while ((c = getopt(argc,argv,"p:k:c:sv?")) != EOF) {
-		switch (c) {
-		case 'p':
-			port=strtoul(optarg,NULL,10);
-			break;
+    while ((c = getopt(argc,argv,"p:k:c:sv?")) != EOF) {
+        switch (c) {
+        case 'p':
+            port=strtoul(optarg,NULL,10);
+            break;
         case 'k':
             key = optarg;
             break;
@@ -189,14 +189,14 @@ int main(int argc, char **argv)
         case 'v':
             verbose=true;
             break;
-		default:
+        default:
             usage();
             exit(1);
-			break;
-		}
-	}
+            break;
+        }
+    }
 
-	std::cout << "Using port " << port << std::endl;
+    std::cout << "Using port " << port << std::endl;
     if (secure) {
             std::cout << "Key: " << key << " Certificate: " << cert
                       << std::endl;
@@ -214,18 +214,18 @@ int main(int argc, char **argv)
     //
     // Create webserver using the configured options
     //
-	webserver ws = cw;
+    webserver ws = cw;
 
     //
     // Create and register service resource available at /service
     //
-	service_resource res;
-	ws.register_resource("/service",&res,true);
+    service_resource res;
+    ws.register_resource("/service",&res,true);
 
     //
     // Start and block the webserver
     //
-	ws.start(true);
+    ws.start(true);
 
-	return 0;
+    return 0;
 }
