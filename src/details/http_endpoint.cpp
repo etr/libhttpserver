@@ -80,8 +80,15 @@ http_endpoint::http_endpoint
 
         if((parts[i] != "") && (parts[i][0] != '{'))
         {
-            this->url_modded = (first ? "" : "/") + (parts[i][0] == '^' ? "" : this->url_modded) + parts[i];
-            first = false;
+            if(first)
+            {
+                this->url_modded = (parts[i][0] == '^' ? "" : this->url_modded) + parts[i];
+                first = false;
+            }
+            else
+            {
+                this->url_modded += "/" + parts[i];
+            }
             this->url_pieces.push_back(parts[i]);
 
             continue;
@@ -91,7 +98,7 @@ http_endpoint::http_endpoint
             throw bad_http_endpoint();
 
         std::string::size_type bar = parts[i].find_first_of('|');
-        this->url_pars.push_back(parts[i].substr(1, bar != string::npos ? bar - 1 : parts[i].size() - bar - 2));
+        this->url_pars.push_back(parts[i].substr(1, bar != string::npos ? bar - 1 : parts[i].size() - 2));
         this->url_modded += (first ? "" : "/") + (bar != string::npos ? parts[i].substr(bar + 1, parts[i].size() - bar - 2) : "([^\\/]+)");
 
         first = false;
