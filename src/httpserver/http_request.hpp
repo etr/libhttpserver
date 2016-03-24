@@ -442,7 +442,11 @@ class http_request
         **/
         void set_arg(const std::string& key, const std::string& value)
         {
-            this->args[key] = value;
+            if (this->args[key].empty()) {
+                this->args[key] = value;
+            } else {
+                this->args[key].append(value);
+            }
         }
         /**
          * Method used to set an argument value by key.
@@ -452,7 +456,11 @@ class http_request
         **/
         void set_arg(const char* key, const char* value, size_t size)
         {
-            this->args[key] = std::string(value, size);
+            if (this->args[key].empty()) {
+                this->args[key] = std::string(value, size);
+            } else {
+                this->args[key].append(value, size);
+            }
         }
         /**
          * Method used to set the content of the request
