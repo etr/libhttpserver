@@ -145,22 +145,22 @@ class webserver
         bool is_valid(const std::string& key);
         void clean_cache();
 
-        const log_access_ptr get_access_logger() const
+        log_access_ptr get_access_logger() const
         {
             return this->log_access;
         }
 
-        const log_error_ptr get_error_logger() const
+        log_error_ptr get_error_logger() const
         {
             return this->log_error;
         }
 
-        const validator_ptr get_request_validator() const
+        validator_ptr get_request_validator() const
         {
             return this->validator;
         }
 
-        const unescaper_ptr get_unescaper() const
+        unescaper_ptr get_unescaper() const
         {
             return this->unescaper;
         }
