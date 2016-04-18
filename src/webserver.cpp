@@ -669,7 +669,12 @@ int webserver::bodyfull_requests_answer_first_step(
                                 encoding,
                                 strlen (MHD_HTTP_POST_ENCODING_FORM_URLENCODED)
                                 )
-            ))
+              )
+             || (0 == strncasecmp (
+                                   MHD_HTTP_POST_ENCODING_MULTIPART_FORMDATA,
+                                   encoding,
+                                   strlen (MHD_HTTP_POST_ENCODING_MULTIPART_FORMDATA)
+                                   )))
         )
     )
     {
