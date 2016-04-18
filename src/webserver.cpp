@@ -655,6 +655,7 @@ int webserver::bodyfull_requests_answer_first_step(
 {
     mr->second = true;
     mr->dhr = new http_request();
+    mr->dhr->set_content_size_limit(content_size_limit);
     const char *encoding = MHD_lookup_connection_value (
             connection,
             MHD_HEADER_KIND,
@@ -699,7 +700,7 @@ int webserver::bodyfull_requests_answer_second_step(
 #ifdef DEBUG
     cout << "Writing content: " << upload_data << endl;
 #endif //DEBUG
-    mr->dhr->grow_content(upload_data, *upload_data_size, content_size_limit);
+    mr->dhr->grow_content(upload_data, *upload_data_size);
 
     if (mr->pp != NULL) MHD_post_process(mr->pp, upload_data, *upload_data_size);
     *upload_data_size = 0;
