@@ -673,9 +673,10 @@ int webserver::bodyfull_requests_answer_first_step(
         )
     )
     {
+        const size_t post_memory_limit (32*1024);  // Same as #MHD_POOL_SIZE_DEFAULT
         mr->pp = MHD_create_post_processor (
                 connection,
-                1024,
+                post_memory_limit,
                 &post_iterator,
                 mr
         );
