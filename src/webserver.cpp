@@ -594,7 +594,7 @@ int webserver::post_iterator (void *cls, enum MHD_ValueKind kind,
     )
 {
     struct details::modded_request* mr = (struct details::modded_request*) cls;
-    mr->dhr->set_arg(key, data, size);
+    mr->dhr->set_arg(key, mr->dhr->get_arg(key) + std::string(data, size));
     return MHD_YES;
 }
 
