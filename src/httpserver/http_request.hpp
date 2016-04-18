@@ -467,9 +467,14 @@ class http_request
          * @param content The content to append.
          * @param size The size of the data to append.
         **/
-        void grow_content(const char* content, size_t size)
+        void grow_content(const char* content, size_t size,
+                          size_t content_size_limit)
         {
             this->content.append(content, size);
+            if (this->content.size() > content_size_limit)
+              {
+                this->content.resize (content_size_limit);
+              }
         }
         /**
          * Method used to set the path requested.

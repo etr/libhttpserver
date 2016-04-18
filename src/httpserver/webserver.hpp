@@ -179,6 +179,7 @@ class webserver
         const int max_threads;
         const int max_connections;
         const int memory_limit;
+        const size_t content_size_limit;
         const int connection_timeout;
         const int per_IP_connection_limit;
         log_access_ptr log_access;

@@ -141,6 +141,7 @@ webserver::webserver(const create_webserver& params):
     max_threads(params._max_threads),
     max_connections(params._max_connections),
     memory_limit(params._memory_limit),
+    content_size_limit(params._content_size_limit),
     connection_timeout(params._connection_timeout),
     per_IP_connection_limit(params._per_IP_connection_limit),
     log_access(params._log_access),
@@ -698,7 +699,7 @@ int webserver::bodyfull_requests_answer_second_step(
 #ifdef DEBUG
     cout << "Writing content: " << upload_data << endl;
 #endif //DEBUG
-    mr->dhr->grow_content(upload_data, *upload_data_size);
+    mr->dhr->grow_content(upload_data, *upload_data_size, content_size_limit);
 
     if (mr->pp != NULL) MHD_post_process(mr->pp, upload_data, *upload_data_size);
     *upload_data_size = 0;

@@ -52,6 +52,7 @@ class create_webserver
             _max_threads(0),
             _max_connections(0),
             _memory_limit(0),
+            _content_size_limit(0),
             _connection_timeout(DEFAULT_WS_TIMEOUT),
             _per_IP_connection_limit(0),
             _log_access(0x0),
@@ -93,6 +94,7 @@ class create_webserver
             _max_threads(0),
             _max_connections(0),
             _memory_limit(0),
+            _content_size_limit(0),
             _connection_timeout(DEFAULT_WS_TIMEOUT),
             _per_IP_connection_limit(0),
             _log_access(0x0),
@@ -146,6 +148,10 @@ class create_webserver
         create_webserver& memory_limit(int memory_limit)
         {
             _memory_limit = memory_limit; return *this;
+        }
+        create_webserver& content_size_limit(size_t content_size_limit)
+        {
+            _content_size_limit = content_size_limit; return *this;
         }
         create_webserver& connection_timeout(int connection_timeout)
         {
@@ -333,6 +339,7 @@ class create_webserver
         int _max_threads;
         int _max_connections;
         int _memory_limit;
+        size_t _content_size_limit;
         int _connection_timeout;
         int _per_IP_connection_limit;
         log_access_ptr _log_access;
