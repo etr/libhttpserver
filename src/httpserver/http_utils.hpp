@@ -303,7 +303,7 @@ struct ip_representation
     ip_representation(const struct sockaddr* ip);
 
     bool operator <(const ip_representation& b) const;
-    const int weight() const
+    int weight() const
     {
         //variable-precision SWAR algorithm
         unsigned int x = mask;

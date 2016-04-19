@@ -110,7 +110,7 @@ class http_response
          * Method used to get the content from the response.
          * @return the content in string form
         **/
-        const std::string get_content()
+        std::string get_content()
         {
             return this->content;
         }
@@ -125,7 +125,7 @@ class http_response
          * @param key The header identification
          * @return a string representing the value assumed by the header
         **/
-        const std::string get_header(const std::string& key)
+        std::string get_header(const std::string& key)
         {
             return this->headers[key];
         }
@@ -140,7 +140,7 @@ class http_response
          * @param key The footer identification
          * @return a string representing the value assumed by the footer
         **/
-        const std::string get_footer(const std::string& key)
+        std::string get_footer(const std::string& key)
         {
             return this->footers[key];
         }
@@ -150,7 +150,7 @@ class http_response
             result = this->footers[key];
         }
 
-        const std::string get_cookie(const std::string& key)
+        std::string get_cookie(const std::string& key)
         {
             return this->cookies[key];
         }
@@ -189,7 +189,7 @@ class http_response
             return this->response_code;
         }
 
-        const std::string get_realm() const
+        std::string get_realm() const
         {
             return this->realm;
         }
@@ -199,7 +199,7 @@ class http_response
             result = this->realm;
         }
 
-        const std::string get_opaque() const
+        std::string get_opaque() const
         {
             return this->opaque;
         }
@@ -209,7 +209,7 @@ class http_response
             result = this->opaque;
         }
 
-        const bool need_nonce_reload() const
+        bool need_nonce_reload() const
         {
             return this->reload_nonce;
         }
