@@ -310,6 +310,18 @@ class http_request
         {
             result = this->content;
         }
+        /**
+         * Method to check whether the size of the content reached or exceeded content_size_limit.
+         * @return boolean
+        **/
+        bool content_too_large() const
+        {
+            return content.size()>=content_size_limit;
+        }
+        /**
+         * Method used to get the content of the query string..
+         * @return the query string in string representation
+        **/
         const std::string get_querystring() const
         {
             return this->querystring;
