@@ -141,6 +141,7 @@ webserver::webserver(const create_webserver& params):
     max_threads(params._max_threads),
     max_connections(params._max_connections),
     memory_limit(params._memory_limit),
+    content_size_limit(params._content_size_limit),
     connection_timeout(params._connection_timeout),
     per_IP_connection_limit(params._per_IP_connection_limit),
     log_access(params._log_access),
@@ -594,7 +595,7 @@ int webserver::post_iterator (void *cls, enum MHD_ValueKind kind,
     )
 {
     struct details::modded_request* mr = (struct details::modded_request*) cls;
-    mr->dhr->set_arg(key, data, size);
+    mr->dhr->set_arg(key, mr->dhr->get_arg(key) + std::string(data, size));
     return MHD_YES;
 }
 
@@ -654,6 +655,7 @@ int webserver::bodyfull_requests_answer_first_step(
 {
     mr->second = true;
     mr->dhr = new http_request();
+    mr->dhr->set_content_size_limit(content_size_limit);
     const char *encoding = MHD_lookup_connection_value (
             connection,
             MHD_HEADER_KIND,
