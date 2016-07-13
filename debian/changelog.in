@@ -1,3 +1,9 @@
+libhttpserver (0.11.1) unstable; urgency=low
+    * Fixed problems with large payloads
+    * Fixed memory leak in http_response_ptr
+
+ -- Sebastiano Merlino <electrictwister2000@gmail.com> Wed, 13 Jul 2016 02:23:11 +0100
+
 libhttpserver (0.11.0) unstable; urgency=low
     * Removed support for event supplier (badly defined, complicated and almost useless)
     * Eliminated custom selection logic (simplified overall code in webserver.cpp)
