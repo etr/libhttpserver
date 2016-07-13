@@ -79,10 +79,10 @@ struct http_response_ptr
 
         ~http_response_ptr()
         {
-            if (atomic_decrement(num_references) != 0 || res == 0x0) return;
+            if (atomic_decrement(num_references) != 0) return;
 
-            delete res;
-            delete num_references;
+            if (res != 0x0) delete res;
+            if (num_references != 0x0) delete num_references;
 
             res = 0x0;
             num_references = 0x0;
