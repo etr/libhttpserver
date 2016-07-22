@@ -718,9 +718,9 @@ void webserver::end_request_construction(
         struct details::modded_request* mr,
         const char* version,
         const char* method,
-        char** user,
-        char** pass,
-        char** digested_user
+        char* user,
+        char* pass,
+        char* digested_user
 )
 {
     mr->ws = this;
@@ -752,9 +752,12 @@ void webserver::end_request_construction(
     mr->dhr->set_path(mr->standardized_url->c_str());
     mr->dhr->set_method(method);
 
-    if(basic_auth_enabled) *user = MHD_basic_auth_get_username_password(connection, pass);
-    if(digest_auth_enabled) *digested_user = MHD_digest_auth_get_username(connection);
-
+    if(basic_auth_enabled)
+    {
+        user = MHD_basic_auth_get_username_password(connection, &pass);
+    }
+    if(digest_auth_enabled)
+        digested_user = MHD_digest_auth_get_username(connection);
     mr->dhr->set_version(version);
     const MHD_ConnectionInfo * conninfo = MHD_get_connection_info(
             connection,
@@ -766,12 +769,12 @@ void webserver::end_request_construction(
     mr->dhr->set_requestor_port(get_port(conninfo->client_addr));
     if(pass != 0x0)
     {
-        mr->dhr->set_pass(*pass);
-        mr->dhr->set_user(*user);
+        mr->dhr->set_pass(pass);
+        mr->dhr->set_user(user);
     }
     if(digested_user != 0x0)
     {
-        mr->dhr->set_digested_user(*digested_user);
+        mr->dhr->set_digested_user(digested_user);
     }
 }
 
@@ -950,9 +953,9 @@ int webserver::complete_request(
             mr,
             version,
             method,
-            &pass,
-            &user,
-            &digested_user
+            pass,
+            user,
+            digested_user
     );
 
     int to_ret = finalize_answer(connection, mr, method);
