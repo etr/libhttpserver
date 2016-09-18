@@ -359,8 +359,6 @@ bool webserver::start(bool blocking)
     start_conf |= MHD_USE_TCP_FASTOPEN;
 #endif
 
-    this->running = true;
-
     struct MHD_Daemon* daemon = MHD_start_daemon
     (
             start_conf, this->port, &policy_callback, this,
@@ -377,6 +375,9 @@ bool webserver::start(bool blocking)
     daemons.push_back(di);
 
     bool value_onclose = false;
+
+    this->running = true;
+
     if(blocking)
     {
         pthread_mutex_lock(&mutexwait);
