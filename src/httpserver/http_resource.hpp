@@ -31,17 +31,18 @@
 #include <iostream>
 #endif
 
+#include "httpserver/http_response.hpp"
+
 namespace httpserver
 {
 
 class webserver;
 class http_request;
-class http_response;
 
 namespace details
 {
 
-void empty_render(const http_request& r, http_response** res);
+http_response empty_render(const http_request& r);
 
 };
 
@@ -66,81 +67,81 @@ class http_resource
          * @param req Request passed through http
          * @return A http_response object
         **/
-        virtual void render(const http_request& r, http_response** res)
+        virtual const http_response render(const http_request& req)
         {
-            details::empty_render(r, res);
+            return details::empty_render(req);
         }
         /**
          * Method used to answer to a GET request
          * @param req Request passed through http
          * @return A http_response object
         **/
-        virtual void render_GET(const http_request& req, http_response** res)
+        virtual const http_response render_GET(const http_request& req)
         {
-            render(req, res);
+            return render(req);
         }
         /**
          * Method used to answer to a POST request
          * @param req Request passed through http
          * @return A http_response object
         **/
-        virtual void render_POST(const http_request& req, http_response** res)
+        virtual const http_response render_POST(const http_request& req)
         {
-            render(req, res);
+            return render(req);
         }
         /**
          * Method used to answer to a PUT request
          * @param req Request passed through http
          * @return A http_response object
         **/
-        virtual void render_PUT(const http_request& req, http_response** res)
+        virtual const http_response render_PUT(const http_request& req)
         {
-            render(req, res);
+            return render(req);
         }
         /**
          * Method used to answer to a HEAD request
          * @param req Request passed through http
          * @return A http_response object
         **/
-        virtual void render_HEAD(const http_request& req, http_response** res)
+        virtual const http_response render_HEAD(const http_request& req)
         {
-            render(req, res);
+            return render(req);
         }
         /**
          * Method used to answer to a DELETE request
          * @param req Request passed through http
          * @return A http_response object
         **/
-        virtual void render_DELETE(const http_request& req, http_response** res)
+        virtual const http_response render_DELETE(const http_request& req)
         {
-            render(req, res);
+            return render(req);
         }
         /**
          * Method used to answer to a TRACE request
          * @param req Request passed through http
          * @return A http_response object
         **/
-        virtual void render_TRACE(const http_request& req, http_response** res)
+        virtual const http_response render_TRACE(const http_request& req)
         {
-            render(req, res);
+            return render(req);
         }
         /**
          * Method used to answer to a OPTIONS request
          * @param req Request passed through http
          * @return A http_response object
         **/
-        virtual void render_OPTIONS(const http_request& req, http_response** res)
+        virtual const http_response render_OPTIONS(const http_request& req)
         {
-            render(req, res);
+            return render(req);
         }
         /**
          * Method used to answer to a CONNECT request
          * @param req Request passed through http
          * @return A http_response object
         **/
-        virtual void render_CONNECT(const http_request& req, http_response** res)
+        virtual const http_response render_CONNECT(const http_request& req)
         {
-            render(req, res);
+            return render(req);
         }
         /**
          * Method used to set if a specific method is allowed or not on this request

@@ -30,9 +30,9 @@ using namespace std;
 class ok_resource : public http_resource
 {
     public:
-        void render_GET(const http_request& req, http_response** res)
+        const http_response render_GET(const http_request& req)
         {
-            *res = new http_response(http_response_builder("OK", 200, "text/plain").string_response());
+            return http_response(http_response_builder("OK", 200, "text/plain").string_response());
         }
 };
 

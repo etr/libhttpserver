@@ -29,17 +29,17 @@ std::vector<std::string> topics(topics_array, topics_array + sizeof(topics_array
 
 class comet_send_resource : public http_resource {
 	public:
-        void render(const http_request& req, http_response** res)
+        const http_response render(const http_request& req)
         {
-            *res = new http_response(http_response_builder("Hi", 200).long_polling_send_response(topics_array[0]));
+            return http_response(http_response_builder("Hi", 200).long_polling_send_response(topics_array[0]));
         }
 };
 
 class comet_listen_resource : public http_resource {
 	public:
-        void render(const http_request& req, http_response** res)
+        const http_response render(const http_request& req)
         {
-            *res = new http_response(http_response_builder("OK", 200).long_polling_receive_response(topics));
+            return http_response(http_response_builder("OK", 200).long_polling_receive_response(topics));
         }
 };
 

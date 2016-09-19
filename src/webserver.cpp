@@ -62,6 +62,8 @@
 #define SOCK_CLOEXEC 02000000
 #endif
 
+#define NEW_OR_MOVE(TYPE, VALUE) new TYPE(VALUE)
+
 using namespace std;
 
 namespace httpserver
@@ -605,38 +607,36 @@ void webserver::upgrade_handler (void *cls, struct MHD_Connection* connection,
 {
 }
 
-void webserver::not_found_page(
-        http_response** dhrs,
-        details::modded_request* mr
-)
+const http_response webserver::not_found_page(details::modded_request* mr) const
 {
     if(not_found_resource != 0x0)
-        not_found_resource(*mr->dhr, dhrs);
+    {
+        return not_found_resource(*mr->dhr);
+    }
     else
-        *dhrs = new http_response(http_response_builder(NOT_FOUND_ERROR, http_utils::http_not_found).string_response());
+    {
+        return http_response(http_response_builder(NOT_FOUND_ERROR, http_utils::http_not_found).string_response());
+    }
 }
 
-void webserver::method_not_allowed_page(
-        http_response** dhrs,
-        details::modded_request* mr
-)
+const http_response webserver::method_not_allowed_page(details::modded_request* mr) const
 {
     if(method_not_acceptable_resource != 0x0)
-        method_not_allowed_resource(*mr->dhr, dhrs);
+    {
+        return method_not_allowed_resource(*mr->dhr);
+    }
     else
-        *dhrs = new http_response(http_response_builder(METHOD_ERROR, http_utils::http_method_not_allowed).string_response());
+    {
+        return http_response(http_response_builder(METHOD_ERROR, http_utils::http_method_not_allowed).string_response());
+    }
 }
 
-void webserver::internal_error_page(
-        http_response** dhrs,
-        details::modded_request* mr,
-        bool force_our
-)
+const http_response webserver::internal_error_page(details::modded_request* mr, bool force_our) const
 {
     if(internal_error_resource != 0x0 && !force_our)
-        internal_error_resource(*mr->dhr, dhrs);
+        return internal_error_resource(*mr->dhr);
     else
-        *dhrs = new http_response(http_response_builder(GENERIC_ERROR, http_utils::http_internal_server_error).string_response());
+        return http_response(http_response_builder(GENERIC_ERROR, http_utils::http_internal_server_error).string_response());
 }
 
 int webserver::bodyless_requests_answer(
@@ -786,7 +786,6 @@ int webserver::finalize_answer(
 )
 {
     int to_ret = MHD_NO;
-    http_response* dhrs = 0x0;
 
     map<string, http_resource*>::iterator fe;
 
@@ -803,36 +802,19 @@ int webserver::finalize_answer(
             if(regex_checking)
             {
 
-                map<
-                    details::http_endpoint, http_resource*
-                >::iterator found_endpoint;
+                map<details::http_endpoint, http_resource*>::iterator found_endpoint;
 
-                details::http_endpoint endpoint(
-                        st_url, false, false, regex_checking
-                );
+                details::http_endpoint endpoint(st_url, false, false, regex_checking);
 
-                map<
-                    details::http_endpoint,
-                    http_resource*
-                >::iterator it;
+                map<details::http_endpoint, http_resource*>::iterator it;
 
                 size_t len = 0;
                 size_t tot_len = 0;
-                for(
-                        it=registered_resources.begin();
-                        it!=registered_resources.end();
-                        ++it
-                )
+                for(it=registered_resources.begin(); it!=registered_resources.end(); ++it)
                 {
                     size_t endpoint_pieces_len = (*it).first.get_url_pieces_num();
                     size_t endpoint_tot_len = (*it).first.get_url_complete_size();
-                    if(!found ||
-                        endpoint_pieces_len > len ||
-                        (
-                            endpoint_pieces_len == len &&
-                            endpoint_tot_len > tot_len
-                        )
-                    )
+                    if(!found || endpoint_pieces_len > len || (endpoint_pieces_len == len && endpoint_tot_len > tot_len))
                     {
                         if((*it).first.match(endpoint))
                         {
@@ -847,8 +829,7 @@ int webserver::finalize_answer(
                 {
                     vector<string> url_pars;
 
-                    size_t pars_size =
-                        found_endpoint->first.get_url_pars(url_pars);
+                    size_t pars_size = found_endpoint->first.get_url_pars(url_pars);
 
                     vector<string> url_pieces;
                     endpoint.get_url_pieces(url_pieces);
@@ -874,6 +855,7 @@ int webserver::finalize_answer(
         hrm = registered_resources.begin()->second;
         found = true;
     }
+
     mr->dhr->set_underlying_connection(connection);
 
     if(found)
@@ -882,58 +864,59 @@ int webserver::finalize_answer(
         {
             if(hrm->is_allowed(method))
             {
-                ((hrm)->*(mr->callback))(*mr->dhr, &dhrs);
-                if (dhrs == 0x0) internal_error_page(&dhrs, mr);
+                mr->dhrs = NEW_OR_MOVE(http_response, ((hrm)->*(mr->callback))(*mr->dhr)); //copy in memory (move in case)
+                if (mr->dhrs->get_response_code() == -1) mr->dhrs = NEW_OR_MOVE(http_response, internal_error_page(mr));
             }
             else
             {
-                method_not_allowed_page(&dhrs, mr);
+                mr->dhrs = NEW_OR_MOVE(http_response, method_not_allowed_page(mr));
             }
         }
         catch(const std::exception& e)
         {
-            internal_error_page(&dhrs, mr);
+            mr->dhrs = NEW_OR_MOVE(http_response, internal_error_page(mr));
         }
         catch(...)
         {
-            internal_error_page(&dhrs, mr);
+            mr->dhrs = NEW_OR_MOVE(http_response, internal_error_page(mr));
         }
     }
     else
     {
-        not_found_page(&dhrs, mr);
+        mr->dhrs = NEW_OR_MOVE(http_response, not_found_page(mr));
     }
-    mr->dhrs = dhrs;
+
     mr->dhrs->underlying_connection = connection;
+
     try
     {
         try
         {
-            dhrs->get_raw_response(&raw_response, this);
+            mr->dhrs->get_raw_response(&raw_response, this);
         }
         catch(const file_access_exception& fae)
         {
-            not_found_page(&dhrs, mr);
-            dhrs->get_raw_response(&raw_response, this);
+            mr->dhrs = NEW_OR_MOVE(http_response, not_found_page(mr));
+            mr->dhrs->get_raw_response(&raw_response, this);
         }
         catch(const std::exception& e)
         {
-            internal_error_page(&dhrs, mr);
-            dhrs->get_raw_response(&raw_response, this);
+            mr->dhrs = NEW_OR_MOVE(http_response, internal_error_page(mr));
+            mr->dhrs->get_raw_response(&raw_response, this);
         }
         catch(...)
         {
-            internal_error_page(&dhrs, mr);
-            dhrs->get_raw_response(&raw_response, this);
+            mr->dhrs = NEW_OR_MOVE(http_response, internal_error_page(mr));
+            mr->dhrs->get_raw_response(&raw_response, this);
         }
     }
     catch(...)
     {
-        internal_error_page(&dhrs, mr, true);
-        dhrs->get_raw_response(&raw_response, this);
+        mr->dhrs = NEW_OR_MOVE(http_response, internal_error_page(mr, true));
+        mr->dhrs->get_raw_response(&raw_response, this);
     }
-    dhrs->decorate_response(raw_response);
-    to_ret = dhrs->enqueue_response(connection, raw_response);
+    mr->dhrs->decorate_response(raw_response);
+    to_ret = mr->dhrs->enqueue_response(connection, raw_response);
     MHD_destroy_response (raw_response);
     return to_ret;
 }

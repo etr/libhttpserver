@@ -44,11 +44,11 @@
 #include <stdexcept>
 
 #include "httpserver/create_webserver.hpp"
+#include "httpserver/http_response.hpp"
 
 namespace httpserver {
 
 class http_resource;
-class http_response;
 class create_webserver;
 
 namespace http {
@@ -235,13 +235,9 @@ class webserver
         static void* select(void* self);
         static void* cleaner(void* self);
 
-        void method_not_allowed_page(http_response** dhrs,
-                details::modded_request* mr
-        );
-        void internal_error_page(http_response** dhrs,
-                details::modded_request* mr, bool force_our = false
-        );
-        void not_found_page(http_response** dhrs, details::modded_request* mr);
+        const http_response method_not_allowed_page(details::modded_request* mr) const;
+        const http_response internal_error_page(details::modded_request* mr, bool force_our = false) const;
+        const http_response not_found_page(details::modded_request* mr) const;
 
         static int method_not_acceptable_page
         (

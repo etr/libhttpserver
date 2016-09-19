@@ -32,20 +32,16 @@
 #include <vector>
 
 #include "httpserver/binders.hpp"
+#include "httpserver/http_utils.hpp"
 
 struct MHD_Connection;
+struct MHD_Response;
 
 namespace httpserver
 {
 
 class webserver;
 class http_response_builder;
-
-namespace http
-{
-    class header_comparator;
-    class arg_comparator;
-};
 
 namespace details
 {
@@ -70,7 +66,6 @@ typedef ssize_t(*cycle_callback_ptr)(char*, size_t);
 class http_response
 {
     public:
-
         http_response(const http_response_builder& builder);
 
         /**
@@ -102,6 +97,10 @@ class http_response
             completed(b.completed),
             ws(b.ws),
             connection_id(b.connection_id)
+        {
+        }
+
+        http_response(): response_code(-1)
         {
         }
 

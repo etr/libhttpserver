@@ -27,6 +27,7 @@
 
 #include <stdlib.h>
 #include "httpserver/http_utils.hpp"
+#include "httpserver/http_response.hpp"
 
 #define DEFAULT_WS_TIMEOUT 180
 #define DEFAULT_WS_PORT 9898
@@ -35,9 +36,8 @@ namespace httpserver {
 
 class webserver;
 class http_request;
-class http_response;
 
-typedef void(*render_ptr)(const http_request&, http_response**);
+typedef http_response(*render_ptr)(const http_request&);
 typedef bool(*validator_ptr)(const std::string&);
 typedef void(*unescaper_ptr)(char*);
 typedef void(*log_access_ptr)(const std::string&);

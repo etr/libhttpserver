@@ -48,9 +48,9 @@ void resource_init(map<string, bool>& allowed_methods)
 namespace details
 {
 
-void empty_render(const http_request& r, http_response** res)
+http_response empty_render(const http_request& r)
 {
-    *res = new http_response(http_response_builder("", 200).string_response());
+    return http_response_builder("", 200).string_response();
 }
 
 };
