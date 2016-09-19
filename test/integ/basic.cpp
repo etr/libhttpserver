@@ -74,7 +74,7 @@ class header_test_resource : public http_resource
         {
             http_response_builder hrb("OK", 200, "text/plain");
             hrb.with_header("KEY", "VALUE");
-            return http_response(hrb.string_response();
+            return hrb.string_response();
         }
 };
 
