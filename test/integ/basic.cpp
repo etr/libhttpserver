@@ -50,11 +50,11 @@ class simple_resource : public http_resource
     public:
         const http_response render_GET(const http_request& req)
         {
-            return http_response(http_response_builder("OK", 200, "text/plain").string_response());
+            return http_response_builder("OK", 200, "text/plain").string_response();
         }
         const http_response render_POST(const http_request& req)
         {
-            return http_response(http_response_builder(req.get_arg("arg1")+req.get_arg("arg2"), 200, "text/plain").string_response());
+            return http_response_builder(req.get_arg("arg1")+req.get_arg("arg2"), 200, "text/plain").string_response();
         }
 };
 
@@ -63,7 +63,7 @@ class long_content_resource : public http_resource
     public:
         const http_response render_GET(const http_request& req)
         {
-            return http_response(http_response_builder(lorem_ipsum, 200, "text/plain").string_response());
+            return http_response_builder(lorem_ipsum, 200, "text/plain").string_response();
         }
 };
 
@@ -74,7 +74,7 @@ class header_test_resource : public http_resource
         {
             http_response_builder hrb("OK", 200, "text/plain");
             hrb.with_header("KEY", "VALUE");
-            return http_response(hrb.string_response());
+            return http_response(hrb.string_response();
         }
 };
 
@@ -83,23 +83,23 @@ class complete_test_resource : public http_resource
     public:
         const http_response render_GET(const http_request& req)
         {
-            return http_response(http_response_builder("OK", 200, "text/plain").string_response());
+            return http_response_builder("OK", 200, "text/plain").string_response();
         }
         const http_response render_POST(const http_request& req)
         {
-            return http_response(http_response_builder("OK", 200, "text/plain").string_response());
+            return http_response_builder("OK", 200, "text/plain").string_response();
         }
         const http_response render_PUT(const http_request& req)
         {
-            return http_response(http_response_builder("OK", 200, "text/plain").string_response());
+            return http_response_builder("OK", 200, "text/plain").string_response();
         }
         const http_response render_DELETE(const http_request& req)
         {
-            return http_response(http_response_builder("OK", 200, "text/plain").string_response());
+            return http_response_builder("OK", 200, "text/plain").string_response();
         }
         const http_response render_CONNECT(const http_request& req)
         {
-            return http_response(http_response_builder("OK", 200, "text/plain").string_response());
+            return http_response_builder("OK", 200, "text/plain").string_response();
         }
 };
 
@@ -108,7 +108,7 @@ class only_render_resource : public http_resource
     public:
         const http_response render(const http_request& req)
         {
-            return http_response(http_response_builder("OK", 200, "text/plain").string_response());
+            return http_response_builder("OK", 200, "text/plain").string_response();
         }
 };
 
@@ -117,7 +117,7 @@ class ok_resource : public http_resource
     public:
         const http_response render_GET(const http_request& req)
         {
-            return http_response(http_response_builder("OK", 200, "text/plain").string_response());
+            return http_response_builder("OK", 200, "text/plain").string_response();
         }
 };
 
@@ -126,7 +126,7 @@ class nok_resource : public http_resource
     public:
         const http_response render_GET(const http_request& req)
         {
-            return http_response(http_response_builder("NOK", 200, "text/plain").string_response());
+            return http_response_builder("NOK", 200, "text/plain").string_response();
         }
 };
 

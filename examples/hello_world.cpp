@@ -42,7 +42,7 @@ const http_response hello_world_resource::render(const http_request& req)
 
     //it is possible to send a response initializing an http_string_response
     //that reads the content to send in response from a string.
-    return http_response(http_response_builder("Hello World!!!", 200).string_response());
+    return http_response_builder("Hello World!!!", 200).string_response();
 }
 
 int main()

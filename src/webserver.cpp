@@ -615,7 +615,7 @@ const http_response webserver::not_found_page(details::modded_request* mr) const
     }
     else
     {
-        return http_response(http_response_builder(NOT_FOUND_ERROR, http_utils::http_not_found).string_response());
+        return http_response_builder(NOT_FOUND_ERROR, http_utils::http_not_found).string_response();
     }
 }
 
@@ -627,7 +627,7 @@ const http_response webserver::method_not_allowed_page(details::modded_request* 
     }
     else
     {
-        return http_response(http_response_builder(METHOD_ERROR, http_utils::http_method_not_allowed).string_response());
+        return http_response_builder(METHOD_ERROR, http_utils::http_method_not_allowed).string_response();
     }
 }
 
@@ -636,7 +636,7 @@ const http_response webserver::internal_error_page(details::modded_request* mr, 
     if(internal_error_resource != 0x0 && !force_our)
         return internal_error_resource(*mr->dhr);
     else
-        return http_response(http_response_builder(GENERIC_ERROR, http_utils::http_internal_server_error).string_response());
+        return http_response_builder(GENERIC_ERROR, http_utils::http_internal_server_error).string_response();
 }
 
 int webserver::bodyless_requests_answer(

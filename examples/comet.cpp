@@ -31,7 +31,7 @@ class comet_send_resource : public http_resource {
 	public:
         const http_response render(const http_request& req)
         {
-            return http_response(http_response_builder("Hi", 200).long_polling_send_response(topics_array[0]));
+            return http_response_builder("Hi", 200).long_polling_send_response(topics_array[0]);
         }
 };
 
@@ -39,7 +39,7 @@ class comet_listen_resource : public http_resource {
 	public:
         const http_response render(const http_request& req)
         {
-            return http_response(http_response_builder("OK", 200).long_polling_receive_response(topics));
+            return http_response_builder("OK", 200).long_polling_receive_response(topics);
         }
 };
 
