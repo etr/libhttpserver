@@ -304,7 +304,7 @@ class webserver
 
         void end_request_construction(MHD_Connection* connection,
                 struct details::modded_request* mr, const char* version,
-                const char* method, char* user, char* pass, char* digested_user
+                const char* method, char* &user, char* &pass, char* &digested_user
         );
 
         int finalize_answer(MHD_Connection* connection,

@@ -719,9 +719,9 @@ void webserver::end_request_construction(
         struct details::modded_request* mr,
         const char* version,
         const char* method,
-        char* user,
-        char* pass,
-        char* digested_user
+        char* &user,
+        char* &pass,
+        char* &digested_user
 )
 {
     mr->ws = this;
