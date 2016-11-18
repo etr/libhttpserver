@@ -214,13 +214,6 @@ AC_OUTPUT(
       src/Makefile
       test/Makefile
       examples/Makefile
-      debian/changelog
-      debian/copyright
-      debian/control
-      debian/libhttpserver-dev.install
-      debian/libhttpserver.install
-      debian/rules
-      redhat/libhttpserver.SPEC
 )
 
 AC_MSG_NOTICE([Configuration Summary:  
