@@ -289,8 +289,8 @@ bool webserver::start(bool blocking)
                 this)
     );
     iov.push_back(gen(MHD_OPTION_CONNECTION_TIMEOUT, connection_timeout));
-    if(bind_address != 0x0)
-        iov.push_back(gen(MHD_OPTION_SOCK_ADDR, (intptr_t) bind_address));
+    //if(bind_address != 0x0)
+    //    iov.push_back(gen(MHD_OPTION_SOCK_ADDR, (intptr_t) bind_address));
     if(bind_socket != 0)
         iov.push_back(gen(MHD_OPTION_LISTEN_SOCKET, bind_socket));
     if(start_method == http_utils::THREAD_PER_CONNECTION && max_threads != 0)
@@ -361,12 +361,23 @@ bool webserver::start(bool blocking)
     start_conf |= MHD_USE_TCP_FASTOPEN;
 #endif
 
-    struct MHD_Daemon* daemon = MHD_start_daemon
-    (
-            start_conf, this->port, &policy_callback, this,
-            &answer_to_connection, this, MHD_OPTION_ARRAY,
-            &iov[0], MHD_OPTION_END
-    );
+    struct MHD_Daemon* daemon = NULL;
+    if(bind_address == 0x0) {
+        daemon = MHD_start_daemon
+        (
+                start_conf, this->port, &policy_callback, this,
+                &answer_to_connection, this, MHD_OPTION_ARRAY,
+                &iov[0], MHD_OPTION_END
+        );
+    } else {
+        daemon = MHD_start_daemon
+        (
+                start_conf, 1, &policy_callback, this,
+                &answer_to_connection, this, MHD_OPTION_ARRAY,
+                &iov[0], MHD_OPTION_SOCK_ADDR, bind_address, MHD_OPTION_END
+        );
+    }
+
     if(NULL == daemon)
     {
         cout << gettext("Unable to connect daemon to port: ") <<
