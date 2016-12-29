@@ -5,6 +5,7 @@ compiler:
 env:
  - DEBUG="debug"
  - DEBUG="nodebug"
+ - LINKING="static"
 before_install:
  - sudo apt-get install info install-info
  - sudo pip install cpp-coveralls
@@ -20,7 +21,7 @@ script:
  - ./bootstrap
  - mkdir build
  - cd build
- - if [ $DEBUG = "debug" ]; then ../configure --enable-debug --disable-shared --disable-fastopen; else ../configure --disable-fastopen; fi
+ - if [ $LINKING = "static" ]; then ../configure --enable-static --disable-fastopen; elif [ $DEBUG = "debug" ]; then ../configure --enable-debug --disable-shared --disable-fastopen; else ../configure --disable-fastopen; fi
  - make
  - make check
 after_success:
@@ -29,3 +30,5 @@ matrix:
   exclude:
     - compiler: clang
       env: DEBUG="debug"
+    - compiler: clang
+      env: LINKING='static'

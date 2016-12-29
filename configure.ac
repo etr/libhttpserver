@@ -133,6 +133,18 @@ if test x"$fastopen" = x"yes"; then
     fi
 fi
 
+AC_MSG_CHECKING([whether to link statically])
+AC_ARG_ENABLE([static],
+    [AS_HELP_STRING([--enable-static],
+        [enable use static linking (def=yes)])],
+    [static="$enableval"],
+    [static=yes])
+AC_MSG_RESULT([$static])
+
+if test x"$static" = x"$yes"; then
+    LDFLAGS="-static $LDFLAGS";
+fi
+
 m4_pattern_allow([AC_TYPE_SIZE_T])
 m4_pattern_allow([AC_TYPE_UINT16_T])
 m4_pattern_allow([AC_TYPE_UINT32_T])
@@ -223,4 +235,5 @@ AC_MSG_NOTICE([Configuration Summary:
   Debug	          :  ${debugit}
   TLS Enabled     :  ${have_gnutls}
   TCP_FASTOPEN    :  ${is_fastopen_supported}
+  Static          :  ${static}
 ])
