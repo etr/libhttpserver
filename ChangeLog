@@ -1,3 +1,6 @@
+Wed Feb 12 13:14:01 2017 +0000
+	Updated to libmicrohttpd 0.9.52
+
 Wed Jul 13 02:23:11 2016 +0100
 	Fixed problems with large payloads
 	Fixed memory leak in http_response_ptr

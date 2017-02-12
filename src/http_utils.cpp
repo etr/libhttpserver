@@ -79,8 +79,7 @@ const int http_utils::http_payment_required = MHD_HTTP_PAYMENT_REQUIRED;
 const int http_utils::http_forbidden = MHD_HTTP_FORBIDDEN;
 const int http_utils::http_not_found = MHD_HTTP_NOT_FOUND;
 const int http_utils::http_method_not_allowed = MHD_HTTP_METHOD_NOT_ALLOWED;
-const int http_utils::http_method_not_acceptable =
-    MHD_HTTP_METHOD_NOT_ACCEPTABLE;
+const int http_utils::http_method_not_acceptable = MHD_HTTP_NOT_ACCEPTABLE;
 const int http_utils::http_proxy_authentication_required =
     MHD_HTTP_PROXY_AUTHENTICATION_REQUIRED;
 const int http_utils::http_request_timeout = MHD_HTTP_REQUEST_TIMEOUT;
