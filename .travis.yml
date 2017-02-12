@@ -10,9 +10,9 @@ before_install:
  - sudo apt-get install info install-info
  - sudo pip install cpp-coveralls
  - sudo pip install gcovr
- - wget ftp://ftp.gnu.org/gnu/libmicrohttpd/libmicrohttpd-0.9.37.tar.gz
- - tar -xvzf libmicrohttpd-0.9.37.tar.gz
- - cd libmicrohttpd-0.9.37
+ - wget ftp://ftp.gnu.org/gnu/libmicrohttpd/libmicrohttpd-0.9.52.tar.gz
+ - tar -xvzf libmicrohttpd-0.9.52.tar.gz
+ - cd libmicrohttpd-0.9.52
  - ./configure --prefix=/usr
  - make
  - sudo make install
