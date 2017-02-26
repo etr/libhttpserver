@@ -1,3 +1,6 @@
+Wed Feb 26 21:31:00 2017 +0000
+	Fixed problem with segfault when copying http_response object
+
 Wed Feb 12 13:14:01 2017 +0000
 	Updated to libmicrohttpd 0.9.52
 
