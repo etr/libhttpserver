@@ -30,6 +30,7 @@
 #include <iosfwd>
 #include <stdint.h>
 #include <vector>
+#include <iostream>
 
 #include "httpserver/binders.hpp"
 #include "httpserver/http_utils.hpp"
@@ -91,12 +92,15 @@ class http_response
             underlying_connection(b.underlying_connection),
             ce(b.ce),
             cycle_callback(b.cycle_callback),
-            get_raw_response(b.get_raw_response),
-            decorate_response(b.decorate_response),
-            enqueue_response(b.enqueue_response),
+            get_raw_response(this, b._get_raw_response),
+            decorate_response(this, b._decorate_response),
+            enqueue_response(this, b._enqueue_response),
             completed(b.completed),
             ws(b.ws),
-            connection_id(b.connection_id)
+            connection_id(b.connection_id),
+            _get_raw_response(b._get_raw_response),
+            _decorate_response(b._decorate_response),
+            _enqueue_response(b._enqueue_response)
         {
         }
 
@@ -298,6 +302,11 @@ class http_response
         http_response& operator=(const http_response& b);
 
         static ssize_t data_generator (void* cls, uint64_t pos, char* buf, size_t max);
+
+        void (http_response::*_get_raw_response)(MHD_Response**, webserver*);
+        void (http_response::*_decorate_response)(MHD_Response*);
+        int (http_response::*_enqueue_response)(MHD_Connection*, MHD_Response*);
+
 };
 
 std::ostream &operator<< (std::ostream &os, const http_response &r);

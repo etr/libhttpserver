@@ -60,7 +60,10 @@ http_response::http_response(const http_response_builder& builder):
     enqueue_response(this, builder._enqueue_response),
     completed(false),
     ws(0x0),
-    connection_id(0x0)
+    connection_id(0x0),
+    _get_raw_response(builder._get_raw_response),
+    _decorate_response(builder._decorate_response),
+    _enqueue_response(builder._enqueue_response)
 {
 }
 
