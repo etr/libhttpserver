@@ -255,10 +255,6 @@ void get_ip_str(
         {
             result = to_ret;
         }
-        else
-        {
-            result.clear();
-        }
     }
 }
 
