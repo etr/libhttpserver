@@ -244,9 +244,17 @@ void get_ip_str(
 {
     if(sa)
     {
+        int addrlen = sizeof(sockaddr_in);
+        if (AF_INET6 == sa->sa_family)
+        {
+            addrlen = sizeof(sockaddr_in6);
+        }
+
         char to_ret[NI_MAXHOST];
-        getnameinfo(sa, sizeof (struct sockaddr), to_ret, NI_MAXHOST, NULL, 0, NI_NUMERICHOST);
-        result = to_ret;
+        if (0 == getnameinfo(sa, addrlen, to_ret, NI_MAXHOST, NULL, 0, NI_NUMERICHOST))
+        {
+            result = to_ret;
+        }
     }
 }
 
