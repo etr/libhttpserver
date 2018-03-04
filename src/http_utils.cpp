@@ -268,7 +268,7 @@ std::string get_ip_str_new(
     return to_ret;
 }
 
-short get_port(const struct sockaddr* sa)
+unsigned short get_port(const struct sockaddr* sa)
 {
     if(sa)
     {

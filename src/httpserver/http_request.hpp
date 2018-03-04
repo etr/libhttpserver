@@ -358,7 +358,7 @@ class http_request
          * Method used to get the requestor port used.
          * @return the requestor port
         **/
-        short get_requestor_port() const
+        unsigned short get_requestor_port() const
         {
             return this->requestor_port;
         }
@@ -415,7 +415,7 @@ class http_request
         std::string version;
         std::string requestor;
 
-        short requestor_port;
+        unsigned short requestor_port;
         struct MHD_Connection* underlying_connection;
 
         void set_underlying_connection(struct MHD_Connection* conn)
@@ -537,7 +537,7 @@ class http_request
          * Method used to set the requestor port
          * @param requestor The requestor port to set
         **/
-        void set_requestor_port(short requestor_port)
+        void set_requestor_port(unsigned short requestor_port)
         {
             this->requestor_port = requestor_port;
         }

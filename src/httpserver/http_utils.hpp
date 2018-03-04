@@ -79,7 +79,7 @@ class http_utils
 #if defined(__MINGW32__) || defined(__CYGWIN32__)
         INTERNAL_SELECT = MHD_USE_SELECT_INTERNALLY | MHD_USE_POLL,
 #else
-        INTERNAL_SELECT = MHD_USE_SELECT_INTERNALLY | MHD_USE_EPOLL | MHD_USE_EPOLL_TURBO, 
+        INTERNAL_SELECT = MHD_USE_SELECT_INTERNALLY | MHD_USE_EPOLL | MHD_USE_EPOLL_TURBO,
 #endif
         THREAD_PER_CONNECTION = MHD_USE_THREAD_PER_CONNECTION | MHD_USE_POLL
     };
@@ -331,7 +331,7 @@ std::string get_ip_str_new(const struct sockaddr* sa,
  * @param sa The sockaddr object to find the port from
  * @return short representing the port
 **/
-short get_port(const struct sockaddr* sa);
+unsigned short get_port(const struct sockaddr* sa);
 
 /**
  * Method to output the contents of a headers map to a std::ostream
