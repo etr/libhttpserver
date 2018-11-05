@@ -30,6 +30,8 @@
 #include <regex.h>
 #include <string>
 
+#include "webserver.hpp"
+
 namespace httpserver
 {
 
@@ -42,24 +44,27 @@ namespace details
 /**
  * Exception class throwed when a bad formatted http url is used
 **/
-class bad_http_endpoint : public std::exception
-{
-    /**
-     * Method used to see error details
-     * @return a const char* containing the error message
-    **/
-    virtual const char* what() const throw()
-    {
-        return "Bad url format!";
-    }
+
 };
 
 /**
  * Class representing an Http Endpoint. It is an abstraction used by the APIs.
 **/
-class http_endpoint
+class webserver::http_endpoint
 {
-    private:
+    public:
+        class bad_http_endpoint : public std::exception
+        {
+            /**
+             * Method used to see error details
+             * @return a const char* containing the error message
+            **/
+            virtual const char* what() const throw()
+            {
+                return "Bad url format!";
+            }
+        };
+
         /**
          * Copy constructor. It is useful expecially to copy regex_t structure that contains dinamically allocated data.
          * @param h The http_endpoint to copy
@@ -232,17 +237,6 @@ class http_endpoint
          * Boolean indicating if the regex is compiled
         **/
         bool reg_compiled;
-        friend class httpserver::webserver;
-        friend void _register_resource(
-                webserver*,
-                const std::string&,
-                const http_resource&,
-                bool
-        );
-        template<typename, typename> friend struct std::pair;
-        template<typename> friend struct std::less;
-};
-
 };
 
 };

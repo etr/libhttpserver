@@ -18,7 +18,7 @@
      USA
 */
 
-#include "details/http_endpoint.hpp"
+#include "http_endpoint.hpp"
 #include "http_utils.hpp"
 #include "string_utilities.hpp"
 
@@ -29,10 +29,7 @@ namespace httpserver
 
 using namespace http;
 
-namespace details
-{
-
-http_endpoint::~http_endpoint()
+webserver::http_endpoint::~http_endpoint()
 {
     if(reg_compiled)
     {
@@ -40,7 +37,7 @@ http_endpoint::~http_endpoint()
     }
 }
 
-http_endpoint::http_endpoint
+webserver::http_endpoint::http_endpoint
 (
     const string& url,
     bool family,
@@ -95,7 +92,7 @@ http_endpoint::http_endpoint
         }
 
         if((parts[i].size() < 3) || (parts[i][0] != '{') || (parts[i][parts[i].size() - 1] != '}'))
-            throw bad_http_endpoint();
+            throw webserver::http_endpoint::bad_http_endpoint();
 
         std::string::size_type bar = parts[i].find_first_of('|');
         this->url_pars.push_back(parts[i].substr(1, bar != string::npos ? bar - 1 : parts[i].size() - 2));
@@ -118,7 +115,7 @@ http_endpoint::http_endpoint
     }
 }
 
-http_endpoint::http_endpoint(const http_endpoint& h):
+webserver::http_endpoint::http_endpoint(const webserver::http_endpoint& h):
     url_complete(h.url_complete),
     url_modded(h.url_modded),
     url_pars(h.url_pars),
@@ -133,7 +130,7 @@ http_endpoint::http_endpoint(const http_endpoint& h):
         );
 }
 
-http_endpoint& http_endpoint::operator =(const http_endpoint& h)
+webserver::http_endpoint& webserver::http_endpoint::operator =(const webserver::http_endpoint& h)
 {
     this->url_complete = h.url_complete;
     this->url_modded = h.url_modded;
@@ -149,12 +146,12 @@ http_endpoint& http_endpoint::operator =(const http_endpoint& h)
     return *this;
 }
 
-bool http_endpoint::operator <(const http_endpoint& b) const
+bool webserver::http_endpoint::operator <(const webserver::http_endpoint& b) const
 {
     COMPARATOR(this->url_modded, b.url_modded, std::toupper);
 }
 
-bool http_endpoint::match(const http_endpoint& url) const
+bool webserver::http_endpoint::match(const webserver::http_endpoint& url) const
 {
 
     if(!this->family_url || url.url_pieces.size() < this->url_pieces.size())  
@@ -172,4 +169,3 @@ bool http_endpoint::match(const http_endpoint& url) const
 
 };
 
-};

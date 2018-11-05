@@ -1,3 +1,6 @@
+Sun Nov 04 19:28:00 2018 -0800
+	Moved http_endpoint as a sub-class of webserver. This avoids usage of friends.
+
 Wed Feb 26 21:31:00 2017 +0000
 	Fixed problem with segfault when copying http_response object
 

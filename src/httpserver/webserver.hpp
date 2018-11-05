@@ -57,7 +57,6 @@ struct httpserver_ska;
 };
 
 namespace details {
-    class http_endpoint;
     struct daemon_item;
     struct modded_request;
     struct cache_entry;
@@ -174,6 +173,8 @@ class webserver
         webserver& operator=(const webserver& other);
 
     private:
+        class http_endpoint;
+
         const uint16_t port;
         http::http_utils::start_method_T start_method;
         const int max_threads;
@@ -218,7 +219,7 @@ class webserver
         render_ptr method_not_allowed_resource;
         render_ptr method_not_acceptable_resource;
         render_ptr internal_error_resource;
-        std::map<details::http_endpoint, http_resource*> registered_resources;
+        std::map<http_endpoint, http_resource*> registered_resources;
         std::map<std::string, http_resource*> registered_resources_str;
 
         std::map<std::string, details::cache_entry*> response_cache;

@@ -19,9 +19,9 @@
 AM_CPPFLAGS = -I../ -I$(srcdir)/httpserver/
 METASOURCES = AUTO
 lib_LTLIBRARIES = libhttpserver.la
-libhttpserver_la_SOURCES = string_utilities.cpp webserver.cpp http_utils.cpp http_request.cpp http_response.cpp http_resource.cpp details/comet_manager.cpp details/http_endpoint.cpp
+libhttpserver_la_SOURCES = string_utilities.cpp webserver.cpp http_utils.cpp http_request.cpp http_response.cpp http_resource.cpp details/comet_manager.cpp http_endpoint.cpp
 noinst_HEADERS = httpserver/string_utilities.hpp httpserver/details/modded_request.hpp httpserver/details/http_response_ptr.hpp httpserver/details/cache_entry.hpp httpserver/details/comet_manager.hpp gettext.h
-nobase_include_HEADERS = httpserver.hpp httpserver/create_webserver.hpp httpserver/webserver.hpp httpserver/http_utils.hpp httpserver/details/http_endpoint.hpp httpserver/http_request.hpp httpserver/http_response.hpp httpserver/http_resource.hpp httpserver/binders.hpp httpserver/http_response_builder.hpp
+nobase_include_HEADERS = httpserver.hpp httpserver/create_webserver.hpp httpserver/webserver.hpp httpserver/http_utils.hpp httpserver/http_endpoint.hpp httpserver/http_request.hpp httpserver/http_response.hpp httpserver/http_resource.hpp httpserver/binders.hpp httpserver/http_response_builder.hpp
 
 AM_CXXFLAGS += -fPIC -Wall
 
