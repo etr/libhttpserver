@@ -6,9 +6,9 @@ compiler:
  - gcc
  - clang
 env:
- - DEBUG="debug"
- - DEBUG="nodebug"
- - LINKING="static"
+ - DEBUG="debug" LDFLAGS="$LDFLAGS -L/usr/local/lib -L/usr/lib"
+ - DEBUG="nodebug" LDFLAGS="$LDFLAGS -L/usr/local/lib -L/usr/lib"
+ - LINKING="static" LDFLAGS="$LDFLAGS -L/usr/local/lib -L/usr/lib"
 before_install:
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo apt-get install info install-info; fi
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo pip install cpp-coveralls; fi
