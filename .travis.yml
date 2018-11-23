@@ -29,6 +29,7 @@ script:
  - if [ $LINKING = "static" ]; then ../configure --enable-static --disable-fastopen; elif [ $DEBUG = "debug" ]; then ../configure --enable-debug --disable-shared --disable-fastopen; else ../configure --disable-fastopen; fi
  - make
  - make check
+ - cat test/test-suite.log
 after_success:
   - if [ $DEBUG = "debug" ] && [ "$TRAVIS_OS_NAME" = "linux" ]; then ../ci-report-coverage; fi
 matrix:
