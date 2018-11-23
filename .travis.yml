@@ -26,12 +26,14 @@ before_install:
  - sudo make install
  - cd ..
  - eval "${MATRIX_EVAL}"
-script:
+install:
  - ./bootstrap
  - mkdir build
  - cd build
  - if [ $LINKING = "static" ]; then ../configure --enable-static --disable-fastopen; elif [ $DEBUG = "debug" ]; then ../configure --enable-debug --disable-shared --disable-fastopen; else ../configure --disable-fastopen; fi
  - make
+ - make check TESTS=
+script:
  - make check
  - cat test/test-suite.log
  - ls -l /usr/local/lib/
