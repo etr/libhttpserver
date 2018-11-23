@@ -274,6 +274,7 @@ fi
 if test "$CROSS_COMPILE" == "1"; then
     AM_CXXFLAGS="$AM_CXXFLAGS --prefix=${ARM_LD_PATH}/ -I/usr/${ARM_ARCH_DIR}/include/c++/${ARM_GCC_VER}/${ARM_ARCH_DIR}/ -I/usr/${ARM_ARCH_DIR}/include/c++/${ARM_GCC_VER}/ -I/usr/${ARM_ARCH_DIR}/include/"
     AM_CFLAGS="$AM_CFLAGS --prefix=${ARM_LD_PATH}/ -I/usr/${ARM_ARCH_DIR}/include/c++/${ARM_GCC_VER}/${ARM_ARCH_DIR}/ -I/usr/${ARM_ARCH_DIR}/include/c++/${ARM_GCC_VER}/ -I/usr/${ARM_ARCH_DIR}/include/"
+    PATH="${ARM_LD_PATH}/:$PATH"
     CXXLINK="${ARM_LD_PATH}/ld"
     LINK="${ARM_LD_PATH}/ld"
 fi
