@@ -1,4 +1,7 @@
 language: cpp
+os:
+ - linux
+ - osx
 compiler: 
  - gcc
  - clang
@@ -7,10 +10,10 @@ env:
  - DEBUG="nodebug"
  - LINKING="static"
 before_install:
- - sudo apt-get install info install-info
- - sudo pip install cpp-coveralls
- - sudo pip install gcovr
- - wget https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.52.tar.gz
+ - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; sudo apt-get install info install-info; fi
+ - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; sudo pip install cpp-coveralls; fi
+ - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; sudo pip install gcovr; fi
+ - curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.52.tar.gz -o libmicrohttpd-0.9.52.tar.gz
  - tar -xvzf libmicrohttpd-0.9.52.tar.gz
  - cd libmicrohttpd-0.9.52
  - ./configure --prefix=/usr
