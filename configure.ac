@@ -272,8 +272,8 @@ if test "$ARM_SETTINGS" != ""; then
 fi
 
 if test "$CROSS_COMPILE" == "1"; then
-    AM_CXXFLAGS="$AM_CXXFLAGS -I/usr/${ARM_ARCH_DIR}/include/c++/${ARM_GCC_VER}/${ARM_ARCH_DIR}/ -I/usr/${ARM_ARCH_DIR}/include/c++/${ARM_GCC_VER}/ -I/usr/${ARM_ARCH_DIR}/include/"
-    AM_CFLAGS="$AM_CFLAGS -I/usr/${ARM_ARCH_DIR}/include/c++/${ARM_GCC_VER}/${ARM_ARCH_DIR}/ -I/usr/${ARM_ARCH_DIR}/include/c++/${ARM_GCC_VER}/ -I/usr/${ARM_ARCH_DIR}/include/"
+    AM_CXXFLAGS="$AM_CXXFLAGS --prefix=${ARM_LD_PATH}/ -I/usr/${ARM_ARCH_DIR}/include/c++/${ARM_GCC_VER}/${ARM_ARCH_DIR}/ -I/usr/${ARM_ARCH_DIR}/include/c++/${ARM_GCC_VER}/ -I/usr/${ARM_ARCH_DIR}/include/"
+    AM_CFLAGS="$AM_CFLAGS --prefix=${ARM_LD_PATH}/ -I/usr/${ARM_ARCH_DIR}/include/c++/${ARM_GCC_VER}/${ARM_ARCH_DIR}/ -I/usr/${ARM_ARCH_DIR}/include/c++/${ARM_GCC_VER}/ -I/usr/${ARM_ARCH_DIR}/include/"
 fi
 
 AM_CONDITIONAL([COND_GCOV],[test x"$cond_gcov" = x"yes"])
