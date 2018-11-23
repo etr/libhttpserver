@@ -17,7 +17,7 @@ before_install:
  - curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.59.tar.gz -o libmicrohttpd-0.9.59.tar.gz
  - tar -xvzf libmicrohttpd-0.9.59.tar.gz
  - cd libmicrohttpd-0.9.59
- - ./configure --disable-examples --prefix=/usr
+ - ./configure --disable-examples
  - make
  - sudo make install
  - cd ..
