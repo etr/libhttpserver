@@ -30,6 +30,8 @@ script:
  - make
  - make check
  - cat test/test-suite.log
+ - ls -l /usr/local/lib/
+ - ls -l /usr/lib/
 after_success:
   - if [ $DEBUG = "debug" ] && [ "$TRAVIS_OS_NAME" = "linux" ]; then ../ci-report-coverage; fi
 matrix:
