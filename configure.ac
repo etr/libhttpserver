@@ -277,6 +277,8 @@ if test "$CROSS_COMPILE" == "1"; then
     PATH="${ARM_LD_PATH}/:$PATH"
     CXXLINK="${ARM_LD_PATH}/ld"
     LINK="${ARM_LD_PATH}/ld"
+    LD="${ARM_LD_PATH}/ld"
+    LDFLAGS="$LDFLAGS -Wl,-rpath -Wl,/usr/lib -Wl,-rpath-link -Wl,${ARM_LD_PATH}/usr/lib -L${ARM_LD_PATH}/lib -L${ARM_LD_PATH}/usr/lib"
 fi
 
 AM_CONDITIONAL([COND_GCOV],[test x"$cond_gcov" = x"yes"])
