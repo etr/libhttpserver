@@ -36,9 +36,6 @@ script:
  - cat test/test-suite.log
  - ls -l /usr/local/lib/
  - ls -l /usr/lib/
- - ldd test/basic
- - ldd test/http_utils
- - ldd test/threaded
 after_success:
   - if [ $DEBUG = "debug" ] && [ "$TRAVIS_OS_NAME" = "linux" ]; then ../ci-report-coverage; fi
 matrix:
