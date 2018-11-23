@@ -97,6 +97,7 @@ matrix:
       env:
         - MATRIX_EVAL="CC=gcc-7 && CXX=g++-7"
     - os: linux
+      compiler: clang
       addons:
         apt:
           sources:
@@ -108,8 +109,9 @@ matrix:
             - gcc-multilib
             - qemu
             - qemu-system-arm
-      env: MATRIX_EVAL="CC=clang -B$HOME/linker_bin/ && CXX=clang++ -B$HOME/linker_bin/" CROSS_COMPILE=1 ARM_ARCH_DIR=arm-linux-gnueabi ARM_GCC_VER=4.7.3 ARM_SETTINGS="armv7-a -mfpu=neon -mfloat-abi=softfp -target arm-linux-gnueabi"
+      env: MATRIX_EVAL="CC='clang -B$HOME/linker_bin/' && CXX='clang++ -B$HOME/linker_bin/'" CROSS_COMPILE=1 ARM_ARCH_DIR=arm-linux-gnueabi ARM_GCC_VER=4.7.3 ARM_SETTINGS="armv7-a -mfpu=neon -mfloat-abi=softfp -target arm-linux-gnueabi"
     - os: linux
+      compiler: clang
       addons:
         apt:
           sources:
@@ -121,8 +123,9 @@ matrix:
             - gcc-multilib
             - qemu
             - qemu-system-arm
-      env: MATRIX_EVAL="CC=clang -B$HOME/linker_bin/ && CXX=clang++ -B$HOME/linker_bin/" CROSS_COMPILE=1 ARM_ARCH_DIR=arm-linux-gnueabi ARM_GCC_VER=4.7.3 ARM_SETTINGS="armv8-a -mfpu=neon -mfloat-abi=softfp -target arm-linux-gnueabi"
+      env: MATRIX_EVAL="CC='clang -B$HOME/linker_bin/' && CXX='clang++ -B$HOME/linker_bin/'" CROSS_COMPILE=1 ARM_ARCH_DIR=arm-linux-gnueabi ARM_GCC_VER=4.7.3 ARM_SETTINGS="armv8-a -mfpu=neon -mfloat-abi=softfp -target arm-linux-gnueabi"
     - os: linux
+      compiler: clang
       addons:
         apt:
           sources:
@@ -135,8 +138,8 @@ matrix:
             - gcc-4.8-multilib
             - qemu
             - qemu-system-arm
-      env: MATRIX_EVAL="CC=clang -B$HOME/linker_bin/ && CXX=clang++ -B$HOME/linker_bin/" CROSS_COMPILE=1 ARM_ARCH_DIR=aarch64-linux-gnu ARM_GCC_VER=4.8.4 ARM_SETTINGS="armv8-a -target aarch64-linux-gnueabi"
+      env: MATRIX_EVAL="CC='clang -B$HOME/linker_bin/' && CXX='clang++ -B$HOME/linker_bin/'" CROSS_COMPILE=1 ARM_ARCH_DIR=aarch64-linux-gnu ARM_GCC_VER=4.8.4 ARM_SETTINGS="armv8-a -target aarch64-linux-gnueabi"
   allow_failures:
-    - env: MATRIX_EVAL="CC=clang -B$HOME/linker_bin/ && CXX=clang++ -B$HOME/linker_bin/" CROSS_COMPILE=1 ARM_ARCH_DIR=arm-linux-gnueabi ARM_GCC_VER=4.7.3 ARM_SETTINGS="armv7-a -mfpu=neon -mfloat-abi=softfp -target arm-linux-gnueabi"
-    - env: MATRIX_EVAL="CC=clang -B$HOME/linker_bin/ && CXX=clang++ -B$HOME/linker_bin/" CROSS_COMPILE=1 ARM_ARCH_DIR=arm-linux-gnueabi ARM_GCC_VER=4.7.3 ARM_SETTINGS="armv8-a -mfpu=neon -mfloat-abi=softfp -target arm-linux-gnueabi"
-    - env: MATRIX_EVAL="CC=clang -B$HOME/linker_bin/ && CXX=clang++ -B$HOME/linker_bin/" CROSS_COMPILE=1 ARM_ARCH_DIR=aarch64-linux-gnu ARM_GCC_VER=4.8.4 ARM_SETTINGS="armv8-a -target aarch64-linux-gnueabi"
+    - env: MATRIX_EVAL="CC='clang -B$HOME/linker_bin/' && CXX='clang++ -B$HOME/linker_bin/'" CROSS_COMPILE=1 ARM_ARCH_DIR=arm-linux-gnueabi ARM_GCC_VER=4.7.3 ARM_SETTINGS="armv7-a -mfpu=neon -mfloat-abi=softfp -target arm-linux-gnueabi"
+    - env: MATRIX_EVAL="CC='clang -B$HOME/linker_bin/' && CXX='clang++ -B$HOME/linker_bin/'" CROSS_COMPILE=1 ARM_ARCH_DIR=arm-linux-gnueabi ARM_GCC_VER=4.7.3 ARM_SETTINGS="armv8-a -mfpu=neon -mfloat-abi=softfp -target arm-linux-gnueabi"
+    - env: MATRIX_EVAL="CC='clang -B$HOME/linker_bin/' && CXX='clang++ -B$HOME/linker_bin/'" CROSS_COMPILE=1 ARM_ARCH_DIR=aarch64-linux-gnu ARM_GCC_VER=4.8.4 ARM_SETTINGS="armv8-a -target aarch64-linux-gnueabi"
