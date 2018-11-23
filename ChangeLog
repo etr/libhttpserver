@@ -1,3 +1,6 @@
+Thu Nov 22 20:58:00 2018 -0800
+	Solved problem with the server not being able to start on mac os
+
 Sun Nov 04 19:28:00 2018 -0800
 	Moved http_endpoint as a sub-class of webserver. This avoids usage of friends.
 
