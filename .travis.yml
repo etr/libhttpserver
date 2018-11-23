@@ -14,9 +14,9 @@ before_install:
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo pip install cpp-coveralls; fi
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo pip install gcovr; fi
  - if [ "$TRAVIS_OS_NAME" = "osx" ]; then export CFLAGS='-mtune=generic'; fi
- - curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.52.tar.gz -o libmicrohttpd-0.9.52.tar.gz
- - tar -xvzf libmicrohttpd-0.9.52.tar.gz
- - cd libmicrohttpd-0.9.52
+ - curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.60.tar.gz -o libmicrohttpd-0.9.60.tar.gz
+ - tar -xvzf libmicrohttpd-0.9.60.tar.gz
+ - cd libmicrohttpd-0.9.60
  - ./configure --disable-examples --prefix=/usr
  - make
  - sudo make install
