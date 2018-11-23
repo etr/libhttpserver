@@ -27,17 +27,39 @@ before_install:
  - cd ..
  - eval "${MATRIX_EVAL}"
 install:
+ - if [[ "$CROSS_COMPILE" == 1 ]] ; then
+     if [[ "$ARM_ARCH_DIR" == "aarch64-linux-gnu" ]] ; then
+       mkdir $HOME/linker_bin ;
+       ln -s /usr/bin/aarch64-linux-gnu-ld $HOME/linker_bin/ld ;
+       echo "SETTING GNU LINKER DIR" ;
+       ls -al $HOME/linker_bin/ld ;
+     fi
+   fi
  - ./bootstrap
  - mkdir build
  - cd build
- - if [ $LINKING = "static" ]; then ../configure --enable-static --disable-fastopen; elif [ $DEBUG = "debug" ]; then ../configure --enable-debug --disable-shared --disable-fastopen; else ../configure --disable-fastopen; fi
+ - if [ $LINKING = "static" ]; then
+     ../configure --enable-static --disable-fastopen;
+   elif [ $DEBUG = "debug" ]; then
+     ../configure --enable-debug --disable-shared --disable-fastopen;
+   else ../configure --disable-fastopen;
+   fi
  - make
  - make check TESTS=
 script:
- - make check
- - cat test/test-suite.log
- - ls -l /usr/local/lib/
- - ls -l /usr/lib/
+ - if [[ "$CROSS_COMPILE" == 1 ]]; then
+     cd test ;
+     if [[ "$ARM_ARCH_DIR" == "aarch64-linux-gnu" ]]; then
+       qemu-aarch64 -L /usr/aarch64-linux-gnu/ ./run_tests ;
+     else
+       qemu-arm -L /usr/arm-linux-gnueabi/ ./run_tests ;
+     fi
+   else
+     make check ;
+     cat test/test-suite.log ;
+     ls -l /usr/local/lib/ ;
+     ls -l /usr/lib/ ;
+   fi
 after_success:
   - if [ $DEBUG = "debug" ] && [ "$TRAVIS_OS_NAME" = "linux" ]; then ../ci-report-coverage; fi
 matrix:
@@ -74,3 +96,47 @@ matrix:
             - g++-7
       env:
         - MATRIX_EVAL="CC=gcc-7 && CXX=g++-7"
+    - os: linux
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - clang-3.9
+            - g++-arm-linux-gnueabi
+            - g++-multilib
+            - gcc-multilib
+            - qemu
+            - qemu-system-arm
+      env: CXX="clang++ -B$HOME/linker_bin/" CC="clang -B$HOME/linker_bin/" CROSS_COMPILE=1 ARM_ARCH_DIR=arm-linux-gnueabi ARM_GCC_VER=4.7.3 ARM_SETTINGS="armv7-a -mfpu=neon -mfloat-abi=softfp -target arm-linux-gnueabi"
+    - os: linux
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - clang-3.9
+            - g++-arm-linux-gnueabi
+            - g++-multilib
+            - gcc-multilib
+            - qemu
+            - qemu-system-arm
+      env: CXX="clang++ -B$HOME/linker_bin/" CC="clang -B$HOME/linker_bin/" CROSS_COMPILE=1 ARM_ARCH_DIR=arm-linux-gnueabi ARM_GCC_VER=4.7.3 ARM_SETTINGS="armv8-a -mfpu=neon -mfloat-abi=softfp -target arm-linux-gnueabi"
+    - os: linux
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - clang-3.9
+            - g++-4.8-aarch64-linux-gnu
+            - gcc-4.8-aarch64-linux-gnu
+            - g++-4.8-multilib
+            - gcc-4.8-multilib
+            - qemu
+            - qemu-system-arm
+      env: CXX="clang++ -B$HOME/linker_bin/" CC="clang -B$HOME/linker_bin/" CROSS_COMPILE=1 ARM_ARCH_DIR=aarch64-linux-gnu ARM_GCC_VER=4.8.4 ARM_SETTINGS="armv8-a -target aarch64-linux-gnueabi"
+  allow_failures:
+    - env: CXX="clang++ -B$HOME/linker_bin/" CC="clang -B$HOME/linker_bin/" CROSS_COMPILE=1 ARM_ARCH_DIR=arm-linux-gnueabi ARM_GCC_VER=4.7.3 ARM_SETTINGS="armv7-a -mfpu=neon -mfloat-abi=softfp -target arm-linux-gnueabi"
+    - env: CXX="clang++ -B$HOME/linker_bin/" CC="clang -B$HOME/linker_bin/" CROSS_COMPILE=1 ARM_ARCH_DIR=arm-linux-gnueabi ARM_GCC_VER=4.7.3 ARM_SETTINGS="armv8-a -mfpu=neon -mfloat-abi=softfp -target arm-linux-gnueabi"
+    - env: CXX="clang++ -B$HOME/linker_bin/" CC="clang -B$HOME/linker_bin/" CROSS_COMPILE=1 ARM_ARCH_DIR=aarch64-linux-gnu ARM_GCC_VER=4.8.4 ARM_SETTINGS="armv8-a -target aarch64-linux-gnueabi"
