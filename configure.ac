@@ -266,14 +266,7 @@ else
     AM_CFLAGS="$AM_CXXFLAGS -O3"
 fi
 
-if test "$ARM_SETTINGS" != ""; then
-    AM_CXXFLAGS="$AM_CXXFLAGS -march=$ARM_SETTINGS"
-    AM_CFLAGS="$AM_CFLAGS -march=$ARM_SETTINGS"
-fi
-
 if test "$CROSS_COMPILE" == "1"; then
-    AM_CXXFLAGS="$AM_CXXFLAGS -I/usr/${ARM_ARCH_DIR}/include/c++/${ARM_GCC_VER}/${ARM_ARCH_DIR}/ -I/usr/${ARM_ARCH_DIR}/include/c++/${ARM_GCC_VER}/ -I/usr/${ARM_ARCH_DIR}/include/"
-    AM_CFLAGS="$AM_CFLAGS -I/usr/${ARM_ARCH_DIR}/include/c++/${ARM_GCC_VER}/${ARM_ARCH_DIR}/ -I/usr/${ARM_ARCH_DIR}/include/c++/${ARM_GCC_VER}/ -I/usr/${ARM_ARCH_DIR}/include/"
     if test "$ARM_ARCH_DIR" == "aarch64-linux-gnu"; then
         AM_CXXFLAGS="$AM_CXXFLAGS --prefix=${ARM_LD_PATH}/"
         AM_CFLAGS="$AM_CFLAGS --prefix=${ARM_LD_PATH}/"
