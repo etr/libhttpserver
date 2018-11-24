@@ -31,6 +31,7 @@ install:
      if [[ "$ARM_ARCH_DIR" == "aarch64-linux-gnu" ]] ; then
        mkdir $HOME/linker_bin ;
        ln -s /usr/bin/aarch64-linux-gnu-ld $HOME/linker_bin/ld ;
+       LD=$HOME/linker_bin/ld ;
        echo "SETTING GNU LINKER DIR" ;
        ls -al $HOME/linker_bin/ld ;
      fi
