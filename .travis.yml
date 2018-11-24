@@ -39,8 +39,6 @@ install:
  - ./bootstrap
  - mkdir build
  - cd build
- - cat Makefile
- - cat libtool
  - if [ $LINKING = "static" ]; then
      ../configure --enable-static --disable-fastopen;
    elif [ $DEBUG = "debug" ]; then
@@ -48,6 +46,8 @@ install:
    else ../configure --disable-fastopen;
    fi
  - cat config.log
+ - cat Makefile
+ - cat libtool
  - make
  - make check TESTS=
 script:
