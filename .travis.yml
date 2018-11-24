@@ -39,9 +39,9 @@ install:
  - ./bootstrap
  - mkdir build
  - cd build
- - if [ $LINKING = "static" ]; then
+ - if [ "$LINKING" = "static" ]; then
      ../configure --enable-static --disable-fastopen;
-   elif [ $DEBUG = "debug" ]; then
+   elif [ "$DEBUG" = "debug" ]; then
      ../configure --enable-debug --disable-shared --disable-fastopen;
    elif [ "$CROSS_COMPILE" = "1" ] && [ "$ARM_ARCH_DIR" = "aarch64-linux-gnu" ]; then 
      ../configure --disable-fastopen CC="gcc -B$HOME/linker_bin" CXX="g++ -B$HOME/linker_bin";
