@@ -272,13 +272,17 @@ if test "$ARM_SETTINGS" != ""; then
 fi
 
 if test "$CROSS_COMPILE" == "1"; then
-    AM_CXXFLAGS="$AM_CXXFLAGS --prefix=${ARM_LD_PATH}/ -I/usr/${ARM_ARCH_DIR}/include/c++/${ARM_GCC_VER}/${ARM_ARCH_DIR}/ -I/usr/${ARM_ARCH_DIR}/include/c++/${ARM_GCC_VER}/ -I/usr/${ARM_ARCH_DIR}/include/"
-    AM_CFLAGS="$AM_CFLAGS --prefix=${ARM_LD_PATH}/ -I/usr/${ARM_ARCH_DIR}/include/c++/${ARM_GCC_VER}/${ARM_ARCH_DIR}/ -I/usr/${ARM_ARCH_DIR}/include/c++/${ARM_GCC_VER}/ -I/usr/${ARM_ARCH_DIR}/include/"
-    PATH="${ARM_LD_PATH}/:$PATH"
-    CXXLINK="${ARM_LD_PATH}/ld"
-    LINK="${ARM_LD_PATH}/ld"
-    LD="${ARM_LD_PATH}/ld"
-    LDFLAGS="$LDFLAGS -Wl,-rpath -Wl,/usr/lib -Wl,-rpath-link -Wl,${ARM_LD_PATH}/usr/lib -L${ARM_LD_PATH}/lib -L${ARM_LD_PATH}/usr/lib"
+    AM_CXXFLAGS="$AM_CXXFLAGS -I/usr/${ARM_ARCH_DIR}/include/c++/${ARM_GCC_VER}/${ARM_ARCH_DIR}/ -I/usr/${ARM_ARCH_DIR}/include/c++/${ARM_GCC_VER}/ -I/usr/${ARM_ARCH_DIR}/include/"
+    AM_CFLAGS="$AM_CFLAGS -I/usr/${ARM_ARCH_DIR}/include/c++/${ARM_GCC_VER}/${ARM_ARCH_DIR}/ -I/usr/${ARM_ARCH_DIR}/include/c++/${ARM_GCC_VER}/ -I/usr/${ARM_ARCH_DIR}/include/"
+    if test "$ARM_ARCH_DIR" == "aarch64-linux-gnu"; then
+        AM_CXXFLAGS="$AM_CXXFLAGS --prefix=${ARM_LD_PATH}/"
+        AM_CFLAGS="$AM_CFLAGS --prefix=${ARM_LD_PATH}/"
+        PATH="${ARM_LD_PATH}/:$PATH"
+        CXXLINK="${ARM_LD_PATH}/ld"
+        LINK="${ARM_LD_PATH}/ld"
+        LD="${ARM_LD_PATH}/ld"
+        LDFLAGS="$LDFLAGS -Wl,-rpath -Wl,/usr/lib -Wl,-rpath-link -Wl,${ARM_LD_PATH}/usr/lib -L${ARM_LD_PATH}/lib -L${ARM_LD_PATH}/usr/lib"
+    fi
 fi
 
 AM_CONDITIONAL([COND_GCOV],[test x"$cond_gcov" = x"yes"])
