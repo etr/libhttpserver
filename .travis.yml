@@ -129,7 +129,7 @@ matrix:
             - gcc-multilib
             - qemu
             - qemu-system-arm
-      env: CROSS_COMPILE=1 ARM_ARCH_DIR=arm-linux-gnueabi
+      env: CROSS_COMPILE=1 ARM_ARCH_DIR=arm-linux-gnueabi CC=arm-linux-gnueabi-gcc
     - os: linux
       compiler: clang
       addons:
@@ -146,5 +146,5 @@ matrix:
             - qemu-system-arm
       env: CROSS_COMPILE=1 ARM_LD_PATH=$HOME/linker_bin ARM_ARCH_DIR=aarch64-linux-gnu
   allow_failures:
-    - env: CROSS_COMPILE=1 ARM_ARCH_DIR=arm-linux-gnueabi
+    - env: CROSS_COMPILE=1 ARM_ARCH_DIR=arm-linux-gnueabi CC=arm-linux-gnueabi-gcc
     - env: CROSS_COMPILE=1 ARM_LD_PATH=$HOME/linker_bin ARM_ARCH_DIR=aarch64-linux-gnu
