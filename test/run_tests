@@ -1,0 +1,5 @@
+#!/bin/sh
+
+./basic
+./http_utils
+./threaded
