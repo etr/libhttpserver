@@ -58,10 +58,18 @@ script:
  - if [[ "$CROSS_COMPILE" == 1 ]]; then
      cd test ;
      if [[ "$ARM_ARCH_DIR" == "aarch64-linux-gnu" ]]; then
+       file ./.libs/basic;
+       file ./.libs/http_utils;
+       file ./.libs/threaded;
+
        qemu-aarch64 -L /usr/aarch64-linux-gnu/ ./.libs/basic ;
        qemu-aarch64 -L /usr/aarch64-linux-gnu/ ./.libs/http_utils ;
        qemu-aarch64 -L /usr/aarch64-linux-gnu/ ./.libs/threaded ;
      else
+       file ./.libs/basic;
+       file ./.libs/http_utils;
+       file ./.libs/threaded;
+
        qemu-arm -L /usr/arm-linux-gnueabi/ ./.libs/basic ;
        qemu-arm -L /usr/arm-linux-gnueabi/ ./.libs/http_utils ;
        qemu-arm -L /usr/arm-linux-gnueabi/ ./.libs/threaded ;
