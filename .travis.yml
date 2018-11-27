@@ -10,6 +10,7 @@ env:
  - DEBUG="nodebug"
  - LINKING="static"
 before_install:
+ - eval "${MATRIX_EVAL}"
  - export LDFLAGS="$LDFLAGS -L/usr/local/lib -L/usr/lib"
  - export PATH=$PATH:/usr/local/lib
  - export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib
@@ -25,7 +26,6 @@ before_install:
  - make
  - sudo make install
  - cd ..
- - eval "${MATRIX_EVAL}"
 install:
  - if [[ "$CROSS_COMPILE" == 1 ]] ; then
      if [[ "$ARM_ARCH_DIR" == "aarch64-linux-gnu" ]] ; then
@@ -208,7 +208,7 @@ matrix:
             - gcc-multilib
             - qemu
             - qemu-system-arm
-      env: MATRIX_EVAL="CROSS_COMPILE=1 ARM_ARCH_DIR=arm-linux-gnueabi CC=arm-linux-gnueabi-gcc"
+      env: MATRIX_EVAL="CROSS_COMPILE=1 && ARM_ARCH_DIR=arm-linux-gnueabi && CC=arm-linux-gnueabi-gcc"
     - os: linux
       compiler: clang
       addons:
@@ -223,7 +223,7 @@ matrix:
             - gcc-4.8-multilib
             - qemu
             - qemu-system-arm
-      env: MATRIX_EVAL="CROSS_COMPILE=1 ARM_LD_PATH=$HOME/linker_bin ARM_ARCH_DIR=aarch64-linux-gnu"
+      env: MATRIX_EVAL="CROSS_COMPILE=1 && ARM_LD_PATH=$HOME/linker_bin && ARM_ARCH_DIR=aarch64-linux-gnu"
   allow_failures:
-    - env: MATRIX_EVAL="CROSS_COMPILE=1 ARM_ARCH_DIR=arm-linux-gnueabi CC=arm-linux-gnueabi-gcc"
-    - env: MATRIX_EVAL="CROSS_COMPILE=1 ARM_LD_PATH=$HOME/linker_bin ARM_ARCH_DIR=aarch64-linux-gnu"
+    - env: MATRIX_EVAL="CROSS_COMPILE=1 && ARM_ARCH_DIR=arm-linux-gnueabi && CC=arm-linux-gnueabi-gcc"
+    - env: MATRIX_EVAL="CROSS_COMPILE=1 && ARM_LD_PATH=$HOME/linker_bin && ARM_ARCH_DIR=aarch64-linux-gnu"
