@@ -16,7 +16,7 @@ before_install:
  - export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib
  - export DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH:/usr/local/lib
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo apt-get install info install-info; fi
- - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo pip install cpp-coveralls; fi
+ - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo pip install codecov; fi
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo pip install gcovr; fi
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo apt-get install cppcheck; fi
  - if [ "$TRAVIS_OS_NAME" = "osx" ]; then export CFLAGS='-mtune=generic'; fi
