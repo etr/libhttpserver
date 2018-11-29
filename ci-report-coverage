@@ -10,5 +10,10 @@ cp -R ../test/* ./test/
 cp -R ../test/integ/* ./test/integ/
 cp -R ../test/unit/* ./test/unit/
 
-echo "Sending coveralls json report"
-coveralls --gcov-options '\-lp'
+echo "Sending json report"
+for filename in `find . | egrep '\.cpp'`; 
+do 
+  gcov -n -o . $filename > /dev/null; 
+done
+
+codecov
