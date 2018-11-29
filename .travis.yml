@@ -83,7 +83,7 @@ script:
      if [ "$TRAVIS_OS_NAME" = "linux" ]; then cd ../src/; cppcheck --error-exitcode=1 .; cd ../build; fi
    fi
 after_success:
-  - if [ "$DEBUG" = "debug" ] && [ "$TRAVIS_OS_NAME" = "linux" ]; then ../ci-report-coverage; fi
+  - if [ "$DEBUG" = "debug" ] && [ "$TRAVIS_OS_NAME" = "linux" ]; then bash <(curl -s https://codecov.io/bash); fi
 matrix:
   exclude:
     - compiler: clang
