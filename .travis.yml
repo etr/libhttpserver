@@ -18,6 +18,7 @@ before_install:
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo apt-get install info install-info; fi
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo pip install cpp-coveralls; fi
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo pip install gcovr; fi
+ - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo apt-get install cppcheck; fi
  - if [ "$TRAVIS_OS_NAME" = "osx" ]; then export CFLAGS='-mtune=generic'; fi
  - curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.59.tar.gz -o libmicrohttpd-0.9.59.tar.gz
  - tar -xvzf libmicrohttpd-0.9.59.tar.gz
@@ -79,6 +80,7 @@ script:
      cat test/test-suite.log ;
      ls -l /usr/local/lib/ ;
      ls -l /usr/lib/ ;
+     if [ "$TRAVIS_OS_NAME" = "linux" ]; then cd ../src/; cppcheck --error-exitcode=1 .; cd ../build; fi
    fi
 after_success:
   - if [ "$DEBUG" = "debug" ] && [ "$TRAVIS_OS_NAME" = "linux" ]; then ../ci-report-coverage; fi
