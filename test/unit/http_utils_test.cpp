@@ -60,23 +60,23 @@ LT_END_AUTO_TEST(unescape)
 
 LT_BEGIN_AUTO_TEST(http_utils_suite, standardize_url)
     string url = "/", result;
-    http::http_utils::standardize_url(url, result);
+    result = http::http_utils::standardize_url(url);
     LT_CHECK_EQ(result, "/");
 
     url = "/abc/", result = "";
-    http::http_utils::standardize_url(url, result);
+    result = http::http_utils::standardize_url(url);
     LT_CHECK_EQ(result, "/abc");
 
     url = "/abc", result = "";
-    http::http_utils::standardize_url(url, result);
+    result = http::http_utils::standardize_url(url);
     LT_CHECK_EQ(result, "/abc");
 
     url = "/abc/pqr/", result = "";
-    http::http_utils::standardize_url(url, result);
+    result = http::http_utils::standardize_url(url);
     LT_CHECK_EQ(result, "/abc/pqr");
 
     url = "/abc/pqr", result = "";
-    http::http_utils::standardize_url(url, result);
+    result = http::http_utils::standardize_url(url);
     LT_CHECK_EQ(result, "/abc/pqr");
 LT_END_AUTO_TEST(standardize_url)
 
@@ -88,7 +88,7 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, ip_to_str)
     ip4addr.sin_addr.s_addr = inet_addr("127.0.0.1");
 
     string result = "";
-    http::get_ip_str((struct sockaddr *) &ip4addr, result);
+    result = http::get_ip_str((struct sockaddr *) &ip4addr);
 
     LT_CHECK_EQ(result, "127.0.0.1");
 LT_END_AUTO_TEST(ip_to_str)

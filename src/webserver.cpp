@@ -775,8 +775,7 @@ void webserver::end_request_construction(
             connection,
             MHD_CONNECTION_INFO_CLIENT_ADDRESS
     );
-    std::string ip_str;
-    get_ip_str(conninfo->client_addr, ip_str);
+    std::string ip_str = get_ip_str(conninfo->client_addr);
     mr->dhr->set_requestor(ip_str);
     mr->dhr->set_requestor_port(get_port(conninfo->client_addr));
     if(pass != 0x0)
@@ -989,7 +988,7 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
 
     mr->standardized_url = new string();
     internal_unescaper((void*) static_cast<webserver*>(cls), (char*) url);
-    http_utils::standardize_url(url, *mr->standardized_url);
+    mr->standardized_url = new string(http_utils::standardize_url(url));
 
     bool body = false;
 

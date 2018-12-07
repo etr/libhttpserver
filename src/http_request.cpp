@@ -31,7 +31,7 @@ namespace httpserver
 
 void http_request::set_method(const std::string& method)
 {
-    string_utilities::to_upper_copy(method, this->method);
+    this->method = string_utilities::to_upper_copy(method);
 }
 
 bool http_request::check_digest_auth(

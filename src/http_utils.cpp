@@ -210,21 +210,20 @@ const std::string http_utils::http_post_encoding_multipart_formdata =
     MHD_HTTP_POST_ENCODING_MULTIPART_FORMDATA;
 
 
-size_t http_utils::tokenize_url(
+std::vector<std::string> http_utils::tokenize_url(
         const std::string& str,
-        std::vector<std::string>& result,
         const char separator
 )
 {
-    string_utilities::string_split(str, result, separator);
-    return result.size();
+    return string_utilities::string_split(str, separator);
 }
 
-void http_utils::standardize_url(const std::string& url, std::string& result)
+std::string http_utils::standardize_url(const std::string& url)
 {
-    std::string n_url;
-    string_utilities::regex_replace(url, "(\\/)+", "/", n_url);
+    std::string n_url = string_utilities::regex_replace(url, "(\\/)+", "/");
     std::string::size_type n_url_length = n_url.length();
+
+    std::string result;
 
     if (n_url_length > 1 && n_url[n_url_length - 1] == '/')
     {
@@ -234,14 +233,17 @@ void http_utils::standardize_url(const std::string& url, std::string& result)
     {
         result = n_url;
     }
+
+    return result;
 }
 
-void get_ip_str(
+std::string get_ip_str(
     const struct sockaddr *sa,
-    std::string& result,
     socklen_t maxlen
 )
 {
+    std::string result;
+
     if(sa)
     {
         int addrlen = sizeof(sockaddr_in);
@@ -256,16 +258,8 @@ void get_ip_str(
             result = to_ret;
         }
     }
-}
 
-std::string get_ip_str_new(
-    const struct sockaddr* sa,
-    socklen_t maxlen
-)
-{
-    std::string to_ret;
-    get_ip_str(sa, to_ret, maxlen);
-    return to_ret;
+    return result;
 }
 
 unsigned short get_port(const struct sockaddr* sa)
@@ -355,7 +349,7 @@ ip_representation::ip_representation(const std::string& ip)
     if(ip.find(':') != std::string::npos) //IPV6
     {
         ip_version = http_utils::IPV6;
-        string_utilities::string_split(ip, parts, ':', false);
+        parts = string_utilities::string_split(ip, ':', false);
         int y = 0;
         for(unsigned int i = 0; i < parts.size(); i++)
         {
@@ -385,8 +379,7 @@ ip_representation::ip_representation(const std::string& ip)
                     }
                     if(parts[i].find('.') != std::string::npos)
                     {
-                        vector<string> subparts;
-                        string_utilities::string_split(parts[i], subparts, '.');
+                        vector<string> subparts = string_utilities::string_split(parts[i], '.');
                         if(subparts.size() == 4)
                         {
                             for(unsigned int ii = 0; ii < subparts.size(); ii++)
@@ -447,7 +440,7 @@ ip_representation::ip_representation(const std::string& ip)
     else //IPV4
     {
         ip_version = http_utils::IPV4;
-        string_utilities::string_split(ip, parts, '.');
+        parts = string_utilities::string_split(ip, '.');
         if(parts.size() == 4)
         {
             for(unsigned int i = 0; i < parts.size(); i++)
@@ -487,26 +480,22 @@ bool ip_representation::operator <(const ip_representation& b) const
     return false;
 }
 
-size_t load_file (const char* filename, char** content)
+char* load_file (const char *filename)
 {
+    char* content = NULL;
+
     ifstream fp(filename, ios::in | ios::binary | ios::ate);
     if(fp.is_open())
     {
         int size = fp.tellg();
-        *content = (char*) malloc(size * sizeof(char));
+        content = (char*) malloc(size * sizeof(char));
         fp.seekg(0, ios::beg);
-        fp.read(*content, size);
+        fp.read(content, size);
         fp.close();
-        return size;
+        return content;
     }
     else
         throw file_access_exception();
-}
-
-char* load_file (const char *filename)
-{
-    char* content = NULL;
-    load_file(filename, &content);
     return content;
 }
 

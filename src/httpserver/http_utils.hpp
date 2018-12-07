@@ -240,10 +240,10 @@ class http_utils
 
     static const std::string http_post_encoding_form_urlencoded;
     static const std::string http_post_encoding_multipart_formdata;
-    static size_t tokenize_url(const std::string&,
-            std::vector<std::string>& result, const char separator = '/'
+    static std::vector<std::string> tokenize_url(const std::string&,
+        const char separator = '/'
     );
-    static void standardize_url(const std::string&, std::string& result);
+    static std::string standardize_url(const std::string&);
 };
 
 #define COMPARATOR(x, y, op) \
@@ -331,13 +331,9 @@ struct ip_representation
  * @param maxlen Maxlen of the address (automatically discovered if not passed)
  * @return string containing the ip address
 **/
-void get_ip_str(const struct sockaddr *sa,
-    std::string& result, socklen_t maxlen = 0
-);
+std::string get_ip_str(const struct sockaddr *sa, socklen_t maxlen = 0);
 
-std::string get_ip_str_new(const struct sockaddr* sa,
-    socklen_t maxlen = 0
-);
+std::string get_ip_str_new(const struct sockaddr* sa, socklen_t maxlen = 0);
 /**
  * Method used to get a port from a sockaddr
  * @param sa The sockaddr object to find the port from
@@ -375,8 +371,6 @@ void dump_arg_map(std::ostream &os, const std::string &prefix,
 size_t http_unescape (char *val);
 
 char* load_file (const char *filename);
-
-size_t load_file (const char* filename, char** content);
 
 };
 };

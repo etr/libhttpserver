@@ -34,14 +34,16 @@ namespace httpserver
 namespace string_utilities
 {
 
-void to_upper_copy(const std::string& str, std::string& result)
+std::string to_upper_copy(const std::string& str)
 {
-    result = str;
+    std::string result = str;
     std::transform(result.begin(),
         result.end(),
         result.begin(),
         (int(*)(int)) std::toupper
     );
+
+    return result;
 }
 
 void to_upper(std::string& str)
@@ -53,41 +55,44 @@ void to_upper(std::string& str)
     );
 }
 
-void to_lower_copy(const std::string& str, std::string& result)
+std::string to_lower_copy(const std::string& str)
 {
-    result = str;
+    std::string result = str;
     std::transform(result.begin(),
         result.end(),
         result.begin(),
         (int(*)(int)) std::tolower
     );
+
+    return result;
 }
 
-size_t string_split(
+std::vector<std::string> string_split(
         const std::string& s,
-        std::vector<std::string>& result,
         char sep,
         bool collapse
 )
 {
+    std::vector<std::string> result;
+
     std::istringstream buf(s);
     for(std::string token; getline(buf, token, sep); )
     {
         if((collapse && token != "") || !collapse)
             result.push_back(token);
     }
-    return result.size();
+    return result;
 }
 
-void regex_replace(const std::string& str,
+std::string regex_replace(const std::string& str,
         const std::string& pattern,
-        const std::string& replace_str,
-        std::string& result
+        const std::string& replace_str
 )
 {
     regex_t preg;
     regmatch_t substmatch[1];
     regcomp(&preg, pattern.c_str(), REG_EXTENDED|REG_ICASE);
+    std::string result;
     if ( regexec(&preg, str.c_str(), 1, substmatch, 0) == 0 )
     {
         char ns[substmatch[0].rm_so + 1 +
@@ -113,6 +118,8 @@ void regex_replace(const std::string& str,
         result = std::string((char*)ns);
     }
     regfree(&preg);
+
+    return result;
 }
 
 };

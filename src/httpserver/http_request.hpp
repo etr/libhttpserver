@@ -505,8 +505,7 @@ class http_request
         void set_path(const std::string& path)
         {
             this->path = path;
-            std::vector<std::string> complete_path;
-            http::http_utils::tokenize_url(this->path, complete_path);
+            std::vector<std::string> complete_path = http::http_utils::tokenize_url(this->path);
             for(unsigned int i = 0; i < complete_path.size(); i++)
             {
                 this->post_path.push_back(complete_path[i]);

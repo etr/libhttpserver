@@ -59,7 +59,7 @@ webserver::http_endpoint::http_endpoint
     if(url_complete[0] != '/')
         url_complete = "/" + url_complete;
 
-    http_utils::tokenize_url(url, parts);
+    parts = http_utils::tokenize_url(url);
     string buffered;
     bool first = true;
 
