@@ -39,12 +39,12 @@ namespace string_utilities
  * @param str The string to turn uppercase
  * @return a string that is the uppercase version of the previous
 **/
-std::string to_upper_copy(const std::string& str);
-std::string to_lower_copy(const std::string& str);
-std::vector<std::string> string_split(const std::string& s,
+const std::string to_upper_copy(const std::string& str);
+const std::string to_lower_copy(const std::string& str);
+const std::vector<std::string> string_split(const std::string& s,
         char sep = ' ', bool collapse = true
 );
-std::string regex_replace(const std::string& str, const std::string& pattern,
+const std::string regex_replace(const std::string& str, const std::string& pattern,
         const std::string& replace_str
 );
 void to_upper(std::string& str);

@@ -34,7 +34,7 @@ namespace httpserver
 namespace string_utilities
 {
 
-std::string to_upper_copy(const std::string& str)
+const std::string to_upper_copy(const std::string& str)
 {
     std::string result = str;
     std::transform(result.begin(),
@@ -55,7 +55,7 @@ void to_upper(std::string& str)
     );
 }
 
-std::string to_lower_copy(const std::string& str)
+const std::string to_lower_copy(const std::string& str)
 {
     std::string result = str;
     std::transform(result.begin(),
@@ -67,7 +67,7 @@ std::string to_lower_copy(const std::string& str)
     return result;
 }
 
-std::vector<std::string> string_split(
+const std::vector<std::string> string_split(
         const std::string& s,
         char sep,
         bool collapse
@@ -84,7 +84,7 @@ std::vector<std::string> string_split(
     return result;
 }
 
-std::string regex_replace(const std::string& str,
+const std::string regex_replace(const std::string& str,
         const std::string& pattern,
         const std::string& replace_str
 )
