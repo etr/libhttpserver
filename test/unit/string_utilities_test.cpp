@@ -1,0 +1,102 @@
+/*
+     This file is part of libhttpserver
+     Copyright (C) 2011, 2012, 2013, 2014, 2015 Sebastiano Merlino
+
+     This library is free software; you can redistribute it and/or
+     modify it under the terms of the GNU Lesser General Public
+     License as published by the Free Software Foundation; either
+     version 2.1 of the License, or (at your option) any later version.
+
+     This library is distributed in the hope that it will be useful,
+     but WITHOUT ANY WARRANTY; without even the implied warranty of
+     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+     Lesser General Public License for more details.
+
+     You should have received a copy of the GNU Lesser General Public
+     License along with this library; if not, write to the Free Software
+     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
+     USA
+*/
+
+#include "littletest.hpp"
+#include "string_utilities.hpp"
+
+#include <cstdio>
+
+using namespace httpserver;
+using namespace std;
+
+LT_BEGIN_SUITE(string_utilities_suite)
+    void set_up()
+    {
+    }
+
+    void tear_down()
+    {
+    }
+LT_END_SUITE(string_utilities_suite)
+
+LT_BEGIN_AUTO_TEST(string_utilities_suite, to_upper_copy)
+    LT_CHECK_EQ(string_utilities::to_upper_copy("test message"), string("TEST MESSAGE"));
+    LT_CHECK_EQ(string_utilities::to_upper_copy("tEsT mEssAge 245&$"), string("TEST MESSAGE 245&$"));
+LT_END_AUTO_TEST(to_upper_copy)
+
+LT_BEGIN_AUTO_TEST(string_utilities_suite, to_upper)
+    string value = "test message";
+    string_utilities::to_upper(value);
+    LT_CHECK_EQ(value, string("TEST MESSAGE"));
+
+    value = "tEsT mEssAge 245&$";
+    string_utilities::to_upper(value);
+    LT_CHECK_EQ(value, string("TEST MESSAGE 245&$"));
+LT_END_AUTO_TEST(to_upper)
+
+LT_BEGIN_AUTO_TEST(string_utilities_suite, to_lower_copy)
+    LT_CHECK_EQ(string_utilities::to_lower_copy("TEST MESSAGE"), string("test message"));
+    LT_CHECK_EQ(string_utilities::to_lower_copy("tEsT mEssAge 245&$"), string("test message 245&$"));
+LT_END_AUTO_TEST(to_lower_copy)
+
+LT_BEGIN_AUTO_TEST(string_utilities_suite, split_string)
+    string value = "test this message here";
+    string expected_arr[] = { "test", "this", "message", "here" };
+    vector<string> expected(expected_arr, expected_arr + sizeof(expected_arr) / sizeof(expected_arr[0]));
+    vector<string> actual = string_utilities::string_split(value, ' ', false);
+
+    LT_CHECK_COLLECTIONS_EQ(expected.begin(), expected.end(), actual.begin());
+LT_END_AUTO_TEST(split_string)
+
+LT_BEGIN_AUTO_TEST(string_utilities_suite, split_string_multiple_spaces)
+    string value = "test  this  message  here";
+    string expected_arr[] = { "test", "", "this", "", "message", "", "here" };
+    vector<string> expected(expected_arr, expected_arr + sizeof(expected_arr) / sizeof(expected_arr[0]));
+    vector<string> actual = string_utilities::string_split(value, ' ', false);
+
+    LT_CHECK_COLLECTIONS_EQ(expected.begin(), expected.end(), actual.begin());
+LT_END_AUTO_TEST(split_string_multiple_spaces)
+
+LT_BEGIN_AUTO_TEST(string_utilities_suite, split_string_multiple_spaces_collapse)
+    string value = "test  this  message  here";
+    string expected_arr[] = { "test", "this", "message", "here" };
+    vector<string> expected(expected_arr, expected_arr + sizeof(expected_arr) / sizeof(expected_arr[0]));
+    vector<string> actual = string_utilities::string_split(value, ' ', true);
+
+    LT_CHECK_COLLECTIONS_EQ(expected.begin(), expected.end(), actual.begin());
+LT_END_AUTO_TEST(split_string_multiple_spaces_collapse)
+
+LT_BEGIN_AUTO_TEST(string_utilities_suite, split_string_end_space)
+    string value = "test this message here ";
+    string expected_arr[] = { "test", "this", "message", "here" };
+    vector<string> expected(expected_arr, expected_arr + sizeof(expected_arr) / sizeof(expected_arr[0]));
+    vector<string> actual = string_utilities::string_split(value, ' ', false);
+
+    LT_CHECK_COLLECTIONS_EQ(expected.begin(), expected.end(), actual.begin());
+LT_END_AUTO_TEST(split_string_end_space)
+
+LT_BEGIN_AUTO_TEST(string_utilities_suite, regex_replace)
+    LT_CHECK_EQ(string_utilities::regex_replace("test///message", "(\\/)+", "/"), "test/message");
+    LT_CHECK_EQ(string_utilities::regex_replace("test 1234 message", "([0-9])+", "bob"), "test bob message");
+LT_END_AUTO_TEST(regex_replace)
+
+LT_BEGIN_AUTO_TEST_ENV()
+    AUTORUN_TESTS()
+LT_END_AUTO_TEST_ENV()
