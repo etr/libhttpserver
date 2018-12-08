@@ -59,14 +59,7 @@ class http_request
         {
             return this->user;
         }
-        /**
-         * Method used to get the username eventually passed through basic authentication.
-         * @param result string that will be filled with the username
-        **/
-        void get_user(std::string& result) const
-        {
-            result = this->user;
-        }
+
         /**
          * Method used to get the username extracted from a digest authentication
          * @return the username
@@ -75,14 +68,7 @@ class http_request
         {
             return this->digested_user;
         }
-        /**
-         * Method used to get the username extracted from a digest authentication
-         * @param result string that will be filled with the username
-        **/
-        void get_digested_user(std::string& result) const
-        {
-            result = this->digested_user;
-        }
+
         /**
          * Method used to get the password eventually passed through basic authentication.
          * @return string representation of the password.
@@ -91,14 +77,7 @@ class http_request
         {
             return this->pass;
         }
-        /**
-         * Method used to get the password eventually passed through basic authentication.
-         * @param result string that will be filled with the password.
-        **/
-        void get_pass(std::string& result) const
-        {
-            result = this->pass;
-        }
+        
         /**
          * Method used to get the path requested
          * @return string representing the path requested.
@@ -107,14 +86,7 @@ class http_request
         {
             return this->path;
         }
-        /**
-         * Method used to get the path requested
-         * @param result string that will be filled with the path.
-        **/
-        void get_path(std::string& result) const
-        {
-            result = this->path;
-        }
+
         /**
          * Method used to get all pieces of the path requested; considering an url splitted by '/'.
          * @return a vector of strings containing all pieces
@@ -123,16 +95,7 @@ class http_request
         {
             return this->post_path;
         }
-        /**
-         * Method used to get all pieces of the path requested; considering an url splitted by '/'.
-         * @param result vector of strings containing the path
-         * @return the size of the vector filled
-        **/
-        size_t get_path_pieces(std::vector<std::string>& result) const
-        {
-            result = this->post_path;
-            return result.size();
-        }
+
         /**
          * Method used to obtain the size of path in terms of pieces; considering an url splitted by '/'.
          * @return an integer representing the number of pieces
@@ -141,6 +104,7 @@ class http_request
         {
             return this->post_path.size();
         }
+
         /**
          * Method used to obtain a specified piece of the path; considering an url splitted by '/'.
          * @param index the index of the piece selected
@@ -152,25 +116,7 @@ class http_request
                 return this->post_path[index];
             return "";
         }
-        /**
-         * Method used to obtain a specified piece of the path; considering an url splitted by '/'.
-         * @param index the index of the piece selected
-         * @param result a string that will be filled with the piece found
-         * @return the length of the piece found
-        **/
-        size_t get_path_piece(int index, std::string& result) const
-        {
-            if(((int)(this->post_path.size())) > index)
-            {
-                result = this->post_path[index];
-                return result.size();
-            }
-            else
-            {
-                result = "";
-                return result.size();
-            }
-        }
+
         /**
          * Method used to get the METHOD used to make the request.
          * @return string representing the method.
@@ -179,38 +125,35 @@ class http_request
         {
             return this->method;
         }
-        /**
-         * Method used to get the METHOD used to make the request.
-         * @param result string that will be filled with the method.
-        **/
-        void get_method(std::string& result) const
-        {
-            result = this->method;
-        }
+
         /**
          * Method used to get all headers passed with the request.
          * @param result a map<string, string> > that will be filled with all headers
          * @result the size of the map
         **/
-        size_t get_headers(std::map<std::string, std::string, http::header_comparator>& result) const;
+        const std::map<std::string, std::string, http::header_comparator> get_headers() const;
+
         /**
          * Method used to get all footers passed with the request.
          * @param result a map<string, string> > that will be filled with all footers
          * @result the size of the map
         **/
-        size_t get_footers(std::map<std::string, std::string, http::header_comparator>& result) const;
+        const std::map<std::string, std::string, http::header_comparator> get_footers() const;
+
         /**
          * Method used to get all cookies passed with the request.
          * @param result a map<string, string> > that will be filled with all cookies
          * @result the size of the map
         **/
-        size_t get_cookies(std::map<std::string, std::string, http::header_comparator>& result) const;
+        const std::map<std::string, std::string, http::header_comparator> get_cookies() const;
+
         /**
          * Method used to get all args passed with the request.
          * @param result a map<string, string> > that will be filled with all args
          * @result the size of the map
         **/
-        size_t get_args(std::map<std::string, std::string, http::arg_comparator>& result) const;
+        const std::map<std::string, std::string, http::arg_comparator> get_args() const;
+
         /**
          * Method used to get a specific header passed with the request.
          * @param key the specific header to get the value from
@@ -225,15 +168,7 @@ class http_request
             else
                 return "";
         }
-        void get_header(const std::string& key, std::string& result) const
-        {
-            std::map<std::string, std::string>::const_iterator it =
-                this->headers.find(key);
-            if(it != this->headers.end())
-                result = it->second;
-            else
-                result = "";
-        }
+
         const std::string get_cookie(const std::string& key) const
         {
             std::map<std::string, std::string>::const_iterator it =
@@ -243,15 +178,7 @@ class http_request
             else
                 return "";
         }
-        void get_cookie(const std::string& key, std::string& result) const
-        {
-            std::map<std::string, std::string>::const_iterator it =
-                this->cookies.find(key);
-            if(it != this->cookies.end())
-                result = it->second;
-            else
-                result = "";
-        }
+        
         /**
          * Method used to get a specific footer passed with the request.
          * @param key the specific footer to get the value from
@@ -266,15 +193,7 @@ class http_request
             else
                 return "";
         }
-        void get_footer(const std::string& key, std::string& result) const
-        {
-            std::map<std::string, std::string>::const_iterator it =
-                this->footers.find(key);
-            if(it != this->footers.end())
-                result = it->second;
-            else
-                result = "";
-        }
+        
         /**
          * Method used to get a specific argument passed with the request.
          * @param ket the specific argument to get the value from
@@ -289,15 +208,7 @@ class http_request
             else
                 return "";
         }
-        void get_arg(const std::string& key, std::string& result) const
-        {
-            std::map<std::string, std::string>::const_iterator it =
-                this->args.find(key);
-            if(it != this->args.end())
-                result = it->second;
-            else
-                result = "";
-        }
+        
         /**
          * Method used to get the content of the request.
          * @return the content in string representation
@@ -306,10 +217,7 @@ class http_request
         {
             return this->content;
         }
-        void get_content(std::string& result) const
-        {
-            result = this->content;
-        }
+        
         /**
          * Method to check whether the size of the content reached or exceeded content_size_limit.
          * @return boolean
@@ -326,10 +234,7 @@ class http_request
         {
             return this->querystring;
         }
-        void get_querystring(std::string& result) const
-        {
-            result = this->querystring;
-        }
+        
         /**
          * Method used to get the version of the request.
          * @return the version in string representation
@@ -338,10 +243,7 @@ class http_request
         {
             return this->version;
         }
-        void get_version(std::string& result) const
-        {
-            result = this->version;
-        }
+        
         /**
          * Method used to get the requestor.
          * @return the requestor
@@ -350,10 +252,7 @@ class http_request
         {
             return this->requestor;
         }
-        void get_requestor(std::string& result) const
-        {
-            result = this->requestor;
-        }
+        
         /**
          * Method used to get the requestor port used.
          * @return the requestor port
@@ -362,12 +261,13 @@ class http_request
         {
             return this->requestor_port;
         }
+
         bool check_digest_auth(const std::string& realm,
                 const std::string& password,
                 int nonce_timeout, bool& reload_nonce
         ) const;
 
-		friend std::ostream &operator<< (std::ostream &os, const http_request &r);
+        friend std::ostream &operator<< (std::ostream &os, const http_request &r);
     private:
         /**
          * Default constructor of the class. It is a specific responsibility of apis to initialize this type of objects.
@@ -376,6 +276,7 @@ class http_request
             content(""), content_size_limit(static_cast<size_t>(-1))
         {
         }
+
         /**
          * Copy constructor.
          * @param b http_request b to copy attributes from.
@@ -422,6 +323,7 @@ class http_request
         {
             this->underlying_connection = conn;
         }
+
         /**
          * Method used to set an header value by key.
          * @param key The name identifying the header
@@ -431,6 +333,7 @@ class http_request
         {
             this->headers[key] = value;
         }
+
         /**
          * Method used to set a footer value by key.
          * @param key The name identifying the footer
@@ -440,6 +343,7 @@ class http_request
         {
             this->footers[key] = value;
         }
+
         /**
          * Method used to set a cookie value by key.
          * @param key The name identifying the cookie
@@ -449,6 +353,7 @@ class http_request
         {
             this->cookies[key] = value;
         }
+
         /**
          * Method used to set an argument value by key.
          * @param key The name identifying the argument
@@ -458,6 +363,7 @@ class http_request
         {
             this->args[key] = value.substr(0,content_size_limit);
         }
+
         /**
          * Method used to set an argument value by key.
          * @param key The name identifying the argument
@@ -469,6 +375,7 @@ class http_request
             this->args[key] = std::string(value,
                                           std::min(size, content_size_limit));
         }
+
         /**
          * Method used to set the content of the request
          * @param content The content to set.
@@ -477,6 +384,7 @@ class http_request
         {
             this->content = content.substr(0,content_size_limit);
         }
+
         /**
          * Method used to set the maximum size of the content
          * @param content_size_limit The limit on the maximum size of the content and arg's.
@@ -485,6 +393,7 @@ class http_request
         {
             this->content_size_limit = content_size_limit;
         }
+
         /**
          * Method used to append content to the request preserving the previous inserted content
          * @param content The content to append.
@@ -498,6 +407,7 @@ class http_request
                 this->content.resize (content_size_limit);
             }
         }
+
         /**
          * Method used to set the path requested.
          * @param path The path searched by the request.
@@ -511,11 +421,13 @@ class http_request
                 this->post_path.push_back(complete_path[i]);
             }
         }
+
         /**
          * Method used to set the request METHOD
          * @param method The method to set for the request
         **/
         void set_method(const std::string& method);
+
         /**
          * Method used to set the request http version (ie http 1.1)
          * @param version The version to set in form of string
@@ -524,6 +436,7 @@ class http_request
         {
             this->version = version;
         }
+
         /**
          * Method used to set the requestor
          * @param requestor The requestor to set
@@ -532,6 +445,7 @@ class http_request
         {
             this->requestor = requestor;
         }
+
         /**
          * Method used to set the requestor port
          * @param requestor The requestor port to set
@@ -540,6 +454,7 @@ class http_request
         {
             this->requestor_port = requestor_port;
         }
+
         /**
          * Method used to remove an header previously inserted
          * @param key The key identifying the header to remove.
@@ -548,6 +463,7 @@ class http_request
         {
             this->headers.erase(key);
         }
+
         /**
          * Method used to set all headers of the request.
          * @param headers The headers key-value map to set for the request.
@@ -558,6 +474,7 @@ class http_request
             for(it = headers.begin(); it != headers.end(); ++it)
                 this->headers[it->first] = it->second;
         }
+
         /**
          * Method used to set all footers of the request.
          * @param footers The footers key-value map to set for the request.
@@ -568,6 +485,7 @@ class http_request
             for(it = footers.begin(); it != footers.end(); ++it)
                 this->footers[it->first] = it->second;
         }
+
         /**
          * Method used to set all cookies of the request.
          * @param cookies The cookies key-value map to set for the request.
@@ -578,6 +496,7 @@ class http_request
             for(it = cookies.begin(); it != cookies.end(); ++it)
                 this->cookies[it->first] = it->second;
         }
+
         /**
          * Method used to set all arguments of the request.
          * @param args The args key-value map to set for the request.
@@ -588,6 +507,7 @@ class http_request
             for(it = args.begin(); it != args.end(); ++it)
                 this->args[it->first] = it->second.substr(0,content_size_limit);
         }
+
         /**
          * Method used to set the username of the request.
          * @param user The username to set.
@@ -596,10 +516,12 @@ class http_request
         {
             this->user = user;
         }
+
         void set_digested_user(const std::string& digested_user)
         {
             this->digested_user = digested_user;
         }
+
         /**
          * Method used to set the password of the request.
          * @param pass The password to set.

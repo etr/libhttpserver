@@ -62,28 +62,24 @@ bool http_request::check_digest_auth(
     return true;
 }
 
-size_t http_request::get_headers(std::map<std::string, std::string, http::header_comparator>& result) const
+const std::map<std::string, std::string, http::header_comparator> http_request::get_headers() const
 {
-    result = this->headers;
-    return result.size();
+    return this->headers;
 }
 
-size_t http_request::get_footers(std::map<std::string, std::string, http::header_comparator>& result) const
+const std::map<std::string, std::string, http::header_comparator> http_request::get_footers() const
 {
-    result = this->footers;
-    return result.size();
+    return this->footers;
 }
 
-size_t http_request::get_cookies(std::map<std::string, std::string, http::header_comparator>& result) const
+const std::map<std::string, std::string, http::header_comparator> http_request::get_cookies() const
 {
-    result = this->cookies;
-    return result.size();
+    return this->cookies;
 }
 
-size_t http_request::get_args(std::map<std::string, std::string, http::arg_comparator>& result) const
+const std::map<std::string, std::string, http::arg_comparator> http_request::get_args() const
 {
-    result = this->args;
-    return result.size();
+    return this->args;
 }
 
 std::ostream &operator<< (std::ostream &os, const http_request &r)
