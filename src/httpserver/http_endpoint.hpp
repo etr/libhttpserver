@@ -83,7 +83,7 @@ class webserver::http_endpoint
          * Method used to get the complete endpoint url
          * @return a string representing the url
         **/
-        const std::string get_url_complete() const
+        const std::string& get_url_complete() const
         {
             return this->url_complete;
         }
@@ -92,7 +92,7 @@ class webserver::http_endpoint
          * Method used to get all pars defined inside an url.
          * @return a vector of strings representing all found pars.
         **/
-        const std::vector<std::string> get_url_pars() const
+        const std::vector<std::string>& get_url_pars() const
         {
             return this->url_pars;
         }
@@ -101,7 +101,7 @@ class webserver::http_endpoint
          * Method used to get all pieces of an url; considering an url splitted by '/'.
          * @return a vector of strings representing all found pieces.
         **/
-        const std::vector<std::string> get_url_pieces() const
+        const std::vector<std::string>& get_url_pieces() const
         {
             return this->url_pieces;
         }
@@ -110,7 +110,7 @@ class webserver::http_endpoint
          * Method used to get indexes of all parameters inside url
          * @return a vector of int indicating all positions.
         **/
-        const std::vector<int> get_chunk_positions() const
+        const std::vector<int>& get_chunk_positions() const
         {
             return this->chunk_positions;
         }
