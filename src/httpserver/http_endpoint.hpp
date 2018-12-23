@@ -29,6 +29,7 @@
 #include <utility>
 #include <regex.h>
 #include <string>
+#include <stdexcept>
 
 #include "webserver.hpp"
 
@@ -38,33 +39,12 @@ namespace httpserver
 class webserver;
 class http_resource;
 
-namespace details
-{
-
-/**
- * Exception class throwed when a bad formatted http url is used
-**/
-
-};
-
 /**
  * Class representing an Http Endpoint. It is an abstraction used by the APIs.
 **/
 class webserver::http_endpoint
 {
     public:
-        class bad_http_endpoint : public std::exception
-        {
-            /**
-             * Method used to see error details
-             * @return a const char* containing the error message
-            **/
-            virtual const char* what() const throw()
-            {
-                return "Bad url format!";
-            }
-        };
-
         /**
          * Copy constructor. It is useful expecially to copy regex_t structure that contains dinamically allocated data.
          * @param h The http_endpoint to copy

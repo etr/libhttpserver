@@ -92,7 +92,7 @@ webserver::http_endpoint::http_endpoint
         }
 
         if((parts[i].size() < 3) || (parts[i][0] != '{') || (parts[i][parts[i].size() - 1] != '}'))
-            throw webserver::http_endpoint::bad_http_endpoint();
+            throw std::invalid_argument("Bad URL format");
 
         std::string::size_type bar = parts[i].find_first_of('|');
         this->url_pars.push_back(parts[i].substr(1, bar != string::npos ? bar - 1 : parts[i].size() - 2));
