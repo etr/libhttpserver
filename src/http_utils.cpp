@@ -243,41 +243,41 @@ std::string get_ip_str(
     socklen_t maxlen
 )
 {
-    std::string result;
+    if (!sa) throw new std::invalid_argument("socket pointer is null");
 
-    if(sa)
+    char to_ret[NI_MAXHOST];
+    if (AF_INET6 == sa->sa_family)
     {
-        char to_ret[NI_MAXHOST];
-        if (AF_INET6 == sa->sa_family)
-        {
-            inet_ntop(AF_INET6, &(((sockaddr_in6*) sa)->sin6_addr), to_ret, INET6_ADDRSTRLEN);
-            result = to_ret;
-        }
-        else
-        {
-            inet_ntop(AF_INET, &(((sockaddr_in*) sa)->sin_addr), to_ret, INET_ADDRSTRLEN);
-            result = to_ret;
-        }
+        inet_ntop(AF_INET6, &(((sockaddr_in6*) sa)->sin6_addr), to_ret, INET6_ADDRSTRLEN);
+        return to_ret;
     }
-
-    return result;
+    else if (AF_INET == sa->sa_family)
+    {
+        inet_ntop(AF_INET, &(((sockaddr_in*) sa)->sin_addr), to_ret, INET_ADDRSTRLEN);
+        return to_ret;
+    }
+    else
+    {
+        throw new std::invalid_argument("IP family must be either AF_INET or AF_INET6");
+    }
 }
 
 unsigned short get_port(const struct sockaddr* sa)
 {
-    if(sa)
+    if (!sa) throw new std::invalid_argument("socket pointer is null");
+
+    if (sa->sa_family == AF_INET)
     {
-        switch(sa->sa_family)
-        {
-            case AF_INET:
-                return ((struct sockaddr_in*) sa)->sin_port;
-            case AF_INET6:
-                return ((struct sockaddr_in6*) sa)->sin6_port;
-            default:
-                return 0;
-        }
+        return ((struct sockaddr_in*) sa)->sin_port;
     }
-    return 0;
+    else if (sa->sa_family == AF_INET6)
+    {
+        return ((struct sockaddr_in6*) sa)->sin6_port;
+    }
+    else
+    {
+        throw new std::invalid_argument("IP family must be either AF_INET or AF_INET6");
+    }
 }
 
 size_t http_unescape(char *val)

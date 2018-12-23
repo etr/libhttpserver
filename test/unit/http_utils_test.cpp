@@ -108,6 +108,34 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, ip_to_str6)
     LT_CHECK_EQ(port, htons(3490));
 LT_END_AUTO_TEST(ip_to_str6)
 
+LT_BEGIN_AUTO_TEST(http_utils_suite, ip_to_str_invalid_family)
+    struct sockaddr_in ip4addr;
+
+    ip4addr.sin_family = 55;
+    ip4addr.sin_port = htons(3490);
+    ip4addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+
+    LT_CHECK_THROW(http::get_ip_str((struct sockaddr*) &ip4addr));
+LT_END_AUTO_TEST(ip_to_str_invalid_family)
+
+LT_BEGIN_AUTO_TEST(http_utils_suite, ip_to_str_null)
+    LT_CHECK_THROW(http::get_ip_str((struct sockaddr*) 0x0));
+LT_END_AUTO_TEST(ip_to_str_null)
+
+LT_BEGIN_AUTO_TEST(http_utils_suite, get_port_invalid_family)
+    struct sockaddr_in ip4addr;
+
+    ip4addr.sin_family = 55;
+    ip4addr.sin_port = htons(3490);
+    ip4addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+
+    LT_CHECK_THROW(http::get_port((struct sockaddr*) &ip4addr));
+LT_END_AUTO_TEST(get_port_invalid_family)
+
+LT_BEGIN_AUTO_TEST(http_utils_suite, get_port_null)
+    LT_CHECK_THROW(http::get_port((struct sockaddr*) 0x0));
+LT_END_AUTO_TEST(get_port_null)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()
