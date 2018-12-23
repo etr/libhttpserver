@@ -30,6 +30,7 @@
 #else
 #include <sys/socket.h>
 #include <netdb.h>
+#include <arpa/inet.h>
 #endif
 #include <sstream>
 #include <iomanip>
@@ -246,15 +247,15 @@ std::string get_ip_str(
 
     if(sa)
     {
-        int addrlen = sizeof(sockaddr_in);
+        char to_ret[NI_MAXHOST];
         if (AF_INET6 == sa->sa_family)
         {
-            addrlen = sizeof(sockaddr_in6);
+            inet_ntop(AF_INET6, &(((sockaddr_in6*) sa)->sin6_addr), to_ret, INET6_ADDRSTRLEN);
+            result = to_ret;
         }
-
-        char to_ret[NI_MAXHOST];
-        if (0 == getnameinfo(sa, addrlen, to_ret, NI_MAXHOST, NULL, 0, NI_NUMERICHOST))
+        else
         {
+            inet_ntop(AF_INET, &(((sockaddr_in*) sa)->sin_addr), to_ret, INET_ADDRSTRLEN);
             result = to_ret;
         }
     }
@@ -269,9 +270,9 @@ unsigned short get_port(const struct sockaddr* sa)
         switch(sa->sa_family)
         {
             case AF_INET:
-                return ((struct sockaddr_in *)sa)->sin_port;
+                return ((struct sockaddr_in*) sa)->sin_port;
             case AF_INET6:
-                return ((struct sockaddr_in *)sa)->sin_port;
+                return ((struct sockaddr_in6*) sa)->sin6_port;
             default:
                 return 0;
         }
@@ -279,7 +280,7 @@ unsigned short get_port(const struct sockaddr* sa)
     return 0;
 }
 
-size_t http_unescape (char *val)
+size_t http_unescape(char *val)
 {
     char *rpos = val;
     char *wpos = val;
