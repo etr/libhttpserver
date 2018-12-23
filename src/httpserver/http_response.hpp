@@ -113,14 +113,9 @@ class http_response
          * Method used to get the content from the response.
          * @return the content in string form
         **/
-        std::string get_content()
+        const std::string& get_content()
         {
             return this->content;
-        }
-
-        void get_content(std::string& result)
-        {
-            result = this->content;
         }
 
         /**
@@ -128,14 +123,9 @@ class http_response
          * @param key The header identification
          * @return a string representing the value assumed by the header
         **/
-        std::string get_header(const std::string& key)
+        const std::string& get_header(const std::string& key)
         {
             return this->headers[key];
-        }
-
-        void get_header(const std::string& key, std::string& result)
-        {
-            result = this->headers[key];
         }
 
         /**
@@ -143,45 +133,38 @@ class http_response
          * @param key The footer identification
          * @return a string representing the value assumed by the footer
         **/
-        std::string get_footer(const std::string& key)
+        const std::string& get_footer(const std::string& key)
         {
             return this->footers[key];
         }
 
-        void get_footer(const std::string& key, std::string& result)
-        {
-            result = this->footers[key];
-        }
-
-        std::string get_cookie(const std::string& key)
+        const std::string& get_cookie(const std::string& key)
         {
             return this->cookies[key];
-        }
-
-        void get_cookie(const std::string& key, std::string& result)
-        {
-            result = this->cookies[key];
         }
 
         /**
          * Method used to get all headers passed with the request.
          * @return a map<string,string> containing all headers.
         **/
-        size_t get_headers(
-                std::map<std::string, std::string, http::header_comparator>& result
-        ) const;
+        const std::map<std::string, std::string, http::header_comparator>& get_headers() const
+        {
+            return this->headers;
+        }
 
         /**
          * Method used to get all footers passed with the request.
          * @return a map<string,string> containing all footers.
         **/
-        size_t get_footers(
-                std::map<std::string, std::string, http::header_comparator>& result
-        ) const;
+        const std::map<std::string, std::string, http::header_comparator>& get_footers() const
+        {
+            return this->footers;
+        }
 
-        size_t get_cookies(
-                std::map<std::string, std::string, http::header_comparator>& result
-        ) const;
+        const std::map<std::string, std::string, http::header_comparator>& get_cookies() const
+        {
+            return this->cookies;
+        }
 
         /**
          * Method used to get the response code from the response
@@ -192,24 +175,14 @@ class http_response
             return this->response_code;
         }
 
-        std::string get_realm() const
+        const std::string& get_realm() const
         {
             return this->realm;
         }
 
-        void get_realm(std::string& result) const
-        {
-            result = this->realm;
-        }
-
-        std::string get_opaque() const
+        const std::string& get_opaque() const
         {
             return this->opaque;
-        }
-
-        void get_opaque(std::string& result) const
-        {
-            result = this->opaque;
         }
 
         bool need_nonce_reload() const
@@ -227,12 +200,9 @@ class http_response
             return autodelete;
         }
 
-        size_t get_topics(std::vector<std::string>& topics) const
+        const std::vector<std::string>& get_topics() const
         {
-            typedef std::vector<std::string>::const_iterator topics_it;
-            for(topics_it it=this->topics.begin();it != this->topics.end();++it)
-                topics.push_back(*it);
-            return topics.size();
+            return this->topics;
         }
     protected:
         typedef details::binders::functor_two<MHD_Response**, webserver*, void> get_raw_response_t;

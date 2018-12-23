@@ -73,24 +73,6 @@ http_response::~http_response()
         webserver::unlock_cache_entry(ce);
 }
 
-size_t http_response::get_headers(std::map<std::string, std::string, http::header_comparator>& result) const
-{
-    result = this->headers;
-    return result.size();
-}
-
-size_t http_response::get_footers(std::map<std::string, std::string, http::header_comparator>& result) const
-{
-    result = this->footers;
-    return result.size();
-}
-
-size_t http_response::get_cookies(std::map<std::string, std::string, http::header_comparator>& result) const
-{
-    result = this->cookies;
-    return result.size();
-}
-
 //RESPONSE
 void http_response::get_raw_response_str(MHD_Response** response, webserver* ws)
 {
