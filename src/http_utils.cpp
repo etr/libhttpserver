@@ -243,7 +243,7 @@ std::string get_ip_str(
     socklen_t maxlen
 )
 {
-    if (!sa) throw new std::invalid_argument("socket pointer is null");
+    if (!sa) throw std::invalid_argument("socket pointer is null");
 
     char to_ret[NI_MAXHOST];
     if (AF_INET6 == sa->sa_family)
@@ -258,13 +258,13 @@ std::string get_ip_str(
     }
     else
     {
-        throw new std::invalid_argument("IP family must be either AF_INET or AF_INET6");
+        throw std::invalid_argument("IP family must be either AF_INET or AF_INET6");
     }
 }
 
 unsigned short get_port(const struct sockaddr* sa)
 {
-    if (!sa) throw new std::invalid_argument("socket pointer is null");
+    if (!sa) throw std::invalid_argument("socket pointer is null");
 
     if (sa->sa_family == AF_INET)
     {
@@ -276,7 +276,7 @@ unsigned short get_port(const struct sockaddr* sa)
     }
     else
     {
-        throw new std::invalid_argument("IP family must be either AF_INET or AF_INET6");
+        throw std::invalid_argument("IP family must be either AF_INET or AF_INET6");
     }
 }
 

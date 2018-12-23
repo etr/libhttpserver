@@ -58,6 +58,18 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, unescape)
     LT_CHECK_EQ(expected_size, 3);
 LT_END_AUTO_TEST(unescape)
 
+LT_BEGIN_AUTO_TEST(http_utils_suite, unescape_plus)
+    char* string_with_plus = (char*) malloc(6 * sizeof(char));
+    sprintf(string_with_plus, "%s", "A+B");
+    int expected_size = http::http_unescape(string_with_plus);
+
+    char* expected = (char*) malloc(4 * sizeof(char));
+    sprintf(expected, "%s", "A B");
+
+    LT_CHECK_EQ(string(string_with_plus), string(expected));
+    LT_CHECK_EQ(expected_size, 3);
+LT_END_AUTO_TEST(unescape_plus)
+
 LT_BEGIN_AUTO_TEST(http_utils_suite, standardize_url)
     string url = "/", result;
     result = http::http_utils::standardize_url(url);
