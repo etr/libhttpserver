@@ -286,7 +286,7 @@ struct ip_representation
 {
     http_utils::IP_version_T ip_version;
     unsigned short pieces[16];
-    unsigned int mask:16;
+    unsigned short mask;
 
     ip_representation(http_utils::IP_version_T ip_version) :
         ip_version(ip_version)

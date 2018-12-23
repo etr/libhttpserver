@@ -148,6 +148,67 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, get_port_null)
     LT_CHECK_THROW(http::get_port((struct sockaddr*) 0x0));
 LT_END_AUTO_TEST(get_port_null)
 
+LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation4_str)
+    http::ip_representation test_ip("192.168.5.5");
+    
+    LT_CHECK_EQ(test_ip.ip_version, http::http_utils::IPV4);
+
+    for (int i = 0; i < 12; i++) {
+        LT_CHECK_EQ(test_ip.pieces[i], 0);
+    }
+
+    LT_CHECK_EQ(test_ip.pieces[12], 192);
+    LT_CHECK_EQ(test_ip.pieces[13], 168);
+    LT_CHECK_EQ(test_ip.pieces[14], 5);
+    LT_CHECK_EQ(test_ip.pieces[15], 5);
+
+    LT_CHECK_EQ(test_ip.mask, 0xFFFF);
+LT_END_AUTO_TEST(ip_representation4_str)
+
+LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation4_str_mask)
+    http::ip_representation test_ip("192.168.*.*");
+    
+    LT_CHECK_EQ(test_ip.ip_version, http::http_utils::IPV4);
+
+    for (int i = 0; i < 12; i++) {
+        LT_CHECK_EQ(test_ip.pieces[i], 0);
+    }
+
+    LT_CHECK_EQ(test_ip.pieces[12], 192);
+    LT_CHECK_EQ(test_ip.pieces[13], 168);
+    LT_CHECK_EQ(test_ip.pieces[14], 0);
+    LT_CHECK_EQ(test_ip.pieces[15], 0);
+
+    LT_CHECK_EQ(test_ip.mask, 0x3FFF);
+LT_END_AUTO_TEST(ip_representation4_str_mask)
+
+LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation4_str_invalid)
+    LT_CHECK_THROW(http::ip_representation("192.168.5.5.5"));
+LT_END_AUTO_TEST(ip_representation4_str_invalid)
+
+LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation6_str)
+    http::ip_representation test_ip("2001:db8:8714:3a90::12");
+    
+    LT_CHECK_EQ(test_ip.ip_version, http::http_utils::IPV6);
+
+    LT_CHECK_EQ(test_ip.pieces[0], 32);
+    LT_CHECK_EQ(test_ip.pieces[1], 1);
+    LT_CHECK_EQ(test_ip.pieces[2], 13);
+    LT_CHECK_EQ(test_ip.pieces[3], 184);
+    LT_CHECK_EQ(test_ip.pieces[4], 135);
+    LT_CHECK_EQ(test_ip.pieces[5], 20);
+    LT_CHECK_EQ(test_ip.pieces[6], 58);
+    LT_CHECK_EQ(test_ip.pieces[7], 144);
+    LT_CHECK_EQ(test_ip.pieces[8], 0);
+    LT_CHECK_EQ(test_ip.pieces[9], 0);
+    LT_CHECK_EQ(test_ip.pieces[10], 0);
+    LT_CHECK_EQ(test_ip.pieces[11], 0);
+    LT_CHECK_EQ(test_ip.pieces[12], 18);
+    LT_CHECK_EQ(test_ip.pieces[13], 0);
+    LT_CHECK_EQ(test_ip.pieces[14], 0);
+    LT_CHECK_EQ(test_ip.pieces[15], 0);
+LT_END_AUTO_TEST(ip_representation6_str)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()
