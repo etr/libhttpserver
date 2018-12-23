@@ -187,7 +187,7 @@ class http_response
          * Method used to get the response code from the response
          * @return The response code
         **/
-        int get_response_code()
+        int get_response_code() const
         {
             return this->response_code;
         }
