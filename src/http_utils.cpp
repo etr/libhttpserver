@@ -36,6 +36,7 @@
 #include <iomanip>
 #include <fstream>
 #include <iostream>
+#include <stdexcept>
 #include "string_utilities.hpp"
 #include "http_utils.hpp"
 
