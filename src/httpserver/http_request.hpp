@@ -50,12 +50,13 @@ namespace http
 class http_request
 {
     public:
+        static const std::string EMPTY;
 
         /**
          * Method used to get the username eventually passed through basic authentication.
          * @return string representation of the username.
         **/
-        const std::string get_user() const
+        const std::string& get_user() const
         {
             return this->user;
         }
@@ -64,7 +65,7 @@ class http_request
          * Method used to get the username extracted from a digest authentication
          * @return the username
         **/
-        const std::string get_digested_user() const
+        const std::string& get_digested_user() const
         {
             return this->digested_user;
         }
@@ -73,7 +74,7 @@ class http_request
          * Method used to get the password eventually passed through basic authentication.
          * @return string representation of the password.
         **/
-        const std::string get_pass() const
+        const std::string& get_pass() const
         {
             return this->pass;
         }
@@ -82,7 +83,7 @@ class http_request
          * Method used to get the path requested
          * @return string representing the path requested.
         **/
-        const std::string get_path() const
+        const std::string& get_path() const
         {
             return this->path;
         }
@@ -91,18 +92,9 @@ class http_request
          * Method used to get all pieces of the path requested; considering an url splitted by '/'.
          * @return a vector of strings containing all pieces
         **/
-        const std::vector<std::string> get_path_pieces() const
+        const std::vector<std::string>& get_path_pieces() const
         {
             return this->post_path;
-        }
-
-        /**
-         * Method used to obtain the size of path in terms of pieces; considering an url splitted by '/'.
-         * @return an integer representing the number of pieces
-        **/
-        size_t get_path_pieces_size() const
-        {
-            return this->post_path.size();
         }
 
         /**
@@ -110,18 +102,18 @@ class http_request
          * @param index the index of the piece selected
          * @return the selected piece in form of string
         **/
-        const std::string get_path_piece(int index) const
+        const std::string& get_path_piece(int index) const
         {
             if(((int)(this->post_path.size())) > index)
                 return this->post_path[index];
-            return "";
+            return EMPTY;
         }
 
         /**
          * Method used to get the METHOD used to make the request.
          * @return string representing the method.
         **/
-        const std::string get_method() const
+        const std::string& get_method() const
         {
             return this->method;
         }
@@ -131,52 +123,64 @@ class http_request
          * @param result a map<string, string> > that will be filled with all headers
          * @result the size of the map
         **/
-        const std::map<std::string, std::string, http::header_comparator> get_headers() const;
+        const std::map<std::string, std::string, http::header_comparator>& get_headers() const
+        {
+            return this->headers;
+        }
 
         /**
          * Method used to get all footers passed with the request.
          * @param result a map<string, string> > that will be filled with all footers
          * @result the size of the map
         **/
-        const std::map<std::string, std::string, http::header_comparator> get_footers() const;
+        const std::map<std::string, std::string, http::header_comparator>& get_footers() const
+        {
+            return this->footers;
+        }
 
         /**
          * Method used to get all cookies passed with the request.
          * @param result a map<string, string> > that will be filled with all cookies
          * @result the size of the map
         **/
-        const std::map<std::string, std::string, http::header_comparator> get_cookies() const;
+        const std::map<std::string, std::string, http::header_comparator>& get_cookies() const
+        {
+            return this->cookies;
+        }
 
         /**
          * Method used to get all args passed with the request.
          * @param result a map<string, string> > that will be filled with all args
          * @result the size of the map
         **/
-        const std::map<std::string, std::string, http::arg_comparator> get_args() const;
+        const std::map<std::string, std::string, http::arg_comparator>& get_args() const
+        {
+            return this->args;
+        }
 
         /**
          * Method used to get a specific header passed with the request.
          * @param key the specific header to get the value from
          * @return the value of the header.
         **/
-        const std::string get_header(const std::string& key) const
+        const std::string& get_header(const std::string& key) const
         {
             std::map<std::string, std::string>::const_iterator it =
                 this->headers.find(key);
             if(it != this->headers.end())
                 return it->second;
             else
-                return "";
+                return EMPTY;
         }
 
-        const std::string get_cookie(const std::string& key) const
+        const std::string& get_cookie(const std::string& key) const
         {
             std::map<std::string, std::string>::const_iterator it =
                 this->cookies.find(key);
             if(it != this->cookies.end())
                 return it->second;
             else
-                return "";
+                return EMPTY;
         }
         
         /**
@@ -184,14 +188,14 @@ class http_request
          * @param key the specific footer to get the value from
          * @return the value of the footer.
         **/
-        const std::string get_footer(const std::string& key) const
+        const std::string& get_footer(const std::string& key) const
         {
             std::map<std::string, std::string>::const_iterator it =
                 this->footers.find(key);
             if(it != this->footers.end())
                 return it->second;
             else
-                return "";
+                return EMPTY;
         }
         
         /**
@@ -199,21 +203,21 @@ class http_request
          * @param ket the specific argument to get the value from
          * @return the value of the arg.
         **/
-        const std::string get_arg(const std::string& key) const
+        const std::string& get_arg(const std::string& key) const
         {
             std::map<std::string, std::string>::const_iterator it =
                 this->args.find(key);
             if(it != this->args.end())
                 return it->second;
             else
-                return "";
+                return EMPTY;
         }
         
         /**
          * Method used to get the content of the request.
          * @return the content in string representation
         **/
-        const std::string get_content() const
+        const std::string& get_content() const
         {
             return this->content;
         }
@@ -230,7 +234,7 @@ class http_request
          * Method used to get the content of the query string..
          * @return the query string in string representation
         **/
-        const std::string get_querystring() const
+        const std::string& get_querystring() const
         {
             return this->querystring;
         }
@@ -239,7 +243,7 @@ class http_request
          * Method used to get the version of the request.
          * @return the version in string representation
         **/
-        const std::string get_version() const
+        const std::string& get_version() const
         {
             return this->version;
         }
@@ -248,7 +252,7 @@ class http_request
          * Method used to get the requestor.
          * @return the requestor
         **/
-        const std::string get_requestor() const
+        const std::string& get_requestor() const
         {
             return this->requestor;
         }

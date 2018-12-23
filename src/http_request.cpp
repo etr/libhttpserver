@@ -29,6 +29,8 @@ using namespace std;
 namespace httpserver
 {
 
+const std::string http_request::EMPTY = "";
+
 void http_request::set_method(const std::string& method)
 {
     this->method = string_utilities::to_upper_copy(method);
@@ -60,26 +62,6 @@ bool http_request::check_digest_auth(
     }
     reload_nonce = false;
     return true;
-}
-
-const std::map<std::string, std::string, http::header_comparator> http_request::get_headers() const
-{
-    return this->headers;
-}
-
-const std::map<std::string, std::string, http::header_comparator> http_request::get_footers() const
-{
-    return this->footers;
-}
-
-const std::map<std::string, std::string, http::header_comparator> http_request::get_cookies() const
-{
-    return this->cookies;
-}
-
-const std::map<std::string, std::string, http::arg_comparator> http_request::get_args() const
-{
-    return this->args;
 }
 
 std::ostream &operator<< (std::ostream &os, const http_request &r)
