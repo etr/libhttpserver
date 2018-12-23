@@ -50,16 +50,19 @@ class webserver::http_endpoint
          * @param h The http_endpoint to copy
         **/
         http_endpoint(const http_endpoint& h);
+
         /**
          * Class Destructor
         **/
         ~http_endpoint(); //if inlined it causes problems during ruby wrapper compiling
+
         /**
          * Operator overload for "less than operator". It is used to order endpoints in maps.
          * @param b The http_endpoint to compare to
          * @return boolean indicating if this is less than b.
         **/
         bool operator <(const http_endpoint& b) const;
+
         /**
          * Operator overload for "assignment operator". It is used to copy endpoints to existing objects.
          * Is is functional expecially to copy regex_t structure that contains dinamically allocated data.
@@ -67,6 +70,7 @@ class webserver::http_endpoint
          * @return a reference to the http_endpoint obtained
         **/
         http_endpoint& operator =(const http_endpoint& h);
+
         /**
          * Method indicating if this endpoint 'matches' with the one passed. A passed endpoint matches a registered endpoint if
          * the regex represented by the registered endpoint matches the passed one.
@@ -74,6 +78,7 @@ class webserver::http_endpoint
          * @return true if the passed endpoint matches this.
         **/
         bool match(const http_endpoint& url) const;
+
         /**
          * Method used to get the complete endpoint url
          * @return a string representing the url
@@ -82,22 +87,7 @@ class webserver::http_endpoint
         {
             return this->url_complete;
         }
-        /**
-         * Method used to get the complete endpoint url
-         * @param result a string reference that will be filled with the url
-        **/
-        void get_url_complete(std::string& result) const
-        {
-            result = this->url_complete;
-        }
-        /**
-         * Method used to find the size of the complete endpoint url
-         * @return the size
-        **/
-        size_t get_url_complete_size() const
-        {
-            return this->url_complete.size();
-        }
+
         /**
          * Method used to get all pars defined inside an url.
          * @return a vector of strings representing all found pars.
@@ -106,11 +96,7 @@ class webserver::http_endpoint
         {
             return this->url_pars;
         }
-        size_t get_url_pars(std::vector<std::string>& result) const
-        {
-            result = this->url_pars;
-            return result.size();
-        }
+
         /**
          * Method used to get all pieces of an url; considering an url splitted by '/'.
          * @return a vector of strings representing all found pieces.
@@ -119,24 +105,7 @@ class webserver::http_endpoint
         {
             return this->url_pieces;
         }
-        /**
-         * Method used to get all pieces of an url; considering an url splittet by '/'.
-         * @param result a vector of strings to fill with url pieces.
-         * @return the size of the vector in output
-        **/
-        size_t get_url_pieces(std::vector<std::string>& result) const
-        {
-            result = this->url_pieces;
-            return result.size();
-        }
-        /**
-         * Method used to get the number of pieces the url is composed of
-         * @return the number of pieces
-        **/
-        size_t get_url_pieces_num() const
-        {
-            return this->url_pieces.size();
-        }
+
         /**
          * Method used to get indexes of all parameters inside url
          * @return a vector of int indicating all positions.
@@ -145,16 +114,7 @@ class webserver::http_endpoint
         {
             return this->chunk_positions;
         }
-        /**
-         * Method used to get indexes of all parameters inside url
-         * @param result a vector to fill with ints indicating chunk positions
-         * @return the size of the vector filled
-        **/
-        size_t get_chunk_positions(std::vector<int>& result) const
-        {
-            result = this->chunk_positions;
-            return result.size();
-        }
+
         /**
          * Default constructor of the class.
          * @param family boolean that indicates if the endpoint is a family endpoint.
@@ -169,6 +129,7 @@ class webserver::http_endpoint
             reg_compiled(false)
         {
         }
+
         /**
          * Constructor of the class http_endpoint. It is used to initialize an http_endpoint starting from a string form URL.
          * @param url The string representation of the endpoint. All endpoints are in the form "/path/to/resource".
@@ -185,34 +146,42 @@ class webserver::http_endpoint
                 bool registration = false,
                 bool use_regex = true
         );
+
         /**
          * The complete url extracted
         **/
         std::string url_complete;
+
         /**
          * The url standardized in order to use standard comparisons or regexes
         **/
         std::string url_modded;
+
         /**
          * Vector containing parameters extracted from url
         **/
         std::vector<std::string> url_pars;
+
         /**
          * Pieces the url can be splitted into (consider '/' as separator)
         **/
         std::vector<std::string> url_pieces;
+
         /**
          * Position of url pieces representing parameters
         **/
         std::vector<int> chunk_positions;
+
         /**
          * Regex used in comparisons
         **/
         regex_t re_url_modded;
+
         /**
          * Boolean indicating wheter the endpoint represents a family
         **/
         bool family_url;
+
         /**
          * Boolean indicating if the regex is compiled
         **/

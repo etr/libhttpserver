@@ -823,8 +823,8 @@ int webserver::finalize_answer(
                 size_t tot_len = 0;
                 for(it=registered_resources.begin(); it!=registered_resources.end(); ++it)
                 {
-                    size_t endpoint_pieces_len = (*it).first.get_url_pieces_num();
-                    size_t endpoint_tot_len = (*it).first.get_url_complete_size();
+                    size_t endpoint_pieces_len = (*it).first.get_url_pieces().size();
+                    size_t endpoint_tot_len = (*it).first.get_url_complete().size();
                     if(!found || endpoint_pieces_len > len || (endpoint_pieces_len == len && endpoint_tot_len > tot_len))
                     {
                         if((*it).first.match(endpoint))
@@ -838,17 +838,13 @@ int webserver::finalize_answer(
                 }
                 if(found)
                 {
-                    vector<string> url_pars;
+                    vector<string> url_pars = found_endpoint->first.get_url_pars();
 
-                    size_t pars_size = found_endpoint->first.get_url_pars(url_pars);
-
-                    vector<string> url_pieces;
-                    endpoint.get_url_pieces(url_pieces);
-                    vector<int> chunkes;
-                    found_endpoint->first.get_chunk_positions(chunkes);
-                    for(unsigned int i = 0; i < pars_size; i++)
+                    vector<string> url_pieces = endpoint.get_url_pieces();
+                    vector<int> chunks = found_endpoint->first.get_chunk_positions();
+                    for(unsigned int i = 0; i < url_pars.size(); i++)
                     {
-                        mr->dhr->set_arg(url_pars[i], url_pieces[chunkes[i]]);
+                        mr->dhr->set_arg(url_pars[i], url_pieces[chunks[i]]);
                     }
 
                     hrm = found_endpoint->second;
