@@ -377,7 +377,7 @@ ip_representation::ip_representation(const std::string& ip)
                 {
                     if(y != 12)
                     {
-                        throw bad_ip_format_exception();
+                        throw std::invalid_argument("IP is badly formatted");
                     }
                     if(parts[i].find('.') != std::string::npos)
                     {
@@ -403,12 +403,12 @@ ip_representation::ip_representation(const std::string& ip)
                         }
                         else
                         {
-                            throw bad_ip_format_exception();
+                            throw std::invalid_argument("IP is badly formatted");
                         }
                     }
                     else
                     {
-                        throw bad_ip_format_exception();
+                        throw std::invalid_argument("IP is badly formatted");
                     }
                 }
             }
@@ -434,7 +434,7 @@ ip_representation::ip_representation(const std::string& ip)
                 }
                 else
                 {
-                    throw bad_ip_format_exception();
+                    throw std::invalid_argument("IP is badly formatted");
                 }
             }
         }
@@ -459,7 +459,7 @@ ip_representation::ip_representation(const std::string& ip)
         }
         else
         {
-            throw bad_ip_format_exception();
+            throw std::invalid_argument("IP is badly formatted");
         }
     }
 }
@@ -497,7 +497,7 @@ char* load_file (const char *filename)
         return content;
     }
     else
-        throw file_access_exception();
+        throw std::invalid_argument("Unable to open file");
     return content;
 }
 

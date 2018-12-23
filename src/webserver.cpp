@@ -28,6 +28,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/time.h>
+#include <stdexcept>
 
 #if defined(__MINGW32__) || defined(__CYGWIN32__)
 #include <winsock2.h>
@@ -904,7 +905,7 @@ int webserver::finalize_answer(
         {
             mr->dhrs->get_raw_response(&raw_response, this);
         }
-        catch(const file_access_exception& fae)
+        catch(const std::invalid_argument& iae)
         {
             mr->dhrs = NEW_OR_MOVE(http_response, not_found_page(mr));
             mr->dhrs->get_raw_response(&raw_response, this);

@@ -42,22 +42,6 @@
 namespace httpserver {
 namespace http {
 
-class bad_ip_format_exception: public std::exception
-{
-    virtual const char* what() const throw()
-    {
-        return "IP is badly formatted!";
-    }
-};
-
-class file_access_exception: public std::exception
-{
-    virtual const char* what() const throw()
-    {
-        return "Unable to open file!";
-    }
-};
-
 class http_utils
 {
     public:
