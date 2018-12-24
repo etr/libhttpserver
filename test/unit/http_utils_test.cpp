@@ -237,7 +237,7 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation6_str_mask)
     LT_CHECK_EQ(test_ip.pieces[14], 0);
     LT_CHECK_EQ(test_ip.pieces[15], 0);
 
-    LT_CHECK_EQ(test_ip.mask, 0xFCFF);
+    LT_CHECK_EQ(test_ip.mask, 0xF0FF);
 LT_END_AUTO_TEST(ip_representation6_str_mask)
 
 LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation6_str_nested)
@@ -365,6 +365,17 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation6_str_loopback)
 
     LT_CHECK_EQ(test_ip.mask, 0xFFFF);
 LT_END_AUTO_TEST(ip_representation6_str_loopback)
+
+LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation_weight)
+    LT_CHECK_EQ(http::ip_representation("::1").weight(), 16);
+    LT_CHECK_EQ(http::ip_representation("192.168.0.1").weight(), 16);
+    LT_CHECK_EQ(http::ip_representation("192.168.*.*").weight(), 14);
+    LT_CHECK_EQ(http::ip_representation("::ffff:192.0.*.*").weight(), 14);
+    LT_CHECK_EQ(http::ip_representation("2001:db8:8714:3a90:*:*").weight(), 12);
+    LT_CHECK_EQ(http::ip_representation("2001:db8:8714:3a90:8714:2001:db8:3a90").weight(), 16);
+    LT_CHECK_EQ(http::ip_representation("2001:db8:8714:3a90:8714:2001:*:*").weight(), 12);
+    LT_CHECK_EQ(http::ip_representation("*:*:*:*:*:*:*:*").weight(), 0);
+LT_END_AUTO_TEST(ip_representation_weight)
 
 LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation6_str_invalid)
     LT_CHECK_THROW(http::ip_representation("2001:db8:8714:3a90::12:4:4:4"));

@@ -475,7 +475,8 @@ ip_representation::ip_representation(const std::string& ip)
             else
             {
                 CLEAR_BIT(mask, y);
-                y++;
+                CLEAR_BIT(mask, y+1);
+                y+=2;
             }
         }
     }
