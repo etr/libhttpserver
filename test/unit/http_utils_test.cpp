@@ -386,6 +386,10 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation6_str_invalid_nested_beyon
     LT_CHECK_THROW(http::ip_representation("::ffff:192.0.256.128"));
 LT_END_AUTO_TEST(ip_representation6_str_invalid_nested_beyond255)
 
+LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation6_str_invalid_nested_more_than_4_parts)
+    LT_CHECK_THROW(http::ip_representation("::ffff:192.0.5.128.128"));
+LT_END_AUTO_TEST(ip_representation6_str_invalid_nested_more_than_4_parts)
+
 LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation6_str_invalid_nested_not_at_end)
     LT_CHECK_THROW(http::ip_representation("::ffff:192.0.256.128:ffff"));
 LT_END_AUTO_TEST(ip_representation6_str_invalid_nested_not_at_end)
