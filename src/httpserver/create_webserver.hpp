@@ -201,21 +201,21 @@ class create_webserver
         {
             char* _https_mem_key_pt = http::load_file(https_mem_key.c_str());
             _https_mem_key = _https_mem_key_pt;
-            free(_https_mem_key_pt);
+            delete _https_mem_key_pt;
             return *this;
         }
         create_webserver& https_mem_cert(const std::string& https_mem_cert)
         {
             char* _https_mem_cert_pt = http::load_file(https_mem_cert.c_str());
             _https_mem_cert = _https_mem_cert_pt;
-            free(_https_mem_cert_pt);
+            delete _https_mem_cert_pt;
             return *this;
         }
         create_webserver& https_mem_trust(const std::string& https_mem_trust)
         {
             char* _https_mem_trust_pt = http::load_file(https_mem_trust.c_str());
             _https_mem_trust = _https_mem_trust_pt;
-            free(_https_mem_trust_pt);
+            delete _https_mem_trust_pt;
             return *this;
         }
         create_webserver& raw_https_mem_key(const std::string& https_mem_key)

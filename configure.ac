@@ -308,7 +308,7 @@ AC_SUBST(LDFLAGS)
 AC_SUBST(EXT_LIB_PATH)
 AC_SUBST(EXT_LIBS)
 
-AC_CONFIG_LINKS([test/run_tests:test/run_tests])
+AC_CONFIG_LINKS([test/test_content:test/test_content])
 
 AC_OUTPUT(
       libhttpserver.pc

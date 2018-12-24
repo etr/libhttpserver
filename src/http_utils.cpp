@@ -524,21 +524,24 @@ bool ip_representation::operator <(const ip_representation& b) const
 
 char* load_file (const char *filename)
 {
-    char* content = NULL;
-
     ifstream fp(filename, ios::in | ios::binary | ios::ate);
     if(fp.is_open())
     {
+        fp.seekg(0, fp.end);
         int size = fp.tellg();
-        content = (char*) malloc(size * sizeof(char));
-        fp.seekg(0, ios::beg);
+        fp.seekg(0, fp.beg);
+
+        char* content = new char[size];
         fp.read(content, size);
         fp.close();
+
+        content[size - 1] = 0;
         return content;
     }
     else
+    {
         throw std::invalid_argument("Unable to open file");
-    return content;
+    }
 }
 
 void dump_header_map(std::ostream &os, const std::string &prefix,

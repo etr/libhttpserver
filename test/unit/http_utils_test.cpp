@@ -468,6 +468,14 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation6_sockaddr)
     LT_CHECK_EQ(test_ip.mask, 0xFFFF);
 LT_END_AUTO_TEST(ip_representation6_sockaddr)
 
+LT_BEGIN_AUTO_TEST(http_utils_suite, load_file)
+    LT_CHECK_EQ(std::string(http::load_file("test_content")), "test content of file");
+LT_END_AUTO_TEST(load_file)
+
+LT_BEGIN_AUTO_TEST(http_utils_suite, load_file_invalid)
+    LT_CHECK_THROW(http::load_file("test_content_invalid"));
+LT_END_AUTO_TEST(load_file_invalid)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()
