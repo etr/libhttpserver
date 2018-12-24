@@ -414,6 +414,60 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation6_str_invalid_nested_start
     LT_CHECK_THROW(http::ip_representation("::ccff:192.0.5.128"));
 LT_END_AUTO_TEST(ip_representation6_str_invalid_nested_starting_wrong_prefix)
 
+LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation4_sockaddr)
+    struct sockaddr_in ip4addr;
+
+    ip4addr.sin_family = AF_INET;
+    ip4addr.sin_port = htons(3490);
+    ip4addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+
+    http::ip_representation test_ip((sockaddr*) &ip4addr);
+    
+    LT_CHECK_EQ(test_ip.ip_version, http::http_utils::IPV4);
+
+    for (int i = 0; i < 12; i++) {
+        LT_CHECK_EQ(test_ip.pieces[i], 0);
+    }
+
+    LT_CHECK_EQ(test_ip.pieces[12], 127);
+    LT_CHECK_EQ(test_ip.pieces[13], 0);
+    LT_CHECK_EQ(test_ip.pieces[14], 0);
+    LT_CHECK_EQ(test_ip.pieces[15], 1);
+
+    LT_CHECK_EQ(test_ip.mask, 0xFFFF);   
+LT_END_AUTO_TEST(ip_representation4_sockaddr)
+
+LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation6_sockaddr)
+    struct sockaddr_in6 ip6addr;
+
+    ip6addr.sin6_family = AF_INET6;
+    ip6addr.sin6_port = htons(3490);
+    inet_pton(AF_INET6, "2001:db8:8714:3a90::12", &(ip6addr.sin6_addr));
+
+    http::ip_representation test_ip((sockaddr*) &ip6addr);
+    
+    LT_CHECK_EQ(test_ip.ip_version, http::http_utils::IPV6);
+
+    LT_CHECK_EQ(test_ip.pieces[0], 32);
+    LT_CHECK_EQ(test_ip.pieces[1], 1);
+    LT_CHECK_EQ(test_ip.pieces[2], 13);
+    LT_CHECK_EQ(test_ip.pieces[3], 184);
+    LT_CHECK_EQ(test_ip.pieces[4], 135);
+    LT_CHECK_EQ(test_ip.pieces[5], 20);
+    LT_CHECK_EQ(test_ip.pieces[6], 58);
+    LT_CHECK_EQ(test_ip.pieces[7], 144);
+    LT_CHECK_EQ(test_ip.pieces[8], 0);
+    LT_CHECK_EQ(test_ip.pieces[9], 0);
+    LT_CHECK_EQ(test_ip.pieces[10], 0);
+    LT_CHECK_EQ(test_ip.pieces[11], 0);
+    LT_CHECK_EQ(test_ip.pieces[12], 0);
+    LT_CHECK_EQ(test_ip.pieces[13], 0);
+    LT_CHECK_EQ(test_ip.pieces[14], 0);
+    LT_CHECK_EQ(test_ip.pieces[15], 18);
+
+    LT_CHECK_EQ(test_ip.mask, 0xFFFF);
+LT_END_AUTO_TEST(ip_representation6_sockaddr)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

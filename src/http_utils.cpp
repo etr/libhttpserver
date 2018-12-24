@@ -333,11 +333,9 @@ ip_representation::ip_representation(const struct sockaddr* ip)
     else
     {
         ip_version = http_utils::IPV6;
-        for(int i=0;i<32;i+=2)
+        for (int i = 0; i < 16; i++)
         {
-            pieces[i/2] =
-                ((u_char*)&(((struct sockaddr_in6 *)ip)->sin6_addr))[i] +
-                16 * ((u_char*)&(((struct sockaddr_in6 *)ip)->sin6_addr))[i+1];
+            pieces[i] = ((u_char*)&(((struct sockaddr_in6 *)ip)->sin6_addr))[i];
         }
     }
     mask = DEFAULT_MASK_VALUE;
