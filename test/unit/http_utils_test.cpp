@@ -70,6 +70,33 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, unescape_plus)
     LT_CHECK_EQ(expected_size, 3);
 LT_END_AUTO_TEST(unescape_plus)
 
+LT_BEGIN_AUTO_TEST(http_utils_suite, tokenize_url)
+    string value = "test/this/url/here";
+    string expected_arr[] = { "test", "this", "url", "here" };
+    vector<string> expected(expected_arr, expected_arr + sizeof(expected_arr) / sizeof(expected_arr[0]));
+    vector<string> actual = http::http_utils::tokenize_url(value, '/');
+
+    LT_CHECK_COLLECTIONS_EQ(expected.begin(), expected.end(), actual.begin());
+LT_END_AUTO_TEST(tokenize_url)
+
+LT_BEGIN_AUTO_TEST(http_utils_suite, tokenize_url_multiple_spaces)
+    string value = "test//this//url//here";
+    string expected_arr[] = { "test", "this", "url", "here" };
+    vector<string> expected(expected_arr, expected_arr + sizeof(expected_arr) / sizeof(expected_arr[0]));
+    vector<string> actual = http::http_utils::tokenize_url(value, '/');
+
+    LT_CHECK_COLLECTIONS_EQ(expected.begin(), expected.end(), actual.begin());
+LT_END_AUTO_TEST(tokenize_url_multiple_spaces)
+
+LT_BEGIN_AUTO_TEST(http_utils_suite, tokenize_url_end_slash)
+    string value = "test/this/url/here/";
+    string expected_arr[] = { "test", "this", "url", "here" };
+    vector<string> expected(expected_arr, expected_arr + sizeof(expected_arr) / sizeof(expected_arr[0]));
+    vector<string> actual = http::http_utils::tokenize_url(value, '/');
+
+    LT_CHECK_COLLECTIONS_EQ(expected.begin(), expected.end(), actual.begin());
+LT_END_AUTO_TEST(tokenize_url_end_slash)
+
 LT_BEGIN_AUTO_TEST(http_utils_suite, standardize_url)
     string url = "/", result;
     result = http::http_utils::standardize_url(url);
