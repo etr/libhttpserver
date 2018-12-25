@@ -150,7 +150,7 @@ LT_END_AUTO_TEST(get_port_null)
 
 LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation4_str)
     http::ip_representation test_ip("192.168.5.5");
-    
+
     LT_CHECK_EQ(test_ip.ip_version, http::http_utils::IPV4);
 
     for (int i = 0; i < 12; i++) {
@@ -167,7 +167,7 @@ LT_END_AUTO_TEST(ip_representation4_str)
 
 LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation4_str_mask)
     http::ip_representation test_ip("192.168.*.*");
-    
+
     LT_CHECK_EQ(test_ip.ip_version, http::http_utils::IPV4);
 
     for (int i = 0; i < 12; i++) {
@@ -192,7 +192,7 @@ LT_END_AUTO_TEST(ip_representation4_str_beyond255)
 
 LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation6_str)
     http::ip_representation test_ip("2001:db8:8714:3a90::12");
-    
+
     LT_CHECK_EQ(test_ip.ip_version, http::http_utils::IPV6);
 
     LT_CHECK_EQ(test_ip.pieces[0], 32);
@@ -217,7 +217,7 @@ LT_END_AUTO_TEST(ip_representation6_str)
 
 LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation6_str_mask)
     http::ip_representation test_ip("2001:db8:8714:3a90:*:*");
-    
+
     LT_CHECK_EQ(test_ip.ip_version, http::http_utils::IPV6);
 
     LT_CHECK_EQ(test_ip.pieces[0], 32);
@@ -422,7 +422,7 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation4_sockaddr)
     ip4addr.sin_addr.s_addr = inet_addr("127.0.0.1");
 
     http::ip_representation test_ip((sockaddr*) &ip4addr);
-    
+
     LT_CHECK_EQ(test_ip.ip_version, http::http_utils::IPV4);
 
     for (int i = 0; i < 12; i++) {
@@ -434,7 +434,7 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation4_sockaddr)
     LT_CHECK_EQ(test_ip.pieces[14], 0);
     LT_CHECK_EQ(test_ip.pieces[15], 1);
 
-    LT_CHECK_EQ(test_ip.mask, 0xFFFF);   
+    LT_CHECK_EQ(test_ip.mask, 0xFFFF);
 LT_END_AUTO_TEST(ip_representation4_sockaddr)
 
 LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation6_sockaddr)
@@ -445,7 +445,7 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation6_sockaddr)
     inet_pton(AF_INET6, "2001:db8:8714:3a90::12", &(ip6addr.sin6_addr));
 
     http::ip_representation test_ip((sockaddr*) &ip6addr);
-    
+
     LT_CHECK_EQ(test_ip.ip_version, http::http_utils::IPV6);
 
     LT_CHECK_EQ(test_ip.pieces[0], 32);
@@ -515,6 +515,50 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation_less_than_with_masks)
     LT_CHECK_EQ(http::ip_representation("2001:db8::ff00:42:*") < http::ip_representation("2001:db8::ff00:42:8329"), false);
     LT_CHECK_EQ(http::ip_representation("2001:db8::ff00:42:8329") < http::ip_representation("2001:db8::ff00:42:*"), false);
 LT_END_AUTO_TEST(ip_representation_less_than_with_masks)
+
+LT_BEGIN_AUTO_TEST(http_utils_suite, dump_header_map)
+    std::map<std::string, std::string, http::header_comparator> header_map;
+    header_map["HEADER_ONE"] = "VALUE_ONE";
+    header_map["HEADER_TWO"] = "VALUE_TWO";
+    header_map["HEADER_THREE"] = "VALUE_THREE";
+
+    std::stringstream ss;
+    http::dump_header_map(ss, "prefix", header_map);
+    LT_CHECK_EQ(ss.str(), "    prefix [HEADER_ONE:\"VALUE_ONE\" HEADER_TWO:\"VALUE_TWO\" HEADER_THREE:\"VALUE_THREE\" ]\n");
+LT_END_AUTO_TEST(dump_header_map)
+
+LT_BEGIN_AUTO_TEST(http_utils_suite, dump_header_map_no_prefix)
+    std::map<std::string, std::string, http::header_comparator> header_map;
+    header_map["HEADER_ONE"] = "VALUE_ONE";
+    header_map["HEADER_TWO"] = "VALUE_TWO";
+    header_map["HEADER_THREE"] = "VALUE_THREE";
+
+    std::stringstream ss;
+    http::dump_header_map(ss, "", header_map);
+    LT_CHECK_EQ(ss.str(), "     [HEADER_ONE:\"VALUE_ONE\" HEADER_TWO:\"VALUE_TWO\" HEADER_THREE:\"VALUE_THREE\" ]\n");
+LT_END_AUTO_TEST(dump_header_map_no_prefix)
+
+LT_BEGIN_AUTO_TEST(http_utils_suite, dump_arg_map)
+    std::map<std::string, std::string, http::arg_comparator> arg_map;
+    arg_map["ARG_ONE"] = "VALUE_ONE";
+    arg_map["ARG_TWO"] = "VALUE_TWO";
+    arg_map["ARG_THREE"] = "VALUE_THREE";
+
+    std::stringstream ss;
+    http::dump_arg_map(ss, "prefix", arg_map);
+    LT_CHECK_EQ(ss.str(), "    prefix [ARG_ONE:\"VALUE_ONE\" ARG_TWO:\"VALUE_TWO\" ARG_THREE:\"VALUE_THREE\" ]\n");
+LT_END_AUTO_TEST(dump_arg_map)
+
+LT_BEGIN_AUTO_TEST(http_utils_suite, dump_arg_map_no_prefix)
+    std::map<std::string, std::string, http::arg_comparator> arg_map;
+    arg_map["ARG_ONE"] = "VALUE_ONE";
+    arg_map["ARG_TWO"] = "VALUE_TWO";
+    arg_map["ARG_THREE"] = "VALUE_THREE";
+
+    std::stringstream ss;
+    http::dump_arg_map(ss, "", arg_map);
+    LT_CHECK_EQ(ss.str(), "     [ARG_ONE:\"VALUE_ONE\" ARG_TWO:\"VALUE_TWO\" ARG_THREE:\"VALUE_THREE\" ]\n");
+LT_END_AUTO_TEST(dump_arg_map_no_prefix)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
