@@ -476,6 +476,46 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, load_file_invalid)
     LT_CHECK_THROW(http::load_file("test_content_invalid"));
 LT_END_AUTO_TEST(load_file_invalid)
 
+LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation_less_than)
+    LT_CHECK_EQ(http::ip_representation("127.0.0.1") < http::ip_representation("127.0.0.2"), true);
+    LT_CHECK_EQ(http::ip_representation("128.0.0.1") < http::ip_representation("127.0.0.2"), false);
+    LT_CHECK_EQ(http::ip_representation("127.0.0.2") < http::ip_representation("127.0.0.1"), false);
+    LT_CHECK_EQ(http::ip_representation("127.0.0.1") < http::ip_representation("127.0.0.1"), false);
+    LT_CHECK_EQ(http::ip_representation("127.0.0.1") < http::ip_representation("127.0.0.1"), false);
+
+    LT_CHECK_EQ(http::ip_representation("2001:db8::ff00:42:8329") < http::ip_representation("2001:db8::ff00:42:8329"), false);
+    LT_CHECK_EQ(http::ip_representation("2001:db8::ff00:42:8330") < http::ip_representation("2001:db8::ff00:42:8329"), false);
+    LT_CHECK_EQ(http::ip_representation("2001:db8::ff00:42:8329") < http::ip_representation("2001:db8::ff00:42:8330"), true);
+    LT_CHECK_EQ(http::ip_representation("2002:db8::ff00:42:8329") < http::ip_representation("2001:db8::ff00:42:8330"), false);
+
+    LT_CHECK_EQ(http::ip_representation("::192.0.2.128") < http::ip_representation("::192.0.2.128"), false);
+    LT_CHECK_EQ(http::ip_representation("::192.0.2.129") < http::ip_representation("::192.0.2.128"), false);
+    LT_CHECK_EQ(http::ip_representation("::192.0.2.128") < http::ip_representation("::192.0.2.129"), true);
+
+    LT_CHECK_EQ(http::ip_representation("::ffff:192.0.2.128") < http::ip_representation("::ffff:192.0.2.128"), false);
+    LT_CHECK_EQ(http::ip_representation("::ffff:192.0.2.129") < http::ip_representation("::ffff:192.0.2.128"), false);
+    LT_CHECK_EQ(http::ip_representation("::ffff:192.0.2.128") < http::ip_representation("::ffff:192.0.2.129"), true);
+
+    LT_CHECK_EQ(http::ip_representation("::ffff:192.0.2.128") < http::ip_representation("::192.0.2.128"), false);
+    LT_CHECK_EQ(http::ip_representation("::ffff:192.0.2.128") < http::ip_representation("::192.0.2.128"), false);
+    LT_CHECK_EQ(http::ip_representation("::192.0.2.128") < http::ip_representation("::ffff:192.0.2.129"), true);
+LT_END_AUTO_TEST(ip_representation_less_than)
+
+LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation_less_than_with_masks)
+    LT_CHECK_EQ(http::ip_representation("127.0.*.*") < http::ip_representation("127.0.0.1"), false);
+    LT_CHECK_EQ(http::ip_representation("127.0.0.1") < http::ip_representation("127.0.*.*"), false);
+    LT_CHECK_EQ(http::ip_representation("127.0.0.*") < http::ip_representation("127.0.*.*"), false);
+    LT_CHECK_EQ(http::ip_representation("127.0.*.1") < http::ip_representation("127.0.0.1"), false);
+    LT_CHECK_EQ(http::ip_representation("127.0.0.1") < http::ip_representation("127.0.*.1"), false);
+    LT_CHECK_EQ(http::ip_representation("127.1.0.1") < http::ip_representation("127.0.*.1"), false);
+    LT_CHECK_EQ(http::ip_representation("127.0.*.1") < http::ip_representation("127.1.0.1"), true);
+    LT_CHECK_EQ(http::ip_representation("127.1.*.1") < http::ip_representation("127.0.*.1"), false);
+    LT_CHECK_EQ(http::ip_representation("127.0.*.1") < http::ip_representation("127.1.*.1"), true);
+
+    LT_CHECK_EQ(http::ip_representation("2001:db8::ff00:42:*") < http::ip_representation("2001:db8::ff00:42:8329"), false);
+    LT_CHECK_EQ(http::ip_representation("2001:db8::ff00:42:8329") < http::ip_representation("2001:db8::ff00:42:*"), false);
+LT_END_AUTO_TEST(ip_representation_less_than_with_masks)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

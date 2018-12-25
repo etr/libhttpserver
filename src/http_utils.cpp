@@ -506,20 +506,37 @@ ip_representation::ip_representation(const std::string& ip)
 
 bool ip_representation::operator <(const ip_representation& b) const
 {
-    int VAL = 16;
-    if(this->ip_version == http_utils::IPV4 && this->ip_version == b.ip_version)
+    long this_score = 0;
+    long b_score = 0;
+    for (int i = 0; i < 16; i++)
     {
-        VAL = this->ip_version;
+        if (i == 10 || i == 11) continue;
+
+        if (CHECK_BIT(this->mask, i) && CHECK_BIT(b.mask, i))
+        {
+            this_score += (16 - i) * this->pieces[i];
+            b_score += (16 - i) * b.pieces[i];
+        }
     }
-    for(int i = 16 - VAL; i < 16; i++)
+
+    if (this_score == b_score &&
+       ((this->pieces[10] == 0x00 || this->pieces[10] == 0xFF) && (b.pieces[10] == 0x00 || b.pieces[10] == 0xFF)) &&
+       ((this->pieces[11] == 0x00 || this->pieces[11] == 0xFF) && (b.pieces[11] == 0x00 || b.pieces[11] == 0xFF))
+    )
     {
-        if(CHECK_BIT(this->mask,i) &&
-                CHECK_BIT(b.mask,i) &&
-                this->pieces[i] < b.pieces[i]
-        )
-            return true;
+        return false;
     }
-    return false;
+
+    for (int i = 10; i < 12; i++)
+    {
+        if (CHECK_BIT(this->mask, i) && CHECK_BIT(b.mask, i))
+        {
+            this_score += (16 - i) * this->pieces[i];
+            b_score += (16 - i) * b.pieces[i];
+        }
+    }
+
+    return this_score < b_score;
 }
 
 char* load_file (const char *filename)
