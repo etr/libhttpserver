@@ -49,7 +49,7 @@
 #include "http_response.hpp"
 #include "http_request.hpp"
 #include "http_response_builder.hpp"
-#include "http_endpoint.hpp"
+#include "details/http_endpoint.hpp"
 #include "string_utilities.hpp"
 #include "create_webserver.hpp"
 #include "details/comet_manager.hpp"
@@ -225,10 +225,10 @@ void webserver::request_completed (
 
 bool webserver::register_resource(const std::string& resource, http_resource* hrm, bool family)
 {
-    http_endpoint idx(resource, family, true, regex_checking);
+    details::http_endpoint idx(resource, family, true, regex_checking);
 
-    pair<map<http_endpoint, http_resource*>::iterator, bool> result = registered_resources.insert(
-        map<http_endpoint, http_resource*>::value_type(idx, hrm)
+    pair<map<details::http_endpoint, http_resource*>::iterator, bool> result = registered_resources.insert(
+        map<details::http_endpoint, http_resource*>::value_type(idx, hrm)
     );
 
     if(result.second)
@@ -436,9 +436,9 @@ bool webserver::stop()
 
 void webserver::unregister_resource(const string& resource)
 {
-    http_endpoint he(resource);
+    details::http_endpoint he(resource);
     this->registered_resources.erase(he);
-    this->registered_resources.erase(he.url_complete);
+    this->registered_resources.erase(he.get_url_complete());
 }
 
 void webserver::ban_ip(const string& ip)
@@ -813,11 +813,11 @@ int webserver::finalize_answer(
             if(regex_checking)
             {
 
-                map<http_endpoint, http_resource*>::iterator found_endpoint;
+                map<details::http_endpoint, http_resource*>::iterator found_endpoint;
 
-                http_endpoint endpoint(st_url, false, false, regex_checking);
+                details::http_endpoint endpoint(st_url, false, false, regex_checking);
 
-                map<http_endpoint, http_resource*>::iterator it;
+                map<details::http_endpoint, http_resource*>::iterator it;
 
                 size_t len = 0;
                 size_t tot_len = 0;

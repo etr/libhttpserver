@@ -31,18 +31,18 @@
 #include <string>
 #include <stdexcept>
 
-#include "webserver.hpp"
-
 namespace httpserver
 {
 
-class webserver;
+namespace details
+{
+
 class http_resource;
 
 /**
  * Class representing an Http Endpoint. It is an abstraction used by the APIs.
 **/
-class webserver::http_endpoint
+class http_endpoint
 {
     public:
         /**
@@ -88,6 +88,11 @@ class webserver::http_endpoint
             return this->url_complete;
         }
 
+        const std::string& get_url_normalized() const
+        {
+            return this->url_normalized;
+        }
+
         /**
          * Method used to get all pars defined inside an url.
          * @return a vector of strings representing all found pars.
@@ -115,6 +120,16 @@ class webserver::http_endpoint
             return this->chunk_positions;
         }
 
+        const bool is_family_url() const
+        {
+            return this->family_url;
+        }
+
+        const bool is_regex_compiled() const
+        {
+            return this->reg_compiled;
+        }
+
         /**
          * Default constructor of the class.
          * @param family boolean that indicates if the endpoint is a family endpoint.
@@ -124,7 +139,7 @@ class webserver::http_endpoint
         **/
         http_endpoint(bool family = false):
             url_complete("/"),
-            url_modded("/"),
+            url_normalized("/"),
             family_url(family),
             reg_compiled(false)
         {
@@ -147,6 +162,7 @@ class webserver::http_endpoint
                 bool use_regex = true
         );
 
+    private:
         /**
          * The complete url extracted
         **/
@@ -155,7 +171,7 @@ class webserver::http_endpoint
         /**
          * The url standardized in order to use standard comparisons or regexes
         **/
-        std::string url_modded;
+        std::string url_normalized;
 
         /**
          * Vector containing parameters extracted from url
@@ -175,7 +191,7 @@ class webserver::http_endpoint
         /**
          * Regex used in comparisons
         **/
-        regex_t re_url_modded;
+        regex_t re_url_normalized;
 
         /**
          * Boolean indicating wheter the endpoint represents a family
@@ -186,6 +202,8 @@ class webserver::http_endpoint
          * Boolean indicating if the regex is compiled
         **/
         bool reg_compiled;
+};
+
 };
 
 };

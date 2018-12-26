@@ -18,7 +18,7 @@
      USA
 */
 
-#include "http_endpoint.hpp"
+#include "details/http_endpoint.hpp"
 #include "http_utils.hpp"
 #include "string_utilities.hpp"
 
@@ -27,17 +27,20 @@ using namespace std;
 namespace httpserver
 {
 
+namespace details
+{
+
 using namespace http;
 
-webserver::http_endpoint::~http_endpoint()
+http_endpoint::~http_endpoint()
 {
     if(reg_compiled)
     {
-        regfree(&(this->re_url_modded));
+        regfree(&(this->re_url_normalized));
     }
 }
 
-webserver::http_endpoint::http_endpoint
+http_endpoint::http_endpoint
 (
     const string& url,
     bool family,
@@ -47,7 +50,7 @@ webserver::http_endpoint::http_endpoint
     family_url(family),
     reg_compiled(false)
 {
-    this->url_modded = use_regex ? "^/" : "/";
+    this->url_normalized = use_regex ? "^/" : "/";
     vector<string> parts;
 
 #ifdef CASE_INSENSITIVE
@@ -67,7 +70,7 @@ webserver::http_endpoint::http_endpoint
     {
         if(!registration)
         {
-            this->url_modded += (first ? "" : "/") + parts[i];
+            this->url_normalized += (first ? "" : "/") + parts[i];
             first = false;
 
             this->url_pieces.push_back(parts[i]);
@@ -79,12 +82,12 @@ webserver::http_endpoint::http_endpoint
         {
             if(first)
             {
-                this->url_modded = (parts[i][0] == '^' ? "" : this->url_modded) + parts[i];
+                this->url_normalized = (parts[i][0] == '^' ? "" : this->url_normalized) + parts[i];
                 first = false;
             }
             else
             {
-                this->url_modded += "/" + parts[i];
+                this->url_normalized += "/" + parts[i];
             }
             this->url_pieces.push_back(parts[i]);
 
@@ -96,7 +99,7 @@ webserver::http_endpoint::http_endpoint
 
         std::string::size_type bar = parts[i].find_first_of('|');
         this->url_pars.push_back(parts[i].substr(1, bar != string::npos ? bar - 1 : parts[i].size() - 2));
-        this->url_modded += (first ? "" : "/") + (bar != string::npos ? parts[i].substr(bar + 1, parts[i].size() - bar - 2) : "([^\\/]+)");
+        this->url_normalized += (first ? "" : "/") + (bar != string::npos ? parts[i].substr(bar + 1, parts[i].size() - bar - 2) : "([^\\/]+)");
 
         first = false;
 
@@ -107,17 +110,17 @@ webserver::http_endpoint::http_endpoint
 
     if(use_regex)
     {
-        this->url_modded += "$";
-        regcomp(&(this->re_url_modded), url_modded.c_str(),
+        this->url_normalized += "$";
+        regcomp(&(this->re_url_normalized), url_normalized.c_str(),
                 REG_EXTENDED|REG_ICASE|REG_NOSUB
         );
         this->reg_compiled = true;
     }
 }
 
-webserver::http_endpoint::http_endpoint(const webserver::http_endpoint& h):
+http_endpoint::http_endpoint(const http_endpoint& h):
     url_complete(h.url_complete),
-    url_modded(h.url_modded),
+    url_normalized(h.url_normalized),
     url_pars(h.url_pars),
     url_pieces(h.url_pieces),
     chunk_positions(h.chunk_positions),
@@ -125,19 +128,19 @@ webserver::http_endpoint::http_endpoint(const webserver::http_endpoint& h):
     reg_compiled(h.reg_compiled)
 {
     if(this->reg_compiled)
-        regcomp(&(this->re_url_modded), url_modded.c_str(),
+        regcomp(&(this->re_url_normalized), url_normalized.c_str(),
                 REG_EXTENDED|REG_ICASE|REG_NOSUB
         );
 }
 
-webserver::http_endpoint& webserver::http_endpoint::operator =(const webserver::http_endpoint& h)
+http_endpoint& http_endpoint::operator =(const http_endpoint& h)
 {
     this->url_complete = h.url_complete;
-    this->url_modded = h.url_modded;
+    this->url_normalized = h.url_normalized;
     this->family_url = h.family_url;
     this->reg_compiled = h.reg_compiled;
     if(this->reg_compiled)
-        regcomp(&(this->re_url_modded), url_modded.c_str(),
+        regcomp(&(this->re_url_normalized), url_normalized.c_str(),
                 REG_EXTENDED|REG_ICASE|REG_NOSUB
         );
     this->url_pars = h.url_pars;
@@ -146,16 +149,16 @@ webserver::http_endpoint& webserver::http_endpoint::operator =(const webserver::
     return *this;
 }
 
-bool webserver::http_endpoint::operator <(const webserver::http_endpoint& b) const
+bool http_endpoint::operator <(const http_endpoint& b) const
 {
-    COMPARATOR(this->url_modded, b.url_modded, std::toupper);
+    COMPARATOR(this->url_normalized, b.url_normalized, std::toupper);
 }
 
-bool webserver::http_endpoint::match(const webserver::http_endpoint& url) const
+bool http_endpoint::match(const http_endpoint& url) const
 {
 
-    if(!this->family_url || url.url_pieces.size() < this->url_pieces.size())  
-        return regexec(&(this->re_url_modded), url.url_complete.c_str(), 0, NULL, 0) == 0;
+    if(!this->family_url || url.url_pieces.size() < this->url_pieces.size())
+        return regexec(&(this->re_url_normalized), url.url_complete.c_str(), 0, NULL, 0) == 0;
 
     string nn = "/";
     bool first = true;
@@ -164,8 +167,9 @@ bool webserver::http_endpoint::match(const webserver::http_endpoint& url) const
         nn += (first ? "" : "/") + url.url_pieces[i];
         first = false;
     }
-    return regexec(&(this->re_url_modded), nn.c_str(), 0, NULL, 0) == 0;
+    return regexec(&(this->re_url_normalized), nn.c_str(), 0, NULL, 0) == 0;
 }
 
 };
 
+};
