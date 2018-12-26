@@ -90,12 +90,12 @@ const int http_utils::http_gone = MHD_HTTP_GONE;
 const int http_utils::http_length_required = MHD_HTTP_LENGTH_REQUIRED;
 const int http_utils::http_precondition_failed = MHD_HTTP_PRECONDITION_FAILED;
 const int http_utils::http_request_entity_too_large =
-    MHD_HTTP_REQUEST_ENTITY_TOO_LARGE;
-const int http_utils::http_request_uri_too_long = MHD_HTTP_REQUEST_URI_TOO_LONG;
+    MHD_HTTP_PAYLOAD_TOO_LARGE;
+const int http_utils::http_request_uri_too_long = MHD_HTTP_URI_TOO_LONG;
 const int http_utils::http_unsupported_media_type =
     MHD_HTTP_UNSUPPORTED_MEDIA_TYPE;
 const int http_utils::http_requested_range_not_satisfiable =
-    MHD_HTTP_REQUESTED_RANGE_NOT_SATISFIABLE;
+    MHD_HTTP_RANGE_NOT_SATISFIABLE;
 const int http_utils::http_expectation_failed = MHD_HTTP_EXPECTATION_FAILED;
 const int http_utils::http_unprocessable_entity = MHD_HTTP_UNPROCESSABLE_ENTITY;
 const int http_utils::http_locked = MHD_HTTP_LOCKED;
@@ -355,7 +355,7 @@ ip_representation::ip_representation(const std::string& ip)
             throw std::invalid_argument("IP is badly formatted. Max 8 parts in IPV6.");
         }
 
-        int omitted = 8 - (parts.size() - 1);
+        unsigned int omitted = 8 - (parts.size() - 1);
         if (omitted != 0)
         {
             int empty_count = 0;
@@ -416,7 +416,7 @@ ip_representation::ip_representation(const std::string& ip)
                     y += 2;
                 }
                 else
-                { 
+                {
                     if(parts[i].find('.') != std::string::npos)
                     {
                         if(y != 12)
