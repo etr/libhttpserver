@@ -1,3 +1,7 @@
+Thu Dec 26 10:00:30 2018 -0800
+	Fixed IPV6 parsing logic.
+	Added tests to support IP parsing, URL parsing and utilities
+
 Thu Nov 22 20:58:00 2018 -0800
 	Solved problem with the server not being able to start on mac os
 
