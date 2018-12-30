@@ -241,7 +241,11 @@ LT_END_AUTO_TEST(http_endpoint_copy_constructor)
 
 LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_assignment)
     http_endpoint a("/path/to/resource/with/{arg|([0-9]+)}/to/fetch", false, true, true);
-    http_endpoint b = a;
+    http_endpoint b("whatever/initial/value");
+
+    LT_CHECK_NEQ(a.get_url_complete(), b.get_url_complete());
+
+    b = a;
 
     LT_CHECK_EQ(a.get_url_complete(), b.get_url_complete());
     LT_CHECK_EQ(a.get_url_normalized(), b.get_url_normalized());
