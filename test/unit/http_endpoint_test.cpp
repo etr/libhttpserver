@@ -49,22 +49,8 @@ LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_default)
     LT_CHECK_EQ(test_endpoint.is_regex_compiled(), false);
 LT_END_AUTO_TEST(http_endpoint_default)
 
-LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_default_family)
-    http_endpoint test_endpoint(true);
-
-    LT_CHECK_EQ(test_endpoint.get_url_complete(), "/");
-    LT_CHECK_EQ(test_endpoint.get_url_normalized(), "/");
-
-    LT_CHECK_EQ(test_endpoint.get_url_pars().size(), 0);
-    LT_CHECK_EQ(test_endpoint.get_url_pieces().size(), 0);
-    LT_CHECK_EQ(test_endpoint.get_chunk_positions().size(), 0);
-
-    LT_CHECK_EQ(test_endpoint.is_family_url(), true);
-    LT_CHECK_EQ(test_endpoint.is_regex_compiled(), false);
-LT_END_AUTO_TEST(http_endpoint_default_family)
-
 LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_from_string_default)
-    http_endpoint test_endpoint(std::string("/path/to/resource"));
+    http_endpoint test_endpoint("/path/to/resource");
 
     LT_CHECK_EQ(test_endpoint.get_url_complete(), "/path/to/resource");
     LT_CHECK_EQ(test_endpoint.get_url_normalized(), "^/path/to/resource$");
@@ -82,7 +68,7 @@ LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_from_string_default)
 LT_END_AUTO_TEST(http_endpoint_from_string_default)
 
 LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_from_string_not_beginning_with_slash)
-    http_endpoint test_endpoint(std::string("path/to/resource"));
+    http_endpoint test_endpoint("path/to/resource");
 
     LT_CHECK_EQ(test_endpoint.get_url_complete(), "/path/to/resource");
     LT_CHECK_EQ(test_endpoint.get_url_normalized(), "^/path/to/resource$");
@@ -99,8 +85,26 @@ LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_from_string_not_beginning_
     LT_CHECK_EQ(test_endpoint.is_regex_compiled(), true);
 LT_END_AUTO_TEST(http_endpoint_from_string_not_beginning_with_slash)
 
+LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_from_string_ending_with_slash)
+    http_endpoint test_endpoint("path/to/resource/");
+
+    LT_CHECK_EQ(test_endpoint.get_url_complete(), "/path/to/resource");
+    LT_CHECK_EQ(test_endpoint.get_url_normalized(), "^/path/to/resource$");
+
+    LT_CHECK_EQ(test_endpoint.get_url_pars().size(), 0);
+
+    string expected_arr[] = { "path", "to", "resource" };
+    vector<string> expected_pieces(expected_arr, expected_arr + sizeof(expected_arr) / sizeof(expected_arr[0]));
+    LT_CHECK_COLLECTIONS_EQ(test_endpoint.get_url_pieces().begin(), test_endpoint.get_url_pieces().end(), expected_pieces.begin());
+
+    LT_CHECK_EQ(test_endpoint.get_chunk_positions().size(), 0);
+
+    LT_CHECK_EQ(test_endpoint.is_family_url(), false);
+    LT_CHECK_EQ(test_endpoint.is_regex_compiled(), true);
+LT_END_AUTO_TEST(http_endpoint_from_string_ending_with_slash)
+
 LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_from_string_family)
-    http_endpoint test_endpoint(std::string("/path/to/resource"), true);
+    http_endpoint test_endpoint("/path/to/resource", true);
 
     LT_CHECK_EQ(test_endpoint.get_url_complete(), "/path/to/resource");
     LT_CHECK_EQ(test_endpoint.get_url_normalized(), "^/path/to/resource$");
@@ -118,7 +122,7 @@ LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_from_string_family)
 LT_END_AUTO_TEST(http_endpoint_from_string_family)
 
 LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_from_string_no_regex)
-    http_endpoint test_endpoint(std::string("/path/to/resource"), false, false, false);
+    http_endpoint test_endpoint("/path/to/resource", false, false, false);
 
     LT_CHECK_EQ(test_endpoint.get_url_complete(), "/path/to/resource");
     LT_CHECK_EQ(test_endpoint.get_url_normalized(), "/path/to/resource");
@@ -136,7 +140,7 @@ LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_from_string_no_regex)
 LT_END_AUTO_TEST(http_endpoint_from_string_no_regex)
 
 LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_registration)
-    http_endpoint test_endpoint(std::string("/path/to/resource"), false, true);
+    http_endpoint test_endpoint("/path/to/resource", false, true);
 
     LT_CHECK_EQ(test_endpoint.get_url_complete(), "/path/to/resource");
     LT_CHECK_EQ(test_endpoint.get_url_normalized(), "^/path/to/resource$");
@@ -154,7 +158,7 @@ LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_registration)
 LT_END_AUTO_TEST(http_endpoint_registration)
 
 LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_registration_nested_regex)
-    http_endpoint test_endpoint(std::string("/path/to/resource/with/[0-9]+/to/fetch"), false, true);
+    http_endpoint test_endpoint("/path/to/resource/with/[0-9]+/to/fetch", false, true);
 
     LT_CHECK_EQ(test_endpoint.get_url_complete(), "/path/to/resource/with/[0-9]+/to/fetch");
     LT_CHECK_EQ(test_endpoint.get_url_normalized(), "^/path/to/resource/with/[0-9]+/to/fetch$");
@@ -172,7 +176,7 @@ LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_registration_nested_regex)
 LT_END_AUTO_TEST(http_endpoint_registration_nested_regex)
 
 LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_registration_arg)
-    http_endpoint test_endpoint(std::string("/path/to/resource/with/{arg}/to/fetch"), false, true);
+    http_endpoint test_endpoint("/path/to/resource/with/{arg}/to/fetch", false, true);
 
     LT_CHECK_EQ(test_endpoint.get_url_complete(), "/path/to/resource/with/{arg}/to/fetch");
     LT_CHECK_EQ(test_endpoint.get_url_normalized(), "^/path/to/resource/with/([^\\/]+)/to/fetch$");
@@ -194,7 +198,7 @@ LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_registration_arg)
 LT_END_AUTO_TEST(http_endpoint_registration_arg)
 
 LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_registration_arg_custom_regex)
-    http_endpoint test_endpoint(std::string("/path/to/resource/with/{arg|([0-9]+)}/to/fetch"), false, true);
+    http_endpoint test_endpoint("/path/to/resource/with/{arg|([0-9]+)}/to/fetch", false, true);
 
     LT_CHECK_EQ(test_endpoint.get_url_complete(), "/path/to/resource/with/{arg|([0-9]+)}/to/fetch");
     LT_CHECK_EQ(test_endpoint.get_url_normalized(), "^/path/to/resource/with/([0-9]+)/to/fetch$");
@@ -216,8 +220,104 @@ LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_registration_arg_custom_re
 LT_END_AUTO_TEST(http_endpoint_registration_arg_custom_regex)
 
 LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_registration_invalid_arg)
-    LT_CHECK_THROW(http_endpoint(std::string("/path/to/resource/with/{}/to/fetch"), false, true));
+    LT_CHECK_THROW(http_endpoint("/path/to/resource/with/{}/to/fetch", false, true));
 LT_END_AUTO_TEST(http_endpoint_registration_invalid_arg)
+
+LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_copy_constructor)
+    http_endpoint a("/path/to/resource/with/{arg|([0-9]+)}/to/fetch", false, true, true);
+    http_endpoint b(a);
+
+    LT_CHECK_EQ(a.get_url_complete(), b.get_url_complete());
+    LT_CHECK_EQ(a.get_url_normalized(), b.get_url_normalized());
+    LT_CHECK_COLLECTIONS_EQ(a.get_url_pars().begin(), a.get_url_pars().end(), b.get_url_pars().begin());
+    LT_CHECK_COLLECTIONS_EQ(a.get_url_pieces().begin(), a.get_url_pieces().end(), b.get_url_pieces().begin());
+    LT_CHECK_COLLECTIONS_EQ(a.get_chunk_positions().begin(), a.get_chunk_positions().end(), b.get_chunk_positions().begin());
+    LT_CHECK_EQ(a.is_family_url(), b.is_family_url());
+    LT_CHECK_EQ(a.is_regex_compiled(), b.is_regex_compiled());
+
+    LT_CHECK_EQ(a.match(http_endpoint("/path/to/resource/with/10/to/fetch")), true);
+    LT_CHECK_EQ(b.match(http_endpoint("/path/to/resource/with/10/to/fetch")), true);
+LT_END_AUTO_TEST(http_endpoint_copy_constructor)
+
+LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_assignment)
+    http_endpoint a("/path/to/resource/with/{arg|([0-9]+)}/to/fetch", false, true, true);
+    http_endpoint b = a;
+
+    LT_CHECK_EQ(a.get_url_complete(), b.get_url_complete());
+    LT_CHECK_EQ(a.get_url_normalized(), b.get_url_normalized());
+    LT_CHECK_COLLECTIONS_EQ(a.get_url_pars().begin(), a.get_url_pars().end(), b.get_url_pars().begin());
+    LT_CHECK_COLLECTIONS_EQ(a.get_url_pieces().begin(), a.get_url_pieces().end(), b.get_url_pieces().begin());
+    LT_CHECK_COLLECTIONS_EQ(a.get_chunk_positions().begin(), a.get_chunk_positions().end(), b.get_chunk_positions().begin());
+    LT_CHECK_EQ(a.is_family_url(), b.is_family_url());
+    LT_CHECK_EQ(a.is_regex_compiled(), b.is_regex_compiled());
+
+    LT_CHECK_EQ(a.match(http_endpoint("/path/to/resource/with/10/to/fetch")), true);
+    LT_CHECK_EQ(b.match(http_endpoint("/path/to/resource/with/10/to/fetch")), true);
+LT_END_AUTO_TEST(http_endpoint_assignment)
+
+LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_match_regex)
+    http_endpoint test_endpoint("/path/to/resource/", false, true, true);
+    LT_CHECK_EQ(test_endpoint.match(http_endpoint("/path/to/resource")), true);
+    LT_CHECK_EQ(test_endpoint.match(http_endpoint("/path/to/resource/")), true);
+    LT_CHECK_EQ(test_endpoint.match(http_endpoint("/path/to2/resource")), false);
+LT_END_AUTO_TEST(http_endpoint_match_regex)
+
+LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_match_regex_nested)
+    http_endpoint test_endpoint("/path/to/resource/with/[0-9]+/to/fetch", false, true, true);
+    LT_CHECK_EQ(test_endpoint.match(http_endpoint("/path/to/resource/with/0/to/fetch")), true);
+    LT_CHECK_EQ(test_endpoint.match(http_endpoint("/path/to/resource/with/10/to/fetch")), true);
+    LT_CHECK_EQ(test_endpoint.match(http_endpoint("path/to/resource/with/1/to/fetch")), true);
+    LT_CHECK_EQ(test_endpoint.match(http_endpoint("/path/to/resource/with/1/to/fetch/")), true);
+LT_END_AUTO_TEST(http_endpoint_match_regex_nested)
+
+LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_match_regex_nested_capture)
+    http_endpoint test_endpoint("/path/to/resource/with/([0-9]+)/to/fetch", false, true, true);
+    LT_CHECK_EQ(test_endpoint.match(http_endpoint("/path/to/resource/with/0/to/fetch")), true);
+    LT_CHECK_EQ(test_endpoint.match(http_endpoint("/path/to/resource/with/10/to/fetch")), true);
+    LT_CHECK_EQ(test_endpoint.match(http_endpoint("path/to/resource/with/1/to/fetch")), true);
+    LT_CHECK_EQ(test_endpoint.match(http_endpoint("/path/to/resource/with/1/to/fetch/")), true);
+LT_END_AUTO_TEST(http_endpoint_match_regex_nested_capture)
+
+LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_match_regex_nested_arg)
+    http_endpoint test_endpoint("/path/to/resource/with/{arg}/to/fetch", false, true, true);
+    LT_CHECK_EQ(test_endpoint.match(http_endpoint("/path/to/resource/with/0/to/fetch")), true);
+    LT_CHECK_EQ(test_endpoint.match(http_endpoint("/path/to/resource/with/10/to/fetch")), true);
+    LT_CHECK_EQ(test_endpoint.match(http_endpoint("path/to/resource/with/1/to/fetch")), true);
+    LT_CHECK_EQ(test_endpoint.match(http_endpoint("/path/to/resource/with/1/to/fetch/")), true);
+LT_END_AUTO_TEST(http_endpoint_match_regex_nested_arg)
+
+LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_match_regex_nested_custom_arg)
+    http_endpoint test_endpoint("/path/to/resource/with/{arg|([0-9]+)}/to/fetch", false, true, true);
+    LT_CHECK_EQ(test_endpoint.match(http_endpoint("/path/to/resource/with/0/to/fetch")), true);
+    LT_CHECK_EQ(test_endpoint.match(http_endpoint("/path/to/resource/with/10/to/fetch")), true);
+    LT_CHECK_EQ(test_endpoint.match(http_endpoint("path/to/resource/with/1/to/fetch")), true);
+    LT_CHECK_EQ(test_endpoint.match(http_endpoint("/path/to/resource/with/1/to/fetch/")), true);
+LT_END_AUTO_TEST(http_endpoint_match_regex_nested_custom_arg)
+
+LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_match_regex_family)
+    http_endpoint test_endpoint("/path/to/resource", true, true, true);
+    LT_CHECK_EQ(test_endpoint.match(http_endpoint("/path/to/resource")), true);
+    LT_CHECK_EQ(test_endpoint.match(http_endpoint("/path/to/resource/")), true);
+    LT_CHECK_EQ(test_endpoint.match(http_endpoint("path/to/resource")), true);
+    LT_CHECK_EQ(test_endpoint.match(http_endpoint("path/to/resource/")), true);
+    LT_CHECK_EQ(test_endpoint.match(http_endpoint("/path/to/resource")), true);
+    LT_CHECK_EQ(test_endpoint.match(http_endpoint("/path/to/resource/followed/by/anything")), true);
+
+    LT_CHECK_EQ(test_endpoint.match(http_endpoint("path/to2/resource")), false);
+LT_END_AUTO_TEST(http_endpoint_match_regex_family)
+
+LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_match_regex_disabled)
+    http_endpoint test_endpoint("/path/to/resource", false, true, false);
+    LT_CHECK_THROW(test_endpoint.match(http_endpoint("/path/to/resource")));
+LT_END_AUTO_TEST(http_endpoint_match_regex_disabled)
+
+LT_BEGIN_AUTO_TEST(http_endpoint_suite, comparator)
+    LT_CHECK_EQ(http_endpoint("/a/b") < http_endpoint("/a/c"), true);
+    LT_CHECK_EQ(http_endpoint("/a/c") < http_endpoint("/a/b"), false);
+
+    LT_CHECK_EQ(http_endpoint("/a/b") < http_endpoint("/a/b/c"), true);
+    LT_CHECK_EQ(http_endpoint("/a/b/c") < http_endpoint("/a/b"), false);
+LT_END_AUTO_TEST(comparator)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

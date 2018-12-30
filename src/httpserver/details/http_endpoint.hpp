@@ -132,15 +132,11 @@ class http_endpoint
 
         /**
          * Default constructor of the class.
-         * @param family boolean that indicates if the endpoint is a family endpoint.
-         *                A family endpoint is an endpoint that identifies a root and all its child like the same resource.
-         *                For example, if I identify "/path/" like a family endpoint and I associate to it the resource "A", also
-         *                "/path/to/res/" is automatically associated to resource "A".
         **/
-        http_endpoint(bool family = false):
+        http_endpoint():
             url_complete("/"),
             url_normalized("/"),
-            family_url(family),
+            family_url(false),
             reg_compiled(false)
         {
         }
@@ -161,7 +157,6 @@ class http_endpoint
                 bool registration = false,
                 bool use_regex = true
         );
-
     private:
         /**
          * The complete url extracted

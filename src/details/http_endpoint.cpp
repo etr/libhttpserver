@@ -59,8 +59,15 @@ http_endpoint::http_endpoint
     url_complete = url;
 #endif
 
-    if(url_complete[0] != '/')
+    if (url_complete[url_complete.size() - 1] == '/')
+    {
+        url_complete = url_complete.substr(0, url_complete.size() - 1);
+    }
+
+    if (url_complete[0] != '/')
+    {
         url_complete = "/" + url_complete;
+    }
 
     parts = http_utils::tokenize_url(url);
     string buffered;
@@ -156,6 +163,7 @@ bool http_endpoint::operator <(const http_endpoint& b) const
 
 bool http_endpoint::match(const http_endpoint& url) const
 {
+    if (!this->reg_compiled) throw std::invalid_argument("Cannot run match. Regex suppressed.");
 
     if(!this->family_url || url.url_pieces.size() < this->url_pieces.size())
         return regexec(&(this->re_url_normalized), url.url_complete.c_str(), 0, NULL, 0) == 0;
