@@ -63,7 +63,7 @@ class args_resource : public http_resource
     public:
         const http_response render_GET(const http_request& req)
         {
-            return http_response_builder(req.get_arg("arg"), 200, "text/plain").string_response();
+            return http_response_builder(req.get_arg("arg") + req.get_arg("arg2"), 200, "text/plain").string_response();
         }
 };
 
@@ -509,6 +509,24 @@ LT_BEGIN_AUTO_TEST(basic_suite, regex_matching_arg_custom)
     curl_easy_cleanup(curl);
     }
 LT_END_AUTO_TEST(regex_matching_arg_custom)
+
+LT_BEGIN_AUTO_TEST(basic_suite, querystring_processing)
+    args_resource* resource = new args_resource();
+    ws->register_resource("this/captures/args/passed/in/the/querystring", resource);
+    curl_global_init(CURL_GLOBAL_ALL);
+
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/this/captures/args/passed/in/the/querystring?arg=first&arg2=second");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "firstsecond");
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(querystring_processing)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
