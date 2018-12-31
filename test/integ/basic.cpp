@@ -58,6 +58,15 @@ class simple_resource : public http_resource
         }
 };
 
+class args_resource : public http_resource
+{
+    public:
+        const http_response render_GET(const http_request& req)
+        {
+            return http_response_builder(req.get_arg("arg"), 200, "text/plain").string_response();
+        }
+};
+
 class long_content_resource : public http_resource
 {
     public:
@@ -427,6 +436,79 @@ LT_BEGIN_AUTO_TEST(basic_suite, no_response)
     LT_ASSERT_EQ(http_code, 500);
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(no_response)
+
+LT_BEGIN_AUTO_TEST(basic_suite, regex_matching)
+    simple_resource* resource = new simple_resource();
+    ws->register_resource("regex/matching/number/[0-9]+", resource);
+    curl_global_init(CURL_GLOBAL_ALL);
+
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/regex/matching/number/10");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "OK");
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(regex_matching)
+
+LT_BEGIN_AUTO_TEST(basic_suite, regex_matching_arg)
+    args_resource* resource = new args_resource();
+    ws->register_resource("this/captures/{arg}/passed/in/input", resource);
+    curl_global_init(CURL_GLOBAL_ALL);
+
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/this/captures/whatever/passed/in/input");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "whatever");
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(regex_matching_arg)
+
+LT_BEGIN_AUTO_TEST(basic_suite, regex_matching_arg_custom)
+    args_resource* resource = new args_resource();
+    ws->register_resource("this/captures/numeric/{arg|([0-9]+)}/passed/in/input", resource);
+    curl_global_init(CURL_GLOBAL_ALL);
+
+    {
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/this/captures/numeric/11/passed/in/input");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "11");
+    curl_easy_cleanup(curl);
+    }
+
+    {
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/this/captures/numeric/text/passed/in/input");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "Not Found");
+    long http_code = 0;
+    curl_easy_getinfo (curl, CURLINFO_RESPONSE_CODE, &http_code);
+    LT_ASSERT_EQ(http_code, 404);
+    curl_easy_cleanup(curl);
+    }
+LT_END_AUTO_TEST(regex_matching_arg_custom)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
