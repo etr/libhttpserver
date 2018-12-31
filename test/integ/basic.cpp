@@ -195,6 +195,10 @@ LT_BEGIN_SUITE(basic_suite)
     }
 LT_END_SUITE(basic_suite)
 
+LT_BEGIN_AUTO_TEST(basic_suite, server_runs)
+    LT_CHECK_EQ(ws->is_running(), true);
+LT_END_AUTO_TEST(server_runs)
+
 LT_BEGIN_AUTO_TEST(basic_suite, two_endpoints)
     ok_resource* ok = new ok_resource();
     ws->register_resource("OK", ok);
