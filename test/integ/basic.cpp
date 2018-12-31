@@ -637,6 +637,62 @@ LT_BEGIN_AUTO_TEST(basic_suite, querystring_processing)
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(querystring_processing)
 
+LT_BEGIN_AUTO_TEST(basic_suite, register_unregister)
+    simple_resource* resource = new simple_resource();
+    ws->register_resource("base", resource);
+    curl_global_init(CURL_GLOBAL_ALL);
+
+    {
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "OK");
+    curl_easy_cleanup(curl);
+    }
+
+    ws->unregister_resource("base");
+    {
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+
+    long http_code = 0;
+    curl_easy_getinfo (curl, CURLINFO_RESPONSE_CODE, &http_code);
+    LT_ASSERT_EQ(http_code, 404);
+
+    LT_CHECK_EQ(s, "Not Found");
+
+    curl_easy_cleanup(curl);
+    }
+
+    ws->register_resource("base", resource);
+    {
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "OK");
+    curl_easy_cleanup(curl);
+    }
+LT_END_AUTO_TEST(register_unregister)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

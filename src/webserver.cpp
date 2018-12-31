@@ -436,6 +436,7 @@ void webserver::unregister_resource(const string& resource)
     details::http_endpoint he(resource);
     this->registered_resources.erase(he);
     this->registered_resources.erase(he.get_url_complete());
+    this->registered_resources_str.erase(he.get_url_complete());
 }
 
 void webserver::ban_ip(const string& ip)
