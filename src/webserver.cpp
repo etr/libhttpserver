@@ -296,8 +296,7 @@ bool webserver::start(bool blocking)
         iov.push_back(gen(MHD_OPTION_LISTEN_SOCKET, bind_socket));
     if(start_method == http_utils::THREAD_PER_CONNECTION && max_threads != 0)
     {
-        cout << "Cannot specify maximum number of threads when using a thread per connection" << endl;
-        throw ::httpserver::webserver_exception();
+        throw std::invalid_argument("Cannot specify maximum number of threads when using a thread per connection");
     }
 
     if(max_threads != 0)
@@ -381,9 +380,7 @@ bool webserver::start(bool blocking)
 
     if(NULL == daemon)
     {
-        cout << gettext("Unable to connect daemon to port: ") <<
-            this->port << endl;
-        throw ::httpserver::webserver_exception();
+        throw std::invalid_argument("Unable to connect daemon to port: " + this->port);
     }
     details::daemon_item* di = new details::daemon_item(this, daemon);
     daemons.push_back(di);
