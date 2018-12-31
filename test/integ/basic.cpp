@@ -22,6 +22,7 @@
 #include <curl/curl.h>
 #include <string>
 #include <map>
+#include "string_utilities.hpp"
 #include "httpserver.hpp"
 
 using namespace httpserver;
@@ -76,7 +77,7 @@ class long_content_resource : public http_resource
         }
 };
 
-class header_test_resource : public http_resource
+class header_set_test_resource : public http_resource
 {
     public:
         const http_response render_GET(const http_request& req)
@@ -84,6 +85,35 @@ class header_test_resource : public http_resource
             http_response_builder hrb("OK", 200, "text/plain");
             hrb.with_header("KEY", "VALUE");
             return hrb.string_response();
+        }
+};
+
+class cookie_set_test_resource : public http_resource
+{
+    public:
+        const http_response render_GET(const http_request& req)
+        {
+            http_response_builder hrb("OK", 200, "text/plain");
+            hrb.with_cookie("MyCookie", "CookieValue");
+            return hrb.string_response();
+        }
+};
+
+class cookie_reading_resource : public http_resource
+{
+    public:
+        const http_response render_GET(const http_request& req)
+        {
+            return http_response_builder(req.get_cookie("name"), 200, "text/plain").string_response();
+        }
+};
+
+class header_reading_resource : public http_resource
+{
+    public:
+        const http_response render_GET(const http_request& req)
+        {
+            return http_response_builder(req.get_header("MyHeader"), 200, "text/plain").string_response();
         }
 };
 
@@ -235,8 +265,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, read_long_body)
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(read_long_body)
 
-LT_BEGIN_AUTO_TEST(basic_suite, read_header)
-    header_test_resource* resource = new header_test_resource();
+LT_BEGIN_AUTO_TEST(basic_suite, resource_setting_header)
+    header_set_test_resource* resource = new header_set_test_resource();
     ws->register_resource("base", resource);
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -254,7 +284,86 @@ LT_BEGIN_AUTO_TEST(basic_suite, read_header)
     LT_CHECK_EQ(s, "OK");
     LT_CHECK_EQ(ss["KEY"], "VALUE");
     curl_easy_cleanup(curl);
-LT_END_AUTO_TEST(read_header)
+LT_END_AUTO_TEST(resource_setting_header)
+
+LT_BEGIN_AUTO_TEST(basic_suite, resource_setting_cookie)
+    cookie_set_test_resource* resource = new cookie_set_test_resource();
+    ws->register_resource("base", resource);
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_COOKIEFILE, "");
+    curl_easy_setopt(curl, CURLOPT_COOKIEJAR, "");
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+
+    struct curl_slist *cookies;
+    curl_easy_getinfo(curl, CURLINFO_COOKIELIST, &cookies);
+
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "OK");
+    std::string read_cookie = "";
+
+    if(!res && cookies)
+    {
+        read_cookie = cookies->data;
+        curl_slist_free_all(cookies);
+    }
+    else
+    {
+        LT_FAIL("No cookie being set");
+    }
+    std::vector<std::string> cookie_parts = string_utilities::string_split(read_cookie, '\t', false);
+    LT_CHECK_EQ(cookie_parts[5], "MyCookie");
+    LT_CHECK_EQ(cookie_parts[6], "CookieValue");
+
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(resource_setting_cookie)
+
+LT_BEGIN_AUTO_TEST(basic_suite, request_with_header)
+    header_reading_resource* resource = new header_reading_resource();
+    ws->register_resource("base", resource);
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+
+    struct curl_slist *list = NULL;
+    list = curl_slist_append(list, "MyHeader: MyValue");
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, list);
+
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "MyValue");
+    curl_slist_free_all(list);
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(request_with_header)
+
+LT_BEGIN_AUTO_TEST(basic_suite, request_with_cookie)
+    cookie_reading_resource* resource = new cookie_reading_resource();
+    ws->register_resource("base", resource);
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    curl_easy_setopt(curl, CURLOPT_COOKIE, "name=myname; present=yes;");
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "myname");
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(request_with_cookie)
 
 LT_BEGIN_AUTO_TEST(basic_suite, complete)
     complete_test_resource* resource = new complete_test_resource();
