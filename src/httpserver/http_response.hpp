@@ -104,7 +104,14 @@ class http_response
         {
         }
 
-        http_response(): response_code(-1)
+        http_response():
+            response_code(-1),
+            fp(-1),
+            underlying_connection(0x0),
+            ce(0x0),
+            completed(false),
+            ws(0x0),
+            connection_id(0x0)
         {
         }
 

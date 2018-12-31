@@ -69,8 +69,7 @@ http_response::http_response(const http_response_builder& builder):
 
 http_response::~http_response()
 {
-    if(ce != 0x0)
-        webserver::unlock_cache_entry(ce);
+    if(ce != 0x0) webserver::unlock_cache_entry(ce);
 }
 
 //RESPONSE

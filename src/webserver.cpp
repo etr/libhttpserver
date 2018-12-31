@@ -646,9 +646,14 @@ const http_response webserver::method_not_allowed_page(details::modded_request* 
 const http_response webserver::internal_error_page(details::modded_request* mr, bool force_our) const
 {
     if(internal_error_resource != 0x0 && !force_our)
+    {
         return internal_error_resource(*mr->dhr);
+    }
     else
-        return http_response_builder(GENERIC_ERROR, http_utils::http_internal_server_error).string_response();
+    {
+        http_response hr = http_response_builder(GENERIC_ERROR, http_utils::http_internal_server_error, "text/plain").string_response();
+        return hr;
+    }
 }
 
 int webserver::bodyless_requests_answer(
@@ -872,7 +877,10 @@ int webserver::finalize_answer(
             if(hrm->is_allowed(method))
             {
                 mr->dhrs = NEW_OR_MOVE(http_response, ((hrm)->*(mr->callback))(*mr->dhr)); //copy in memory (move in case)
-                if (mr->dhrs->get_response_code() == -1) mr->dhrs = NEW_OR_MOVE(http_response, internal_error_page(mr));
+                if (mr->dhrs->get_response_code() == -1)
+                {
+                    mr->dhrs = NEW_OR_MOVE(http_response, internal_error_page(mr));
+                }
             }
             else
             {

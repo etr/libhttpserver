@@ -157,7 +157,6 @@ LT_BEGIN_SUITE(basic_suite)
 LT_END_SUITE(basic_suite)
 
 LT_BEGIN_AUTO_TEST(basic_suite, two_endpoints)
-
     ok_resource* ok = new ok_resource();
     ws->register_resource("OK", ok);
     nok_resource* nok = new nok_resource();
@@ -413,26 +412,21 @@ LT_BEGIN_AUTO_TEST(basic_suite, empty_arg)
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(empty_arg)
 
-/*
 LT_BEGIN_AUTO_TEST(basic_suite, no_response)
     no_response_resource* resource = new no_response_resource();
     ws->register_resource("base", resource);
     curl_global_init(CURL_GLOBAL_ALL);
-    std::string s;
-    CURL* curl;
-    CURLcode res;
 
-    curl = curl_easy_init();
+    CURL* curl = curl_easy_init();
     curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    res = curl_easy_perform(curl);
+    CURLcode res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
     long http_code = 0;
     curl_easy_getinfo (curl, CURLINFO_RESPONSE_CODE, &http_code);
     LT_ASSERT_EQ(http_code, 500);
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(no_response)
-*/
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
