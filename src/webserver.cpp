@@ -898,7 +898,7 @@ int webserver::finalize_answer(
             mr->dhrs->get_raw_response(&raw_response, this);
         }
     }
-    catch(...)
+    catch(...) // catches errors in internal error page
     {
         mr->dhrs = NEW_OR_MOVE(http_response, internal_error_page(mr, true));
         mr->dhrs->get_raw_response(&raw_response, this);
