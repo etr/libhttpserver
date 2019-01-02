@@ -130,6 +130,45 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, start_stop)
     }
 LT_END_AUTO_TEST(start_stop)
 
+
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, sweet_kill)
+    webserver ws = create_webserver(8080);
+    ok_resource* ok = new ok_resource();
+    ws.register_resource("base", ok);
+    ws.start(false);
+
+    {
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "OK");
+    curl_easy_cleanup(curl);
+    }
+
+    ws.sweet_kill();
+
+    {
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 7);
+    curl_easy_cleanup(curl);
+    }
+LT_END_AUTO_TEST(sweet_kill)
+
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, disable_options)
     webserver ws = create_webserver(8080)
         .no_ssl()
