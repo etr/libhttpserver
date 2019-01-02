@@ -48,7 +48,6 @@ namespace details
 {
     struct http_response_ptr;
     ssize_t cb(void*, uint64_t, char*, size_t);
-    struct cache_entry;
 };
 
 class bad_caching_attempt: public std::exception
@@ -90,7 +89,6 @@ class http_response
             keepalive_msg(b.keepalive_msg),
             send_topic(b.send_topic),
             underlying_connection(b.underlying_connection),
-            ce(b.ce),
             cycle_callback(b.cycle_callback),
             get_raw_response(this, b._get_raw_response),
             decorate_response(this, b._decorate_response),
@@ -108,7 +106,6 @@ class http_response
             response_code(-1),
             fp(-1),
             underlying_connection(0x0),
-            ce(0x0),
             completed(false),
             ws(0x0),
             connection_id(0x0)
@@ -234,7 +231,6 @@ class http_response
         std::string keepalive_msg;
         std::string send_topic;
         struct MHD_Connection* underlying_connection;
-        details::cache_entry* ce;
         cycle_callback_ptr cycle_callback;
 
         const get_raw_response_t get_raw_response;
@@ -254,10 +250,8 @@ class http_response
                 webserver* ws = 0x0);
 
         void get_raw_response_lp_send(MHD_Response** res, webserver* ws = 0x0);
-        void get_raw_response_cache(MHD_Response** res, webserver* ws = 0x0);
         void get_raw_response_deferred(MHD_Response** res, webserver* ws = 0x0);
         void decorate_response_str(MHD_Response* res);
-        void decorate_response_cache(MHD_Response* res);
         void decorate_response_deferred(MHD_Response* res);
         int enqueue_response_str(MHD_Connection* connection, MHD_Response* res);
 

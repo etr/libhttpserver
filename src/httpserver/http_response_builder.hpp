@@ -40,11 +40,6 @@ namespace http
     class header_comparator;
 };
 
-namespace details
-{
-    struct cache_entry;
-};
-
 struct byte_string
 {
     public:
@@ -91,7 +86,6 @@ class http_response_builder
             _keepalive_secs(-1),
             _keepalive_msg(""),
             _send_topic(""),
-            _ce(0x0),
             _get_raw_response(&http_response::get_raw_response_str),
             _decorate_response(&http_response::decorate_response_str),
             _enqueue_response(&http_response::enqueue_response_str)
@@ -118,7 +112,6 @@ class http_response_builder
             _keepalive_secs(-1),
             _keepalive_msg(""),
             _send_topic(""),
-            _ce(0x0),
             _get_raw_response(&http_response::get_raw_response_str),
             _decorate_response(&http_response::decorate_response_str),
             _enqueue_response(&http_response::enqueue_response_str)
@@ -140,7 +133,6 @@ class http_response_builder
             _keepalive_secs(b._keepalive_secs),
             _keepalive_msg(b._keepalive_msg),
             _send_topic(b._send_topic),
-            _ce(b._ce),
             _get_raw_response(b._get_raw_response),
             _decorate_response(b._decorate_response),
             _enqueue_response(b._enqueue_response)
@@ -162,7 +154,6 @@ class http_response_builder
             _keepalive_secs = b._keepalive_secs;
             _keepalive_msg = b._keepalive_msg;
             _send_topic = b._send_topic;
-            _ce = b._ce;
             _get_raw_response = b._get_raw_response;
             _decorate_response = b._decorate_response;
             _enqueue_response = b._enqueue_response;
@@ -224,13 +215,6 @@ class http_response_builder
             return *this;
         }
 
-        http_response_builder& cache_response()
-        {
-            _get_raw_response = &http_response::get_raw_response_cache;
-            _decorate_response = &http_response::decorate_response_cache;
-            return *this;
-        }
-
         http_response_builder& deferred_response(cycle_callback_ptr cycle_callback)
         {
             _cycle_callback = cycle_callback;
@@ -275,19 +259,10 @@ class http_response_builder
         std::string _keepalive_msg;
         std::string _send_topic;
         cycle_callback_ptr _cycle_callback;
-        details::cache_entry* _ce;
 
         void (http_response::*_get_raw_response)(MHD_Response**, webserver*);
         void (http_response::*_decorate_response)(MHD_Response*);
         int (http_response::*_enqueue_response)(MHD_Connection*, MHD_Response*);
-
-        http_response_builder& cache_response(details::cache_entry* ce)
-        {
-            _ce = ce;
-            _get_raw_response = &http_response::get_raw_response_cache;
-            _decorate_response = &http_response::decorate_response_cache;
-            return *this;
-        }
 
         friend class http_response;
 };

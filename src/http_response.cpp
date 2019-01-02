@@ -53,7 +53,6 @@ http_response::http_response(const http_response_builder& builder):
     keepalive_msg(builder._keepalive_msg),
     send_topic(builder._send_topic),
     underlying_connection(0x0),
-    ce(builder._ce),
     cycle_callback(builder._cycle_callback),
     get_raw_response(this, builder._get_raw_response),
     decorate_response(this, builder._decorate_response),
@@ -69,7 +68,6 @@ http_response::http_response(const http_response_builder& builder):
 
 http_response::~http_response()
 {
-    if(ce != 0x0) webserver::unlock_cache_entry(ce);
 }
 
 //RESPONSE
@@ -114,10 +112,6 @@ int http_response::enqueue_response_str(
 )
 {
     return MHD_queue_response(connection, response_code, response);
-}
-
-void http_response::decorate_response_cache(MHD_Response* response)
-{
 }
 
 int http_response::enqueue_response_basic(
@@ -165,23 +159,6 @@ void http_response::get_raw_response_file(
                 MHD_RESPMEM_PERSISTENT
         );
     }
-}
-
-void http_response::get_raw_response_cache(
-        MHD_Response** response,
-        webserver* ws
-)
-{
-    bool valid;
-    http_response* r;
-    if(ce == 0x0)
-        r = ws->get_from_cache(content, &valid, &ce, true, false);
-    else
-        webserver::get_response(ce, &r);
-    r->get_raw_response(response, ws);
-    r->decorate_response(*response); //It is done here to avoid to search two times for the same element
-
-    //TODO: Check if element is not in cache and throw exception
 }
 
 namespace details

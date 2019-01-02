@@ -61,7 +61,6 @@ struct httpserver_ska;
 namespace details {
     struct daemon_item;
     struct modded_request;
-    struct cache_entry;
     class comet_manager;
 }
 
@@ -120,22 +119,6 @@ class webserver
         size_t read_message(MHD_Connection* connection_id,
             std::string& message
         );
-
-        http_response* get_from_cache(const std::string& key, bool* valid,
-                bool lock = false, bool write = false
-        );
-        http_response* get_from_cache(const std::string& key, bool* valid,
-                details::cache_entry** ce, bool lock = false, bool write = false
-        );
-        void lock_cache_element(details::cache_entry* ce, bool write = false);
-        void unlock_cache_element(details::cache_entry* ce);
-        details::cache_entry* put_in_cache(const std::string& key, http_response* value,
-                bool* new_elem, bool lock = false,
-                bool write = false, int validity = -1
-        );
-        void remove_from_cache(const std::string& key);
-        bool is_valid(const std::string& key);
-        void clean_cache();
 
         log_access_ptr get_access_logger() const
         {
@@ -213,9 +196,7 @@ class webserver
         std::map<details::http_endpoint, http_resource*> registered_resources;
         std::map<std::string, http_resource*> registered_resources_str;
 
-        std::map<std::string, details::cache_entry*> response_cache;
         int next_to_choose;
-        pthread_rwlock_t cache_guard;
         std::set<http::ip_representation> bans;
         std::set<http::ip_representation> allowances;
 
@@ -275,10 +256,6 @@ class webserver
             struct MHD_Connection* connection,
             void **con_cls, int upgrade_socket
         );
-
-        static void unlock_cache_entry(details::cache_entry*);
-        static void lock_cache_entry(details::cache_entry*);
-        static void get_response(details::cache_entry*, http_response** res);
 
         int bodyless_requests_answer(MHD_Connection* connection,
             const char* method, const char* version,

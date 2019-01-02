@@ -55,7 +55,6 @@
 #include "details/comet_manager.hpp"
 #include "webserver.hpp"
 #include "details/modded_request.hpp"
-#include "details/cache_entry.hpp"
 
 #define _REENTRANT 1
 
@@ -189,7 +188,6 @@ webserver::webserver(const create_webserver& params):
     pthread_mutex_init(&mutexwait, NULL);
     pthread_rwlock_init(&runguard, NULL);
     pthread_cond_init(&mutexcond, NULL);
-    pthread_rwlock_init(&cache_guard, NULL);
 }
 
 webserver::~webserver()
@@ -197,7 +195,6 @@ webserver::~webserver()
     this->stop();
     pthread_mutex_destroy(&mutexwait);
     pthread_rwlock_destroy(&runguard);
-    pthread_rwlock_destroy(&cache_guard);
     pthread_cond_destroy(&mutexcond);
     delete internal_comet_manager;
 }
@@ -1059,196 +1056,6 @@ size_t webserver::read_message(MHD_Connection* connection_id,
 )
 {
     return internal_comet_manager->read_message(connection_id, message);
-}
-
-http_response* webserver::get_from_cache(
-        const std::string& key,
-        bool* valid,
-        bool lock,
-        bool write
-)
-{
-    details::cache_entry* ce = 0x0;
-    return get_from_cache(key, valid, &ce, lock, write);
-}
-
-http_response* webserver::get_from_cache(
-        const std::string& key,
-        bool* valid,
-        details::cache_entry** ce,
-        bool lock,
-        bool write
-)
-{
-    pthread_rwlock_rdlock(&cache_guard);
-    *valid = true;
-    map<string, details::cache_entry*>::iterator it(response_cache.find(key));
-    if(it != response_cache.end())
-    {
-        if(lock)
-            (*it).second->lock(write);
-        if((*it).second->validity != -1)
-        {
-            timeval now;
-            gettimeofday(&now, NULL);
-            if( now.tv_sec - (*it).second->ts > (*it).second->validity)
-                *valid = false;
-        }
-        *ce = (*it).second;
-        pthread_rwlock_unlock(&cache_guard);
-        return (*it).second->response.ptr();
-    }
-    else
-    {
-        pthread_rwlock_unlock(&cache_guard);
-        *valid = false;
-        return 0x0;
-    }
-}
-
-bool webserver::is_valid(const std::string& key)
-{
-    pthread_rwlock_rdlock(&cache_guard);
-    map<string, details::cache_entry*>::iterator it(response_cache.find(key));
-    if(it != response_cache.end())
-    {
-        if((*it).second->validity != -1)
-        {
-            timeval now;
-            gettimeofday(&now, NULL);
-            if( now.tv_sec - (*it).second->ts > (*it).second->validity)
-            {
-                pthread_rwlock_unlock(&cache_guard);
-                return false;
-            }
-            else
-            {
-                pthread_rwlock_unlock(&cache_guard);
-                return true;
-            }
-        }
-        else
-        {
-            pthread_rwlock_unlock(&cache_guard);
-            return true;
-        }
-    }
-    pthread_rwlock_unlock(&cache_guard);
-    return false;
-}
-
-void webserver::lock_cache_element(details::cache_entry* ce, bool write)
-{
-    if(ce)
-        ce->lock(write);
-}
-
-void webserver::unlock_cache_element(details::cache_entry* ce)
-{
-    if(ce)
-        ce->unlock();
-}
-
-details::cache_entry* webserver::put_in_cache(
-        const std::string& key,
-        http_response* value,
-        bool* new_elem,
-        bool lock,
-        bool write,
-        int validity
-)
-{
-    pthread_rwlock_wrlock(&cache_guard);
-    map<string, details::cache_entry*>::iterator it(response_cache.find(key));
-    details::cache_entry* to_ret;
-    bool already_in = false;
-    if(it != response_cache.end())
-    {
-        (*it).second->lock(true);
-        already_in = true;
-    }
-    if(validity == -1)
-    {
-        if(already_in)
-        {
-            (*it).second->response = value;
-            to_ret = (*it).second;
-            *new_elem = false;
-        }
-        else
-        {
-            pair<map<string, details::cache_entry*>::iterator, bool> res =
-                response_cache.insert(pair<string, details::cache_entry*>(
-                            key, new details::cache_entry(value))
-                );
-
-            to_ret = (*res.first).second;
-            *new_elem = res.second;
-        }
-    }
-    else
-    {
-        timeval now;
-        gettimeofday(&now, NULL);
-        if(already_in)
-        {
-            (*it).second->response = value;
-            (*it).second->ts = now.tv_sec;
-            (*it).second->validity = validity;
-            to_ret = (*it).second;
-            *new_elem = false;
-        }
-        else
-        {
-            pair<map<string, details::cache_entry*>::iterator, bool> res =
-                response_cache.insert(pair<string, details::cache_entry*>(
-                            key, new details::cache_entry(value, now.tv_sec, validity))
-                );
-            to_ret = (*res.first).second;
-            *new_elem = res.second;
-        }
-    }
-    if(already_in)
-        (*it).second->unlock();
-    if(lock)
-        to_ret->lock(write);
-    pthread_rwlock_unlock(&cache_guard);
-    return to_ret;
-}
-
-void webserver::remove_from_cache(const std::string& key)
-{
-    pthread_rwlock_wrlock(&cache_guard);
-    map<string, details::cache_entry*>::iterator it(response_cache.find(key));
-    if(it != response_cache.end())
-    {
-        details::cache_entry* ce = (*it).second;
-        response_cache.erase(it);
-        delete ce;
-    }
-    pthread_rwlock_unlock(&cache_guard);
-}
-
-void webserver::clean_cache()
-{
-    pthread_rwlock_wrlock(&cache_guard);
-    response_cache.clear(); //manage this because obviously causes leaks
-    pthread_rwlock_unlock(&cache_guard);
-}
-
-void webserver::unlock_cache_entry(details::cache_entry* ce)
-{
-    ce->unlock();
-}
-
-void webserver::lock_cache_entry(details::cache_entry* ce)
-{
-    ce->lock();
-}
-
-void webserver::get_response(details::cache_entry* ce, http_response** res)
-{
-    *res = ce->response.ptr();
 }
 
 };
