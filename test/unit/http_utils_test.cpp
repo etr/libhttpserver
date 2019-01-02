@@ -496,7 +496,7 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation6_sockaddr)
 LT_END_AUTO_TEST(ip_representation6_sockaddr)
 
 LT_BEGIN_AUTO_TEST(http_utils_suite, load_file)
-    LT_CHECK_EQ(std::string(http::load_file("test_content")), "test content of file");
+    LT_CHECK_EQ(std::string(http::load_file("test_content")), "test content of file\n");
 LT_END_AUTO_TEST(load_file)
 
 LT_BEGIN_AUTO_TEST(http_utils_suite, load_file_invalid)

@@ -548,11 +548,11 @@ char* load_file (const char *filename)
         int size = fp.tellg();
         fp.seekg(0, fp.beg);
 
-        char* content = new char[size];
+        char* content = new char[size + 1];
         fp.read(content, size);
         fp.close();
 
-        content[size - 1] = 0;
+        content[size] = '\0';
         return content;
     }
     else
