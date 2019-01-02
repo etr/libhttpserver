@@ -238,28 +238,6 @@ bool webserver::register_resource(const std::string& resource, http_resource* hr
     return result.second;
 }
 
-MHD_socket create_socket (int domain, int type, int protocol)
-{
-    int sock_cloexec = SOCK_CLOEXEC;
-    int ctype = SOCK_STREAM | sock_cloexec;
-
-    /* use SOCK_STREAM rather than ai_socktype: some getaddrinfo
-    * implementations do not set ai_socktype, e.g. RHL6.2. */
-    MHD_socket fd = socket(domain, ctype, protocol);
-
-#ifdef _WINDOWS
-    if (fd == INVALID_SOCKET)
-#else
-    if ((fd == -1) &&
-        (errno == EINVAL || errno == EPROTONOSUPPORT) && (sock_cloexec != 0)
-    )
-#endif
-    {
-        fd = socket(domain, type, protocol);
-    }
-    return fd;
-}
-
 bool webserver::start(bool blocking)
 {
 
