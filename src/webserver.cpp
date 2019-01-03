@@ -749,7 +749,9 @@ void webserver::end_request_construction(
         user = MHD_basic_auth_get_username_password(connection, &pass);
     }
     if(digest_auth_enabled)
+    {
         digested_user = MHD_digest_auth_get_username(connection);
+    }
     mr->dhr->set_version(version);
     const MHD_ConnectionInfo * conninfo = MHD_get_connection_info(
             connection,
