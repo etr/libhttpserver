@@ -187,6 +187,24 @@ class file_response_resource : public http_resource
         }
 };
 
+class exception_resource : public http_resource
+{
+    public:
+        const http_response render_GET(const http_request& req)
+        {
+            throw std::domain_error("invalid");
+        }
+};
+
+class error_resource : public http_resource
+{
+    public:
+        const http_response render_GET(const http_request& req)
+        {
+            throw "invalid";
+        }
+};
+
 LT_BEGIN_SUITE(basic_suite)
 
     webserver* ws;
@@ -723,6 +741,52 @@ LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource)
     LT_CHECK_EQ(s, "test content of file\n");
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(file_serving_resource)
+
+LT_BEGIN_AUTO_TEST(basic_suite, exception_forces_500)
+    exception_resource* resource = new exception_resource();
+    ws->register_resource("base", resource);
+    curl_global_init(CURL_GLOBAL_ALL);
+
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "Internal Error");
+
+    long http_code = 0;
+    curl_easy_getinfo (curl, CURLINFO_RESPONSE_CODE, &http_code);
+    LT_ASSERT_EQ(http_code, 500);
+
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(exception_forces_500)
+
+LT_BEGIN_AUTO_TEST(basic_suite, untyped_error_forces_500)
+    error_resource* resource = new error_resource();
+    ws->register_resource("base", resource);
+    curl_global_init(CURL_GLOBAL_ALL);
+
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "Internal Error");
+
+    long http_code = 0;
+    curl_easy_getinfo (curl, CURLINFO_RESPONSE_CODE, &http_code);
+    LT_ASSERT_EQ(http_code, 500);
+
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(untyped_error_forces_500)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
