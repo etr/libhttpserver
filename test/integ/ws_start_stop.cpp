@@ -53,6 +53,16 @@ class ok_resource : public httpserver::http_resource
         }
 };
 
+const httpserver::http_response not_found_custom(const httpserver::http_request& req)
+{
+    return httpserver::http_response_builder("Not found custom", 404, "text/plain").string_response();
+}
+
+const httpserver::http_response not_allowed_custom(const httpserver::http_request& req)
+{
+    return httpserver::http_response_builder("Not allowed custom", 405, "text/plain").string_response();
+}
+
 LT_BEGIN_SUITE(ws_start_stop_suite)
     void set_up()
     {
@@ -464,6 +474,75 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, blocking_server)
     pthread_join(tid,(void**) &b);
     free(b);
 LT_END_AUTO_TEST(blocking_server)
+
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_error_resources)
+    webserver ws = create_webserver(8080)
+        .not_found_resource(not_found_custom)
+        .method_not_allowed_resource(not_allowed_custom);
+
+    ok_resource* ok = new ok_resource();
+    ws.register_resource("base", ok);
+    ws.start(false);
+
+    {
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "OK");
+    curl_easy_cleanup(curl);
+    }
+
+    {
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/not_registered");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "Not found custom");
+
+    long http_code = 0;
+    curl_easy_getinfo (curl, CURLINFO_RESPONSE_CODE, &http_code);
+    LT_ASSERT_EQ(http_code, 404);
+
+    curl_easy_cleanup(curl);
+    }
+
+    {
+    ok->set_allowing("PUT", false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "PUT");
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "Not allowed custom");
+
+    long http_code = 0;
+    curl_easy_getinfo (curl, CURLINFO_RESPONSE_CODE, &http_code);
+    LT_ASSERT_EQ(http_code, 405);
+
+    curl_easy_cleanup(curl);
+    }
+
+    ws.stop();
+LT_END_AUTO_TEST(custom_error_resources)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

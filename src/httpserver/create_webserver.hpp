@@ -37,7 +37,7 @@ namespace httpserver {
 class webserver;
 class http_request;
 
-typedef http_response(*render_ptr)(const http_request&);
+typedef const http_response(*render_ptr)(const http_request&);
 typedef bool(*validator_ptr)(const std::string&);
 typedef void(*unescaper_ptr)(char*);
 typedef void(*log_access_ptr)(const std::string&);
@@ -83,7 +83,6 @@ class create_webserver
             _single_resource(false),
             _not_found_resource(0x0),
             _method_not_allowed_resource(0x0),
-            _method_not_acceptable_resource(0x0),
             _internal_error_resource(0x0)
         {
         }
@@ -125,7 +124,6 @@ class create_webserver
             _single_resource(false),
             _not_found_resource(0x0),
             _method_not_allowed_resource(0x0),
-            _method_not_acceptable_resource(0x0),
             _internal_error_resource(0x0)
         {
         }
@@ -319,13 +317,6 @@ class create_webserver
             _method_not_allowed_resource = method_not_allowed_resource;
             return *this;
         }
-        create_webserver& method_not_acceptable_resource(
-                render_ptr method_not_acceptable_resource
-        )
-        {
-            _method_not_acceptable_resource = method_not_acceptable_resource;
-            return *this;
-        }
         create_webserver& internal_error_resource(
                 render_ptr internal_error_resource
         )
@@ -370,7 +361,6 @@ class create_webserver
         bool _single_resource;
         render_ptr _not_found_resource;
         render_ptr _method_not_allowed_resource;
-        render_ptr _method_not_acceptable_resource;
         render_ptr _internal_error_resource;
 
         friend class webserver;

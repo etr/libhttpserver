@@ -191,7 +191,6 @@ class webserver
         pthread_cond_t mutexcond;
         render_ptr not_found_resource;
         render_ptr method_not_allowed_resource;
-        render_ptr method_not_acceptable_resource;
         render_ptr internal_error_resource;
         std::map<details::http_endpoint, http_resource*> registered_resources;
         std::map<std::string, http_resource*> registered_resources_str;
@@ -212,11 +211,6 @@ class webserver
         const http_response internal_error_page(details::modded_request* mr, bool force_our = false) const;
         const http_response not_found_page(details::modded_request* mr) const;
 
-        static int method_not_acceptable_page
-        (
-            const void *cls,
-            struct MHD_Connection *connection
-        );
         static void request_completed(void *cls,
                 struct MHD_Connection *connection, void **con_cls,
                 enum MHD_RequestTerminationCode toe

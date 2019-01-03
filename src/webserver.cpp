@@ -175,7 +175,6 @@ webserver::webserver(const create_webserver& params):
     single_resource(params._single_resource),
     not_found_resource(params._not_found_resource),
     method_not_allowed_resource(params._method_not_allowed_resource),
-    method_not_acceptable_resource(params._method_not_acceptable_resource),
     internal_error_resource(params._internal_error_resource),
     next_to_choose(0),
     internal_comet_manager(new details::comet_manager())
@@ -607,7 +606,7 @@ const http_response webserver::not_found_page(details::modded_request* mr) const
 
 const http_response webserver::method_not_allowed_page(details::modded_request* mr) const
 {
-    if(method_not_acceptable_resource != 0x0)
+    if(method_not_allowed_resource != 0x0)
     {
         return method_not_allowed_resource(*mr->dhr);
     }
