@@ -24,3 +24,6 @@ Marcel Pursche <marcel.pursche@3dcontentlogistics.com>
 
 - Fixed error management and regex handling
 Julian Picht <julian.picht@4Com.de>
+
+- Fix string termination when loading files in memory
+martamoreton
