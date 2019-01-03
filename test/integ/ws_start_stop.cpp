@@ -33,7 +33,7 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include "httpserver.hpp"
-#include <thread>
+#include <pthread.h>
 
 using namespace std;
 using namespace httpserver;
@@ -427,16 +427,21 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_with_trust)
     ws.stop();
 LT_END_AUTO_TEST(ssl_with_trust)
 
-void start_ws_blocking(webserver* ws)
+void* start_ws_blocking(void* par)
 {
+    webserver* ws = (webserver*) par;
     ok_resource* ok = new ok_resource();
     ws->register_resource("base", ok);
     ws->start(true);
+
+    return 0x0;
 }
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, blocking_server)
     webserver ws = create_webserver(8080);
-    std::thread server(start_ws_blocking, &ws);
+
+    pthread_t tid;
+    pthread_create(&tid, NULL, start_ws_blocking, (void *) &ws);
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -454,7 +459,10 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, blocking_server)
     curl_easy_cleanup(curl);
 
     ws.stop();
-    server.join();
+
+    char* b;
+    pthread_join(tid,(void**) &b);
+    free(b);
 LT_END_AUTO_TEST(blocking_server)
 
 LT_BEGIN_AUTO_TEST_ENV()
