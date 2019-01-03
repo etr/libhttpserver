@@ -33,6 +33,7 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include "httpserver.hpp"
+#include <thread>
 
 using namespace std;
 using namespace httpserver;
@@ -425,6 +426,36 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_with_trust)
 
     ws.stop();
 LT_END_AUTO_TEST(ssl_with_trust)
+
+void start_ws_blocking(webserver* ws)
+{
+    ok_resource* ok = new ok_resource();
+    ws->register_resource("base", ok);
+    ws->start(true);
+}
+
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, blocking_server)
+    webserver ws = create_webserver(8080);
+    std::thread server(start_ws_blocking, &ws);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L); // avoid verifying ssl
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L); // avoid verifying ssl
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "OK");
+    curl_easy_cleanup(curl);
+
+    ws.stop();
+    server.join();
+LT_END_AUTO_TEST(blocking_server)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
