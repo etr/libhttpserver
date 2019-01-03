@@ -50,6 +50,10 @@ class user_pass_resource : public httpserver::http_resource
     public:
         const httpserver::http_response render_GET(const httpserver::http_request& req)
         {
+            if (req.get_user() != "myuser" || req.get_pass() != "mypass")
+            {
+                return httpserver::http_response_builder("FAIL").basic_auth_fail_response("test@example.com");
+            }
             return httpserver::http_response_builder(req.get_user() + " " + req.get_pass(), 200, "text/plain").string_response();
         }
 };
@@ -108,6 +112,31 @@ LT_BEGIN_AUTO_TEST(authentication_suite, base_auth)
 
     ws.stop();
 LT_END_AUTO_TEST(base_auth)
+
+LT_BEGIN_AUTO_TEST(authentication_suite, base_auth_fail)
+    webserver ws = create_webserver(8080);
+
+    user_pass_resource* user_pass = new user_pass_resource();
+    ws.register_resource("base", user_pass);
+    ws.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_USERNAME, "myuser");
+    curl_easy_setopt(curl, CURLOPT_PASSWORD, "wrongpass");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "FAIL");
+    curl_easy_cleanup(curl);
+
+    ws.stop();
+LT_END_AUTO_TEST(base_auth_fail)
 
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth)
     webserver ws = create_webserver(8080)
