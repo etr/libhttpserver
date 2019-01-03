@@ -307,12 +307,13 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, tuning_options)
         .max_threads(10)
         .memory_limit(10000)
         .per_IP_connection_limit(10)
-        .max_thread_stack_size(10)
+        .max_thread_stack_size(4*1024*1024)
         .nonce_nc_size(10);
+       ;
 
     ok_resource* ok = new ok_resource();
     ws.register_resource("base", ok);
-    ws.start(false);
+    LT_CHECK_NOTHROW(ws.start(false));
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -363,7 +364,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_with_protocol_priorities)
         .use_ssl()
         .https_mem_key("key.pem")
         .https_mem_cert("cert.pem")
-        .https_priorities("TLS1.0-AES-SHA1");
+        .https_priorities("NONE:+VERS-TLS1.0:+AES-128-CBC:+SHA1:+RSA:+COMP-NULL");
 
     ok_resource* ok = new ok_resource();
     ws.register_resource("base", ok);
