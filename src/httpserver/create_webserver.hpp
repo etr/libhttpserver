@@ -80,7 +80,7 @@ class create_webserver
             _ban_system_enabled(true),
             _post_process_enabled(true),
             _comet_enabled(false),
-            _single_resource(0x0),
+            _single_resource(false),
             _not_found_resource(0x0),
             _method_not_allowed_resource(0x0),
             _method_not_acceptable_resource(0x0),
@@ -122,7 +122,7 @@ class create_webserver
             _ban_system_enabled(true),
             _post_process_enabled(true),
             _comet_enabled(false),
-            _single_resource(0x0),
+            _single_resource(false),
             _not_found_resource(0x0),
             _method_not_allowed_resource(0x0),
             _method_not_acceptable_resource(0x0),
@@ -304,9 +304,9 @@ class create_webserver
         {
             _post_process_enabled = false; return *this;
         }
-        create_webserver& single_resource(render_ptr single_resource)
+        create_webserver& single_resource()
         {
-            _single_resource = single_resource; return *this;
+            _single_resource = true; return *this;
         }
         create_webserver& not_found_resource(render_ptr not_found_resource)
         {
@@ -367,7 +367,7 @@ class create_webserver
         bool _ban_system_enabled;
         bool _post_process_enabled;
         bool _comet_enabled;
-        render_ptr _single_resource;
+        bool _single_resource;
         render_ptr _not_found_resource;
         render_ptr _method_not_allowed_resource;
         render_ptr _method_not_acceptable_resource;

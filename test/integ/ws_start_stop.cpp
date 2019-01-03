@@ -260,6 +260,38 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_socket)
     ws.stop();
 LT_END_AUTO_TEST(custom_socket)
 
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, single_resource)
+    webserver ws = create_webserver(8080).single_resource();
+    ok_resource* ok = new ok_resource();
+    ws.register_resource("/", ok, true);
+    ws.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/any/url/works");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "OK");
+    curl_easy_cleanup(curl);
+
+    ws.stop();
+LT_END_AUTO_TEST(single_resource)
+
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, single_resource_not_default_resource)
+    webserver ws = create_webserver(8080).single_resource();
+    ok_resource* ok = new ok_resource();
+    LT_CHECK_THROW(ws.register_resource("/other", ok, true));
+    LT_CHECK_THROW(ws.register_resource("/", ok, false));
+    ws.start(false);
+
+    ws.stop();
+LT_END_AUTO_TEST(single_resource_not_default_resource)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

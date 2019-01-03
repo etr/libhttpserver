@@ -180,10 +180,6 @@ webserver::webserver(const create_webserver& params):
     next_to_choose(0),
     internal_comet_manager(new details::comet_manager())
 {
-    if(single_resource != 0x0)
-        this->single_resource = true;
-    else
-        this->single_resource = false;
     ignore_sigpipe();
     pthread_mutex_init(&mutexwait, NULL);
     pthread_rwlock_init(&runguard, NULL);
@@ -222,6 +218,11 @@ void webserver::request_completed (
 
 bool webserver::register_resource(const std::string& resource, http_resource* hrm, bool family)
 {
+    if (single_resource && ((resource != "" && resource != "/") || !family))
+    {
+        throw std::invalid_argument("The resource should be '' or '/' and be marked as family when using a single_resource server");
+    }
+
     details::http_endpoint idx(resource, family, true, regex_checking);
 
     pair<map<details::http_endpoint, http_resource*>::iterator, bool> result = registered_resources.insert(
