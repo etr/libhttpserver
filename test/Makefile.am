@@ -19,7 +19,7 @@
 LDADD = $(top_builddir)/src/libhttpserver.la
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/
 METASOURCES = AUTO
-check_PROGRAMS = basic http_utils threaded string_utilities http_endpoint ban_system ws_start_stop authentication
+check_PROGRAMS = basic http_utils threaded string_utilities http_endpoint ban_system ws_start_stop authentication comet_tests
 
 MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
 
@@ -28,6 +28,7 @@ threaded_SOURCES = integ/threaded.cpp
 ban_system_SOURCES = integ/ban_system.cpp
 ws_start_stop_SOURCES = integ/ws_start_stop.cpp
 authentication_SOURCES = integ/authentication.cpp
+comet_tests_SOURCES = integ/comet_tests.cpp
 http_utils_SOURCES = unit/http_utils_test.cpp
 string_utilities_SOURCES = unit/string_utilities_test.cpp
 http_endpoint_SOURCES = unit/http_endpoint_test.cpp
