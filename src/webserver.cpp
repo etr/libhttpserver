@@ -270,7 +270,7 @@ bool webserver::start(bool blocking)
     //    iov.push_back(gen(MHD_OPTION_SOCK_ADDR, (intptr_t) bind_address));
     if(bind_socket != 0)
         iov.push_back(gen(MHD_OPTION_LISTEN_SOCKET, bind_socket));
-    if(start_method == http_utils::THREAD_PER_CONNECTION && max_threads != 0)
+    if(start_method == http_utils::THREAD_PER_CONNECTION && (max_threads != 0 || max_thread_stack_size != 0))
     {
         throw std::invalid_argument("Cannot specify maximum number of threads when using a thread per connection");
     }

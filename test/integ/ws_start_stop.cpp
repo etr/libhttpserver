@@ -301,6 +301,15 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, thread_per_connection_fails_with_max_thr
     }
 LT_END_AUTO_TEST(thread_per_connection_fails_with_max_threads)
 
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, thread_per_connection_fails_with_max_threads_stack_size)
+    {
+    webserver ws = create_webserver(8080)
+        .start_method(http::http_utils::THREAD_PER_CONNECTION)
+        .max_thread_stack_size(4*1024*1024);
+    LT_CHECK_THROW(ws.start(false));
+    }
+LT_END_AUTO_TEST(thread_per_connection_fails_with_max_threads_stack_size)
+
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, tuning_options)
     webserver ws = create_webserver(8080)
         .max_connections(10)
