@@ -12,6 +12,8 @@ The libhttpserver (0.8.0) reference manual
 ==========================================
 
 [![Build Status](https://travis-ci.org/etr/libhttpserver.png?branch=master)](https://travis-ci.org/etr/libhttpserver)
+[![codecov](https://codecov.io/gh/etr/libhttpserver/branch/master/graph/badge.svg)](https://codecov.io/gh/etr/libhttpserver)
+
 [![ko-fi](https://www.ko-fi.com/img/donate_sm.png)](https://ko-fi.com/F1F5HY8B)
 
 This library has been originally developed under the zencoders flags and this community has always supported me all along this work so I am happy to put the logo on this readme.
