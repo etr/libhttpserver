@@ -205,6 +205,49 @@ class error_resource : public http_resource
         }
 };
 
+class print_request_resource : public http_resource
+{
+    public:
+        print_request_resource(std::stringstream* ss)
+        {
+            this->ss = ss;
+        }
+
+        const http_response render_GET(const http_request& req)
+        {
+            (*ss) << req;
+            return http_response_builder("OK", 200, "text/plain").string_response();
+        }
+
+    private:
+        std::stringstream* ss;
+};
+
+class print_response_resource : public http_resource
+{
+    public:
+        print_response_resource(std::stringstream* ss)
+        {
+            this->ss = ss;
+        }
+
+        const http_response render_GET(const http_request& req)
+        {
+            http_response hresp(http_response_builder("OK", 200, "text/plain")
+                    .with_header("MyResponseHeader", "MyResponseHeaderValue")
+                    .with_footer("MyResponseFooter", "MyResponseFooterValue")
+                    .with_cookie("MyResponseCookie", "MyResponseCookieValue")
+                    .string_response()
+            );
+            (*ss) << hresp;
+
+            return hresp;
+        }
+
+    private:
+        std::stringstream* ss;
+};
+
 LT_BEGIN_SUITE(basic_suite)
 
     webserver* ws;
@@ -787,6 +830,70 @@ LT_BEGIN_AUTO_TEST(basic_suite, untyped_error_forces_500)
 
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(untyped_error_forces_500)
+
+LT_BEGIN_AUTO_TEST(basic_suite, request_is_printable)
+    std::stringstream ss;
+    print_request_resource* resource = new print_request_resource(&ss);
+    ws->register_resource("base", resource);
+    curl_global_init(CURL_GLOBAL_ALL);
+
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+
+    struct curl_slist *list = NULL;
+    list = curl_slist_append(list, "MyHeader: MyValue");
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, list);
+
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "OK");
+
+    std::string actual = ss.str();
+    LT_CHECK_EQ(actual.find("GET Request") != string::npos, true);
+    LT_CHECK_EQ(actual.find("Headers [") != string::npos, true);
+    LT_CHECK_EQ(actual.find("Host") != string::npos, true);
+    LT_CHECK_EQ(actual.find("Accept:\"*/*\"") != string::npos, true);
+    LT_CHECK_EQ(actual.find("MyHeader:\"MyValue\"") != string::npos, true);
+    LT_CHECK_EQ(actual.find("Version [ HTTP/1.1 ]") != string::npos, true);
+
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(request_is_printable)
+
+LT_BEGIN_AUTO_TEST(basic_suite, response_is_printable)
+    std::stringstream ss;
+    print_response_resource* resource = new print_response_resource(&ss);
+    ws->register_resource("base", resource);
+    curl_global_init(CURL_GLOBAL_ALL);
+
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+
+    struct curl_slist *list = NULL;
+    list = curl_slist_append(list, "MyHeader: MyValue");
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, list);
+
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "OK");
+
+    std::string actual = ss.str();
+    LT_CHECK_EQ(actual.find("Response [response_code:200]") != string::npos, true);
+    LT_CHECK_EQ(actual.find("Headers [Content-Type:\"text/plain\" MyResponseHeader:\"MyResponseHeaderValue\" ]") != string::npos, true);
+    LT_CHECK_EQ(actual.find("Footers [MyResponseFooter:\"MyResponseFooterValue\" ]") != string::npos, true);
+    LT_CHECK_EQ(actual.find("Cookies [MyResponseCookie:\"MyResponseCookieValue\" ]") != string::npos, true);
+
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(response_is_printable)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
