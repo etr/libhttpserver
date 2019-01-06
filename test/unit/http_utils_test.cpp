@@ -56,6 +56,9 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, unescape)
 
     LT_CHECK_EQ(string(string_with_plus), string(expected));
     LT_CHECK_EQ(expected_size, 3);
+
+    free(string_with_plus);
+    free(expected);
 LT_END_AUTO_TEST(unescape)
 
 LT_BEGIN_AUTO_TEST(http_utils_suite, unescape_plus)
@@ -68,6 +71,9 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, unescape_plus)
 
     LT_CHECK_EQ(string(string_with_plus), string(expected));
     LT_CHECK_EQ(expected_size, 3);
+
+    free(string_with_plus);
+    free(expected);
 LT_END_AUTO_TEST(unescape_plus)
 
 LT_BEGIN_AUTO_TEST(http_utils_suite, tokenize_url)
@@ -496,7 +502,7 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation6_sockaddr)
 LT_END_AUTO_TEST(ip_representation6_sockaddr)
 
 LT_BEGIN_AUTO_TEST(http_utils_suite, load_file)
-    LT_CHECK_EQ(std::string(http::load_file("test_content")), "test content of file\n");
+    LT_CHECK_EQ(http::load_file("test_content"), "test content of file\n");
 LT_END_AUTO_TEST(load_file)
 
 LT_BEGIN_AUTO_TEST(http_utils_suite, load_file_invalid)

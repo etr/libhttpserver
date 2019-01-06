@@ -245,7 +245,9 @@ LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_assignment)
 
     LT_CHECK_NEQ(a.get_url_complete(), b.get_url_complete());
 
+    std::cout << "before assigning" << std::endl;
     b = a;
+    std::cout << "after assigning" << std::endl;
 
     LT_CHECK_EQ(a.get_url_complete(), b.get_url_complete());
     LT_CHECK_EQ(a.get_url_normalized(), b.get_url_normalized());

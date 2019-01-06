@@ -354,7 +354,7 @@ void dump_arg_map(std::ostream &os, const std::string &prefix,
  */
 size_t http_unescape (char *val);
 
-char* load_file (const char *filename);
+const std::string load_file (const std::string& filename);
 
 };
 };

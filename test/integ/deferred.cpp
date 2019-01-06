@@ -88,8 +88,8 @@ LT_BEGIN_SUITE(deferred_suite)
 LT_END_SUITE(deferred_suite)
 
 LT_BEGIN_AUTO_TEST(deferred_suite, deferred_response)
-    deferred_resource* resource = new deferred_resource();
-    ws->register_resource("base", resource);
+    deferred_resource resource;
+    ws->register_resource("base", &resource);
     curl_global_init(CURL_GLOBAL_ALL);
 
     std::string s;

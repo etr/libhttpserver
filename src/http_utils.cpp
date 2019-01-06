@@ -539,20 +539,18 @@ bool ip_representation::operator <(const ip_representation& b) const
     return this_score < b_score;
 }
 
-char* load_file (const char *filename)
+const std::string load_file (const std::string& filename)
 {
     ifstream fp(filename, ios::in | ios::binary | ios::ate);
     if(fp.is_open())
     {
-        fp.seekg(0, fp.end);
-        int size = fp.tellg();
-        fp.seekg(0, fp.beg);
+        std::string content;
 
-        char* content = new char[size + 1];
-        fp.read(content, size);
-        fp.close();
+        fp.seekg(0, std::ios::end);
+        content.reserve(fp.tellg());
+        fp.seekg(0, std::ios::beg);
 
-        content[size] = '\0';
+        content.assign((std::istreambuf_iterator<char>(fp)), std::istreambuf_iterator<char>());
         return content;
     }
     else

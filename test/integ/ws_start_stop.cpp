@@ -76,8 +76,8 @@ LT_END_SUITE(ws_start_stop_suite)
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, start_stop)
     {
     webserver ws = create_webserver(8080);
-    ok_resource* ok = new ok_resource();
-    ws.register_resource("base", ok);
+    ok_resource ok;
+    ws.register_resource("base", &ok);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -98,8 +98,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, start_stop)
 
     {
     webserver ws = create_webserver(8080).start_method(http::http_utils::INTERNAL_SELECT);
-    ok_resource* ok = new ok_resource();
-    ws.register_resource("base", ok);
+    ok_resource ok;
+    ws.register_resource("base", &ok);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -120,8 +120,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, start_stop)
 
     {
     webserver ws = create_webserver(8080).start_method(http::http_utils::THREAD_PER_CONNECTION);
-    ok_resource* ok = new ok_resource();
-    ws.register_resource("base", ok);
+    ok_resource ok;
+    ws.register_resource("base", &ok);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -144,8 +144,8 @@ LT_END_AUTO_TEST(start_stop)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, sweet_kill)
     webserver ws = create_webserver(8080);
-    ok_resource* ok = new ok_resource();
-    ws.register_resource("base", ok);
+    ok_resource ok;
+    ws.register_resource("base", &ok);
     ws.start(false);
 
     {
@@ -192,8 +192,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, disable_options)
         .no_regex_checking()
         .no_ban_system()
         .no_post_process();
-    ok_resource* ok = new ok_resource();
-    ws.register_resource("base", ok);
+    ok_resource ok;
+    ws.register_resource("base", &ok);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -220,8 +220,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, enable_options)
         .regex_checking()
         .ban_system()
         .post_process();
-    ok_resource* ok = new ok_resource();
-    ws.register_resource("base", ok);
+    ok_resource ok;
+    ws.register_resource("base", &ok);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -251,8 +251,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_socket)
     listen(fd, 10000);
 
     webserver ws = create_webserver(-1).bind_socket(fd); //whatever port here doesn't matter
-    ok_resource* ok = new ok_resource();
-    ws.register_resource("base", ok);
+    ok_resource ok;
+    ws.register_resource("base", &ok);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -273,8 +273,8 @@ LT_END_AUTO_TEST(custom_socket)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, single_resource)
     webserver ws = create_webserver(8080).single_resource();
-    ok_resource* ok = new ok_resource();
-    ws.register_resource("/", ok, true);
+    ok_resource ok;
+    ws.register_resource("/", &ok, true);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -295,9 +295,9 @@ LT_END_AUTO_TEST(single_resource)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, single_resource_not_default_resource)
     webserver ws = create_webserver(8080).single_resource();
-    ok_resource* ok = new ok_resource();
-    LT_CHECK_THROW(ws.register_resource("/other", ok, true));
-    LT_CHECK_THROW(ws.register_resource("/", ok, false));
+    ok_resource ok;
+    LT_CHECK_THROW(ws.register_resource("/other", &ok, true));
+    LT_CHECK_THROW(ws.register_resource("/", &ok, false));
     ws.start(false);
 
     ws.stop();
@@ -331,8 +331,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, tuning_options)
         .nonce_nc_size(10);
        ;
 
-    ok_resource* ok = new ok_resource();
-    ws.register_resource("base", ok);
+    ok_resource ok;
+    ws.register_resource("base", &ok);
     LT_CHECK_NOTHROW(ws.start(false));
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -357,8 +357,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_base)
         .https_mem_key("key.pem")
         .https_mem_cert("cert.pem");
 
-    ok_resource* ok = new ok_resource();
-    ws.register_resource("base", ok);
+    ok_resource ok;
+    ws.register_resource("base", &ok);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -386,8 +386,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_with_protocol_priorities)
         .https_mem_cert("cert.pem")
         .https_priorities("NONE:+VERS-TLS1.0:+AES-128-CBC:+SHA1:+RSA:+COMP-NULL");
 
-    ok_resource* ok = new ok_resource();
-    ws.register_resource("base", ok);
+    ok_resource ok;
+    ws.register_resource("base", &ok);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -415,8 +415,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_with_trust)
         .https_mem_cert("cert.pem")
         .https_mem_trust("test_root_ca.pem");
 
-    ok_resource* ok = new ok_resource();
-    ws.register_resource("base", ok);
+    ok_resource ok;
+    ws.register_resource("base", &ok);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -440,8 +440,8 @@ LT_END_AUTO_TEST(ssl_with_trust)
 void* start_ws_blocking(void* par)
 {
     webserver* ws = (webserver*) par;
-    ok_resource* ok = new ok_resource();
-    ws->register_resource("base", ok);
+    ok_resource ok;
+    ws->register_resource("base", &ok);
     ws->start(true);
 
     return 0x0;
@@ -453,12 +453,12 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, blocking_server)
     pthread_t tid;
     pthread_create(&tid, NULL, start_ws_blocking, (void *) &ws);
 
+    sleep(1);
+
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L); // avoid verifying ssl
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L); // avoid verifying ssl
     curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
@@ -480,8 +480,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_error_resources)
         .not_found_resource(not_found_custom)
         .method_not_allowed_resource(not_allowed_custom);
 
-    ok_resource* ok = new ok_resource();
-    ws.register_resource("base", ok);
+    ok_resource ok;
+    ws.register_resource("base", &ok);
     ws.start(false);
 
     {
@@ -520,7 +520,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_error_resources)
     }
 
     {
-    ok->set_allowing("PUT", false);
+    ok.set_allowing("PUT", false);
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;

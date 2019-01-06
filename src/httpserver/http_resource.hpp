@@ -60,6 +60,7 @@ class http_resource
         **/
         virtual ~http_resource()
         {
+            allowed_methods.clear();
         }
 
         /**
@@ -204,6 +205,7 @@ class http_resource
         {
             resource_init(allowed_methods);
         }
+
         /**
          * Copy constructor
         **/

@@ -91,8 +91,8 @@ LT_END_SUITE(authentication_suite)
 LT_BEGIN_AUTO_TEST(authentication_suite, base_auth)
     webserver ws = create_webserver(8080);
 
-    user_pass_resource* user_pass = new user_pass_resource();
-    ws.register_resource("base", user_pass);
+    user_pass_resource user_pass;
+    ws.register_resource("base", &user_pass);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -116,8 +116,8 @@ LT_END_AUTO_TEST(base_auth)
 LT_BEGIN_AUTO_TEST(authentication_suite, base_auth_fail)
     webserver ws = create_webserver(8080);
 
-    user_pass_resource* user_pass = new user_pass_resource();
-    ws.register_resource("base", user_pass);
+    user_pass_resource user_pass;
+    ws.register_resource("base", &user_pass);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -143,8 +143,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth)
         .digest_auth_random("myrandom")
         .nonce_nc_size(300);
 
-    digest_resource* digest = new digest_resource();
-    ws.register_resource("base", digest);
+    digest_resource digest;
+    ws.register_resource("base", &digest);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -174,8 +174,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_wrong_pass)
         .digest_auth_random("myrandom")
         .nonce_nc_size(300);
 
-    digest_resource* digest = new digest_resource();
-    ws.register_resource("base", digest);
+    digest_resource digest;
+    ws.register_resource("base", &digest);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);

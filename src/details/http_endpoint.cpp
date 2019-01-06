@@ -147,9 +147,13 @@ http_endpoint& http_endpoint::operator =(const http_endpoint& h)
     this->family_url = h.family_url;
     this->reg_compiled = h.reg_compiled;
     if(this->reg_compiled)
+    {
+        regfree(&(this->re_url_normalized));
+
         regcomp(&(this->re_url_normalized), url_normalized.c_str(),
                 REG_EXTENDED|REG_ICASE|REG_NOSUB
         );
+    }
     this->url_pars = h.url_pars;
     this->url_pieces = h.url_pieces;
     this->chunk_positions = h.chunk_positions;

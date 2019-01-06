@@ -58,11 +58,12 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, accept_default_ban_blocks)
     webserver ws = create_webserver(8080).default_policy(http_utils::ACCEPT);
     ws.start(false);
 
-    ok_resource* resource = new ok_resource();
-    ws.register_resource("base", resource);
+    ok_resource resource;
+    ws.register_resource("base", &resource);
+
+    curl_global_init(CURL_GLOBAL_ALL);
 
     {
-    curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
@@ -79,14 +80,10 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, accept_default_ban_blocks)
     {
     ws.ban_ip("127.0.0.1");
 
-    curl_global_init(CURL_GLOBAL_ALL);
-    std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
     curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
     res = curl_easy_perform(curl);
     LT_ASSERT_NEQ(res, 0);
     curl_easy_cleanup(curl);
@@ -95,7 +92,6 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, accept_default_ban_blocks)
     {
     ws.unban_ip("127.0.0.1");
 
-    curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
@@ -109,6 +105,7 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, accept_default_ban_blocks)
     curl_easy_cleanup(curl);
     }
 
+    curl_global_cleanup();
     ws.stop();
 LT_END_AUTO_TEST(accept_default_ban_blocks)
 
@@ -116,18 +113,16 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, reject_default_allow_passes)
     webserver ws = create_webserver(8080).default_policy(http_utils::REJECT);
     ws.start(false);
 
-    ok_resource* resource = new ok_resource();
-    ws.register_resource("base", resource);
+    ok_resource resource;
+    ws.register_resource("base", &resource);
+
+    curl_global_init(CURL_GLOBAL_ALL);
 
     {
-    curl_global_init(CURL_GLOBAL_ALL);
-    std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
     curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
     res = curl_easy_perform(curl);
     LT_ASSERT_NEQ(res, 0);
     curl_easy_cleanup(curl);
@@ -136,7 +131,6 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, reject_default_allow_passes)
     {
     ws.allow_ip("127.0.0.1");
 
-    curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
@@ -147,24 +141,22 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, reject_default_allow_passes)
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "OK");
+    curl_easy_cleanup(curl);
     }
 
     {
     ws.disallow_ip("127.0.0.1");
 
-    curl_global_init(CURL_GLOBAL_ALL);
-    std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
     curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
     res = curl_easy_perform(curl);
     LT_ASSERT_NEQ(res, 0);
     curl_easy_cleanup(curl);
     }
 
+    curl_global_cleanup();
     ws.stop();
 LT_END_AUTO_TEST(reject_default_allow_passes)
 

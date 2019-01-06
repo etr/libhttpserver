@@ -270,10 +270,10 @@ LT_BEGIN_AUTO_TEST(basic_suite, server_runs)
 LT_END_AUTO_TEST(server_runs)
 
 LT_BEGIN_AUTO_TEST(basic_suite, two_endpoints)
-    ok_resource* ok = new ok_resource();
-    ws->register_resource("OK", ok);
-    nok_resource* nok = new nok_resource();
-    ws->register_resource("NOK", nok);
+    ok_resource ok;
+    ws->register_resource("OK", &ok);
+    nok_resource nok;
+    ws->register_resource("NOK", &nok);
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -306,8 +306,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, two_endpoints)
 LT_END_AUTO_TEST(two_endpoints)
 
 LT_BEGIN_AUTO_TEST(basic_suite, read_body)
-    simple_resource* resource = new simple_resource();
-    ws->register_resource("base", resource);
+    simple_resource resource;
+    ws->register_resource("base", &resource);
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
     CURL *curl = curl_easy_init();
@@ -323,8 +323,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, read_body)
 LT_END_AUTO_TEST(read_body)
 
 LT_BEGIN_AUTO_TEST(basic_suite, read_long_body)
-    long_content_resource* resource = new long_content_resource();
-    ws->register_resource("base", resource);
+    long_content_resource resource;
+    ws->register_resource("base", &resource);
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
     CURL *curl = curl_easy_init();
@@ -340,8 +340,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, read_long_body)
 LT_END_AUTO_TEST(read_long_body)
 
 LT_BEGIN_AUTO_TEST(basic_suite, resource_setting_header)
-    header_set_test_resource* resource = new header_set_test_resource();
-    ws->register_resource("base", resource);
+    header_set_test_resource resource;
+    ws->register_resource("base", &resource);
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
     map<string, string> ss;
@@ -361,8 +361,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, resource_setting_header)
 LT_END_AUTO_TEST(resource_setting_header)
 
 LT_BEGIN_AUTO_TEST(basic_suite, resource_setting_cookie)
-    cookie_set_test_resource* resource = new cookie_set_test_resource();
-    ws->register_resource("base", resource);
+    cookie_set_test_resource resource;
+    ws->register_resource("base", &resource);
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
     CURL *curl = curl_easy_init();
@@ -382,15 +382,9 @@ LT_BEGIN_AUTO_TEST(basic_suite, resource_setting_cookie)
     LT_CHECK_EQ(s, "OK");
     std::string read_cookie = "";
 
-    if(!res && cookies)
-    {
-        read_cookie = cookies->data;
-        curl_slist_free_all(cookies);
-    }
-    else
-    {
-        LT_FAIL("No cookie being set");
-    }
+    read_cookie = cookies->data;
+    curl_slist_free_all(cookies);
+
     std::vector<std::string> cookie_parts = string_utilities::string_split(read_cookie, '\t', false);
     LT_CHECK_EQ(cookie_parts[5], "MyCookie");
     LT_CHECK_EQ(cookie_parts[6], "CookieValue");
@@ -399,8 +393,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, resource_setting_cookie)
 LT_END_AUTO_TEST(resource_setting_cookie)
 
 LT_BEGIN_AUTO_TEST(basic_suite, request_with_header)
-    header_reading_resource* resource = new header_reading_resource();
-    ws->register_resource("base", resource);
+    header_reading_resource resource;
+    ws->register_resource("base", &resource);
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
     CURL *curl = curl_easy_init();
@@ -422,8 +416,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, request_with_header)
 LT_END_AUTO_TEST(request_with_header)
 
 LT_BEGIN_AUTO_TEST(basic_suite, request_with_cookie)
-    cookie_reading_resource* resource = new cookie_reading_resource();
-    ws->register_resource("base", resource);
+    cookie_reading_resource resource;
+    ws->register_resource("base", &resource);
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
     CURL *curl = curl_easy_init();
@@ -440,8 +434,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, request_with_cookie)
 LT_END_AUTO_TEST(request_with_cookie)
 
 LT_BEGIN_AUTO_TEST(basic_suite, complete)
-    complete_test_resource* resource = new complete_test_resource();
-    ws->register_resource("base", resource);
+    complete_test_resource resource;
+    ws->register_resource("base", &resource);
     curl_global_init(CURL_GLOBAL_ALL);
 
     {
@@ -495,8 +489,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, complete)
 LT_END_AUTO_TEST(complete)
 
 LT_BEGIN_AUTO_TEST(basic_suite, only_render)
-    only_render_resource* resource = new only_render_resource();
-    ws->register_resource("base", resource);
+    only_render_resource resource;
+    ws->register_resource("base", &resource);
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
     CURL* curl;
@@ -574,8 +568,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, only_render)
 LT_END_AUTO_TEST(only_render)
 
 LT_BEGIN_AUTO_TEST(basic_suite, postprocessor)
-    simple_resource* resource = new simple_resource();
-    ws->register_resource("base", resource);
+    simple_resource resource;
+    ws->register_resource("base", &resource);
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
     CURL *curl = curl_easy_init();
@@ -591,8 +585,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, postprocessor)
 LT_END_AUTO_TEST(postprocessor)
 
 LT_BEGIN_AUTO_TEST(basic_suite, empty_arg)
-    simple_resource* resource = new simple_resource();
-    ws->register_resource("base", resource);
+    simple_resource resource;
+    ws->register_resource("base", &resource);
     curl_global_init(CURL_GLOBAL_ALL);
     CURL *curl = curl_easy_init();
     CURLcode res;
@@ -605,8 +599,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, empty_arg)
 LT_END_AUTO_TEST(empty_arg)
 
 LT_BEGIN_AUTO_TEST(basic_suite, no_response)
-    no_response_resource* resource = new no_response_resource();
-    ws->register_resource("base", resource);
+    no_response_resource resource;
+    ws->register_resource("base", &resource);
     curl_global_init(CURL_GLOBAL_ALL);
 
     CURL* curl = curl_easy_init();
@@ -621,8 +615,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, no_response)
 LT_END_AUTO_TEST(no_response)
 
 LT_BEGIN_AUTO_TEST(basic_suite, regex_matching)
-    simple_resource* resource = new simple_resource();
-    ws->register_resource("regex/matching/number/[0-9]+", resource);
+    simple_resource resource;
+    ws->register_resource("regex/matching/number/[0-9]+", &resource);
     curl_global_init(CURL_GLOBAL_ALL);
 
     std::string s;
@@ -639,8 +633,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, regex_matching)
 LT_END_AUTO_TEST(regex_matching)
 
 LT_BEGIN_AUTO_TEST(basic_suite, regex_matching_arg)
-    args_resource* resource = new args_resource();
-    ws->register_resource("this/captures/{arg}/passed/in/input", resource);
+    args_resource resource;
+    ws->register_resource("this/captures/{arg}/passed/in/input", &resource);
     curl_global_init(CURL_GLOBAL_ALL);
 
     std::string s;
@@ -657,8 +651,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, regex_matching_arg)
 LT_END_AUTO_TEST(regex_matching_arg)
 
 LT_BEGIN_AUTO_TEST(basic_suite, regex_matching_arg_custom)
-    args_resource* resource = new args_resource();
-    ws->register_resource("this/captures/numeric/{arg|([0-9]+)}/passed/in/input", resource);
+    args_resource resource;
+    ws->register_resource("this/captures/numeric/{arg|([0-9]+)}/passed/in/input", &resource);
     curl_global_init(CURL_GLOBAL_ALL);
 
     {
@@ -694,8 +688,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, regex_matching_arg_custom)
 LT_END_AUTO_TEST(regex_matching_arg_custom)
 
 LT_BEGIN_AUTO_TEST(basic_suite, querystring_processing)
-    args_resource* resource = new args_resource();
-    ws->register_resource("this/captures/args/passed/in/the/querystring", resource);
+    args_resource resource;
+    ws->register_resource("this/captures/args/passed/in/the/querystring", &resource);
     curl_global_init(CURL_GLOBAL_ALL);
 
     std::string s;
@@ -712,8 +706,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, querystring_processing)
 LT_END_AUTO_TEST(querystring_processing)
 
 LT_BEGIN_AUTO_TEST(basic_suite, register_unregister)
-    simple_resource* resource = new simple_resource();
-    ws->register_resource("base", resource);
+    simple_resource resource;
+    ws->register_resource("base", &resource);
     curl_global_init(CURL_GLOBAL_ALL);
 
     {
@@ -751,7 +745,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, register_unregister)
     curl_easy_cleanup(curl);
     }
 
-    ws->register_resource("base", resource);
+    ws->register_resource("base", &resource);
     {
     std::string s;
     CURL *curl = curl_easy_init();
@@ -768,8 +762,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, register_unregister)
 LT_END_AUTO_TEST(register_unregister)
 
 LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource)
-    file_response_resource* resource = new file_response_resource();
-    ws->register_resource("base", resource);
+    file_response_resource resource;
+    ws->register_resource("base", &resource);
     curl_global_init(CURL_GLOBAL_ALL);
 
     std::string s;
@@ -786,8 +780,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource)
 LT_END_AUTO_TEST(file_serving_resource)
 
 LT_BEGIN_AUTO_TEST(basic_suite, exception_forces_500)
-    exception_resource* resource = new exception_resource();
-    ws->register_resource("base", resource);
+    exception_resource resource;
+    ws->register_resource("base", &resource);
     curl_global_init(CURL_GLOBAL_ALL);
 
     std::string s;
@@ -809,8 +803,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, exception_forces_500)
 LT_END_AUTO_TEST(exception_forces_500)
 
 LT_BEGIN_AUTO_TEST(basic_suite, untyped_error_forces_500)
-    error_resource* resource = new error_resource();
-    ws->register_resource("base", resource);
+    error_resource resource;
+    ws->register_resource("base", &resource);
     curl_global_init(CURL_GLOBAL_ALL);
 
     std::string s;
@@ -833,8 +827,8 @@ LT_END_AUTO_TEST(untyped_error_forces_500)
 
 LT_BEGIN_AUTO_TEST(basic_suite, request_is_printable)
     std::stringstream ss;
-    print_request_resource* resource = new print_request_resource(&ss);
-    ws->register_resource("base", resource);
+    print_request_resource resource(&ss);
+    ws->register_resource("base", &resource);
     curl_global_init(CURL_GLOBAL_ALL);
 
     std::string s;
@@ -846,10 +840,12 @@ LT_BEGIN_AUTO_TEST(basic_suite, request_is_printable)
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
 
     struct curl_slist *list = NULL;
-    list = curl_slist_append(list, "MyHeader: MyValue");
+    list = curl_slist_append(NULL, "MyHeader: MyValue");
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, list);
 
     res = curl_easy_perform(curl);
+    curl_slist_free_all(list);
+
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "OK");
 
@@ -866,8 +862,8 @@ LT_END_AUTO_TEST(request_is_printable)
 
 LT_BEGIN_AUTO_TEST(basic_suite, response_is_printable)
     std::stringstream ss;
-    print_response_resource* resource = new print_response_resource(&ss);
-    ws->register_resource("base", resource);
+    print_response_resource resource(&ss);
+    ws->register_resource("base", &resource);
     curl_global_init(CURL_GLOBAL_ALL);
 
     std::string s;
@@ -879,10 +875,12 @@ LT_BEGIN_AUTO_TEST(basic_suite, response_is_printable)
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
 
     struct curl_slist *list = NULL;
-    list = curl_slist_append(list, "MyHeader: MyValue");
+    list = curl_slist_append(NULL, "MyHeader: MyValue");
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, list);
 
     res = curl_easy_perform(curl);
+    curl_slist_free_all(list);
+
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "OK");
 
