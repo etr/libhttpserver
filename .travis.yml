@@ -108,7 +108,6 @@ matrix:
       env:
          - MATRIX_EVAL="CC=gcc-5 && CXX=g++-5"
     - os: linux
-      compiler: gcc
       addons:
         apt:
           sources:
@@ -116,7 +115,6 @@ matrix:
       env:
          - MATRIX_EVAL="BUILD_TYPE=asan"
     - os: linux
-      compiler: gcc
       addons:
         apt:
           sources:
@@ -124,7 +122,6 @@ matrix:
       env:
          - MATRIX_EVAL="BUILD_TYPE=asanpc"
     - os: linux
-      compiler: gcc
       addons:
         apt:
           sources:
@@ -132,7 +129,6 @@ matrix:
       env:
          - MATRIX_EVAL="BUILD_TYPE=asanps"
     - os: linux
-      compiler: gcc
       addons:
         apt:
           sources:
@@ -140,7 +136,6 @@ matrix:
       env:
          - MATRIX_EVAL="BUILD_TYPE=lsan"
     - os: linux
-      compiler: gcc
       addons:
         apt:
           sources:
@@ -148,7 +143,6 @@ matrix:
       env:
          - MATRIX_EVAL="BUILD_TYPE=tsan"
     - os: linux
-      compiler: gcc
       addons:
         apt:
           sources:
@@ -285,14 +279,8 @@ matrix:
     - env: MATRIX_EVAL="CROSS_COMPILE=1 && ARM_ARCH_DIR=arm-linux-gnueabi && CC=arm-linux-gnueabi-gcc"
     - env: MATRIX_EVAL="CROSS_COMPILE=1 && ARM_LD_PATH=$HOME/linker_bin && ARM_ARCH_DIR=aarch64-linux-gnu"
     - env: MATRIX_EVAL="BUILD_TYPE=asan"
-      compiler: gcc
     - env: MATRIX_EVAL="BUILD_TYPE=asanpc"
-      compiler: gcc
     - env: MATRIX_EVAL="BUILD_TYPE=asanps"
-      compiler: gcc
     - env: MATRIX_EVAL="BUILD_TYPE=lsan"
-      compiler: gcc
     - env: MATRIX_EVAL="BUILD_TYPE=tsan"
-      compiler: gcc
     - env: MATRIX_EVAL="BUILD_TYPE=ubsan"
-      compiler: gcc
