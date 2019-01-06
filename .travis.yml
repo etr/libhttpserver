@@ -104,6 +104,14 @@ matrix:
             - ubuntu-toolchain-r-test
           packages:
             - g++-7
+            - libasan4
+            - libasan4-dbg
+            - libtsan0
+            - libtsan0-dbg
+            - liblsan0
+            - liblsan0-dbg
+            - libubsan0
+            - libubsan0-dbg
       env: MATRIX_EVAL="BUILD_TYPE=asan && CC=gcc-7 && CXX=g++-7 && DEBUG=debug"
     - os: linux
       addons:
@@ -112,6 +120,14 @@ matrix:
             - ubuntu-toolchain-r-test
           packages:
             - g++-7
+            - libasan4
+            - libasan4-dbg
+            - libtsan0
+            - libtsan0-dbg
+            - liblsan0
+            - liblsan0-dbg
+            - libubsan0
+            - libubsan0-dbg
       env: MATRIX_EVAL="BUILD_TYPE=asanpc && CC=gcc-7 && CXX=g++-7 && DEBUG=debug"
     - os: linux
       addons:
@@ -120,6 +136,14 @@ matrix:
             - ubuntu-toolchain-r-test
           packages:
             - g++-7
+            - libasan4
+            - libasan4-dbg
+            - libtsan0
+            - libtsan0-dbg
+            - liblsan0
+            - liblsan0-dbg
+            - libubsan0
+            - libubsan0-dbg
       env: MATRIX_EVAL="BUILD_TYPE=asanps && CC=gcc-7 && CXX=g++-7 && DEBUG=debug"
     - os: linux
       addons:
@@ -128,6 +152,14 @@ matrix:
             - ubuntu-toolchain-r-test
           packages:
             - g++-7
+            - libasan4
+            - libasan4-dbg
+            - libtsan0
+            - libtsan0-dbg
+            - liblsan0
+            - liblsan0-dbg
+            - libubsan0
+            - libubsan0-dbg
       env: MATRIX_EVAL="BUILD_TYPE=lsan && CC=gcc-7 && CXX=g++-7 && DEBUG=debug"
     - os: linux
       addons:
@@ -136,6 +168,14 @@ matrix:
             - ubuntu-toolchain-r-test
           packages:
             - g++-7
+            - libasan4
+            - libasan4-dbg
+            - libtsan0
+            - libtsan0-dbg
+            - liblsan0
+            - liblsan0-dbg
+            - libubsan0
+            - libubsan0-dbg
       env: MATRIX_EVAL="BUILD_TYPE=tsan && CC=gcc-7 && CXX=g++-7 && DEBUG=debug"
     - os: linux
       addons:
@@ -144,6 +184,14 @@ matrix:
             - ubuntu-toolchain-r-test
           packages:
             - g++-7
+            - libasan4
+            - libasan4-dbg
+            - libtsan0
+            - libtsan0-dbg
+            - liblsan0
+            - liblsan0-dbg
+            - libubsan0
+            - libubsan0-dbg
       env: MATRIX_EVAL="BUILD_TYPE=ubsan && CC=gcc-7 && CXX=g++-7 && DEBUG=debug"
     - os: linux
       addons:
