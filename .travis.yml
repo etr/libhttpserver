@@ -112,43 +112,37 @@ matrix:
         apt:
           sources:
             - ubuntu-toolchain-r-test
-      env:
-         - MATRIX_EVAL="BUILD_TYPE=asan"
+      env: MATRIX_EVAL="BUILD_TYPE=asan"
     - os: linux
       addons:
         apt:
           sources:
             - ubuntu-toolchain-r-test
-      env:
-         - MATRIX_EVAL="BUILD_TYPE=asanpc"
+      env: MATRIX_EVAL="BUILD_TYPE=asanpc"
     - os: linux
       addons:
         apt:
           sources:
             - ubuntu-toolchain-r-test
-      env:
-         - MATRIX_EVAL="BUILD_TYPE=asanps"
+      env: MATRIX_EVAL="BUILD_TYPE=asanps"
     - os: linux
       addons:
         apt:
           sources:
             - ubuntu-toolchain-r-test
-      env:
-         - MATRIX_EVAL="BUILD_TYPE=lsan"
+      env: MATRIX_EVAL="BUILD_TYPE=lsan"
     - os: linux
       addons:
         apt:
           sources:
             - ubuntu-toolchain-r-test
-      env:
-         - MATRIX_EVAL="BUILD_TYPE=tsan"
+      env: MATRIX_EVAL="BUILD_TYPE=tsan"
     - os: linux
       addons:
         apt:
           sources:
             - ubuntu-toolchain-r-test
-      env:
-         - MATRIX_EVAL="BUILD_TYPE=ubsan"
+      env: MATRIX_EVAL="BUILD_TYPE=ubsan"
     - os: linux
       addons:
         apt:
