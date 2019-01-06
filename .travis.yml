@@ -281,8 +281,3 @@ matrix:
   allow_failures:
     - env: MATRIX_EVAL="CROSS_COMPILE=1 && ARM_ARCH_DIR=arm-linux-gnueabi && CC=arm-linux-gnueabi-gcc"
     - env: MATRIX_EVAL="CROSS_COMPILE=1 && ARM_LD_PATH=$HOME/linker_bin && ARM_ARCH_DIR=aarch64-linux-gnu"
-    - env: MATRIX_EVAL="BUILD_TYPE=asan && CC=clang-3.8 && CXX=clang++-3.8 && DEBUG=debug && COVERAGE=nocoverage"
-    - env: MATRIX_EVAL="BUILD_TYPE=msan && CC=clang-3.8 && CXX=clang++-3.8 && DEBUG=debug && COVERAGE=nocoverage"
-    - env: MATRIX_EVAL="BUILD_TYPE=lsan && CC=clang-3.8 && CXX=clang++-3.8 && DEBUG=debug && COVERAGE=nocoverage"
-    - env: MATRIX_EVAL="BUILD_TYPE=tsan && CC=clang-3.8 && CXX=clang++-3.8 && DEBUG=debug && COVERAGE=nocoverage"
-    - env: MATRIX_EVAL="BUILD_TYPE=ubsan && CC=clang-3.8 && CXX=clang++-3.8 && DEBUG=debug && COVERAGE=nocoverage"
