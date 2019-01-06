@@ -966,7 +966,6 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
             );
     }
 
-    mr->standardized_url = new string();
     internal_unescaper((void*) static_cast<webserver*>(cls), (char*) url);
     mr->standardized_url = new string(http_utils::standardize_url(url));
 
