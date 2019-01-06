@@ -6,8 +6,8 @@ compiler:
  - gcc
  - clang
 env:
- - DEBUG="debug"
- - DEBUG="nodebug"
+ - DEBUG="debug" COVEAGE="coverage"
+ - DEBUG="nodebug" COVERAGE="nocoverage"
  - LINKING="static"
 before_install:
  - eval "${MATRIX_EVAL}"
@@ -47,6 +47,8 @@ install:
  - cd build
  - if [ "$LINKING" = "static" ]; then
      ../configure --enable-static --disable-fastopen;
+   elif [ "$DEBUG" = "debug" ] && [ "$COVERAGE" = "coverage" ]; then
+     ../configure --enable-debug --enable-coverage --disable-shared --disable-fastopen;
    elif [ "$DEBUG" = "debug" ]; then
      ../configure --enable-debug --disable-shared --disable-fastopen;
    elif [ "$CROSS_COMPILE" = "1" ] && [ "$ARM_ARCH_DIR" = "aarch64-linux-gnu" ]; then 
@@ -88,11 +90,11 @@ script:
      if [ "$TRAVIS_OS_NAME" = "linux" ]; then cd ../src/; cppcheck --error-exitcode=1 .; cd ../build; fi
    fi
 after_success:
-  - if [ "$DEBUG" = "debug" ] && [ "$TRAVIS_OS_NAME" = "linux" ]; then bash <(curl -s https://codecov.io/bash); fi
+  - if [ "$DEBUG" = "debug" ] && [ "$COVERAGE" = "coverage" ] && [ "$TRAVIS_OS_NAME" = "linux" ]; then bash <(curl -s https://codecov.io/bash); fi
 matrix:
   exclude:
     - compiler: clang
-      env: DEBUG="debug"
+      env: DEBUG="debug" COVERAGE="coverage"
     - compiler: clang
       env: LINKING='static'
   include:
@@ -104,7 +106,7 @@ matrix:
             - llvm-toolchain-precise-3.8
           packages:
             - clang-3.8
-      env: MATRIX_EVAL="BUILD_TYPE=asan && CC=clang-3.8 && CXX=clang++-3.8 && DEBUG=debug"
+      env: MATRIX_EVAL="BUILD_TYPE=asan && CC=clang-3.8 && CXX=clang++-3.8 && DEBUG=debug COVERAGE=nocoverage"
     - os: linux
       addons:
         apt:
@@ -113,7 +115,7 @@ matrix:
             - llvm-toolchain-precise-3.8
           packages:
             - clang-3.8
-      env: MATRIX_EVAL="BUILD_TYPE=msan && CC=clang-3.8 && CXX=clang++-3.8 && DEBUG=debug"
+      env: MATRIX_EVAL="BUILD_TYPE=msan && CC=clang-3.8 && CXX=clang++-3.8 && DEBUG=debug COVERAGE=nocoverage"
     - os: linux
       addons:
         apt:
@@ -122,7 +124,7 @@ matrix:
             - llvm-toolchain-precise-3.8
           packages:
             - clang-3.8
-      env: MATRIX_EVAL="BUILD_TYPE=lsan && CC=clang-3.8 && CXX=clang++-3.8 && DEBUG=debug"
+      env: MATRIX_EVAL="BUILD_TYPE=lsan && CC=clang-3.8 && CXX=clang++-3.8 && DEBUG=debug COVERAGE=nocoverage"
     - os: linux
       addons:
         apt:
@@ -131,7 +133,7 @@ matrix:
             - llvm-toolchain-precise-3.8
           packages:
             - clang-3.8
-      env: MATRIX_EVAL="BUILD_TYPE=tsan && CC=clang-3.8 && CXX=clang++-3.8 && DEBUG=debug"
+      env: MATRIX_EVAL="BUILD_TYPE=tsan && CC=clang-3.8 && CXX=clang++-3.8 && DEBUG=debug COVERAGE=nocoverage"
     - os: linux
       addons:
         apt:
@@ -140,7 +142,7 @@ matrix:
             - llvm-toolchain-precise-3.8
           packages:
             - clang-3.8
-      env: MATRIX_EVAL="BUILD_TYPE=ubsan && CC=clang-3.8 && CXX=clang++-3.8 && DEBUG=debug"
+      env: MATRIX_EVAL="BUILD_TYPE=ubsan && CC=clang-3.8 && CXX=clang++-3.8 && DEBUG=debug COVERAGE=nocoverage"
     - os: linux
       addons:
         apt:
