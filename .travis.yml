@@ -55,6 +55,13 @@ install:
  - if [ "$CROSS_COMPILE" = "1" ] && [ "$ARM_ARCH_DIR" = "aarch64-linux-gnu" ]; then sed -i 's+/usr/bin/ld+$HOME/linker_bin/ld+g' Makefile; fi
  - make
  - make check TESTS=
+before_script:
+ - if [ "$BUILD_TYPE" = "asan" ]; then export CFLAGS='-fsanitize=address'; export LDFLAGS='-fsanitize=address'; fi
+ - if [ "$BUILD_TYPE" = "asanpc" ]; then export CFLAGS='-fsanitize=address -fsanitize=pointer-compare'; export LDFLAGS='-fsanitize=address -fsanitize=pointer-compare'; fi
+ - if [ "$BUILD_TYPE" = "asanps" ]; then export CFLAGS='-fsanitize=address -fsanitize=pointer-subtract'; export LDFLAGS='-fsanitize=address -fsanitize=pointer-subtract'; fi
+ - if [ "$BUILD_TYPE" = "lsan" ]; then export CFLAGS='-fsanitize=leak'; export LDFLAGS='-fsanitize=leak'; fi
+ - if [ "$BUILD_TYPE" = "tsan" ]; then export CFLAGS='-fsanitize=thread'; export LDFLAGS='-fsanitize=thread'; fi
+ - if [ "$BUILD_TYPE" = "ubsan" ]; then export export CFLAGS='-fsanitize=undefined'; export LDFLAGS='-fsanitize=undefined'; fi
 script:
  - if [[ "$CROSS_COMPILE" == 1 ]]; then
      cd test ;
@@ -100,6 +107,54 @@ matrix:
             - g++-5
       env:
          - MATRIX_EVAL="CC=gcc-5 && CXX=g++-5"
+    - os: linux
+      compiler: gcc
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+      env:
+         - BUILD_TYPE=asan
+    - os: linux
+      compiler: gcc
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+      env:
+         - BUILD_TYPE=asanpc
+    - os: linux
+      compiler: gcc
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+      env:
+         - BUILD_TYPE=asanps
+    - os: linux
+      compiler: gcc
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+      env:
+         - BUILD_TYPE=lsan
+    - os: linux
+      compiler: gcc
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+      env:
+         - BUILD_TYPE=tsan
+    - os: linux
+      compiler: gcc
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+      env:
+         - BUILD_TYPE=ubsan
     - os: linux
       addons:
         apt:
@@ -229,3 +284,9 @@ matrix:
   allow_failures:
     - env: MATRIX_EVAL="CROSS_COMPILE=1 && ARM_ARCH_DIR=arm-linux-gnueabi && CC=arm-linux-gnueabi-gcc"
     - env: MATRIX_EVAL="CROSS_COMPILE=1 && ARM_LD_PATH=$HOME/linker_bin && ARM_ARCH_DIR=aarch64-linux-gnu"
+    - env: BUILD_TYPE=asan
+    - env: BUILD_TYPE=asanpc
+    - env: BUILD_TYPE=asanps
+    - env: BUILD_TYPE=lsan
+    - env: BUILD_TYPE=tsan
+    - env: BUILD_TYPE=ubsan
