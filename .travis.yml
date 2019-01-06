@@ -285,8 +285,14 @@ matrix:
     - env: MATRIX_EVAL="CROSS_COMPILE=1 && ARM_ARCH_DIR=arm-linux-gnueabi && CC=arm-linux-gnueabi-gcc"
     - env: MATRIX_EVAL="CROSS_COMPILE=1 && ARM_LD_PATH=$HOME/linker_bin && ARM_ARCH_DIR=aarch64-linux-gnu"
     - env: MATRIX_EVAL="BUILD_TYPE=asan"
+      compiler: gcc
     - env: MATRIX_EVAL="BUILD_TYPE=asanpc"
+      compiler: gcc
     - env: MATRIX_EVAL="BUILD_TYPE=asanps"
+      compiler: gcc
     - env: MATRIX_EVAL="BUILD_TYPE=lsan"
+      compiler: gcc
     - env: MATRIX_EVAL="BUILD_TYPE=tsan"
+      compiler: gcc
     - env: MATRIX_EVAL="BUILD_TYPE=ubsan"
+      compiler: gcc
