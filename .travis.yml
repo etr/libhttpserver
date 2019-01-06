@@ -6,7 +6,7 @@ compiler:
  - gcc
  - clang
 env:
- - DEBUG="debug" COVEAGE="coverage"
+ - DEBUG="debug" COVERAGE="coverage"
  - DEBUG="nodebug" COVERAGE="nocoverage"
  - LINKING="static"
 before_install:
