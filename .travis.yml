@@ -103,45 +103,57 @@ matrix:
           sources:
             - ubuntu-toolchain-r-test
           packages:
+            - g++-7
+      env: MATRIX_EVAL="BUILD_TYPE=asan CC=gcc-7 && CXX=g++-7 DEBUG=debug"
+    - os: linux
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-7
+      env: MATRIX_EVAL="BUILD_TYPE=asanpc CC=gcc-7 && CXX=g++-7 DEBUG=debug"
+    - os: linux
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-7
+      env: MATRIX_EVAL="BUILD_TYPE=asanps CC=gcc-7 && CXX=g++-7 DEBUG=debug"
+    - os: linux
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-7
+      env: MATRIX_EVAL="BUILD_TYPE=lsan CC=gcc-7 && CXX=g++-7 DEBUG=debug"
+    - os: linux
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-7
+      env: MATRIX_EVAL="BUILD_TYPE=tsan CC=gcc-7 && CXX=g++-7 DEBUG=debug"
+    - os: linux
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-7
+      env: MATRIX_EVAL="BUILD_TYPE=ubsan CC=gcc-7 && CXX=g++-7 DEBUG=debug"
+    - os: linux
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
             - g++-5
       env:
          - MATRIX_EVAL="CC=gcc-5 && CXX=g++-5"
-    - os: linux
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-      env: MATRIX_EVAL="BUILD_TYPE=asan"
-    - os: linux
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-      env: MATRIX_EVAL="BUILD_TYPE=asanpc"
-    - os: linux
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-      env: MATRIX_EVAL="BUILD_TYPE=asanps"
-    - os: linux
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-      env: MATRIX_EVAL="BUILD_TYPE=lsan"
-    - os: linux
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-      env: MATRIX_EVAL="BUILD_TYPE=tsan"
-    - os: linux
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-      env: MATRIX_EVAL="BUILD_TYPE=ubsan"
     - os: linux
       addons:
         apt:
@@ -271,9 +283,9 @@ matrix:
   allow_failures:
     - env: MATRIX_EVAL="CROSS_COMPILE=1 && ARM_ARCH_DIR=arm-linux-gnueabi && CC=arm-linux-gnueabi-gcc"
     - env: MATRIX_EVAL="CROSS_COMPILE=1 && ARM_LD_PATH=$HOME/linker_bin && ARM_ARCH_DIR=aarch64-linux-gnu"
-    - env: MATRIX_EVAL="BUILD_TYPE=asan"
-    - env: MATRIX_EVAL="BUILD_TYPE=asanpc"
-    - env: MATRIX_EVAL="BUILD_TYPE=asanps"
-    - env: MATRIX_EVAL="BUILD_TYPE=lsan"
-    - env: MATRIX_EVAL="BUILD_TYPE=tsan"
-    - env: MATRIX_EVAL="BUILD_TYPE=ubsan"
+    - env: MATRIX_EVAL="BUILD_TYPE=asan CC=gcc-7 && CXX=g++-7 DEBUG=debug"
+    - env: MATRIX_EVAL="BUILD_TYPE=asanpc CC=gcc-7 && CXX=g++-7 DEBUG=debug"
+    - env: MATRIX_EVAL="BUILD_TYPE=asanps CC=gcc-7 && CXX=g++-7 DEBUG=debug"
+    - env: MATRIX_EVAL="BUILD_TYPE=lsan CC=gcc-7 && CXX=g++-7 DEBUG=debug"
+    - env: MATRIX_EVAL="BUILD_TYPE=tsan CC=gcc-7 && CXX=g++-7 DEBUG=debug"
+    - env: MATRIX_EVAL="BUILD_TYPE=ubsan CC=gcc-7 && CXX=g++-7 DEBUG=debug"
