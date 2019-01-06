@@ -114,7 +114,7 @@ matrix:
           sources:
             - ubuntu-toolchain-r-test
       env:
-         - BUILD_TYPE=asan
+         - MATRIX_EVAL="BUILD_TYPE=asan"
     - os: linux
       compiler: gcc
       addons:
@@ -122,7 +122,7 @@ matrix:
           sources:
             - ubuntu-toolchain-r-test
       env:
-         - BUILD_TYPE=asanpc
+         - MATRIX_EVAL="BUILD_TYPE=asanpc"
     - os: linux
       compiler: gcc
       addons:
@@ -130,7 +130,7 @@ matrix:
           sources:
             - ubuntu-toolchain-r-test
       env:
-         - BUILD_TYPE=asanps
+         - MATRIX_EVAL="BUILD_TYPE=asanps"
     - os: linux
       compiler: gcc
       addons:
@@ -138,7 +138,7 @@ matrix:
           sources:
             - ubuntu-toolchain-r-test
       env:
-         - BUILD_TYPE=lsan
+         - MATRIX_EVAL="BUILD_TYPE=lsan"
     - os: linux
       compiler: gcc
       addons:
@@ -146,7 +146,7 @@ matrix:
           sources:
             - ubuntu-toolchain-r-test
       env:
-         - BUILD_TYPE=tsan
+         - MATRIX_EVAL="BUILD_TYPE=tsan"
     - os: linux
       compiler: gcc
       addons:
@@ -154,7 +154,7 @@ matrix:
           sources:
             - ubuntu-toolchain-r-test
       env:
-         - BUILD_TYPE=ubsan
+         - MATRIX_EVAL="BUILD_TYPE=ubsan"
     - os: linux
       addons:
         apt:
@@ -284,9 +284,9 @@ matrix:
   allow_failures:
     - env: MATRIX_EVAL="CROSS_COMPILE=1 && ARM_ARCH_DIR=arm-linux-gnueabi && CC=arm-linux-gnueabi-gcc"
     - env: MATRIX_EVAL="CROSS_COMPILE=1 && ARM_LD_PATH=$HOME/linker_bin && ARM_ARCH_DIR=aarch64-linux-gnu"
-    - env: BUILD_TYPE=asan
-    - env: BUILD_TYPE=asanpc
-    - env: BUILD_TYPE=asanps
-    - env: BUILD_TYPE=lsan
-    - env: BUILD_TYPE=tsan
-    - env: BUILD_TYPE=ubsan
+    - env: MATRIX_EVAL="BUILD_TYPE=asan"
+    - env: MATRIX_EVAL="BUILD_TYPE=asanpc"
+    - env: MATRIX_EVAL="BUILD_TYPE=asanps"
+    - env: MATRIX_EVAL="BUILD_TYPE=lsan"
+    - env: MATRIX_EVAL="BUILD_TYPE=tsan"
+    - env: MATRIX_EVAL="BUILD_TYPE=ubsan"
