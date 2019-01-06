@@ -11,6 +11,7 @@ Copyright (C)  2014  Sebastiano Merlino.
 The libhttpserver (0.8.0) reference manual
 ==========================================
 
+[![Codacy Badge](https://api.codacy.com/project/badge/Grade/c86bf908e84a46068a316276ccb0ded0)](https://app.codacy.com/app/etr/libhttpserver?utm_source=github.com&utm_medium=referral&utm_content=etr/libhttpserver&utm_campaign=Badge_Grade_Dashboard)
 [![Build Status](https://travis-ci.org/etr/libhttpserver.png?branch=master)](https://travis-ci.org/etr/libhttpserver)
 [![codecov](https://codecov.io/gh/etr/libhttpserver/branch/master/graph/badge.svg)](https://codecov.io/gh/etr/libhttpserver)
 
