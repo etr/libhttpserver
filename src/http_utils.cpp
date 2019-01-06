@@ -541,14 +541,14 @@ bool ip_representation::operator <(const ip_representation& b) const
 
 const std::string load_file (const std::string& filename)
 {
-    ifstream fp(filename, ios::in | ios::binary | ios::ate);
+    ifstream fp(filename.c_str(), ios::in | ios::binary | ios::ate);
     if(fp.is_open())
     {
         std::string content;
 
-        fp.seekg(0, std::ios::end);
+        fp.seekg(0, fp.end);
         content.reserve(fp.tellg());
-        fp.seekg(0, std::ios::beg);
+        fp.seekg(0, fp.beg);
 
         content.assign((std::istreambuf_iterator<char>(fp)), std::istreambuf_iterator<char>());
         return content;
