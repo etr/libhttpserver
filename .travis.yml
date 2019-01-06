@@ -27,6 +27,12 @@ before_install:
  - make
  - sudo make install
  - cd ..
+ - if [ "$BUILD_TYPE" = "asan" ]; then export CFLAGS='-fsanitize=address'; export LDFLAGS='-fsanitize=address'; fi
+ - if [ "$BUILD_TYPE" = "asanpc" ]; then export CFLAGS='-fsanitize=address -fsanitize=pointer-compare'; export LDFLAGS='-fsanitize=address -fsanitize=pointer-compare'; fi
+ - if [ "$BUILD_TYPE" = "asanps" ]; then export CFLAGS='-fsanitize=address -fsanitize=pointer-subtract'; export LDFLAGS='-fsanitize=address -fsanitize=pointer-subtract'; fi
+ - if [ "$BUILD_TYPE" = "lsan" ]; then export CFLAGS='-fsanitize=leak'; export LDFLAGS='-fsanitize=leak'; fi
+ - if [ "$BUILD_TYPE" = "tsan" ]; then export CFLAGS='-fsanitize=thread'; export LDFLAGS='-fsanitize=thread'; fi
+ - if [ "$BUILD_TYPE" = "ubsan" ]; then export export CFLAGS='-fsanitize=undefined'; export LDFLAGS='-fsanitize=undefined'; fi
 install:
  - if [[ "$CROSS_COMPILE" == 1 ]] ; then
      if [[ "$ARM_ARCH_DIR" == "aarch64-linux-gnu" ]] ; then
@@ -55,13 +61,6 @@ install:
  - if [ "$CROSS_COMPILE" = "1" ] && [ "$ARM_ARCH_DIR" = "aarch64-linux-gnu" ]; then sed -i 's+/usr/bin/ld+$HOME/linker_bin/ld+g' Makefile; fi
  - make
  - make check TESTS=
-before_script:
- - if [ "$BUILD_TYPE" = "asan" ]; then export CFLAGS='-fsanitize=address'; export LDFLAGS='-fsanitize=address'; fi
- - if [ "$BUILD_TYPE" = "asanpc" ]; then export CFLAGS='-fsanitize=address -fsanitize=pointer-compare'; export LDFLAGS='-fsanitize=address -fsanitize=pointer-compare'; fi
- - if [ "$BUILD_TYPE" = "asanps" ]; then export CFLAGS='-fsanitize=address -fsanitize=pointer-subtract'; export LDFLAGS='-fsanitize=address -fsanitize=pointer-subtract'; fi
- - if [ "$BUILD_TYPE" = "lsan" ]; then export CFLAGS='-fsanitize=leak'; export LDFLAGS='-fsanitize=leak'; fi
- - if [ "$BUILD_TYPE" = "tsan" ]; then export CFLAGS='-fsanitize=thread'; export LDFLAGS='-fsanitize=thread'; fi
- - if [ "$BUILD_TYPE" = "ubsan" ]; then export export CFLAGS='-fsanitize=undefined'; export LDFLAGS='-fsanitize=undefined'; fi
 script:
  - if [[ "$CROSS_COMPILE" == 1 ]]; then
      cd test ;
