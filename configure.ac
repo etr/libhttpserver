@@ -246,6 +246,24 @@ AC_MSG_RESULT([$debugit])
 AM_LDFLAGS="-lstdc++"
 
 if test x"$debugit" = x"yes"; then
+    AC_DEFINE([DEBUG],[],[Debug Mode])
+    AM_CXXFLAGS="$AM_CXXFLAGS -DDEBUG -g -Wall -Wno-uninitialized -O0"
+    AM_CFLAGS="$AM_CXXFLAGS -DDEBUG -g -Wall -Wno-uninitialized -O0"
+else
+    AC_DEFINE([NDEBUG],[],[No-debug Mode])
+    AM_CXXFLAGS="$AM_CXXFLAGS -O3"
+    AM_CFLAGS="$AM_CXXFLAGS -O3"
+fi
+
+AC_MSG_CHECKING([whether to build with coverage information])
+AC_ARG_ENABLE([coverage],
+    [AS_HELP_STRING([--enable-coverage],
+        [enable coverage data generation (def=no)])],
+    [coverit="$enableval"],
+    [coverit=no])
+AC_MSG_RESULT([$coverit])
+
+if test x"$coverit" = x"yes"; then
     case $host_os in
         darwin* )
             echo "Coverage not supported on OSX"
@@ -256,14 +274,6 @@ if test x"$debugit" = x"yes"; then
             cond_gcov="yes"
             ;;
     esac
-
-    AC_DEFINE([DEBUG],[],[Debug Mode])
-    AM_CXXFLAGS="$AM_CXXFLAGS -DDEBUG -g -Wall -Wno-uninitialized -O0"
-    AM_CFLAGS="$AM_CXXFLAGS -DDEBUG -g -Wall -Wno-uninitialized -O0"
-else
-    AC_DEFINE([NDEBUG],[],[No-debug Mode])
-    AM_CXXFLAGS="$AM_CXXFLAGS -O3"
-    AM_CFLAGS="$AM_CXXFLAGS -O3"
 fi
 
 if test "$CROSS_COMPILE" == "1"; then
