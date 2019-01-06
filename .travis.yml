@@ -28,8 +28,7 @@ before_install:
  - sudo make install
  - cd ..
  - if [ "$BUILD_TYPE" = "asan" ]; then export CFLAGS='-fsanitize=address'; export LDFLAGS='-fsanitize=address'; fi
- - if [ "$BUILD_TYPE" = "asanpc" ]; then export CFLAGS='-fsanitize=address -fsanitize=pointer-compare'; export LDFLAGS='-fsanitize=address -fsanitize=pointer-compare'; fi
- - if [ "$BUILD_TYPE" = "asanps" ]; then export CFLAGS='-fsanitize=address -fsanitize=pointer-subtract'; export LDFLAGS='-fsanitize=address -fsanitize=pointer-subtract'; fi
+ - if [ "$BUILD_TYPE" = "msan" ]; then export CFLAGS='-fsanitize=memory'; export LDFLAGS='-fsanitize=memory'; fi
  - if [ "$BUILD_TYPE" = "lsan" ]; then export CFLAGS='-fsanitize=leak'; export LDFLAGS='-fsanitize=leak'; fi
  - if [ "$BUILD_TYPE" = "tsan" ]; then export CFLAGS='-fsanitize=thread'; export LDFLAGS='-fsanitize=thread'; fi
  - if [ "$BUILD_TYPE" = "ubsan" ]; then export export CFLAGS='-fsanitize=undefined'; export LDFLAGS='-fsanitize=undefined'; fi
@@ -102,97 +101,46 @@ matrix:
         apt:
           sources:
             - ubuntu-toolchain-r-test
+            - llvm-toolchain-precise-3.8
           packages:
-            - g++-7
-            - libasan4
-            - libasan4-dbg
-            - libtsan0
-            - libtsan0-dbg
-            - liblsan0
-            - liblsan0-dbg
-            - libubsan0
-            - libubsan0-dbg
-      env: MATRIX_EVAL="BUILD_TYPE=asan && CC=gcc-7 && CXX=g++-7 && DEBUG=debug"
+            - clang-3.8
+      env: MATRIX_EVAL="BUILD_TYPE=asan && CC=clang-3.8 && CXX=clang++-3.8 && DEBUG=debug"
     - os: linux
       addons:
         apt:
           sources:
             - ubuntu-toolchain-r-test
+            - llvm-toolchain-precise-3.8
           packages:
-            - g++-7
-            - libasan4
-            - libasan4-dbg
-            - libtsan0
-            - libtsan0-dbg
-            - liblsan0
-            - liblsan0-dbg
-            - libubsan0
-            - libubsan0-dbg
-      env: MATRIX_EVAL="BUILD_TYPE=asanpc && CC=gcc-7 && CXX=g++-7 && DEBUG=debug"
+            - clang-3.8
+      env: MATRIX_EVAL="BUILD_TYPE=msan && CC=clang-3.8 && CXX=clang++-3.8 && DEBUG=debug"
     - os: linux
       addons:
         apt:
           sources:
             - ubuntu-toolchain-r-test
+            - llvm-toolchain-precise-3.8
           packages:
-            - g++-7
-            - libasan4
-            - libasan4-dbg
-            - libtsan0
-            - libtsan0-dbg
-            - liblsan0
-            - liblsan0-dbg
-            - libubsan0
-            - libubsan0-dbg
-      env: MATRIX_EVAL="BUILD_TYPE=asanps && CC=gcc-7 && CXX=g++-7 && DEBUG=debug"
+            - clang-3.8
+      env: MATRIX_EVAL="BUILD_TYPE=lsan && CC=clang-3.8 && CXX=clang++-3.8 && DEBUG=debug"
     - os: linux
       addons:
         apt:
           sources:
             - ubuntu-toolchain-r-test
+            - llvm-toolchain-precise-3.8
           packages:
-            - g++-7
-            - libasan4
-            - libasan4-dbg
-            - libtsan0
-            - libtsan0-dbg
-            - liblsan0
-            - liblsan0-dbg
-            - libubsan0
-            - libubsan0-dbg
-      env: MATRIX_EVAL="BUILD_TYPE=lsan && CC=gcc-7 && CXX=g++-7 && DEBUG=debug"
+            - clang-3.8
+      env: MATRIX_EVAL="BUILD_TYPE=tsan && CC=clang-3.8 && CXX=clang++-3.8 && DEBUG=debug"
     - os: linux
       addons:
         apt:
           sources:
             - ubuntu-toolchain-r-test
+            - llvm-toolchain-precise-3.8
           packages:
-            - g++-7
-            - libasan4
-            - libasan4-dbg
-            - libtsan0
-            - libtsan0-dbg
-            - liblsan0
-            - liblsan0-dbg
-            - libubsan0
-            - libubsan0-dbg
-      env: MATRIX_EVAL="BUILD_TYPE=tsan && CC=gcc-7 && CXX=g++-7 && DEBUG=debug"
-    - os: linux
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-          packages:
-            - g++-7
-            - libasan4
-            - libasan4-dbg
-            - libtsan0
-            - libtsan0-dbg
-            - liblsan0
-            - liblsan0-dbg
-            - libubsan0
-            - libubsan0-dbg
-      env: MATRIX_EVAL="BUILD_TYPE=ubsan && CC=gcc-7 && CXX=g++-7 && DEBUG=debug"
+            - clang-3.8
+      env: MATRIX_EVAL="BUILD_TYPE=ubsan && CC=clang-3.8 && CXX=clang++-3.8 && DEBUG=debug"
     - os: linux
       addons:
         apt:
@@ -331,9 +279,8 @@ matrix:
   allow_failures:
     - env: MATRIX_EVAL="CROSS_COMPILE=1 && ARM_ARCH_DIR=arm-linux-gnueabi && CC=arm-linux-gnueabi-gcc"
     - env: MATRIX_EVAL="CROSS_COMPILE=1 && ARM_LD_PATH=$HOME/linker_bin && ARM_ARCH_DIR=aarch64-linux-gnu"
-    - env: MATRIX_EVAL="BUILD_TYPE=asan && CC=gcc-7 && CXX=g++-7 && DEBUG=debug"
-    - env: MATRIX_EVAL="BUILD_TYPE=asanpc && CC=gcc-7 && CXX=g++-7 && DEBUG=debug"
-    - env: MATRIX_EVAL="BUILD_TYPE=asanps && CC=gcc-7 && CXX=g++-7 && DEBUG=debug"
-    - env: MATRIX_EVAL="BUILD_TYPE=lsan && CC=gcc-7 && CXX=g++-7 && DEBUG=debug"
-    - env: MATRIX_EVAL="BUILD_TYPE=tsan && CC=gcc-7 && CXX=g++-7 && DEBUG=debug"
-    - env: MATRIX_EVAL="BUILD_TYPE=ubsan && CC=gcc-7 && CXX=g++-7 && DEBUG=debug"
+    - env: MATRIX_EVAL="BUILD_TYPE=asan && CC=clang-3.8 && CXX=clang++-3.8 && DEBUG=debug"
+    - env: MATRIX_EVAL="BUILD_TYPE=msan && CC=clang-3.8 && CXX=clang++-3.8 && DEBUG=debug"
+    - env: MATRIX_EVAL="BUILD_TYPE=lsan && CC=clang-3.8 && CXX=clang++-3.8 && DEBUG=debug"
+    - env: MATRIX_EVAL="BUILD_TYPE=tsan && CC=clang-3.8 && CXX=clang++-3.8 && DEBUG=debug"
+    - env: MATRIX_EVAL="BUILD_TYPE=ubsan && CC=clang-3.8 && CXX=clang++-3.8 && DEBUG=debug"
