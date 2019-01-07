@@ -352,7 +352,7 @@ void dump_arg_map(std::ostream &os, const std::string &prefix,
  * @return length of the resulting val (strlen(val) maybe
  *  shorter afterwards due to elimination of escape sequences)
  */
-size_t http_unescape (char *val);
+size_t http_unescape (std::string& val);
 
 const std::string load_file (const std::string& filename);
 

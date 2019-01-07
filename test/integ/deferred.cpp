@@ -58,7 +58,7 @@ ssize_t test_callback (char* buf, size_t max)
         memset(buf, 0, max);
         strcat(buf, "test");
         counter++;
-        return strlen(buf);
+        return std::string(buf).size();
     }
 }
 

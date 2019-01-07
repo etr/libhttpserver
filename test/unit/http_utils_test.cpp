@@ -47,32 +47,37 @@ LT_BEGIN_SUITE(http_utils_suite)
 LT_END_SUITE(http_utils_suite)
 
 LT_BEGIN_AUTO_TEST(http_utils_suite, unescape)
-    char* string_with_plus = (char*) malloc(6 * sizeof(char));
-    sprintf(string_with_plus, "%s", "A%20B");
+    char* with_plus = (char*) malloc(6 * sizeof(char));
+    sprintf(with_plus, "%s", "A%20B");
+    std::string string_with_plus = with_plus;
     int expected_size = http::http_unescape(string_with_plus);
 
     char* expected = (char*) malloc(4 * sizeof(char));
     sprintf(expected, "%s", "A B");
 
-    LT_CHECK_EQ(string(string_with_plus), string(expected));
+    std::cout << "|||||" << string_with_plus << "||||" << std::endl;
+    std::cout << expected << std::endl;
+
+    LT_CHECK_EQ(string_with_plus, string(expected));
     LT_CHECK_EQ(expected_size, 3);
 
-    free(string_with_plus);
+    free(with_plus);
     free(expected);
 LT_END_AUTO_TEST(unescape)
 
 LT_BEGIN_AUTO_TEST(http_utils_suite, unescape_plus)
-    char* string_with_plus = (char*) malloc(6 * sizeof(char));
-    sprintf(string_with_plus, "%s", "A+B");
+    char* with_plus = (char*) malloc(6 * sizeof(char));
+    sprintf(with_plus, "%s", "A+B");
+    std::string string_with_plus = with_plus;
     int expected_size = http::http_unescape(string_with_plus);
 
     char* expected = (char*) malloc(4 * sizeof(char));
     sprintf(expected, "%s", "A B");
 
-    LT_CHECK_EQ(string(string_with_plus), string(expected));
+    LT_CHECK_EQ(string_with_plus, string(expected));
     LT_CHECK_EQ(expected_size, 3);
 
-    free(string_with_plus);
+    free(with_plus);
     free(expected);
 LT_END_AUTO_TEST(unescape_plus)
 

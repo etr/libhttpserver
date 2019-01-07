@@ -107,12 +107,12 @@ const std::string regex_replace(const std::string& str,
         );
 
         memcpy(&ns[substmatch[0].rm_so+replace_str.size()],
-                &str[substmatch[0].rm_eo], strlen(&str[substmatch[0].rm_eo])
+                &str[substmatch[0].rm_eo], str.substr(substmatch[0].rm_eo).size()
         );
 
         ns[substmatch[0].rm_so +
             replace_str.size() +
-            strlen(&str[substmatch[0].rm_eo])
+            str.substr(substmatch[0].rm_eo).size()
         ] = 0;
 
         result = std::string((char*)ns);

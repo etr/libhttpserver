@@ -96,7 +96,7 @@ void error_log(void*, const char*, va_list);
 void* uri_log(void*, const char*);
 void access_log(webserver*, string);
 size_t unescaper_func(void*, struct MHD_Connection*, char*);
-size_t internal_unescaper(void*, char*);
+size_t internal_unescaper(void*, std::string&);
 
 struct compare_value
 {
@@ -494,22 +494,22 @@ int webserver::build_request_args (
 )
 {
     details::modded_request* mr = static_cast<details::modded_request*>(cls);
-    char* value = (char*) ((arg_value == NULL) ? "" : arg_value);
+    std::string value = ((arg_value == NULL) ? "" : arg_value);
     {
-        char buf[strlen(key) + strlen(value) + 3];
+        char buf[strlen(key) + value.size() + 3];
         if(mr->dhr->querystring == "")
         {
-            snprintf(buf, sizeof buf, "?%s=%s", key, value);
+            snprintf(buf, sizeof buf, "?%s=%s", key, value.c_str());
             mr->dhr->querystring = buf;
         }
         else
         {
-            snprintf(buf, sizeof buf, "&%s=%s", key, value);
+            snprintf(buf, sizeof buf, "&%s=%s", key, value.c_str());
             mr->dhr->querystring += string(buf);
         }
     }
-    size_t size = internal_unescaper((void*) mr->ws, value);
-    mr->dhr->set_arg(key, string(value, size));
+    internal_unescaper((void*) mr->ws, value);
+    mr->dhr->set_arg(key, value);
     return MHD_YES;
 }
 
@@ -560,7 +560,7 @@ size_t unescaper_func(void * cls, struct MHD_Connection *c, char *s)
     return strlen(s);
 }
 
-size_t internal_unescaper(void* cls, char* s)
+size_t internal_unescaper(void* cls, std::string& s)
 {
     if(s[0] == 0) return 0;
 
@@ -568,7 +568,7 @@ size_t internal_unescaper(void* cls, char* s)
     if(dws->unescaper != 0x0)
     {
         dws->unescaper(s);
-        return strlen(s);
+        return s.size();
     }
 
     return http_unescape(s);
@@ -658,15 +658,15 @@ int webserver::bodyfull_requests_answer_first_step(
         (
             0x0 != encoding &&
             ((0 == strncasecmp (
-                                MHD_HTTP_POST_ENCODING_FORM_URLENCODED,
+                                http_utils::http_post_encoding_form_urlencoded.c_str(),
                                 encoding,
-                                strlen (MHD_HTTP_POST_ENCODING_FORM_URLENCODED)
+                                http_utils::http_post_encoding_form_urlencoded.size()
                                 )
               )
              || (0 == strncasecmp (
-                                   MHD_HTTP_POST_ENCODING_MULTIPART_FORMDATA,
+                                   http_utils::http_post_encoding_multipart_formdata.c_str(),
                                    encoding,
-                                   strlen (MHD_HTTP_POST_ENCODING_MULTIPART_FORMDATA)
+                                   http_utils::http_post_encoding_multipart_formdata.size()
                                    )))
         )
     )
@@ -966,8 +966,10 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
             );
     }
 
-    internal_unescaper((void*) static_cast<webserver*>(cls), (char*) url);
-    mr->standardized_url = new string(http_utils::standardize_url(url));
+    std::string t_url = url;
+
+    internal_unescaper((void*) static_cast<webserver*>(cls), t_url);
+    mr->standardized_url = new string(http_utils::standardize_url(t_url));
 
     bool body = false;
 

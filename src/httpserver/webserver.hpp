@@ -288,7 +288,7 @@ class webserver
         friend size_t unescaper_func(void * cls,
                 struct MHD_Connection *c, char *s
         );
-        friend size_t internal_unescaper(void * cls, char *s);
+        friend size_t internal_unescaper(void * cls, std::string& s);
         friend class http_response;
 };
 

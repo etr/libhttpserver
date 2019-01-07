@@ -281,42 +281,44 @@ unsigned short get_port(const struct sockaddr* sa)
     }
 }
 
-size_t http_unescape(char *val)
+size_t http_unescape(std::string& val)
 {
-    char *rpos = val;
-    char *wpos = val;
+    if (val.empty()) return 0;
+
+    int rpos = 0;
+    int wpos = 0;
+
     unsigned int num;
 
-    while ('\0' != *rpos)
+    while ('\0' != val[rpos])
     {
-        switch (*rpos)
+        switch (val[rpos])
         {
             case '+':
-                *wpos = ' ';
+                val[wpos] = ' ';
                 wpos++;
                 rpos++;
                 break;
             case '%':
-                if ( (1 == sscanf (&rpos[1],
-                    "%2x", &num)) ||
-                    (1 == sscanf (&rpos[1],
-                    "%2X", &num))
+                if ( (1 == sscanf (val.substr(rpos + 1).c_str(), "%2x", &num)) ||
+                    (1 == sscanf (val.substr(rpos + 1).c_str(), "%2X", &num))
                 )
                 {
-                    *wpos = (unsigned char) num;
+                    val[wpos] = (unsigned char) num;
                     wpos++;
                     rpos += 3;
                     break;
                 }
             /* intentional fall through! */
             default:
-                *wpos = *rpos;
+                val[wpos] = val[rpos];
                 wpos++;
                 rpos++;
         }
     }
-    *wpos = '\0'; /* add 0-terminator */
-    return wpos - val; /* = strlen(val) */
+    val[wpos] = '\0'; /* add 0-terminator */
+    val.resize(wpos);
+    return wpos; /* = strlen(val) */
 }
 
 ip_representation::ip_representation(const struct sockaddr* ip)
