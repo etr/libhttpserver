@@ -14,6 +14,7 @@ The libhttpserver (0.8.0) reference manual
 [![Build Status](https://travis-ci.org/etr/libhttpserver.png?branch=master)](https://travis-ci.org/etr/libhttpserver)
 [![codecov](https://codecov.io/gh/etr/libhttpserver/branch/master/graph/badge.svg)](https://codecov.io/gh/etr/libhttpserver)
 [![Codacy Badge](https://api.codacy.com/project/badge/Grade/5fa4bdc3815b4c10977f3badefedecd6)](https://www.codacy.com/app/etr/libhttpserver?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=etr/libhttpserver&amp;utm_campaign=Badge_Grade)
+[![Gitter chat](https://badges.gitter.im/etr/libhttpserver.png)](https://gitter.im/libhttpserver/community)
 
 [![ko-fi](https://www.ko-fi.com/img/donate_sm.png)](https://ko-fi.com/F1F5HY8B)
 
