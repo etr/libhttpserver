@@ -175,6 +175,8 @@ Please open an issue on `etr/libhttpserver` if you have suggestions for new labe
 | `windows` | [search][search-libhttpserver-repo-label-windows] | Related to  Windows. |
 | `linux` | [search][search-libhttpserver-repo-label-linux] | Related to  Linux. |
 | `mac` | [search][search-libhttpserver-repo-label-mac] | Related to  macOS. |
+| `travis` | [search][search-libhttpserver-repo-label-travis] | Related to  travis and CI in general. |
+| `tests` | [search][search-libhttpserver-repo-label-tests] | Related to tests (add tests, fix tests, etc...). |
 | `documentation` | [search][search-libhttpserver-repo-label-documentation] | Related to any type of documentation. |
 | `performance` | [search][search-libhttpserver-repo-label-performance] | Related to performance. |
 | `security` | [search][search-libhttpserver-repo-label-security] | Related to security. |
@@ -203,6 +205,8 @@ Please open an issue on `etr/libhttpserver` if you have suggestions for new labe
 [search-libhttpserver-repo-label-windows]: https://github.com/search?q=is%3Aopen+is%3Aissue+repo%3Aetr%23Flibhttpserver+label%3Awindows
 [search-libhttpserver-repo-label-linux]: https://github.com/search?q=is%3Aopen+is%3Aissue+repo%3Aetr%23Flibhttpserver+label%3Alinux
 [search-libhttpserver-repo-label-mac]: https://github.com/search?q=is%3Aopen+is%3Aissue+repo%3Aetr%23Flibhttpserver+label%3Amac
+[search-libhttpserver-repo-label-travis]: https://github.com/search?q=is%3Aopen+is%3Aissue+repo%3Aetr%23Flibhttpserver+label%3Atravis
+[search-libhttpserver-repo-label-tests]: https://github.com/search?q=is%3Aopen+is%3Aissue+repo%3Aetr%23Flibhttpserver+label%3Atests
 [search-libhttpserver-repo-label-documentation]: https://github.com/search?q=is%3Aopen+is%3Aissue+repo%3Aetr%23Flibhttpserver+label%3Adocumentation
 [search-libhttpserver-repo-label-performance]: https://github.com/search?q=is%3Aopen+is%3Aissue+repo%3Aetr%23Flibhttpserver+label%3Aperformance
 [search-libhttpserver-repo-label-security]: https://github.com/search?q=is%3Aopen+is%3Aissue+repo%3Aetr%23Flibhttpserver+label%3Asecurity
