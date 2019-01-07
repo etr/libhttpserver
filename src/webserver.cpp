@@ -496,7 +496,7 @@ int webserver::build_request_args (
     details::modded_request* mr = static_cast<details::modded_request*>(cls);
     std::string value = ((arg_value == NULL) ? "" : arg_value);
     {
-        char buf[strlen(key) + value.size() + 3];
+        char buf[std::string(key).size() + value.size() + 3];
         if(mr->dhr->querystring == "")
         {
             snprintf(buf, sizeof buf, "?%s=%s", key, value.c_str());
@@ -557,7 +557,7 @@ size_t unescaper_func(void * cls, struct MHD_Connection *c, char *s)
     // IT IS DUE TO A BOGUS ON libmicrohttpd (V0.99) THAT PRODUCING A
     // STRING CONTAINING '\0' AFTER AN UNESCAPING, IS UNABLE TO PARSE
     // ARGS WITH get_connection_values FUNC OR lookup FUNC.
-    return strlen(s);
+    return std::string(s).size();
 }
 
 size_t internal_unescaper(void* cls, std::string& s)
