@@ -44,3 +44,7 @@ AM_LDFLAGS += -O0 --coverage -lgcov --no-inline
 endif
 
 TESTS = $(check_PROGRAMS)
+
+@VALGRIND_CHECK_RULES@
+#VALGRIND_SUPPRESSIONS_FILES = libhttpserver.supp
+#EXTRA_DIST = libhttpserver.supp
