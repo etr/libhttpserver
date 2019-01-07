@@ -239,10 +239,7 @@ std::string http_utils::standardize_url(const std::string& url)
     return result;
 }
 
-std::string get_ip_str(
-    const struct sockaddr *sa,
-    socklen_t maxlen
-)
+std::string get_ip_str(const struct sockaddr *sa, socklen_t maxlen)
 {
     if (!sa) throw std::invalid_argument("socket pointer is null");
 
