@@ -52,7 +52,6 @@
 #include "details/http_endpoint.hpp"
 #include "string_utilities.hpp"
 #include "create_webserver.hpp"
-#include "details/comet_manager.hpp"
 #include "webserver.hpp"
 #include "details/modded_request.hpp"
 
@@ -176,8 +175,7 @@ webserver::webserver(const create_webserver& params):
     not_found_resource(params._not_found_resource),
     method_not_allowed_resource(params._method_not_allowed_resource),
     internal_error_resource(params._internal_error_resource),
-    next_to_choose(0),
-    internal_comet_manager(new details::comet_manager())
+    next_to_choose(0)
 {
     ignore_sigpipe();
     pthread_mutex_init(&mutexwait, NULL);
@@ -191,7 +189,6 @@ webserver::~webserver()
     pthread_mutex_destroy(&mutexwait);
     pthread_rwlock_destroy(&runguard);
     pthread_cond_destroy(&mutexcond);
-    delete internal_comet_manager;
 }
 
 void webserver::sweet_kill()
@@ -208,8 +205,6 @@ void webserver::request_completed (
 {
     details::modded_request* mr = static_cast<details::modded_request*>(*con_cls);
     if (mr == 0x0) return;
-
-    if (mr->ws != 0x0) mr->ws->internal_comet_manager->complete_request(mr->dhrs->connection_id);
 
     delete mr;
     mr = 0x0;
@@ -1014,29 +1009,6 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
     }
 
     return body ? static_cast<webserver*>(cls)->bodyfull_requests_answer_first_step(connection, mr) : static_cast<webserver*>(cls)->bodyless_requests_answer(connection, method, version, mr);
-}
-
-void webserver::send_message_to_topic(
-        const std::string& topic,
-        const std::string& message
-)
-{
-    internal_comet_manager->send_message_to_topic(topic, message);
-}
-
-void webserver::register_to_topics(
-        const std::vector<std::string>& topics,
-        MHD_Connection* connection_id
-)
-{
-    internal_comet_manager->register_to_topics(topics, connection_id);
-}
-
-size_t webserver::read_message(MHD_Connection* connection_id,
-    std::string& message
-)
-{
-    return internal_comet_manager->read_message(connection_id, message);
 }
 
 };

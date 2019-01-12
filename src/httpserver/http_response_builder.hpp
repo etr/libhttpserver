@@ -189,26 +189,6 @@ class http_response_builder
             return *this;
         }
 
-        http_response_builder& long_polling_receive_response(
-            const std::vector<std::string>& topics,
-            int keepalive_secs = -1,
-            std::string keepalive_msg = ""
-        )
-        {
-            _topics = topics;
-            _keepalive_secs = keepalive_secs;
-            _keepalive_msg = keepalive_msg;
-            _get_raw_response = &http_response::get_raw_response_lp_receive;
-            return *this;
-        }
-
-        http_response_builder& long_polling_send_response(const std::string& send_topic)
-        {
-            _send_topic = send_topic;
-            _get_raw_response = &http_response::get_raw_response_lp_send;
-            return *this;
-        }
-
         http_response_builder& deferred_response(cycle_callback_ptr cycle_callback)
         {
             _cycle_callback = cycle_callback;

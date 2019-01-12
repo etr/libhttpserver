@@ -61,7 +61,6 @@ struct httpserver_ska;
 namespace details {
     struct daemon_item;
     struct modded_request;
-    class comet_manager;
 }
 
 /**
@@ -109,16 +108,6 @@ class webserver
         void allow_ip(const std::string& ip);
         void unban_ip(const std::string& ip);
         void disallow_ip(const std::string& ip);
-
-        void send_message_to_topic(const std::string& topic,
-                const std::string& message
-        );
-        void register_to_topics(const std::vector<std::string>& topics,
-                MHD_Connection* connection_id
-        );
-        size_t read_message(MHD_Connection* connection_id,
-            std::string& message
-        );
 
         log_access_ptr get_access_logger() const
         {
@@ -201,8 +190,6 @@ class webserver
 
         std::vector<details::daemon_item*> daemons;
         std::vector<pthread_t> threads;
-
-        details::comet_manager* internal_comet_manager;
 
         static void* select(void* self);
         static void* cleaner(void* self);

@@ -239,10 +239,6 @@ class http_response
         void get_raw_response_file(MHD_Response** res, webserver* ws = 0x0);
         void get_raw_response_switch_r(MHD_Response** res, webserver* ws = 0x0);
 
-        void get_raw_response_lp_receive(MHD_Response** res,
-                webserver* ws = 0x0);
-
-        void get_raw_response_lp_send(MHD_Response** res, webserver* ws = 0x0);
         void get_raw_response_deferred(MHD_Response** res, webserver* ws = 0x0);
         void decorate_response_str(MHD_Response* res);
         void decorate_response_deferred(MHD_Response* res);

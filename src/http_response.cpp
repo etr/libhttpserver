@@ -196,47 +196,6 @@ void http_response::decorate_response_deferred(MHD_Response* response)
         static_cast<http_response*>(this)->decorate_response(response);
 }
 
-void http_response::get_raw_response_lp_receive(
-        MHD_Response** response,
-        webserver* ws
-)
-{
-    this->ws = ws;
-    this->connection_id = this->underlying_connection;
-
-    *response = MHD_create_response_from_callback(MHD_SIZE_UNKNOWN, 80,
-        &http_response::data_generator, (void*) this, NULL);
-
-    ws->register_to_topics(
-            topics,
-            connection_id
-    );
-}
-
-ssize_t http_response::data_generator(
-        void* cls,
-        uint64_t pos,
-        char* buf,
-        size_t max
-)
-{
-    http_response* _this = static_cast<http_response*>(cls);
-
-    string message;
-    size_t size = _this->ws->read_message(_this->connection_id, message);
-    memcpy(buf, message.c_str(), size);
-    return size;
-}
-
-void http_response::get_raw_response_lp_send(
-        MHD_Response** response,
-        webserver* ws
-)
-{
-    http_response::get_raw_response_str(response, ws);
-    ws->send_message_to_topic(send_topic, content);
-}
-
 std::ostream &operator<< (std::ostream &os, const http_response &r)
 {
     os << "Response [response_code:" << r.response_code << "]" << std::endl;
@@ -247,6 +206,5 @@ std::ostream &operator<< (std::ostream &os, const http_response &r)
 
     return os;
 }
-
 
 };
