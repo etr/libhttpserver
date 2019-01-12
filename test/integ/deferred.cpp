@@ -62,12 +62,12 @@ ssize_t test_callback (char* buf, size_t max)
     }
 }
 
-class deferred_resource : public httpserver::http_resource
+class deferred_resource : public http_resource
 {
     public:
-        const httpserver::http_response render_GET(const httpserver::http_request& req)
+        const shared_ptr<http_response> render_GET(const http_request& req)
         {
-            return httpserver::http_response_builder("cycle callback response").deferred_response(test_callback);
+            return shared_ptr<deferred_response>(new deferred_response(test_callback, "cycle callback response"));
         }
 };
 

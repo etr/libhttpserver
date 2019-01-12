@@ -18,22 +18,20 @@
      USA
 */
 
-#ifndef _HTTPSERVER_HPP_
-#define _HTTPSERVER_HPP_
+#include "basic_auth_fail_response.hpp"
 
-#define _HTTPSERVER_HPP_INSIDE_
+using namespace std;
 
-#include "httpserver/http_utils.hpp"
-#include "httpserver/http_resource.hpp"
-#include "httpserver/http_response.hpp"
+namespace httpserver
+{
 
-#include "httpserver/string_response.hpp"
-#include "httpserver/basic_auth_fail_response.hpp"
-#include "httpserver/digest_auth_fail_response.hpp"
-#include "httpserver/deferred_response.hpp"
-#include "httpserver/file_response.hpp"
+int basic_auth_fail_response::enqueue_response(MHD_Connection* connection, MHD_Response* response)
+{
+    return MHD_queue_basic_auth_fail_response(
+            connection,
+            realm.c_str(),
+            response
+    );
+}
 
-#include "httpserver/http_request.hpp"
-#include "httpserver/webserver.hpp"
-
-#endif
+}

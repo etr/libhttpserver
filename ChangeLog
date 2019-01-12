@@ -1,3 +1,11 @@
+Sat Jan 12 00:51:00 2018 -0800
+	Removed the support for integrated COMET logic.
+	Removed the support for caching logic.
+	Added integ tests.
+	Changed http_resource interface to use shared_ptr.
+	Improved interface of the http_response object.
+	Deprecated http_response_builder object.
+
 Thu Dec 26 10:00:30 2018 -0800
 	Fixed IPV6 parsing logic.
 	Added tests to support IP parsing, URL parsing and utilities

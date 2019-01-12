@@ -48,33 +48,33 @@ size_t writefunc(void *ptr, size_t size, size_t nmemb, std::string *s)
 class user_pass_resource : public httpserver::http_resource
 {
     public:
-        const httpserver::http_response render_GET(const httpserver::http_request& req)
+        const shared_ptr<http_response> render_GET(const http_request& req)
         {
             if (req.get_user() != "myuser" || req.get_pass() != "mypass")
             {
-                return httpserver::http_response_builder("FAIL").basic_auth_fail_response("test@example.com");
+                return shared_ptr<basic_auth_fail_response>(new basic_auth_fail_response("FAIL", "test@example.com"));
             }
-            return httpserver::http_response_builder(req.get_user() + " " + req.get_pass(), 200, "text/plain").string_response();
+            return shared_ptr<string_response>(new string_response(req.get_user() + " " + req.get_pass(), 200, "text/plain"));
         }
 };
 
 class digest_resource : public httpserver::http_resource
 {
     public:
-        const httpserver::http_response render_GET(const httpserver::http_request& req)
+        const shared_ptr<http_response> render_GET(const http_request& req)
         {
             if (req.get_digested_user() == "") {
-                return httpserver::http_response_builder("FAIL").digest_auth_fail_response("test@example.com", MY_OPAQUE, true);
+                return shared_ptr<digest_auth_fail_response>(new digest_auth_fail_response("FAIL", "test@example.com", MY_OPAQUE, true));
             }
             else
             {
-                bool reload_nonce = false;;
+                bool reload_nonce = false;
                 if(!req.check_digest_auth("test@example.com", "mypass", 300, reload_nonce))
                 {
-                    return httpserver::http_response_builder("FAIL").digest_auth_fail_response("test@example.com", MY_OPAQUE, reload_nonce);
+                    return shared_ptr<digest_auth_fail_response>(new digest_auth_fail_response("FAIL", "test@example.com", MY_OPAQUE, reload_nonce));
                 }
             }
-            return httpserver::http_response_builder("SUCCESS", 200, "text/plain").string_response();
+            return shared_ptr<string_response>(new string_response("SUCCESS", 200, "text/plain"));
         }
 };
 

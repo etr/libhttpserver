@@ -50,6 +50,7 @@ bool http_request::check_digest_auth(
             password.c_str(),
             nonce_timeout
     );
+
     if(val == MHD_INVALID_NONCE)
     {
         reload_nonce = true;

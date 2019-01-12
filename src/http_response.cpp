@@ -27,60 +27,18 @@
 #include "http_utils.hpp"
 #include "webserver.hpp"
 #include "http_response.hpp"
-#include "http_response_builder.hpp"
 
 using namespace std;
 
 namespace httpserver
 {
 
-class webserver;
-
-http_response::http_response(const http_response_builder& builder):
-    content(builder._content_hook),
-    response_code(builder._response_code),
-    realm(builder._realm),
-    opaque(builder._opaque),
-    reload_nonce(builder._reload_nonce),
-    fp(-1),
-    filename(builder._content_hook),
-    headers(builder._headers),
-    footers(builder._footers),
-    cookies(builder._cookies),
-    topics(builder._topics),
-    keepalive_secs(builder._keepalive_secs),
-    keepalive_msg(builder._keepalive_msg),
-    send_topic(builder._send_topic),
-    underlying_connection(0x0),
-    cycle_callback(builder._cycle_callback),
-    get_raw_response(this, builder._get_raw_response),
-    decorate_response(this, builder._decorate_response),
-    enqueue_response(this, builder._enqueue_response),
-    completed(false),
-    ws(0x0),
-    connection_id(0x0),
-    _get_raw_response(builder._get_raw_response),
-    _decorate_response(builder._decorate_response),
-    _enqueue_response(builder._enqueue_response)
+MHD_Response* http_response::get_raw_response()
 {
+    return MHD_create_response_from_buffer(0, (void*) "", MHD_RESPMEM_PERSISTENT);
 }
 
-http_response::~http_response()
-{
-}
-
-//RESPONSE
-void http_response::get_raw_response_str(MHD_Response** response, webserver* ws)
-{
-    size_t size = &(*content.end()) - &(*content.begin());
-    *response = MHD_create_response_from_buffer(
-            size,
-            (void*) content.c_str(),
-            MHD_RESPMEM_PERSISTENT
-    );
-}
-
-void http_response::decorate_response_str(MHD_Response* response)
+void http_response::decorate_response(MHD_Response* response)
 {
     map<string, string, http::header_comparator>::iterator it;
 
@@ -105,95 +63,14 @@ void http_response::decorate_response_str(MHD_Response* response)
         );
 }
 
-int http_response::enqueue_response_str(
-        MHD_Connection* connection,
-        MHD_Response* response
-)
+int http_response::enqueue_response(MHD_Connection* connection, MHD_Response* response)
 {
     return MHD_queue_response(connection, response_code, response);
 }
 
-int http_response::enqueue_response_basic(
-        MHD_Connection* connection,
-        MHD_Response* response
-)
+void http_response::shoutCAST()
 {
-    return MHD_queue_basic_auth_fail_response(
-            connection,
-            realm.c_str(),
-            response
-    );
-}
-
-int http_response::enqueue_response_digest(
-        MHD_Connection* connection,
-        MHD_Response* response
-)
-{
-    return MHD_queue_auth_fail_response(
-            connection,
-            realm.c_str(),
-            opaque.c_str(),
-            response,
-            reload_nonce ? MHD_YES : MHD_NO
-    );
-}
-
-void http_response::get_raw_response_file(
-        MHD_Response** response,
-        webserver* ws
-)
-{
-    int fd = open(filename.c_str(), O_RDONLY);
-    size_t size = lseek(fd, 0, SEEK_END);
-    if(size)
-    {
-        *response = MHD_create_response_from_fd(size, fd);
-    }
-    else
-    {
-        *response = MHD_create_response_from_buffer(
-                0,
-                (void*) "",
-                MHD_RESPMEM_PERSISTENT
-        );
-    }
-}
-
-namespace details
-{
-
-ssize_t cb(void* cls, uint64_t pos, char* buf, size_t max)
-{
-    ssize_t val = static_cast<http_response*>(cls)->cycle_callback(buf, max);
-    if(val == -1)
-        static_cast<http_response*>(cls)->completed = true;
-    return val;
-}
-
-}
-
-void http_response::get_raw_response_deferred(
-        MHD_Response** response,
-        webserver* ws
-)
-{
-    if(!completed)
-        *response = MHD_create_response_from_callback(
-                MHD_SIZE_UNKNOWN,
-                1024,
-                &details::cb,
-                this,
-                NULL
-        );
-    else
-        static_cast<http_response*>(this)->get_raw_response(response, ws);
-}
-
-void http_response::decorate_response_deferred(MHD_Response* response)
-{
-    if(completed)
-        static_cast<http_response*>(this)->decorate_response(response);
+    this->response_code |= http::http_utils::shoutcast_response;
 }
 
 std::ostream &operator<< (std::ostream &os, const http_response &r)
@@ -207,4 +84,4 @@ std::ostream &operator<< (std::ostream &os, const http_response &r)
     return os;
 }
 
-};
+}

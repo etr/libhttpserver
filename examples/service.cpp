@@ -32,15 +32,15 @@ public:
 	service_resource();
 
 	~service_resource();
-	
-	const http_response render_GET(const http_request &req);
-	const http_response render_PUT(const http_request &req);
-	const http_response render_POST(const http_request &req);	
-	const http_response render(const http_request &req);
-	const http_response render_HEAD(const http_request &req);
-	const http_response render_OPTIONS(const http_request &req);
-	const http_response render_CONNECT(const http_request &req);
-	const http_response render_DELETE(const http_request &req);
+
+	const std::shared_ptr<http_response> render_GET(const http_request &req);
+	const std::shared_ptr<http_response> render_PUT(const http_request &req);
+	const std::shared_ptr<http_response> render_POST(const http_request &req);
+	const std::shared_ptr<http_response> render(const http_request &req);
+	const std::shared_ptr<http_response> render_HEAD(const http_request &req);
+	const std::shared_ptr<http_response> render_OPTIONS(const http_request &req);
+	const std::shared_ptr<http_response> render_CONNECT(const http_request &req);
+	const std::shared_ptr<http_response> render_DELETE(const http_request &req);
 
 private:
 
@@ -53,120 +53,118 @@ service_resource::service_resource()
 service_resource::~service_resource()
 {}
 
-const http_response
+const std::shared_ptr<http_response>
 service_resource::render_GET(const http_request &req)
 {
     std::cout << "service_resource::render_GET()" << std::endl;
 
     if (verbose) std::cout << req;
+    string_response* res = new string_response("GET response", 200);
 
-    http_response res(http_response_builder("GET response", 200).string_response());
+    if (verbose) std::cout << *res;
 
-    if (verbose) std::cout << res;    
-
-    return res;
-
+    return std::shared_ptr<http_response>(res);
 }
 
 
-const http_response
+const std::shared_ptr<http_response>
 service_resource::render_PUT(const http_request &req)
 {
-    std::cout << "service_resource::render_PUT()" << std::endl;	
+    std::cout << "service_resource::render_PUT()" << std::endl;
 
     if (verbose) std::cout << req;
-    
-    http_response res(http_response_builder("PUT response", 200).string_response());
 
-    if (verbose) std::cout << res;
+    string_response* res = new string_response("PUT response", 200);
 
-    return res;
+    if (verbose) std::cout << *res;
+
+    return std::shared_ptr<http_response>(res);
 }
 
 
-const http_response
+const std::shared_ptr<http_response>
 service_resource::render_POST(const http_request &req)
 {
-    std::cout << "service_resource::render_POST()" << std::endl;	
+    std::cout << "service_resource::render_POST()" << std::endl;
 
     if (verbose) std::cout << req;
-    
-    http_response res(http_response_builder("POST response", 200).string_response());
 
-    if (verbose) std::cout << res;
+    string_response* res = new string_response("POST response", 200);
 
-    return res;    
+    if (verbose) std::cout << *res;
+
+    return std::shared_ptr<http_response>(res);
 }
 
-const http_response
+const std::shared_ptr<http_response>
 service_resource::render(const http_request &req)
 {
-    std::cout << "service_resource::render()" << std::endl;	
+    std::cout << "service_resource::render()" << std::endl;
 
     if (verbose) std::cout << req;
 
-    http_response res(http_response_builder("generic response", 200).string_response());
+    string_response* res = new string_response("generic response", 200);
 
-    if (verbose) std::cout << res;
+    if (verbose) std::cout << *res;
 
-    return res;    
+    return std::shared_ptr<http_response>(res);
 }
 
 
-const http_response
+const std::shared_ptr<http_response>
 service_resource::render_HEAD(const http_request &req)
 {
     std::cout << "service_resource::render_HEAD()" << std::endl;
 
     if (verbose) std::cout << req;
-    
-    http_response res(http_response_builder("HEAD response", 200).string_response());
 
-    if (verbose) std::cout << res;
+    string_response* res = new string_response("HEAD response", 200);
 
-    return res;    
+    if (verbose) std::cout << *res;
+
+    return std::shared_ptr<http_response>(res);
 }
 
-const http_response
+const std::shared_ptr<http_response>
 service_resource::render_OPTIONS(const http_request &req)
 {
     std::cout << "service_resource::render_OPTIONS()" << std::endl;
 
     if (verbose) std::cout << req;
-    
-    http_response res(http_response_builder("OPTIONS response", 200).string_response());
 
-    if (verbose) std::cout << res;
+    string_response* res = new string_response("OPTIONS response", 200);
 
-    return res;    
+    if (verbose) std::cout << *res;
+
+    return std::shared_ptr<http_response>(res);
 }
 
-const http_response
+const std::shared_ptr<http_response>
 service_resource::render_CONNECT(const http_request &req)
 {
-    std::cout << "service_resource::render_CONNECT()" << std::endl;	
+    std::cout << "service_resource::render_CONNECT()" << std::endl;
 
     if (verbose) std::cout << req;
-    
-    http_response res(http_response_builder("CONNECT response", 200).string_response());
 
-    if (verbose) std::cout << res;
+    string_response* res = new string_response("CONNECT response", 200);
 
-    return res;    
+    if (verbose) std::cout << *res;
+
+    return std::shared_ptr<http_response>(res);
 }
 
-const http_response
+const std::shared_ptr<http_response>
 service_resource::render_DELETE(const http_request &req)
 {
-    std::cout << "service_resource::render_DELETE()" << std::endl;	
+    std::cout << "service_resource::render_DELETE()" << std::endl;
 
     if (verbose) std::cout << req;
-    
-    http_response res(http_response_builder("DELETE response", 200).string_response());
 
-    if (verbose) std::cout << res;
+    string_response* res = new string_response("DELETE response", 200);
 
-    return res;    
+    if (verbose) std::cout << *res;
+
+    return std::shared_ptr<http_response>(res);
 }
 
 void usage()

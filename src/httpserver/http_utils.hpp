@@ -224,6 +224,9 @@ class http_utils
 
     static const std::string http_post_encoding_form_urlencoded;
     static const std::string http_post_encoding_multipart_formdata;
+
+    static const std::string text_plain;
+
     static std::vector<std::string> tokenize_url(const std::string&,
         const char separator = '/'
     );

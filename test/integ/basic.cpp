@@ -49,148 +49,148 @@ size_t headerfunc(void *ptr, size_t size, size_t nmemb, map<string, string>* ss)
 class simple_resource : public http_resource
 {
     public:
-        const http_response render_GET(const http_request& req)
+        const shared_ptr<http_response> render_GET(const http_request& req)
         {
-            return http_response_builder("OK", 200, "text/plain").string_response();
+            return shared_ptr<string_response>(new string_response("OK", 200, "text/plain"));
         }
-        const http_response render_POST(const http_request& req)
+        const shared_ptr<http_response> render_POST(const http_request& req)
         {
-            return http_response_builder(req.get_arg("arg1")+req.get_arg("arg2"), 200, "text/plain").string_response();
+            return shared_ptr<string_response>(new string_response(req.get_arg("arg1")+req.get_arg("arg2"), 200, "text/plain"));
         }
 };
 
 class args_resource : public http_resource
 {
     public:
-        const http_response render_GET(const http_request& req)
+        const shared_ptr<http_response> render_GET(const http_request& req)
         {
-            return http_response_builder(req.get_arg("arg") + req.get_arg("arg2"), 200, "text/plain").string_response();
+            return shared_ptr<string_response>(new string_response(req.get_arg("arg") + req.get_arg("arg2"), 200, "text/plain"));
         }
 };
 
 class long_content_resource : public http_resource
 {
     public:
-        const http_response render_GET(const http_request& req)
+        const shared_ptr<http_response> render_GET(const http_request& req)
         {
-            return http_response_builder(lorem_ipsum, 200, "text/plain").string_response();
+            return shared_ptr<string_response>(new string_response(lorem_ipsum, 200, "text/plain"));
         }
 };
 
 class header_set_test_resource : public http_resource
 {
     public:
-        const http_response render_GET(const http_request& req)
+        const shared_ptr<http_response> render_GET(const http_request& req)
         {
-            http_response_builder hrb("OK", 200, "text/plain");
-            hrb.with_header("KEY", "VALUE");
-            return hrb.string_response();
+            shared_ptr<string_response> hrb(new string_response("OK", 200, "text/plain"));
+            hrb->with_header("KEY", "VALUE");
+            return hrb;
         }
 };
 
 class cookie_set_test_resource : public http_resource
 {
     public:
-        const http_response render_GET(const http_request& req)
+        const shared_ptr<http_response> render_GET(const http_request& req)
         {
-            http_response_builder hrb("OK", 200, "text/plain");
-            hrb.with_cookie("MyCookie", "CookieValue");
-            return hrb.string_response();
+            shared_ptr<string_response> hrb(new string_response("OK", 200, "text/plain"));
+            hrb->with_cookie("MyCookie", "CookieValue");
+            return hrb;
         }
 };
 
 class cookie_reading_resource : public http_resource
 {
     public:
-        const http_response render_GET(const http_request& req)
+        const shared_ptr<http_response> render_GET(const http_request& req)
         {
-            return http_response_builder(req.get_cookie("name"), 200, "text/plain").string_response();
+            return shared_ptr<string_response>(new string_response(req.get_cookie("name"), 200, "text/plain"));
         }
 };
 
 class header_reading_resource : public http_resource
 {
     public:
-        const http_response render_GET(const http_request& req)
+        const shared_ptr<http_response> render_GET(const http_request& req)
         {
-            return http_response_builder(req.get_header("MyHeader"), 200, "text/plain").string_response();
+            return shared_ptr<string_response>(new string_response(req.get_header("MyHeader"), 200, "text/plain"));
         }
 };
 
 class complete_test_resource : public http_resource
 {
     public:
-        const http_response render_GET(const http_request& req)
+        const shared_ptr<http_response> render_GET(const http_request& req)
         {
-            return http_response_builder("OK", 200, "text/plain").string_response();
+            return shared_ptr<string_response>(new string_response("OK", 200, "text/plain"));
         }
-        const http_response render_POST(const http_request& req)
+        const shared_ptr<http_response> render_POST(const http_request& req)
         {
-            return http_response_builder("OK", 200, "text/plain").string_response();
+            return shared_ptr<string_response>(new string_response("OK", 200, "text/plain"));
         }
-        const http_response render_PUT(const http_request& req)
+        const shared_ptr<http_response> render_PUT(const http_request& req)
         {
-            return http_response_builder("OK", 200, "text/plain").string_response();
+            return shared_ptr<string_response>(new string_response("OK", 200, "text/plain"));
         }
-        const http_response render_DELETE(const http_request& req)
+        const shared_ptr<http_response> render_DELETE(const http_request& req)
         {
-            return http_response_builder("OK", 200, "text/plain").string_response();
+            return shared_ptr<string_response>(new string_response("OK", 200, "text/plain"));
         }
-        const http_response render_CONNECT(const http_request& req)
+        const shared_ptr<http_response> render_CONNECT(const http_request& req)
         {
-            return http_response_builder("OK", 200, "text/plain").string_response();
+            return shared_ptr<string_response>(new string_response("OK", 200, "text/plain"));
         }
 };
 
 class only_render_resource : public http_resource
 {
     public:
-        const http_response render(const http_request& req)
+        const shared_ptr<http_response> render(const http_request& req)
         {
-            return http_response_builder("OK", 200, "text/plain").string_response();
+            return shared_ptr<string_response>(new string_response("OK", 200, "text/plain"));
         }
 };
 
 class ok_resource : public http_resource
 {
     public:
-        const http_response render_GET(const http_request& req)
+        const shared_ptr<http_response> render_GET(const http_request& req)
         {
-            return http_response_builder("OK", 200, "text/plain").string_response();
+            return shared_ptr<string_response>(new string_response("OK", 200, "text/plain"));
         }
 };
 
 class nok_resource : public http_resource
 {
     public:
-        const http_response render_GET(const http_request& req)
+        const shared_ptr<http_response> render_GET(const http_request& req)
         {
-            return http_response_builder("NOK", 200, "text/plain").string_response();
+            return shared_ptr<string_response>(new string_response("NOK", 200, "text/plain"));
         }
 };
 
 class no_response_resource : public http_resource
 {
     public:
-        const http_response render_GET(const http_request& req)
+        const shared_ptr<http_response> render_GET(const http_request& req)
         {
-            return http_response();
+            return shared_ptr<http_response>(new http_response());
         }
 };
 
 class file_response_resource : public http_resource
 {
     public:
-        const http_response render_GET(const http_request& req)
+        const shared_ptr<http_response> render_GET(const http_request& req)
         {
-            return http_response_builder("test_content", 200, "text/plain").file_response();
+            return shared_ptr<file_response>(new file_response("test_content", 200, "text/plain"));
         }
 };
 
 class exception_resource : public http_resource
 {
     public:
-        const http_response render_GET(const http_request& req)
+        const shared_ptr<http_response> render_GET(const http_request& req)
         {
             throw std::domain_error("invalid");
         }
@@ -199,7 +199,7 @@ class exception_resource : public http_resource
 class error_resource : public http_resource
 {
     public:
-        const http_response render_GET(const http_request& req)
+        const shared_ptr<http_response> render_GET(const http_request& req)
         {
             throw "invalid";
         }
@@ -213,10 +213,10 @@ class print_request_resource : public http_resource
             this->ss = ss;
         }
 
-        const http_response render_GET(const http_request& req)
+        const shared_ptr<http_response> render_GET(const http_request& req)
         {
             (*ss) << req;
-            return http_response_builder("OK", 200, "text/plain").string_response();
+            return shared_ptr<string_response>(new string_response("OK", 200, "text/plain"));
         }
 
     private:
@@ -231,15 +231,15 @@ class print_response_resource : public http_resource
             this->ss = ss;
         }
 
-        const http_response render_GET(const http_request& req)
+        const shared_ptr<http_response> render_GET(const http_request& req)
         {
-            http_response hresp(http_response_builder("OK", 200, "text/plain")
-                    .with_header("MyResponseHeader", "MyResponseHeaderValue")
-                    .with_footer("MyResponseFooter", "MyResponseFooterValue")
-                    .with_cookie("MyResponseCookie", "MyResponseCookieValue")
-                    .string_response()
-            );
-            (*ss) << hresp;
+            shared_ptr<string_response> hresp(new string_response("OK", 200, "text/plain"));
+
+            hresp->with_header("MyResponseHeader", "MyResponseHeaderValue");
+            hresp->with_footer("MyResponseFooter", "MyResponseFooterValue");
+            hresp->with_cookie("MyResponseCookie", "MyResponseCookieValue");
+
+            (*ss) << *hresp;
 
             return hresp;
         }

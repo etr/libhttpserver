@@ -38,9 +38,9 @@ size_t writefunc(void *ptr, size_t size, size_t nmemb, std::string *s)
 class ok_resource : public http_resource
 {
     public:
-        const http_response render_GET(const http_request& req)
+        const shared_ptr<http_response> render_GET(const http_request& req)
         {
-            return http_response_builder("OK", 200, "text/plain").string_response();
+            return shared_ptr<string_response>(new string_response("OK", 200, "text/plain"));
         }
 };
 

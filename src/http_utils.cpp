@@ -211,6 +211,7 @@ const std::string http_utils::http_post_encoding_form_urlencoded =
 const std::string http_utils::http_post_encoding_multipart_formdata =
     MHD_HTTP_POST_ENCODING_MULTIPART_FORMDATA;
 
+const std::string http_utils::text_plain = "text/plain";
 
 std::vector<std::string> http_utils::tokenize_url(
         const std::string& str,

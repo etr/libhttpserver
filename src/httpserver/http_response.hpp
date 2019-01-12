@@ -30,9 +30,7 @@
 #include <iosfwd>
 #include <stdint.h>
 #include <vector>
-#include <iostream>
 
-#include "httpserver/binders.hpp"
 #include "httpserver/http_utils.hpp"
 
 struct MHD_Connection;
@@ -41,84 +39,49 @@ struct MHD_Response;
 namespace httpserver
 {
 
-class webserver;
-class http_response_builder;
-
-namespace details
-{
-    struct http_response_ptr;
-    ssize_t cb(void*, uint64_t, char*, size_t);
-};
-
-class bad_caching_attempt: public std::exception
-{
-    virtual const char* what() const throw()
-    {
-        return "You cannot pass ce = 0x0 without key!";
-    }
-};
-
-typedef ssize_t(*cycle_callback_ptr)(char*, size_t);
-
 /**
  * Class representing an abstraction for an Http Response. It is used from classes using these apis to send information through http protocol.
 **/
 class http_response
 {
     public:
-        http_response(const http_response_builder& builder);
+        http_response():
+            response_code(-1)
+        {
+        }
+
+        explicit http_response(int response_code, const std::string& content_type):
+            response_code(response_code)
+        {
+            this->headers[http::http_utils::http_header_content_type] = content_type;
+        }
 
         /**
          * Copy constructor
          * @param b The http_response object to copy attributes value from.
         **/
         http_response(const http_response& b):
-            content(b.content),
             response_code(b.response_code),
-            realm(b.realm),
-            opaque(b.opaque),
-            reload_nonce(b.reload_nonce),
-            fp(b.fp),
-            filename(b.filename),
             headers(b.headers),
             footers(b.footers),
-            cookies(b.cookies),
-            topics(b.topics),
-            keepalive_secs(b.keepalive_secs),
-            keepalive_msg(b.keepalive_msg),
-            send_topic(b.send_topic),
-            underlying_connection(b.underlying_connection),
-            cycle_callback(b.cycle_callback),
-            get_raw_response(this, b._get_raw_response),
-            decorate_response(this, b._decorate_response),
-            enqueue_response(this, b._enqueue_response),
-            completed(b.completed),
-            ws(b.ws),
-            connection_id(b.connection_id),
-            _get_raw_response(b._get_raw_response),
-            _decorate_response(b._decorate_response),
-            _enqueue_response(b._enqueue_response)
+            cookies(b.cookies)
         {
         }
 
-        http_response():
-            response_code(-1),
-            fp(-1),
-            underlying_connection(0x0),
-            completed(false),
-            ws(0x0),
-            connection_id(0x0)
+        http_response& operator=(const http_response& b)
         {
+            if (this == &b) return *this;
+
+            this->response_code = b.response_code;
+            this->headers = b.headers;
+            this->footers = b.footers;
+            this->cookies = b.cookies;
+
+            return *this;
         }
 
-        ~http_response();
-        /**
-         * Method used to get the content from the response.
-         * @return the content in string form
-        **/
-        const std::string& get_content()
+        virtual ~http_response()
         {
-            return this->content;
         }
 
         /**
@@ -178,95 +141,36 @@ class http_response
             return this->response_code;
         }
 
-        const std::string& get_realm() const
+        void with_header(const std::string& key, const std::string& value)
         {
-            return this->realm;
+            headers[key] = value;
         }
 
-        const std::string& get_opaque() const
+        void with_footer(const std::string& key, const std::string& value)
         {
-            return this->opaque;
+            footers[key] = value;
         }
 
-        bool need_nonce_reload() const
+        void with_cookie(const std::string& key, const std::string& value)
         {
-            return this->reload_nonce;
+            cookies[key] = value;
         }
 
-        int get_switch_callback() const
-        {
-            return 0;
-        }
+        void shoutCAST();
 
-        const std::vector<std::string>& get_topics() const
-        {
-            return this->topics;
-        }
+        virtual MHD_Response* get_raw_response();
+        virtual void decorate_response(MHD_Response* response);
+        virtual int enqueue_response(MHD_Connection* connection, MHD_Response* response);
+
     protected:
-        typedef details::binders::functor_two<MHD_Response**, webserver*, void> get_raw_response_t;
-
-        typedef details::binders::functor_one<MHD_Response*, void> decorate_response_t;
-
-        typedef details::binders::functor_two<MHD_Connection* ,MHD_Response*, int> enqueue_response_t;
-
         std::string content;
         int response_code;
-        std::string realm;
-        std::string opaque;
-        bool reload_nonce;
-        int fp;
-        std::string filename;
+
         std::map<std::string, std::string, http::header_comparator> headers;
         std::map<std::string, std::string, http::header_comparator> footers;
         std::map<std::string, std::string, http::header_comparator> cookies;
-        std::vector<std::string> topics;
-        int keepalive_secs;
-        std::string keepalive_msg;
-        std::string send_topic;
-        struct MHD_Connection* underlying_connection;
-        cycle_callback_ptr cycle_callback;
 
-        const get_raw_response_t get_raw_response;
-        const decorate_response_t decorate_response;
-        const enqueue_response_t enqueue_response;
-
-        bool completed;
-
-        webserver* ws;
-        MHD_Connection* connection_id;
-
-        void get_raw_response_str(MHD_Response** res, webserver* ws = 0x0);
-        void get_raw_response_file(MHD_Response** res, webserver* ws = 0x0);
-        void get_raw_response_switch_r(MHD_Response** res, webserver* ws = 0x0);
-
-        void get_raw_response_deferred(MHD_Response** res, webserver* ws = 0x0);
-        void decorate_response_str(MHD_Response* res);
-        void decorate_response_deferred(MHD_Response* res);
-        int enqueue_response_str(MHD_Connection* connection, MHD_Response* res);
-
-        int enqueue_response_basic(MHD_Connection* connection,
-                MHD_Response* res
-        );
-
-        int enqueue_response_digest(MHD_Connection* connection,
-                MHD_Response* res
-        );
-
-        friend class webserver;
-        friend struct details::http_response_ptr;
-        friend class http_response_builder;
-        friend void clone_response(const http_response& hr, http_response** dhr);
-        friend ssize_t details::cb(void* cls, uint64_t pos, char* buf, size_t max);
     	friend std::ostream &operator<< (std::ostream &os, const http_response &r);
-    private:
-        http_response& operator=(const http_response& b);
-
-        static ssize_t data_generator (void* cls, uint64_t pos, char* buf, size_t max);
-
-        void (http_response::*_get_raw_response)(MHD_Response**, webserver*);
-        void (http_response::*_decorate_response)(MHD_Response*);
-        int (http_response::*_enqueue_response)(MHD_Connection*, MHD_Response*);
-
 };
 
 std::ostream &operator<< (std::ostream &os, const http_response &r);

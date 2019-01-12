@@ -26,7 +26,7 @@
 #include "http_response.hpp"
 #include "webserver.hpp"
 #include "string_utilities.hpp"
-#include "http_response_builder.hpp"
+#include "string_response.hpp"
 
 using namespace std;
 
@@ -48,9 +48,9 @@ void resource_init(map<string, bool>& allowed_methods)
 namespace details
 {
 
-http_response empty_render(const http_request& r)
+shared_ptr<http_response> empty_render(const http_request& r)
 {
-    return http_response_builder("", 200).string_response();
+    return shared_ptr<http_response>(new string_response());
 }
 
 };

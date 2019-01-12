@@ -47,8 +47,8 @@
 #include "http_utils.hpp"
 #include "http_resource.hpp"
 #include "http_response.hpp"
+#include "string_response.hpp"
 #include "http_request.hpp"
-#include "http_response_builder.hpp"
 #include "details/http_endpoint.hpp"
 #include "string_utilities.hpp"
 #include "create_webserver.hpp"
@@ -60,8 +60,6 @@
 #ifndef SOCK_CLOEXEC
 #define SOCK_CLOEXEC 02000000
 #endif
-
-#define NEW_OR_MOVE(TYPE, VALUE) new TYPE(VALUE)
 
 using namespace std;
 
@@ -587,7 +585,7 @@ void webserver::upgrade_handler (void *cls, struct MHD_Connection* connection,
 {
 }
 
-const http_response webserver::not_found_page(details::modded_request* mr) const
+const std::shared_ptr<http_response> webserver::not_found_page(details::modded_request* mr) const
 {
     if(not_found_resource != 0x0)
     {
@@ -595,11 +593,11 @@ const http_response webserver::not_found_page(details::modded_request* mr) const
     }
     else
     {
-        return http_response_builder(NOT_FOUND_ERROR, http_utils::http_not_found).string_response();
+        return std::shared_ptr<http_response>(new string_response(NOT_FOUND_ERROR, http_utils::http_not_found));
     }
 }
 
-const http_response webserver::method_not_allowed_page(details::modded_request* mr) const
+const std::shared_ptr<http_response> webserver::method_not_allowed_page(details::modded_request* mr) const
 {
     if(method_not_allowed_resource != 0x0)
     {
@@ -607,11 +605,11 @@ const http_response webserver::method_not_allowed_page(details::modded_request* 
     }
     else
     {
-        return http_response_builder(METHOD_ERROR, http_utils::http_method_not_allowed).string_response();
+        return std::shared_ptr<http_response>(new string_response(METHOD_ERROR, http_utils::http_method_not_allowed));
     }
 }
 
-const http_response webserver::internal_error_page(details::modded_request* mr, bool force_our) const
+const std::shared_ptr<http_response> webserver::internal_error_page(details::modded_request* mr, bool force_our) const
 {
     if(internal_error_resource != 0x0 && !force_our)
     {
@@ -619,8 +617,7 @@ const http_response webserver::internal_error_page(details::modded_request* mr, 
     }
     else
     {
-        http_response hr = http_response_builder(GENERIC_ERROR, http_utils::http_internal_server_error, "text/plain").string_response();
-        return hr;
+        return std::shared_ptr<http_response>(new string_response(GENERIC_ERROR, http_utils::http_internal_server_error, "text/plain"));
     }
 }
 
@@ -846,63 +843,61 @@ int webserver::finalize_answer(
         {
             if(hrm->is_allowed(method))
             {
-                mr->dhrs = NEW_OR_MOVE(http_response, ((hrm)->*(mr->callback))(*mr->dhr)); //copy in memory (move in case)
+                mr->dhrs = ((hrm)->*(mr->callback))(*mr->dhr); //copy in memory (move in case)
                 if (mr->dhrs->get_response_code() == -1)
                 {
-                    mr->dhrs = NEW_OR_MOVE(http_response, internal_error_page(mr));
+                    mr->dhrs = internal_error_page(mr);
                 }
             }
             else
             {
-                mr->dhrs = NEW_OR_MOVE(http_response, method_not_allowed_page(mr));
+                mr->dhrs = method_not_allowed_page(mr);
             }
         }
         catch(const std::exception& e)
         {
-            mr->dhrs = NEW_OR_MOVE(http_response, internal_error_page(mr));
+            mr->dhrs = internal_error_page(mr);
         }
         catch(...)
         {
-            mr->dhrs = NEW_OR_MOVE(http_response, internal_error_page(mr));
+            mr->dhrs = internal_error_page(mr);
         }
     }
     else
     {
-        mr->dhrs = NEW_OR_MOVE(http_response, not_found_page(mr));
+        mr->dhrs = not_found_page(mr);
     }
-
-    mr->dhrs->underlying_connection = connection;
 
     try
     {
         try
         {
-            mr->dhrs->get_raw_response(&raw_response, this);
+            raw_response = mr->dhrs->get_raw_response();
         }
         catch(const std::invalid_argument& iae)
         {
-            mr->dhrs = NEW_OR_MOVE(http_response, not_found_page(mr));
-            mr->dhrs->get_raw_response(&raw_response, this);
+            mr->dhrs = not_found_page(mr);
+            raw_response = mr->dhrs->get_raw_response();
         }
         catch(const std::exception& e)
         {
-            mr->dhrs = NEW_OR_MOVE(http_response, internal_error_page(mr));
-            mr->dhrs->get_raw_response(&raw_response, this);
+            mr->dhrs = internal_error_page(mr);
+            raw_response = mr->dhrs->get_raw_response();
         }
         catch(...)
         {
-            mr->dhrs = NEW_OR_MOVE(http_response, internal_error_page(mr));
-            mr->dhrs->get_raw_response(&raw_response, this);
+            mr->dhrs = internal_error_page(mr);
+            raw_response = mr->dhrs->get_raw_response();
         }
     }
     catch(...) // catches errors in internal error page
     {
-        mr->dhrs = NEW_OR_MOVE(http_response, internal_error_page(mr, true));
-        mr->dhrs->get_raw_response(&raw_response, this);
+        mr->dhrs = internal_error_page(mr, true);
+        raw_response = mr->dhrs->get_raw_response();
     }
     mr->dhrs->decorate_response(raw_response);
     to_ret = mr->dhrs->enqueue_response(connection, raw_response);
-    MHD_destroy_response (raw_response);
+    MHD_destroy_response(raw_response);
     return to_ret;
 }
 

@@ -25,9 +25,6 @@
 #ifndef _MODDED_REQUEST_HPP_
 #define _MODDED_REQUEST_HPP_
 
-#include "binders.hpp"
-#include "details/http_response_ptr.hpp"
-
 namespace httpserver
 {
 
@@ -41,10 +38,10 @@ struct modded_request
     std::string* standardized_url;
     webserver* ws;
 
-    const http_response (httpserver::http_resource::*callback)(const httpserver::http_request&);
+    const std::shared_ptr<http_response> (httpserver::http_resource::*callback)(const httpserver::http_request&);
 
     http_request* dhr;
-    http_response_ptr dhrs;
+    std::shared_ptr<http_response> dhrs;
     bool second;
 
     modded_request():
@@ -53,7 +50,6 @@ struct modded_request
         standardized_url(0x0),
         ws(0x0),
         dhr(0x0),
-        dhrs(0x0),
         second(false)
     {
     }
