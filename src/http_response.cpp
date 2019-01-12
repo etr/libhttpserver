@@ -39,7 +39,6 @@ class webserver;
 http_response::http_response(const http_response_builder& builder):
     content(builder._content_hook),
     response_code(builder._response_code),
-    autodelete(builder._autodelete),
     realm(builder._realm),
     opaque(builder._opaque),
     reload_nonce(builder._reload_nonce),

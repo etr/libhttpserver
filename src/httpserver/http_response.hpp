@@ -75,7 +75,6 @@ class http_response
         http_response(const http_response& b):
             content(b.content),
             response_code(b.response_code),
-            autodelete(b.autodelete),
             realm(b.realm),
             opaque(b.opaque),
             reload_nonce(b.reload_nonce),
@@ -199,11 +198,6 @@ class http_response
             return 0;
         }
 
-        bool is_autodelete() const
-        {
-            return autodelete;
-        }
-
         const std::vector<std::string>& get_topics() const
         {
             return this->topics;
@@ -217,7 +211,6 @@ class http_response
 
         std::string content;
         int response_code;
-        bool autodelete;
         std::string realm;
         std::string opaque;
         bool reload_nonce;

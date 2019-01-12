@@ -70,12 +70,10 @@ class http_response_builder
         explicit http_response_builder(
             const std::string& content_hook,
             int response_code = 200,
-            const std::string& content_type = "text/plain",
-            bool autodelete = true
+            const std::string& content_type = "text/plain"
         ):
             _content_hook(content_hook),
             _response_code(response_code),
-            _autodelete(autodelete),
             _realm(""),
             _opaque(""),
             _reload_nonce(false),
@@ -96,12 +94,10 @@ class http_response_builder
         http_response_builder(
             const byte_string& content_hook,
             int response_code = 200,
-            const std::string& content_type = "text/plain",
-            bool autodelete = true
+            const std::string& content_type = "text/plain"
         ):
             _content_hook(std::string(content_hook.get_content_hook(), content_hook.get_content_length())),
             _response_code(response_code),
-            _autodelete(autodelete),
             _realm(""),
             _opaque(""),
             _reload_nonce(false),
@@ -122,7 +118,6 @@ class http_response_builder
         http_response_builder(const http_response_builder& b):
             _content_hook(b._content_hook),
             _response_code(b._response_code),
-            _autodelete(b._autodelete),
             _realm(b._realm),
             _opaque(b._opaque),
             _reload_nonce(b._reload_nonce),
@@ -143,7 +138,6 @@ class http_response_builder
         {
             _content_hook = b._content_hook;
             _response_code = b._response_code;
-            _autodelete = b._autodelete;
             _realm = b._realm;
             _opaque = b._opaque;
             _reload_nonce = b._reload_nonce;
@@ -247,7 +241,6 @@ class http_response_builder
     private:
         std::string _content_hook;
         int _response_code;
-        bool _autodelete;
         std::string _realm;
         std::string _opaque;
         bool _reload_nonce;
