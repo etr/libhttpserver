@@ -263,6 +263,7 @@ matrix:
         apt:
           sources:
             - llvm-toolchain-trusty-6.0
+            - ubuntu-toolchain-r-test
           packages:
             - clang-6.0
       env:
@@ -272,6 +273,7 @@ matrix:
         apt:
           sources:
             - llvm-toolchain-trusty-7
+            - ubuntu-toolchain-r-test
           packages:
             - clang-7.0
       env:
