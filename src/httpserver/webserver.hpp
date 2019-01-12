@@ -173,7 +173,7 @@ class webserver
         const bool regex_checking;
         const bool ban_system_enabled;
         const bool post_process_enabled;
-        const bool comet_enabled;
+        const bool deferred_enabled;
         bool single_resource;
         pthread_mutex_t mutexwait;
         pthread_rwlock_t runguard;

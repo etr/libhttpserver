@@ -170,7 +170,7 @@ webserver::webserver(const create_webserver& params):
     regex_checking(params._regex_checking),
     ban_system_enabled(params._ban_system_enabled),
     post_process_enabled(params._post_process_enabled),
-    comet_enabled(params._comet_enabled),
+    deferred_enabled(params._deferred_enabled),
     single_resource(params._single_resource),
     not_found_resource(params._not_found_resource),
     method_not_allowed_resource(params._method_not_allowed_resource),
@@ -324,7 +324,7 @@ bool webserver::start(bool blocking)
         start_conf |= MHD_USE_DEBUG;
     if(pedantic)
         start_conf |= MHD_USE_PEDANTIC_CHECKS;
-    if(comet_enabled)
+    if(deferred_enabled)
         start_conf |= MHD_USE_SUSPEND_RESUME;
 
 #ifdef USE_FASTOPEN
