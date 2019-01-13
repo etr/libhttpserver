@@ -86,7 +86,7 @@ script:
      fi
    else
      make check ;
-     if [ "$VALGRIND" = "valgrind" ]; then make check-valgrind; fi
+     if [ "$VALGRIND" = "valgrind" ]; then make check-valgrind; fi;
      cat test/test-suite.log ;
      ls -l /usr/local/lib/ ;
      ls -l /usr/lib/ ;
