@@ -55,6 +55,8 @@ install:
      ../configure --disable-fastopen --build `../config.guess` --host aarch64-linux-gnu CC="gcc -B$HOME/linker_bin" CXX="g++ -B$HOME/linker_bin";
    elif [ "$CROSS_COMPILE" = "1" ] && [ "$ARM_ARCH_DIR" = "arm-linux-gnueabi" ]; then 
      ../configure --disable-fastopen --build `../config.guess` --host arm-linux-gnueabi;
+   elif [ "$VALGRIND" = "valgrind" ]; then
+     ../configure --enable-debug --disable-fastopen --disable-valgrind-helgrind --disable-valgrind-drd --disable-valgrind-sgcheck;
    else
      ../configure --disable-fastopen;
    fi
@@ -84,6 +86,7 @@ script:
      fi
    else
      make check ;
+     if [ "$VALGRIND" = "valgrind" ]; then make check-valgrind; fi
      cat test/test-suite.log ;
      ls -l /usr/local/lib/ ;
      ls -l /usr/lib/ ;
@@ -179,6 +182,17 @@ matrix:
             - g++-8
       env:
         - MATRIX_EVAL="CC=gcc-8 && CXX=g++-8"
+    - os: linux
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-7
+            - valgrind
+            - valgrind-dbg
+      env:
+        - MATRIX_EVAL="CC=gcc-7 && CXX=g++-7 && VALGRIND=valgrind"
     #- os: osx
     #  osx_image: xcode8
     #  env:
