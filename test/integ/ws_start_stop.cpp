@@ -241,6 +241,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, enable_options)
 LT_END_AUTO_TEST(enable_options)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_socket)
+#ifndef DARWIN
     int fd = socket(AF_INET, SOCK_STREAM, 0);
 
     struct sockaddr_in address;
@@ -269,6 +270,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_socket)
     curl_easy_cleanup(curl);
 
     ws.stop();
+#endif
 LT_END_AUTO_TEST(custom_socket)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, single_resource)

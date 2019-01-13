@@ -270,6 +270,8 @@ if test x"$coverit" = x"yes"; then
     case $host_os in
         darwin* )
             echo "Coverage not supported on OSX"
+            AM_CXXFLAGS="$AM_CXXFLAGS -DDARWIN"
+            AM_CFLAGS="$AM_CFLAGS -DDARWIN"
             cond_gcov="no"
             ;;
         *)
