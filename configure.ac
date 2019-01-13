@@ -258,6 +258,13 @@ else
     AM_CFLAGS="$AM_CXXFLAGS -O3"
 fi
 
+case $host_os in
+    darwin* )
+        AM_CXXFLAGS="$AM_CXXFLAGS -DDARWIN"
+        AM_CFLAGS="$AM_CFLAGS -DDARWIN"
+        ;;
+esac
+
 AC_MSG_CHECKING([whether to build with coverage information])
 AC_ARG_ENABLE([coverage],
     [AS_HELP_STRING([--enable-coverage],
