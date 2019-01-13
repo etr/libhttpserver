@@ -325,6 +325,9 @@ AC_CONFIG_LINKS([test/test_content:test/test_content])
 AC_CONFIG_LINKS([test/cert.pem:test/cert.pem])
 AC_CONFIG_LINKS([test/key.pem:test/key.pem])
 AC_CONFIG_LINKS([test/test_root_ca.pem:test/test_root_ca.pem])
+AC_CONFIG_LINKS([examples/cert.pem:examples/cert.pem])
+AC_CONFIG_LINKS([examples/key.pem:examples/key.pem])
+AC_CONFIG_LINKS([examples/test_content:examples/test_content])
 
 AC_OUTPUT(
       libhttpserver.pc
