@@ -381,13 +381,6 @@ bool webserver::stop()
     this->running = false;
     pthread_cond_signal(&mutexcond);
     pthread_mutex_unlock(&mutexwait);
-    for(unsigned int i = 0; i < threads.size(); ++i)
-    {
-        void* t_res;
-        pthread_join(threads[i], &t_res);
-        free(t_res);
-    }
-    threads.clear();
     typedef vector<details::daemon_item*>::const_iterator daemon_item_it;
 
     for(daemon_item_it it = daemons.begin(); it != daemons.end(); ++it)

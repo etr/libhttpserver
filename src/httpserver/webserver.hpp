@@ -189,7 +189,6 @@ class webserver
         std::set<http::ip_representation> allowances;
 
         std::vector<details::daemon_item*> daemons;
-        std::vector<pthread_t> threads;
 
         static void* select(void* self);
         static void* cleaner(void* self);
