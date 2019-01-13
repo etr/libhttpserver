@@ -19,8 +19,9 @@
 LDADD = $(top_builddir)/src/libhttpserver.la
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/
 METASOURCES = AUTO
-noinst_PROGRAMS = hello_world service
+noinst_PROGRAMS = hello_world service minimal_hello_world custom_error
 
 hello_world_SOURCES = hello_world.cpp
 service_SOURCES = service.cpp
-
+minimal_hello_world_SOURCES = minimal_hello_world.cpp
+custom_error_SOURCES = custom_error.cpp
