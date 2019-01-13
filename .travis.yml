@@ -84,6 +84,7 @@ script:
        qemu-arm -L /usr/arm-linux-gnueabi/ ./.libs/http_utils ;
        qemu-arm -L /usr/arm-linux-gnueabi/ ./.libs/threaded ;
      fi
+   fi
  - make check
  - cat test/test-suite.log
  - if [ "$VALGRIND" = "valgrind" ]; then make check-valgrind; fi;
