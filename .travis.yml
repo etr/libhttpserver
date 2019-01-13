@@ -84,14 +84,13 @@ script:
        qemu-arm -L /usr/arm-linux-gnueabi/ ./.libs/http_utils ;
        qemu-arm -L /usr/arm-linux-gnueabi/ ./.libs/threaded ;
      fi
-   else
-     make check ;
-     if [ "$VALGRIND" = "valgrind" ]; then make check-valgrind; fi;
-     cat test/test-suite.log ;
-     ls -l /usr/local/lib/ ;
-     ls -l /usr/lib/ ;
-     if [ "$TRAVIS_OS_NAME" = "linux" ]; then cd ../src/; cppcheck --error-exitcode=1 .; cd ../build; fi
-   fi
+ - make check
+ - cat test/test-suite.log
+ - if [ "$VALGRIND" = "valgrind" ]; then make check-valgrind; fi;
+ - if [ "$VALGRIND" = "valgrind" ]; then cat test/test-suite-memcheck.log; fi;
+ - ls -l /usr/local/lib/
+ - ls -l /usr/lib/
+ - if [ "$TRAVIS_OS_NAME" = "linux" ]; then cd ../src/; cppcheck --error-exitcode=1 .; cd ../build; fi
 after_success:
   - if [ "$DEBUG" = "debug" ] && [ "$COVERAGE" = "coverage" ] && [ "$TRAVIS_OS_NAME" = "linux" ]; then bash <(curl -s https://codecov.io/bash); fi
 matrix:
