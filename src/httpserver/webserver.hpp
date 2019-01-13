@@ -59,7 +59,6 @@ struct httpserver_ska;
 };
 
 namespace details {
-    struct daemon_item;
     struct modded_request;
 }
 
@@ -188,7 +187,7 @@ class webserver
         std::set<http::ip_representation> bans;
         std::set<http::ip_representation> allowances;
 
-        std::vector<details::daemon_item*> daemons;
+        struct MHD_Daemon* daemon;
 
         static void* select(void* self);
         static void* cleaner(void* self);

@@ -66,26 +66,6 @@ using namespace std;
 namespace httpserver
 {
 
-namespace details
-{
-
-struct daemon_item
-{
-    webserver* ws;
-    struct MHD_Daemon* daemon;
-    daemon_item(webserver* ws, struct MHD_Daemon* daemon):
-        ws(ws),
-        daemon(daemon)
-    {
-    }
-    ~daemon_item()
-    {
-        MHD_stop_daemon (this->daemon);
-    }
-};
-
-}
-
 using namespace http;
 
 int policy_callback (void *, const struct sockaddr*, socklen_t);
@@ -329,16 +309,16 @@ bool webserver::start(bool blocking)
     start_conf |= MHD_USE_TCP_FASTOPEN;
 #endif
 
-    struct MHD_Daemon* daemon = NULL;
+    this->daemon = NULL;
     if(bind_address == 0x0) {
-        daemon = MHD_start_daemon
+        this->daemon = MHD_start_daemon
         (
                 start_conf, this->port, &policy_callback, this,
                 &answer_to_connection, this, MHD_OPTION_ARRAY,
                 &iov[0], MHD_OPTION_END
         );
     } else {
-        daemon = MHD_start_daemon
+        this->daemon = MHD_start_daemon
         (
                 start_conf, 1, &policy_callback, this,
                 &answer_to_connection, this, MHD_OPTION_ARRAY,
@@ -346,12 +326,10 @@ bool webserver::start(bool blocking)
         );
     }
 
-    if(NULL == daemon)
+    if(this->daemon == NULL)
     {
         throw std::invalid_argument("Unable to connect daemon to port: " + this->port);
     }
-    details::daemon_item* di = new details::daemon_item(this, daemon);
-    daemons.push_back(di);
 
     bool value_onclose = false;
 
@@ -381,11 +359,8 @@ bool webserver::stop()
     this->running = false;
     pthread_cond_signal(&mutexcond);
     pthread_mutex_unlock(&mutexwait);
-    typedef vector<details::daemon_item*>::const_iterator daemon_item_it;
 
-    for(daemon_item_it it = daemons.begin(); it != daemons.end(); ++it)
-        delete *it;
-    daemons.clear();
+    MHD_stop_daemon(this->daemon);
 
     shutdown(bind_socket, 2);
 
