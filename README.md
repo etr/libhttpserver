@@ -337,7 +337,7 @@ libhttpserver supports IP blacklisting and whitelisting as an internal feature. 
 * _.ban_system() and .no_ban_system:_ Can be used to enable/disable the ban system. `on` by default.
 * _.default_policy(**const http::http_utils::policy_T&** default_policy):_ Specifies what should be the default behavior when receiving a request. Possible values are `ACCEPT` and `REJECT`. Default is `ACCEPT`.
 
-### Authentication
+### Authentication Parameters
 * _.basic_auth() and .no_basic_auth:_ Can be used to enable/disable parsing of the basic authorization header sent by the client. `on` by default.
 * _.digest_auth() and .no_digest_auth:_ Can be used to enable/disable parsing of the digested authentication data sent by the client. `on` by default.
 * _.nonce_nc_size(**int** nonce_size):_ Size of an array of nonce and nonce counter map. This option represents the size (number of elements) of a map of a nonce and a nonce-counter. If this option is not specified, a default value of 4 will be used (which might be too small for servers handling many requests).
