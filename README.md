@@ -1,5 +1,5 @@
 <!---
-Copyright (C)  2014  Sebastiano Merlino.
+Copyright (C)  2011-2019  Sebastiano Merlino.
     Permission is granted to copy, distribute and/or modify this document
     under the terms of the GNU Free Documentation License, Version 1.3
     or any later version published by the Free Software Foundation;
@@ -8,8 +8,7 @@ Copyright (C)  2014  Sebastiano Merlino.
     Free Documentation License".
 -->
 
-The libhttpserver (0.8.0) reference manual
-==========================================
+# The libhttpserver reference manual
 
 [![Build Status](https://travis-ci.org/etr/libhttpserver.png?branch=master)](https://travis-ci.org/etr/libhttpserver)
 [![codecov](https://codecov.io/gh/etr/libhttpserver/branch/master/graph/badge.svg)](https://codecov.io/gh/etr/libhttpserver)
@@ -18,60 +17,857 @@ The libhttpserver (0.8.0) reference manual
 
 [![ko-fi](https://www.ko-fi.com/img/donate_sm.png)](https://ko-fi.com/F1F5HY8B)
 
-This library has been originally developed under the zencoders flags and this community has always supported me all along this work so I am happy to put the logo on this readme.
+## Tl;dr
+libhttpserver is a C++ library for building high performance RESTful web servers.
+libhttpserver is buildt upon  [libmicrohttpd](https://www.gnu.org/software/libmicrohttpd/) to provide a simple API for developers to create HTTP services in C++.
 
-            When you see this tree, know that you've came across ZenCoders.org
+**Features:**
+- HTTP 1.1 compatible request parser
+- RESTful oriented interface
+- Flexible handler API
+- Cross-platform compatible
+- Implementation is HTTP 1.1 compliant
+- Multiple threading models
+- Support for IPv6
+- Support for SHOUTcast
+- Support for incremental processing of POST data (optional)
+- Support for basic and digest authentication (optional)
+- Support for TLS (requires libgnutls, optional)
+
+## Table of Contents
+* [Introduction](#introduction)
+* [Requirements](#requirements)
+* [Building](#building)
+* [Getting Started](#getting-started)
+* [Structures and classes type definition](#structures-and-classes-type-definition)
+* [Create and work with a webserver](#create-and-work-with-a-webserver)
+* [The resource object](#the-resource-object)
+* [Registering resources](#registering-resources)
+* [Parsing requests](#parsing-requests)
+* [Building responses to requests](#building-responses-to-requests)
+* [IP Blacklisting and Whitelisting](#ip-blacklisting-and-whitelisting)
+* [Authentication](#authentication)
+* [HTTP Utils](#http-utils)
+* [Other Examples](#other-examples)
+
+#### Community
+* [Code of Conduct (on a separate page)](https://github.com/etr/libhttpserver/blob/master/CODE_OF_CONDUCT.md)
+* [Contributing (on a separate page)](https://github.com/etr/libhttpserver/blob/master/CODE_OF_CONDUCT.md) 
+
+#### Appendices
+* [Copying statement](#copying)
+* [GNU-LGPL](#GNU-lesser-general-public-license): The GNU Lesser General Public License says how you can copy and share almost all of libhttpserver.
+* [GNU-FDL](#GNU-free-documentation-license): The GNU Free Documentation License says how you can copy and share the documentation of libhttpserver.
+
+## Introduction
+libhttpserver is meant to constitute an easy system to build HTTP servers with REST fashion.
+libhttpserver is based on [libmicrohttpd](https://www.gnu.org/software/libmicrohttpd/) and, like this, it is a daemon library (parts of this documentation are, in fact, matching those of the wrapped library).
+The mission of this library is to support all possible HTTP features directly and with a simple semantic allowing then the user to concentrate only on his application and not on HTTP request handling details.
+
+The library is supposed to work transparently for the client Implementing the business logic and using the library itself to realize an interface.
+If the user wants it must be able to change every behavior of the library itself through the registration of callbacks.
+
+libhttpserver is able to decode certain body format a and automatically format them in object oriented fashion. This is true for query arguments and for *POST* and *PUT* requests bodies if *application/x-www-form-urlencoded* or *multipart/form-data* header are passed.
+
+All functions are guaranteed to be completely reentrant and thread-safe (unless differently specified).
+Additionally, clients can specify resource limits on the overall number of connections, number of connections per IP address and memory used per connection to avoid resource exhaustion.
+
+[Back to TOC](#table-of-contents)
+
+## Requirements
+libhttpserver can be used without any dependencies aside for libmicrohttpd.
+
+The minimum versions required are:
+* g++ >= 4.8.4 or clang-3.6
+* libmicrohttpd >= 0.9.52
+* [Optionally]: for TLS (HTTPS) support, you'll need [libgnutls](http://www.gnutls.org/).
+* [Optionally]: to compile the code-reference, you'll need [doxygen](http://www.doxygen.nl/).
+
+Additionally, for MinGW on windows you will need:
+* libwinpthread (For MinGW-w64, if you use thread model posix then you have this)
+* libgnurx >= 2.5.1
+
+Furthermore, the testcases use [libcurl](http://curl.haxx.se/libcurl/) but you don't need it to compile the library.
+
+[Back to TOC](#table-of-contents)
+
+## Building
+libhttpserver uses the standard system where the usual build process involves running
+> ./bootstrap  
+> mkdir build  
+> cd build  
+> \.\./configure  
+> make  
+> make install # (optionally to install on the system)
+
+[Back to TOC](#table-of-contents)
+
+### Optional parameters to configure script
+A complete list of parameters can be obtained running 'configure --help'.
+Here are listed the libhttpserver specific options (the canonical configure options are also supported).
+
+* _\-\-enable-same-directory-build:_ enable to compile in the same directory. This is heavily discouraged. (def=no)
+* _\-\-enable-debug:_ enable debug data generation. (def=no)
+* _\-\-disable-doxygen-doc:_ don't generate any doxygen documentation. Doxygen is automatically invoked if present on the system. Automatically disabled otherwise.
+* _\-\-enable-fastopen:_ enable use of TCP_FASTOPEN (def=yes)
+* _\-\-enable-poll[=ARG]:_ enable poll support. Internal behavior of the `INTERNAL_SELECT` (yes, no, auto) [auto]
+* _\-\-enable-epoll[=ARG]:_ enable epoll support. Internal behavior of the `INTERNAL_SELECT` (yes, no, auto) [auto]
+* _\-\-enable-static:_ enable use static linking (def=yes)
+
+[Back to TOC](#table-of-contents)
+
+## Getting Started
+The most basic example of creating a server and handling a requests for the path `/hello`:
+
+    #include <httpserver.hpp>
+
+    using namespace httpserver;
+
+    class hello_world_resource : public http_resource {
+    public:
+        const std::shared_ptr<http_response> render(const http_request&) {
+            return std::shared_ptr<http_response>(new string_response("Hello, World!"));
+        }
+    };
+
+    int main(int argc, char** argv) {
+        webserver ws = create_webserver(8080);
+
+        hello_world_resource hwr;
+        ws.register_resource("/hello", &hwr);
+        ws.start(true);
+        
+        return 0;
+    }
+
+To test the above example, you could run the following command from a terminal:
     
-                                   with open('ZenCoders.                            
-                             `num` in numbers   synchronized                        
-                         datetime d      glob.     sys.argv[2] .                    
-                      def myclass   `..` @@oscla   org.   .  class {                
-                   displ  hooks(   public static void   ma    functor:              
-                 $myclass->method(  impport sys, os.pipe `   @param name`           
-               fcl   if(system(cmd) myc. /de   `  $card( array("a"   srand          
-             format  lists:  ++:   conc   ++ "my  an   WHERE  for(   == myi         
-           `sys:  myvalue(myvalue) sys.t   Console.W  try{    rais     using        
-          connec  SELECT * FROM table mycnf acco desc and or selector::clas  at     
-         openldap string  sys.   print "zenc der " { 'a':  `ls -l` >  appe &firs    
-        import Tkinter    paste( $obh  &a or it myval  bro roll:  :: [] require a   
-       case `` super. +y  <svg x="100">  expr    say " %rooms 1  --account fb- yy   
-      proc    meth Animate => send(D, open)    putd    EndIf 10  whi   myc`   cont  
-     and    main (--) import loop $$ or  end onload  UNION WITH tab   timer 150 *2  
-     end. begin True GtkLabel *label    doto partition te   let auto  i<- (i + d ); 
-    .mushup ``/.  ^/zenc/    myclass->her flv   op             <> element >> 71  or 
-    QFileDi   :   and  ..    with myc  toA  channel::bo    myc isEmpty a  not  bodt;
-    class T  public pol    str    mycalc d   pt &&a     *i fc  add               ^ac
-    ::ZenCoders::core::namespac  boost::function st  f = std:   ;;     int    assert
-    cout << endl   public genera   #include "b ost   ::ac myna const cast<char*> mys
-    ac  size_t   return ran  int (*getNextValue)(void) ff   double sa_family_t famil
-    pu        a   do puts("      ac   int main(int argc, char*   "%5d    struct nam
-    cs               float       for     typedef    enum  puts            getchar() 
-    if(                        else      #define     fp    FILE* f         char* s 
-     i++                                 strcat(           %s                  int 
-     31]                                 total+=                               do  
-      }do                                while(1)                             sle  
-      getc                              strcpy( a                            for   
-       prin                            scanf(%d, &                          get    
-         int                       void myfunc(int pa                     retu      
-           BEQ                   BNEQZ R1 10 ANDI R1 R2                  SYS        
-            XOR                SYSCALL 5 SLTIU MFLO 15 SW               JAL         
-              BNE            BLTZAL R1 1 LUI 001 NOOP MULTU           SLLV          
-                MOV R1     ADD R1 R2  JUMP  10 1001 BEQ R1 R2 1      ANDI            
-                   1101  1010001100  111 001 01  1010 101100 1001  100              
-                     110110 100   0  01 101 01100 100 100 1000100011                
-                        11101001001  00   11  100   11  10100010                    
-                            000101001001 10  1001   101000101                       
-                                 010010010010110101001010
+    curl -XGET -v http://localhost:8080/hello
 
-For further information:
-visit our website www.zencoders.org
+You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/minimal_hello_world.cpp).
 
-Author: Sebastiano Merlino
+[Back to TOC](#table-of-contents)
 
-Copying
-=======
-This manual is for libhttpserver, C++ library for creating an
-embedded Rest HTTP server (and more).
+## Structures and classes type definition
+* _webserver:_ Represents the daemon listening on a socket for HTTP traffic.
+	* _create_webserver:_ Builder class to support the creation of a webserver.
+* _http_resource:_ Represents the resource associated with a specific http endpoint.
+* _http_request:_ Represents the request received by the resource that process it.
+* _http_response:_ Represents the response sent by the server once the resource finished its work.
+	* _string_response:_ A simple string response.
+	* _file_response:_ A response getting content from a fail.
+	* _basic_auth_fail_response:_ A failure in basic authentication.
+	* _digest_auth_fail_response:_ A failure in digest authentication.
+	* _deferred_response:_ A response getting content from a callback.
+
+[Back to TOC](#table-of-contents)
+
+## Create and work with a webserver
+As you can see from the example above, creating a webserver with standard configuration is quite simple:
+    
+    webserver ws = create_webserver(8080);
+
+The `create_webserver` class is a supporting _builder_ class that eases the building of a webserver through chained syntax.
+
+### Basic Startup Options
+
+In this section we will explore other basic options that you can use when configuring your server. More advanced options (custom callbacks, https support, etc...) will be discussed separately.
+
+* _.port(**int** port):_ The port at which the server will listen. This can also be passed to the consturctor of `create_webserver`. E.g. `create_webserver(8080)`.
+* _.max_connections(**int** max_conns):_ Maximum number of concurrent connections to accept. The default is `FD_SETSIZE - 4` (the maximum number of file descriptors supported by `select` minus four for `stdin`, `stdout`, `stderr` and the server socket). In other words, the default is as large as possible. Note that if you set a low connection limit, you can easily get into trouble with browsers doing request pipelining.
+For example, if your connection limit is “1”, a browser may open a first connection to access your “index.html” file, keep it open but use a second connection to retrieve CSS files, images and the like. In fact, modern browsers are typically by default configured for up to 15 parallel connections to a single server. If this happens, the library will refuse to even accept the second connection until the first connection is closed — which does not happen until timeout. As a result, the browser will fail to render the page and seem to hang. If you expect your server to operate close to the connection limit, you should first consider using a lower timeout value and also possibly add a “Connection: close” header to your response to ensure that request pipelining is not used and connections are closed immediately after the request has completed.
+* _.content_size_limit(**size_t** size_limit):_ Sets the maximum size of the content that a client can send over in a single block. The default is `-1 = unlimited`.
+* _.connection_timeout(**int** timeout):_ Determines after how many seconds of inactivity a connection should be timed out automatically. The default timeout is `180 seconds`.
+* _.memory_limit(**int** memory_limit):_ Maximum memory size per connection (followed by a `size_t`). The default is 32 kB (32*1024 bytes). Values above 128k are unlikely to result in much benefit, as half of the memory will be typically used for IO, and TCP buffers are unlikely to support window sizes above 64k on most systems.
+* _.per_IP_connection_limit(**int** connection_limit):_ Limit on the number of (concurrent) connections made to the server from the same IP address. Can be used to prevent one IP from taking over all of the allowed connections. If the same IP tries to establish more than the specified number of connections, they will be immediately rejected. The default is `0`, which means no limit on the number of connections from the same IP address.
+* _.bind_socket(**int** socket_fd):_ Listen socket to use. Pass a listen socket for the daemon to use (systemd-style). If this option is used, the daemon will not open its own listen socket(s). The argument passed must be of type "int" and refer to an existing socket that has been bound to a port and is listening.
+* _.max_thread_stack_size(**int** stack_size):_ Maximum stack size for threads created by the library. Not specifying this option or using a value of zero means using the system default (which is likely to differ based on your platform). Default is `0 (system default)`.
+* _.use_ipv6() and .no_ipv6():_ Enable or disable the IPv6 protocol support (by default, libhttpserver will just support IPv4). If you specify this and the local platform does not support it, starting up the server will throw an exception. `off` by default.
+* _.pedantic() and .no_pedantic():_ Enables pedantic checks about the protocol (as opposed to as tolerant as possible). Specifically, at the moment, this flag causes the library to reject HTTP 1.1 connections without a `Host` header. This is required by the standard, but of course in violation of the “be as liberal as possible in what you accept” norm. It is recommended to turn this **off** if you are testing clients against the library, and **on** in production. `off` by default.
+* _.debug() and .no_debug():_ Enables debug messages from the library. `off` by default.
+* _.regex_checking() and .no_regex_checking():_ Enables pattern matching for endpoints. Read more [here](#registering-resources). `on` by default.
+* _.post_process() and .no_post_process():_ Enables/Disables the library to automatically parse the body of the http request as arguments if in querystring format. Read more [here](#parsing-requests). `on` by default.
+* _.deferred()_ and _.no_deferred():_ Enables/Disables the ability for the server to suspend and resume connections. Simply put, it enables/disables the ability to use `deferred_response`. Read more [here](#building-responses-to-requests). `on` by default.
+* _.single_resource() and .no_single_resource:_ Sets or unsets the server in single resource mode. This limits all endpoints to be served from a single resource. The resultant is that the webserver will process the request matching to the endpoint skipping any complex semantic. Because of this, the option is incompatible with `regex_checking` and requires the resource to be registered against an empty endpoint or the root endpoint (`"/"`). The resource will also have to be registered as family. (For more information on resource registration, read more [here](#registering-resources)). `off` by default.
+
+### Threading Models
+* _.start_method(**const http::http_utils::start_method_T&** start_method):_ libhttpserver can operate with two different threading models that can be selected through this method. Default value is `INTERNAL_SELECT`.
+	* `http::http_utils::INTERNAL_SELECT`: In this mode, libhttpserver uses only a single thread to handle listening on the port and processing of requests. This mode is preferable if spawning a thread for each connection would be costly. If the HTTP server is able to quickly produce responses without much computational overhead for each connection, this mode can be a great choice. Note that libhttpserver will still start a single thread for itself -- this way, the main program can continue with its operations after calling the start method. Naturally, if the HTTP server needs to interact with shared state in the main application, synchronization will be required. If such synchronization in code providing a response results in blocking, all HTTP server operations on all connections will stall. This mode is a bad choice if response data cannot always be provided instantly. The reason is that the code generating responses should not block (since that would block all other connections) and on the other hand, if response data is not available immediately, libhttpserver will start to busy wait on it. If you need to scale along the number of concurrent connection and scale on multiple thread you can specify a value for `max_threads` (see below) thus enabling a thread pool - this is different from `THREAD_PER_CONNECTION` below where a new thread is spawned for each connection. 
+	* `http::http_utils::THREAD_PER_CONNECTION`: In this mode, libhttpserver starts one thread to listen on the port for new connections and then spawns a new thread to handle each connection. This mode is great if the HTTP server has hardly any state that is shared between connections (no synchronization issues!) and may need to perform blocking operations (such as extensive IO or running of code) to handle an individual connection.
+* _.max_threads(**int** max_threads):_ A thread pool can be combined with the `INTERNAL_SELECT` mode to benefit implementations that require scalability. As said before, by default this mode only uses a single thread. When combined with the thread pool option, it is possible to handle multiple connections with multiple threads. Any value greater than one for this option will activate the use of the thread pool. In contrast to the `THREAD_PER_CONNECTION` mode (where each thread handles one and only one connection), threads in the pool can handle a large number of concurrent connections. Using `INTERNAL_SELECT` in combination with a thread pool is typically the most scalable (but also hardest to debug) mode of operation for libhttpserver. Default value is `1`. This option is incompatible with `THREAD_PER_CONNECTION`.
+
+### Custom defaulted error messages
+libhttpserver allows to override internal error retrieving functions to provide custom messages to the HTTP client. There are only 3 cases in which implementing logic (an http_resource) cannot be invoked: (1) a not found resource, where the library is not being able to match the URL requested by the client to any implementing http_resource object; (2) a not allowed method, when the HTTP client is requesting a method explicitly marked as not allowed (more info [here](#allowing-and-disallowing-methods-on-a-resource)) by the implementation; (3) an exception being thrown.
+In all these 3 cases libhttpserver would provide a standard HTTP response to the client with the correct error code; respectively a `404`, a `405` and a `500`. The library allows its user to specify custom callbacks that will be called to replace the default behavior.
+* _.not_found_resource(**const  shared_ptr<http_response>(&ast;render_ptr)(const http_request&)** resource):_ Specifies a function to handle a request when no matching registered endpoint exist for the URL requested by the client.
+* _.method_not_allowed_resource(**const  shared_ptr<http_response>(&ast;render_ptr)(const http_request&)** resource):_ Specifies a function to handle a request that is asking for a method marked as not allowed on the matching http_resource.
+* _.internal_error_resource(**const  shared_ptr<http_response>(&ast;render_ptr)(const http_request&)** resource):_ Specifies a function to handle a request that is causing an uncaught exception during its execution. **REMEMBER:** is this callback is causing an exception itself, the standard default response from libhttpserver will be reported to the HTTP client.
+
+#### Example of custom errors:
+      #include <httpserver.hpp>
+
+      using namespace httpserver;
+
+      const std::shared_ptr<http_response> not_found_custom(const http_request& req) {
+          return std::shared_ptr<string_response>(new string_response("Not found custom", 404, "text/plain"));
+      }
+
+      const std::shared_ptr<http_response> not_allowed_custom(const http_request& req) {
+          return std::shared_ptr<string_response>(new string_response("Not allowed custom", 405, "text/plain"));
+      }
+
+      class hello_world_resource : public http_resource {
+      public:
+          const std::shared_ptr<http_response> render(const http_request&) {
+              return std::shared_ptr<http_response>(new string_response("Hello, World!"));
+          }
+      };
+
+      int main(int argc, char** argv) {
+          webserver ws = create_webserver(8080)
+              .not_found_resource(not_found_custom)
+              .method_not_allowed_resource(not_allowed_custom);
+
+          hello_world_resource hwr;
+          hwr.disallow_all();
+          hwr.set_allowing("GET", true);
+          ws.register_resource("/hello", &hwr);
+          ws.start(true);
+
+          return 0;
+      }
+
+To test the above example, you can run the following command from a terminal:
+    
+    curl -XGET -v http://localhost:8080/hello
+
+If you try to run either of the two following commands, you'll see your custom errors:
+* `curl -XGET -v http://localhost:8080/morning`: will return your custom `not found` error.
+* `curl -XPOST -v http://localhost:8080/hello`: will return your custom `not allowed` error.
+
+You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/custom_error.cpp).
+
+### Custom logging callbacks
+* _.log_access(**void(&ast;log_access_ptr)(const std::string&)** functor):_ Specifies a function used to log accesses (requests) to the server.
+* _.log_error(**void(&ast;log_error_ptr)(const std::string&)** functor):_ Specifies a function used to log errors generating from the server.
+
+#### Example of custom logging callback
+    #include <httpserver.hpp>
+    #include <iostream>
+
+    using namespace httpserver;
+
+    void custom_access_log(const std::string& url) {
+        std::cout << "ACCESSING: " << url << std::endl;
+    }
+
+    class hello_world_resource : public http_resource {
+    public:
+        const std::shared_ptr<http_response> render(const http_request&) {
+            return std::shared_ptr<http_response>(new string_response("Hello, World!"));
+        }
+    };
+
+    int main(int argc, char** argv) {
+        webserver ws = create_webserver(8080)
+            .log_access(custom_access_log);
+
+        hello_world_resource hwr;
+        ws.register_resource("/hello", &hwr);
+        ws.start(true);
+
+        return 0;
+    }
+
+To test the above example, you can run the following command from a terminal:
+    
+    curl -XGET -v http://localhost:8080/hello
+
+You'll notice how, on the terminal runing your server, the logs will now be printed in output for each request received.
+
+You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/custom_access_log.cpp).
+
+### TLS/HTTPS
+* _.use_ssl() and .no_ssl():_ Determines whether to run in HTTPS-mode or not. If you set this as on and libhttpserver was compiled without SSL support, the library will throw an exception at start of the server. `off` by default.
+* _.cred_type(**const http::http_utils::cred_type_T&** cred_type):_ Daemon credentials type. Either certificate or anonymous. Acceptable values are:
+	* `NONE`: No credentials.
+	* `CERTIFICATE`: Certificate credential.
+	* `ANON`: Anonymous credential.
+	* `SRP`: SRP credential.
+	* `PSK`: PSK credential.
+	* `IA`: IA credential.
+* _.https_mem_key(**const std::string&** filename):_ String representing the path to a file containing the private key to be used by the HTTPS daemon. This must be used in conjunction with `https_mem_cert`.
+* _.https_mem_cert(**const std::string&** filename):_ String representing the path to a file containing the certificate to be used by the HTTPS daemon. This must be used in conjunction with `https_mem_key`.
+* _.https_mem_trust(**const std::string&** filename):_ String representing the path to a file containing the CA certificate to be used by the HTTPS daemon to authenticate and trust clients certificates. The presence of this option activates the request of certificate to the client. The request to the client is marked optional, and it is the responsibility of the server to check the presence of the certificate if needed. Note that most browsers will only present a client certificate only if they have one matching the specified CA, not sending any certificate otherwise.
+* _.https_priorities(**const std::string&** priority_string):_ SSL/TLS protocol version and ciphers. Must be followed by a string specifying the SSL/TLS protocol versions and ciphers that are acceptable for the application. The string is passed unchanged to gnutls_priority_init. If this option is not specified, `"NORMAL"` is used.
+
+#### Minimal example using HTTPS
+    #include <httpserver.hpp>
+
+    using namespace httpserver;
+
+    class hello_world_resource : public http_resource {
+    public:
+        const std::shared_ptr<http_response> render(const http_request&) {
+            return std::shared_ptr<http_response>(new string_response("Hello, World!"));
+        }
+    };
+
+    int main(int argc, char** argv) {
+        webserver ws = create_webserver(8080)
+            .use_ssl()
+            .https_mem_key("key.pem")
+            .https_mem_cert("cert.pem");
+
+        hello_world_resource hwr;
+        ws.register_resource("/hello", &hwr);
+        ws.start(true);
+
+        return 0;
+    }
+
+To test the above example, you can run the following command from a terminal:
+    
+    curl -XGET -v -k 'https://localhost:8080/hello'
+
+You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/minimal_https.cpp).
+
+### IP Blacklisting/Whitelisting
+libhttpserver supports IP blacklisting and whitelisting as an internal feature. This section explains the startup options related with IP blacklisting/whitelisting. See the [specific section](#ip-blacklisting-and-whitelisting) to read more about the topic.
+* _.ban_system() and .no_ban_system:_ Can be used to enable/disable the ban system. `on` by default.
+* _.default_policy(**const http::http_utils::policy_T&** default_policy):_ Specifies what should be the default behavior when receiving a request. Possible values are `ACCEPT` and `REJECT`. Default is `ACCEPT`.
+
+### Authentication
+* _.basic_auth() and .no_basic_auth:_ Can be used to enable/disable parsing of the basic authorization header sent by the client. `on` by default.
+* _.digest_auth() and .no_digest_auth:_ Can be used to enable/disable parsing of the digested authentication data sent by the client. `on` by default.
+* _.nonce_nc_size(**int** nonce_size):_ Size of an array of nonce and nonce counter map. This option represents the size (number of elements) of a map of a nonce and a nonce-counter. If this option is not specified, a default value of 4 will be used (which might be too small for servers handling many requests).
+You should calculate the value of NC_SIZE based on the number of connections per second multiplied by your expected session duration plus a factor of about two for hash table collisions. For example, if you expect 100 digest-authenticated connections per second and the average user to stay on your site for 5 minutes, then you likely need a value of about 60000. On the other hand, if you can only expect only 10 digest-authenticated connections per second, tolerate browsers getting a fresh nonce for each request and expect a HTTP request latency of 250 ms, then a value of about 5 should be fine.
+* _.digest_auth_random(**const std::string&** nonce_seed):_ Digest Authentication nonce’s seed. For security, you SHOULD provide a fresh random nonce when actually using Digest Authentication with libhttpserver in production.
+
+### Examples of chaining syntax to create a webserver
+
+    webserver ws = create_webserver(8080)
+	    .no_ssl()
+	    .no_ipv6()
+        .no_debug()
+        .no_pedantic()
+        .no_basic_auth()
+        .no_digest_auth()
+        .no_comet()
+        .no_regex_checking()
+        .no_ban_system()
+        .no_post_process();
+##
+    webserver ws = create_webserver(8080)
+        .use_ssl()
+        .https_mem_key("key.pem")
+        .https_mem_cert("cert.pem");
+
+### Starting and stopping a webserver
+Once a webserver is created, you can manage its execution through the following methods on the `webserver` class:
+* _**void** webserver::start(**bool** blocking):_ Allows to start a server. If the `blocking` flag is passed as `true`, it will block the execution of the current thread until a call to stop on the same webserver object is performed. 
+* _**void** webserver::stop():_ Allows to stop a server. It immediately stops it.
+* _**bool** webserver::is_running():_ Checks if a server is running
+* _**void** webserver::sweet_kill():_ Allows to stop a server. It doesn't guarantee an immediate halt to allow for thread termination and connection closure.
+
+[Back to TOC](#table-of-contents)
+
+## The Resource Object
+The `http_resource` class represents a logical collection of HTTP methods that will be associated to a URL when registered on the webserver. The class is **designed for extension** and it is where most of your code should ideally live. When the webserver matches a request against a resource (see: [resource registration](#registering-resources)), the method correspondent to the one in the request (GET, POST, etc..) (see below) is called on the resource.
+
+Given this, the `http_resource` class contains the following extensible methods (also called `handlers` or `render methods`):
+* _**const std::shared_ptr<http_response>** http_resource::render_GET(**const http_request&** req):_ Invoked on an HTTP GET request.
+* _**const std::shared_ptr<http_response>** http_resource::render_POST(**const http_request&** req):_ Invoked on an HTTP POST request.
+* _**const std::shared_ptr<http_response>** http_resource::render_PUT(**const http_request&** req):_ Invoked on an HTTP PUT request.
+* _**const std::shared_ptr<http_response>** http_resource::render_HEAD(**const http_request&** req):_ Invoked on an HTTP HEAD request.
+* _**const std::shared_ptr<http_response>** http_resource::render_DELETE(**const http_request&** req):_ Invoked on an HTTP DELETE request.
+* _**const std::shared_ptr<http_response>** http_resource::render_TRACE(**const http_request&** req):_ Invoked on an HTTP TRACE request.
+* _**const std::shared_ptr<http_response>** http_resource::render_OPTIONS(**const http_request&** req):_ Invoked on an HTTP OPTIONS request.
+* _**const std::shared_ptr<http_response>** http_resource::render_CONNECT(**const http_request&** req):_ Invoked on an HTTP CONNECT request.
+* _**const std::shared_ptr<http_response>** http_resource::render(**const http_request&** req):_ Invoked as a backup method if the matching method is not implemented. It can be used whenever you want all the invocations on a URL to activate the same behavior regardless of the HTTP method requested. The default implementation of the `render` method returns an empty response with a `404`.
+
+#### Example of implementation of render methods
+    #include <httpserver.hpp>
+
+    using namespace httpserver;
+
+    class hello_world_resource : public http_resource {
+    public:
+        const std::shared_ptr<http_response> render_GET(const http_request&) {
+            return std::shared_ptr<http_response>(new string_response("GET: Hello, World!"));
+        }
+
+        const std::shared_ptr<http_response> render(const http_request&) {
+            return std::shared_ptr<http_response>(new string_response("OTHER: Hello, World!"));
+        }
+    };
+
+    int main(int argc, char** argv) {
+        webserver ws = create_webserver(8080);
+
+        hello_world_resource hwr;
+        ws.register_resource("/hello", &hwr);
+        ws.start(true);
+
+        return 0;
+    }
+
+To test the above example, you can run the following commands from a terminal:
+ * `curl -XGET -v http://localhost:8080/hello`: will return `GET: Hello, World!`.
+ * `curl -XPOST -v http://localhost:8080/hello`: will return `OTHER: Hello, World!`. You can try requesting other methods beside `POST` to verify how the same message will be returned.
+
+You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/handlers.cpp).
+
+### Allowing and disallowing methods on a resource
+By default, all methods an a resource are allowed, meaning that an HTTP request with that method will be invoked. It is possible to mark methods as `not allowed` on a resource. When a method not allowed is requested on a resource, the default `method_not_allowed` method is invoked - the default can be overriden as explain in the section [Custom defaulted error messages](custom-defaulted-error-messages).
+The base `http_resource` class has a set of methods that can be used to allow and disallow HTTP methods.
+* _**void**  http_resource::set_allowing(**const std::string&** method, **bool** allowed):_ Used to allow or disallow a method. The `method` parameter is a string representing an HTTP method (GET, POST, PUT, etc...).
+* _**void**  http_resource::allow_all():_ Marks all HTTP methods as allowed.
+* _**void**  http_resource::disallow_all():_ Marks all HTTP methods as not allowed.
+
+#### Example of methods allowed/disallowed
+      #include <httpserver.hpp>
+
+      using namespace httpserver;
+
+      class hello_world_resource : public http_resource {
+      public:
+          const std::shared_ptr<http_response> render(const http_request&) {
+              return std::shared_ptr<http_response>(new string_response("Hello, World!"));
+          }
+      };
+
+      int main(int argc, char** argv) {
+          webserver ws = create_webserver(8080);
+
+          hello_world_resource hwr;
+          hwr.disallow_all();
+          hwr.set_allowing("GET", true);
+          ws.register_resource("/hello", &hwr);
+          ws.start(true);
+
+          return 0;
+      }
+
+To test the above example, you can run the following command from a terminal:
+    
+    curl -XGET -v http://localhost:8080/hello
+
+If you try to run the following command, you'll see a `method_not_allowed` error:
+* `curl -XPOST -v http://localhost:8080/hello`.
+
+You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/allowing_disallowing_methods.cpp).
+
+[Back to TOC](#table-of-contents)
+
+## Registering resources
+Once you have created your resource and extended its methods, you'll have to register the resource on the webserver. Registering a resource will associate it with an endpoint and allows the webserver to route it.
+The `webserver` class offers a method to register a resource:
+* _**bool** register_resource(**const std::string&** endpoint, **http_resource&ast;** resource, **bool** family = `false`):_ Registers the `resource` to an `endpoint`. The endpoint is a string representing the path on your webserver from where you want your resource to be served from (e.g. `"/path/to/resource"`). The optional `family` parameter allows to register a resource as a "family" resource that will match any path nested into the one specified. For example, if family is set to `true` and endpoint is set to `"/path"`, the webserver will route to the resource not only the requests against  `"/path"` but also everything in its nested path `"/path/on/the/previous/one"`.
+
+### Specifying endpoints
+There are essentially four ways to specify an endpoint string:
+* **A simple path (e.g. `"/path/to/resource"`).** In this case, the webserver will try to match exactly the value of the endpoint.
+* **A regular exception.** In this case, the webserver will try to match the URL of the request with the regex passed. For example, if passing `"/path/as/decimal/[0-9]+`, requests on URLs like `"/path/as/decimal/5"` or `"/path/as/decimal/42"` will be matched; instead, URLs like `"/path/as/decimal/three"` will not.
+* **A parametrized path. (e.g. `"/path/to/resource/with/{arg1}/{arg2}/in/url"`)**. In this case, the webserver will match the argument with any value passed. In addition to this, the arguments will be passed to the resource as part of the arguments (readable from the `http_request::get_arg` method - see [here](#parsing-requests)). For example, if passing `"/path/to/resource/with/{arg1}/{arg2}/in/url"` will match any request on URL with any value in place of `{arg1}` and `{arg2}`. 
+* **A parametrized path with custom parameters.** This is the same of a normal parametrized path, but allows to specify a regular expression for the argument (e.g. `"/path/to/resource/with/{arg1|[0-9]+}/{arg2|[a-z]+}/in/url"`. In this case, the webserver will match the arguments with any value passed that satisfies the regex. In addition to this, as above, the arguments will be passed to the resource as part of the arguments (readable from the `http_request::get_arg` method - see [here](#parsing-requests)). For example, if passing `"/path/to/resource/with/{arg1|[0-9]+}/{arg2|[a-z]+}/in/url"` will match requests on URLs like `"/path/to/resource/with/10/AA/in/url"` but not like `""/path/to/resource/with/BB/10/in/url""`
+* Any of the above marked as `family`. Will match any request on URLs having path that is prefixed by the path passed. For example, if family is set to `true` and endpoint is set to `"/path"`, the webserver will route to the resource not only the requests against  `"/path"` but also everything in its nested path `"/path/on/the/previous/one"`.
+
+      #include <httpserver.hpp>
+
+      using namespace httpserver;
+
+      class hello_world_resource : public http_resource {
+      public:
+          const std::shared_ptr<http_response> render(const http_request&) {
+              return std::shared_ptr<http_response>(new string_response("Hello, World!"));
+          }
+      };
+
+      class handling_multiple_resource : public http_resource {
+      public:
+          const std::shared_ptr<http_response> render(const http_request& req) {
+              return std::shared_ptr<http_response>(new string_response("Your URL: " + req.get_path()));
+          }
+      };
+
+      class url_args_resource : public http_resource {
+      public:
+          const std::shared_ptr<http_response> render(const http_request& req) {
+              return std::shared_ptr<http_response>(new string_response("ARGS: " + req.get_arg("arg1") + " and " + req.get_arg("arg2")));
+          }
+      };
+
+      int main(int argc, char** argv) {
+          webserver ws = create_webserver(8080);
+
+          hello_world_resource hwr;
+          ws.register_resource("/hello", &hwr);
+
+          handling_multiple_resource hmr;
+          ws.register_resource("/family", &hmr, true);
+          ws.register_resource("/with_regex_[0-9]+", &hmr);
+
+          url_args_resource uar;
+          ws.register_resource("/url/with/{arg1}/and/{arg2}", &uar);
+          ws.register_resource("/url/with/parametric/args/{arg1|[0-9]+}/and/{arg2|[A-Z]+}", &uar);
+
+          ws.start(true);
+
+          return 0;
+      }
+
+To test the above example, you can run the following commands from a terminal:
+    
+* `curl -XGET -v http://localhost:8080/hello`: will return the `Hello, World!` message.
+* `curl -XGET -v http://localhost:8080/family`: will return the `Your URL: /family` message.
+* `curl -XGET -v http://localhost:8080/family/with/suffix`: will return the `Your URL: /family/with/suffix` message.
+* `curl -XGET -v http://localhost:8080/with_regex_10`: will return the `Your URL: /with_regex_10` message.
+* `curl -XGET -v http://localhost:8080/url/with/AA/and/BB`: will return the `ARGS: AA and BB` message. You can change `AA` and `BB` with any value and observe how the URL is still matched and parameters are read.
+* `curl -XGET -v http://localhost:8080/url/with/parametric/args/10/and/AA`: will return the `ARGS: 10 and AA` message. You can change `10` and `AA` with any value matching the regexes and observe how the URL is still matched and parameters are read.
+
+Conversely, you can observe how these URL will not be matched (al the following will give you a `not found` message):
+* `curl -XGET -v http://localhost:8080/with_regex_A`
+* `curl -XGET -v http://localhost:8080/url/with/parametric/args/AA/and/BB`
+
+You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/url_registration.cpp).
+
+[Back to TOC](#table-of-contents)
+
+## Parsing requests
+As seen in the documentation of [http_resource](#the-resource-object), every extensible method takes in input a `http_request` object. The webserver takes the responsibility to extract the data from the HTTP request on the network and does all the heavy lifting to build the instance of `http_request`.
+
+The `http_request` class has a set of methods you will have access to when implementing your handlers:
+* _**const std::string&** get_path() **const**:_ Returns the path as requested from the HTTP client.
+* _**const std::vector\<std::string\>&** get_path_pieces() **const**:_ Returns the components of the path requested by the HTTP client (each piece of the path split by `'/'`.
+* _**const std::string&** get_path_piece(int index) **const**:_ Returns one piece of the path requested by the HTTP client. The piece is selected through the `index` parameter (0-indexed). 
+* _**const std::string&** get_method() **const**:_ Returns the method requested by the HTTP client.
+* _**const std::string&** get_header(**const std::string&** key) **const**:_ Returns the header with name equal to `key` if present in the HTTP request. Returns an `empty string` otherwise.
+* _**const std::string&** get_cookie(**const std::string&** key) **const**:_ Returns the cookie with name equal to `key` if present in the HTTP request. Returns an `empty string` otherwise.
+* _**const std::string&** get_footer(**const std::string&** key) **const**:_ Returns the footer with name equal to `key` if present in the HTTP request (only for http 1.1 chunked encodings). Returns an `empty string` otherwise.
+* _**const std::string&** get_arg(**const std::string&** key) **const**:_ Returns the argument with name equal to `key` if present in the HTTP request. Arguments can be (1) querystring parameters, (2) path argument (in case of parametric endpoint, (3) parameters parsed from the HTTP request body if the body is in `application/x-www-form-urlencoded` or `multipart/form-data` formats and the postprocessor is enabled in the webserver (enabled by default).
+* _**const std::map<std::string, std::string, http::header_comparator>&** get_headers() **const**:_ Returns a map containing all the headers present in the HTTP request.
+* _**const std::map<std::string, std::string, http::header_comparator>&** get_cookies() **const**:_ Returns a map containing all the cookies present in the HTTP request.
+* _**const std::map<std::string, std::string, http::header_comparator>&** get_footers() **const**:_ Returns a map containing all the footers present in the HTTP request (only for http 1.1 chunked encodings).
+* _**const std::map<std::string, std::string, http::arg_comparator>&** get_args() **const**:_ Returns all the arguments present in the HTTP request. Arguments can be (1) querystring parameters, (2) path argument (in case of parametric endpoint, (3) parameters parsed from the HTTP request body if the body is in `application/x-www-form-urlencoded` or `multipart/form-data` formats and the postprocessor is enabled in the webserver (enabled by default).
+* _**const std::string&** get_content() **const**:_ Returns the body of the HTTP request.
+* _**bool**  content_too_large() **const**:_ Returns `true` if the body length of the HTTP request sent by the client is longer than the max allowed on the server.
+* _**const std::string&** get_querystring() **const**:_ Returns the `querystring` of the HTTP request.
+* _**const std::string&** get_version() **const**:_ Returns the HTTP version of the client request.
+* _**const std::string&** get_requestor() **const**:_ Returns the IP from which the client is sending the request.
+* _**unsigned  short**  get_requestor_port() **const**:_ Returns the port from which the client is sending the request.
+* _**const std::string&** get_user() **const**:_ Returns the `user` as self-identified through basic authentication. The content of the user header will be parsed only if basic authentication is enabled on the server (enabled by default).
+* _**const std::string&** get_pass() **const**:_ Returns the `password` as self-identified through basic authentication. The content of the password header will be parsed only if basic authentication is enabled on the server (enabled by default).
+* _**const std::string&** get_digested_user() **const**:_ Returns the `digested user` as self-identified through digest authentication. The content of the user header will be parsed only if digest authentication is enabled on the server (enabled by default).
+* _**bool** check_digest_auth(**const std::string&** realm, **const std::string&** password, **int** nonce_timeout, **bool&** reload_nonce) **const**:_ Allows to check the validity of the authentication token sent through digest authentication (if the provided values in the WWW-Authenticate header are valid and sound according to RFC2716). Takes in input the `realm` of validity of the authentication, the `password` as known to the server to compare against, the `nonce_timeout` to indicate how long the nonce is valid and `reload_nonce` a boolean that will be set by the method to indicate a nonce being reloaded. The method returns `true` if the authentication is valid, `false` otherwise.
+
+#### Example of handler reading arguments from a request
+    #include <httpserver.hpp>
+
+    using namespace httpserver;
+
+    class hello_world_resource : public http_resource {
+    public:
+        const std::shared_ptr<http_response> render(const http_request& req) {
+            return std::shared_ptr<http_response>(new string_response("Hello: " + req.get_arg("name")));
+        }
+    };
+
+    int main(int argc, char** argv) {
+        webserver ws = create_webserver(8080);
+
+        hello_world_resource hwr;
+        ws.register_resource("/hello", &hwr);
+        ws.start(true);
+
+        return 0;
+    }
+
+To test the above example, you can run the following command from a terminal:
+    
+    curl -XGET -v "http://localhost:8080/hello?name=John"
+
+You will receive the message `Hello: John` in reply. Given that the body post processing is enabled, you can also run `curl -d "name=John" -X POST http://localhost:8080/hello` to obtain the same result.
+
+You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/hello_with_get_arg.cpp).
+
+[Back to TOC](#table-of-contents)
+
+## Building responses to requests
+As seen in the documentation of [http_resource](#the-resource-object), every extensible method returns in output a `http_response` object. The webserver takes the responsibility to convert the `http_response` object you create into a response on the network.
+
+There are 5 types of response that you can create - we will describe them here through their constructors:
+* _string_response(**const std::string&** content, **int** response_code = `200`, **const std::string&** content_type = `"text/plain"`):_ The most basic type of response. It uses the `content` string passed in construction as body of the HTTP response. The other two optional parameters are the `response_code` and the `content_type`. You can find constant definition for the various response codes within the [http_utils](https://github.com/etr/libhttpserver/blob/master/src/httpserver/http_utils.hpp) library file.
+* _file_response(**const std::string&** filename, **int** response_code = `200`, **const std::string&** content_type = `"text/plain"`):_ Uses the `filename` passed in construction as pointer to a file on disk. The body of the HTTP response will be set using the content of the file. The other two optional parameters are the `response_code` and the `content_type`. You can find constant definition for the various response codes within the [http_utils](https://github.com/etr/libhttpserver/blob/master/src/httpserver/http_utils.hpp) library file.
+* _basic_auth_fail_response(**const std::string&** content, **const std::string&** realm = `""`, **int** response_code = `200`, **const std::string&** content_type = `"text/plain"`):_ A response in return to a failure during basic authentication. It allows to specify a `content` string as a message to send back to the client. The `realm` parameter should contain your realm of authentication (if any). The other two optional parameters are the `response_code` and the `content_type`. You can find constant definition for the various response codes within the [http_utils](https://github.com/etr/libhttpserver/blob/master/src/httpserver/http_utils.hpp) library file.
+* _digest_auth_fail_response(**const std::string&** content, **const std::string&** realm = `""`, **const std::string&** opaque = `""`, **bool** reload_nonce = `false`, **int** response_code = `200`, **const std::string&** content_type = `"text/plain"`):_ A response in return to a failure during digest authentication. It allows to specify a `content` string as a message to send back to the client. The `realm` parameter should contain your realm of authentication (if any). The `opaque` represents a value that gets passed to the client and expected to be passed again to the server as-is. This value can be a hexadecimal or base64 string. The `reload_nonce` parameter tells the server to reload the nonce (you should use the value returned by the `check_digest_auth` method on the `http_request`. The other two optional parameters are the `response_code` and the `content_type`. You can find constant definition for the various response codes within the [http_utils](https://github.com/etr/libhttpserver/blob/master/src/httpserver/http_utils.hpp) library file.
+* _deferred_response(**ssize_t(&ast;cycle_callback_ptr)(char&ast;, size_t)** cycle_callback, **const std::string&** content = `""`, **int** response_code = `200`, **const std::string&** content_type = `"text/plain"`):_ A response that obtains additional content from a callback executed in a deferred way. It leaves the client in pending state (returning a `100 CONTINUE` message) and suspends the connection. Besides the callback, optionally, you can provide a `content` parameter that sets the initial message sent immediately to the client. The other two optional parameters are the `response_code` and the `content_type`. You can find constant definition for the various response codes within the [http_utils](https://github.com/etr/libhttpserver/blob/master/src/httpserver/http_utils.hpp) library file. To use `deferred_response` you need to have the `deferred` option active on your webserver (enabled by default).
+	* The `cycle_callback_ptr` has this shape:
+		_**ssize_t** cycle_callback(**char&ast;** buf, **size_t** max_size)_.
+		You are supposed to implement a function in this shape and provide it to the `deferred_repsonse` method. The webserver will provide a `char*` to the function. It is responsibility of the function to allocate it and fill its content. The method is supposed to respect the `max_size` parameter passed in input. The function must return  a `ssize_t` value representing the actual size you filled the `buf` with. Any value different from `-1` will keep the resume the connection, deliver the content and suspend it again (with a `100 CONTINUE`). If the method returns `-1`, the webserver will complete the communication with the client and close the connection.
+
+### Setting additional properties of the response
+The `http_response` class offers an additional set of methods to "decorate" your responses. This set of methods is:
+* _**void**  with_header(**const std::string&** key, **const std::string&** value):_ Sets an HTTP header with name set to `key` and value set to `value`.
+* _**void**  with_footer(**const std::string&** key, **const std::string&** value):_ Sets an HTTP footer with name set to `key` and value set to `value`.
+* _**void**  with_cookie(**const std::string&** key, **const std::string&** value):_ Sets an HTTP cookie with name set to `key` and value set to `value` (only for http 1.1 chunked encodings). 
+* _**void**  shoutCAST():_ Mark the response as a `shoutCAST` one.
+
+### Example of response setting headers
+    #include <httpserver.hpp>
+
+    using namespace httpserver;
+
+    class hello_world_resource : public http_resource {
+    public:
+        const std::shared_ptr<http_response> render(const http_request&) {
+            std::shared_ptr<http_response> response = std::shared_ptr<http_response>(new string_response("Hello, World!"));
+            response->with_header("MyHeader", "MyValue");
+            return response;
+        }
+    };
+
+    int main(int argc, char** argv) {
+        webserver ws = create_webserver(8080);
+
+        hello_world_resource hwr;
+        ws.register_resource("/hello", &hwr);
+        ws.start(true);
+
+        return 0;
+    }
+
+To test the above example, you could run the following command from a terminal:
+    
+    curl -XGET -v "http://localhost:8080/hello"
+
+You will receive the message custom header in reply.
+
+You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/setting_headers.cpp).
+
+[Back to TOC](#table-of-contents)
+
+## IP Blacklisting and Whitelisting
+libhttpserver provides natively a system to blacklist and whitelist IP addresses. To enable/disable the system, it is possible to use the `ban_system` and `no_ban_system` methods on the `create_webserver` class. In the same way, you can specify what you want to be your "default behavior" (allow by default or disallow by default) by using the `default_policy` method (see [here](#create-and-work-with-a-webserver)).
+
+The system supports both IPV4 and IPV6 and manages them transparently. The only requirement is for ipv6 to be enabled on your server - you'll have to enable this by using the `use_ipv6` method on `create_webserver`.
+
+You can explicitly ban or allow an IP address using the following methods on the `webserver` class:
+* _**void** ban_ip(**const std::string&** ip):_ Adds one IP (or a range of IPs) to the list of the banned ones. Takes in input a `string` that contains the IP (or range of IPs) to ban. To use when the `default_policy` is `ACCEPT`.
+* _**void** allow_ip(**const std::string&** ip):_ Adds one IP (or a range of IPs) to the list of the allowed ones. Takes in input a `string` that contains the IP (or range of IPs) to allow.  To use when the `default_policy` is `REJECT`.
+* _**void** unban_ip(**const std::string&** ip):_ Removes one IP (or a range of IPs) from the list of the banned ones. Takes in input a `string` that contains the IP (or range of IPs) to remove from the list.  To use when the `default_policy` is `REJECT`.
+* _**void** disallow_ip(**const std::string&** ip):_ Removes one IP (or a range of IPs) from the list of the allowed ones. Takes in input a `string` that contains the IP (or range of IPs) to remove from the list.  To use when the `default_policy` is `REJECT`.
+
+### IP String Format
+The IP string format can represent both IPV4 and IPV6. Addresses will be normalized by the webserver to operate in the same sapce. Any valid IPV4 or IPV6 textual representation works.
+It is also possible to specify ranges of IPs. To do so, omit the octect you want to express as a range and specify a `'*'` in its place.
+Examples of valid IPs include:
+* `"192.168.5.5"`: standard IPV4
+* `"192.168.*.*"`: range of IPV4 addresses. In the example, everything between `192.168.0.0` and `192.168.255.255`.
+* `"2001:db8:8714:3a90::12"`: standard IPV6 - clustered empty ranges are fully supported.
+* `"2001:db8:8714:3a90:*:*"`: range of IPV6 addresses.
+* `"::ffff:192.0.2.128"`: IPV4 IPs nested into IPV6.
+* `"::192.0.2.128"`: IPV4 IPs nested into IPV6 (without `'ffff'` prefix)
+* `"::ffff:192.0.*.*"`: ranges of IPV4 IPs nested into IPV6.
+
+#### Example of IP Whitelisting/Blacklisting
+    #include <httpserver.hpp>
+
+    using namespace httpserver;
+
+    class hello_world_resource : public http_resource {
+    public:
+        const std::shared_ptr<http_response> render(const http_request&) {
+            return std::shared_ptr<http_response>(new string_response("Hello, World!"));
+        }
+    };
+
+    int main(int argc, char** argv) {
+        webserver ws = create_webserver(8080)
+            .default_policy(http::http_utils::REJECT);
+
+        ws.allow_ip("127.0.0.1");
+
+        hello_world_resource hwr;
+        ws.register_resource("/hello", &hwr);
+        ws.start(true);
+
+        return 0;
+    }
+
+To test the above example, you could run the following command from a terminal:
+    
+    curl -XGET -v "http://localhost:8080/hello"
+
+You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/minimal_ip_ban.cpp).
+
+[Back to TOC](#table-of-contents)
+
+## Authentication
+libhttpserver support three types of client authentication.
+
+Basic authentication uses a simple authentication method based on BASE64 algorithm. Username and password are exchanged in clear between the client and the server, so this method must only be used for non-sensitive content or when the session is protected with https. When using basic authentication libhttpserver will have access to the clear password, possibly allowing to create a chained authentication toward an external authentication server. You can enable/disable support for Basic authentication through the `basic_auth` and `no_basic_auth` methods of the `create_webserver` class.
+
+Digest authentication uses a one-way authentication method based on MD5 hash algorithm. Only the hash will transit over the network, hence protecting the user password. The nonce will prevent replay attacks. This method is appropriate for general use, especially when https is not used to encrypt the session. You can enable/disable support for Digest authentication through the `digest_auth` and `no_digest_auth` methods of the `create_webserver` class.
+
+Client certificate authentication uses a X.509 certificate from the client. This is the strongest authentication mechanism but it requires the use of HTTPS. Client certificate authentication can be used simultaneously with Basic or Digest Authentication in order to provide a two levels authentication (like for instance separate machine and user authentication). You can enable/disable support for Certificate authentication through the `use_ssl` and `no_ssl` methods of the `create_webserver` class.
+
+### Using Basic Authentication
+    #include <httpserver.hpp>
+
+    using namespace httpserver;
+
+    class user_pass_resource : public httpserver::http_resource {
+    public:
+        const std::shared_ptr<http_response> render_GET(const http_request& req) {
+            if (req.get_user() != "myuser" || req.get_pass() != "mypass") {
+                return std::shared_ptr<basic_auth_fail_response>(new basic_auth_fail_response("FAIL", "test@example.com"));
+            }
+            return std::shared_ptr<string_response>(new string_response(req.get_user() + " " + req.get_pass(), 200, "text/plain"));
+        }
+    };
+
+    int main(int argc, char** argv) {
+        webserver ws = create_webserver(8080);
+
+        user_pass_resource hwr;
+        ws.register_resource("/hello", &hwr);
+        ws.start(true);
+
+        return 0;
+    }
+
+To test the above example, you can run the following command from a terminal:
+    
+    curl -XGET -v -u myuser:mypass "http://localhost:8080/hello"
+
+You will receive back the user and password you passed in input. Try to pass the wrong credentials to see the failure.
+
+You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/basic_authentication.cpp).
+
+### Using Digest Authentication
+    #include <httpserver.hpp>
+
+    #define MY_OPAQUE "11733b200778ce33060f31c9af70a870ba96ddd4"
+
+    using namespace httpserver;
+
+    class digest_resource : public httpserver::http_resource {
+    public:
+        const std::shared_ptr<http_response> render_GET(const http_request& req) {
+            if (req.get_digested_user() == "") {
+                return std::shared_ptr<digest_auth_fail_response>(new digest_auth_fail_response("FAIL", "test@example.com", MY_OPAQUE, true));
+            }
+            else {
+                bool reload_nonce = false;
+                if(!req.check_digest_auth("test@example.com", "mypass", 300, reload_nonce)) {
+                    return std::shared_ptr<digest_auth_fail_response>(new digest_auth_fail_response("FAIL", "test@example.com", MY_OPAQUE, reload_nonce));
+                }
+            }
+            return std::shared_ptr<string_response>(new string_response("SUCCESS", 200, "text/plain"));
+        }
+    };
+
+    int main(int argc, char** argv) {
+        webserver ws = create_webserver(8080);
+
+        digest_resource hwr;
+        ws.register_resource("/hello", &hwr);
+        ws.start(true);
+
+        return 0;
+    }
+
+To test the above example, you can run the following command from a terminal:
+    
+    curl -XGET -v --digest --user myuser:mypass localhost:8080/hello
+
+You will receive a `SUCCESS` in response (observe the response message from the server in detail and you'll  see the full interaction). Try to pass the wrong credentials or send a request without `digest` active to see the failure.
+
+You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/digest_authentication.cpp).
+
+[Back to TOC](#table-of-contents)
+
+## HTTP Utils
+libhttpserver provides a set of constants to help you develop your HTTP server. It would be redudant to list them here; so, please, consult the list directly [here](https://github.com/etr/libhttpserver/blob/master/src/httpserver/http_utils.hpp).
+
+[Back to TOC](#table-of-contents)
+
+## Other Examples
+
+#### Example of returning a response from a file
+    #include <httpserver.hpp>
+
+    using namespace httpserver;
+
+    class file_response_resource : public http_resource {
+    public:
+        const std::shared_ptr<http_response> render_GET(const http_request& req) {
+            return std::shared_ptr<file_response>(new file_response("test_content", 200, "text/plain"));
+        }
+    };
+
+    int main(int argc, char** argv) {
+        webserver ws = create_webserver(8080);
+
+        file_response_resource hwr;
+        ws.register_resource("/hello", &hwr);
+        ws.start(true);
+
+        return 0;
+    }
+
+To test the above example, you can run the following command from a terminal:
+    
+    curl -XGET -v localhost:8080/hello
+
+You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/minimal_file_response.cpp).
+
+#### Example of a deferred response through callback
+    #include <httpserver.hpp>
+
+    using namespace httpserver;
+
+    static int counter = 0;
+
+    ssize_t test_callback (char* buf, size_t max) {
+        if (counter == 2) {
+            return -1;
+        } else {
+            memset(buf, 0, max);
+            strcat(buf, " test ");
+            counter++;
+            return std::string(buf).size();
+        }
+    }
+
+    class deferred_resource : public http_resource {
+    public:
+        const std::shared_ptr<http_response> render_GET(const http_request& req) {
+            return std::shared_ptr<deferred_response>(new deferred_response(test_callback, "cycle callback response"));
+        }
+    };
+
+    int main(int argc, char** argv) {
+        webserver ws = create_webserver(8080);
+
+        deferred_resource hwr;
+        ws.register_resource("/hello", &hwr);
+        ws.start(true);
+
+        return 0;
+    }
+
+To test the above example, you can run the following command from a terminal:
+    
+    curl -XGET -v localhost:8080/hello
+
+You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/minimal_deferred.cpp).
+
+[Back to TOC](#table-of-contents)
+
+## Copying
+This manual is for libhttpserver, C++ library for creating an embedded Rest HTTP server (and more).
 
 > Permission is granted to copy, distribute and/or modify this document
 > under the terms of the GNU Free Documentation License, Version 1.3
@@ -80,116 +876,9 @@ embedded Rest HTTP server (and more).
 > Texts.  A copy of the license is included in the section entitled GNU
 > Free Documentation License.
 
-Contents
-========
-* Introduction.
-* Requirements.
-* Compilation.
-* Constants.
-* Structures and classes type definition.
-* Callback functions definition.
-* Create and work with server.
-* Registering resources.
-* Building responses to requests.
-* Whitelists and Blacklists.
-* Simple comet semantics.
-* Utilizing Authentication.
-* Obtaining and modifying status information.
+[Back to TOC](#table-of-contents)
 
-Appendices
-----------
-* GNU-LGPL: The GNU Lesser General Public License says how you can copy and share almost all of libhttpserver.
-* GNU-FDL: The GNU Free Documentation License says how you can copy and share the documentation of libhttpserver.
-
-Introduction
-============
-libhttpserver is meant to constitute an easy system to build HTTP
-servers with REST fashion.
-libhttpserver is based on libmicrohttpd and, like this, it is a
-daemon library.
-The mission of this library is to support all possible HTTP features
-directly and with a simple semantic allowing then the user to concentrate
-only on his application and not on HTTP request handling details.
-
-The library is supposed to work transparently for the client Implementing
-the business logic and using the library itself to realize an interface.
-If the user wants it must be able to change every behavior of the library
-itself through the registration of callbacks.
-
-Like the api is based on (libmicrohttpd), libhttpserver is able to decode
-certain body format a and automatically format them in object oriented
-fashion. This is true for query arguments and for *POST* and *PUT*
-requests bodies if *application/x-www-form-urlencoded* or
-*multipart/form-data* header are passed.
-
-The header reproduce all the constants defined by libhttpserver.
-These maps various constant used by the HTTP protocol that are exported
-as a convenience for users of the library. Is is possible for the user
-to define their own extensions of the HTTP standard and use those with
-libhttpserver.
-
-All functions are guaranteed to be completely reentrant and
-thread-safe (unless differently specified).
-Additionally, clients can specify resource limits on the overall
-number of connections, number of connections per IP address and memory
-used per connection to avoid resource exhaustion.
-
-Requirements
-============
-* g++ >= 4.1.2
-* libmicrohttpd >= 0.9.37
-* doxygen (if you want to build code reference)
-
-Additionally, for MinGW on windows you will need:
-* libwinpthread (For MinGW-w64, if you use thread model posix then you have this)
-* libgnurx >= 2.5.1
-
-Compilation
-===========
-libhttpserver uses the standard system where the usual build process
-involves running
-> ./bootstrap  
-> mkdir build  
-> cd build  
-> ../configure  
-> make  
-> make install  
-> make doxygen-doc # if you want to build the code reference
-
-Optional parameters to configure script
----------------------------------------
-A complete list of parameters can be obtained running 'configure --help'.
-Here are listed the libhttpserver specific options (the canonical configure options are also supported).
-
-* --enable-same-directory-build: enable to compile in the same directory. This is heavily discouraged. (def=no)
-* --enable-debug: enable debug data generation (def=no)
-* --enable-cpp11: enable c++11 std classes (def=no)
-* --disable-doxygen-doc: don't generate any doxygen documentation
-* --disable-doxygen-dot: don't generate graphics for doxygen documentation
-* --disable-doxygen-man: don't generate doxygen manual pages
-* --enable-doxygen-rtf: generate doxygen RTF documentation
-* --enable-doxygen-xml: generate doxygen XML documentation
-* --enable-doxygen-chm: generate doxygen compressed HTML help documentation
-* --enable-doxygen-chi: generate doxygen seperate compressed HTML help index file
-* --disable-doxygen-html: don't generate doxygen plain HTML documentation
-* --enable-doxygen-ps: generate doxygen PostScript documentation
-* --enable-doxygen-pdf: generate doxygen PDF documentation
-
-Constants
-=========
-W.I.P.
-
-Structures and classes type definition
-======================================
-* http_resource (CPP class): Represents the resource associated with a specific http endpoint.
-* http_request (CPP class): Represents the request received by the resource that process it.
-* http_response (CPP class): Represents the response sent by the server once the resource finished its work.
-* event_supplier (CPP class): Represents a class that supplies events to the webserver. It can be used to trigger the internal select of it.
-* webserver (CPP class): Represents the daemon listening on a socket for HTTP traffic.
-
-GNU Lesser General Public License
-=================================
-
+## GNU Lesser General Public License
 Version 2.1, February 1999
 
 Copyright &copy; 1991, 1999 Free Software Foundation, Inc.
@@ -682,8 +1371,9 @@ necessary.  Here is a sample; alter the names:
 
 That's all there is to it!
 
-GNU Free Documentation License
-==============================
+[Back to TOC](#table-of-contents)
+
+## GNU Free Documentation License
 
 Version 1.3, 3 November 2008
 
@@ -1133,3 +1823,59 @@ If your document contains nontrivial examples of program code, we
 recommend releasing these examples in parallel under your choice of
 free software license, such as the GNU General Public License,
 to permit their use in free software.
+
+[Back to TOC](#table-of-contents)
+
+## Thanks
+
+This library has been originally developed under the zencoders flags and this community has always supported me all along this work so I am happy to put the logo on this readme.
+
+            When you see this tree, know that you've came across ZenCoders.org
+    
+                                   with open('ZenCoders.                            
+                             `num` in numbers   synchronized                        
+                         datetime d      glob.     sys.argv[2] .                    
+                      def myclass   `..` @@oscla   org.   .  class {                
+                   displ  hooks(   public static void   ma    functor:              
+                 $myclass->method(  impport sys, os.pipe `   @param name`           
+               fcl   if(system(cmd) myc. /de   `  $card( array("a"   srand          
+             format  lists:  ++:   conc   ++ "my  an   WHERE  for(   == myi         
+           `sys:  myvalue(myvalue) sys.t   Console.W  try{    rais     using        
+          connec  SELECT * FROM table mycnf acco desc and or selector::clas  at     
+         openldap string  sys.   print "zenc der " { 'a':  `ls -l` >  appe &firs    
+        import Tkinter    paste( $obh  &a or it myval  bro roll:  :: [] require a   
+       case `` super. +y  <svg x="100">  expr    say " %rooms 1  --account fb- yy   
+      proc    meth Animate => send(D, open)    putd    EndIf 10  whi   myc`   cont  
+     and    main (--) import loop $$ or  end onload  UNION WITH tab   timer 150 *2  
+     end. begin True GtkLabel *label    doto partition te   let auto  i<- (i + d ); 
+    .mushup ``/.  ^/zenc/    myclass->her flv   op             <> element >> 71  or 
+    QFileDi   :   and  ..    with myc  toA  channel::bo    myc isEmpty a  not  bodt;
+    class T  public pol    str    mycalc d   pt &&a     *i fc  add               ^ac
+    ::ZenCoders::core::namespac  boost::function st  f = std:   ;;     int    assert
+    cout << endl   public genera   #include "b ost   ::ac myna const cast<char*> mys
+    ac  size_t   return ran  int (*getNextValue)(void) ff   double sa_family_t famil
+    pu        a   do puts("      ac   int main(int argc, char*   "%5d    struct nam
+    cs               float       for     typedef    enum  puts            getchar() 
+    if(                        else      #define     fp    FILE* f         char* s 
+     i++                                 strcat(           %s                  int 
+     31]                                 total+=                               do  
+      }do                                while(1)                             sle  
+      getc                              strcpy( a                            for   
+       prin                            scanf(%d, &                          get    
+         int                       void myfunc(int pa                     retu      
+           BEQ                   BNEQZ R1 10 ANDI R1 R2                  SYS        
+            XOR                SYSCALL 5 SLTIU MFLO 15 SW               JAL         
+              BNE            BLTZAL R1 1 LUI 001 NOOP MULTU           SLLV          
+                MOV R1     ADD R1 R2  JUMP  10 1001 BEQ R1 R2 1      ANDI            
+                   1101  1010001100  111 001 01  1010 101100 1001  100              
+                     110110 100   0  01 101 01100 100 100 1000100011                
+                        11101001001  00   11  100   11  10100010                    
+                            000101001001 10  1001   101000101                       
+                                 010010010010110101001010
+
+For further information:
+visit our website www.zencoders.org
+
+**Author:** Sebastiano Merlino
+
+[Back to TOC](#table-of-contents)
