@@ -286,6 +286,12 @@ if test x"$coverit" = x"yes"; then
     esac
 fi
 
+AC_ARG_ENABLE([[examples]],
+  [AS_HELP_STRING([[--disable-examples]], [do not build any examples])], ,
+    [enable_examples=yes])
+test "x$enable_examples" = "xno" || enable_examples=yes
+AM_CONDITIONAL([BUILD_EXAMPLES], [test "x$enable_examples" = "xyes"])
+
 if test "$CROSS_COMPILE" == "1"; then
     if test "$ARM_ARCH_DIR" == "aarch64-linux-gnu"; then
         AM_CXXFLAGS="$AM_CXXFLAGS --prefix=${ARM_LD_PATH}/"
@@ -355,4 +361,5 @@ AC_MSG_NOTICE([Configuration Summary:
   poll support    :  ${enable_poll=no}
   epoll support   :  ${enable_epoll=no}
   Static          :  ${static}
+  Build examples  :  ${enable_examples}
 ])
