@@ -24,8 +24,14 @@ LIBTOOL_DEPS = @LIBTOOL_DEPS@
 AUTOMAKE_OPTIONS = foreign 1.4
 ACLOCAL_AMFLAGS = -I m4
 
-SUBDIRS = src test examples
-DIST_SUBDIRS = src test examples
+SUBDIRS = src test
+DIST_SUBDIRS = src test
+
+if BUILD_EXAMPLES
+SUBDIRS += examples
+DIST_SUBDIRS += examples
+endif
+
 EXTRA_DIST = libhttpserver.pc.in $(DX_CONFIG)
 
 MOSTLYCLEANFILES = $(DX_CLEANFILES) *.gcda *.gcno *.gcov
