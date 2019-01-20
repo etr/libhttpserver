@@ -49,7 +49,7 @@ init:
   - 'echo Repo build commit is: %APPVEYOR_REPO_COMMIT%'
   - 'echo Cygwin root is: %CYG_ROOT%'
 install:
-  - C:\MinGW\bin\mingw-get install gcc g++ autotools autoconf automake m4
+  - C:\MinGW\bin\mingw-get install gcc g++ autotools autoconf automake msys-base msys-m4
 build_script:
   - ps: |
       $env:PATH="$env:C:\CYG_ROOT\bin;C:\MinGW\bin;$($env:PATH)"
