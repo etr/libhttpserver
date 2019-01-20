@@ -57,6 +57,3 @@ build_script:
       bash -lc "echo 'C:\MinGW /mingw' > /etc/fstab"
       $env:APPVEYOR_BUILD_FOLDER = $env:APPVEYOR_BUILD_FOLDER -replace "\\", "/"
       bash -lc "exec 0</dev/null; exec 2>&1; cd $env:APPVEYOR_BUILD_FOLDER; bash -x ./bootstrap && mkdir -p build && cd build && ../configure && make"
-
-cache:
-  - build
