@@ -12,9 +12,9 @@ skip_commits:
 
 environment:
   global:
-    APPVEYOR_SAVE_CACHE_ON_ERROR: true
     EVENT_TESTS_PARALLEL: 20
     EVENT_BUILD_PARALLEL: 10
+    CYG_ROOT: C:/MinGW/msys/1.0
   matrix:
     - Platform: Cygwin32
     - Platform: MinGW32
@@ -49,11 +49,10 @@ init:
   - 'echo Repo build commit is: %APPVEYOR_REPO_COMMIT%'
   - 'echo Cygwin root is: %CYG_ROOT%'
 install:
-  - C:\MinGW\bin\mingw-get install autotools autoconf automake
+  - C:\MinGW\bin\mingw-get install gcc g++ autotools autoconf automake
 build_script:
   - ps: |
-      $env:PATH="$env:C:\cygwin\bin;C:\MinGW\bin;$($env:PATH)"
-      bash -lc "echo 'C:\cygwin /cygwin' > /etc/fstab"
+      $env:PATH="$env:C:\CYG_ROOT\bin;C:\MinGW\bin;$($env:PATH)"
       bash -lc "echo 'C:\MinGW /mingw' > /etc/fstab"
       $env:APPVEYOR_BUILD_FOLDER = $env:APPVEYOR_BUILD_FOLDER -replace "\\", "/"
       bash -lc "exec 0</dev/null; exec 2>&1; cd $env:APPVEYOR_BUILD_FOLDER; bash -x ./bootstrap && mkdir -p build && cd build && ../configure && make"
