@@ -79,14 +79,14 @@ esac
 
 # Checks for header files.
 AC_HEADER_STDC
+
+AC_CHECK_HEADERS([fcntl.h math.h errno.h limits.h stdio.h locale.h sys/stat.h sys/types.h], [], [AC_MSG_ERROR([Compiling libhttpserver requires standard UNIX headers files])], [AC_INCLUDES_DEFAULT])
+
 AC_CHECK_HEADER([stdint.h],[],[AC_MSG_ERROR("stdint.h not found")])
 AC_CHECK_HEADER([inttypes.h],[],[AC_MSG_ERROR("inttypes.h not found")])
-AC_CHECK_HEADER([errno.h],[],[AC_MSG_ERROR("errno.h not found")])
 AC_CHECK_HEADER([unistd.h],[],[AC_MSG_ERROR("unistd.h not found")])
 AC_CHECK_HEADER([ctype.h],[],[AC_MSG_ERROR("cctype not found")])
 AC_CHECK_HEADER([regex.h],[],[AC_MSG_ERROR("regex.h not found")])
-AC_CHECK_HEADER([sys/stat.h],[],[AC_MSG_ERROR("sys/stat.h not found")])
-AC_CHECK_HEADER([sys/types.h],[],[AC_MSG_ERROR("sys/types.h not found")])
 AC_CHECK_HEADER([$NETWORK_HEADER],[],[AC_MSG_ERROR("$NETWORK_HEADER not found")])
 AC_CHECK_HEADER([signal.h],[],[AC_MSG_ERROR("signal.h not found")])
 
