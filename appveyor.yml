@@ -13,7 +13,6 @@ skip_commits:
 environment:
   global:
     APPVEYOR_SAVE_CACHE_ON_ERROR: true
-    CYG_ROOT: C:/MinGW/msys/1.0
     EVENT_TESTS_PARALLEL: 20
     EVENT_BUILD_PARALLEL: 10
   matrix:
@@ -41,7 +40,6 @@ environment:
 matrix:
   allow_failures:
     - EVENT_ALLOW_FAILURE: 1
-  fast_finish: true
 
 init:
   - 'echo Building libhttpserver %version% for Windows'
@@ -54,9 +52,9 @@ install:
   - C:\MinGW\bin\mingw-get install autotools autoconf automake
 build_script:
   - ps: |
-      $env:PATH="$env:CYG_ROOT\bin;C:\MinGW\bin;$($env:PATH)"
+      $env:PATH="$env:C:\cygwin\bin;C:\MinGW\bin;$($env:PATH)"
+      bash -lc "echo 'C:\cygwin /cygwin' > /etc/fstab"
       bash -lc "echo 'C:\MinGW /mingw' > /etc/fstab"
-      bash -lc "echo 'C:\OpenSSL-Win32 /ssl' >> /etc/fstab"
       $env:APPVEYOR_BUILD_FOLDER = $env:APPVEYOR_BUILD_FOLDER -replace "\\", "/"
       bash -lc "exec 0</dev/null; exec 2>&1; cd $env:APPVEYOR_BUILD_FOLDER; bash -x ./bootstrap && mkdir -p build && cd build && ../configure && make"
 
