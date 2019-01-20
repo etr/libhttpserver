@@ -96,13 +96,13 @@ script:
    if [ "$PERFORMANCE" = "select" ]; then
     cd examples
     ./benchmark_select 8080 $(nproc) &
-    sleep 5 && ab -n 10000000 -c 1000 localhost:8080/plaintext
+    sleep 5 && ab -n 10000000 -c 100 localhost:8080/plaintext
    fi
  - |
    if [ "$PERFORMANCE" = "threads" ]; then
     cd examples
     ./benchmark_threads 8080 &
-    sleep 5 && ab -n 10000000 -c 1000 localhost:8080/plaintext
+    sleep 5 && ab -n 10000000 -c 100 localhost:8080/plaintext
    fi
 after_success:
   - if [ "$DEBUG" = "debug" ] && [ "$COVERAGE" = "coverage" ] && [ "$TRAVIS_OS_NAME" = "linux" ]; then bash <(curl -s https://codecov.io/bash); fi
