@@ -92,10 +92,18 @@ script:
  - ls -l /usr/local/lib/
  - ls -l /usr/lib/
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then cd ../src/; cppcheck --error-exitcode=1 .; cd ../build; fi
- - if [ "$PERFORMANCE" = "select" ]; then cd examples; ./benchmark_select 8080 $(nproc) & fi;
+ - |
+   if [ "$PERFORMANCE" = "select" ]; then
+    cd examples
+    ./benchmark_select 8080 $(nproc) &
+   fi
  - if [ "$PERFORMANCE" = "select" ]; then ab -n 10000000 -c 1000 localhost:8080/plaintext; fi;
- - if [ "$PERFORMANCE" = "thread" ]; then cd examples; ./benchmark_threads 8080 & fi;
- - if [ "$PERFORMANCE" = "thread" ]; then ab -n 10000000 -c 1000 localhost:8080/plaintext; fi;
+ - |
+   if [ "$PERFORMANCE" = "threads" ]; then
+    cd examples
+    ./benchmark_threads 8080 &
+   fi
+ - if [ "$PERFORMANCE" = "threads" ]; then ab -n 10000000 -c 1000 localhost:8080/plaintext; fi;
 after_success:
   - if [ "$DEBUG" = "debug" ] && [ "$COVERAGE" = "coverage" ] && [ "$TRAVIS_OS_NAME" = "linux" ]; then bash <(curl -s https://codecov.io/bash); fi
 matrix:
