@@ -377,6 +377,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_base)
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "OK");
     curl_easy_cleanup(curl);
+    curl_global_cleanup();
 
     ws.stop();
 LT_END_AUTO_TEST(ssl_base)
