@@ -1,0 +1,64 @@
+version: 2.2.0.{build}
+
+os: Visual Studio 2015
+
+branches:
+  except:
+    - /.*travis.*/
+skip_commits:
+  message: /travis/
+  files:
+    - .travis.yml
+
+environment:
+  global:
+    APPVEYOR_SAVE_CACHE_ON_ERROR: true
+    CYG_ROOT: C:/MinGW/msys/1.0
+    EVENT_TESTS_PARALLEL: 20
+    EVENT_BUILD_PARALLEL: 10
+  matrix:
+    - Platform: Cygwin32
+    - Platform: MinGW32
+      PlatformToolset: 4.8.5
+    - Platform: MinGW64
+      PlatformToolset: 4.8.5
+    - Platform: MinGW32
+      PlatformToolset: 5.3.0
+    - Platform: MinGW64
+      PlatformToolset: 5.3.0
+    - Platform: Win32
+      PlatformToolset: v90
+    - Platform: Win32
+      PlatformToolset: v100
+    - Platform: Win32
+      PlatformToolset: v110
+    - Platform: Win32
+      PlatformToolset: v120
+    - Platform: Win32
+      PlatformToolset: v140
+    - Platform: x64
+      PlatformToolset: v140
+matrix:
+  allow_failures:
+    - EVENT_ALLOW_FAILURE: 1
+  fast_finish: true
+
+init:
+  - 'echo Building libhttpserver %version% for Windows'
+  - 'echo System architecture: %PLATFORM%'
+  - 'echo Repo build branch is: %APPVEYOR_REPO_BRANCH%'
+  - 'echo Build folder is: %APPVEYOR_BUILD_FOLDER%'
+  - 'echo Repo build commit is: %APPVEYOR_REPO_COMMIT%'
+  - 'echo Cygwin root is: %CYG_ROOT%'
+install:
+  - C:\MinGW\bin\mingw-get install autotools autoconf automake
+build_script:
+  - ps: |
+      $env:PATH="$env:CYG_ROOT\bin;C:\MinGW\bin;$($env:PATH)"
+      bash -lc "echo 'C:\MinGW /mingw' > /etc/fstab"
+      bash -lc "echo 'C:\OpenSSL-Win32 /ssl' >> /etc/fstab"
+      $env:APPVEYOR_BUILD_FOLDER = $env:APPVEYOR_BUILD_FOLDER -replace "\\", "/"
+      bash -lc "exec 0</dev/null; exec 2>&1; cd $env:APPVEYOR_BUILD_FOLDER; bash -x ./bootstrap && mkdir -p build && cd build && ../configure && make"
+
+cache:
+  - build
