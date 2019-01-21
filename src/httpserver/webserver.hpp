@@ -200,18 +200,7 @@ class webserver
                 struct MHD_Connection *connection, void **con_cls,
                 enum MHD_RequestTerminationCode toe
         );
-        static int build_request_header (void *cls, enum MHD_ValueKind kind,
-                const char *key, const char *value
-        );
-        static int build_request_footer (void *cls, enum MHD_ValueKind kind,
-                const char *key, const char *value
-        );
-        static int build_request_cookie (void *cls, enum MHD_ValueKind kind,
-                const char *key, const char *value
-        );
-        static int build_request_args (void *cls, enum MHD_ValueKind kind,
-                const char *key, const char *value
-        );
+
         static int answer_to_connection
         (
             void* cls, MHD_Connection* connection,
@@ -250,11 +239,6 @@ class webserver
             size_t* upload_data_size, struct details::modded_request* mr
         );
 
-        void end_request_construction(MHD_Connection* connection,
-                struct details::modded_request* mr, const char* version,
-                const char* method, char* &user, char* &pass, char* &digested_user
-        );
-
         int finalize_answer(MHD_Connection* connection,
                 struct details::modded_request* mr, const char* method
         );
@@ -273,7 +257,6 @@ class webserver
         friend size_t unescaper_func(void * cls,
                 struct MHD_Connection *c, char *s
         );
-        friend size_t internal_unescaper(void * cls, std::string& s);
         friend class http_response;
 };
 

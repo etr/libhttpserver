@@ -73,7 +73,6 @@ void error_log(void*, const char*, va_list);
 void* uri_log(void*, const char*);
 void access_log(webserver*, string);
 size_t unescaper_func(void*, struct MHD_Connection*, char*);
-size_t internal_unescaper(void*, std::string&);
 
 struct compare_value
 {
@@ -238,8 +237,6 @@ bool webserver::start(bool blocking)
                 this)
     );
     iov.push_back(gen(MHD_OPTION_CONNECTION_TIMEOUT, connection_timeout));
-    //if(bind_address != 0x0)
-    //    iov.push_back(gen(MHD_OPTION_SOCK_ADDR, (intptr_t) bind_address));
     if(bind_socket != 0)
         iov.push_back(gen(MHD_OPTION_LISTEN_SOCKET, bind_socket));
     if(start_method == http_utils::THREAD_PER_CONNECTION && (max_threads != 0 || max_thread_stack_size != 0))
@@ -411,69 +408,6 @@ void webserver::disallow_ip(const string& ip)
     this->allowances.erase(ip);
 }
 
-int webserver::build_request_header (
-        void *cls,
-        enum MHD_ValueKind kind,
-        const char *key,
-        const char *value
-)
-{
-    http_request* dhr = static_cast<http_request*>(cls);
-    dhr->set_header(key, value);
-    return MHD_YES;
-}
-
-int webserver::build_request_cookie (
-        void *cls,
-        enum MHD_ValueKind kind,
-        const char *key,
-        const char *value
-)
-{
-    http_request* dhr = static_cast<http_request*>(cls);
-    dhr->set_cookie(key, value);
-    return MHD_YES;
-}
-
-int webserver::build_request_footer (
-        void *cls,
-        enum MHD_ValueKind kind,
-        const char *key,
-        const char *value
-)
-{
-    http_request* dhr = static_cast<http_request*>(cls);
-    dhr->set_footer(key, value);
-    return MHD_YES;
-}
-
-int webserver::build_request_args (
-        void *cls,
-        enum MHD_ValueKind kind,
-        const char *key,
-        const char *arg_value
-)
-{
-    details::modded_request* mr = static_cast<details::modded_request*>(cls);
-    std::string value = ((arg_value == NULL) ? "" : arg_value);
-    {
-        char buf[std::string(key).size() + value.size() + 3];
-        if(mr->dhr->querystring == "")
-        {
-            snprintf(buf, sizeof buf, "?%s=%s", key, value.c_str());
-            mr->dhr->querystring = buf;
-        }
-        else
-        {
-            snprintf(buf, sizeof buf, "&%s=%s", key, value.c_str());
-            mr->dhr->querystring += string(buf);
-        }
-    }
-    internal_unescaper((void*) mr->ws, value);
-    mr->dhr->set_arg(key, value);
-    return MHD_YES;
-}
-
 int policy_callback (void *cls, const struct sockaddr* addr, socklen_t addrlen)
 {
     if(!(static_cast<webserver*>(cls))->ban_system_enabled) return MHD_YES;
@@ -519,20 +453,6 @@ size_t unescaper_func(void * cls, struct MHD_Connection *c, char *s)
     // STRING CONTAINING '\0' AFTER AN UNESCAPING, IS UNABLE TO PARSE
     // ARGS WITH get_connection_values FUNC OR lookup FUNC.
     return std::string(s).size();
-}
-
-size_t internal_unescaper(void* cls, std::string& s)
-{
-    if(s[0] == 0) return 0;
-
-    webserver* dws = static_cast<webserver*>(cls);
-    if(dws->unescaper != 0x0)
-    {
-        dws->unescaper(s);
-        return s.size();
-    }
-
-    return http_unescape(s);
 }
 
 int webserver::post_iterator (void *cls, enum MHD_ValueKind kind,
@@ -594,7 +514,7 @@ int webserver::bodyless_requests_answer(
     const char* version, struct details::modded_request* mr
     )
 {
-    http_request req;
+    http_request req(connection, unescaper);
     mr->dhr = &(req);
     return complete_request(connection, mr, version, method);
 }
@@ -605,7 +525,7 @@ int webserver::bodyfull_requests_answer_first_step(
 )
 {
     mr->second = true;
-    mr->dhr = new http_request();
+    mr->dhr = new http_request(connection, unescaper);
     mr->dhr->set_content_size_limit(content_size_limit);
     const char *encoding = MHD_lookup_connection_value (
             connection,
@@ -662,72 +582,6 @@ int webserver::bodyfull_requests_answer_second_step(
     if (mr->pp != NULL) MHD_post_process(mr->pp, upload_data, *upload_data_size);
     *upload_data_size = 0;
     return MHD_YES;
-}
-
-void webserver::end_request_construction(
-        MHD_Connection* connection,
-        struct details::modded_request* mr,
-        const char* version,
-        const char* method,
-        char* &user,
-        char* &pass,
-        char* &digested_user
-)
-{
-    mr->ws = this;
-    MHD_get_connection_values (
-            connection,
-            MHD_GET_ARGUMENT_KIND,
-            &build_request_args,
-            (void*) mr
-    );
-    MHD_get_connection_values (
-            connection,
-            MHD_HEADER_KIND,
-            &build_request_header,
-            (void*) mr->dhr
-    );
-    MHD_get_connection_values (
-            connection,
-            MHD_FOOTER_KIND,
-            &build_request_footer,
-            (void*) mr->dhr
-    );
-    MHD_get_connection_values (
-            connection,
-            MHD_COOKIE_KIND,
-            &build_request_cookie,
-            (void*) mr->dhr
-    );
-
-    mr->dhr->set_path(mr->standardized_url->c_str());
-    mr->dhr->set_method(method);
-
-    if(basic_auth_enabled)
-    {
-        user = MHD_basic_auth_get_username_password(connection, &pass);
-    }
-    if(digest_auth_enabled)
-    {
-        digested_user = MHD_digest_auth_get_username(connection);
-    }
-    mr->dhr->set_version(version);
-    const MHD_ConnectionInfo * conninfo = MHD_get_connection_info(
-            connection,
-            MHD_CONNECTION_INFO_CLIENT_ADDRESS
-    );
-    std::string ip_str = get_ip_str(conninfo->client_addr);
-    mr->dhr->set_requestor(ip_str);
-    mr->dhr->set_requestor_port(get_port(conninfo->client_addr));
-    if(pass != 0x0)
-    {
-        mr->dhr->set_pass(pass);
-        mr->dhr->set_user(user);
-    }
-    if(digested_user != 0x0)
-    {
-        mr->dhr->set_digested_user(digested_user);
-    }
 }
 
 int webserver::finalize_answer(
@@ -803,8 +657,6 @@ int webserver::finalize_answer(
         found = true;
     }
 
-    mr->dhr->set_underlying_connection(connection);
-
     if(found)
     {
         try
@@ -876,30 +728,13 @@ int webserver::complete_request(
         const char* method
 )
 {
-    char* pass = 0x0;
-    char* user = 0x0;
-    char* digested_user = 0x0;
+    mr->ws = this;
 
-    end_request_construction(
-            connection,
-            mr,
-            version,
-            method,
-            pass,
-            user,
-            digested_user
-    );
+    mr->dhr->set_path(mr->standardized_url->c_str());
+    mr->dhr->set_method(method);
+    mr->dhr->set_version(version);
 
-    int to_ret = finalize_answer(connection, mr, method);
-
-    if (user != 0x0)
-        free (user);
-    if (pass != 0x0)
-        free (pass);
-    if (digested_user != 0x0)
-        free (digested_user);
-
-    return to_ret;
+    return finalize_answer(connection, mr, method);
 }
 
 int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
@@ -926,7 +761,7 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
 
     std::string t_url = url;
 
-    internal_unescaper((void*) static_cast<webserver*>(cls), t_url);
+    base_unescaper(t_url, static_cast<webserver*>(cls)->unescaper);
     mr->standardized_url = new string(http_utils::standardize_url(t_url));
 
     bool body = false;

@@ -24,11 +24,11 @@ using namespace httpserver;
 
 class hello_world_resource : public http_resource {
 public:
-    const std::shared_ptr<http_response> render_GET(const http_request&) {
+    const std::shared_ptr<http_response> render_GET(http_request&) {
         return std::shared_ptr<http_response>(new string_response("GET: Hello, World!"));
     }
 
-    const std::shared_ptr<http_response> render(const http_request&) {
+    const std::shared_ptr<http_response> render(http_request&) {
         return std::shared_ptr<http_response>(new string_response("OTHER: Hello, World!"));
     }
 };

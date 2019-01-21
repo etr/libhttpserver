@@ -33,14 +33,14 @@ public:
 
 	~service_resource();
 
-	const std::shared_ptr<http_response> render_GET(const http_request &req);
-	const std::shared_ptr<http_response> render_PUT(const http_request &req);
-	const std::shared_ptr<http_response> render_POST(const http_request &req);
-	const std::shared_ptr<http_response> render(const http_request &req);
-	const std::shared_ptr<http_response> render_HEAD(const http_request &req);
-	const std::shared_ptr<http_response> render_OPTIONS(const http_request &req);
-	const std::shared_ptr<http_response> render_CONNECT(const http_request &req);
-	const std::shared_ptr<http_response> render_DELETE(const http_request &req);
+	const std::shared_ptr<http_response> render_GET(http_request &req);
+	const std::shared_ptr<http_response> render_PUT(http_request &req);
+	const std::shared_ptr<http_response> render_POST(http_request &req);
+	const std::shared_ptr<http_response> render(http_request &req);
+	const std::shared_ptr<http_response> render_HEAD(http_request &req);
+	const std::shared_ptr<http_response> render_OPTIONS(http_request &req);
+	const std::shared_ptr<http_response> render_CONNECT(http_request &req);
+	const std::shared_ptr<http_response> render_DELETE(http_request &req);
 
 private:
 
@@ -54,7 +54,7 @@ service_resource::~service_resource()
 {}
 
 const std::shared_ptr<http_response>
-service_resource::render_GET(const http_request &req)
+service_resource::render_GET(http_request &req)
 {
     std::cout << "service_resource::render_GET()" << std::endl;
 
@@ -68,7 +68,7 @@ service_resource::render_GET(const http_request &req)
 
 
 const std::shared_ptr<http_response>
-service_resource::render_PUT(const http_request &req)
+service_resource::render_PUT(http_request &req)
 {
     std::cout << "service_resource::render_PUT()" << std::endl;
 
@@ -83,7 +83,7 @@ service_resource::render_PUT(const http_request &req)
 
 
 const std::shared_ptr<http_response>
-service_resource::render_POST(const http_request &req)
+service_resource::render_POST(http_request &req)
 {
     std::cout << "service_resource::render_POST()" << std::endl;
 
@@ -97,7 +97,7 @@ service_resource::render_POST(const http_request &req)
 }
 
 const std::shared_ptr<http_response>
-service_resource::render(const http_request &req)
+service_resource::render(http_request &req)
 {
     std::cout << "service_resource::render()" << std::endl;
 
@@ -112,7 +112,7 @@ service_resource::render(const http_request &req)
 
 
 const std::shared_ptr<http_response>
-service_resource::render_HEAD(const http_request &req)
+service_resource::render_HEAD(http_request &req)
 {
     std::cout << "service_resource::render_HEAD()" << std::endl;
 
@@ -126,7 +126,7 @@ service_resource::render_HEAD(const http_request &req)
 }
 
 const std::shared_ptr<http_response>
-service_resource::render_OPTIONS(const http_request &req)
+service_resource::render_OPTIONS(http_request &req)
 {
     std::cout << "service_resource::render_OPTIONS()" << std::endl;
 
@@ -140,7 +140,7 @@ service_resource::render_OPTIONS(const http_request &req)
 }
 
 const std::shared_ptr<http_response>
-service_resource::render_CONNECT(const http_request &req)
+service_resource::render_CONNECT(http_request &req)
 {
     std::cout << "service_resource::render_CONNECT()" << std::endl;
 
@@ -154,7 +154,7 @@ service_resource::render_CONNECT(const http_request &req)
 }
 
 const std::shared_ptr<http_response>
-service_resource::render_DELETE(const http_request &req)
+service_resource::render_DELETE(http_request &req)
 {
     std::cout << "service_resource::render_DELETE()" << std::endl;
 

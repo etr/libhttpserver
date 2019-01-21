@@ -22,19 +22,19 @@
 
 using namespace httpserver;
 
-const std::shared_ptr<http_response> not_found_custom(const http_request& req)
+const std::shared_ptr<http_response> not_found_custom( http_request& req)
 {
     return std::shared_ptr<string_response>(new string_response("Not found custom", 404, "text/plain"));
 }
 
-const std::shared_ptr<http_response> not_allowed_custom(const http_request& req)
+const std::shared_ptr<http_response> not_allowed_custom(http_request& req)
 {
     return std::shared_ptr<string_response>(new string_response("Not allowed custom", 405, "text/plain"));
 }
 
 class hello_world_resource : public http_resource {
 public:
-    const std::shared_ptr<http_response> render(const http_request&) {
+    const std::shared_ptr<http_response> render(http_request&) {
         return std::shared_ptr<http_response>(new string_response("Hello, World!"));
     }
 };

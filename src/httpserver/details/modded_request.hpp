@@ -38,7 +38,7 @@ struct modded_request
     std::string* standardized_url;
     webserver* ws;
 
-    const std::shared_ptr<http_response> (httpserver::http_resource::*callback)(const httpserver::http_request&);
+    const std::shared_ptr<http_response> (httpserver::http_resource::*callback)(httpserver::http_request&);
 
     http_request* dhr;
     std::shared_ptr<http_response> dhrs;
