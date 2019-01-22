@@ -19,7 +19,7 @@ Copyright (C)  2011-2019  Sebastiano Merlino.
 
 ## Tl;dr
 libhttpserver is a C++ library for building high performance RESTful web servers.
-libhttpserver is buildt upon  [libmicrohttpd](https://www.gnu.org/software/libmicrohttpd/) to provide a simple API for developers to create HTTP services in C++.
+libhttpserver is built upon  [libmicrohttpd](https://www.gnu.org/software/libmicrohttpd/) to provide a simple API for developers to create HTTP services in C++.
 
 **Features:**
 - HTTP 1.1 compatible request parser
