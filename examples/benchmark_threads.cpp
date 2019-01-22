@@ -14,7 +14,7 @@ class hello_world_resource : public http_resource {
         {
         }
 
-        const std::shared_ptr<http_response> render(const http_request&) {
+        const std::shared_ptr<http_response> render(http_request&) {
             return resp;
         }
 
