@@ -128,6 +128,10 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, standardize_url)
     url = "/abc/pqr", result = "";
     result = http::http_utils::standardize_url(url);
     LT_CHECK_EQ(result, "/abc/pqr");
+
+    url = "/abc//pqr", result = "";
+    result = http::http_utils::standardize_url(url);
+    LT_CHECK_EQ(result, "/abc/pqr");
 LT_END_AUTO_TEST(standardize_url)
 
 LT_BEGIN_AUTO_TEST(http_utils_suite, ip_to_str)
