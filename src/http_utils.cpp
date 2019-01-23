@@ -223,7 +223,11 @@ std::vector<std::string> http_utils::tokenize_url(
 
 std::string http_utils::standardize_url(const std::string& url)
 {
-    std::string n_url = string_utilities::regex_replace(url, "(\\/)+", "/");
+    std::string n_url = url;
+
+    std::string::iterator new_end = std::unique(n_url.begin(), n_url.end(), [](char a, char b) { return (a == b) && (a == '/'); });
+    n_url.erase(new_end, n_url.end());
+
     std::string::size_type n_url_length = n_url.length();
 
     std::string result;
