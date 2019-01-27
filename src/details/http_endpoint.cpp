@@ -34,10 +34,6 @@ using namespace http;
 
 http_endpoint::~http_endpoint()
 {
-    if(reg_compiled)
-    {
-        regfree(&(this->re_url_normalized));
-    }
 }
 
 http_endpoint::http_endpoint
@@ -118,9 +114,7 @@ http_endpoint::http_endpoint
     if(use_regex)
     {
         this->url_normalized += "$";
-        regcomp(&(this->re_url_normalized), url_normalized.c_str(),
-                REG_EXTENDED|REG_ICASE|REG_NOSUB
-        );
+        this->re_url_normalized = std::regex(url_normalized, std::regex_constants::icase & std::regex_constants::nosubs & std::regex_constants::extended);
         this->reg_compiled = true;
     }
 }
@@ -131,32 +125,47 @@ http_endpoint::http_endpoint(const http_endpoint& h):
     url_pars(h.url_pars),
     url_pieces(h.url_pieces),
     chunk_positions(h.chunk_positions),
+    re_url_normalized(h.re_url_normalized),
     family_url(h.family_url),
     reg_compiled(h.reg_compiled)
 {
-    if(this->reg_compiled)
-        regcomp(&(this->re_url_normalized), url_normalized.c_str(),
-                REG_EXTENDED|REG_ICASE|REG_NOSUB
-        );
 }
 
-http_endpoint& http_endpoint::operator =(const http_endpoint& h)
+http_endpoint::http_endpoint(http_endpoint&& h):
+    url_complete(std::move(h.url_complete)),
+    url_normalized(std::move(h.url_normalized)),
+    url_pars(std::move(h.url_pars)),
+    url_pieces(std::move(h.url_pieces)),
+    chunk_positions(std::move(h.chunk_positions)),
+    re_url_normalized(std::move(h.re_url_normalized)),
+    family_url(h.family_url),
+    reg_compiled(h.reg_compiled)
+{
+}
+
+http_endpoint& http_endpoint::operator=(const http_endpoint& h)
 {
     this->url_complete = h.url_complete;
     this->url_normalized = h.url_normalized;
     this->family_url = h.family_url;
     this->reg_compiled = h.reg_compiled;
-    if(this->reg_compiled)
-    {
-        regfree(&(this->re_url_normalized));
-
-        regcomp(&(this->re_url_normalized), url_normalized.c_str(),
-                REG_EXTENDED|REG_ICASE|REG_NOSUB
-        );
-    }
+    this->re_url_normalized = h.re_url_normalized;
     this->url_pars = h.url_pars;
     this->url_pieces = h.url_pieces;
     this->chunk_positions = h.chunk_positions;
+    return *this;
+}
+
+http_endpoint& http_endpoint::operator=(http_endpoint&& h)
+{
+    this->url_complete = std::move(h.url_complete);
+    this->url_normalized = std::move(h.url_normalized);
+    this->family_url = h.family_url;
+    this->reg_compiled = h.reg_compiled;
+    this->re_url_normalized = std::move(h.re_url_normalized);
+    this->url_pars = std::move(h.url_pars);
+    this->url_pieces = std::move(h.url_pieces);
+    this->chunk_positions = std::move(h.chunk_positions);
     return *this;
 }
 
@@ -170,7 +179,7 @@ bool http_endpoint::match(const http_endpoint& url) const
     if (!this->reg_compiled) throw std::invalid_argument("Cannot run match. Regex suppressed.");
 
     if(!this->family_url || url.url_pieces.size() < this->url_pieces.size())
-        return regexec(&(this->re_url_normalized), url.url_complete.c_str(), 0, NULL, 0) == 0;
+        return regex_match(url.url_complete, this->re_url_normalized);
 
     string nn = "/";
     bool first = true;
@@ -179,7 +188,7 @@ bool http_endpoint::match(const http_endpoint& url) const
         nn += (first ? "" : "/") + url.url_pieces[i];
         first = false;
     }
-    return regexec(&(this->re_url_normalized), nn.c_str(), 0, NULL, 0) == 0;
+    return regex_match(nn, this->re_url_normalized);
 }
 
 };

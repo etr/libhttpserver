@@ -27,7 +27,7 @@
 
 #include <vector>
 #include <utility>
-#include <regex.h>
+#include <regex>
 #include <string>
 #include <stdexcept>
 
@@ -51,6 +51,8 @@ class http_endpoint
         **/
         http_endpoint(const http_endpoint& h);
 
+        http_endpoint(http_endpoint&& h);
+
         /**
          * Class Destructor
         **/
@@ -70,6 +72,8 @@ class http_endpoint
          * @return a reference to the http_endpoint obtained
         **/
         http_endpoint& operator =(const http_endpoint& h);
+
+        http_endpoint& operator =(http_endpoint&& h);
 
         /**
          * Method indicating if this endpoint 'matches' with the one passed. A passed endpoint matches a registered endpoint if
@@ -186,7 +190,7 @@ class http_endpoint
         /**
          * Regex used in comparisons
         **/
-        regex_t re_url_normalized;
+        std::regex re_url_normalized;
 
         /**
          * Boolean indicating wheter the endpoint represents a family
