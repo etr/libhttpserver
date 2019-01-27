@@ -59,12 +59,31 @@ class deferred_response : public string_response
         {
         }
 
+        deferred_response(deferred_response&& other) noexcept:
+            string_response(std::move(other)),
+            cycle_callback(std::move(other.cycle_callback)),
+            completed(other.completed)
+        {
+        }
+
         deferred_response& operator=(const deferred_response& b)
         {
             if (this == &b) return *this;
 
             (string_response&) (*this) = b;
             this->cycle_callback = b.cycle_callback;
+            this->completed = b.completed;
+
+            return *this;
+        }
+
+        deferred_response& operator=(deferred_response&& b)
+        {
+            if (this == &b) return *this;
+
+            (string_response&) (*this) = std::move(b);
+            this->cycle_callback = std::move(b.cycle_callback);
+            this->completed = b.completed;
 
             return *this;
         }

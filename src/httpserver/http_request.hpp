@@ -78,7 +78,7 @@ class http_request
         {
             return this->pass;
         }
-        
+
         /**
          * Method used to get the path requested
          * @return string representing the path requested.
@@ -182,7 +182,7 @@ class http_request
             else
                 return EMPTY;
         }
-        
+
         /**
          * Method used to get a specific footer passed with the request.
          * @param key the specific footer to get the value from
@@ -197,7 +197,7 @@ class http_request
             else
                 return EMPTY;
         }
-        
+
         /**
          * Method used to get a specific argument passed with the request.
          * @param ket the specific argument to get the value from
@@ -212,7 +212,7 @@ class http_request
             else
                 return EMPTY;
         }
-        
+
         /**
          * Method used to get the content of the request.
          * @return the content in string representation
@@ -221,7 +221,7 @@ class http_request
         {
             return this->content;
         }
-        
+
         /**
          * Method to check whether the size of the content reached or exceeded content_size_limit.
          * @return boolean
@@ -238,7 +238,7 @@ class http_request
         {
             return this->querystring;
         }
-        
+
         /**
          * Method used to get the version of the request.
          * @return the version in string representation
@@ -247,7 +247,7 @@ class http_request
         {
             return this->version;
         }
-        
+
         /**
          * Method used to get the requestor.
          * @return the requestor
@@ -256,7 +256,7 @@ class http_request
         {
             return this->requestor;
         }
-        
+
         /**
          * Method used to get the requestor port used.
          * @return the requestor port
@@ -304,6 +304,75 @@ class http_request
             underlying_connection(b.underlying_connection)
         {
         }
+
+        http_request(http_request&& b) noexcept:
+            user(std::move(b.user)),
+            pass(std::move(b.pass)),
+            path(std::move(b.path)),
+            digested_user(std::move(b.digested_user)),
+            method(std::move(b.method)),
+            post_path(std::move(b.post_path)),
+            headers(std::move(b.headers)),
+            footers(std::move(b.footers)),
+            cookies(std::move(b.cookies)),
+            args(std::move(b.args)),
+            querystring(std::move(b.querystring)),
+            content(std::move(b.content)),
+            content_size_limit(b.content_size_limit),
+            version(std::move(b.version)),
+            requestor(std::move(b.requestor)),
+            underlying_connection(std::move(b.underlying_connection))
+        {
+        }
+
+        http_request& operator=(const http_request& b)
+        {
+            if (this == &b) return *this;
+
+            this->user = b.user;
+            this->pass = b.pass;
+            this->path = b.path;
+            this->digested_user = b.digested_user;
+            this->method = b.method;
+            this->post_path = b.post_path;
+            this->headers = b.headers;
+            this->footers = b.footers;
+            this->cookies = b.cookies;
+            this->args = b.args;
+            this->querystring = b.querystring;
+            this->content = b.content;
+            this->content_size_limit = b.content_size_limit;
+            this->version = b.version;
+            this->requestor = b.requestor;
+            this->underlying_connection = b.underlying_connection;
+
+            return *this;
+        }
+
+        http_request& operator=(http_request&& b)
+        {
+            if (this == &b) return *this;
+
+            this->user = std::move(b.user);
+            this->pass = std::move(b.pass);
+            this->path = std::move(b.path);
+            this->digested_user = std::move(b.digested_user);
+            this->method = std::move(b.method);
+            this->post_path = std::move(b.post_path);
+            this->headers = std::move(b.headers);
+            this->footers = std::move(b.footers);
+            this->cookies = std::move(b.cookies);
+            this->args = std::move(b.args);
+            this->querystring = std::move(b.querystring);
+            this->content = std::move(b.content);
+            this->content_size_limit = b.content_size_limit;
+            this->version = std::move(b.version);
+            this->requestor = std::move(b.requestor);
+            this->underlying_connection = std::move(b.underlying_connection);
+
+            return *this;
+        }
+
         std::string user;
         std::string pass;
         std::string path;

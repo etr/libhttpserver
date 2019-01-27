@@ -212,9 +212,21 @@ class http_resource
         **/
         http_resource(const http_resource& b) : allowed_methods(b.allowed_methods) { }
 
+        http_resource(http_resource&& b) noexcept: allowed_methods(std::move(b.allowed_methods)) { }
+
         http_resource& operator=(const http_resource& b)
         {
+            if (this == &b) return *this;
+
             allowed_methods = b.allowed_methods;
+            return (*this);
+        }
+
+        http_resource& operator=(http_resource&& b)
+        {
+            if (this == &b) return *this;
+
+            allowed_methods = std::move(b.allowed_methods);
             return (*this);
         }
 
