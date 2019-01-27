@@ -56,12 +56,28 @@ class basic_auth_fail_response : public string_response
         {
         }
 
+        basic_auth_fail_response(basic_auth_fail_response&& other) noexcept:
+            string_response(std::move(other)),
+            realm(std::move(other.realm))
+        {
+        }
+
         basic_auth_fail_response& operator=(const basic_auth_fail_response& b)
         {
             if (this == &b) return *this;
 
             (string_response&) (*this) = b;
             this->realm = b.realm;
+
+            return *this;
+        }
+
+        basic_auth_fail_response& operator=(basic_auth_fail_response&& b)
+        {
+            if (this == &b) return *this;
+
+            (string_response&) (*this) = std::move(b);
+            this->realm = std::move(b.realm);
 
             return *this;
         }

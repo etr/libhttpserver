@@ -55,12 +55,28 @@ class string_response : public http_response
         {
         }
 
+        string_response(string_response&& other) noexcept:
+            http_response(std::move(other)),
+            content(std::move(other.content))
+        {
+        }
+
         string_response& operator=(const string_response& b)
         {
             if (this == &b) return *this;
 
             (http_response&) (*this) = b;
             this->content = b.content;
+
+            return *this;
+        }
+
+        string_response& operator=(string_response&& b)
+        {
+            if (this == &b) return *this;
+
+            (http_response&) (*this) = std::move(b);
+            this->content = std::move(b.content);
 
             return *this;
         }

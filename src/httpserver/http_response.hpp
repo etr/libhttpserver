@@ -68,6 +68,14 @@ class http_response
         {
         }
 
+        http_response(http_response&& other) noexcept:
+            response_code(other.response_code),
+            headers(std::move(other.headers)),
+            footers(std::move(other.footers)),
+            cookies(std::move(other.cookies))
+        {
+        }
+
         http_response& operator=(const http_response& b)
         {
             if (this == &b) return *this;
@@ -76,6 +84,18 @@ class http_response
             this->headers = b.headers;
             this->footers = b.footers;
             this->cookies = b.cookies;
+
+            return *this;
+        }
+
+        http_response& operator=(http_response&& b)
+        {
+            if (this == &b) return *this;
+
+            this->response_code = b.response_code;
+            this->headers = std::move(b.headers);
+            this->footers = std::move(b.footers);
+            this->cookies = std::move(b.cookies);
 
             return *this;
         }

@@ -55,12 +55,28 @@ class file_response : public http_response
         {
         }
 
+        file_response(file_response&& other) noexcept:
+            http_response(std::move(other)),
+            filename(std::move(other.filename))
+        {
+        }
+
         file_response& operator=(const file_response& b)
         {
             if (this == &b) return *this;
 
             (http_response&) (*this) = b;
             this->filename = b.filename;
+
+            return *this;
+        }
+
+        file_response& operator=(file_response&& b)
+        {
+            if (this == &b) return *this;
+
+            (http_response&) (*this) = std::move(b);
+            this->filename = std::move(b.filename);
 
             return *this;
         }
