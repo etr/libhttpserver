@@ -64,6 +64,14 @@ class digest_auth_fail_response : public string_response
         {
         }
 
+        digest_auth_fail_response(digest_auth_fail_response&& other) noexcept:
+            string_response(std::move(other)),
+            realm(std::move(other.realm)),
+            opaque(std::move(other.opaque)),
+            reload_nonce(other.reload_nonce)
+        {
+        }
+
         digest_auth_fail_response& operator=(const digest_auth_fail_response& b)
         {
             if (this == &b) return *this;
@@ -71,6 +79,18 @@ class digest_auth_fail_response : public string_response
             (string_response&) (*this) = b;
             this->realm = b.realm;
             this->opaque = b.opaque;
+            this->reload_nonce = b.reload_nonce;
+
+            return *this;
+        }
+
+        digest_auth_fail_response& operator=(digest_auth_fail_response&& b)
+        {
+            if (this == &b) return *this;
+
+            (string_response&) (*this) = std::move(b);
+            this->realm = std::move(b.realm);
+            this->opaque = std::move(b.opaque);
             this->reload_nonce = b.reload_nonce;
 
             return *this;

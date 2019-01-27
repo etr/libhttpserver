@@ -53,6 +53,55 @@ struct modded_request
         second(false)
     {
     }
+
+    modded_request(const modded_request& b):
+        pp(b.pp),
+        complete_uri(b.complete_uri),
+        standardized_url(b.standardized_url),
+        ws(b.ws),
+        dhr(b.dhr),
+        second(b.second)
+    {
+    }
+
+    modded_request(modded_request&& b):
+        pp(std::move(b.pp)),
+        complete_uri(std::move(b.complete_uri)),
+        standardized_url(std::move(b.standardized_url)),
+        ws(std::move(b.ws)),
+        dhr(std::move(b.dhr)),
+        second(b.second)
+    {
+    }
+
+    modded_request& operator=(const modded_request& b)
+    {
+        if (this == &b) return *this;
+
+        this->pp = b.pp;
+        this->complete_uri = b.complete_uri;
+        this->standardized_url = b.standardized_url;
+        this->ws = b.ws;
+        this->dhr = b.dhr;
+        this->second = b.second;
+
+        return *this;
+    }
+
+    modded_request& operator=(modded_request&& b)
+    {
+        if (this == &b) return *this;
+
+        this->pp = std::move(b.pp);
+        this->complete_uri = std::move(b.complete_uri);
+        this->standardized_url = std::move(b.standardized_url);
+        this->ws = std::move(b.ws);
+        this->dhr = std::move(b.dhr);
+        this->second = b.second;
+
+        return *this;
+    }
+
     ~modded_request()
     {
         if (NULL != pp)

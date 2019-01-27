@@ -86,6 +86,178 @@ class create_webserver
         {
         }
 
+        create_webserver(const create_webserver& b):
+            _port(b._port),
+            _start_method(b._start_method),
+            _max_threads(b._max_threads),
+            _max_connections(b._max_connections),
+            _memory_limit(b._memory_limit),
+            _content_size_limit(b._content_size_limit),
+            _connection_timeout(b._connection_timeout),
+            _per_IP_connection_limit(b._per_IP_connection_limit),
+            _log_access(b._log_access),
+            _log_error(b._log_error),
+            _validator(b._validator),
+            _unescaper(b._unescaper),
+            _bind_address(b._bind_address),
+            _bind_socket(b._bind_socket),
+            _max_thread_stack_size(b._max_thread_stack_size),
+            _use_ssl(b._use_ssl),
+            _use_ipv6(b._use_ipv6),
+            _debug(b._debug),
+            _pedantic(b._pedantic),
+            _https_mem_key(b._https_mem_key),
+            _https_mem_cert(b._https_mem_cert),
+            _https_mem_trust(b._https_mem_trust),
+            _https_priorities(b._https_priorities),
+            _cred_type(b._cred_type),
+            _digest_auth_random(b._digest_auth_random),
+            _nonce_nc_size(b._nonce_nc_size),
+            _default_policy(b._default_policy),
+            _basic_auth_enabled(b._basic_auth_enabled),
+            _digest_auth_enabled(b._digest_auth_enabled),
+            _regex_checking(b._regex_checking),
+            _ban_system_enabled(b._ban_system_enabled),
+            _post_process_enabled(b._post_process_enabled),
+            _deferred_enabled(b._deferred_enabled),
+            _single_resource(b._single_resource),
+            _not_found_resource(b._not_found_resource),
+            _method_not_allowed_resource(b._method_not_allowed_resource),
+            _internal_error_resource(b._internal_error_resource)
+        {
+        }
+
+        create_webserver(create_webserver&& b):
+            _port(b._port),
+            _start_method(b._start_method),
+            _max_threads(b._max_threads),
+            _max_connections(b._max_connections),
+            _memory_limit(b._memory_limit),
+            _content_size_limit(b._content_size_limit),
+            _connection_timeout(b._connection_timeout),
+            _per_IP_connection_limit(b._per_IP_connection_limit),
+            _log_access(std::move(b._log_access)),
+            _log_error(std::move(b._log_error)),
+            _validator(std::move(b._validator)),
+            _unescaper(std::move(b._unescaper)),
+            _bind_address(std::move(b._bind_address)),
+            _bind_socket(b._bind_socket),
+            _max_thread_stack_size(b._max_thread_stack_size),
+            _use_ssl(b._use_ssl),
+            _use_ipv6(b._use_ipv6),
+            _debug(b._debug),
+            _pedantic(b._pedantic),
+            _https_mem_key(std::move(b._https_mem_key)),
+            _https_mem_cert(std::move(b._https_mem_cert)),
+            _https_mem_trust(std::move(b._https_mem_trust)),
+            _https_priorities(std::move(b._https_priorities)),
+            _cred_type(b._cred_type),
+            _digest_auth_random(std::move(b._digest_auth_random)),
+            _nonce_nc_size(b._nonce_nc_size),
+            _default_policy(b._default_policy),
+            _basic_auth_enabled(b._basic_auth_enabled),
+            _digest_auth_enabled(b._digest_auth_enabled),
+            _regex_checking(b._regex_checking),
+            _ban_system_enabled(b._ban_system_enabled),
+            _post_process_enabled(b._post_process_enabled),
+            _deferred_enabled(b._deferred_enabled),
+            _single_resource(b._single_resource),
+            _not_found_resource(std::move(b._not_found_resource)),
+            _method_not_allowed_resource(std::move(b._method_not_allowed_resource)),
+            _internal_error_resource(std::move(b._internal_error_resource))
+        {
+        }
+
+       create_webserver& operator=(const create_webserver& b)
+       {
+           if (this == &b) return *this;
+
+           this->_port = b._port;
+           this->_start_method = b._start_method;
+           this->_max_threads = b._max_threads;
+           this->_max_connections = b._max_connections;
+           this->_memory_limit = b._memory_limit;
+           this->_content_size_limit = b._content_size_limit;
+           this->_connection_timeout = b._connection_timeout;
+           this->_per_IP_connection_limit = b._per_IP_connection_limit;
+           this->_log_access = b._log_access;
+           this->_log_error = b._log_error;
+           this->_validator = b._validator;
+           this->_unescaper = b._unescaper;
+           this->_bind_address = b._bind_address;
+           this->_bind_socket = b._bind_socket;
+           this->_max_thread_stack_size = b._max_thread_stack_size;
+           this->_use_ssl = b._use_ssl;
+           this->_use_ipv6 = b._use_ipv6;
+           this->_debug = b._debug;
+           this->_pedantic = b._pedantic;
+           this->_https_mem_key = b._https_mem_key;
+           this->_https_mem_cert = b._https_mem_cert;
+           this->_https_mem_trust = b._https_mem_trust;
+           this->_https_priorities = b._https_priorities;
+           this->_cred_type = b._cred_type;
+           this->_digest_auth_random = b._digest_auth_random;
+           this->_nonce_nc_size = b._nonce_nc_size;
+           this->_default_policy = b._default_policy;
+           this->_basic_auth_enabled = b._basic_auth_enabled;
+           this->_digest_auth_enabled = b._digest_auth_enabled;
+           this->_regex_checking = b._regex_checking;
+           this->_ban_system_enabled = b._ban_system_enabled;
+           this->_post_process_enabled = b._post_process_enabled;
+           this->_deferred_enabled = b._deferred_enabled;
+           this->_single_resource = b._single_resource;
+           this->_not_found_resource = b._not_found_resource;
+           this->_method_not_allowed_resource = b._method_not_allowed_resource;
+           this->_internal_error_resource = b._internal_error_resource;
+
+           return *this;
+       }
+
+       create_webserver& operator=(create_webserver&& b)
+       {
+           if (this == &b) return *this;
+
+           this->_port = b._port;
+           this->_start_method = b._start_method;
+           this->_max_threads = b._max_threads;
+           this->_max_connections = b._max_connections;
+           this->_memory_limit = b._memory_limit;
+           this->_content_size_limit = b._content_size_limit;
+           this->_connection_timeout = b._connection_timeout;
+           this->_per_IP_connection_limit = b._per_IP_connection_limit;
+           this->_log_access = std::move(b._log_access);
+           this->_log_error = std::move(b._log_error);
+           this->_validator = std::move(b._validator);
+           this->_unescaper = std::move(b._unescaper);
+           this->_bind_address = std::move(b._bind_address);
+           this->_bind_socket = b._bind_socket;
+           this->_max_thread_stack_size = b._max_thread_stack_size;
+           this->_use_ssl = b._use_ssl;
+           this->_use_ipv6 = b._use_ipv6;
+           this->_debug = b._debug;
+           this->_pedantic = b._pedantic;
+           this->_https_mem_key = std::move(b._https_mem_key);
+           this->_https_mem_cert = std::move(b._https_mem_cert);
+           this->_https_mem_trust = std::move(b._https_mem_trust);
+           this->_https_priorities = std::move(b._https_priorities);
+           this->_cred_type = b._cred_type;
+           this->_digest_auth_random = std::move(b._digest_auth_random);
+           this->_nonce_nc_size = b._nonce_nc_size;
+           this->_default_policy = b._default_policy;
+           this->_basic_auth_enabled = b._basic_auth_enabled;
+           this->_digest_auth_enabled = b._digest_auth_enabled;
+           this->_regex_checking = b._regex_checking;
+           this->_ban_system_enabled = b._ban_system_enabled;
+           this->_post_process_enabled = b._post_process_enabled;
+           this->_deferred_enabled = b._deferred_enabled;
+           this->_single_resource = b._single_resource;
+           this->_not_found_resource = std::move(b._not_found_resource);
+           this->_method_not_allowed_resource = std::move(b._method_not_allowed_resource);
+           this->_internal_error_resource = std::move(b._internal_error_resource);
+
+           return *this;
+        }
+
         explicit create_webserver(uint16_t port):
             _port(port),
             _start_method(http::http_utils::INTERNAL_SELECT),
