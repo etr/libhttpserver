@@ -40,6 +40,9 @@
 #define DEFAULT_MASK_VALUE 0xFFFF
 
 namespace httpserver {
+
+typedef void(*unescaper_ptr)(std::string&);
+
 namespace http {
 
 class http_utils
@@ -358,6 +361,8 @@ void dump_arg_map(std::ostream &os, const std::string &prefix,
 size_t http_unescape (std::string& val);
 
 const std::string load_file (const std::string& filename);
+
+size_t base_unescaper(std::string&, unescaper_ptr unescaper);
 
 };
 };

@@ -593,6 +593,18 @@ void dump_arg_map(std::ostream &os, const std::string &prefix,
     }
 }
 
+size_t base_unescaper(std::string& s, unescaper_ptr unescaper)
+{
+    if(s[0] == 0) return 0;
+
+    if(unescaper != 0x0)
+    {
+        unescaper(s);
+        return s.size();
+    }
+
+    return http_unescape(s);
+}
 
 };
 };

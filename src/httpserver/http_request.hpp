@@ -56,28 +56,19 @@ class http_request
          * Method used to get the username eventually passed through basic authentication.
          * @return string representation of the username.
         **/
-        const std::string& get_user() const
-        {
-            return this->user;
-        }
+        const std::string get_user() const;
 
         /**
          * Method used to get the username extracted from a digest authentication
          * @return the username
         **/
-        const std::string& get_digested_user() const
-        {
-            return this->digested_user;
-        }
+        const std::string get_digested_user() const;
 
         /**
          * Method used to get the password eventually passed through basic authentication.
          * @return string representation of the password.
         **/
-        const std::string& get_pass() const
-        {
-            return this->pass;
-        }
+        const std::string get_pass() const;
 
         /**
          * Method used to get the path requested
@@ -123,95 +114,51 @@ class http_request
          * @param result a map<string, string> > that will be filled with all headers
          * @result the size of the map
         **/
-        const std::map<std::string, std::string, http::header_comparator>& get_headers() const
-        {
-            return this->headers;
-        }
+        const std::map<std::string, std::string, http::header_comparator> get_headers() const;
 
         /**
          * Method used to get all footers passed with the request.
          * @param result a map<string, string> > that will be filled with all footers
          * @result the size of the map
         **/
-        const std::map<std::string, std::string, http::header_comparator>& get_footers() const
-        {
-            return this->footers;
-        }
+        const std::map<std::string, std::string, http::header_comparator> get_footers() const;
 
         /**
          * Method used to get all cookies passed with the request.
          * @param result a map<string, string> > that will be filled with all cookies
          * @result the size of the map
         **/
-        const std::map<std::string, std::string, http::header_comparator>& get_cookies() const
-        {
-            return this->cookies;
-        }
+        const std::map<std::string, std::string, http::header_comparator> get_cookies() const;
 
         /**
          * Method used to get all args passed with the request.
          * @param result a map<string, string> > that will be filled with all args
          * @result the size of the map
         **/
-        const std::map<std::string, std::string, http::arg_comparator>& get_args() const
-        {
-            return this->args;
-        }
+        const std::map<std::string, std::string, http::arg_comparator> get_args() const;
 
         /**
          * Method used to get a specific header passed with the request.
          * @param key the specific header to get the value from
          * @return the value of the header.
         **/
-        const std::string& get_header(const std::string& key) const
-        {
-            std::map<std::string, std::string>::const_iterator it =
-                this->headers.find(key);
-            if(it != this->headers.end())
-                return it->second;
-            else
-                return EMPTY;
-        }
+        const std::string get_header(const std::string& key) const;
 
-        const std::string& get_cookie(const std::string& key) const
-        {
-            std::map<std::string, std::string>::const_iterator it =
-                this->cookies.find(key);
-            if(it != this->cookies.end())
-                return it->second;
-            else
-                return EMPTY;
-        }
+        const std::string get_cookie(const std::string& key) const;
 
         /**
          * Method used to get a specific footer passed with the request.
          * @param key the specific footer to get the value from
          * @return the value of the footer.
         **/
-        const std::string& get_footer(const std::string& key) const
-        {
-            std::map<std::string, std::string>::const_iterator it =
-                this->footers.find(key);
-            if(it != this->footers.end())
-                return it->second;
-            else
-                return EMPTY;
-        }
+        const std::string get_footer(const std::string& key) const;
 
         /**
          * Method used to get a specific argument passed with the request.
          * @param ket the specific argument to get the value from
          * @return the value of the arg.
         **/
-        const std::string& get_arg(const std::string& key) const
-        {
-            std::map<std::string, std::string>::const_iterator it =
-                this->args.find(key);
-            if(it != this->args.end())
-                return it->second;
-            else
-                return EMPTY;
-        }
+        const std::string get_arg(const std::string& key) const;
 
         /**
          * Method used to get the content of the request.
@@ -234,10 +181,7 @@ class http_request
          * Method used to get the content of the query string..
          * @return the query string in string representation
         **/
-        const std::string& get_querystring() const
-        {
-            return this->querystring;
-        }
+        const std::string get_querystring() const;
 
         /**
          * Method used to get the version of the request.
@@ -252,32 +196,38 @@ class http_request
          * Method used to get the requestor.
          * @return the requestor
         **/
-        const std::string& get_requestor() const
-        {
-            return this->requestor;
-        }
+        const std::string get_requestor() const;
 
         /**
          * Method used to get the requestor port used.
          * @return the requestor port
         **/
-        unsigned short get_requestor_port() const
-        {
-            return this->requestor_port;
-        }
+        unsigned short get_requestor_port() const;
 
         bool check_digest_auth(const std::string& realm,
                 const std::string& password,
                 int nonce_timeout, bool& reload_nonce
         ) const;
 
-        friend std::ostream &operator<< (std::ostream &os, const http_request &r);
+        friend std::ostream &operator<< (std::ostream &os, http_request &r);
+
     private:
         /**
          * Default constructor of the class. It is a specific responsibility of apis to initialize this type of objects.
         **/
         http_request():
-            content(""), content_size_limit(static_cast<size_t>(-1))
+            content(""),
+            content_size_limit(static_cast<size_t>(-1)),
+            underlying_connection(0x0),
+            unescaper(0x0)
+        {
+        }
+
+        http_request(MHD_Connection* underlying_connection, unescaper_ptr unescaper):
+            content(""),
+            content_size_limit(static_cast<size_t>(-1)),
+            underlying_connection(underlying_connection),
+            unescaper(unescaper)
         {
         }
 
@@ -286,41 +236,26 @@ class http_request
          * @param b http_request b to copy attributes from.
         **/
         http_request(const http_request& b):
-            user(b.user),
-            pass(b.pass),
             path(b.path),
-            digested_user(b.digested_user),
             method(b.method),
             post_path(b.post_path),
-            headers(b.headers),
-            footers(b.footers),
-            cookies(b.cookies),
             args(b.args),
-            querystring(b.querystring),
             content(b.content),
             content_size_limit(b.content_size_limit),
             version(b.version),
-            requestor(b.requestor),
-            underlying_connection(b.underlying_connection)
+            underlying_connection(b.underlying_connection),
+            unescaper(b.unescaper)
         {
         }
 
         http_request(http_request&& b) noexcept:
-            user(std::move(b.user)),
-            pass(std::move(b.pass)),
             path(std::move(b.path)),
-            digested_user(std::move(b.digested_user)),
             method(std::move(b.method)),
             post_path(std::move(b.post_path)),
-            headers(std::move(b.headers)),
-            footers(std::move(b.footers)),
-            cookies(std::move(b.cookies)),
             args(std::move(b.args)),
-            querystring(std::move(b.querystring)),
             content(std::move(b.content)),
             content_size_limit(b.content_size_limit),
             version(std::move(b.version)),
-            requestor(std::move(b.requestor)),
             underlying_connection(std::move(b.underlying_connection))
         {
         }
@@ -329,21 +264,13 @@ class http_request
         {
             if (this == &b) return *this;
 
-            this->user = b.user;
-            this->pass = b.pass;
             this->path = b.path;
-            this->digested_user = b.digested_user;
             this->method = b.method;
             this->post_path = b.post_path;
-            this->headers = b.headers;
-            this->footers = b.footers;
-            this->cookies = b.cookies;
             this->args = b.args;
-            this->querystring = b.querystring;
             this->content = b.content;
             this->content_size_limit = b.content_size_limit;
             this->version = b.version;
-            this->requestor = b.requestor;
             this->underlying_connection = b.underlying_connection;
 
             return *this;
@@ -353,79 +280,41 @@ class http_request
         {
             if (this == &b) return *this;
 
-            this->user = std::move(b.user);
-            this->pass = std::move(b.pass);
             this->path = std::move(b.path);
-            this->digested_user = std::move(b.digested_user);
             this->method = std::move(b.method);
             this->post_path = std::move(b.post_path);
-            this->headers = std::move(b.headers);
-            this->footers = std::move(b.footers);
-            this->cookies = std::move(b.cookies);
             this->args = std::move(b.args);
-            this->querystring = std::move(b.querystring);
             this->content = std::move(b.content);
             this->content_size_limit = b.content_size_limit;
             this->version = std::move(b.version);
-            this->requestor = std::move(b.requestor);
             this->underlying_connection = std::move(b.underlying_connection);
 
             return *this;
         }
 
-        std::string user;
-        std::string pass;
         std::string path;
-        std::string digested_user;
         std::string method;
         std::vector<std::string> post_path;
-        std::map<std::string, std::string, http::header_comparator> headers;
-        std::map<std::string, std::string, http::header_comparator> footers;
-        std::map<std::string, std::string, http::header_comparator> cookies;
         std::map<std::string, std::string, http::arg_comparator> args;
-        std::string querystring;
         std::string content;
         size_t content_size_limit;
         std::string version;
-        std::string requestor;
 
-        unsigned short requestor_port;
         struct MHD_Connection* underlying_connection;
 
-        void set_underlying_connection(struct MHD_Connection* conn)
-        {
-            this->underlying_connection = conn;
-        }
+        unescaper_ptr unescaper;
 
-        /**
-         * Method used to set an header value by key.
-         * @param key The name identifying the header
-         * @param value The value assumed by the header
-        **/
-        void set_header(const std::string& key, const std::string& value)
-        {
-            this->headers[key] = value;
-        }
+        static int build_request_header(void *cls, enum MHD_ValueKind kind,
+                const char *key, const char *value
+        );
 
-        /**
-         * Method used to set a footer value by key.
-         * @param key The name identifying the footer
-         * @param value The value assumed by the footer
-        **/
-        void set_footer(const std::string& key, const std::string& value)
-        {
-            this->footers[key] = value;
-        }
+        static int build_request_args(void *cls, enum MHD_ValueKind kind,
+                const char *key, const char *value
+        );
 
-        /**
-         * Method used to set a cookie value by key.
-         * @param key The name identifying the cookie
-         * @param value The value assumed by the cookie
-        **/
-        void set_cookie(const std::string& key, const std::string& value)
-        {
-            this->cookies[key] = value;
-        }
+        static int build_request_querystring(void *cls, enum MHD_ValueKind kind,
+                const char *key, const char *value
+        );
 
         /**
          * Method used to set an argument value by key.
@@ -511,66 +400,6 @@ class http_request
         }
 
         /**
-         * Method used to set the requestor
-         * @param requestor The requestor to set
-        **/
-        void set_requestor(const std::string& requestor)
-        {
-            this->requestor = requestor;
-        }
-
-        /**
-         * Method used to set the requestor port
-         * @param requestor The requestor port to set
-        **/
-        void set_requestor_port(unsigned short requestor_port)
-        {
-            this->requestor_port = requestor_port;
-        }
-
-        /**
-         * Method used to remove an header previously inserted
-         * @param key The key identifying the header to remove.
-        **/
-        void remove_header(const std::string& key)
-        {
-            this->headers.erase(key);
-        }
-
-        /**
-         * Method used to set all headers of the request.
-         * @param headers The headers key-value map to set for the request.
-        **/
-        void set_headers(const std::map<std::string, std::string>& headers)
-        {
-            std::map<std::string, std::string>::const_iterator it;
-            for(it = headers.begin(); it != headers.end(); ++it)
-                this->headers[it->first] = it->second;
-        }
-
-        /**
-         * Method used to set all footers of the request.
-         * @param footers The footers key-value map to set for the request.
-        **/
-        void set_footers(const std::map<std::string, std::string>& footers)
-        {
-            std::map<std::string, std::string>::const_iterator it;
-            for(it = footers.begin(); it != footers.end(); ++it)
-                this->footers[it->first] = it->second;
-        }
-
-        /**
-         * Method used to set all cookies of the request.
-         * @param cookies The cookies key-value map to set for the request.
-        **/
-        void set_cookies(const std::map<std::string, std::string>& cookies)
-        {
-            std::map<std::string, std::string>::const_iterator it;
-            for(it = cookies.begin(); it != cookies.end(); ++it)
-                this->cookies[it->first] = it->second;
-        }
-
-        /**
          * Method used to set all arguments of the request.
          * @param args The args key-value map to set for the request.
         **/
@@ -581,28 +410,8 @@ class http_request
                 this->args[it->first] = it->second.substr(0,content_size_limit);
         }
 
-        /**
-         * Method used to set the username of the request.
-         * @param user The username to set.
-        **/
-        void set_user(const std::string& user)
-        {
-            this->user = user;
-        }
-
-        void set_digested_user(const std::string& digested_user)
-        {
-            this->digested_user = digested_user;
-        }
-
-        /**
-         * Method used to set the password of the request.
-         * @param pass The password to set.
-        **/
-        void set_pass(const std::string& pass)
-        {
-            this->pass = pass;
-        }
+        const std::string get_connection_value(const std::string& key, enum MHD_ValueKind kind) const;
+        const std::map<std::string, std::string, http::header_comparator> get_headerlike_values(enum MHD_ValueKind kind) const;
 
         friend class webserver;
 };
