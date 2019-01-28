@@ -338,8 +338,6 @@ class http_request
                                           std::min(size, content_size_limit));
         }
 
-        void check_or_fill_args();
-
         /**
          * Method used to set the content of the request
          * @param content The content to set.
