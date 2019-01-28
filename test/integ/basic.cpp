@@ -117,6 +117,24 @@ class header_reading_resource : public http_resource
         }
 };
 
+class full_args_resource : public http_resource
+{
+    public:
+        const shared_ptr<http_response> render_GET(const http_request& req)
+        {
+            return shared_ptr<string_response>(new string_response(req.get_args().at("arg"), 200, "text/plain"));
+        }
+};
+
+class querystring_resource : public http_resource
+{
+    public:
+        const shared_ptr<http_response> render_GET(const http_request& req)
+        {
+            return shared_ptr<string_response>(new string_response(req.get_querystring(), 200, "text/plain"));
+        }
+};
+
 class complete_test_resource : public http_resource
 {
     public:
@@ -704,6 +722,42 @@ LT_BEGIN_AUTO_TEST(basic_suite, querystring_processing)
     LT_CHECK_EQ(s, "firstsecond");
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(querystring_processing)
+
+LT_BEGIN_AUTO_TEST(basic_suite, full_arguments_processing)
+    full_args_resource resource;
+    ws->register_resource("this/captures/args/passed/in/the/querystring", &resource);
+    curl_global_init(CURL_GLOBAL_ALL);
+
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/this/captures/args/passed/in/the/querystring?arg=argument");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "argument");
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(full_arguments_processing)
+
+LT_BEGIN_AUTO_TEST(basic_suite, querystring_query_processing)
+    querystring_resource resource;
+    ws->register_resource("this/captures/args/passed/in/the/querystring", &resource);
+    curl_global_init(CURL_GLOBAL_ALL);
+
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/this/captures/args/passed/in/the/querystring?arg1=value1&arg2=value2&arg3=value3");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "?arg1=value1&arg2=value2&arg3=value3");
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(querystring_query_processing)
 
 LT_BEGIN_AUTO_TEST(basic_suite, register_unregister)
     simple_resource resource;
