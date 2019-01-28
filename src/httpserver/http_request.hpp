@@ -292,50 +292,6 @@ class http_request
             return *this;
         }
 
-        http_request(http_request&& b) noexcept:
-            path(std::move(b.path)),
-            method(std::move(b.method)),
-            post_path(std::move(b.post_path)),
-            args(std::move(b.args)),
-            content(std::move(b.content)),
-            content_size_limit(b.content_size_limit),
-            version(std::move(b.version)),
-            underlying_connection(std::move(b.underlying_connection))
-        {
-        }
-
-        http_request& operator=(const http_request& b)
-        {
-            if (this == &b) return *this;
-
-            this->path = b.path;
-            this->method = b.method;
-            this->post_path = b.post_path;
-            this->args = b.args;
-            this->content = b.content;
-            this->content_size_limit = b.content_size_limit;
-            this->version = b.version;
-            this->underlying_connection = b.underlying_connection;
-
-            return *this;
-        }
-
-        http_request& operator=(http_request&& b)
-        {
-            if (this == &b) return *this;
-
-            this->path = std::move(b.path);
-            this->method = std::move(b.method);
-            this->post_path = std::move(b.post_path);
-            this->args = std::move(b.args);
-            this->content = std::move(b.content);
-            this->content_size_limit = b.content_size_limit;
-            this->version = std::move(b.version);
-            this->underlying_connection = std::move(b.underlying_connection);
-
-            return *this;
-        }
-
         std::string path;
         std::string method;
         std::vector<std::string> post_path;
