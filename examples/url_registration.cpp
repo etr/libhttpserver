@@ -24,21 +24,21 @@ using namespace httpserver;
 
 class hello_world_resource : public http_resource {
 public:
-    const std::shared_ptr<http_response> render(http_request&) {
+    const std::shared_ptr<http_response> render(const http_request&) {
         return std::shared_ptr<http_response>(new string_response("Hello, World!"));
     }
 };
 
 class handling_multiple_resource : public http_resource {
 public:
-    const std::shared_ptr<http_response> render(http_request& req) {
+    const std::shared_ptr<http_response> render(const http_request& req) {
         return std::shared_ptr<http_response>(new string_response("Your URL: " + req.get_path()));
     }
 };
 
 class url_args_resource : public http_resource {
 public:
-    const std::shared_ptr<http_response> render(http_request& req) {
+    const std::shared_ptr<http_response> render(const http_request& req) {
         return std::shared_ptr<http_response>(new string_response("ARGS: " + req.get_arg("arg1") + " and " + req.get_arg("arg2")));
     }
 };

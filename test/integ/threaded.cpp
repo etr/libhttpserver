@@ -30,7 +30,7 @@ using namespace std;
 class ok_resource : public http_resource
 {
     public:
-        const shared_ptr<http_response> render_GET(http_request& req)
+        const shared_ptr<http_response> render_GET(const http_request& req)
         {
             return shared_ptr<string_response>(new string_response("OK", 200, "text/plain"));
         }

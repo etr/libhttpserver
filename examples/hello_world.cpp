@@ -25,13 +25,13 @@ using namespace httpserver;
 
 class hello_world_resource : public http_resource {
 	public:
-        const std::shared_ptr<http_response> render(http_request&);
+        const std::shared_ptr<http_response> render(const http_request&);
         void set_some_data(const std::string &s) {data = s;}
         std::string data;
 };
 
 //using the render method you are able to catch each type of request you receive
-const std::shared_ptr<http_response> hello_world_resource::render(http_request& req)
+const std::shared_ptr<http_response> hello_world_resource::render(const http_request& req)
 {
     //it is possible to store data inside the resource object that can be altered
     //through the requests

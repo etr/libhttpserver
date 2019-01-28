@@ -48,7 +48,7 @@ size_t writefunc(void *ptr, size_t size, size_t nmemb, std::string *s)
 class user_pass_resource : public httpserver::http_resource
 {
     public:
-        const shared_ptr<http_response> render_GET(http_request& req)
+        const shared_ptr<http_response> render_GET(const http_request& req)
         {
             if (req.get_user() != "myuser" || req.get_pass() != "mypass")
             {
@@ -61,7 +61,7 @@ class user_pass_resource : public httpserver::http_resource
 class digest_resource : public httpserver::http_resource
 {
     public:
-        const shared_ptr<http_response> render_GET(http_request& req)
+        const shared_ptr<http_response> render_GET(const http_request& req)
         {
             if (req.get_digested_user() == "") {
                 return shared_ptr<digest_auth_fail_response>(new digest_auth_fail_response("FAIL", "test@example.com", MY_OPAQUE, true));

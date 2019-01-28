@@ -25,7 +25,7 @@ using namespace httpserver;
 class user_pass_resource : public httpserver::http_resource
 {
     public:
-        const std::shared_ptr<http_response> render_GET(http_request& req)
+        const std::shared_ptr<http_response> render_GET(const http_request& req)
         {
             if (req.get_user() != "myuser" || req.get_pass() != "mypass")
             {

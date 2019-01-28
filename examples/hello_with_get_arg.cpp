@@ -24,7 +24,7 @@ using namespace httpserver;
 
 class hello_world_resource : public http_resource {
 public:
-    const std::shared_ptr<http_response> render(http_request& req) {
+    const std::shared_ptr<http_response> render(const http_request& req) {
         return std::shared_ptr<http_response>(new string_response("Hello: " + req.get_arg("name")));
     }
 };

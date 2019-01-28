@@ -43,7 +43,7 @@ class http_request;
 namespace details
 {
 
-std::shared_ptr<http_response> empty_render(http_request& r);
+std::shared_ptr<http_response> empty_render(const http_request& r);
 
 };
 
@@ -69,7 +69,7 @@ class http_resource
          * @param req Request passed through http
          * @return A http_response object
         **/
-        virtual const std::shared_ptr<http_response> render(http_request& req)
+        virtual const std::shared_ptr<http_response> render(const http_request& req)
         {
             return details::empty_render(req);
         }
@@ -78,7 +78,7 @@ class http_resource
          * @param req Request passed through http
          * @return A http_response object
         **/
-        virtual const std::shared_ptr<http_response> render_GET(http_request& req)
+        virtual const std::shared_ptr<http_response> render_GET(const http_request& req)
         {
             return render(req);
         }
@@ -87,7 +87,7 @@ class http_resource
          * @param req Request passed through http
          * @return A http_response object
         **/
-        virtual const std::shared_ptr<http_response> render_POST(http_request& req)
+        virtual const std::shared_ptr<http_response> render_POST(const http_request& req)
         {
             return render(req);
         }
@@ -96,7 +96,7 @@ class http_resource
          * @param req Request passed through http
          * @return A http_response object
         **/
-        virtual const std::shared_ptr<http_response> render_PUT(http_request& req)
+        virtual const std::shared_ptr<http_response> render_PUT(const http_request& req)
         {
             return render(req);
         }
@@ -105,7 +105,7 @@ class http_resource
          * @param req Request passed through http
          * @return A http_response object
         **/
-        virtual const std::shared_ptr<http_response> render_HEAD(http_request& req)
+        virtual const std::shared_ptr<http_response> render_HEAD(const http_request& req)
         {
             return render(req);
         }
@@ -114,7 +114,7 @@ class http_resource
          * @param req Request passed through http
          * @return A http_response object
         **/
-        virtual const std::shared_ptr<http_response> render_DELETE(http_request& req)
+        virtual const std::shared_ptr<http_response> render_DELETE(const http_request& req)
         {
             return render(req);
         }
@@ -123,7 +123,7 @@ class http_resource
          * @param req Request passed through http
          * @return A http_response object
         **/
-        virtual const std::shared_ptr<http_response> render_TRACE( http_request& req)
+        virtual const std::shared_ptr<http_response> render_TRACE(const http_request& req)
         {
             return render(req);
         }
@@ -132,7 +132,7 @@ class http_resource
          * @param req Request passed through http
          * @return A http_response object
         **/
-        virtual const std::shared_ptr<http_response> render_OPTIONS(http_request& req)
+        virtual const std::shared_ptr<http_response> render_OPTIONS(const http_request& req)
         {
             return render(req);
         }
@@ -141,7 +141,7 @@ class http_resource
          * @param req Request passed through http
          * @return A http_response object
         **/
-        virtual const std::shared_ptr<http_response> render_CONNECT(http_request& req)
+        virtual const std::shared_ptr<http_response> render_CONNECT(const http_request& req)
         {
             return render(req);
         }

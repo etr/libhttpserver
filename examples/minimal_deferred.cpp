@@ -38,7 +38,7 @@ ssize_t test_callback (char* buf, size_t max) {
 
 class deferred_resource : public http_resource {
     public:
-        const std::shared_ptr<http_response> render_GET(http_request& req) {
+        const std::shared_ptr<http_response> render_GET(const http_request& req) {
             return std::shared_ptr<deferred_response>(new deferred_response(test_callback, "cycle callback response"));
         }
 };

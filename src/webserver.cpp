@@ -532,8 +532,7 @@ int webserver::bodyfull_requests_answer_first_step(
             MHD_HEADER_KIND,
             http_utils::http_header_content_type.c_str()
     );
-    if(encoding != 0x0)
-        mr->dhr->set_header(http_utils::http_header_content_type, encoding);
+
     if ( post_process_enabled &&
         (
             0x0 != encoding &&

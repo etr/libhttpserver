@@ -47,18 +47,18 @@ size_t writefunc(void *ptr, size_t size, size_t nmemb, std::string *s)
 class ok_resource : public http_resource
 {
     public:
-        const shared_ptr<http_response> render_GET(http_request& req)
+        const shared_ptr<http_response> render_GET(const http_request& req)
         {
             return shared_ptr<string_response>(new string_response("OK", 200, "text/plain"));
         }
 };
 
-const shared_ptr<http_response> not_found_custom(http_request& req)
+const shared_ptr<http_response> not_found_custom(const http_request& req)
 {
     return shared_ptr<string_response>(new string_response("Not found custom", 404, "text/plain"));
 }
 
-const shared_ptr<http_response> not_allowed_custom(http_request& req)
+const shared_ptr<http_response> not_allowed_custom(const http_request& req)
 {
     return shared_ptr<string_response>(new string_response("Not allowed custom", 405, "text/plain"));
 }

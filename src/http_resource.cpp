@@ -48,7 +48,7 @@ void resource_init(map<string, bool>& allowed_methods)
 namespace details
 {
 
-shared_ptr<http_response> empty_render(http_request& r)
+shared_ptr<http_response> empty_render(const http_request& r)
 {
     return shared_ptr<http_response>(new string_response());
 }
