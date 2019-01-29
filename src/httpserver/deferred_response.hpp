@@ -35,19 +35,24 @@ namespace details
     ssize_t cb(void*, uint64_t, char*, size_t);
 };
 
-typedef ssize_t(*cycle_callback_ptr)(char*, size_t);
+typedef ssize_t(*cycle_callback_ptr)(void*, char*, size_t);
+typedef void(*cleanup_callback_ptr)(void**);
 
 class deferred_response : public string_response
 {
     public:
         explicit deferred_response(
                 cycle_callback_ptr cycle_callback,
+                void* priv_data = nullptr,
+                cleanup_callback_ptr cleanup_callback = nullptr,
                 const std::string& content = "",
                 int response_code = http::http_utils::http_ok,
                 const std::string& content_type = http::http_utils::text_plain
         ):
             string_response(content, response_code, content_type),
             cycle_callback(cycle_callback),
+            priv_data(priv_data),
+            cleanup_callback(cleanup_callback),
             completed(false)
         {
         }
@@ -55,6 +60,8 @@ class deferred_response : public string_response
         deferred_response(const deferred_response& other):
             string_response(other),
             cycle_callback(other.cycle_callback),
+            priv_data(other.priv_data),
+            cleanup_callback(other.cleanup_callback),
             completed(other.completed)
         {
         }
@@ -73,6 +80,8 @@ class deferred_response : public string_response
             (string_response&) (*this) = b;
             this->cycle_callback = b.cycle_callback;
             this->completed = b.completed;
+            this->priv_data = b.priv_data;
+            this->cleanup_callback = b.cleanup_callback;
 
             return *this;
         }
@@ -84,18 +93,25 @@ class deferred_response : public string_response
             (string_response&) (*this) = std::move(b);
             this->cycle_callback = std::move(b.cycle_callback);
             this->completed = b.completed;
+            this->priv_data = b.priv_data;
+            this->cleanup_callback = b.cleanup_callback;
 
             return *this;
         }
 
         ~deferred_response()
         {
+            if (priv_data != nullptr) {
+                cleanup_callback(&priv_data);
+            }
         }
 
         MHD_Response* get_raw_response();
         void decorate_response(MHD_Response* response);
     private:
         cycle_callback_ptr cycle_callback;
+        void* priv_data;
+        cleanup_callback_ptr cleanup_callback;
         bool completed;
 
         friend ssize_t details::cb(void* cls, uint64_t pos, char* buf, size_t max);

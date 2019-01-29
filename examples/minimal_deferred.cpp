@@ -18,32 +18,65 @@
      USA
 */
 
+#include <atomic>
 #include <httpserver.hpp>
 
 using namespace httpserver;
 
-static int counter = 0;
+std::atomic<int> reqid;
 
-ssize_t test_callback (char* buf, size_t max) {
-    if (counter == 2) {
+typedef struct {
+    int reqid;
+} connection;
+
+ssize_t test_callback (void* data, char* buf, size_t max) {
+    int reqid;
+    if (data == nullptr) {
+        reqid = -1;
+    } else {
+        reqid = static_cast<connection*>(data)->reqid;
+    }
+
+    // only first 5 connections can be established
+    if (reqid >= 5) {
         return -1;
     }
-    else {
-        memset(buf, 0, max);
-        strcat(buf, " test ");
-        counter++;
-        return std::string(buf).size();
+
+    // respond corresponding request IDs to the clients
+    std::string str = "";
+    str += std::to_string(reqid) + " ";
+    memset(buf, 0, max);
+    std::copy(str.begin(), str.end(), buf);
+
+    // keep sending reqid
+    sleep(1);
+    return (ssize_t)max;
+}
+
+void test_cleanup (void** data)
+{
+    if (*data != nullptr) {
+            delete static_cast<connection*>(*data);
     }
+    data = nullptr;
 }
 
 class deferred_resource : public http_resource {
     public:
         const std::shared_ptr<http_response> render_GET(const http_request& req) {
-            return std::shared_ptr<deferred_response>(new deferred_response(test_callback, "cycle callback response"));
+            // private data of new connections
+            auto priv_data = new connection();
+            priv_data->reqid = reqid++;
+
+            auto response = std::make_shared<deferred_response>(test_callback, priv_data, test_cleanup,
+                                                                "cycle callback response");
+            return response;
         }
 };
 
 int main(int argc, char** argv) {
+    reqid.store(0);
+
     webserver ws = create_webserver(8080);
 
     deferred_resource hwr;
@@ -52,4 +85,3 @@ int main(int argc, char** argv) {
 
     return 0;
 }
-

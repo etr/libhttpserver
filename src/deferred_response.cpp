@@ -30,7 +30,8 @@ namespace details
 
 ssize_t cb(void* cls, uint64_t pos, char* buf, size_t max)
 {
-    ssize_t val = static_cast<deferred_response*>(cls)->cycle_callback(buf, max);
+    ssize_t val = static_cast<deferred_response*>(cls)->cycle_callback(
+                  static_cast<deferred_response*>(cls)->priv_data, buf, max);
     if(val == -1)
     {
         static_cast<deferred_response*>(cls)->completed = true;
