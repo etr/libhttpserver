@@ -47,7 +47,7 @@ size_t writefunc(void *ptr, size_t size, size_t nmemb, std::string *s)
 
 static int counter = 0;
 
-ssize_t test_callback (char* buf, size_t max)
+ssize_t test_callback (void*, char* buf, size_t max)
 {
     if (counter == 2)
     {
@@ -67,7 +67,8 @@ class deferred_resource : public http_resource
     public:
         const shared_ptr<http_response> render_GET(const http_request& req)
         {
-            return shared_ptr<deferred_response>(new deferred_response(test_callback, "cycle callback response"));
+            return shared_ptr<deferred_response>(new deferred_response(test_callback, nullptr, nullptr,
+                                                                       "cycle callback response"));
         }
 };
 
