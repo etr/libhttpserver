@@ -22,6 +22,7 @@ before_install:
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo apt-get install cppcheck; fi
  - if [ "$TRAVIS_OS_NAME" = "osx" ]; then export CFLAGS='-mtune=generic'; fi
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then choco install curl; fi
+ - if [ "$TRAVIS_OS_NAME" = "windows" ]; then choco install mingw; fi
  - curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.59.tar.gz -o libmicrohttpd-0.9.59.tar.gz
  - tar -xvzf libmicrohttpd-0.9.59.tar.gz
  - cd libmicrohttpd-0.9.59
