@@ -601,10 +601,10 @@ There are 5 types of response that you can create - we will describe them here t
 * _file_response(**const std::string&** filename, **int** response_code = `200`, **const std::string&** content_type = `"text/plain"`):_ Uses the `filename` passed in construction as pointer to a file on disk. The body of the HTTP response will be set using the content of the file. The other two optional parameters are the `response_code` and the `content_type`. You can find constant definition for the various response codes within the [http_utils](https://github.com/etr/libhttpserver/blob/master/src/httpserver/http_utils.hpp) library file.
 * _basic_auth_fail_response(**const std::string&** content, **const std::string&** realm = `""`, **int** response_code = `200`, **const std::string&** content_type = `"text/plain"`):_ A response in return to a failure during basic authentication. It allows to specify a `content` string as a message to send back to the client. The `realm` parameter should contain your realm of authentication (if any). The other two optional parameters are the `response_code` and the `content_type`. You can find constant definition for the various response codes within the [http_utils](https://github.com/etr/libhttpserver/blob/master/src/httpserver/http_utils.hpp) library file.
 * _digest_auth_fail_response(**const std::string&** content, **const std::string&** realm = `""`, **const std::string&** opaque = `""`, **bool** reload_nonce = `false`, **int** response_code = `200`, **const std::string&** content_type = `"text/plain"`):_ A response in return to a failure during digest authentication. It allows to specify a `content` string as a message to send back to the client. The `realm` parameter should contain your realm of authentication (if any). The `opaque` represents a value that gets passed to the client and expected to be passed again to the server as-is. This value can be a hexadecimal or base64 string. The `reload_nonce` parameter tells the server to reload the nonce (you should use the value returned by the `check_digest_auth` method on the `http_request`. The other two optional parameters are the `response_code` and the `content_type`. You can find constant definition for the various response codes within the [http_utils](https://github.com/etr/libhttpserver/blob/master/src/httpserver/http_utils.hpp) library file.
-* _deferred_response(**ssize_t(&ast;cycle_callback_ptr)(char&ast;, size_t)** cycle_callback, **const std::string&** content = `""`, **int** response_code = `200`, **const std::string&** content_type = `"text/plain"`):_ A response that obtains additional content from a callback executed in a deferred way. It leaves the client in pending state (returning a `100 CONTINUE` message) and suspends the connection. Besides the callback, optionally, you can provide a `content` parameter that sets the initial message sent immediately to the client. The other two optional parameters are the `response_code` and the `content_type`. You can find constant definition for the various response codes within the [http_utils](https://github.com/etr/libhttpserver/blob/master/src/httpserver/http_utils.hpp) library file. To use `deferred_response` you need to have the `deferred` option active on your webserver (enabled by default).
+* _deferred_response(**ssize_t(&ast;cycle_callback_ptr)(shared_ptr<T>, char&ast;, size_t)** cycle_callback, **const std::string&** content = `""`, **int** response_code = `200`, **const std::string&** content_type = `"text/plain"`):_ A response that obtains additional content from a callback executed in a deferred way. It leaves the client in pending state (returning a `100 CONTINUE` message) and suspends the connection. Besides the callback, optionally, you can provide a `content` parameter that sets the initial message sent immediately to the client. The other two optional parameters are the `response_code` and the `content_type`. You can find constant definition for the various response codes within the [http_utils](https://github.com/etr/libhttpserver/blob/master/src/httpserver/http_utils.hpp) library file. To use `deferred_response` you need to have the `deferred` option active on your webserver (enabled by default).
 	* The `cycle_callback_ptr` has this shape:
-		_**ssize_t** cycle_callback(**char&ast;** buf, **size_t** max_size)_.
-		You are supposed to implement a function in this shape and provide it to the `deferred_repsonse` method. The webserver will provide a `char*` to the function. It is responsibility of the function to allocate it and fill its content. The method is supposed to respect the `max_size` parameter passed in input. The function must return  a `ssize_t` value representing the actual size you filled the `buf` with. Any value different from `-1` will keep the resume the connection, deliver the content and suspend it again (with a `100 CONTINUE`). If the method returns `-1`, the webserver will complete the communication with the client and close the connection.
+		_**ssize_t** cycle_callback(**shared_ptr<T> closure_data, char&ast;** buf, **size_t** max_size)_.
+		You are supposed to implement a function in this shape and provide it to the `deferred_repsonse` method. The webserver will provide a `char*` to the function. It is responsibility of the function to allocate it and fill its content. The method is supposed to respect the `max_size` parameter passed in input. The function must return  a `ssize_t` value representing the actual size you filled the `buf` with. Any value different from `-1` will keep the resume the connection, deliver the content and suspend it again (with a `100 CONTINUE`). If the method returns `-1`, the webserver will complete the communication with the client and close the connection. You can also pass a `shared_ptr` pointing to a data object of your choice (this will be templetized with a class of your choice). The server will guarantee that this object is passed at each invocation of the method allowing the client code to use it as a memory buffer during computation.
 
 ### Setting additional properties of the response
 The `http_response` class offers an additional set of methods to "decorate" your responses. This set of methods is:
@@ -825,36 +825,37 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
 
 #### Example of a deferred response through callback
     #include <httpserver.hpp>
-
+    
     using namespace httpserver;
-
+    
     static int counter = 0;
-
-    ssize_t test_callback (char* buf, size_t max) {
+    
+    ssize_t test_callback (std::shared_ptr<void> closure_data, char* buf, size_t max) {
         if (counter == 2) {
             return -1;
-        } else {
+        }
+        else {
             memset(buf, 0, max);
             strcat(buf, " test ");
             counter++;
             return std::string(buf).size();
         }
     }
-
+    
     class deferred_resource : public http_resource {
-    public:
-        const std::shared_ptr<http_response> render_GET(const http_request& req) {
-            return std::shared_ptr<deferred_response>(new deferred_response(test_callback, "cycle callback response"));
-        }
+        public:
+            const std::shared_ptr<http_response> render_GET(const http_request& req) {
+                return std::shared_ptr<deferred_response<void> >(new deferred_response<void>(test_callback, nullptr, "cycle callback response"));
+            }
     };
-
+    
     int main(int argc, char** argv) {
         webserver ws = create_webserver(8080);
-
+    
         deferred_resource hwr;
         ws.register_resource("/hello", &hwr);
         ws.start(true);
-
+    
         return 0;
     }
 
@@ -863,6 +864,63 @@ To test the above example, you can run the following command from a terminal:
     curl -XGET -v localhost:8080/hello
 
 You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/minimal_deferred.cpp).
+
+#### Example of a deferred response through callback (passing additional data along)
+    #include <atomic>
+    #include <httpserver.hpp>
+    
+    using namespace httpserver;
+    
+    std::atomic<int> counter;
+    
+    ssize_t test_callback (std::shared_ptr<std::atomic<int> > closure_data, char* buf, size_t max) {
+        int reqid;
+        if (closure_data == nullptr) {
+            reqid = -1;
+        } else {
+            reqid = *closure_data;
+        }
+    
+        // only first 5 connections can be established
+        if (reqid >= 5) {
+            return -1;
+        } else {
+            // respond corresponding request IDs to the clients
+            std::string str = "";
+            str += std::to_string(reqid) + " ";
+            memset(buf, 0, max);
+            std::copy(str.begin(), str.end(), buf);
+    
+            // keep sending reqid
+            sleep(1);
+    
+            return (ssize_t)max;
+        }
+    }
+    
+    class deferred_resource : public http_resource {
+        public:
+            const std::shared_ptr<http_response> render_GET(const http_request& req) {
+                std::shared_ptr<std::atomic<int> > closure_data(new std::atomic<int>(counter++));
+                return std::shared_ptr<deferred_response<std::atomic<int> > >(new deferred_response<std::atomic<int> >(test_callback, closure_data, "cycle callback response"));
+            }
+    };
+    
+    int main(int argc, char** argv) {
+        webserver ws = create_webserver(8080);
+    
+        deferred_resource hwr;
+        ws.register_resource("/hello", &hwr);
+        ws.start(true);
+    
+        return 0;
+    }
+
+To test the above example, you can run the following command from a terminal:
+    
+    curl -XGET -v localhost:8080/hello
+
+You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/deferred_with_accumulator.cpp).
 
 [Back to TOC](#table-of-contents)
 

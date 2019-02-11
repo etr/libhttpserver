@@ -24,7 +24,7 @@ using namespace httpserver;
 
 static int counter = 0;
 
-ssize_t test_callback (char* buf, size_t max) {
+ssize_t test_callback (std::shared_ptr<void> closure_data, char* buf, size_t max) {
     if (counter == 2) {
         return -1;
     }
@@ -39,7 +39,7 @@ ssize_t test_callback (char* buf, size_t max) {
 class deferred_resource : public http_resource {
     public:
         const std::shared_ptr<http_response> render_GET(const http_request& req) {
-            return std::shared_ptr<deferred_response>(new deferred_response(test_callback, "cycle callback response"));
+            return std::shared_ptr<deferred_response<void> >(new deferred_response<void>(test_callback, nullptr, "cycle callback response"));
         }
 };
 
