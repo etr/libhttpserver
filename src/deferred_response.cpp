@@ -28,44 +28,11 @@ namespace httpserver
 namespace details
 {
 
-ssize_t cb(void* cls, uint64_t pos, char* buf, size_t max)
+MHD_Response* get_raw_response_helper(void* cls, ssize_t (*cb)(void*, uint64_t, char*, size_t))
 {
-    ssize_t val = static_cast<deferred_response*>(cls)->cycle_callback(buf, max);
-    if(val == -1)
-    {
-        static_cast<deferred_response*>(cls)->completed = true;
-    }
-
-    return val;
+    return MHD_create_response_from_callback(MHD_SIZE_UNKNOWN, 1024, cb, cls, NULL);
 }
 
 }
 
-MHD_Response* deferred_response::get_raw_response()
-{
-    if(!completed)
-    {
-        return MHD_create_response_from_callback(
-                MHD_SIZE_UNKNOWN,
-                1024,
-                &details::cb,
-                this,
-                NULL
-        );
-    }
-    else
-    {
-        return static_cast<string_response*>(this)->get_raw_response();
-    }
 }
-
-void deferred_response::decorate_response(MHD_Response* response)
-{
-    if(completed)
-    {
-        static_cast<string_response*>(this)->decorate_response(response);
-    }
-}
-
-}
-
