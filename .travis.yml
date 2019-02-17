@@ -12,9 +12,6 @@ env:
  - LINKING="static"
 before_install:
  - eval "${MATRIX_EVAL}"
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then choco install curl; fi
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then choco install mingw; fi
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then choco install msys2; fi
  - if [ "$TRAVIS_OS_NAME" != "windows" ]; then export LDFLAGS="$LDFLAGS -L/usr/local/lib -L/usr/lib"; fi
  - if [ "$TRAVIS_OS_NAME" != "windows" ]; then export PATH=$PATH:/usr/local/lib; fi
  - if [ "$TRAVIS_OS_NAME" != "windows" ]; then export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib; fi
@@ -24,14 +21,12 @@ before_install:
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo pip install gcovr; fi
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo apt-get install cppcheck; fi
  - if [ "$TRAVIS_OS_NAME" = "osx" ]; then export CFLAGS='-mtune=generic'; fi
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then export LDFLAGS="$LDFLAGS -L/c/tools/msys64/usr/lib"; fi
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then export CFLAGS="$CFLAGS -I/c/tools/msys64/usr/include -I/c/tools/msys64/usr/include/arpa"; fi
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then export CXXFLAGS="$CXXFLAGS -I/c/tools/msys64/usr/include -I/c/tools/msys64/usr/include/arpa"; fi
- - echo $PATH;
- - env
  - curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.59.tar.gz -o libmicrohttpd-0.9.59.tar.gz
  - tar -xvzf libmicrohttpd-0.9.59.tar.gz
  - cd libmicrohttpd-0.9.59
+ - if [ "$TRAVIS_OS_NAME" = "windows" ]; then autoreconf -i; fi
+ - if [ "$TRAVIS_OS_NAME" = "windows" ]; then automake --add-missing; fi
+ - if [ "$TRAVIS_OS_NAME" = "windows" ]; then autoconf; fi
  - if [[ "$ARM_ARCH_DIR" != "" ]]; then ./configure --build `./config.guess` --host $ARM_ARCH_DIR --disable-examples; else ./configure --disable-examples; fi
  - make
  - sudo make install
