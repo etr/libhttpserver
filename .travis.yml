@@ -14,7 +14,6 @@ before_install:
  - eval "${MATRIX_EVAL}"
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then choco install curl; fi
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then choco install mingw; fi
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then choco install cygwin; fi
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then choco install msys2; fi
  - if [ "$TRAVIS_OS_NAME" != "windows" ]; then export LDFLAGS="$LDFLAGS -L/usr/local/lib -L/usr/lib"; fi
  - if [ "$TRAVIS_OS_NAME" != "windows" ]; then export PATH=$PATH:/usr/local/lib; fi
@@ -25,7 +24,6 @@ before_install:
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo pip install gcovr; fi
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo apt-get install cppcheck; fi
  - if [ "$TRAVIS_OS_NAME" = "osx" ]; then export CFLAGS='-mtune=generic'; fi
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then export PATH=/c/tools/msys64:/c/tools/msys64/mingw64/bin:/c/tools/msys64/mingw32/bin:/c/tools/msys64/usr/bin:$PATH; fi
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then export LDFLAGS="$LDFLAGS -L/c/tools/msys64/usr/lib"; fi
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then export CFLAGS="$CFLAGS -I/c/tools/msys64/usr/include -I/c/tools/msys64/usr/include/arpa"; fi
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then export CXXFLAGS="$CXXFLAGS -I/c/tools/msys64/usr/include -I/c/tools/msys64/usr/include/arpa"; fi
