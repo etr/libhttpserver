@@ -12,7 +12,7 @@ env:
  - LINKING="static"
 before_install:
  - eval "${MATRIX_EVAL}"
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then choco install gnuwin; fi
+ - if [ "$TRAVIS_OS_NAME" = "windows" ]; then choco install msys2; fi
  - if [ "$TRAVIS_OS_NAME" != "windows" ]; then export LDFLAGS="$LDFLAGS -L/usr/local/lib -L/usr/lib"; fi
  - if [ "$TRAVIS_OS_NAME" != "windows" ]; then export PATH=$PATH:/usr/local/lib; fi
  - if [ "$TRAVIS_OS_NAME" != "windows" ]; then export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib; fi
@@ -22,6 +22,9 @@ before_install:
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo pip install gcovr; fi
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo apt-get install cppcheck; fi
  - if [ "$TRAVIS_OS_NAME" = "osx" ]; then export CFLAGS='-mtune=generic'; fi
+ - which env;
+ - if [ "$TRAVIS_OS_NAME" = "windows" ]; then /c/tools/msys64/usr/bin/pacman.exe -Syuu; fi
+ - if [ "$TRAVIS_OS_NAME" = "windows" ]; then /c/tools/msys64/usr/bin/pacman.exe -S --needed base-devel; fi
  - curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.59.tar.gz -o libmicrohttpd-0.9.59.tar.gz
  - tar -xvzf libmicrohttpd-0.9.59.tar.gz
  - cd libmicrohttpd-0.9.59
