@@ -21,7 +21,6 @@ before_install:
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo pip install gcovr; fi
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo apt-get install cppcheck; fi
  - if [ "$TRAVIS_OS_NAME" = "osx" ]; then export CFLAGS='-mtune=generic'; fi
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then export PATH=/c/tools/msys64:/c/tools/msys64/mingw64/bin:/c/tools/msys64/mingw32/bin:/c/tools/msys64/usr/bin; fi
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then ls -R /c/ProgramData/chocolatey; fi
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then ls -R /bin; fi
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then ls -R /usr/bin; fi
