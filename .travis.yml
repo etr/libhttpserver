@@ -27,7 +27,7 @@ before_install:
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then export PATH=/c/tools/msys64:/c/tools/msys64/mingw64/bin:/c/tools/msys64/mingw32/bin:/c/tools/msys64/usr/bin:$PATH; fi
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then export LDFLAGS="$LDFLAGS -L/c/tools/msys64/usr/lib"; fi
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then export CFLAGS="$CFLAGS -I/c/tools/msys64/usr/include -I/c/tools/msys64/usr/include/arpa"; fi
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then export CXXLAGS="$CXXLAGS -I/c/tools/msys64/usr/include -I/c/tools/msys64/usr/include/arpa"; fi
+ - if [ "$TRAVIS_OS_NAME" = "windows" ]; then export CXXFLAGS="$CXXFLAGS -I/c/tools/msys64/usr/include -I/c/tools/msys64/usr/include/arpa"; fi
  - echo $PATH;
  - env
  - curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.59.tar.gz -o libmicrohttpd-0.9.59.tar.gz
