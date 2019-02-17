@@ -14,7 +14,6 @@ before_install:
  - eval "${MATRIX_EVAL}"
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then choco install curl; fi
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then choco install mingw; fi
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then choco install cygwin; fi
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then choco install msys2; fi
  - if [ "$TRAVIS_OS_NAME" != "windows" ]; then export LDFLAGS="$LDFLAGS -L/usr/local/lib -L/usr/lib"; fi
  - if [ "$TRAVIS_OS_NAME" != "windows" ]; then export PATH=$PATH:/usr/local/lib; fi
