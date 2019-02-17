@@ -25,7 +25,7 @@ before_install:
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo pip install gcovr; fi
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo apt-get install cppcheck; fi
  - if [ "$TRAVIS_OS_NAME" = "osx" ]; then export CFLAGS='-mtune=generic'; fi
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then export PATH=$PATH:/c/tools/msys64; fi
+ - if [ "$TRAVIS_OS_NAME" = "windows" ]; then export PATH=/c/tools/msys64:$PATH; fi
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then ls /c/tools/msys64; fi
  - echo $PATH;
  - env
