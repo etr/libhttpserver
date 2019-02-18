@@ -21,17 +21,23 @@ before_install:
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo pip install gcovr; fi
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo apt-get install cppcheck; fi
  - if [ "$TRAVIS_OS_NAME" = "osx" ]; then export CFLAGS='-mtune=generic'; fi
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then ls -R /c/ProgramData/chocolatey; fi
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then ls -R /bin; fi
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then ls -R /usr/bin; fi
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then ls -R /c/ProgramData/chocolatey/bin; fi
+ - if [ "$TRAVIS_OS_NAME" = "windows" ]; then
+     curl https://s3.amazonaws.com/libhttpserver/travis_stuff/msys2-base-x86_64-20181211.tar.xz -o msys2-base-x86_64-20181211.tar.xz ;
+     tar xf msys2-base-x86_64-20181211.tar.xz ;
+     cp -R msys64/ /c/ProgramData/chocolatey/lib/mingw/tools/install/mingw64/ ;
+   fi
+ - if [ "$TRAVIS_OS_NAME" = "windows" ]; then pacman -Syuu; fi
+ - if [ "$TRAVIS_OS_NAME" = "windows" ]; then pacman -S --needed base-devel; fi
  - curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.59.tar.gz -o libmicrohttpd-0.9.59.tar.gz
  - tar -xvzf libmicrohttpd-0.9.59.tar.gz
  - cd libmicrohttpd-0.9.59
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then autoreconf -i; fi
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then automake --add-missing; fi
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then autoconf; fi
- - if [[ "$ARM_ARCH_DIR" != "" ]]; then ./configure --build `./config.guess` --host $ARM_ARCH_DIR --disable-examples; else ./configure --disable-examples; fi
+ - if [[ "$ARM_ARCH_DIR" != "" ]]; then
+     ./configure --build `./config.guess` --host $ARM_ARCH_DIR --disable-examples;
+   elif [[ "$TRAVIS_OS_NAME" = "windows" ]]; then
+     ./configure --disable-examples;
+   else
+     ./configure --disable-examples;
+   fi
  - make
  - sudo make install
  - cd ..
