@@ -23,13 +23,13 @@ before_install:
  - if [ "$TRAVIS_OS_NAME" = "osx" ]; then export CFLAGS='-mtune=generic'; fi
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then
      curl https://s3.amazonaws.com/libhttpserver/travis_stuff/msys64.tar.gz -o msys64.tar.gz ;
-     tar -xvzf msys64.tar.gz ;
+     tar -xzf msys64.tar.gz ;
      cp -R msys64/ /c/ProgramData/chocolatey/lib/mingw/tools/install/mingw64/ ;
    fi
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then pacman -Syuu; fi
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then pacman -S --needed base-devel; fi
  - curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.59.tar.gz -o libmicrohttpd-0.9.59.tar.gz
- - tar -xvzf libmicrohttpd-0.9.59.tar.gz
+ - tar -xzf libmicrohttpd-0.9.59.tar.gz
  - cd libmicrohttpd-0.9.59
  - if [[ "$ARM_ARCH_DIR" != "" ]]; then
      ./configure --build `./config.guess` --host $ARM_ARCH_DIR --disable-examples;
