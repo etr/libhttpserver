@@ -31,6 +31,9 @@ before_install:
      rm msys64/usr/bin/bash.exe ;
      cp -R msys64/* / ;
    fi
+ - if [ "$TRAVIS_OS_NAME" = "windows" ]; then pacman-key --init; fi
+ - if [ "$TRAVIS_OS_NAME" = "windows" ]; then pacman-key --populate msys2; fi
+ - if [ "$TRAVIS_OS_NAME" = "windows" ]; then pacman-key --refresh-keys; fi
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then pacman -Syuu; fi
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then pacman -S --needed base-devel; fi
  - curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.59.tar.gz -o libmicrohttpd-0.9.59.tar.gz
