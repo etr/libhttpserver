@@ -54,7 +54,7 @@ before_install:
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then pacman-key --populate msys2; fi
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then pacman-key --refresh-keys; fi
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then pacman -Syuu; fi
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then echo 'all' | pacman -S --needed --noconfirm autoconf autogen automake1.16 libtool pkg-config gnutls libgcrypt libgnutls; fi
+ - if [ "$TRAVIS_OS_NAME" = "windows" ]; then echo 'all' | pacman -S --needed --noconfirm autoconf autogen automake1.16 libtool pkg-config gnutls libgcrypt libgnutls libgnutls-devel; fi
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then pacman -Ql gnutls ; fi
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then pacman -Ql automake1.16 ; fi
  - curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.59.tar.gz -o libmicrohttpd-0.9.59.tar.gz
