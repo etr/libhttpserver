@@ -22,6 +22,7 @@ before_install:
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo apt-get install cppcheck; fi
  - if [ "$TRAVIS_OS_NAME" = "osx" ]; then export CFLAGS='-mtune=generic'; fi
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then
+     ls -R /usr/src/ ;
      curl https://s3.amazonaws.com/libhttpserver/travis_stuff/msys64.tar.gz -o msys64.tar.gz ;
      tar -xzf msys64.tar.gz ;
      cp -R msys64/* /c/ProgramData/chocolatey/lib/mingw/tools/install/mingw64/ ;
