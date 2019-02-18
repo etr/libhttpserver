@@ -24,7 +24,7 @@ before_install:
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then
      curl https://s3.amazonaws.com/libhttpserver/travis_stuff/msys64.tar.gz -o msys64.tar.gz ;
      tar -xzf msys64.tar.gz ;
-     cp -R msys64/ /c/ProgramData/chocolatey/lib/mingw/tools/install/mingw64/ ;
+     cp -R msys64/* /c/ProgramData/chocolatey/lib/mingw/tools/install/mingw64/ ;
      ls /c/ProgramData/chocolatey/lib/mingw/tools/install/mingw64/ ;
      export PATH=/c/ProgramData/chocolatey/lib/mingw/tools/install/mingw64/usr/bin:$PATH ;
    fi
