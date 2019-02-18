@@ -61,7 +61,9 @@ before_install:
  - if [[ "$ARM_ARCH_DIR" != "" ]]; then
      ./configure --build `./config.guess` --host $ARM_ARCH_DIR --disable-examples;
    elif [[ "$TRAVIS_OS_NAME" = "windows" ]]; then
-     ./configure --prefix=/usr --build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32 --disable-examples --enable-https --enable-shared --enable-static;
+     ls /usr/include/ ;
+     ls /usr/local/include ;
+     ./configure --prefix=/usr --build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32 --disable-examples --enable-https --enable-shared --enable-static ;
    else
      ./configure --disable-examples;
    fi
