@@ -24,8 +24,11 @@ before_install:
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then
      curl https://s3.amazonaws.com/libhttpserver/travis_stuff/msys64.tar.gz -o msys64.tar.gz ;
      tar -xzf msys64.tar.gz ;
-     ls /bin ;
-     ls /usr/bin ;
+     rm msys64/usr/bin/cp.exe ;
+     rm msys64/usr/bin/msys-2.0.dll ;
+     rm msys64/usr/bin/msys-intl-8.dll ;
+     rm msys64/usr/bin/msys-iconv-2.dll ;
+     rm msys64/usr/bin/bash.exe ;
      cp -R msys64/* / ;
    fi
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then pacman -Syuu; fi
