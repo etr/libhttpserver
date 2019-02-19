@@ -55,16 +55,15 @@ before_install:
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then pacman-key --refresh-keys; fi
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then pacman -Syuu; fi
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then echo 'all' | pacman -S --needed --noconfirm autoconf autogen automake1.16 libtool pkg-config gnutls libgcrypt libgnutls libgnutls-devel; fi
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then pacman -Ql gnutls ; fi
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then pacman -Ql automake1.16 ; fi
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then pacman -Ql libgnutls-devel ; fi
  - curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.59.tar.gz -o libmicrohttpd-0.9.59.tar.gz
  - tar -xzf libmicrohttpd-0.9.59.tar.gz
  - cd libmicrohttpd-0.9.59
  - if [[ "$ARM_ARCH_DIR" != "" ]]; then
      ./configure --build `./config.guess` --host $ARM_ARCH_DIR --disable-examples;
    elif [[ "$TRAVIS_OS_NAME" = "windows" ]]; then
-     ./configure --prefix=/c/ProgramData/chocolatey/lib/mingw/tools/install/mingw64/x86_64-w64-mingw32/ --build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32 --disable-examples --enable-https --enable-shared --enable-static ;
+     export CPPFLAGS=/usr/include:$CPPFLAGS ;
+     export LDFLAGS=/usr/lib:$LDFLAGS ;
+     ./configure --prefix=/usr/ --build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32 --disable-examples --enable-https --enable-shared --enable-static ;
    else
      ./configure --disable-examples;
    fi
