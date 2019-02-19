@@ -57,6 +57,7 @@ before_install:
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then echo 'all' | pacman -S --needed --noconfirm autoconf autogen automake1.16 libtool pkg-config gnutls libgcrypt libgnutls libgnutls-devel; fi
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then pacman -Ql gnutls ; fi
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then pacman -Ql automake1.16 ; fi
+ - if [ "$TRAVIS_OS_NAME" = "windows" ]; then pacman -Ql gnutls-devel ; fi
  - curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.59.tar.gz -o libmicrohttpd-0.9.59.tar.gz
  - tar -xzf libmicrohttpd-0.9.59.tar.gz
  - cd libmicrohttpd-0.9.59
