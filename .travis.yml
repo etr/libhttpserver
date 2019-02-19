@@ -62,6 +62,7 @@ before_install:
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then export LDFLAGS="$LDFLAGS -L/usr/lib"; fi
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then export CFLAGS="$CFLAGS -I/usr/include"; fi
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then export CXXFLAGS="$CXXFLAGS -I/usr/include"; fi
+ - if [ "$TRAVIS_OS_NAME" = "windows" ]; then cat /usr/include/gnutls/gnutls.h ; fi
  - curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.59.tar.gz -o libmicrohttpd-0.9.59.tar.gz
  - tar -xzf libmicrohttpd-0.9.59.tar.gz
  - cd libmicrohttpd-0.9.59
