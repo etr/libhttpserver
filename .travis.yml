@@ -48,6 +48,9 @@ before_install:
      rm /usr/lib/tar/backup.sh ;
      rm /usr/lib/tar/dump-remind ;
      rm /usr/lib/tar/rmt.exe ;
+     rm /mingw64/bin/libwinpthread-1.dll ;
+     rm /mingw64/share/licenses/libwinpthread/COPYING ;
+     rm /mingw64/share/licenses/libwinpthread/mingw-w64-libraries/winpthreads/COPYING ;
      cp -R msys64/* / ;
    fi
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then pacman-key --init; fi
