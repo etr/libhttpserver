@@ -325,7 +325,7 @@ bool webserver::start(bool blocking)
 
     if(this->daemon == NULL)
     {
-        throw std::invalid_argument("Unable to connect daemon to port: " + this->port);
+        throw std::invalid_argument("Unable to connect daemon to port: " + std::to_string(this->port));
     }
 
     bool value_onclose = false;
