@@ -8,6 +8,6 @@ Description: A C++ library for creating an embedded Rest HTTP server
 Version: @VERSION@
 Requires: libmicrohttpd >= 0.9.37
 Conflicts:
-Libs: -L${libdir} -lmicrohttpd
+Libs: -L${libdir} -lhttpserver
 Libs.private: @LHT_LIBDEPS@
 Cflags: -I${includedir} -I${includedir}/httpserver
