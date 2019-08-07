@@ -1,4 +1,8 @@
-Sat Jan 27 21:59:11 2018 -0800
+Tue Aug 06 22:22:14 2019 -0800
+	Added support for body parsing in DELETE requests.
+	Added support for PATCH method
+
+Sat Jan 27 21:59:11 2019 -0800
 	libhttpserver now includes set of examples to demonstrate the main capabilities of the library
 	"examples" are now optionally disabled.
 	Adds valgrind memcheck to the build system on travis
@@ -7,7 +11,7 @@ Sat Jan 27 21:59:11 2018 -0800
 	All classes now implement move constructor and move assignment operator
 	The library now avoids collecting connection properties (headers, arguments, footers, cookies, etc...) unless explicitly asked by the client code.
 
-Sat Jan 12 00:51:00 2018 -0800
+Sat Jan 12 00:51:00 2019 -0800
 	Removed the support for integrated COMET logic.
 	Removed the support for caching logic.
 	Added integ tests.
