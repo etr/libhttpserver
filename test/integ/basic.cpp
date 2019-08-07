@@ -158,6 +158,10 @@ class complete_test_resource : public http_resource
         {
             return shared_ptr<string_response>(new string_response("OK", 200, "text/plain"));
         }
+        const shared_ptr<http_response> render_PATCH(const http_request& req)
+        {
+            return shared_ptr<string_response>(new string_response("OK", 200, "text/plain"));
+        }
 };
 
 class only_render_resource : public http_resource
@@ -483,6 +487,14 @@ LT_BEGIN_AUTO_TEST(basic_suite, complete)
     curl_easy_cleanup(curl);
     }
 
+    {
+    CURL* curl = curl_easy_init();
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "PATCH");
+    CURLcode res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    curl_easy_cleanup(curl);
+    }
 /*
     {
     CURL* curl = curl_easy_init();

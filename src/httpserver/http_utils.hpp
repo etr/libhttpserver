@@ -102,6 +102,7 @@ class http_utils
     static const short http_method_post_code;
     static const short http_method_put_code;
     static const short http_method_trace_code;
+    static const short http_method_patch_code;
     static const short http_method_unknown_code;
 
     static const int http_continue;
@@ -224,6 +225,7 @@ class http_utils
     static const std::string http_method_post;
     static const std::string http_method_put;
     static const std::string http_method_trace;
+    static const std::string http_method_patch;
 
     static const std::string http_post_encoding_form_urlencoded;
     static const std::string http_post_encoding_multipart_formdata;
