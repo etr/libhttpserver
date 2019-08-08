@@ -787,6 +787,12 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
     else if (0 == strcasecmp(method,http_utils::http_method_delete.c_str()))
     {
         mr->callback = &http_resource::render_DELETE;
+        body = true;
+    }
+    else if (0 == strcasecmp(method, http_utils::http_method_patch.c_str()))
+    {
+        mr->callback = &http_resource::render_PATCH;
+        body = true;
     }
     else if (0 == strcasecmp(method, http_utils::http_method_head.c_str()))
     {

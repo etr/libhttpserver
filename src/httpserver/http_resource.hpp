@@ -137,6 +137,15 @@ class http_resource
             return render(req);
         }
         /**
+         * Method used to answer to a PATCH request
+         * @param req Request passed through http
+         * @return A http_response object
+        **/
+        virtual const std::shared_ptr<http_response> render_PATCH(const http_request& req)
+        {
+            return render(req);
+        }
+        /**
          * Method used to answer to a CONNECT request
          * @param req Request passed through http
          * @return A http_response object
