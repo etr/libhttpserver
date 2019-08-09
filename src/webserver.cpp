@@ -151,8 +151,7 @@ webserver::webserver(const create_webserver& params):
     single_resource(params._single_resource),
     not_found_resource(params._not_found_resource),
     method_not_allowed_resource(params._method_not_allowed_resource),
-    internal_error_resource(params._internal_error_resource),
-    next_to_choose(0)
+    internal_error_resource(params._internal_error_resource)
 {
     ignore_sigpipe();
     pthread_mutex_init(&mutexwait, NULL);
