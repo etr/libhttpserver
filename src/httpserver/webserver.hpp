@@ -174,6 +174,7 @@ class webserver
         const bool post_process_enabled;
         const bool deferred_enabled;
         bool single_resource;
+        bool tcp_nodelay;
         pthread_mutex_t mutexwait;
         pthread_rwlock_t runguard;
         pthread_cond_t mutexcond;

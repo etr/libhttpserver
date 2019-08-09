@@ -99,6 +99,12 @@ script:
     sleep 5 && ab -n 10000000 -c 100 localhost:8080/plaintext
    fi
  - |
+   if [ "$PERFORMANCE" = "nodelay" ]; then
+    cd examples
+    ./benchmark_nodelay 8080 $(nproc) &
+    sleep 5 && ab -n 10000000 -c 100 localhost:8080/plaintext
+   fi
+ - |
    if [ "$PERFORMANCE" = "threads" ]; then
     cd examples
     ./benchmark_threads 8080 &
@@ -215,6 +221,16 @@ matrix:
             - apache2-utils
       env:
         - MATRIX_EVAL="CC=gcc-7 && CXX=g++-7 && PERFORMANCE=select"
+    - os: linux
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-7
+            - apache2-utils
+      env:
+        - MATRIX_EVAL="CC=gcc-7 && CXX=g++-7 && PERFORMANCE=nodelay"
     - os: linux
       addons:
         apt:

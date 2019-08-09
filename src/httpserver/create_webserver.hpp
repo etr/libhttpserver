@@ -80,6 +80,7 @@ class create_webserver
             _post_process_enabled(true),
             _deferred_enabled(false),
             _single_resource(false),
+            _tcp_nodelay(false),
             _not_found_resource(0x0),
             _method_not_allowed_resource(0x0),
             _internal_error_resource(0x0)
@@ -121,6 +122,7 @@ class create_webserver
             _post_process_enabled(b._post_process_enabled),
             _deferred_enabled(b._deferred_enabled),
             _single_resource(b._single_resource),
+            _tcp_nodelay(b._tcp_nodelay),
             _not_found_resource(b._not_found_resource),
             _method_not_allowed_resource(b._method_not_allowed_resource),
             _internal_error_resource(b._internal_error_resource)
@@ -162,6 +164,7 @@ class create_webserver
             _post_process_enabled(b._post_process_enabled),
             _deferred_enabled(b._deferred_enabled),
             _single_resource(b._single_resource),
+            _tcp_nodelay(b._tcp_nodelay),
             _not_found_resource(std::move(b._not_found_resource)),
             _method_not_allowed_resource(std::move(b._method_not_allowed_resource)),
             _internal_error_resource(std::move(b._internal_error_resource))
@@ -206,6 +209,7 @@ class create_webserver
            this->_post_process_enabled = b._post_process_enabled;
            this->_deferred_enabled = b._deferred_enabled;
            this->_single_resource = b._single_resource;
+           this->_tcp_nodelay = b._tcp_nodelay;
            this->_not_found_resource = b._not_found_resource;
            this->_method_not_allowed_resource = b._method_not_allowed_resource;
            this->_internal_error_resource = b._internal_error_resource;
@@ -251,6 +255,7 @@ class create_webserver
            this->_post_process_enabled = b._post_process_enabled;
            this->_deferred_enabled = b._deferred_enabled;
            this->_single_resource = b._single_resource;
+           this->_tcp_nodelay = b._tcp_nodelay;
            this->_not_found_resource = std::move(b._not_found_resource);
            this->_method_not_allowed_resource = std::move(b._method_not_allowed_resource);
            this->_internal_error_resource = std::move(b._internal_error_resource);
@@ -293,6 +298,7 @@ class create_webserver
             _post_process_enabled(true),
             _deferred_enabled(false),
             _single_resource(false),
+            _tcp_nodelay(false),
             _not_found_resource(0x0),
             _method_not_allowed_resource(0x0),
             _internal_error_resource(0x0)
@@ -471,6 +477,10 @@ class create_webserver
         {
             _single_resource = true; return *this;
         }
+        create_webserver& tcp_nodelay()
+        {
+            _tcp_nodelay = true; return *this;
+        }
         create_webserver& not_found_resource(render_ptr not_found_resource)
         {
             _not_found_resource = not_found_resource; return *this;
@@ -524,6 +534,7 @@ class create_webserver
         bool _post_process_enabled;
         bool _deferred_enabled;
         bool _single_resource;
+        bool _tcp_nodelay;
         render_ptr _not_found_resource;
         render_ptr _method_not_allowed_resource;
         render_ptr _internal_error_resource;
