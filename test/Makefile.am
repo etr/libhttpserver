@@ -19,7 +19,7 @@
 LDADD = $(top_builddir)/src/libhttpserver.la
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/
 METASOURCES = AUTO
-check_PROGRAMS = basic http_utils threaded string_utilities http_endpoint ban_system ws_start_stop authentication deferred
+check_PROGRAMS = basic http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred
 
 MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
 
@@ -32,6 +32,7 @@ deferred_SOURCES = integ/deferred.cpp
 http_utils_SOURCES = unit/http_utils_test.cpp
 string_utilities_SOURCES = unit/string_utilities_test.cpp
 http_endpoint_SOURCES = unit/http_endpoint_test.cpp
+nodelay_SOURCES = integ/nodelay.cpp
 
 noinst_HEADERS = littletest.hpp
 AM_CXXFLAGS += -lcurl -Wall -fPIC

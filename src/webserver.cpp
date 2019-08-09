@@ -32,9 +32,11 @@
 
 #if defined(__MINGW32__) || defined(__CYGWIN32__)
 #include <winsock2.h>
+#include <ws2tcpip.h>
 #define _WINDOWS
 #else
 #include <netinet/ip.h>
+#include <netinet/tcp.h>
 #endif
 
 #include <signal.h>
@@ -149,10 +151,10 @@ webserver::webserver(const create_webserver& params):
     post_process_enabled(params._post_process_enabled),
     deferred_enabled(params._deferred_enabled),
     single_resource(params._single_resource),
+    tcp_nodelay(params._tcp_nodelay),
     not_found_resource(params._not_found_resource),
     method_not_allowed_resource(params._method_not_allowed_resource),
-    internal_error_resource(params._internal_error_resource),
-    next_to_choose(0)
+    internal_error_resource(params._internal_error_resource)
 {
     ignore_sigpipe();
     pthread_mutex_init(&mutexwait, NULL);
@@ -756,6 +758,17 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
                     upload_data_size,
                     mr
             );
+    }
+
+    const MHD_ConnectionInfo * conninfo = MHD_get_connection_info(
+            connection,
+            MHD_CONNECTION_INFO_CONNECTION_FD
+    );
+
+    if (static_cast<webserver*>(cls)->tcp_nodelay)
+    {
+        int yes = 1;
+        setsockopt(conninfo->connect_fd, IPPROTO_TCP, TCP_NODELAY, (char *) &yes, sizeof(int));
     }
 
     std::string t_url = url;
