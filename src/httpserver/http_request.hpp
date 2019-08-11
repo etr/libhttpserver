@@ -83,9 +83,9 @@ class http_request
          * Method used to get all pieces of the path requested; considering an url splitted by '/'.
          * @return a vector of strings containing all pieces
         **/
-        const std::vector<std::string>& get_path_pieces() const
+        const std::vector<std::string> get_path_pieces() const
         {
-            return this->post_path;
+            return http::http_utils::tokenize_url(this->path);
         }
 
         /**
@@ -95,8 +95,9 @@ class http_request
         **/
         const std::string& get_path_piece(int index) const
         {
-            if(((int)(this->post_path.size())) > index)
-                return this->post_path[index];
+            std::vector<std::string> post_path = this->get_path_pieces();
+            if(((int)(post_path.size())) > index)
+                return post_path[index];
             return EMPTY;
         }
 
@@ -238,7 +239,6 @@ class http_request
         http_request(const http_request& b):
             path(b.path),
             method(b.method),
-            post_path(b.post_path),
             args(b.args),
             content(b.content),
             content_size_limit(b.content_size_limit),
@@ -251,7 +251,6 @@ class http_request
         http_request(http_request&& b) noexcept:
             path(std::move(b.path)),
             method(std::move(b.method)),
-            post_path(std::move(b.post_path)),
             args(std::move(b.args)),
             content(std::move(b.content)),
             content_size_limit(b.content_size_limit),
@@ -266,7 +265,6 @@ class http_request
 
             this->path = b.path;
             this->method = b.method;
-            this->post_path = b.post_path;
             this->args = b.args;
             this->content = b.content;
             this->content_size_limit = b.content_size_limit;
@@ -282,7 +280,6 @@ class http_request
 
             this->path = std::move(b.path);
             this->method = std::move(b.method);
-            this->post_path = std::move(b.post_path);
             this->args = std::move(b.args);
             this->content = std::move(b.content);
             this->content_size_limit = b.content_size_limit;
@@ -294,7 +291,6 @@ class http_request
 
         std::string path;
         std::string method;
-        std::vector<std::string> post_path;
         std::map<std::string, std::string, http::arg_comparator> args;
         std::string content;
         size_t content_size_limit;
@@ -377,11 +373,6 @@ class http_request
         void set_path(const std::string& path)
         {
             this->path = path;
-            std::vector<std::string> complete_path = http::http_utils::tokenize_url(this->path);
-            for(unsigned int i = 0; i < complete_path.size(); i++)
-            {
-                this->post_path.push_back(complete_path[i]);
-            }
         }
 
         /**
