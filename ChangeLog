@@ -1,3 +1,7 @@
+Sat Aug 10 18:34:07 2019 -0800
+	Added support for TCP-NODELAY
+	Changed set_path on http_request to have lazy behavior
+
 Tue Aug 06 22:22:14 2019 -0800
 	Added support for body parsing in DELETE requests.
 	Added support for PATCH method
