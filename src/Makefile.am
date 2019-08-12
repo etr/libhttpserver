@@ -31,7 +31,10 @@ AM_CXXFLAGS += -O0 --coverage --no-inline
 AM_LDFLAGS += -O0 --coverage -lgcov --no-inline
 endif
 
+if !COND_CROSS_COMPILE
 libhttpserver_la_LIBADD = -lmicrohttpd
+endif
+
 libhttpserver_la_CFLAGS = $(AM_CFLAGS)
 libhttpserver_la_CXXFLAGS = $(AM_CXXFLAGS)
 libhttpserver_la_LDFLAGS = $(AM_LDFLAGS) -no-undefined

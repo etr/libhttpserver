@@ -24,12 +24,18 @@ LIBTOOL_DEPS = @LIBTOOL_DEPS@
 AUTOMAKE_OPTIONS = foreign 1.4
 ACLOCAL_AMFLAGS = -I m4
 
-SUBDIRS = src test
-DIST_SUBDIRS = src test
+SUBDIRS = src
+DIST_SUBDIRS = src
+
+if !COND_CROSS_COMPILE
+SUBDIRS += test
+DIST_SUBDIRS += test
 
 if BUILD_EXAMPLES
 SUBDIRS += examples
 DIST_SUBDIRS += examples
+endif
+
 endif
 
 EXTRA_DIST = libhttpserver.pc.in $(DX_CONFIG)

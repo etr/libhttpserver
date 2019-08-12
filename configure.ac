@@ -37,7 +37,7 @@ AX_VALGRIND_CHECK
 OLD_CXXFLAGS=$CXXFLAGS
 LT_INIT
 AC_PROG_CC
-AC_PROG_CXX([clang++])
+AC_PROG_CXX()
 AC_PROG_LN_S
 CXXFLAGS=$OLD_CXXFLAGS
 AC_LANG([C++])
@@ -93,28 +93,48 @@ AC_CHECK_HEADER([signal.h],[],[AC_MSG_ERROR("signal.h not found")])
 AC_CHECK_HEADER([gnutls/gnutls.h],[have_gnutls="yes"],[AC_MSG_WARN("gnutls/gnutls.h not found. TLS will be disabled"); have_gnutls="no"])
 
 # Checks for libmicrohttpd
-AC_CHECK_HEADER([microhttpd.h],
-    AC_CHECK_LIB([microhttpd], [MHD_get_fdset2],
-        [AC_MSG_CHECKING([for libmicrohttpd >= 0.9.52])
-            AC_COMPILE_IFELSE(
-                [AC_LANG_SOURCE([
-                    #include <microhttpd.h>
-                    #if (MHD_VERSION < 0x00095102)
-                    #error needs at least version 0.9.52
-                    #endif
-                    int main () { return 0; }
-                ])],
-            [],
-            [AC_MSG_ERROR("libmicrohttpd is too old - install libmicrohttpd >= 0.9.52")]
-            )
-        ],
-        [AC_MSG_ERROR(["libmicrohttpd not found"])]
-    ),
-    [AC_MSG_ERROR(["microhttpd.h not found"])]
-)
+if test x"$host" = x"$build"; then
+    AC_CHECK_HEADER([microhttpd.h],
+        AC_CHECK_LIB([microhttpd], [MHD_get_fdset2],
+            [AC_MSG_CHECKING([for libmicrohttpd >= 0.9.52])
+                AC_COMPILE_IFELSE(
+                    [AC_LANG_SOURCE([
+                        #include <microhttpd.h>
+                        #if (MHD_VERSION < 0x00095102)
+                        #error needs at least version 0.9.52
+                        #endif
+                        int main () { return 0; }
+                    ])],
+                [],
+                [AC_MSG_ERROR("libmicrohttpd is too old - install libmicrohttpd >= 0.9.52")]
+                )
+            ],
+            [AC_MSG_ERROR(["libmicrohttpd not found"])]
+        ),
+        [AC_MSG_ERROR(["microhttpd.h not found"])]
+    )
 
-CXXFLAGS="-std=c++11 -DHTTPSERVER_COMPILATION -D_REENTRANT $LIBMICROHTTPD_CFLAGS $CXXFLAGS"
-LDFLAGS="$LIBMICROHTTPD_LIBS $REGEX_LIBS $LDFLAGS"
+    CXXFLAGS="-std=c++11 -DHTTPSERVER_COMPILATION -D_REENTRANT $LIBMICROHTTPD_CFLAGS $CXXFLAGS"
+    LDFLAGS="$LIBMICROHTTPD_LIBS $REGEX_LIBS $LDFLAGS"
+
+    cond_cross_compile="no"
+else
+    AC_CHECK_HEADER([microhttpd.h],
+        AC_CHECK_LIB([microhttpd], [MHD_get_fdset2],
+            [],
+            [AC_MSG_ERROR(["libmicrohttpd not found"])]
+        ),
+        [AC_MSG_ERROR(["microhttpd.h not found"])]
+    )
+
+    CXXFLAGS="-std=c++11 -DHTTPSERVER_COMPILATION -D_REENTRANT $CXXFLAGS"
+    LDFLAGS="$REGEX_LIBS $LDFLAGS"
+
+    cond_cross_compile="yes"
+fi
+
+AM_CONDITIONAL([COND_CROSS_COMPILE],[test x"$cond_cross_compile" = x"yes"])
+AC_SUBST(COND_CROSS_COMPILE)
 
 AC_MSG_CHECKING([whether to build with TCP_FASTOPEN support])
 AC_ARG_ENABLE([fastopen],
@@ -291,18 +311,6 @@ AC_ARG_ENABLE([[examples]],
     [enable_examples=yes])
 test "x$enable_examples" = "xno" || enable_examples=yes
 AM_CONDITIONAL([BUILD_EXAMPLES], [test "x$enable_examples" = "xyes"])
-
-if test "$CROSS_COMPILE" == "1"; then
-    if test "$ARM_ARCH_DIR" == "aarch64-linux-gnu"; then
-        AM_CXXFLAGS="$AM_CXXFLAGS --prefix=${ARM_LD_PATH}/"
-        AM_CFLAGS="$AM_CFLAGS --prefix=${ARM_LD_PATH}/"
-        PATH="${ARM_LD_PATH}/:$PATH"
-        CXXLINK="${ARM_LD_PATH}/ld"
-        LINK="${ARM_LD_PATH}/ld"
-        LD="${ARM_LD_PATH}/ld"
-        LDFLAGS="$LDFLAGS -Wl,-rpath -Wl,/usr/lib -Wl,-rpath-link -Wl,${ARM_LD_PATH}/usr/lib -L${ARM_LD_PATH}/lib -L${ARM_LD_PATH}/usr/lib"
-    fi
-fi
 
 AM_CONDITIONAL([COND_GCOV],[test x"$cond_gcov" = x"yes"])
 AC_SUBST(COND_GCOV)
