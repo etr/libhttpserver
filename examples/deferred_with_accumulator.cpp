@@ -18,6 +18,8 @@
      USA
 */
 
+#include <chrono>
+#include <thread>
 #include <atomic>
 #include <httpserver.hpp>
 
@@ -44,7 +46,8 @@ ssize_t test_callback (std::shared_ptr<std::atomic<int> > closure_data, char* bu
         std::copy(str.begin(), str.end(), buf);
 
         // keep sending reqid
-        sleep(1);
+        // sleep(1); ==> adapted for C++11 on non-*Nix systems
+        std::this_thread::sleep_for(std::chrono::seconds(1));
 
         return (ssize_t)max;
     }
