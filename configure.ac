@@ -60,10 +60,12 @@ if test x"$samedirectory" = x"no"; then
 fi
 
 is_windows=yes;
+NETWORK_LIBS=""
 case "$host" in
     *-mingw*)
         NETWORK_HEADER="winsock2.h"
         REGEX_LIBS="-lregex -lpthread -no-undefined"
+        NETWORK_LIBS="-lws2_32"
         native_srcdir=$(cd $srcdir; pwd -W)
         ;;
     *-cygwin*)
@@ -115,7 +117,7 @@ if test x"$host" = x"$build"; then
     )
 
     CXXFLAGS="-std=c++11 -DHTTPSERVER_COMPILATION -D_REENTRANT $LIBMICROHTTPD_CFLAGS $CXXFLAGS"
-    LDFLAGS="$LIBMICROHTTPD_LIBS $REGEX_LIBS $LDFLAGS"
+    LDFLAGS="$LIBMICROHTTPD_LIBS $NETWORK_LIBS $REGEX_LIBS $LDFLAGS"
 
     cond_cross_compile="no"
 else
@@ -128,7 +130,7 @@ else
     )
 
     CXXFLAGS="-std=c++11 -DHTTPSERVER_COMPILATION -D_REENTRANT $CXXFLAGS"
-    LDFLAGS="$REGEX_LIBS $LDFLAGS"
+    LDFLAGS="$NETWORK_LIBS $REGEX_LIBS $LDFLAGS"
 
     cond_cross_compile="yes"
 fi
