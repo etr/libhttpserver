@@ -25,18 +25,18 @@ before_install:
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then PATH=$PATH:/c/tools/msys64/usr/bin/ ; fi
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then powershell -executionpolicy bypass "pacman -Syu --noconfirm autoconf libtool automake make autoconf-archive pkg-config" ; fi
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then
-     ln -s /c/tools/msys64/usr/share/autoconf* /usr/share/
-     ln -s /c/tools/msys64/usr/share/automake* /usr/share/
-     ln -s /c/tools/msys64/usr/share/aclocal* /usr/share/
-     ln -s /c/tools/msys64/usr/share/libtool* /usr/share/
-     ln -s /c/tools/msys64/usr/share/pkgconfig /usr/share/
-     ln -s /c/tools/msys64/usr/bin/autom4te /usr/bin/
-     ln -s /c/tools/msys64/usr/bin/autoconf /usr/bin/
-     ln -s /c/tools/msys64/usr/bin/autoheader /usr/bin/
-     ln -s /c/tools/msys64/usr/bin/m4 /usr/bin/
+     ln -s /c/tools/msys64/usr/share/autoconf* /usr/share/ ;
+     ln -s /c/tools/msys64/usr/share/automake* /usr/share/ ; 
+     ln -s /c/tools/msys64/usr/share/aclocal* /usr/share/ ;
+     ln -s /c/tools/msys64/usr/share/libtool* /usr/share/ ;
+     ln -s /c/tools/msys64/usr/share/pkgconfig /usr/share/ ;
+     ln -s /c/tools/msys64/usr/bin/autom4te /usr/bin/ ;
+     ln -s /c/tools/msys64/usr/bin/autoconf /usr/bin/ ;
+     ln -s /c/tools/msys64/usr/bin/autoheader /usr/bin/ ;
+     ln -s /c/tools/msys64/usr/bin/m4 /usr/bin/ ;
      
-     PATH=$PATH:/c/tools/msys64/usr/bin/
-     export CONFIG_SHELL=/usr/bin/bash.exe
+     PATH=$PATH:/c/tools/msys64/usr/bin/ ;
+     export CONFIG_SHELL=/usr/bin/bash.exe ;
    fi
  - curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.59.tar.gz -o libmicrohttpd-0.9.59.tar.gz
  - tar -xzf libmicrohttpd-0.9.59.tar.gz
