@@ -49,7 +49,6 @@ before_install:
    else
      ./configure --disable-examples;
    fi
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then PATH=/c/tools/msys64/usr/bin/:$PATH ; fi
  - make
  - sudo make install
  - cd ..
