@@ -151,6 +151,12 @@ script:
     sleep 5 && ab -n 10000000 -c 100 localhost:8080/plaintext
    fi
  - |
+   if [ "$PERFORMANCE" = "nodelay" ]; then
+    cd examples
+    ./benchmark_nodelay 8080 $(nproc) &
+    sleep 5 && ab -n 10000000 -c 100 localhost:8080/plaintext
+   fi
+ - |
    if [ "$PERFORMANCE" = "threads" ]; then
     cd examples
     ./benchmark_threads 8080 &
@@ -280,6 +286,16 @@ matrix:
             - g++-7
             - apache2-utils
       env:
+        - MATRIX_EVAL="CC=gcc-7 && CXX=g++-7 && PERFORMANCE=nodelay"
+    - os: linux
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-7
+            - apache2-utils
+      env:
         - MATRIX_EVAL="CC=gcc-7 && CXX=g++-7 && PERFORMANCE=threads"
     #- os: osx
     #  osx_image: xcode8
@@ -344,8 +360,6 @@ matrix:
     - os: linux
       addons:
         apt:
-          sources:
-            - llvm-toolchain-trusty-4.0
           packages:
             - clang-4.0
       env:
@@ -354,8 +368,6 @@ matrix:
     - os: linux
       addons:
         apt:
-          sources:
-            - llvm-toolchain-trusty-5.0
           packages:
             - clang-5.0
       env:
@@ -363,9 +375,6 @@ matrix:
     - os: linux
       addons:
         apt:
-          sources:
-            - llvm-toolchain-trusty-6.0
-            - ubuntu-toolchain-r-test
           packages:
             - clang-6.0
       env:
@@ -374,12 +383,22 @@ matrix:
       addons:
         apt:
           sources:
-            - llvm-toolchain-trusty-7
+            - llvm-toolchain-xenial-7
             - ubuntu-toolchain-r-test
           packages:
             - clang-7
       env:
         - MATRIX_EVAL="CC=clang-7 && CXX=clang++-7"
+    - os: linux
+      addons:
+        apt:
+          sources:
+            - llvm-toolchain-xenial-8
+            - ubuntu-toolchain-r-test
+          packages:
+            - clang-8
+      env:
+        - MATRIX_EVAL="CC=clang-8 && CXX=clang++-8"
     - os: linux
       compiler: clang
       addons:

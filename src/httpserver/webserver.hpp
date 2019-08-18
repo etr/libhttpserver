@@ -174,6 +174,7 @@ class webserver
         const bool post_process_enabled;
         const bool deferred_enabled;
         bool single_resource;
+        bool tcp_nodelay;
         pthread_mutex_t mutexwait;
         pthread_rwlock_t runguard;
         pthread_cond_t mutexcond;
@@ -183,14 +184,10 @@ class webserver
         std::map<details::http_endpoint, http_resource*> registered_resources;
         std::map<std::string, http_resource*> registered_resources_str;
 
-        int next_to_choose;
         std::set<http::ip_representation> bans;
         std::set<http::ip_representation> allowances;
 
         struct MHD_Daemon* daemon;
-
-        static void* select(void* self);
-        static void* cleaner(void* self);
 
         const std::shared_ptr<http_response> method_not_allowed_page(details::modded_request* mr) const;
         const std::shared_ptr<http_response> internal_error_page(details::modded_request* mr, bool force_our = false) const;

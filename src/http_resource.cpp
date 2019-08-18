@@ -43,6 +43,7 @@ void resource_init(map<string, bool>& allowed_methods)
     allowed_methods[MHD_HTTP_METHOD_TRACE] = true;
     allowed_methods[MHD_HTTP_METHOD_CONNECT] = true;
     allowed_methods[MHD_HTTP_METHOD_OPTIONS] = true;
+    allowed_methods[MHD_HTTP_METHOD_PATCH] = true;
 }
 
 namespace details

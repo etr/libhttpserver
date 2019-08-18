@@ -47,7 +47,12 @@ size_t writefunc(void *ptr, size_t size, size_t nmemb, std::string *s)
 
 static int counter = 0;
 
-ssize_t test_callback (char* buf, size_t max)
+struct test_data
+{
+    int value;
+};
+
+ssize_t test_callback(std::shared_ptr<void> closure_data, char* buf, size_t max)
 {
     if (counter == 2)
     {
@@ -62,12 +67,41 @@ ssize_t test_callback (char* buf, size_t max)
     }
 }
 
+ssize_t test_callback_with_data(std::shared_ptr<test_data> closure_data, char* buf, size_t max)
+{
+    if (counter == 2)
+    {
+        return -1;
+    }
+    else
+    {
+        memset(buf, 0, max);
+        strcat(buf, ("test" + std::to_string(closure_data->value)).c_str());
+
+        closure_data->value = 84;
+
+        counter++;
+        return std::string(buf).size();
+    }
+}
+
 class deferred_resource : public http_resource
 {
     public:
         const shared_ptr<http_response> render_GET(const http_request& req)
         {
-            return shared_ptr<deferred_response>(new deferred_response(test_callback, "cycle callback response"));
+            return shared_ptr<deferred_response<void>>(new deferred_response<void>(test_callback, nullptr, "cycle callback response"));
+        }
+};
+
+class deferred_resource_with_data : public http_resource
+{
+    public:
+        const shared_ptr<http_response> render_GET(const http_request& req)
+        {
+            std::shared_ptr<test_data> internal_info(new test_data);
+            internal_info->value = 42;
+            return shared_ptr<deferred_response<test_data>>(new deferred_response<test_data>(test_callback_with_data, internal_info, "cycle callback response"));
         }
 };
 
@@ -82,6 +116,8 @@ LT_BEGIN_SUITE(deferred_suite)
 
     void tear_down()
     {
+        counter = 0;
+
         ws->stop();
         delete ws;
     }
@@ -104,6 +140,24 @@ LT_BEGIN_AUTO_TEST(deferred_suite, deferred_response)
     LT_CHECK_EQ(s, "testtest");
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(deferred_response)
+
+LT_BEGIN_AUTO_TEST(deferred_suite, deferred_response_with_data)
+    deferred_resource_with_data resource;
+    ws->register_resource("base", &resource);
+    curl_global_init(CURL_GLOBAL_ALL);
+
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "test42test84");
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(deferred_response_with_data)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

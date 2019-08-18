@@ -205,6 +205,7 @@ const std::string http_utils::http_method_options = MHD_HTTP_METHOD_OPTIONS;
 const std::string http_utils::http_method_post = MHD_HTTP_METHOD_POST;
 const std::string http_utils::http_method_put = MHD_HTTP_METHOD_PUT;
 const std::string http_utils::http_method_trace = MHD_HTTP_METHOD_TRACE;
+const std::string http_utils::http_method_patch = MHD_HTTP_METHOD_PATCH;
 
 const std::string http_utils::http_post_encoding_form_urlencoded =
     MHD_HTTP_POST_ENCODING_FORM_URLENCODED;

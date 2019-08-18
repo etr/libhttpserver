@@ -18,28 +18,46 @@
      USA
 */
 
+#include <chrono>
+#include <thread>
+#include <atomic>
 #include <httpserver.hpp>
 
 using namespace httpserver;
 
-static int counter = 0;
+std::atomic<int> counter;
 
-ssize_t test_callback (std::shared_ptr<void> closure_data, char* buf, size_t max) {
-    if (counter == 2) {
-        return -1;
+ssize_t test_callback (std::shared_ptr<std::atomic<int> > closure_data, char* buf, size_t max) {
+    int reqid;
+    if (closure_data == nullptr) {
+        reqid = -1;
+    } else {
+        reqid = *closure_data;
     }
-    else {
+
+    // only first 5 connections can be established
+    if (reqid >= 5) {
+        return -1;
+    } else {
+        // respond corresponding request IDs to the clients
+        std::string str = "";
+        str += std::to_string(reqid) + " ";
         memset(buf, 0, max);
-        strcat(buf, " test ");
-        counter++;
-        return std::string(buf).size();
+        std::copy(str.begin(), str.end(), buf);
+
+        // keep sending reqid
+        // sleep(1); ==> adapted for C++11 on non-*Nix systems
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+
+        return (ssize_t)max;
     }
 }
 
 class deferred_resource : public http_resource {
     public:
         const std::shared_ptr<http_response> render_GET(const http_request& req) {
-            return std::shared_ptr<deferred_response<void> >(new deferred_response<void>(test_callback, nullptr, "cycle callback response"));
+            std::shared_ptr<std::atomic<int> > closure_data(new std::atomic<int>(counter++));
+            return std::shared_ptr<deferred_response<std::atomic<int> > >(new deferred_response<std::atomic<int> >(test_callback, closure_data, "cycle callback response"));
         }
 };
 

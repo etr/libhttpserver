@@ -25,6 +25,7 @@
 #ifndef _DEFERRED_RESPONSE_HPP_
 #define _DEFERRED_RESPONSE_HPP_
 
+#include <memory>
 #include "httpserver/string_response.hpp"
 
 namespace httpserver
@@ -32,37 +33,37 @@ namespace httpserver
 
 namespace details
 {
-    ssize_t cb(void*, uint64_t, char*, size_t);
-};
+    MHD_Response* get_raw_response_helper(void* cls, ssize_t (*cb)(void*, uint64_t, char*, size_t));
+}
 
-typedef ssize_t(*cycle_callback_ptr)(char*, size_t);
-
+template <class T>
 class deferred_response : public string_response
 {
     public:
         explicit deferred_response(
-                cycle_callback_ptr cycle_callback,
+                ssize_t(*cycle_callback)(std::shared_ptr<T>, char*, size_t),
+                std::shared_ptr<T> closure_data,
                 const std::string& content = "",
                 int response_code = http::http_utils::http_ok,
                 const std::string& content_type = http::http_utils::text_plain
         ):
             string_response(content, response_code, content_type),
             cycle_callback(cycle_callback),
-            completed(false)
+            closure_data(closure_data)
         {
         }
 
         deferred_response(const deferred_response& other):
             string_response(other),
             cycle_callback(other.cycle_callback),
-            completed(other.completed)
+            closure_data(other.closure_data)
         {
         }
 
         deferred_response(deferred_response&& other) noexcept:
             string_response(std::move(other)),
             cycle_callback(std::move(other.cycle_callback)),
-            completed(other.completed)
+            closure_data(std::move(other.closure_data))
         {
         }
 
@@ -72,7 +73,7 @@ class deferred_response : public string_response
 
             (string_response&) (*this) = b;
             this->cycle_callback = b.cycle_callback;
-            this->completed = b.completed;
+            this->closure_data = b.closure_data;
 
             return *this;
         }
@@ -83,7 +84,7 @@ class deferred_response : public string_response
 
             (string_response&) (*this) = std::move(b);
             this->cycle_callback = std::move(b.cycle_callback);
-            this->completed = b.completed;
+            this->closure_data = std::move(b.closure_data);
 
             return *this;
         }
@@ -92,13 +93,20 @@ class deferred_response : public string_response
         {
         }
 
-        MHD_Response* get_raw_response();
-        void decorate_response(MHD_Response* response);
-    private:
-        cycle_callback_ptr cycle_callback;
-        bool completed;
+        MHD_Response* get_raw_response()
+        {
+            return details::get_raw_response_helper((void*) this, &(this->cb));
+        }
 
-        friend ssize_t details::cb(void* cls, uint64_t pos, char* buf, size_t max);
+    private:
+        ssize_t (*cycle_callback)(std::shared_ptr<T>, char*, size_t);
+        std::shared_ptr<T> closure_data;
+
+        static ssize_t cb(void* cls, uint64_t pos, char* buf, size_t max)
+        {
+            deferred_response<T>* dfr = static_cast<deferred_response<T>*>(cls);
+            return dfr->cycle_callback(dfr->closure_data, buf, max);
+        }
 };
 
 }
