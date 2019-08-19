@@ -48,6 +48,7 @@ before_install:
    else
      ./configure --disable-examples;
    fi
+ - if [ "$TRAVIS_OS_NAME" = "windows" ]; then find . -type f -exec sed -i "s/\${SHELL}/\/usr\/bin\/sh.exe/" "{}" + ; fi
  - make
  - sudo make install
  - cd ..
