@@ -139,6 +139,8 @@ script:
     ./benchmark_threads 8080 &
     sleep 5 && ab -n 10000000 -c 100 localhost:8080/plaintext
    fi
+after_script:
+  - ps -ef
 after_success:
   - if [ "$DEBUG" = "debug" ] && [ "$COVERAGE" = "coverage" ] && [ "$TRAVIS_OS_NAME" = "linux" ]; then bash <(curl -s https://codecov.io/bash); fi
 matrix:
