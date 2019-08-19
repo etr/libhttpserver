@@ -34,14 +34,12 @@ before_install:
      ln -s /c/tools/msys64/usr/bin/autoconf /usr/bin/ ;
      ln -s /c/tools/msys64/usr/bin/autoheader /usr/bin/ ;
      ln -s /c/tools/msys64/usr/bin/m4 /usr/bin/ ;
+     
      PATH=$PATH:/c/tools/msys64/usr/bin/ ;
-     export CONFIG_SHELL=/usr/bin/bash.exe ;
-     export SHELL=/usr/bin/bash.exe ;
    fi
  - curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.59.tar.gz -o libmicrohttpd-0.9.59.tar.gz
  - tar -xzf libmicrohttpd-0.9.59.tar.gz
  - cd libmicrohttpd-0.9.59
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then autoreconf -vfi ; fi
  - if [[ "$ARM_ARCH_DIR" != "" ]]; then
      ./configure --build `./config.guess` --host $ARM_ARCH_DIR --disable-examples;
    elif [[ "$TRAVIS_OS_NAME" = "windows" ]]; then
@@ -49,6 +47,7 @@ before_install:
    else
      ./configure --disable-examples;
    fi
+ - grep -Hrn 'program files' .
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then find . -type f -exec sed -i "s/C:\/program files\/git\/usr\/bin/\/usr\/bin/" "{}" + ; fi
  - make
  - sudo make install
@@ -405,4 +404,3 @@ matrix:
   allow_failures:
     - env: MATRIX_EVAL="CROSS_COMPILE=1 && ARM_ARCH_DIR=arm-linux-gnueabi && CC=arm-linux-gnueabi-gcc"
     - env: MATRIX_EVAL="CROSS_COMPILE=1 && ARM_LD_PATH=$HOME/linker_bin && ARM_ARCH_DIR=aarch64-linux-gnu"
-    
