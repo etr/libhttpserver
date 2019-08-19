@@ -149,6 +149,8 @@ matrix:
       env: DEBUG="debug" COVERAGE="coverage"
     - os: windows
       env: LINKING="static"
+    - os: windows
+      compiler: clang
   include:
     - os: linux
       addons:
