@@ -28,10 +28,11 @@ before_install:
  - if [[ "$ARM_ARCH_DIR" != "" ]]; then
      ./configure --build `./config.guess` --host $ARM_ARCH_DIR --disable-examples;
    elif [[ "$TRAVIS_OS_NAME" = "windows" ]]; then
-     CONFIG_SHELL=/bin/sh /bin/sh ./configure --prefix=/usr --disable-examples --disable-https --enable-shared --enable-static ;
+     ./configure --prefix=/usr --disable-examples --disable-https --enable-shared --enable-static ;
    else
      ./configure --disable-examples;
    fi
+ - if [ "$TRAVIS_OS_NAME" = "windows" ]; then find . -type f -exec sed -i "s/program files/'program files'/" "{}" +; fi
  - make
  - sudo make install
  - cd ..
