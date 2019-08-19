@@ -21,14 +21,31 @@ before_install:
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo pip install gcovr; fi
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo apt-get install cppcheck; fi
  - if [ "$TRAVIS_OS_NAME" = "osx" ]; then export CFLAGS='-mtune=generic'; fi
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then choco install -r --no-progress -y make; fi
+ - if [ "$TRAVIS_OS_NAME" = "windows" ]; then choco install -r --no-progress -y msys2 make; fi
+ - if [ "$TRAVIS_OS_NAME" = "windows" ]; then PATH=$PATH:/c/tools/msys64/usr/bin/ ; fi
+ - if [ "$TRAVIS_OS_NAME" = "windows" ]; then powershell -executionpolicy bypass "pacman -Syu --noconfirm autoconf libtool automake make autoconf-archive pkg-config" ; fi
+ - if [ "$TRAVIS_OS_NAME" = "windows" ]; then
+     ln -s /c/tools/msys64/usr/share/autoconf* /usr/share/ ;
+     ln -s /c/tools/msys64/usr/share/automake* /usr/share/ ; 
+     ln -s /c/tools/msys64/usr/share/aclocal* /usr/share/ ;
+     ln -s /c/tools/msys64/usr/share/libtool* /usr/share/ ;
+     ln -s /c/tools/msys64/usr/share/pkgconfig /usr/share/ ;
+     ln -s /c/tools/msys64/usr/bin/autom4te /usr/bin/ ;
+     ln -s /c/tools/msys64/usr/bin/autoconf /usr/bin/ ;
+     ln -s /c/tools/msys64/usr/bin/autoheader /usr/bin/ ;
+     ln -s /c/tools/msys64/usr/bin/m4 /usr/bin/ ;
+     PATH=$PATH:/c/tools/msys64/usr/bin/ ;
+     export CONFIG_SHELL=/usr/bin/bash.exe ;
+     export SHELL=/usr/bin/bash.exe ;
+   fi
  - curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.59.tar.gz -o libmicrohttpd-0.9.59.tar.gz
  - tar -xzf libmicrohttpd-0.9.59.tar.gz
  - cd libmicrohttpd-0.9.59
+ - if [ "$TRAVIS_OS_NAME" = "windows" ]; then autoreconf -vfi ; fi
  - if [[ "$ARM_ARCH_DIR" != "" ]]; then
      ./configure --build `./config.guess` --host $ARM_ARCH_DIR --disable-examples;
    elif [[ "$TRAVIS_OS_NAME" = "windows" ]]; then
-     ./configure --prefix=/usr --disable-examples --disable-https --enable-shared --enable-static ;
+     ./configure --prefix=/usr --build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32 --disable-examples --disable-https --enable-shared --enable-static ;
    else
      ./configure --disable-examples;
    fi
@@ -388,3 +405,4 @@ matrix:
   allow_failures:
     - env: MATRIX_EVAL="CROSS_COMPILE=1 && ARM_ARCH_DIR=arm-linux-gnueabi && CC=arm-linux-gnueabi-gcc"
     - env: MATRIX_EVAL="CROSS_COMPILE=1 && ARM_LD_PATH=$HOME/linker_bin && ARM_ARCH_DIR=aarch64-linux-gnu"
+    
