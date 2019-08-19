@@ -47,7 +47,6 @@ before_install:
    else
      ./configure --disable-examples;
    fi
- - grep -Hrn 'program files' .
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then find . -type f -exec sed -i "s/C:\/program files\/git\/usr\/bin/\/usr\/bin/" "{}" + ; fi
  - make
  - sudo make install
