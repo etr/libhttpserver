@@ -35,8 +35,6 @@ before_install:
      ln -s /c/tools/msys64/usr/bin/autoheader /usr/bin/ ;
      ln -s /c/tools/msys64/usr/bin/m4 /usr/bin/ ;
      PATH=$PATH:/c/tools/msys64/usr/bin/ ;
-     export CONFIG_SHELL=/usr/bin/bash.exe ;
-     export SHELL=/usr/bin/bash.exe ;
    fi
  - curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.59.tar.gz -o libmicrohttpd-0.9.59.tar.gz
  - tar -xzf libmicrohttpd-0.9.59.tar.gz
@@ -45,7 +43,8 @@ before_install:
  - if [[ "$ARM_ARCH_DIR" != "" ]]; then
      ./configure --build `./config.guess` --host $ARM_ARCH_DIR --disable-examples;
    elif [[ "$TRAVIS_OS_NAME" = "windows" ]]; then
-     ./configure --prefix=/usr --build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32 --disable-examples --disable-https --enable-shared --enable-static ;
+     export CONFIG_SHELL=/usr/bin/bash.exe ;
+     CONFIG_SHELL=/usr/bin/bash.exe /usr/bin/bash.exe ./configure --prefix=/usr --disable-examples --disable-https --enable-shared --enable-static ;
    else
      ./configure --disable-examples;
    fi
