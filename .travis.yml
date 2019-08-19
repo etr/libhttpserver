@@ -44,7 +44,7 @@ before_install:
      ./configure --build `./config.guess` --host $ARM_ARCH_DIR --disable-examples;
    elif [[ "$TRAVIS_OS_NAME" = "windows" ]]; then
      export CONFIG_SHELL=/usr/bin/bash.exe ;
-     CONFIG_SHELL=/usr/bin/bash.exe /usr/bin/bash.exe ./configure --prefix=/usr --disable-examples --disable-https --enable-shared --enable-static ;
+     CONFIG_SHELL=/bin/sh /bin/sh ./configure --prefix=/usr --disable-examples --disable-https --enable-shared --enable-static ;
    else
      ./configure --disable-examples;
    fi
