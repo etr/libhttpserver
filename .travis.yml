@@ -36,6 +36,7 @@ before_install:
      ln -s /c/tools/msys64/usr/bin/m4 /usr/bin/ ;
      
      PATH=$PATH:/c/tools/msys64/usr/bin/ ;
+     export SHELL=/usr/bin/sh.exe
    fi
  - curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.59.tar.gz -o libmicrohttpd-0.9.59.tar.gz
  - tar -xzf libmicrohttpd-0.9.59.tar.gz
@@ -47,7 +48,6 @@ before_install:
    else
      ./configure --disable-examples;
    fi
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then find . -type f -exec sed -i "s/C:\/program files\/git\/usr\/bin/\/usr\/bin/" "{}" + ; fi
  - make
  - sudo make install
  - cd ..
