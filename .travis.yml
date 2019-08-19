@@ -23,7 +23,7 @@ before_install:
  - if [ "$TRAVIS_OS_NAME" = "osx" ]; then export CFLAGS='-mtune=generic'; fi
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then choco install -r --no-progress -y msys2 make; fi
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then PATH=$PATH:/c/tools/msys64/usr/bin/ ; fi
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then powershell -executionpolicy bypass "pacman -Syu --noconfirm autoconf libtool automake make autoconf-archive pkg-config" ; fi
+ - if [ "$TRAVIS_OS_NAME" = "windows" ]; then powershell -executionpolicy bypass "pacman -Syu --noconfirm autoconf libtool automake make autoconf-archive pkg-config $MINGW_PACKAGE_PREFIX-libsystre" ; fi
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then
      ln -s /c/tools/msys64/usr/share/autoconf* /usr/share/ ;
      ln -s /c/tools/msys64/usr/share/automake* /usr/share/ ; 
@@ -71,7 +71,12 @@ install:
  - ./bootstrap
  - mkdir build
  - cd build
- - if [ "$LINKING" = "static" ]; then
+ - if [ "$TRAVIS_OS_NAME" = "windows" ]; then
+     ../configure --disable-fastopen --disable-examples CPPFLAGS='-I/c/tools/msys64/mingw64/include/ -I/usr/include/' LDFLAGS='-L/c/tools/msys64/mingw64/lib -L/usr/lib/' ;
+     cd .. ;
+     find . -name Makefile -type f -exec sed -i "s/\$(SHELL)/\/usr\/bin\/sh.exe/" "{}" + ;
+     cd build ;
+   elif [ "$LINKING" = "static" ]; then
      ../configure --enable-static --disable-fastopen;
    elif [ "$DEBUG" = "debug" ] && [ "$COVERAGE" = "coverage" ]; then
      ../configure --enable-debug --enable-coverage --disable-shared --disable-fastopen;
@@ -89,7 +94,7 @@ install:
  - if [ "$CROSS_COMPILE" = "1" ] && [ "$ARM_ARCH_DIR" = "aarch64-linux-gnu" ]; then sed -i 's+/usr/bin/ld+$HOME/linker_bin/ld+g' libtool; fi
  - if [ "$CROSS_COMPILE" = "1" ] && [ "$ARM_ARCH_DIR" = "aarch64-linux-gnu" ]; then sed -i 's+/usr/bin/ld+$HOME/linker_bin/ld+g' Makefile; fi
  - make
- - make check TESTS=
+ - if [ "$TRAVIS_OS_NAME" != "windows" ]; then make check TESTS= ; fi
 script:
  - if [[ "$CROSS_COMPILE" == 1 ]]; then
      cd test ;
@@ -111,12 +116,10 @@ script:
        qemu-arm -L /usr/arm-linux-gnueabi/ ./.libs/threaded ;
      fi
    fi
- - make check
- - cat test/test-suite.log
+ - if [ "$TRAVIS_OS_NAME" != "windows" ]; then make check ; fi
+ - if [ "$TRAVIS_OS_NAME" != "windows" ]; then cat test/test-suite.log; fi
  - if [ "$VALGRIND" = "valgrind" ]; then make check-valgrind; fi;
  - if [ "$VALGRIND" = "valgrind" ]; then cat test/test-suite-memcheck.log; fi;
- - ls -l /usr/local/lib/
- - ls -l /usr/lib/
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then cd ../src/; cppcheck --error-exitcode=1 .; cd ../build; fi
  - |
    if [ "$PERFORMANCE" = "select" ]; then
@@ -142,12 +145,10 @@ matrix:
   exclude:
     - compiler: clang
       env: DEBUG="debug" COVERAGE="coverage"
-    - compiler: clang
-      env: LINKING='static'
     - os: windows
       env: DEBUG="debug" COVERAGE="coverage"
     - os: windows
-      env: LINKING='static'
+      env: LINKING="static"
   include:
     - os: linux
       addons:
