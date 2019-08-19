@@ -146,12 +146,9 @@ matrix:
     - compiler: clang
       env: DEBUG="debug" COVERAGE="coverage"
     - os: windows
-      env: DEBUG="debug" COVERAGE="coverage"
-    - os: windows
-      env: LINKING="static"
-    - os: windows
-      compiler: clang
   include:
+    - os: windows
+      env: DEBUG="nodebug" COVERAGE="nocoverage" YARN_GPG=no
     - os: linux
       addons:
         apt:
