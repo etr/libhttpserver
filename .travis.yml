@@ -48,9 +48,10 @@ before_install:
    else
      ./configure --disable-examples;
    fi
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then find . -type f -exec sed -i "s/\${SHELL}/\/usr\/bin\/sh.exe/" "{}" + ; fi
+ - if [ "$TRAVIS_OS_NAME" = "windows" ]; then  find . -name Makefile -type f -exec sed -i "s/\${SHELL}/\/usr\/bin\/sh.exe/" "{}" + ; fi
+ - if [ "$TRAVIS_OS_NAME" = "windows" ]; then  find . -name Makefile -type f -exec sed -i "s/\$(SHELL)/\/usr\/bin\/sh.exe/" "{}" + ; fi
  - make
- - sudo make install
+ - if [ "$TRAVIS_OS_NAME" = "windows" ]; then make install; else sudo make install; fi
  - cd ..
  - if [ "$BUILD_TYPE" = "asan" ]; then export CFLAGS='-fsanitize=address'; export CXXLAGS='-fsanitize=address'; export LDFLAGS='-fsanitize=address'; fi
  - if [ "$BUILD_TYPE" = "msan" ]; then export CFLAGS='-fsanitize=memory'; export CXXLAGS='-fsanitize=memory'; export LDFLAGS='-fsanitize=memory'; fi
