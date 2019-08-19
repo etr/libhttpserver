@@ -72,7 +72,7 @@ install:
  - mkdir build
  - cd build
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then
-     ../configure --disable-fastopen --disable-examples CPPFLAGS='-I/c/tools/msys64/mingw64/include/ -I/usr/include/' LDFLAGS='-L/c/tools/msys64/mingw64/lib -L/usr/lib/' ;
+     ../configure --build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32 --disable-fastopen --disable-examples CPPFLAGS='-I/c/tools/msys64/mingw64/include/ -I/usr/include/' LDFLAGS='-L/c/tools/msys64/mingw64/lib -L/usr/lib/' ;
      cd .. ;
      find . -name Makefile -type f -exec sed -i "s/\$(SHELL)/\/usr\/bin\/sh.exe/" "{}" + ;
      cd build ;
