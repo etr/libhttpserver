@@ -11,6 +11,7 @@ env:
  - DEBUG="nodebug" COVERAGE="nocoverage"
  - LINKING="static"
 before_install:
+ - ps -ef
  - eval "${MATRIX_EVAL}"
  - if [ "$TRAVIS_OS_NAME" != "windows" ]; then export LDFLAGS="$LDFLAGS -L/usr/local/lib -L/usr/lib"; fi
  - if [ "$TRAVIS_OS_NAME" != "windows" ]; then export PATH=$PATH:/usr/local/lib; fi
@@ -59,6 +60,7 @@ before_install:
  - if [ "$BUILD_TYPE" = "tsan" ]; then export CFLAGS='-fsanitize=thread'; export CXXLAGS='-fsanitize=thread'; export LDFLAGS='-fsanitize=thread'; fi
  - if [ "$BUILD_TYPE" = "ubsan" ]; then export export CFLAGS='-fsanitize=undefined'; export CXXLAGS='-fsanitize=undefined'; export LDFLAGS='-fsanitize=undefined'; fi
 install:
+ - ps -ef
  - if [[ "$CROSS_COMPILE" == 1 ]] ; then
      if [[ "$ARM_ARCH_DIR" == "aarch64-linux-gnu" ]] ; then
        mkdir $HOME/linker_bin ;
@@ -96,6 +98,7 @@ install:
  - make
  - if [ "$TRAVIS_OS_NAME" != "windows" ]; then make check TESTS= ; fi
 script:
+ - ps -ef
  - if [[ "$CROSS_COMPILE" == 1 ]]; then
      cd test ;
      if [[ "$ARM_ARCH_DIR" == "aarch64-linux-gnu" ]]; then
