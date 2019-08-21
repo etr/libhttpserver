@@ -144,7 +144,7 @@ script:
    fi
 after_script:
   - ps -ef
-  - if [ "$TRAVIS_OS_NAME" = "windows" ]; ps -Wla ; fi
+  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then ps -Wla ; fi
   - echo $$
   - if [ "$TRAVIS_OS_NAME" = "windows" ]; then ps | grep $$ | cut -f6 -d' ' | grep -v $$ | sed -n '1!p' ; fi
   - if [ "$TRAVIS_OS_NAME" = "windows" ]; then kill $(ps | grep $$ | cut -f6 -d' ' | grep -v $$ | sed -n '1!p') ; fi
