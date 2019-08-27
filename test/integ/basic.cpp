@@ -21,6 +21,7 @@
 #include "littletest.hpp"
 #include <curl/curl.h>
 #include <string>
+#include <sstream>
 #include <map>
 #include "string_utilities.hpp"
 #include "httpserver.hpp"
@@ -132,6 +133,20 @@ class querystring_resource : public http_resource
         const shared_ptr<http_response> render_GET(const http_request& req)
         {
             return shared_ptr<string_response>(new string_response(req.get_querystring(), 200, "text/plain"));
+        }
+};
+
+class path_pieces_resource : public http_resource
+{
+    public:
+        const shared_ptr<http_response> render_GET(const http_request& req)
+        {
+            std::stringstream ss;
+            for (unsigned int i = 0; i < req.get_path_pieces().size(); i++)
+            {
+                ss << req.get_path_piece(i) << ",";
+            }
+            return shared_ptr<string_response>(new string_response(ss.str(), 200, "text/plain"));
         }
 };
 
@@ -958,6 +973,24 @@ LT_BEGIN_AUTO_TEST(basic_suite, response_is_printable)
 
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(response_is_printable)
+
+LT_BEGIN_AUTO_TEST(basic_suite, long_path_pieces)
+    path_pieces_resource resource;
+    ws->register_resource("/settings", &resource, true);
+    curl_global_init(CURL_GLOBAL_ALL);
+
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/settings/somestringthatisreallylong/with_really_a_lot_of_content/and_underscores_and_looooooooooooooooooong_stuff");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "settings,somestringthatisreallylong,with_really_a_lot_of_content,and_underscores_and_looooooooooooooooooong_stuff,");
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(long_path_pieces)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
