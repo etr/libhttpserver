@@ -93,7 +93,7 @@ class http_request
          * @param index the index of the piece selected
          * @return the selected piece in form of string
         **/
-        const std::string& get_path_piece(int index) const
+        const std::string get_path_piece(int index) const
         {
             std::vector<std::string> post_path = this->get_path_pieces();
             if(((int)(post_path.size())) > index)
