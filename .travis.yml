@@ -12,6 +12,7 @@ env:
  - LINKING="static"
 before_install:
  - ps -ef
+ - if [ "$TRAVIS_OS_NAME" = "windows" ]; then ps -Wla | sort ; fi
  - eval "${MATRIX_EVAL}"
  - if [ "$TRAVIS_OS_NAME" != "windows" ]; then export LDFLAGS="$LDFLAGS -L/usr/local/lib -L/usr/lib"; fi
  - if [ "$TRAVIS_OS_NAME" != "windows" ]; then export PATH=$PATH:/usr/local/lib; fi
@@ -144,7 +145,7 @@ script:
    fi
 after_script:
   - ps -ef
-  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then ps -Wla ; fi
+  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then ps -Wla | sort ; fi
   - echo $$
 after_success:
   - if [ "$DEBUG" = "debug" ] && [ "$COVERAGE" = "coverage" ] && [ "$TRAVIS_OS_NAME" = "linux" ]; then bash <(curl -s https://codecov.io/bash); fi
