@@ -146,8 +146,6 @@ after_script:
   - ps -ef
   - if [ "$TRAVIS_OS_NAME" = "windows" ]; then ps -Wla ; fi
   - echo $$
-  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then ps | grep $$ | cut -f6 -d' ' | grep -v $$ | sed -n '1!p' ; fi
-  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then kill $(ps | grep $$ | cut -f6 -d' ' | grep -v $$ | sed -n '1!p') ; fi
 after_success:
   - if [ "$DEBUG" = "debug" ] && [ "$COVERAGE" = "coverage" ] && [ "$TRAVIS_OS_NAME" = "linux" ]; then bash <(curl -s https://codecov.io/bash); fi
 matrix:
