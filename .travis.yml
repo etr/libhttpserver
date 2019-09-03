@@ -146,7 +146,8 @@ script:
 after_script:
   - ps -ef
   - if [ "$TRAVIS_OS_NAME" = "windows" ]; then ps -Wla | sort ; fi
-  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then taskkill /F /PID $(ps -Wla | tr -s ' ' | grep gpg | cut -f2 -d' ') ; fi
+  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then gpgconf --kill gpg-agent ; fi
+  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then taskkill /PID $(ps -Wla | tr -s ' ' | grep gpg | cut -f2 -d' ') ; fi
   - if [ "$TRAVIS_OS_NAME" = "windows" ]; then ps -Wla | sort ; fi
   - echo $$
 after_success:
