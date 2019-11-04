@@ -776,8 +776,6 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
     base_unescaper(t_url, static_cast<webserver*>(cls)->unescaper);
     mr->standardized_url = new string(http_utils::standardize_url(t_url));
 
-    bool body = false;
-
     access_log(
             static_cast<webserver*>(cls),
             *(mr->complete_uri) + " METHOD: " + method
@@ -790,22 +788,18 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
     else if (0 == strcmp(method, http_utils::http_method_post.c_str()))
     {
         mr->callback = &http_resource::render_POST;
-        body = true;
     }
     else if (0 == strcasecmp(method, http_utils::http_method_put.c_str()))
     {
         mr->callback = &http_resource::render_PUT;
-        body = true;
     }
     else if (0 == strcasecmp(method,http_utils::http_method_delete.c_str()))
     {
         mr->callback = &http_resource::render_DELETE;
-        body = true;
     }
     else if (0 == strcasecmp(method, http_utils::http_method_patch.c_str()))
     {
         mr->callback = &http_resource::render_PATCH;
-        body = true;
     }
     else if (0 == strcasecmp(method, http_utils::http_method_head.c_str()))
     {
@@ -824,7 +818,7 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
         mr->callback = &http_resource::render_OPTIONS;
     }
 
-    return body ? static_cast<webserver*>(cls)->bodyfull_requests_answer_first_step(connection, mr) : static_cast<webserver*>(cls)->bodyless_requests_answer(connection, method, version, mr);
+    return static_cast<webserver*>(cls)->bodyfull_requests_answer_first_step(connection, mr);
 }
 
 };
