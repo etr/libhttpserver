@@ -511,23 +511,19 @@ const std::shared_ptr<http_response> webserver::internal_error_page(details::mod
     }
 }
 
-int webserver::bodyless_requests_answer(
-    MHD_Connection* connection, const char* method,
-    const char* version, struct details::modded_request* mr
-    )
-{
-    http_request req(connection, unescaper);
-    mr->dhr = &(req);
-    return complete_request(connection, mr, version, method);
-}
-
-int webserver::bodyfull_requests_answer_first_step(
+int webserver::requests_answer_first_step(
         MHD_Connection* connection,
         struct details::modded_request* mr
 )
 {
     mr->second = true;
     mr->dhr = new http_request(connection, unescaper);
+
+    if (!mr->has_body)
+    {
+        return MHD_YES;
+    }
+
     mr->dhr->set_content_size_limit(content_size_limit);
     const char *encoding = MHD_lookup_connection_value (
             connection,
@@ -567,7 +563,7 @@ int webserver::bodyfull_requests_answer_first_step(
     return MHD_YES;
 }
 
-int webserver::bodyfull_requests_answer_second_step(
+int webserver::requests_answer_second_step(
     MHD_Connection* connection, const char* method,
     const char* version, const char* upload_data,
     size_t* upload_data_size, struct details::modded_request* mr
@@ -575,12 +571,17 @@ int webserver::bodyfull_requests_answer_second_step(
 {
     if (0 == *upload_data_size) return complete_request(connection, mr, version, method);
 
-#ifdef DEBUG
-    cout << "Writing content: " << upload_data << endl;
-#endif //DEBUG
-    mr->dhr->grow_content(upload_data, *upload_data_size);
+    if (mr->has_body)
+    {
 
-    if (mr->pp != NULL) MHD_post_process(mr->pp, upload_data, *upload_data_size);
+#ifdef DEBUG
+        cout << "Writing content: " << upload_data << endl;
+#endif //DEBUG
+        mr->dhr->grow_content(upload_data, *upload_data_size);
+
+        if (mr->pp != NULL) MHD_post_process(mr->pp, upload_data, *upload_data_size);
+    }
+
     *upload_data_size = 0;
     return MHD_YES;
 }
@@ -750,7 +751,7 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
     if(mr->second != false)
     {
         return static_cast<webserver*>(cls)->
-            bodyfull_requests_answer_second_step(
+            requests_answer_second_step(
                     connection,
                     method,
                     version,
@@ -776,7 +777,7 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
     base_unescaper(t_url, static_cast<webserver*>(cls)->unescaper);
     mr->standardized_url = new string(http_utils::standardize_url(t_url));
 
-    bool body = false;
+    mr->has_body = false;
 
     access_log(
             static_cast<webserver*>(cls),
@@ -790,22 +791,22 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
     else if (0 == strcmp(method, http_utils::http_method_post.c_str()))
     {
         mr->callback = &http_resource::render_POST;
-        body = true;
+        mr->has_body = true;
     }
     else if (0 == strcasecmp(method, http_utils::http_method_put.c_str()))
     {
         mr->callback = &http_resource::render_PUT;
-        body = true;
+        mr->has_body = true;
     }
     else if (0 == strcasecmp(method,http_utils::http_method_delete.c_str()))
     {
         mr->callback = &http_resource::render_DELETE;
-        body = true;
+        mr->has_body = true;
     }
     else if (0 == strcasecmp(method, http_utils::http_method_patch.c_str()))
     {
         mr->callback = &http_resource::render_PATCH;
-        body = true;
+        mr->has_body = true;
     }
     else if (0 == strcasecmp(method, http_utils::http_method_head.c_str()))
     {
@@ -824,7 +825,7 @@ int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
         mr->callback = &http_resource::render_OPTIONS;
     }
 
-    return body ? static_cast<webserver*>(cls)->bodyfull_requests_answer_first_step(connection, mr) : static_cast<webserver*>(cls)->bodyless_requests_answer(connection, method, version, mr);
+    return static_cast<webserver*>(cls)->requests_answer_first_step(connection, mr);
 }
 
 };

@@ -222,16 +222,11 @@ class webserver
             void **con_cls, int upgrade_socket
         );
 
-        int bodyless_requests_answer(MHD_Connection* connection,
-            const char* method, const char* version,
-            struct details::modded_request* mr
-        );
-
-        int bodyfull_requests_answer_first_step(MHD_Connection* connection,
+        int requests_answer_first_step(MHD_Connection* connection,
                 struct details::modded_request* mr
         );
 
-        int bodyfull_requests_answer_second_step(MHD_Connection* connection,
+        int requests_answer_second_step(MHD_Connection* connection,
             const char* method, const char* version, const char* upload_data,
             size_t* upload_data_size, struct details::modded_request* mr
         );
