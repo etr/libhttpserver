@@ -43,6 +43,7 @@ struct modded_request
     http_request* dhr;
     std::shared_ptr<http_response> dhrs;
     bool second;
+    bool has_body;
 
     modded_request():
         pp(0x0),
@@ -50,7 +51,8 @@ struct modded_request
         standardized_url(0x0),
         ws(0x0),
         dhr(0x0),
-        second(false)
+        second(false),
+        has_body(false)
     {
     }
 
@@ -60,7 +62,8 @@ struct modded_request
         standardized_url(b.standardized_url),
         ws(b.ws),
         dhr(b.dhr),
-        second(b.second)
+        second(b.second),
+        has_body(b.has_body)
     {
     }
 
@@ -70,7 +73,8 @@ struct modded_request
         standardized_url(std::move(b.standardized_url)),
         ws(std::move(b.ws)),
         dhr(std::move(b.dhr)),
-        second(b.second)
+        second(b.second),
+        has_body(b.has_body)
     {
     }
 
@@ -84,6 +88,7 @@ struct modded_request
         this->ws = b.ws;
         this->dhr = b.dhr;
         this->second = b.second;
+        this->has_body = b.has_body;
 
         return *this;
     }
@@ -98,6 +103,7 @@ struct modded_request
         this->ws = std::move(b.ws);
         this->dhr = std::move(b.dhr);
         this->second = b.second;
+        this->has_body = b.has_body;
 
         return *this;
     }
