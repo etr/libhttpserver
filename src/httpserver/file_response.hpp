@@ -49,7 +49,7 @@ class file_response : public http_response
         file_response(file_response&& other) noexcept = default;
 
         file_response& operator=(const file_response& b) = default;
-        file_response& operator=(file_response&& b) noexcept = default;
+        file_response& operator=(file_response&& b) = default;
 
         ~file_response() = default;
 

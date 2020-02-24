@@ -56,7 +56,7 @@ class deferred_response : public string_response
         deferred_response(const deferred_response& other) = default;
         deferred_response(deferred_response&& other) noexcept = default;
         deferred_response& operator=(const deferred_response& b) = default;
-        deferred_response& operator=(deferred_response&& b) noexcept = default;
+        deferred_response& operator=(deferred_response&& b) = default;
 
         ~deferred_response() = default;
 

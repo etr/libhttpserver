@@ -219,7 +219,7 @@ class http_resource
         http_resource(const http_resource& b) = default;
         http_resource(http_resource&& b) noexcept = default;
         http_resource& operator=(const http_resource& b) = default;
-        http_resource& operator=(http_resource&& b) noexcept = default;
+        http_resource& operator=(http_resource&& b) = default;
 
     private:
         friend class webserver;
