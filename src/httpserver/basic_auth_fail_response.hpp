@@ -49,7 +49,7 @@ class basic_auth_fail_response : public string_response
         basic_auth_fail_response(const basic_auth_fail_response& other) = default;
         basic_auth_fail_response(basic_auth_fail_response&& other) noexcept = default;
         basic_auth_fail_response& operator=(const basic_auth_fail_response& b) = default;
-        basic_auth_fail_response& operator=(basic_auth_fail_response&& b) noexcept = default;
+        basic_auth_fail_response& operator=(basic_auth_fail_response&& b) = default;
 
         ~basic_auth_fail_response() = default;
 
