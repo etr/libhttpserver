@@ -150,7 +150,7 @@ class http_response
         std::map<std::string, std::string, http::header_comparator> footers;
         std::map<std::string, std::string, http::header_comparator> cookies;
 
-      	friend std::ostream &operator<< (std::ostream &os, const http_response &r);
+    	friend std::ostream &operator<< (std::ostream &os, const http_response &r);
 };
 
 std::ostream &operator<< (std::ostream &os, const http_response &r);
