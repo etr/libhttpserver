@@ -49,7 +49,7 @@ class string_response : public http_response
         string_response(string_response&& other) noexcept = default;
 
         string_response& operator=(const string_response& b) = default;
-        string_response& operator=(string_response&& b) noexcept = default;
+        string_response& operator=(string_response&& b) = default;
 
         ~string_response() = default;
 

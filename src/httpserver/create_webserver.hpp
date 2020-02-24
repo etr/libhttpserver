@@ -50,7 +50,7 @@ class create_webserver
         create_webserver(const create_webserver& b) = default;
         create_webserver(create_webserver&& b) noexcept = default;
         create_webserver& operator=(const create_webserver& b) = default;
-        create_webserver& operator=(create_webserver&& b) noexcept = default;
+        create_webserver& operator=(create_webserver&& b) = default;
 
         explicit create_webserver(uint16_t port):
             _port(port)

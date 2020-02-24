@@ -233,7 +233,7 @@ class http_request
         http_request(http_request&& b) noexcept = default;
 
         http_request& operator=(const http_request& b) = default;
-        http_request& operator=(http_request&& b) noexcept = default;
+        http_request& operator=(http_request&& b) = default;
 
         std::string path;
         std::string method;
