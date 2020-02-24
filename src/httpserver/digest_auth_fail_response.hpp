@@ -53,7 +53,7 @@ class digest_auth_fail_response : public string_response
         digest_auth_fail_response(const digest_auth_fail_response& other) = default;
         digest_auth_fail_response(digest_auth_fail_response&& other) noexcept = default;
         digest_auth_fail_response& operator=(const digest_auth_fail_response& b) = default;
-        digest_auth_fail_response& operator=(digest_auth_fail_response&& b) noexcept = default;
+        digest_auth_fail_response& operator=(digest_auth_fail_response&& b) = default;
 
         ~digest_auth_fail_response() = default;
 
