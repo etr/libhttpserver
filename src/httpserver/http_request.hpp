@@ -25,7 +25,6 @@
 #ifndef _HTTP_REQUEST_HPP_
 #define _HTTP_REQUEST_HPP_
 
-#include <limits>
 #include <map>
 #include <vector>
 #include <string>
@@ -239,12 +238,12 @@ class http_request
         std::string method;
         std::map<std::string, std::string, http::arg_comparator> args;
         std::string content = "";
-        size_t content_size_limit = std::numeric_limits<size_t>::max();
+        size_t content_size_limit = static_cast<size_t>(-1);
         std::string version;
 
-        struct MHD_Connection* underlying_connection = nullptr;
+        struct MHD_Connection* underlying_connection = 0x0;
 
-        unescaper_ptr unescaper = nullptr;
+        unescaper_ptr unescaper = 0x0;
 
         static int build_request_header(void *cls, enum MHD_ValueKind kind,
                 const char *key, const char *value
