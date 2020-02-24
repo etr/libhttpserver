@@ -53,45 +53,12 @@ class deferred_response : public string_response
         {
         }
 
-        deferred_response(const deferred_response& other):
-            string_response(other),
-            cycle_callback(other.cycle_callback),
-            closure_data(other.closure_data)
-        {
-        }
+        deferred_response(const deferred_response& other) = default;
+        deferred_response(deferred_response&& other) noexcept = default;
+        deferred_response& operator=(const deferred_response& b) = default;
+        deferred_response& operator=(deferred_response&& b) noexcept = default;
 
-        deferred_response(deferred_response&& other) noexcept:
-            string_response(std::move(other)),
-            cycle_callback(std::move(other.cycle_callback)),
-            closure_data(std::move(other.closure_data))
-        {
-        }
-
-        deferred_response& operator=(const deferred_response& b)
-        {
-            if (this == &b) return *this;
-
-            (string_response&) (*this) = b;
-            this->cycle_callback = b.cycle_callback;
-            this->closure_data = b.closure_data;
-
-            return *this;
-        }
-
-        deferred_response& operator=(deferred_response&& b)
-        {
-            if (this == &b) return *this;
-
-            (string_response&) (*this) = std::move(b);
-            this->cycle_callback = std::move(b.cycle_callback);
-            this->closure_data = std::move(b.closure_data);
-
-            return *this;
-        }
-
-        ~deferred_response()
-        {
-        }
+        ~deferred_response() = default;
 
         MHD_Response* get_raw_response()
         {

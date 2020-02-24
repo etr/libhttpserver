@@ -25,6 +25,7 @@
 #ifndef _HTTP_REQUEST_HPP_
 #define _HTTP_REQUEST_HPP_
 
+#include <limits>
 #include <map>
 #include <vector>
 #include <string>
@@ -216,17 +217,9 @@ class http_request
         /**
          * Default constructor of the class. It is a specific responsibility of apis to initialize this type of objects.
         **/
-        http_request():
-            content(""),
-            content_size_limit(static_cast<size_t>(-1)),
-            underlying_connection(0x0),
-            unescaper(0x0)
-        {
-        }
+        http_request() = default;
 
         http_request(MHD_Connection* underlying_connection, unescaper_ptr unescaper):
-            content(""),
-            content_size_limit(static_cast<size_t>(-1)),
             underlying_connection(underlying_connection),
             unescaper(unescaper)
         {
@@ -236,69 +229,22 @@ class http_request
          * Copy constructor.
          * @param b http_request b to copy attributes from.
         **/
-        http_request(const http_request& b):
-            path(b.path),
-            method(b.method),
-            args(b.args),
-            content(b.content),
-            content_size_limit(b.content_size_limit),
-            version(b.version),
-            underlying_connection(b.underlying_connection),
-            unescaper(b.unescaper)
-        {
-        }
+        http_request(const http_request& b) = default;
+        http_request(http_request&& b) noexcept = default;
 
-        http_request(http_request&& b) noexcept:
-            path(std::move(b.path)),
-            method(std::move(b.method)),
-            args(std::move(b.args)),
-            content(std::move(b.content)),
-            content_size_limit(b.content_size_limit),
-            version(std::move(b.version)),
-            underlying_connection(std::move(b.underlying_connection))
-        {
-        }
-
-        http_request& operator=(const http_request& b)
-        {
-            if (this == &b) return *this;
-
-            this->path = b.path;
-            this->method = b.method;
-            this->args = b.args;
-            this->content = b.content;
-            this->content_size_limit = b.content_size_limit;
-            this->version = b.version;
-            this->underlying_connection = b.underlying_connection;
-
-            return *this;
-        }
-
-        http_request& operator=(http_request&& b)
-        {
-            if (this == &b) return *this;
-
-            this->path = std::move(b.path);
-            this->method = std::move(b.method);
-            this->args = std::move(b.args);
-            this->content = std::move(b.content);
-            this->content_size_limit = b.content_size_limit;
-            this->version = std::move(b.version);
-            this->underlying_connection = std::move(b.underlying_connection);
-
-            return *this;
-        }
+        http_request& operator=(const http_request& b) = default;
+        http_request& operator=(http_request&& b) noexcept = default;
 
         std::string path;
         std::string method;
         std::map<std::string, std::string, http::arg_comparator> args;
-        std::string content;
-        size_t content_size_limit;
+        std::string content = "";
+        size_t content_size_limit = std::numeric_limits<size_t>::max();
         std::string version;
 
-        struct MHD_Connection* underlying_connection;
+        struct MHD_Connection* underlying_connection = nullptr;
 
-        unescaper_ptr unescaper;
+        unescaper_ptr unescaper = nullptr;
 
         static int build_request_header(void *cls, enum MHD_ValueKind kind,
                 const char *key, const char *value

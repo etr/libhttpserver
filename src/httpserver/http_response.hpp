@@ -45,10 +45,7 @@ namespace httpserver
 class http_response
 {
     public:
-        http_response():
-            response_code(-1)
-        {
-        }
+        http_response() = default;
 
         explicit http_response(int response_code, const std::string& content_type):
             response_code(response_code)
@@ -60,49 +57,13 @@ class http_response
          * Copy constructor
          * @param b The http_response object to copy attributes value from.
         **/
-        http_response(const http_response& b):
-            response_code(b.response_code),
-            headers(b.headers),
-            footers(b.footers),
-            cookies(b.cookies)
-        {
-        }
+        http_response(const http_response& b) = default;
+        http_response(http_response&& b) noexcept = default;
 
-        http_response(http_response&& other) noexcept:
-            response_code(other.response_code),
-            headers(std::move(other.headers)),
-            footers(std::move(other.footers)),
-            cookies(std::move(other.cookies))
-        {
-        }
+        http_response& operator=(const http_response& b) = default;
+        http_response& operator=(http_response&& b) noexcept = default;
 
-        http_response& operator=(const http_response& b)
-        {
-            if (this == &b) return *this;
-
-            this->response_code = b.response_code;
-            this->headers = b.headers;
-            this->footers = b.footers;
-            this->cookies = b.cookies;
-
-            return *this;
-        }
-
-        http_response& operator=(http_response&& b)
-        {
-            if (this == &b) return *this;
-
-            this->response_code = b.response_code;
-            this->headers = std::move(b.headers);
-            this->footers = std::move(b.footers);
-            this->cookies = std::move(b.cookies);
-
-            return *this;
-        }
-
-        virtual ~http_response()
-        {
-        }
+        virtual ~http_response() = default;
 
         /**
          * Method used to get a specified header defined for the response
@@ -183,14 +144,13 @@ class http_response
         virtual int enqueue_response(MHD_Connection* connection, MHD_Response* response);
 
     protected:
-        std::string content;
-        int response_code;
+        int response_code = -1;
 
         std::map<std::string, std::string, http::header_comparator> headers;
         std::map<std::string, std::string, http::header_comparator> footers;
         std::map<std::string, std::string, http::header_comparator> cookies;
 
-    	friend std::ostream &operator<< (std::ostream &os, const http_response &r);
+      	friend std::ostream &operator<< (std::ostream &os, const http_response &r);
 };
 
 std::ostream &operator<< (std::ostream &os, const http_response &r);

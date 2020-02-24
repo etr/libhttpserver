@@ -33,13 +33,7 @@ namespace httpserver
 class digest_auth_fail_response : public string_response
 {
     public:
-        digest_auth_fail_response():
-            string_response(),
-            realm(""),
-            opaque(""),
-            reload_nonce(false)
-        {
-        }
+        digest_auth_fail_response() = default;
 
         digest_auth_fail_response(
                 const std::string& content,
@@ -56,56 +50,19 @@ class digest_auth_fail_response : public string_response
         {
         }
 
-        digest_auth_fail_response(const digest_auth_fail_response& other):
-            string_response(other),
-            realm(other.realm),
-            opaque(other.opaque),
-            reload_nonce(other.reload_nonce)
-        {
-        }
+        digest_auth_fail_response(const digest_auth_fail_response& other) = default;
+        digest_auth_fail_response(digest_auth_fail_response&& other) noexcept = default;
+        digest_auth_fail_response& operator=(const digest_auth_fail_response& b) = default;
+        digest_auth_fail_response& operator=(digest_auth_fail_response&& b) noexcept = default;
 
-        digest_auth_fail_response(digest_auth_fail_response&& other) noexcept:
-            string_response(std::move(other)),
-            realm(std::move(other.realm)),
-            opaque(std::move(other.opaque)),
-            reload_nonce(other.reload_nonce)
-        {
-        }
-
-        digest_auth_fail_response& operator=(const digest_auth_fail_response& b)
-        {
-            if (this == &b) return *this;
-
-            (string_response&) (*this) = b;
-            this->realm = b.realm;
-            this->opaque = b.opaque;
-            this->reload_nonce = b.reload_nonce;
-
-            return *this;
-        }
-
-        digest_auth_fail_response& operator=(digest_auth_fail_response&& b)
-        {
-            if (this == &b) return *this;
-
-            (string_response&) (*this) = std::move(b);
-            this->realm = std::move(b.realm);
-            this->opaque = std::move(b.opaque);
-            this->reload_nonce = b.reload_nonce;
-
-            return *this;
-        }
-
-        ~digest_auth_fail_response()
-        {
-        }
+        ~digest_auth_fail_response() = default;
 
         int enqueue_response(MHD_Connection* connection, MHD_Response* response);
 
     private:
-        std::string realm;
-        std::string opaque;
-        bool reload_nonce;
+        std::string realm = "";
+        std::string opaque = "";
+        bool reload_nonce = false;
 };
 
 }
