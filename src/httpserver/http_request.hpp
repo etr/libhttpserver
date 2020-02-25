@@ -76,7 +76,7 @@ class http_request
         **/
         const std::string& get_path() const
         {
-            return this->path;
+            return path;
         }
 
         /**
@@ -85,7 +85,7 @@ class http_request
         **/
         const std::vector<std::string> get_path_pieces() const
         {
-            return http::http_utils::tokenize_url(this->path);
+            return http::http_utils::tokenize_url(path);
         }
 
         /**
@@ -95,7 +95,7 @@ class http_request
         **/
         const std::string get_path_piece(int index) const
         {
-            std::vector<std::string> post_path = this->get_path_pieces();
+            std::vector<std::string> post_path = get_path_pieces();
             if(((int)(post_path.size())) > index)
                 return post_path[index];
             return EMPTY;
@@ -107,7 +107,7 @@ class http_request
         **/
         const std::string& get_method() const
         {
-            return this->method;
+            return method;
         }
 
         /**
@@ -167,7 +167,7 @@ class http_request
         **/
         const std::string& get_content() const
         {
-            return this->content;
+            return content;
         }
 
         /**
@@ -190,7 +190,7 @@ class http_request
         **/
         const std::string& get_version() const
         {
-            return this->version;
+            return version;
         }
 
         /**
@@ -264,7 +264,7 @@ class http_request
         **/
         void set_arg(const std::string& key, const std::string& value)
         {
-            this->args[key] = value.substr(0,content_size_limit);
+            args[key] = value.substr(0,content_size_limit);
         }
 
         /**
@@ -275,26 +275,25 @@ class http_request
         **/
         void set_arg(const char* key, const char* value, size_t size)
         {
-            this->args[key] = std::string(value,
-                                          std::min(size, content_size_limit));
+            args[key] = std::string(value, std::min(size, content_size_limit));
         }
 
         /**
          * Method used to set the content of the request
          * @param content The content to set.
         **/
-        void set_content(const std::string& content)
+        void set_content(const std::string& content_src)
         {
-            this->content = content.substr(0,content_size_limit);
+            content = content_src.substr(0,content_size_limit);
         }
 
         /**
          * Method used to set the maximum size of the content
          * @param content_size_limit The limit on the maximum size of the content and arg's.
         **/
-        void set_content_size_limit(size_t content_size_limit)
+        void set_content_size_limit(size_t content_size_limit_src)
         {
-            this->content_size_limit = content_size_limit;
+            content_size_limit = content_size_limit_src;
         }
 
         /**
@@ -302,12 +301,12 @@ class http_request
          * @param content The content to append.
          * @param size The size of the data to append.
         **/
-        void grow_content(const char* content, size_t size)
+        void grow_content(const char* content_ptr, size_t size)
         {
-            this->content.append(content, size);
-            if (this->content.size() > content_size_limit)
+            content.append(content_ptr, size);
+            if (content.size() > content_size_limit)
             {
-                this->content.resize (content_size_limit);
+                content.resize (content_size_limit);
             }
         }
 
@@ -315,9 +314,9 @@ class http_request
          * Method used to set the path requested.
          * @param path The path searched by the request.
         **/
-        void set_path(const std::string& path)
+        void set_path(const std::string& path_src)
         {
-            this->path = path;
+            path = path_src;
         }
 
         /**
@@ -330,20 +329,20 @@ class http_request
          * Method used to set the request http version (ie http 1.1)
          * @param version The version to set in form of string
         **/
-        void set_version(const std::string& version)
+        void set_version(const std::string& version_src)
         {
-            this->version = version;
+            version = version_src;
         }
 
         /**
          * Method used to set all arguments of the request.
          * @param args The args key-value map to set for the request.
         **/
-        void set_args(const std::map<std::string, std::string>& args)
+        void set_args(const std::map<std::string, std::string>& args_src)
         {
             std::map<std::string, std::string>::const_iterator it;
-            for(it = args.begin(); it != args.end(); ++it)
-                this->args[it->first] = it->second.substr(0,content_size_limit);
+            for(it = args_src.begin(); it != args_src.end(); ++it)
+                args[it->first] = it->second.substr(0,content_size_limit);
         }
 
         const std::string get_connection_value(const std::string& key, enum MHD_ValueKind kind) const;

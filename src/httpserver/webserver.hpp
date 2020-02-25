@@ -110,22 +110,22 @@ class webserver
 
         log_access_ptr get_access_logger() const
         {
-            return this->log_access;
+            return log_access;
         }
 
         log_error_ptr get_error_logger() const
         {
-            return this->log_error;
+            return log_error;
         }
 
         validator_ptr get_request_validator() const
         {
-            return this->validator;
+            return validator;
         }
 
         unescaper_ptr get_unescaper() const
         {
-            return this->unescaper;
+            return unescaper;
         }
 
         /**
