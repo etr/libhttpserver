@@ -161,9 +161,9 @@ class http_resource
         **/
         void set_allowing(const std::string& method, bool allowed)
         {
-            if(this->allowed_methods.count(method))
+            if(allowed_methods.count(method))
             {
-                this->allowed_methods[method] = allowed;
+                allowed_methods[method] = allowed;
             }
         }
         /**
@@ -172,8 +172,8 @@ class http_resource
         void allow_all()
         {
             std::map<std::string,bool>::iterator it;
-            for ( it=this->allowed_methods.begin() ; it != this->allowed_methods.end(); ++it )
-                this->allowed_methods[(*it).first] = true;
+            for ( it=allowed_methods.begin() ; it != allowed_methods.end(); ++it )
+                allowed_methods[(*it).first] = true;
         }
         /**
          * Method used to implicitly disallow all methods
@@ -181,8 +181,8 @@ class http_resource
         void disallow_all()
         {
             std::map<std::string,bool>::iterator it;
-            for ( it=this->allowed_methods.begin() ; it != this->allowed_methods.end(); ++it )
-                this->allowed_methods[(*it).first] = false;
+            for ( it=allowed_methods.begin() ; it != allowed_methods.end(); ++it )
+                allowed_methods[(*it).first] = false;
         }
         /**
          * Method used to discover if an http method is allowed or not for this resource
@@ -191,9 +191,9 @@ class http_resource
         **/
         bool is_allowed(const std::string& method)
         {
-            if(this->allowed_methods.count(method))
+            if(allowed_methods.count(method))
             {
-                return this->allowed_methods[method];
+                return allowed_methods[method];
             }
             else
             {

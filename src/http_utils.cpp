@@ -517,16 +517,16 @@ bool ip_representation::operator <(const ip_representation& b) const
     {
         if (i == 10 || i == 11) continue;
 
-        if (CHECK_BIT(this->mask, i) && CHECK_BIT(b.mask, i))
+        if (CHECK_BIT(mask, i) && CHECK_BIT(b.mask, i))
         {
-            this_score += (16 - i) * this->pieces[i];
+            this_score += (16 - i) * pieces[i];
             b_score += (16 - i) * b.pieces[i];
         }
     }
 
     if (this_score == b_score &&
-       ((this->pieces[10] == 0x00 || this->pieces[10] == 0xFF) && (b.pieces[10] == 0x00 || b.pieces[10] == 0xFF)) &&
-       ((this->pieces[11] == 0x00 || this->pieces[11] == 0xFF) && (b.pieces[11] == 0x00 || b.pieces[11] == 0xFF))
+       ((pieces[10] == 0x00 || pieces[10] == 0xFF) && (b.pieces[10] == 0x00 || b.pieces[10] == 0xFF)) &&
+       ((pieces[11] == 0x00 || pieces[11] == 0xFF) && (b.pieces[11] == 0x00 || b.pieces[11] == 0xFF))
     )
     {
         return false;
@@ -534,9 +534,9 @@ bool ip_representation::operator <(const ip_representation& b) const
 
     for (int i = 10; i < 12; i++)
     {
-        if (CHECK_BIT(this->mask, i) && CHECK_BIT(b.mask, i))
+        if (CHECK_BIT(mask, i) && CHECK_BIT(b.mask, i))
         {
-            this_score += (16 - i) * this->pieces[i];
+            this_score += (16 - i) * pieces[i];
             b_score += (16 - i) * b.pieces[i];
         }
     }

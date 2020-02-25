@@ -37,9 +37,9 @@ struct arguments_accumulator
     std::map<std::string, std::string, http::arg_comparator>* arguments;
 };
 
-void http_request::set_method(const std::string& method)
+void http_request::set_method(const std::string& method_src)
 {
-    this->method = string_utilities::to_upper_copy(method);
+    method = string_utilities::to_upper_copy(method_src);
 }
 
 bool http_request::check_digest_auth(
@@ -76,7 +76,7 @@ bool http_request::check_digest_auth(
 const std::string http_request::get_connection_value(const std::string& key, enum MHD_ValueKind kind) const
 {
     const char* header_c = MHD_lookup_connection_value(
-        this->underlying_connection,
+        underlying_connection,
         kind,
         key.c_str()
     );
@@ -103,7 +103,7 @@ const std::map<std::string, std::string, http::header_comparator> http_request::
     std::map<std::string, std::string, http::header_comparator> headers;
 
     MHD_get_connection_values(
-        this->underlying_connection,
+        underlying_connection,
         kind,
         &build_request_header,
         (void*) &headers
@@ -144,9 +144,9 @@ const std::map<std::string, std::string, http::header_comparator> http_request::
 
 const std::string http_request::get_arg(const std::string& key) const
 {
-    std::map<std::string, std::string>::const_iterator it = this->args.find(key);
+    std::map<std::string, std::string>::const_iterator it = args.find(key);
 
-    if(it != this->args.end())
+    if(it != args.end())
     {
         return it->second;
     }
@@ -157,14 +157,14 @@ const std::string http_request::get_arg(const std::string& key) const
 const std::map<std::string, std::string, http::arg_comparator> http_request::get_args() const
 {
     std::map<std::string, std::string, http::arg_comparator> arguments;
-    arguments.insert(this->args.begin(), this->args.end());
+    arguments.insert(args.begin(), args.end());
 
     arguments_accumulator aa;
-    aa.unescaper = this->unescaper;
+    aa.unescaper = unescaper;
     aa.arguments = &arguments;
 
     MHD_get_connection_values(
-        this->underlying_connection,
+        underlying_connection,
         MHD_GET_ARGUMENT_KIND,
         &build_request_args,
         (void*) &aa
@@ -178,7 +178,7 @@ const std::string http_request::get_querystring() const
     std::string querystring = "";
 
     MHD_get_connection_values(
-        this->underlying_connection,
+        underlying_connection,
         MHD_GET_ARGUMENT_KIND,
         &build_request_querystring,
         (void*) &querystring

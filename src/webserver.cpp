@@ -164,7 +164,7 @@ webserver::webserver(const create_webserver& params):
 
 webserver::~webserver()
 {
-    this->stop();
+    stop();
     pthread_mutex_destroy(&mutexwait);
     pthread_rwlock_destroy(&runguard);
     pthread_cond_destroy(&mutexcond);
@@ -172,7 +172,7 @@ webserver::~webserver()
 
 void webserver::sweet_kill()
 {
-    this->stop();
+    stop();
 }
 
 void webserver::request_completed (
@@ -308,16 +308,16 @@ bool webserver::start(bool blocking)
     start_conf |= MHD_USE_TCP_FASTOPEN;
 #endif
 
-    this->daemon = NULL;
+    daemon = NULL;
     if(bind_address == 0x0) {
-        this->daemon = MHD_start_daemon
+        daemon = MHD_start_daemon
         (
-                start_conf, this->port, &policy_callback, this,
+                start_conf, port, &policy_callback, this,
                 &answer_to_connection, this, MHD_OPTION_ARRAY,
                 &iov[0], MHD_OPTION_END
         );
     } else {
-        this->daemon = MHD_start_daemon
+        daemon = MHD_start_daemon
         (
                 start_conf, 1, &policy_callback, this,
                 &answer_to_connection, this, MHD_OPTION_ARRAY,
@@ -325,14 +325,14 @@ bool webserver::start(bool blocking)
         );
     }
 
-    if(this->daemon == NULL)
+    if(daemon == NULL)
     {
-        throw std::invalid_argument("Unable to connect daemon to port: " + std::to_string(this->port));
+        throw std::invalid_argument("Unable to connect daemon to port: " + std::to_string(port));
     }
 
     bool value_onclose = false;
 
-    this->running = true;
+    running = true;
 
     if(blocking)
     {
@@ -347,19 +347,19 @@ bool webserver::start(bool blocking)
 
 bool webserver::is_running()
 {
-    return this->running;
+    return running;
 }
 
 bool webserver::stop()
 {
-    if(!this->running) return false;
+    if(!running) return false;
 
     pthread_mutex_lock(&mutexwait);
-    this->running = false;
+    running = false;
     pthread_cond_signal(&mutexcond);
     pthread_mutex_unlock(&mutexwait);
 
-    MHD_stop_daemon(this->daemon);
+    MHD_stop_daemon(daemon);
 
     shutdown(bind_socket, 2);
 
@@ -369,45 +369,45 @@ bool webserver::stop()
 void webserver::unregister_resource(const string& resource)
 {
     details::http_endpoint he(resource);
-    this->registered_resources.erase(he);
-    this->registered_resources.erase(he.get_url_complete());
-    this->registered_resources_str.erase(he.get_url_complete());
+    registered_resources.erase(he);
+    registered_resources.erase(he.get_url_complete());
+    registered_resources_str.erase(he.get_url_complete());
 }
 
 void webserver::ban_ip(const string& ip)
 {
     ip_representation t_ip(ip);
-    set<ip_representation>::iterator it = this->bans.find(t_ip);
-    if(it != this->bans.end() && (t_ip.weight() < (*it).weight()))
+    set<ip_representation>::iterator it = bans.find(t_ip);
+    if(it != bans.end() && (t_ip.weight() < (*it).weight()))
     {
-        this->bans.erase(it);
-        this->bans.insert(t_ip);
+        bans.erase(it);
+        bans.insert(t_ip);
     }
     else
-        this->bans.insert(t_ip);
+        bans.insert(t_ip);
 }
 
 void webserver::allow_ip(const string& ip)
 {
     ip_representation t_ip(ip);
-    set<ip_representation>::iterator it = this->allowances.find(t_ip);
-    if(it != this->allowances.end() && (t_ip.weight() < (*it).weight()))
+    set<ip_representation>::iterator it = allowances.find(t_ip);
+    if(it != allowances.end() && (t_ip.weight() < (*it).weight()))
     {
-        this->allowances.erase(it);
-        this->allowances.insert(t_ip);
+        allowances.erase(it);
+        allowances.insert(t_ip);
     }
     else
-        this->allowances.insert(t_ip);
+        allowances.insert(t_ip);
 }
 
 void webserver::unban_ip(const string& ip)
 {
-    this->bans.erase(ip);
+    bans.erase(ip);
 }
 
 void webserver::disallow_ip(const string& ip)
 {
-    this->allowances.erase(ip);
+    allowances.erase(ip);
 }
 
 int policy_callback (void *cls, const struct sockaddr* addr, socklen_t addrlen)

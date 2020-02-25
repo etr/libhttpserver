@@ -95,7 +95,7 @@ class deferred_response : public string_response
 
         MHD_Response* get_raw_response()
         {
-            return details::get_raw_response_helper((void*) this, &(this->cb));
+            return details::get_raw_response_helper((void*) this, &cb);
         }
 
     private:
