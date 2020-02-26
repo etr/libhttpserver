@@ -33,80 +33,25 @@ namespace details
 
 struct modded_request
 {
-    struct MHD_PostProcessor *pp;
-    std::string* complete_uri;
-    std::string* standardized_url;
-    webserver* ws;
+    struct MHD_PostProcessor *pp = 0x0;
+    std::string* complete_uri = 0x0;
+    std::string* standardized_url = 0x0;
+    webserver* ws = 0x0;
 
     const std::shared_ptr<http_response> (httpserver::http_resource::*callback)(const httpserver::http_request&);
 
-    http_request* dhr;
+    http_request* dhr = 0x0;
     std::shared_ptr<http_response> dhrs;
-    bool second;
-    bool has_body;
+    bool second = false;
+    bool has_body = false;
 
-    modded_request():
-        pp(0x0),
-        complete_uri(0x0),
-        standardized_url(0x0),
-        ws(0x0),
-        dhr(0x0),
-        second(false),
-        has_body(false)
-    {
-    }
+    modded_request() = default;
 
-    modded_request(const modded_request& b):
-        pp(b.pp),
-        complete_uri(b.complete_uri),
-        standardized_url(b.standardized_url),
-        ws(b.ws),
-        dhr(b.dhr),
-        second(b.second),
-        has_body(b.has_body)
-    {
-    }
+    modded_request(const modded_request& b) = default;
+    modded_request(modded_request&& b) = default;
 
-    modded_request(modded_request&& b):
-        pp(std::move(b.pp)),
-        complete_uri(std::move(b.complete_uri)),
-        standardized_url(std::move(b.standardized_url)),
-        ws(std::move(b.ws)),
-        dhr(std::move(b.dhr)),
-        second(b.second),
-        has_body(b.has_body)
-    {
-    }
-
-    modded_request& operator=(const modded_request& b)
-    {
-        if (this == &b) return *this;
-
-        this->pp = b.pp;
-        this->complete_uri = b.complete_uri;
-        this->standardized_url = b.standardized_url;
-        this->ws = b.ws;
-        this->dhr = b.dhr;
-        this->second = b.second;
-        this->has_body = b.has_body;
-
-        return *this;
-    }
-
-    modded_request& operator=(modded_request&& b)
-    {
-        if (this == &b) return *this;
-
-        this->pp = std::move(b.pp);
-        this->complete_uri = std::move(b.complete_uri);
-        this->standardized_url = std::move(b.standardized_url);
-        this->ws = std::move(b.ws);
-        this->dhr = std::move(b.dhr);
-        this->second = b.second;
-        this->has_body = b.has_body;
-
-        return *this;
-    }
+    modded_request& operator=(const modded_request& b) = default;
+    modded_request& operator=(modded_request&& b) = default;
 
     ~modded_request()
     {

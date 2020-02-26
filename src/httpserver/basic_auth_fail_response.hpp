@@ -33,11 +33,7 @@ namespace httpserver
 class basic_auth_fail_response : public string_response
 {
     public:
-        basic_auth_fail_response():
-            string_response(),
-            realm("")
-        {
-        }
+        basic_auth_fail_response() = default;
 
         explicit basic_auth_fail_response(
                 const std::string& content,
@@ -50,46 +46,17 @@ class basic_auth_fail_response : public string_response
         {
         }
 
-        basic_auth_fail_response(const basic_auth_fail_response& other):
-            string_response(other),
-            realm(other.realm)
-        {
-        }
+        basic_auth_fail_response(const basic_auth_fail_response& other) = default;
+        basic_auth_fail_response(basic_auth_fail_response&& other) noexcept = default;
+        basic_auth_fail_response& operator=(const basic_auth_fail_response& b) = default;
+        basic_auth_fail_response& operator=(basic_auth_fail_response&& b) = default;
 
-        basic_auth_fail_response(basic_auth_fail_response&& other) noexcept:
-            string_response(std::move(other)),
-            realm(std::move(other.realm))
-        {
-        }
-
-        basic_auth_fail_response& operator=(const basic_auth_fail_response& b)
-        {
-            if (this == &b) return *this;
-
-            (string_response&) (*this) = b;
-            this->realm = b.realm;
-
-            return *this;
-        }
-
-        basic_auth_fail_response& operator=(basic_auth_fail_response&& b)
-        {
-            if (this == &b) return *this;
-
-            (string_response&) (*this) = std::move(b);
-            this->realm = std::move(b.realm);
-
-            return *this;
-        }
-
-        ~basic_auth_fail_response()
-        {
-        }
+        ~basic_auth_fail_response() = default;
 
         int enqueue_response(MHD_Connection* connection, MHD_Response* response);
 
     private:
-        std::string realm;
+        std::string realm = "";
 };
 
 }

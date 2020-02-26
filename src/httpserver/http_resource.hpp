@@ -59,10 +59,7 @@ class http_resource
         /**
          * Class destructor
         **/
-        virtual ~http_resource()
-        {
-            allowed_methods.clear();
-        }
+        virtual ~http_resource() = default;
 
         /**
          * Method used to answer to a generic request
@@ -219,25 +216,10 @@ class http_resource
         /**
          * Copy constructor
         **/
-        http_resource(const http_resource& b) : allowed_methods(b.allowed_methods) { }
-
-        http_resource(http_resource&& b) noexcept: allowed_methods(std::move(b.allowed_methods)) { }
-
-        http_resource& operator=(const http_resource& b)
-        {
-            if (this == &b) return *this;
-
-            allowed_methods = b.allowed_methods;
-            return (*this);
-        }
-
-        http_resource& operator=(http_resource&& b)
-        {
-            if (this == &b) return *this;
-
-            allowed_methods = std::move(b.allowed_methods);
-            return (*this);
-        }
+        http_resource(const http_resource& b) = default;
+        http_resource(http_resource&& b) noexcept = default;
+        http_resource& operator=(const http_resource& b) = default;
+        http_resource& operator=(http_resource&& b) = default;
 
     private:
         friend class webserver;
@@ -245,5 +227,5 @@ class http_resource
         std::map<std::string, bool> allowed_methods;
 };
 
-};
+}
 #endif

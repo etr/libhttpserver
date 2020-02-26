@@ -33,11 +33,7 @@ namespace httpserver
 class file_response : public http_response
 {
     public:
-        file_response():
-            http_response(),
-            filename("")
-        {
-        }
+        file_response() = default;
 
         explicit file_response(
                 const std::string& filename,
@@ -49,46 +45,18 @@ class file_response : public http_response
         {
         }
 
-        file_response(const file_response& other):
-            http_response(other),
-            filename(other.filename)
-        {
-        }
+        file_response(const file_response& other) = default;
+        file_response(file_response&& other) noexcept = default;
 
-        file_response(file_response&& other) noexcept:
-            http_response(std::move(other)),
-            filename(std::move(other.filename))
-        {
-        }
+        file_response& operator=(const file_response& b) = default;
+        file_response& operator=(file_response&& b) = default;
 
-        file_response& operator=(const file_response& b)
-        {
-            if (this == &b) return *this;
-
-            (http_response&) (*this) = b;
-            this->filename = b.filename;
-
-            return *this;
-        }
-
-        file_response& operator=(file_response&& b)
-        {
-            if (this == &b) return *this;
-
-            (http_response&) (*this) = std::move(b);
-            this->filename = std::move(b.filename);
-
-            return *this;
-        }
-
-        ~file_response()
-        {
-        }
+        ~file_response() = default;
 
         MHD_Response* get_raw_response();
 
     private:
-        std::string filename;
+        std::string filename = "";
 };
 
 }

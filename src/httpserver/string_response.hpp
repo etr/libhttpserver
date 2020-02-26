@@ -33,11 +33,7 @@ namespace httpserver
 class string_response : public http_response
 {
     public:
-        string_response():
-            http_response(),
-            content("")
-        {
-        }
+        string_response() = default;
 
         explicit string_response(
                 const std::string& content,
@@ -49,46 +45,18 @@ class string_response : public http_response
         {
         }
 
-        string_response(const string_response& other):
-            http_response(other),
-            content(other.content)
-        {
-        }
+        string_response(const string_response& other) = default;
+        string_response(string_response&& other) noexcept = default;
 
-        string_response(string_response&& other) noexcept:
-            http_response(std::move(other)),
-            content(std::move(other.content))
-        {
-        }
+        string_response& operator=(const string_response& b) = default;
+        string_response& operator=(string_response&& b) = default;
 
-        string_response& operator=(const string_response& b)
-        {
-            if (this == &b) return *this;
-
-            (http_response&) (*this) = b;
-            this->content = b.content;
-
-            return *this;
-        }
-
-        string_response& operator=(string_response&& b)
-        {
-            if (this == &b) return *this;
-
-            (http_response&) (*this) = std::move(b);
-            this->content = std::move(b.content);
-
-            return *this;
-        }
-
-        ~string_response()
-        {
-        }
+        ~string_response() = default;
 
         MHD_Response* get_raw_response();
 
     private:
-        std::string content;
+        std::string content = "";
 };
 
 }
