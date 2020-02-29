@@ -37,9 +37,9 @@ struct arguments_accumulator
     std::map<std::string, std::string, http::arg_comparator>* arguments;
 };
 
-void http_request::set_method(const std::string& method_src)
+void http_request::set_method(const std::string& method)
 {
-    method = string_utilities::to_upper_copy(method_src);
+    this->method = string_utilities::to_upper_copy(method);
 }
 
 bool http_request::check_digest_auth(

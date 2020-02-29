@@ -245,9 +245,9 @@ class error_resource : public http_resource
 class print_request_resource : public http_resource
 {
     public:
-        print_request_resource(std::stringstream* ss_src)
+        print_request_resource(std::stringstream* ss)
         {
-            ss = ss_src;
+            this->ss = ss;
         }
 
         const shared_ptr<http_response> render_GET(const http_request& req)
@@ -263,9 +263,9 @@ class print_request_resource : public http_resource
 class print_response_resource : public http_resource
 {
     public:
-        print_response_resource(std::stringstream* ss_src)
+        print_response_resource(std::stringstream* ss)
         {
-            ss = ss_src;
+            this->ss = ss;
         }
 
         const shared_ptr<http_response> render_GET(const http_request& req)

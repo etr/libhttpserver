@@ -282,18 +282,18 @@ class http_request
          * Method used to set the content of the request
          * @param content The content to set.
         **/
-        void set_content(const std::string& content_src)
+        void set_content(const std::string& content)
         {
-            content = content_src.substr(0,content_size_limit);
+            this->content = content.substr(0,content_size_limit);
         }
 
         /**
          * Method used to set the maximum size of the content
          * @param content_size_limit The limit on the maximum size of the content and arg's.
         **/
-        void set_content_size_limit(size_t content_size_limit_src)
+        void set_content_size_limit(size_t content_size_limit)
         {
-            content_size_limit = content_size_limit_src;
+            this->content_size_limit = content_size_limit;
         }
 
         /**
@@ -301,12 +301,12 @@ class http_request
          * @param content The content to append.
          * @param size The size of the data to append.
         **/
-        void grow_content(const char* content_ptr, size_t size)
+        void grow_content(const char* content, size_t size)
         {
-            content.append(content_ptr, size);
-            if (content.size() > content_size_limit)
+            this->content.append(content, size);
+            if (this->content.size() > content_size_limit)
             {
-                content.resize (content_size_limit);
+                this->content.resize (content_size_limit);
             }
         }
 
@@ -314,9 +314,9 @@ class http_request
          * Method used to set the path requested.
          * @param path The path searched by the request.
         **/
-        void set_path(const std::string& path_src)
+        void set_path(const std::string& path)
         {
-            path = path_src;
+            this->path = path;
         }
 
         /**
@@ -329,20 +329,20 @@ class http_request
          * Method used to set the request http version (ie http 1.1)
          * @param version The version to set in form of string
         **/
-        void set_version(const std::string& version_src)
+        void set_version(const std::string& version)
         {
-            version = version_src;
+            this->version = version;
         }
 
         /**
          * Method used to set all arguments of the request.
          * @param args The args key-value map to set for the request.
         **/
-        void set_args(const std::map<std::string, std::string>& args_src)
+        void set_args(const std::map<std::string, std::string>& args)
         {
             std::map<std::string, std::string>::const_iterator it;
-            for(it = args_src.begin(); it != args_src.end(); ++it)
-                args[it->first] = it->second.substr(0,content_size_limit);
+            for(it = args.begin(); it != args.end(); ++it)
+                this->args[it->first] = it->second.substr(0,content_size_limit);
         }
 
         const std::string get_connection_value(const std::string& key, enum MHD_ValueKind kind) const;
