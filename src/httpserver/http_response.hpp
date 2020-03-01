@@ -143,13 +143,14 @@ class http_response
         virtual void decorate_response(MHD_Response* response);
         virtual int enqueue_response(MHD_Connection* connection, MHD_Response* response);
 
-    protected:
+    private:
         int response_code = -1;
 
         std::map<std::string, std::string, http::header_comparator> headers;
         std::map<std::string, std::string, http::header_comparator> footers;
         std::map<std::string, std::string, http::header_comparator> cookies;
 
+    protected:
     	friend std::ostream &operator<< (std::ostream &os, const http_response &r);
 };
 
