@@ -70,7 +70,7 @@ int http_response::enqueue_response(MHD_Connection* connection, MHD_Response* re
 
 void http_response::shoutCAST()
 {
-    this->response_code |= http::http_utils::shoutcast_response;
+    response_code |= http::http_utils::shoutcast_response;
 }
 
 std::ostream &operator<< (std::ostream &os, const http_response &r)

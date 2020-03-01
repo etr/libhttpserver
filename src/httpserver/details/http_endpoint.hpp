@@ -85,12 +85,12 @@ class http_endpoint
         **/
         const std::string& get_url_complete() const
         {
-            return this->url_complete;
+            return url_complete;
         }
 
         const std::string& get_url_normalized() const
         {
-            return this->url_normalized;
+            return url_normalized;
         }
 
         /**
@@ -99,7 +99,7 @@ class http_endpoint
         **/
         const std::vector<std::string>& get_url_pars() const
         {
-            return this->url_pars;
+            return url_pars;
         }
 
         /**
@@ -108,7 +108,7 @@ class http_endpoint
         **/
         const std::vector<std::string>& get_url_pieces() const
         {
-            return this->url_pieces;
+            return url_pieces;
         }
 
         /**
@@ -117,17 +117,17 @@ class http_endpoint
         **/
         const std::vector<int>& get_chunk_positions() const
         {
-            return this->chunk_positions;
+            return chunk_positions;
         }
 
         const bool is_family_url() const
         {
-            return this->family_url;
+            return family_url;
         }
 
         const bool is_regex_compiled() const
         {
-            return this->reg_compiled;
+            return reg_compiled;
         }
 
         /**

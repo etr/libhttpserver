@@ -50,7 +50,7 @@ class http_response
         explicit http_response(int response_code, const std::string& content_type):
             response_code(response_code)
         {
-            this->headers[http::http_utils::http_header_content_type] = content_type;
+            headers[http::http_utils::http_header_content_type] = content_type;
         }
 
         /**
@@ -72,7 +72,7 @@ class http_response
         **/
         const std::string& get_header(const std::string& key)
         {
-            return this->headers[key];
+            return headers[key];
         }
 
         /**
@@ -82,12 +82,12 @@ class http_response
         **/
         const std::string& get_footer(const std::string& key)
         {
-            return this->footers[key];
+            return footers[key];
         }
 
         const std::string& get_cookie(const std::string& key)
         {
-            return this->cookies[key];
+            return cookies[key];
         }
 
         /**
@@ -96,7 +96,7 @@ class http_response
         **/
         const std::map<std::string, std::string, http::header_comparator>& get_headers() const
         {
-            return this->headers;
+            return headers;
         }
 
         /**
@@ -105,12 +105,12 @@ class http_response
         **/
         const std::map<std::string, std::string, http::header_comparator>& get_footers() const
         {
-            return this->footers;
+            return footers;
         }
 
         const std::map<std::string, std::string, http::header_comparator>& get_cookies() const
         {
-            return this->cookies;
+            return cookies;
         }
 
         /**
@@ -119,7 +119,7 @@ class http_response
         **/
         int get_response_code() const
         {
-            return this->response_code;
+            return response_code;
         }
 
         void with_header(const std::string& key, const std::string& value)

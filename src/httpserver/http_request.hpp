@@ -76,7 +76,7 @@ class http_request
         **/
         const std::string& get_path() const
         {
-            return this->path;
+            return path;
         }
 
         /**
@@ -85,7 +85,7 @@ class http_request
         **/
         const std::vector<std::string> get_path_pieces() const
         {
-            return http::http_utils::tokenize_url(this->path);
+            return http::http_utils::tokenize_url(path);
         }
 
         /**
@@ -95,7 +95,7 @@ class http_request
         **/
         const std::string get_path_piece(int index) const
         {
-            std::vector<std::string> post_path = this->get_path_pieces();
+            std::vector<std::string> post_path = get_path_pieces();
             if(((int)(post_path.size())) > index)
                 return post_path[index];
             return EMPTY;
@@ -107,7 +107,7 @@ class http_request
         **/
         const std::string& get_method() const
         {
-            return this->method;
+            return method;
         }
 
         /**
@@ -167,7 +167,7 @@ class http_request
         **/
         const std::string& get_content() const
         {
-            return this->content;
+            return content;
         }
 
         /**
@@ -190,7 +190,7 @@ class http_request
         **/
         const std::string& get_version() const
         {
-            return this->version;
+            return version;
         }
 
         /**
@@ -264,7 +264,7 @@ class http_request
         **/
         void set_arg(const std::string& key, const std::string& value)
         {
-            this->args[key] = value.substr(0,content_size_limit);
+            args[key] = value.substr(0,content_size_limit);
         }
 
         /**
@@ -275,8 +275,7 @@ class http_request
         **/
         void set_arg(const char* key, const char* value, size_t size)
         {
-            this->args[key] = std::string(value,
-                                          std::min(size, content_size_limit));
+            args[key] = std::string(value, std::min(size, content_size_limit));
         }
 
         /**
