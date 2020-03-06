@@ -46,16 +46,16 @@
 #include <microhttpd.h>
 
 #include "gettext.h"
-#include "http_utils.hpp"
-#include "http_resource.hpp"
-#include "http_response.hpp"
-#include "string_response.hpp"
-#include "http_request.hpp"
-#include "details/http_endpoint.hpp"
-#include "string_utilities.hpp"
-#include "create_webserver.hpp"
-#include "webserver.hpp"
-#include "details/modded_request.hpp"
+#include "httpserver/http_utils.hpp"
+#include "httpserver/http_resource.hpp"
+#include "httpserver/http_response.hpp"
+#include "httpserver/string_response.hpp"
+#include "httpserver/http_request.hpp"
+#include "httpserver/details/http_endpoint.hpp"
+#include "httpserver/string_utilities.hpp"
+#include "httpserver/create_webserver.hpp"
+#include "httpserver/webserver.hpp"
+#include "httpserver/details/modded_request.hpp"
 
 #define _REENTRANT 1
 

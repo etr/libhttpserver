@@ -20,13 +20,13 @@
 
 #include <stdlib.h>
 
-#include "http_resource.hpp"
-#include "http_utils.hpp"
-#include "http_request.hpp"
-#include "http_response.hpp"
-#include "webserver.hpp"
-#include "string_utilities.hpp"
-#include "string_response.hpp"
+#include "httpserver/http_resource.hpp"
+#include "httpserver/http_utils.hpp"
+#include "httpserver/http_request.hpp"
+#include "httpserver/http_response.hpp"
+#include "httpserver/webserver.hpp"
+#include "httpserver/string_utilities.hpp"
+#include "httpserver/string_response.hpp"
 
 using namespace std;
 

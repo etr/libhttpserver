@@ -46,7 +46,7 @@
 #include "httpserver/create_webserver.hpp"
 #include "httpserver/http_response.hpp"
 
-#include "details/http_endpoint.hpp"
+#include "httpserver/details/http_endpoint.hpp"
 
 namespace httpserver {
 

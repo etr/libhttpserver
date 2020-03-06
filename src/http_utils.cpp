@@ -37,8 +37,8 @@
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
-#include "string_utilities.hpp"
-#include "http_utils.hpp"
+#include "httpserver/string_utilities.hpp"
+#include "httpserver/http_utils.hpp"
 
 #pragma GCC diagnostic ignored "-Warray-bounds"
 #define CHECK_BIT(var,pos) ((var) & (1<<(pos)))

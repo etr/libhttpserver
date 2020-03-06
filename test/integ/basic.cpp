@@ -23,7 +23,7 @@
 #include <string>
 #include <sstream>
 #include <map>
-#include "string_utilities.hpp"
+#include "httpserver/string_utilities.hpp"
 #include "httpserver.hpp"
 
 using namespace httpserver;

@@ -19,9 +19,9 @@
 
 */
 
-#include "http_utils.hpp"
-#include "http_request.hpp"
-#include "string_utilities.hpp"
+#include "httpserver/http_utils.hpp"
+#include "httpserver/http_request.hpp"
+#include "httpserver/string_utilities.hpp"
 #include <iostream>
 
 using namespace std;
