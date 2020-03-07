@@ -19,7 +19,7 @@
 */
 
 #include "littletest.hpp"
-#include "string_utilities.hpp"
+#include "httpserver/string_utilities.hpp"
 
 #include <cstdio>
 

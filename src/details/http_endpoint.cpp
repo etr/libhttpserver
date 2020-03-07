@@ -18,9 +18,9 @@
      USA
 */
 
-#include "details/http_endpoint.hpp"
-#include "http_utils.hpp"
-#include "string_utilities.hpp"
+#include "httpserver/details/http_endpoint.hpp"
+#include "httpserver/http_utils.hpp"
+#include "httpserver/string_utilities.hpp"
 
 using namespace std;
 

@@ -18,7 +18,7 @@
      USA
 */
 
-#include "digest_auth_fail_response.hpp"
+#include "httpserver/digest_auth_fail_response.hpp"
 
 using namespace std;
 

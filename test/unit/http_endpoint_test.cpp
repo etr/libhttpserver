@@ -19,7 +19,7 @@
 */
 
 #include "littletest.hpp"
-#include "details/http_endpoint.hpp"
+#include "httpserver/details/http_endpoint.hpp"
 
 using namespace httpserver;
 using namespace std;

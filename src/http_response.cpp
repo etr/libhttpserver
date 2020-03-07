@@ -24,9 +24,9 @@
 #include <sstream>
 #include <fcntl.h>
 #include <unistd.h>
-#include "http_utils.hpp"
-#include "webserver.hpp"
-#include "http_response.hpp"
+#include "httpserver/http_utils.hpp"
+#include "httpserver/webserver.hpp"
+#include "httpserver/http_response.hpp"
 
 using namespace std;
 
