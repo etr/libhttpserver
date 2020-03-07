@@ -26,6 +26,7 @@
 #define _DEFERRED_RESPONSE_HPP_
 
 #include <memory>
+
 #include "httpserver/string_response.hpp"
 
 namespace httpserver

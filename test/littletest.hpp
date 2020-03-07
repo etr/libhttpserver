@@ -23,11 +23,11 @@
 #ifndef _LITTLETEST_HPP_
 #define _LITTLETEST_HPP_
 
-#include <string>
+#include <sys/time.h>
+#include <algorithm>
 #include <iostream>
 #include <sstream>
-#include <algorithm>
-#include <sys/time.h>
+#include <string>
 #include <vector>
 
 #define LT_VERSION 1.0

@@ -18,6 +18,8 @@
      USA
 */
 
+#include "httpserver/http_utils.hpp"
+
 #if defined(__MINGW32__) || defined(__CYGWIN32__)
 #define _WINDOWS
 #undef _WIN32_WINNT
@@ -28,10 +30,9 @@
 #include <arpa/inet.h>
 #endif
 
-#include "littletest.hpp"
-#include "httpserver/http_utils.hpp"
-
 #include <cstdio>
+
+#include "littletest.hpp"
 
 using namespace httpserver;
 using namespace std;

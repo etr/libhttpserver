@@ -1,6 +1,7 @@
-#include <httpserver.hpp>
 #include <cstdlib>
 #include <memory>
+
+#include <httpserver.hpp>
 
 #define PATH "/plaintext"
 #define BODY "Hello, World!"

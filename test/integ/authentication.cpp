@@ -28,11 +28,12 @@
 #include <arpa/inet.h>
 #endif
 
-#include "littletest.hpp"
 #include <curl/curl.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
+
 #include "httpserver.hpp"
+#include "littletest.hpp"
 
 #define MY_OPAQUE "11733b200778ce33060f31c9af70a870ba96ddd4"
 

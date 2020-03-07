@@ -25,6 +25,8 @@
 #ifndef _MODDED_REQUEST_HPP_
 #define _MODDED_REQUEST_HPP_
 
+#include "httpserver/http_request.hpp"
+
 namespace httpserver
 {
 

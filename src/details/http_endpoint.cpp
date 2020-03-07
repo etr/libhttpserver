@@ -19,6 +19,7 @@
 */
 
 #include "httpserver/details/http_endpoint.hpp"
+
 #include "httpserver/http_utils.hpp"
 #include "httpserver/string_utilities.hpp"
 

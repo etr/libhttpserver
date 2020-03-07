@@ -28,12 +28,13 @@
 #include <arpa/inet.h>
 #endif
 
-#include "littletest.hpp"
 #include <curl/curl.h>
 #include <netinet/in.h>
-#include <sys/socket.h>
-#include "httpserver.hpp"
 #include <pthread.h>
+#include <sys/socket.h>
+
+#include "httpserver.hpp"
+#include "littletest.hpp"
 
 using namespace std;
 using namespace httpserver;

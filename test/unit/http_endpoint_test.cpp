@@ -18,8 +18,9 @@
      USA
 */
 
-#include "littletest.hpp"
 #include "httpserver/details/http_endpoint.hpp"
+
+#include "littletest.hpp"
 
 using namespace httpserver;
 using namespace std;
