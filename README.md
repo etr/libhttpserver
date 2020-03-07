@@ -52,7 +52,7 @@ libhttpserver is built upon  [libmicrohttpd](https://www.gnu.org/software/libmic
 
 #### Community
 * [Code of Conduct (on a separate page)](https://github.com/etr/libhttpserver/blob/master/CODE_OF_CONDUCT.md)
-* [Contributing (on a separate page)](https://github.com/etr/libhttpserver/blob/master/CODE_OF_CONDUCT.md) 
+* [Contributing (on a separate page)](https://github.com/etr/libhttpserver/blob/master/CONTRIBUTING.md) 
 
 #### Appendices
 * [Copying statement](#copying)
@@ -1888,7 +1888,7 @@ to permit their use in free software.
 
 This library has been originally developed under the zencoders flags and this community has always supported me all along this work so I am happy to put the logo on this readme.
 
-            When you see this tree, know that you've came across ZenCoders.org
+              When you see this tree, know that you've came across ZenCoders
     
                                    with open('ZenCoders.                            
                              `num` in numbers   synchronized                        
@@ -1932,7 +1932,7 @@ This library has been originally developed under the zencoders flags and this co
                                  010010010010110101001010
 
 For further information:
-visit our website www.zencoders.org
+visit our website https://zencoders.github.io
 
 **Author:** Sebastiano Merlino
 
