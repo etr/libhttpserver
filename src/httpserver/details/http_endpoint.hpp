@@ -25,11 +25,11 @@
 #ifndef _HTTP_ENDPOINT_HPP_
 #define _HTTP_ENDPOINT_HPP_
 
-#include <vector>
-#include <utility>
 #include <regex.h>
-#include <string>
 #include <stdexcept>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace httpserver
 {

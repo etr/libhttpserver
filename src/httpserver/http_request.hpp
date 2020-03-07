@@ -25,11 +25,13 @@
 #ifndef _HTTP_REQUEST_HPP_
 #define _HTTP_REQUEST_HPP_
 
+#include <iosfwd>
 #include <map>
-#include <vector>
 #include <string>
 #include <utility>
-#include <iosfwd>
+#include <vector>
+
+#include "httpserver/http_utils.hpp"
 
 struct MHD_Connection;
 

@@ -25,17 +25,17 @@
 #ifndef _HTTPUTILS_H_
 #define _HTTPUTILS_H_
 
-#include <microhttpd.h>
-#include <string>
-#include <cctype>
-#include <vector>
-#include <map>
-#include <algorithm>
-#include <exception>
-#include <iosfwd>
 #ifdef HAVE_GNUTLS
 #include <gnutls/gnutls.h>
 #endif
+#include <microhttpd.h>
+#include <algorithm>
+#include <cctype>
+#include <exception>
+#include <iosfwd>
+#include <map>
+#include <string>
+#include <vector>
 
 #define DEFAULT_MASK_VALUE 0xFFFF
 

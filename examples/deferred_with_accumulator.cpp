@@ -18,9 +18,10 @@
      USA
 */
 
+#include <atomic>
 #include <chrono>
 #include <thread>
-#include <atomic>
+
 #include <httpserver.hpp>
 
 using namespace httpserver;

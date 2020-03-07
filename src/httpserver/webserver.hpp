@@ -30,23 +30,21 @@
 #define NOT_METHOD_ERROR "Method not Acceptable"
 #define GENERIC_ERROR "Internal Error"
 
+#include <pthread.h>
+#include <stdlib.h>
 #include <cstring>
+#include <deque>
 #include <map>
-#include <vector>
+#include <memory>
 #include <set>
+#include <stdexcept>
 #include <string>
 #include <utility>
-#include <stdlib.h>
-#include <memory>
-#include <deque>
-
-#include <pthread.h>
-#include <stdexcept>
+#include <vector>
 
 #include "httpserver/create_webserver.hpp"
-#include "httpserver/http_response.hpp"
-
 #include "httpserver/details/http_endpoint.hpp"
+#include "httpserver/http_response.hpp"
 
 namespace httpserver {
 

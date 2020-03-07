@@ -24,11 +24,12 @@
 
 #ifndef _HTTP_RESPONSE_HPP_
 #define _HTTP_RESPONSE_HPP_
-#include <map>
-#include <utility>
-#include <string>
+
 #include <iosfwd>
+#include <map>
 #include <stdint.h>
+#include <string>
+#include <utility>
 #include <vector>
 
 #include "httpserver/http_utils.hpp"

@@ -18,11 +18,12 @@
      USA
 */
 
-#include "littletest.hpp"
 #include <curl/curl.h>
-#include <string>
 #include <map>
+#include <string>
+
 #include "httpserver.hpp"
+#include "littletest.hpp"
 
 using namespace httpserver;
 using namespace std;

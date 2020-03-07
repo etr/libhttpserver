@@ -24,13 +24,13 @@
 
 #ifndef _http_resource_hpp_
 #define _http_resource_hpp_
-#include <map>
-#include <string>
-#include <memory>
 
 #ifdef DEBUG
 #include <iostream>
 #endif
+#include <map>
+#include <memory>
+#include <string>
 
 #include "httpserver/http_response.hpp"
 

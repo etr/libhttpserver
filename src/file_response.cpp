@@ -18,8 +18,9 @@
      USA
 */
 
-#include <fcntl.h>
 #include "httpserver/file_response.hpp"
+
+#include <fcntl.h>
 
 using namespace std;
 

@@ -19,10 +19,12 @@
 
 */
 
-#include "httpserver/http_utils.hpp"
 #include "httpserver/http_request.hpp"
-#include "httpserver/string_utilities.hpp"
+
 #include <iostream>
+
+#include "httpserver/http_utils.hpp"
+#include "httpserver/string_utilities.hpp"
 
 using namespace std;
 

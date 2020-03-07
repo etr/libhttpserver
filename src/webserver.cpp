@@ -18,17 +18,7 @@
      USA
 */
 
-#include <stdint.h>
-#include <inttypes.h>
-#include <iostream>
-#include <stdlib.h>
-#include <stdio.h>
-#include <errno.h>
-#include <unistd.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <sys/time.h>
-#include <stdexcept>
+#include "httpserver/webserver.hpp"
 
 #if defined(__MINGW32__) || defined(__CYGWIN32__)
 #include <winsock2.h>
@@ -39,23 +29,32 @@
 #include <netinet/tcp.h>
 #endif
 
-#include <signal.h>
+#include <errno.h>
 #include <fcntl.h>
-#include <algorithm>
-
+#include <inttypes.h>
 #include <microhttpd.h>
+#include <signal.h>
+#include <stdexcept>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <algorithm>
+#include <iostream>
 
 #include "gettext.h"
-#include "httpserver/http_utils.hpp"
+#include "httpserver/create_webserver.hpp"
+#include "httpserver/details/http_endpoint.hpp"
+#include "httpserver/details/modded_request.hpp"
+#include "httpserver/http_request.hpp"
 #include "httpserver/http_resource.hpp"
 #include "httpserver/http_response.hpp"
+#include "httpserver/http_utils.hpp"
 #include "httpserver/string_response.hpp"
-#include "httpserver/http_request.hpp"
-#include "httpserver/details/http_endpoint.hpp"
 #include "httpserver/string_utilities.hpp"
-#include "httpserver/create_webserver.hpp"
-#include "httpserver/webserver.hpp"
-#include "httpserver/details/modded_request.hpp"
 
 #define _REENTRANT 1
 

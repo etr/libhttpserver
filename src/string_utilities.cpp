@@ -18,16 +18,17 @@
      USA
 */
 
+#include "httpserver/string_utilities.hpp"
+
+#include <regex.h>
 #include <algorithm>
-#include <string>
-#include <istream>
-#include <sstream>
-#include <vector>
 #include <cctype>
 #include <cstdlib>
 #include <cstring>
-#include <regex.h>
-#include "httpserver/string_utilities.hpp"
+#include <istream>
+#include <sstream>
+#include <string>
+#include <vector>
 
 namespace httpserver
 {

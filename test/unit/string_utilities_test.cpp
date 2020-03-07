@@ -18,10 +18,11 @@
      USA
 */
 
-#include "littletest.hpp"
 #include "httpserver/string_utilities.hpp"
 
 #include <cstdio>
+
+#include "littletest.hpp"
 
 using namespace httpserver;
 using namespace std;
