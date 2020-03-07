@@ -25,7 +25,7 @@ The following is a set of guidelines for contributing to libhttpserver. These ar
 
 ## Code of Conduct
 
-This project and everyone participating in it is governed by the [Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code. Please report unacceptable behavior to [etr@zencoders.org](mailto:etr@zencoders.org).
+This project and everyone participating in it is governed by the [Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code. Please report unacceptable behavior to [merlino.sebastiano@gmail.com](mailto:merlino.sebastiano@gmail.com).
 
 ## I don't want to read this whole thing I just have a question!!!
 
