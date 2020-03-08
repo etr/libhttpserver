@@ -82,9 +82,7 @@ install:
  - $buildshell ./bootstrap
  - mkdir build
  - cd build
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then
-     $buildshell ../configure --build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32 --disable-fastopen --disable-examples CPPFLAGS='-I/c/tools/msys64/mingw64/include/ -I/usr/include/' LDFLAGS='-L/c/tools/msys64/mingw64/lib -L/usr/lib/' ;
-   elif [ "$LINKING" = "static" ]; then
+ - if [ "$LINKING" = "static" ]; then
      $buildshell ../configure --enable-static --disable-fastopen;
    elif [ "$DEBUG" = "debug" ] && [ "$COVERAGE" = "coverage" ]; then
      $buildshell ../configure --enable-debug --enable-coverage --disable-shared --disable-fastopen;
