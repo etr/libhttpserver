@@ -22,8 +22,6 @@ cache:
     - $HOME/AppData/Local/Temp/chocolatey
     - /C/tools/msys64
 before_install:
- - ps -ef
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then ps -Wla | sort ; fi
  - eval "${MATRIX_EVAL}"
  - if [ "$TRAVIS_OS_NAME" != "windows" ]; then export LDFLAGS="$LDFLAGS -L/usr/local/lib -L/usr/lib"; fi
  - if [ "$TRAVIS_OS_NAME" != "windows" ]; then export PATH=$PATH:/usr/local/lib; fi
@@ -59,10 +57,8 @@ before_install:
  - cd libmicrohttpd-0.9.59
  - if [[ "$ARM_ARCH_DIR" != "" ]]; then
      ./configure --build `./config.guess` --host $ARM_ARCH_DIR --disable-examples;
-   elif [[ "$TRAVIS_OS_NAME" = "windows" ]]; then
-     $buildshell ./configure --prefix=/usr --build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32 --disable-examples --disable-https --enable-shared --enable-static ;
    else
-     ./configure --disable-examples;
+     $buildshell ./configure --disable-examples;
    fi
  - $buildshell make
  - $buildshell make install
@@ -83,7 +79,7 @@ install:
        ls -al $HOME/linker_bin/ld ;
      fi
    fi
- - ./bootstrap
+ - $buildshell ./bootstrap
  - mkdir build
  - cd build
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then
@@ -107,7 +103,6 @@ install:
  - if [ "$CROSS_COMPILE" = "1" ] && [ "$ARM_ARCH_DIR" = "aarch64-linux-gnu" ]; then sed -i 's+/usr/bin/ld+$HOME/linker_bin/ld+g' Makefile; fi
  - $buildshell make
 script:
- - ps -ef
  - if [[ "$CROSS_COMPILE" == 1 ]]; then
      cd test ;
      if [[ "$ARM_ARCH_DIR" == "aarch64-linux-gnu" ]]; then
