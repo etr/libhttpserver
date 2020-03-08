@@ -18,8 +18,9 @@
      USA
 */
 
-#include "httpserver/http_utils.hpp"
-
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #if defined(__MINGW32__) || defined(__CYGWIN32__)
 #define _WINDOWS
 #undef _WIN32_WINNT
@@ -31,17 +32,15 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #endif
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <fstream>
-#include <iomanip>
-#include <iostream>
 #include <sstream>
+#include <iomanip>
+#include <fstream>
+#include <iostream>
+
 #include <stdexcept>
 
 #include "httpserver/string_utilities.hpp"
+#include "httpserver/http_utils.hpp"
 
 #pragma GCC diagnostic ignored "-Warray-bounds"
 #define CHECK_BIT(var,pos) ((var) & (1<<(pos)))
