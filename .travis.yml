@@ -9,6 +9,18 @@ env:
  - DEBUG="debug" COVERAGE="coverage"
  - DEBUG="nodebug" COVERAGE="nocoverage"
  - LINKING="static"
+before_cache:
+- |-
+    case $TRAVIS_OS_NAME in
+      windows)
+        # https://unix.stackexchange.com/a/137322/107554
+        $msys2 pacman --sync --clean --noconfirm
+        ;;
+    esac
+cache:
+    directories:
+    - $HOME/AppData/Local/Temp/chocolatey
+    - /C/tools/msys64
 before_install:
  - ps -ef
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then ps -Wla | sort ; fi
@@ -17,42 +29,43 @@ before_install:
  - if [ "$TRAVIS_OS_NAME" != "windows" ]; then export PATH=$PATH:/usr/local/lib; fi
  - if [ "$TRAVIS_OS_NAME" != "windows" ]; then export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib; fi
  - if [ "$TRAVIS_OS_NAME" != "windows" ]; then export DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH:/usr/local/lib; fi
+ - if [ "$TRAVIS_OS_NAME" != "windows" ]; then export buildshell=''; fi
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo apt-get install info install-info; fi
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo pip install codecov; fi
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo pip install gcovr; fi
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo apt-get install cppcheck; fi
  - if [ "$TRAVIS_OS_NAME" = "osx" ]; then export CFLAGS='-mtune=generic'; fi
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then choco install -r --no-progress -y msys2 make; fi
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then PATH=$PATH:/c/tools/msys64/usr/bin/ ; fi
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then powershell -executionpolicy bypass "pacman -Syu --noconfirm autoconf libtool automake make autoconf-archive pkg-config mingw-w64-x86_64-libsystre" ; fi
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then
-     ln -s /c/tools/msys64/usr/share/autoconf* /usr/share/ ;
-     ln -s /c/tools/msys64/usr/share/automake* /usr/share/ ; 
-     ln -s /c/tools/msys64/usr/share/aclocal* /usr/share/ ;
-     ln -s /c/tools/msys64/usr/share/libtool* /usr/share/ ;
-     ln -s /c/tools/msys64/usr/share/pkgconfig /usr/share/ ;
-     ln -s /c/tools/msys64/usr/bin/autom4te /usr/bin/ ;
-     ln -s /c/tools/msys64/usr/bin/autoconf /usr/bin/ ;
-     ln -s /c/tools/msys64/usr/bin/autoheader /usr/bin/ ;
-     ln -s /c/tools/msys64/usr/bin/m4 /usr/bin/ ;
-     
-     PATH=$PATH:/c/tools/msys64/usr/bin/ ;
-     export SHELL=/usr/bin/sh.exe ;
-   fi
+ - |-
+    case $TRAVIS_OS_NAME in
+      windows)
+        [[ ! -f C:/tools/msys64/msys2_shell.cmd ]] && rm -rf C:/tools/msys64
+        choco uninstall -y mingw
+        choco upgrade --no-progress -y msys2
+        export msys2='cmd //C RefreshEnv.cmd '
+        export msys2+='& set MSYS=winsymlinks:nativestrict '
+        export msys2+='& C:\\tools\\msys64\\msys2_shell.cmd -defterm -no-start'
+        export buildshell="$msys2 -mingw64 -full-path -here -c "\"\$@"\" --"
+        export msys2+=" -msys2 -c "\"\$@"\" --"
+        $msys2 pacman --sync --noconfirm --needed mingw-w64-x86_64-toolchain
+        $msys2 pacman -Syu --noconfirm autoconf libtool automake make autoconf-archive pkg-config mingw-w64-x86_64-libsystre
+        ## Install more MSYS2 packages from https://packages.msys2.org/base here
+        taskkill //IM gpg-agent.exe //F  # https://travis-ci.community/t/4967
+        export PATH=/C/tools/msys64/mingw64/bin:$PATH
+        export MAKE=mingw32-make  # so that Autotools can find it
+        ;;
+    esac
  - curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.59.tar.gz -o libmicrohttpd-0.9.59.tar.gz
  - tar -xzf libmicrohttpd-0.9.59.tar.gz
  - cd libmicrohttpd-0.9.59
  - if [[ "$ARM_ARCH_DIR" != "" ]]; then
      ./configure --build `./config.guess` --host $ARM_ARCH_DIR --disable-examples;
    elif [[ "$TRAVIS_OS_NAME" = "windows" ]]; then
-     ./configure --prefix=/usr --build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32 --disable-examples --disable-https --enable-shared --enable-static ;
+     $buildshell ./configure --prefix=/usr --build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32 --disable-examples --disable-https --enable-shared --enable-static ;
    else
      ./configure --disable-examples;
    fi
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then  find . -name Makefile -type f -exec sed -i "s/\${SHELL}/\/usr\/bin\/sh.exe/" "{}" + ; fi
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then  find . -name Makefile -type f -exec sed -i "s/\$(SHELL)/\/usr\/bin\/sh.exe/" "{}" + ; fi
- - make
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then make install; else sudo make install; fi
+ - $buildshell make
+ - $buildshell make install
  - cd ..
  - if [ "$BUILD_TYPE" = "asan" ]; then export CFLAGS='-fsanitize=address'; export CXXLAGS='-fsanitize=address'; export LDFLAGS='-fsanitize=address'; fi
  - if [ "$BUILD_TYPE" = "msan" ]; then export CFLAGS='-fsanitize=memory'; export CXXLAGS='-fsanitize=memory'; export LDFLAGS='-fsanitize=memory'; fi
@@ -74,29 +87,25 @@ install:
  - mkdir build
  - cd build
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then
-     ../configure --build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32 --disable-fastopen --disable-examples CPPFLAGS='-I/c/tools/msys64/mingw64/include/ -I/usr/include/' LDFLAGS='-L/c/tools/msys64/mingw64/lib -L/usr/lib/' ;
-     cd .. ;
-     find . -name Makefile -type f -exec sed -i "s/\$(SHELL)/\/usr\/bin\/sh.exe/" "{}" + ;
-     cd build ;
+     $buildshell ../configure --build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32 --disable-fastopen --disable-examples CPPFLAGS='-I/c/tools/msys64/mingw64/include/ -I/usr/include/' LDFLAGS='-L/c/tools/msys64/mingw64/lib -L/usr/lib/' ;
    elif [ "$LINKING" = "static" ]; then
-     ../configure --enable-static --disable-fastopen;
+     $buildshell ../configure --enable-static --disable-fastopen;
    elif [ "$DEBUG" = "debug" ] && [ "$COVERAGE" = "coverage" ]; then
-     ../configure --enable-debug --enable-coverage --disable-shared --disable-fastopen;
+     $buildshell ../configure --enable-debug --enable-coverage --disable-shared --disable-fastopen;
    elif [ "$DEBUG" = "debug" ]; then
-     ../configure --enable-debug --disable-shared --disable-fastopen;
+     $buildshell ../configure --enable-debug --disable-shared --disable-fastopen;
    elif [ "$CROSS_COMPILE" = "1" ] && [ "$ARM_ARCH_DIR" = "aarch64-linux-gnu" ]; then 
-     ../configure --disable-fastopen --build `../config.guess` --host aarch64-linux-gnu CC="gcc -B$HOME/linker_bin" CXX="g++ -B$HOME/linker_bin";
+     $buildshell ../configure --disable-fastopen --build `../config.guess` --host aarch64-linux-gnu CC="gcc -B$HOME/linker_bin" CXX="g++ -B$HOME/linker_bin";
    elif [ "$CROSS_COMPILE" = "1" ] && [ "$ARM_ARCH_DIR" = "arm-linux-gnueabi" ]; then 
-     ../configure --disable-fastopen --build `../config.guess` --host arm-linux-gnueabi;
+     $buildshell ../configure --disable-fastopen --build `../config.guess` --host arm-linux-gnueabi;
    elif [ "$VALGRIND" = "valgrind" ]; then
-     ../configure --enable-debug --disable-fastopen --disable-valgrind-helgrind --disable-valgrind-drd --disable-valgrind-sgcheck;
+     $buildshell ../configure --enable-debug --disable-fastopen --disable-valgrind-helgrind --disable-valgrind-drd --disable-valgrind-sgcheck;
    else
-     ../configure --disable-fastopen;
+     $buildshell ../configure --disable-fastopen;
    fi
  - if [ "$CROSS_COMPILE" = "1" ] && [ "$ARM_ARCH_DIR" = "aarch64-linux-gnu" ]; then sed -i 's+/usr/bin/ld+$HOME/linker_bin/ld+g' libtool; fi
  - if [ "$CROSS_COMPILE" = "1" ] && [ "$ARM_ARCH_DIR" = "aarch64-linux-gnu" ]; then sed -i 's+/usr/bin/ld+$HOME/linker_bin/ld+g' Makefile; fi
- - make
- - if [ "$TRAVIS_OS_NAME" != "windows" ]; then make check TESTS= ; fi
+ - $buildshell make
 script:
  - ps -ef
  - if [[ "$CROSS_COMPILE" == 1 ]]; then
@@ -119,8 +128,8 @@ script:
        qemu-arm -L /usr/arm-linux-gnueabi/ ./.libs/threaded ;
      fi
    fi
- - if [ "$TRAVIS_OS_NAME" != "windows" ]; then make check ; fi
- - if [ "$TRAVIS_OS_NAME" != "windows" ]; then cat test/test-suite.log; fi
+ - $buildshell make check
+ - $buildshell cat test/test-suite.log
  - if [ "$VALGRIND" = "valgrind" ]; then make check-valgrind; fi;
  - if [ "$VALGRIND" = "valgrind" ]; then cat test/test-suite-memcheck.log; fi;
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then cd ../src/; cppcheck --error-exitcode=1 .; cd ../build; fi
@@ -142,13 +151,6 @@ script:
     ./benchmark_threads 8080 &
     sleep 5 && ab -n 10000000 -c 100 localhost:8080/plaintext
    fi
-after_script:
-  - ps -ef
-  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then ps -Wla | sort ; fi
-  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then gpgconf --kill gpg-agent ; fi
-  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then taskkill //F //PID $(ps -Wla | tr -s ' ' | grep gpg | cut -f2 -d' ') ; fi
-  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then ps -Wla | sort ; fi
-  - echo $$
 after_success:
   - if [ "$DEBUG" = "debug" ] && [ "$COVERAGE" = "coverage" ] && [ "$TRAVIS_OS_NAME" = "linux" ]; then bash <(curl -s https://codecov.io/bash); fi
 matrix:
