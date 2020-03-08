@@ -2,7 +2,6 @@ language: cpp
 os:
  - linux
  - osx
- - windows
 compiler: 
  - gcc
  - clang
@@ -156,7 +155,6 @@ matrix:
   exclude:
     - compiler: clang
       env: DEBUG="debug" COVERAGE="coverage"
-    - os: windows
   include:
     - os: windows
       env: DEBUG="nodebug" COVERAGE="nocoverage" YARN_GPG=no
