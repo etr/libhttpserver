@@ -61,7 +61,7 @@ before_install:
      $buildshell ./configure --disable-examples;
    fi
  - $buildshell make
- - $buildshell make install
+ - if [ "$TRAVIS_OS_NAME" != "windows" ]; then sudo make install; else $buildshell make install; fi
  - cd ..
  - if [ "$BUILD_TYPE" = "asan" ]; then export CFLAGS='-fsanitize=address'; export CXXLAGS='-fsanitize=address'; export LDFLAGS='-fsanitize=address'; fi
  - if [ "$BUILD_TYPE" = "msan" ]; then export CFLAGS='-fsanitize=memory'; export CXXLAGS='-fsanitize=memory'; export LDFLAGS='-fsanitize=memory'; fi
