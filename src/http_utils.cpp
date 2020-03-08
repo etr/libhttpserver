@@ -20,13 +20,7 @@
 
 #include "httpserver/http_utils.hpp"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #if defined(__MINGW32__) || defined(__CYGWIN32__)
-#define _WINDOWS
-#undef _WIN32_WINNT
-#define _WIN32_WINNT 0x600
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #else
@@ -34,11 +28,14 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #endif
-#include <sstream>
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <iomanip>
 #include <fstream>
 #include <iostream>
-
+#include <sstream>
 #include <stdexcept>
 
 #include "httpserver/string_utilities.hpp"
