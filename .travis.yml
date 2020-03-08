@@ -78,6 +78,7 @@ install:
      fi
    fi
  - $buildshell ./bootstrap
+ - if [ "$TRAVIS_OS_NAME" = "windows" ]; then $buildshell cat configure; fi
  - mkdir build
  - cd build
  - if [ "$LINKING" = "static" ]; then
