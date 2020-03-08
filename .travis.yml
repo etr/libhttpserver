@@ -58,7 +58,7 @@ before_install:
  - if [[ "$ARM_ARCH_DIR" != "" ]]; then
      ./configure --build `./config.guess` --host $ARM_ARCH_DIR --disable-examples;
    else
-     $buildshell ./configure --disable-examples;
+     if [ "$TRAVIS_OS_NAME" != "windows" ]; then $buildshell ./configure --disable-examples; else $buildshell ./configure --disable-examples --enable-poll=no; fi;
    fi
  - $buildshell make
  - if [ "$TRAVIS_OS_NAME" != "windows" ]; then sudo make install; else $buildshell make install; fi
