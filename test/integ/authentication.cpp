@@ -153,7 +153,11 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth)
     CURL *curl = curl_easy_init();
     CURLcode res;
     curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_DIGEST);
+#if defined(_WINDOWS)
+    curl_easy_setopt(curl, CURLOPT_USERPWD, "test@example.com\\myuser:mypass");
+#else
     curl_easy_setopt(curl, CURLOPT_USERPWD, "myuser:mypass");
+#endif
     curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
@@ -184,7 +188,11 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_wrong_pass)
     CURL *curl = curl_easy_init();
     CURLcode res;
     curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_DIGEST);
+#if defined(_WINDOWS)
+    curl_easy_setopt(curl, CURLOPT_USERPWD, "test@example.com\\myuser:wrongpass");
+#else
     curl_easy_setopt(curl, CURLOPT_USERPWD, "myuser:wrongpass");
+#endif
     curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
