@@ -32,6 +32,7 @@
 
 #include <curl/curl.h>
 #include <pthread.h>
+#include <unistd.h>
 
 #include "httpserver.hpp"
 #include "littletest.hpp"
