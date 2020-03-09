@@ -53,6 +53,7 @@ before_install:
  - curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.59.tar.gz -o libmicrohttpd-0.9.59.tar.gz
  - tar -xzf libmicrohttpd-0.9.59.tar.gz
  - cd libmicrohttpd-0.9.59
+ - $buildshell echo $PATH
  - if [[ "$ARM_ARCH_DIR" != "" ]]; then
      ./configure --build `./config.guess` --host $ARM_ARCH_DIR --disable-examples;
    else
@@ -81,6 +82,8 @@ install:
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then $buildshell cat configure; fi
  - mkdir build
  - cd build
+ - $buildshell echo $PATH
+ - if [ "$TRAVIS_OS_NAME" = "windows" ]; then export MANIFEST_TOOL=''; fi 
  - if [ "$LINKING" = "static" ]; then
      $buildshell ../configure --enable-static --disable-fastopen;
    elif [ "$DEBUG" = "debug" ] && [ "$COVERAGE" = "coverage" ]; then
