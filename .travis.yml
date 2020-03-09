@@ -79,7 +79,8 @@ install:
  - $buildshell ./bootstrap
  - mkdir build
  - cd build
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then export MANIFEST_TOOL='no'; fi 
+ - if [ "$TRAVIS_OS_NAME" = "windows" ]; then export MANIFEST_TOOL='no'; fi
+ - if [ "$TRAVIS_OS_NAME" = "windows" ]; then export DX_DOXYGEN='no'; fi 
  - if [ "$LINKING" = "static" ]; then
      $buildshell ../configure --enable-static --disable-fastopen;
    elif [ "$DEBUG" = "debug" ] && [ "$COVERAGE" = "coverage" ]; then
