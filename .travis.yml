@@ -45,7 +45,7 @@ before_install:
         export buildshell="$msys2 -mingw64 -full-path -here -c "\"\$@"\" --"
         export msys2+=" -msys2 -c "\"\$@"\" --"
         $msys2 pacman --sync --noconfirm --disable-download-timeout --needed mingw-w64-x86_64-toolchain
-        $msys2 pacman -Syu --noconfirm --disable-download-timeout autoconf libtool automake make autoconf-archive pkg-config mingw-w64-x86_64-libsystre mingw-w64-x86_64-doxygen mingw-w64-x86_64-gnutls
+        $msys2 pacman -Syu --noconfirm --disable-download-timeout autoconf libtool automake make autoconf-archive pkg-config mingw-w64-x86_64-libsystre mingw-w64-x86_64-doxygen mingw-w64-x86_64-gnutls mingw-w64-x86_64-graphviz
         export PATH=/C/tools/msys64/mingw64/bin:$PATH
         export MAKE=mingw32-make  # so that Autotools can find it
         ;;
@@ -80,7 +80,6 @@ install:
  - mkdir build
  - cd build
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then export MANIFEST_TOOL='no'; fi
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then export DX_DOXYGEN='no'; fi 
  - if [ "$LINKING" = "static" ]; then
      $buildshell ../configure --enable-static --disable-fastopen;
    elif [ "$DEBUG" = "debug" ] && [ "$COVERAGE" = "coverage" ]; then
