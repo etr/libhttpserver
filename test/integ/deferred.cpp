@@ -26,10 +26,10 @@
 #include <ws2tcpip.h>
 #else
 #include <arpa/inet.h>
+#include <netinet/in.h>
 #endif
 
 #include <curl/curl.h>
-#include <netinet/in.h>
 #include <signal.h>
 #include <sys/socket.h>
 #include <unistd.h>

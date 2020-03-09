@@ -26,11 +26,11 @@
 #include <ws2tcpip.h>
 #else
 #include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
 #endif
 
 #include <curl/curl.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
 
 #include "httpserver.hpp"
 #include "littletest.hpp"
