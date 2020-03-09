@@ -53,7 +53,6 @@ before_install:
  - curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.59.tar.gz -o libmicrohttpd-0.9.59.tar.gz
  - tar -xzf libmicrohttpd-0.9.59.tar.gz
  - cd libmicrohttpd-0.9.59
- - $buildshell echo $PATH
  - if [[ "$ARM_ARCH_DIR" != "" ]]; then
      ./configure --build `./config.guess` --host $ARM_ARCH_DIR --disable-examples;
    else
@@ -68,7 +67,6 @@ before_install:
  - if [ "$BUILD_TYPE" = "tsan" ]; then export CFLAGS='-fsanitize=thread'; export CXXLAGS='-fsanitize=thread'; export LDFLAGS='-fsanitize=thread'; fi
  - if [ "$BUILD_TYPE" = "ubsan" ]; then export export CFLAGS='-fsanitize=undefined'; export CXXLAGS='-fsanitize=undefined'; export LDFLAGS='-fsanitize=undefined'; fi
 install:
- - ps -ef
  - if [[ "$CROSS_COMPILE" == 1 ]] ; then
      if [[ "$ARM_ARCH_DIR" == "aarch64-linux-gnu" ]] ; then
        mkdir $HOME/linker_bin ;
@@ -79,10 +77,8 @@ install:
      fi
    fi
  - $buildshell ./bootstrap
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then $buildshell cat configure; fi
  - mkdir build
  - cd build
- - $buildshell echo $PATH
  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then export MANIFEST_TOOL='no'; fi 
  - if [ "$LINKING" = "static" ]; then
      $buildshell ../configure --enable-static --disable-fastopen;
