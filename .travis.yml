@@ -83,7 +83,7 @@ install:
  - mkdir build
  - cd build
  - $buildshell echo $PATH
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then export MANIFEST_TOOL=''; fi 
+ - if [ "$TRAVIS_OS_NAME" = "windows" ]; then export MANIFEST_TOOL='no'; fi 
  - if [ "$LINKING" = "static" ]; then
      $buildshell ../configure --enable-static --disable-fastopen;
    elif [ "$DEBUG" = "debug" ] && [ "$COVERAGE" = "coverage" ]; then
