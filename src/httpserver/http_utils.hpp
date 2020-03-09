@@ -28,6 +28,15 @@
 #ifdef HAVE_GNUTLS
 #include <gnutls/gnutls.h>
 #endif
+
+// needed to force Vista as a bare minimum to have inet_ntop (libmicro defines
+// this to include XP support as a lower version).
+#if defined(__MINGW32__) || defined(__CYGWIN32__)
+#define _WINDOWS
+#undef _WIN32_WINNT
+#define _WIN32_WINNT 0x600
+#endif
+
 #include <microhttpd.h>
 #include <algorithm>
 #include <cctype>

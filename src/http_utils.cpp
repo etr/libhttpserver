@@ -21,9 +21,6 @@
 #include "httpserver/http_utils.hpp"
 
 #if defined(__MINGW32__) || defined(__CYGWIN32__)
-#define _WINDOWS
-#undef _WIN32_WINNT
-#define _WIN32_WINNT 0x600
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #else
@@ -35,8 +32,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <fstream>
 #include <iomanip>
+#include <fstream>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>

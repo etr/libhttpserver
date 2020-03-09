@@ -344,14 +344,14 @@ AC_SUBST(LDFLAGS)
 AC_SUBST(EXT_LIB_PATH)
 AC_SUBST(EXT_LIBS)
 
-AC_CONFIG_LINKS([test/test_content:test/test_content])
-AC_CONFIG_LINKS([test/cert.pem:test/cert.pem])
-AC_CONFIG_LINKS([test/key.pem:test/key.pem])
-AC_CONFIG_LINKS([test/test_root_ca.pem:test/test_root_ca.pem])
-AC_CONFIG_LINKS([test/libhttpserver.supp:test/libhttpserver.supp])
-AC_CONFIG_LINKS([examples/cert.pem:examples/cert.pem])
-AC_CONFIG_LINKS([examples/key.pem:examples/key.pem])
-AC_CONFIG_LINKS([examples/test_content:examples/test_content])
+AC_CONFIG_FILES([test/test_content:test/test_content])
+AC_CONFIG_FILES([test/cert.pem:test/cert.pem])
+AC_CONFIG_FILES([test/key.pem:test/key.pem])
+AC_CONFIG_FILES([test/test_root_ca.pem:test/test_root_ca.pem])
+AC_CONFIG_FILES([test/libhttpserver.supp:test/libhttpserver.supp])
+AC_CONFIG_FILES([examples/cert.pem:examples/cert.pem])
+AC_CONFIG_FILES([examples/key.pem:examples/key.pem])
+AC_CONFIG_FILES([examples/test_content:examples/test_content])
 
 AC_OUTPUT(
       libhttpserver.pc
