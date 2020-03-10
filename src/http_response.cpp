@@ -20,15 +20,11 @@
 
 #include "httpserver/http_response.hpp"
 
-#include <fcntl.h>
-#include <unistd.h>
-#include <cstdio>
-#include <functional>
+#include <microhttpd.h>
 #include <iostream>
-#include <sstream>
+#include <utility>
 
 #include "httpserver/http_utils.hpp"
-#include "httpserver/webserver.hpp"
 
 using namespace std;
 

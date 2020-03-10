@@ -21,22 +21,25 @@
 #include "httpserver/http_utils.hpp"
 
 #if defined(__MINGW32__) || defined(__CYGWIN32__)
+#include <ws2def.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #else
-#include <sys/socket.h>
-#include <netdb.h>
 #include <arpa/inet.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <sys/types.h>
 #endif
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <iomanip>
 #include <fstream>
-#include <iostream>
+#include <iomanip>
+#include <memory>
 #include <sstream>
 #include <stdexcept>
+#include <utility>
 
 #include "httpserver/string_utilities.hpp"
 
@@ -404,7 +407,7 @@ ip_representation::ip_representation(const std::string& ip)
 
                 if (parts[i].size() < 4)
                 {
-                    stringstream ss;
+                    std::stringstream ss;
                     ss << setfill('0') << setw(4) << parts[i];
                     parts[i] = ss.str();
                 }
@@ -546,7 +549,7 @@ bool ip_representation::operator <(const ip_representation& b) const
 
 const std::string load_file (const std::string& filename)
 {
-    ifstream fp(filename.c_str(), ios::in | ios::binary | ios::ate);
+    std::ifstream fp(filename.c_str(), ios::in | ios::binary | ios::ate);
     if(fp.is_open())
     {
         std::string content;

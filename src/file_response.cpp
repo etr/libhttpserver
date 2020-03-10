@@ -21,6 +21,9 @@
 #include "httpserver/file_response.hpp"
 
 #include <fcntl.h>
+#include <microhttpd.h>
+#include <stddef.h>
+#include <unistd.h>
 
 using namespace std;
 

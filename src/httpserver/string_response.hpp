@@ -25,7 +25,11 @@
 #ifndef _STRING_RESPONSE_HPP_
 #define _STRING_RESPONSE_HPP_
 
+#include <microhttpd.h>
+#include <string>
+
 #include "httpserver/http_response.hpp"
+#include "httpserver/http_utils.hpp"
 
 namespace httpserver
 {

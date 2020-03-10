@@ -32,6 +32,7 @@
 
 #include <curl/curl.h>
 #include <signal.h>
+#include <string.h>
 #include <unistd.h>
 
 #include "httpserver.hpp"

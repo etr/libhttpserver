@@ -23,7 +23,9 @@
 
 #define _HTTPSERVER_HPP_INSIDE_
 
+// IWYU pragma: begin_exports
 #include "httpserver/basic_auth_fail_response.hpp"
+#include "httpserver/create_webserver.hpp"
 #include "httpserver/deferred_response.hpp"
 #include "httpserver/digest_auth_fail_response.hpp"
 #include "httpserver/file_response.hpp"
@@ -33,5 +35,6 @@
 #include "httpserver/http_utils.hpp"
 #include "httpserver/string_response.hpp"
 #include "httpserver/webserver.hpp"
+// IWYU pragma: end_exports
 
 #endif

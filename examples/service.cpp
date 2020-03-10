@@ -18,10 +18,12 @@
      USA
 */
 
+#include <stdint.h>
+#include <stdlib.h>
 #include <unistd.h>
-
 #include <cstdio>
 #include <iostream>
+#include <memory>
 
 #include <httpserver.hpp>
 

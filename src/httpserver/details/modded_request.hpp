@@ -25,10 +25,18 @@
 #ifndef _MODDED_REQUEST_HPP_
 #define _MODDED_REQUEST_HPP_
 
+#include <microhttpd.h>
+#include <stddef.h>
+#include <memory>
+#include <string>
+
 #include "httpserver/http_request.hpp"
+#include "httpserver/http_resource.hpp"
+#include "httpserver/http_response.hpp"
 
 namespace httpserver
 {
+class webserver;  // Break cycle
 
 namespace details
 {

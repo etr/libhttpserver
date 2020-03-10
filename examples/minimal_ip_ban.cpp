@@ -19,6 +19,8 @@
 */
 
 #include <httpserver.hpp>
+#include <memory>
+#include <utility>
 
 using namespace httpserver;
 

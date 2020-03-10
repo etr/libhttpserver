@@ -31,14 +31,13 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <utility>
 
+#include "httpserver/http_request.hpp"
 #include "httpserver/http_response.hpp"
 
 namespace httpserver
 {
-
-class webserver;
-class http_request;
 
 namespace details
 {

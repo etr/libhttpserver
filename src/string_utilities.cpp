@@ -23,9 +23,7 @@
 #include <regex.h>
 #include <algorithm>
 #include <cctype>
-#include <cstdlib>
 #include <cstring>
-#include <istream>
 #include <sstream>
 #include <string>
 #include <vector>

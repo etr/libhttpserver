@@ -25,17 +25,12 @@
 #ifndef _HTTP_RESPONSE_HPP_
 #define _HTTP_RESPONSE_HPP_
 
+#include <microhttpd.h>
 #include <iosfwd>
 #include <map>
-#include <stdint.h>
 #include <string>
-#include <utility>
-#include <vector>
 
 #include "httpserver/http_utils.hpp"
-
-struct MHD_Connection;
-struct MHD_Response;
 
 namespace httpserver
 {

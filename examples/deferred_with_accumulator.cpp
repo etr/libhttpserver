@@ -18,8 +18,13 @@
      USA
 */
 
+#include <string.h>
+#include <sys/types.h>
+#include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <memory>
+#include <string>
 #include <thread>
 
 #include <httpserver.hpp>

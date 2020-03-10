@@ -35,12 +35,15 @@
 #define _WINDOWS
 #undef _WIN32_WINNT
 #define _WIN32_WINNT 0x600
+// DO NOT SUBMIT
+#elseif
+#include <sys/socket.h>
 #endif
 
 #include <microhttpd.h>
+#include <stddef.h>
 #include <algorithm>
 #include <cctype>
-#include <exception>
 #include <iosfwd>
 #include <map>
 #include <string>

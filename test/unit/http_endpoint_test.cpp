@@ -20,6 +20,9 @@
 
 #include "httpserver/details/http_endpoint.hpp"
 
+#include <exception>
+#include <iostream>
+
 #include "littletest.hpp"
 
 using namespace httpserver;

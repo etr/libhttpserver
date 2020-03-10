@@ -20,8 +20,12 @@
 
 #include "httpserver/details/http_endpoint.hpp"
 
+#include <stddef.h>
+#include <cctype>
+#include <memory>
+#include <stdexcept>
+
 #include "httpserver/http_utils.hpp"
-#include "httpserver/string_utilities.hpp"
 
 using namespace std;
 

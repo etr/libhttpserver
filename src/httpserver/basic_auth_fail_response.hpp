@@ -25,6 +25,10 @@
 #ifndef _BASIC_AUTH_FAIL_RESPONSE_HPP_
 #define _BASIC_AUTH_FAIL_RESPONSE_HPP_
 
+#include <microhttpd.h>
+#include <string>
+
+#include "httpserver/http_utils.hpp"
 #include "httpserver/string_response.hpp"
 
 namespace httpserver

@@ -20,6 +20,10 @@
 
 #include <httpserver.hpp>
 
+#include <memory>
+#include <string>
+#include <utility>
+
 using namespace httpserver;
 
 class user_pass_resource : public httpserver::http_resource

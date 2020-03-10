@@ -20,14 +20,11 @@
 
 #include "httpserver/http_resource.hpp"
 
-#include <stdlib.h>
+#include <microhttpd.h>
 
 #include "httpserver/http_request.hpp"
 #include "httpserver/http_response.hpp"
-#include "httpserver/http_utils.hpp"
 #include "httpserver/string_response.hpp"
-#include "httpserver/string_utilities.hpp"
-#include "httpserver/webserver.hpp"
 
 using namespace std;
 

@@ -26,9 +26,7 @@
 #define _HTTP_ENDPOINT_HPP_
 
 #include <regex.h>
-#include <stdexcept>
 #include <string>
-#include <utility>
 #include <vector>
 
 namespace httpserver
@@ -36,8 +34,6 @@ namespace httpserver
 
 namespace details
 {
-
-class http_resource;
 
 /**
  * Class representing an Http Endpoint. It is an abstraction used by the APIs.

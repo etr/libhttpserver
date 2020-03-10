@@ -28,9 +28,14 @@
 #include <ws2tcpip.h>
 #else
 #include <arpa/inet.h>
+#include <netinet/in.h>
 #endif
 
+#include <stdlib.h>
 #include <cstdio>
+#include <exception>
+#include <iostream>
+#include <sstream>
 
 #include "littletest.hpp"
 

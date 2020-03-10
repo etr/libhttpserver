@@ -18,6 +18,10 @@
      USA
 */
 
+#include <memory>
+#include <string>
+#include <utility>
+
 #include <httpserver.hpp>
 
 #define MY_OPAQUE "11733b200778ce33060f31c9af70a870ba96ddd4"

@@ -20,6 +20,9 @@
 
 #include "httpserver/string_response.hpp"
 
+#include <microhttpd.h>
+#include <stddef.h>
+
 using namespace std;
 
 namespace httpserver

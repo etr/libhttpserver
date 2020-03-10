@@ -20,7 +20,7 @@
 
 #include "httpserver/string_utilities.hpp"
 
-#include <cstdio>
+#include <exception>
 
 #include "littletest.hpp"
 

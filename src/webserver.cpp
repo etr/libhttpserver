@@ -25,25 +25,23 @@
 #include <ws2tcpip.h>
 #define _WINDOWS
 #else
-#include <netinet/ip.h>
+#include <netinet/in.h>
 #include <netinet/tcp.h>
 #endif
 
 #include <errno.h>
-#include <fcntl.h>
-#include <inttypes.h>
 #include <microhttpd.h>
 #include <signal.h>
-#include <stdexcept>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/stat.h>
-#include <sys/time.h>
-#include <sys/types.h>
-#include <unistd.h>
-#include <algorithm>
-#include <iostream>
+#include <strings.h>
+#include <cstring>
+#include <exception>
+#include <memory>
+#include <stdexcept>
+#include <utility>
+#include <vector>
 
 #include "gettext.h"
 #include "httpserver/create_webserver.hpp"
@@ -54,7 +52,6 @@
 #include "httpserver/http_response.hpp"
 #include "httpserver/http_utils.hpp"
 #include "httpserver/string_response.hpp"
-#include "httpserver/string_utilities.hpp"
 
 #define _REENTRANT 1
 

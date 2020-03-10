@@ -30,35 +30,30 @@
 #define NOT_METHOD_ERROR "Method not Acceptable"
 #define GENERIC_ERROR "Internal Error"
 
+#if defined(__MINGW32__) || defined(__CYGWIN32__)
+#include <ws2tcpip.h>
+#else
+#include <sys/socket.h>
+#endif
+
+#include <microhttpd.h>
 #include <pthread.h>
+#include <stdarg.h>
+#include <stdint.h>
 #include <stdlib.h>
-#include <cstring>
-#include <deque>
 #include <map>
 #include <memory>
 #include <set>
-#include <stdexcept>
 #include <string>
-#include <utility>
-#include <vector>
 
 #include "httpserver/create_webserver.hpp"
 #include "httpserver/details/http_endpoint.hpp"
+#include "httpserver/details/modded_request.hpp"
+#include "httpserver/http_resource.hpp"
 #include "httpserver/http_response.hpp"
+#include "httpserver/http_utils.hpp"
 
 namespace httpserver {
-
-class http_resource;
-class create_webserver;
-
-namespace http {
-struct ip_representation;
-struct httpserver_ska;
-};
-
-namespace details {
-    struct modded_request;
-}
 
 /**
  * Class representing the webserver. Main class of the apis.

@@ -18,6 +18,12 @@
      USA
 */
 
+#include <string.h>
+#include <sys/types.h>
+#include <memory>
+#include <string>
+#include <utility>
+
 #include <httpserver.hpp>
 
 using namespace httpserver;

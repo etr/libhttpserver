@@ -25,8 +25,12 @@
 #ifndef _CREATE_WEBSERVER_HPP_
 #define _CREATE_WEBSERVER_HPP_
 
+#include <stdint.h>
 #include <stdlib.h>
+#include <string>
+#include <memory>
 
+#include "httpserver/http_request.hpp"
 #include "httpserver/http_response.hpp"
 #include "httpserver/http_utils.hpp"
 
@@ -34,9 +38,6 @@
 #define DEFAULT_WS_PORT 9898
 
 namespace httpserver {
-
-class webserver;
-class http_request;
 
 typedef const std::shared_ptr<http_response>(*render_ptr)(const http_request&);
 typedef bool(*validator_ptr)(const std::string&);

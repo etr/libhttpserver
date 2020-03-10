@@ -21,6 +21,9 @@
 
 #include "httpserver/http_request.hpp"
 
+#include <microhttpd.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <iostream>
 
 #include "httpserver/http_utils.hpp"
