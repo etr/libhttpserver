@@ -35,8 +35,8 @@
 #define _WINDOWS
 #undef _WIN32_WINNT
 #define _WIN32_WINNT 0x600
-// DO NOT SUBMIT
-#elseif
+#include <ws2tcpip.h>
+#else
 #include <sys/socket.h>
 #endif
 
