@@ -229,6 +229,10 @@ class create_webserver
         {
             _single_resource = true; return *this;
         }
+        create_webserver& no_single_resource()
+        {
+            _single_resource = false; return *this;
+        }
         create_webserver& tcp_nodelay()
         {
             _tcp_nodelay = true; return *this;
