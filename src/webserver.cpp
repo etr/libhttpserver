@@ -25,6 +25,9 @@
 #include <ws2tcpip.h>
 #define _WINDOWS
 #else
+#if defined(__FreeBSD__)
+#include <netinet/in.h>
+#endif
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
 #endif

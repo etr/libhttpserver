@@ -24,6 +24,9 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #else
+#if defined(__FreeBSD__)
+#include <netinet/in.h>
+#endif
 #include <sys/socket.h>
 #include <netdb.h>
 #include <arpa/inet.h>
