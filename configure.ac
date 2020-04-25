@@ -69,7 +69,7 @@ case "$host" in
         native_srcdir=$(cd $srcdir; pwd -W)
         ;;
     *-cygwin*)
-        NETWORK_HEADER="winsock2.h"
+        NETWORK_HEADER="arpa/inet.h"
         REGEX_LIBS="-lregex -lpthread -no-undefined"
         ;;
     *)

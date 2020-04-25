@@ -20,7 +20,7 @@
 
 #include "httpserver/webserver.hpp"
 
-#if defined(__MINGW32__) || defined(__CYGWIN32__)
+#if defined(_WIN32) && ! defined(__CYGWIN__)
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #define _WINDOWS
