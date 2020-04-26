@@ -28,6 +28,9 @@
 #if defined(__FreeBSD__)
 #include <netinet/in.h>
 #endif
+#if defined(__CYGWIN__)
+#include <sys/select.h>
+#endif
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
 #endif

@@ -27,6 +27,9 @@
 #if defined(__FreeBSD__)
 #include <netinet/in.h>
 #endif
+#if defined(__CYGWIN__)
+#include <sys/select.h>
+#endif
 #include <sys/socket.h>
 #include <netdb.h>
 #include <arpa/inet.h>
