@@ -91,7 +91,7 @@ struct compare_value
     }
 };
 
-#ifndef __MINGW32__
+#if !defined(_WIN32) && !defined(__MINGW32__) && !defined(__CYGWIN__)
 static void catcher (int sig)
 {
 }
@@ -100,7 +100,7 @@ static void catcher (int sig)
 static void ignore_sigpipe ()
 {
 //Mingw doesn't implement SIGPIPE
-#ifndef __MINGW32__
+#if !defined(_WIN32) && !defined(__MINGW32__) && !defined(__CYGWIN__)
     struct sigaction oldsig;
     struct sigaction sig;
 
