@@ -50,6 +50,13 @@
 #include <unistd.h>
 #include <algorithm>
 #include <iostream>
+#include <strings.h>
+#include <cstring>
+#include <exception>
+#include <memory>
+#include <stdexcept>
+#include <utility>
+#include <vector>
 
 #include "gettext.h"
 #include "httpserver/create_webserver.hpp"
