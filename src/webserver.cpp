@@ -170,7 +170,6 @@ webserver::webserver(const create_webserver& params):
 {
     ignore_sigpipe();
     pthread_mutex_init(&mutexwait, NULL);
-    pthread_rwlock_init(&runguard, NULL);
     pthread_cond_init(&mutexcond, NULL);
 }
 
@@ -178,7 +177,6 @@ webserver::~webserver()
 {
     stop();
     pthread_mutex_destroy(&mutexwait);
-    pthread_rwlock_destroy(&runguard);
     pthread_cond_destroy(&mutexcond);
 }
 
