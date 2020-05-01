@@ -44,9 +44,6 @@ const std::string to_lower_copy(const std::string& str);
 const std::vector<std::string> string_split(const std::string& s,
         char sep = ' ', bool collapse = true
 );
-const std::string regex_replace(const std::string& str, const std::string& pattern,
-        const std::string& replace_str
-);
 void to_upper(std::string& str);
 };
 };
