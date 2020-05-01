@@ -52,9 +52,16 @@
 #define CLEAR_BIT(var,pos) ((var) &= ~(1<<(pos)))
 
 #if defined (__CYGWIN__)
+
 #if ! defined (NI_MAXHOST)
 #define NI_MAXHOST 1025
 #endif // NI_MAXHOST
+
+#ifndef __u_char_defined
+typedef unsigned char u_char;
+#define __u_char_defined
+#endif // __u_char_defined
+
 #endif // CYGWIN
 
 using namespace std;
