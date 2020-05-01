@@ -23,17 +23,16 @@
 #if defined(_WIN32) && ! defined(__CYGWIN__)
 #include <winsock2.h>
 #include <ws2tcpip.h>
-#else
+#else // WIN32 check
 #if defined(__FreeBSD__)
 #include <netinet/in.h>
-#endif
-#if defined(__CYGWIN__)
-#include <netdb.h>
-#endif
-#include <sys/socket.h>
-#include <netdb.h>
+#endif // FreeBSD
 #include <arpa/inet.h>
-#endif
+#include <netdb.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#endif // WIN32 check
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -43,6 +42,7 @@
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
+#include <utility>
 
 #include "httpserver/string_utilities.hpp"
 
@@ -50,6 +50,12 @@
 #define CHECK_BIT(var,pos) ((var) & (1<<(pos)))
 #define SET_BIT(var,pos) ((var) |= 1 << (pos))
 #define CLEAR_BIT(var,pos) ((var) &= ~(1<<(pos)))
+
+#if defined (__CYGWIN__)
+#if ! defined (NI_MAXHOST)
+#define NI_MAXHOST 1025
+#endif // NI_MAXHOST
+#endif // CYGWIN
 
 using namespace std;
 
