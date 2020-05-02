@@ -138,7 +138,7 @@ class http_endpoint
             url_normalized("/"),
             family_url(false),
             reg_compiled(false),
-            re_url_normalized(std::basic_regex()) // initialize empty
+            re_url_normalized(std::regex("")) // initialize empty
         {
         }
 
@@ -187,7 +187,7 @@ class http_endpoint
         /**
          * Regex used in comparisons
         **/
-        std::basic_regex re_url_normalized;
+        std::regex re_url_normalized;
 
         /**
          * Boolean indicating wheter the endpoint represents a family
