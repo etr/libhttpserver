@@ -115,7 +115,7 @@ http_endpoint::http_endpoint
     if(use_regex)
     {
         url_normalized += "$";
-        re_url_normalized = std::basic_regex(url_normalized, std::regex::extended | syntax_option_type icase | syntax_option_type nosubs);
+        re_url_normalized = std::regex(url_normalized, std::regex::extended | syntax_option_type icase | syntax_option_type nosubs);
         reg_compiled = true;
     }
 }
