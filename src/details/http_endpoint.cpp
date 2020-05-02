@@ -35,10 +35,6 @@ using namespace http;
 
 http_endpoint::~http_endpoint()
 {
-    if(reg_compiled)
-    {
-        regfree(&re_url_normalized);
-    }
 }
 
 http_endpoint::http_endpoint
@@ -119,9 +115,7 @@ http_endpoint::http_endpoint
     if(use_regex)
     {
         url_normalized += "$";
-        regcomp(&re_url_normalized, url_normalized.c_str(),
-                REG_EXTENDED|REG_ICASE|REG_NOSUB
-        );
+        re_url_normalized = std::basic_regex(url_normalized, std::regex::extended | syntax_option_type icase | syntax_option_type nosubs);
         reg_compiled = true;
     }
 }
@@ -133,12 +127,9 @@ http_endpoint::http_endpoint(const http_endpoint& h):
     url_pieces(h.url_pieces),
     chunk_positions(h.chunk_positions),
     family_url(h.family_url),
-    reg_compiled(h.reg_compiled)
+    reg_compiled(h.reg_compiled),
+    re_url_normalized(h.re_url_normalize)
 {
-    if(reg_compiled)
-        regcomp(&re_url_normalized, url_normalized.c_str(),
-                REG_EXTENDED|REG_ICASE|REG_NOSUB
-        );
 }
 
 http_endpoint& http_endpoint::operator =(const http_endpoint& h)
@@ -147,14 +138,7 @@ http_endpoint& http_endpoint::operator =(const http_endpoint& h)
     url_normalized = h.url_normalized;
     family_url = h.family_url;
     reg_compiled = h.reg_compiled;
-    if(reg_compiled)
-    {
-        regfree(&re_url_normalized);
-
-        regcomp(&re_url_normalized, url_normalized.c_str(),
-                REG_EXTENDED|REG_ICASE|REG_NOSUB
-        );
-    }
+    re_url_normalized = h.re_url_normalized;
     url_pars = h.url_pars;
     url_pieces = h.url_pieces;
     chunk_positions = h.chunk_positions;
@@ -171,7 +155,9 @@ bool http_endpoint::match(const http_endpoint& url) const
     if (!reg_compiled) throw std::invalid_argument("Cannot run match. Regex suppressed.");
 
     if(!family_url || url.url_pieces.size() < url_pieces.size())
-        return regexec(&re_url_normalized, url.url_complete.c_str(), 0, NULL, 0) == 0;
+    {
+        return regex_match(url.url_complete, re_url_normalized);
+    }
 
     string nn = "/";
     bool first = true;
@@ -180,7 +166,7 @@ bool http_endpoint::match(const http_endpoint& url) const
         nn += (first ? "" : "/") + url.url_pieces[i];
         first = false;
     }
-    return regexec(&re_url_normalized, nn.c_str(), 0, NULL, 0) == 0;
+    return regex_match(nn, re_url_normalized);
 }
 
 };
