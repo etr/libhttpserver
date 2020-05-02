@@ -115,7 +115,7 @@ http_endpoint::http_endpoint
     if(use_regex)
     {
         url_normalized += "$";
-        re_url_normalized = std::regex(url_normalized, std::regex::extended | syntax_option_type icase | syntax_option_type nosubs);
+        re_url_normalized = std::regex(url_normalized, std::regex::extended | std::regex::icase | std::regex::nosubs);
         reg_compiled = true;
     }
 }
@@ -128,7 +128,7 @@ http_endpoint::http_endpoint(const http_endpoint& h):
     chunk_positions(h.chunk_positions),
     family_url(h.family_url),
     reg_compiled(h.reg_compiled),
-    re_url_normalized(h.re_url_normalize)
+    re_url_normalized(h.re_url_normalized)
 {
 }
 
