@@ -136,9 +136,9 @@ class http_endpoint
         http_endpoint():
             url_complete("/"),
             url_normalized("/"),
+            re_url_normalized(std::regex("")), // initialize empty
             family_url(false),
-            reg_compiled(false),
-            re_url_normalized(std::regex("")) // initialize empty
+            reg_compiled(false)
         {
         }
 
