@@ -37,6 +37,11 @@
 #define _WIN32_WINNT 0x600
 #endif
 
+// needed to have the fd_set definition ahead of microhttpd.h import
+#if defined(__CYGWIN__)
+#include <sys/select.h>
+#endif
+
 #include <microhttpd.h>
 #include <algorithm>
 #include <cctype>
@@ -72,7 +77,7 @@ class http_utils
 
     enum start_method_T
     {
-#if defined(__MINGW32__) || defined(__CYGWIN32__)
+#if defined(__MINGW32__) || defined(__CYGWIN__)
     #ifdef ENABLE_POLL
         INTERNAL_SELECT = MHD_USE_SELECT_INTERNALLY | MHD_USE_POLL,
     #else

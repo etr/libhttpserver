@@ -20,13 +20,16 @@
 
 #include "httpserver/webserver.hpp"
 
-#if defined(__MINGW32__) || defined(__CYGWIN32__)
+#if defined(_WIN32) && ! defined(__CYGWIN__)
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #define _WINDOWS
 #else
 #if defined(__FreeBSD__)
 #include <netinet/in.h>
+#endif
+#if defined(__CYGWIN__)
+#include <sys/select.h>
 #endif
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
@@ -47,6 +50,13 @@
 #include <unistd.h>
 #include <algorithm>
 #include <iostream>
+#include <strings.h>
+#include <cstring>
+#include <exception>
+#include <memory>
+#include <stdexcept>
+#include <utility>
+#include <vector>
 
 #include "gettext.h"
 #include "httpserver/create_webserver.hpp"
@@ -88,7 +98,7 @@ struct compare_value
     }
 };
 
-#ifndef __MINGW32__
+#if !defined(_WIN32) && !defined(__MINGW32__) && !defined(__CYGWIN__)
 static void catcher (int sig)
 {
 }
@@ -97,7 +107,7 @@ static void catcher (int sig)
 static void ignore_sigpipe ()
 {
 //Mingw doesn't implement SIGPIPE
-#ifndef __MINGW32__
+#if !defined(_WIN32) && !defined(__MINGW32__) && !defined(__CYGWIN__)
     struct sigaction oldsig;
     struct sigaction sig;
 
@@ -160,7 +170,6 @@ webserver::webserver(const create_webserver& params):
 {
     ignore_sigpipe();
     pthread_mutex_init(&mutexwait, NULL);
-    pthread_rwlock_init(&runguard, NULL);
     pthread_cond_init(&mutexcond, NULL);
 }
 
@@ -168,7 +177,6 @@ webserver::~webserver()
 {
     stop();
     pthread_mutex_destroy(&mutexwait);
-    pthread_rwlock_destroy(&runguard);
     pthread_cond_destroy(&mutexcond);
 }
 

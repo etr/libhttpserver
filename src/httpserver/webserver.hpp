@@ -174,7 +174,6 @@ class webserver
         bool single_resource;
         bool tcp_nodelay;
         pthread_mutex_t mutexwait;
-        pthread_rwlock_t runguard;
         pthread_cond_t mutexcond;
         render_ptr not_found_resource;
         render_ptr method_not_allowed_resource;

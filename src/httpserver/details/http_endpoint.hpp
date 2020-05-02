@@ -25,7 +25,7 @@
 #ifndef _HTTP_ENDPOINT_HPP_
 #define _HTTP_ENDPOINT_HPP_
 
-#include <regex.h>
+#include <regex>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -136,6 +136,7 @@ class http_endpoint
         http_endpoint():
             url_complete("/"),
             url_normalized("/"),
+            re_url_normalized(std::regex("")), // initialize empty
             family_url(false),
             reg_compiled(false)
         {
@@ -186,7 +187,7 @@ class http_endpoint
         /**
          * Regex used in comparisons
         **/
-        regex_t re_url_normalized;
+        std::regex re_url_normalized;
 
         /**
          * Boolean indicating wheter the endpoint represents a family

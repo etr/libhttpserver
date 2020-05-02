@@ -64,17 +64,17 @@ NETWORK_LIBS=""
 case "$host" in
     *-mingw*)
         NETWORK_HEADER="winsock2.h"
-        REGEX_LIBS="-lregex -lpthread -no-undefined"
+        ADDITIONAL_LIBS="-lpthread -no-undefined"
         NETWORK_LIBS="-lws2_32"
         native_srcdir=$(cd $srcdir; pwd -W)
         ;;
     *-cygwin*)
-        NETWORK_HEADER="winsock2.h"
-        REGEX_LIBS="-lregex -lpthread -no-undefined"
+        NETWORK_HEADER="arpa/inet.h"
+        ADDITIONAL_LIBS="-lpthread -no-undefined"
         ;;
     *)
         NETWORK_HEADER="arpa/inet.h"
-        REGEX_LIBS=""
+        ADDITIONAL_LIBS=""
         is_windows=no
         ;;
 esac
@@ -86,7 +86,6 @@ AC_CHECK_HEADER([inttypes.h],[],[AC_MSG_ERROR("inttypes.h not found")])
 AC_CHECK_HEADER([errno.h],[],[AC_MSG_ERROR("errno.h not found")])
 AC_CHECK_HEADER([unistd.h],[],[AC_MSG_ERROR("unistd.h not found")])
 AC_CHECK_HEADER([ctype.h],[],[AC_MSG_ERROR("cctype not found")])
-AC_CHECK_HEADER([regex.h],[],[AC_MSG_ERROR("regex.h not found")])
 AC_CHECK_HEADER([sys/stat.h],[],[AC_MSG_ERROR("sys/stat.h not found")])
 AC_CHECK_HEADER([sys/types.h],[],[AC_MSG_ERROR("sys/types.h not found")])
 AC_CHECK_HEADER([$NETWORK_HEADER],[],[AC_MSG_ERROR("$NETWORK_HEADER not found")])
@@ -117,7 +116,7 @@ if test x"$host" = x"$build"; then
     )
 
     CXXFLAGS="-std=c++11 -DHTTPSERVER_COMPILATION -D_REENTRANT $LIBMICROHTTPD_CFLAGS $CXXFLAGS"
-    LDFLAGS="$LIBMICROHTTPD_LIBS $NETWORK_LIBS $REGEX_LIBS $LDFLAGS"
+    LDFLAGS="$LIBMICROHTTPD_LIBS $NETWORK_LIBS $ADDITIONAL_LIBS $LDFLAGS"
 
     cond_cross_compile="no"
 else
@@ -130,7 +129,7 @@ else
     )
 
     CXXFLAGS="-std=c++11 -DHTTPSERVER_COMPILATION -D_REENTRANT $CXXFLAGS"
-    LDFLAGS="$NETWORK_LIBS $REGEX_LIBS $LDFLAGS"
+    LDFLAGS="$NETWORK_LIBS $ADDITIONAL_LIBS $LDFLAGS"
 
     cond_cross_compile="yes"
 fi
