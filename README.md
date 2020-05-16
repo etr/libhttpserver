@@ -85,6 +85,8 @@ The minimum versions required are:
 
 Additionally, for MinGW on windows you will need:
 * libwinpthread (For MinGW-w64, if you use thread model posix then you have this)
+
+For versions before 0.18.0, on MinGW, you will need:
 * libgnurx >= 2.5.1
 
 Furthermore, the testcases use [libcurl](http://curl.haxx.se/libcurl/) but you don't need it to compile the library.
