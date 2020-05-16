@@ -1,3 +1,12 @@
+Sat May 16 07:20:00 2020 -0800
+	General performance improvements (reduced use of regex, lazy-building of
+	post-processor)
+	General code cleanup
+	General fixes to the documentation
+	Fixed support on FreeBSD (added missing headers)
+	Fixed support for Cygwin
+	Removed depedency on C regex - now using C++11 regex
+
 Sat Aug 10 18:34:07 2019 -0800
 	Added support for TCP-NODELAY
 	Changed set_path on http_request to have lazy behavior
