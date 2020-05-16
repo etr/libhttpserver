@@ -9,9 +9,14 @@ Craig Minihan <craig@ripcordsoftware.com>
 Guo Xiao <guoxiao08@gmail.com>
 Philipp Claßen <philipp.classen@gmx.net>
 Vitaut Bajaryn <vitaut.bayaryn@gmail.com>
+Felipe Zipitría <fzipi@fing.edu.uy>
+Steven 'Steve' Kendall <skendall@neverware.com>
+G. Mercat <guillaume.mercat@gmail.com>
+Thomas Schätzlein <schaetzleinT@minimax.de>
 
 - Support for building on MinGW/Cygwin systems
 Shane Peelar <lookatyouhacker@gmail.com>
+Dean M. Sands, III <dsands@taloncontrols.com>
 
 - Support for building on MaxOsX
 Jan Klimke <jan.klimke@hpi.uni-potsdam.de>
@@ -26,4 +31,14 @@ Marcel Pursche <marcel.pursche@3dcontentlogistics.com>
 Julian Picht <julian.picht@4Com.de>
 
 - Fix string termination when loading files in memory
-martamoreton
+martamoreton (Github: https://github.com/martamoreton)
+
+- Memory leaks
+rdiazmartin <rdiazmartin@gmail.com>
+
+- Cleanup of multiple parts of the code
+bcsgh (Github: https://github.com/bcsgh)
+
+- Management of large uploads
+Walter Landry <wlandry@caltech.edu>
+Jagat <pellucide@yahoo.com>
