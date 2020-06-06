@@ -18,6 +18,8 @@
      USA
 */
 
+#include <stdexcept>
+
 #include "httpserver/details/http_endpoint.hpp"
 
 #include "httpserver/http_utils.hpp"
@@ -47,6 +49,11 @@ http_endpoint::http_endpoint
     family_url(family),
     reg_compiled(false)
 {
+    if (use_regex && !registration)
+    {
+        throw new std::invalid_argument("Cannot use regex if not during registration");
+    }
+
     url_normalized = use_regex ? "^/" : "/";
     vector<string> parts;
 
@@ -115,7 +122,14 @@ http_endpoint::http_endpoint
     if(use_regex)
     {
         url_normalized += "$";
-        re_url_normalized = std::regex(url_normalized, std::regex::extended | std::regex::icase | std::regex::nosubs);
+        try
+        {
+            re_url_normalized = std::regex(url_normalized, std::regex::extended | std::regex::icase | std::regex::nosubs);
+        }
+        catch (std::regex_error& e)
+        {
+            throw new std::invalid_argument("Not a valid regex in URL: " + url_normalized);
+        }
         reg_compiled = true;
     }
 }
@@ -126,9 +140,9 @@ http_endpoint::http_endpoint(const http_endpoint& h):
     url_pars(h.url_pars),
     url_pieces(h.url_pieces),
     chunk_positions(h.chunk_positions),
+    re_url_normalized(h.re_url_normalized),
     family_url(h.family_url),
-    reg_compiled(h.reg_compiled),
-    re_url_normalized(h.re_url_normalized)
+    reg_compiled(h.reg_compiled)
 {
 }
 
