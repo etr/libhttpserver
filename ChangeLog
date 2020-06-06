@@ -1,3 +1,7 @@
+Sat Jun 6 10:21:05 2020 -0800
+    Prevent use of regex in http_endpoint outside of registration which could
+	allow DOS attacks.
+
 Sat May 16 07:20:00 2020 -0800
 	General performance improvements (reduced use of regex, lazy-building of
 	post-processor)
