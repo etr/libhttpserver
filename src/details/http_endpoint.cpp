@@ -51,7 +51,7 @@ http_endpoint::http_endpoint
 {
     if (use_regex && !registration)
     {
-        throw new std::invalid_argument("Cannot use regex if not during registration");
+        throw std::invalid_argument("Cannot use regex if not during registration");
     }
 
     url_normalized = use_regex ? "^/" : "/";
@@ -128,7 +128,7 @@ http_endpoint::http_endpoint
         }
         catch (std::regex_error& e)
         {
-            throw new std::invalid_argument("Not a valid regex in URL: " + url_normalized);
+            throw std::invalid_argument("Not a valid regex in URL: " + url_normalized);
         }
         reg_compiled = true;
     }
