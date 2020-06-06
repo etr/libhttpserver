@@ -378,7 +378,8 @@ bool webserver::stop()
 
 void webserver::unregister_resource(const string& resource)
 {
-    details::http_endpoint he(resource);
+    // family does not matter - it just checks the url_normalized anyhow
+    details::http_endpoint he(resource, false, true, regex_checking);
     registered_resources.erase(he);
     registered_resources.erase(he.get_url_complete());
     registered_resources_str.erase(he.get_url_complete());
@@ -621,7 +622,7 @@ int webserver::finalize_answer(
 
                 map<details::http_endpoint, http_resource*>::iterator found_endpoint;
 
-                details::http_endpoint endpoint(st_url, false, false, regex_checking);
+                details::http_endpoint endpoint(st_url, false, false, false);
 
                 map<details::http_endpoint, http_resource*>::iterator it;
 

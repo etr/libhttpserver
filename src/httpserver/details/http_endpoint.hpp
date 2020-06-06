@@ -156,7 +156,7 @@ class http_endpoint
         http_endpoint(const std::string& url,
                 bool family = false,
                 bool registration = false,
-                bool use_regex = true
+                bool use_regex = false
         );
     private:
         /**

@@ -993,6 +993,24 @@ LT_BEGIN_AUTO_TEST(basic_suite, long_path_pieces)
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(long_path_pieces)
 
+LT_BEGIN_AUTO_TEST(basic_suite, url_with_regex_like_pieces)
+    path_pieces_resource resource;
+    ws->register_resource("/settings", &resource, true);
+    curl_global_init(CURL_GLOBAL_ALL);
+
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/settings/{}");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "settings,{},");
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(url_with_regex_like_pieces)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()
