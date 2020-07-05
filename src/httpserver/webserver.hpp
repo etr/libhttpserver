@@ -195,14 +195,14 @@ class webserver
                 enum MHD_RequestTerminationCode toe
         );
 
-        static int answer_to_connection
+        static MHD_Result answer_to_connection
         (
             void* cls, MHD_Connection* connection,
             const char* url, const char* method,
             const char* version, const char* upload_data,
             size_t* upload_data_size, void** con_cls
         );
-        static int post_iterator
+        static MHD_Result post_iterator
         (
             void *cls,
             enum MHD_ValueKind kind,
@@ -219,25 +219,25 @@ class webserver
             void **con_cls, int upgrade_socket
         );
 
-        int requests_answer_first_step(MHD_Connection* connection,
+        MHD_Result requests_answer_first_step(MHD_Connection* connection,
                 struct details::modded_request* mr
         );
 
-        int requests_answer_second_step(MHD_Connection* connection,
+        MHD_Result requests_answer_second_step(MHD_Connection* connection,
             const char* method, const char* version, const char* upload_data,
             size_t* upload_data_size, struct details::modded_request* mr
         );
 
-        int finalize_answer(MHD_Connection* connection,
+        MHD_Result finalize_answer(MHD_Connection* connection,
                 struct details::modded_request* mr, const char* method
         );
 
-        int complete_request(MHD_Connection* connection,
+        MHD_Result complete_request(MHD_Connection* connection,
                 struct details::modded_request* mr,
                 const char* version, const char* method
         );
 
-        friend int policy_callback (void *cls,
+        friend MHD_Result policy_callback (void *cls,
                 const struct sockaddr* addr, socklen_t addrlen
         );
         friend void error_log(void* cls, const char* fmt, va_list ap);
