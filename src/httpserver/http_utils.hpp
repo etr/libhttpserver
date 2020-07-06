@@ -53,6 +53,10 @@
 
 #define DEFAULT_MASK_VALUE 0xFFFF
 
+#if MHD_VERSION < 0x00097002
+typedef int MHD_Result;
+#endif
+
 namespace httpserver {
 
 typedef void(*unescaper_ptr)(std::string&);

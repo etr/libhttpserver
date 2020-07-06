@@ -75,6 +75,10 @@
 #define SOCK_CLOEXEC 02000000
 #endif
 
+#if MHD_VERSION < 0x00097002
+typedef int MHD_Result;
+#endif
+
 using namespace std;
 
 namespace httpserver
@@ -82,7 +86,7 @@ namespace httpserver
 
 using namespace http;
 
-int policy_callback (void *, const struct sockaddr*, socklen_t);
+MHD_Result policy_callback (void *, const struct sockaddr*, socklen_t);
 void error_log(void*, const char*, va_list);
 void* uri_log(void*, const char*);
 void access_log(webserver*, string);
@@ -421,7 +425,7 @@ void webserver::disallow_ip(const string& ip)
     allowances.erase(ip);
 }
 
-int policy_callback (void *cls, const struct sockaddr* addr, socklen_t addrlen)
+MHD_Result policy_callback (void *cls, const struct sockaddr* addr, socklen_t addrlen)
 {
     if(!(static_cast<webserver*>(cls))->ban_system_enabled) return MHD_YES;
 
@@ -468,7 +472,7 @@ size_t unescaper_func(void * cls, struct MHD_Connection *c, char *s)
     return std::string(s).size();
 }
 
-int webserver::post_iterator (void *cls, enum MHD_ValueKind kind,
+MHD_Result webserver::post_iterator (void *cls, enum MHD_ValueKind kind,
     const char *key,
     const char *filename,
     const char *content_type,
@@ -522,7 +526,7 @@ const std::shared_ptr<http_response> webserver::internal_error_page(details::mod
     }
 }
 
-int webserver::requests_answer_first_step(
+MHD_Result webserver::requests_answer_first_step(
         MHD_Connection* connection,
         struct details::modded_request* mr
 )
@@ -574,7 +578,7 @@ int webserver::requests_answer_first_step(
     return MHD_YES;
 }
 
-int webserver::requests_answer_second_step(
+MHD_Result webserver::requests_answer_second_step(
     MHD_Connection* connection, const char* method,
     const char* version, const char* upload_data,
     size_t* upload_data_size, struct details::modded_request* mr
@@ -597,7 +601,7 @@ int webserver::requests_answer_second_step(
     return MHD_YES;
 }
 
-int webserver::finalize_answer(
+MHD_Result webserver::finalize_answer(
         MHD_Connection* connection,
         struct details::modded_request* mr,
         const char* method
@@ -731,10 +735,10 @@ int webserver::finalize_answer(
     mr->dhrs->decorate_response(raw_response);
     to_ret = mr->dhrs->enqueue_response(connection, raw_response);
     MHD_destroy_response(raw_response);
-    return to_ret;
+    return (MHD_Result) to_ret;
 }
 
-int webserver::complete_request(
+MHD_Result webserver::complete_request(
         MHD_Connection* connection,
         struct details::modded_request* mr,
         const char* version,
@@ -750,7 +754,7 @@ int webserver::complete_request(
     return finalize_answer(connection, mr, method);
 }
 
-int webserver::answer_to_connection(void* cls, MHD_Connection* connection,
+MHD_Result webserver::answer_to_connection(void* cls, MHD_Connection* connection,
     const char* url, const char* method,
     const char* version, const char* upload_data,
     size_t* upload_data_size, void** con_cls

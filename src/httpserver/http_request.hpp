@@ -247,15 +247,15 @@ class http_request
 
         unescaper_ptr unescaper = 0x0;
 
-        static int build_request_header(void *cls, enum MHD_ValueKind kind,
+        static MHD_Result build_request_header(void *cls, enum MHD_ValueKind kind,
                 const char *key, const char *value
         );
 
-        static int build_request_args(void *cls, enum MHD_ValueKind kind,
+        static MHD_Result build_request_args(void *cls, enum MHD_ValueKind kind,
                 const char *key, const char *value
         );
 
-        static int build_request_querystring(void *cls, enum MHD_ValueKind kind,
+        static MHD_Result build_request_querystring(void *cls, enum MHD_ValueKind kind,
                 const char *key, const char *value
         );
 
