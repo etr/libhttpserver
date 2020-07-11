@@ -1,0 +1,103 @@
+version: 2.2.0.{build}
+
+branches:
+  except:
+    - /.*travis.*/
+skip_commits:
+  message: /travis/
+  files:
+    - .travis.yml
+
+environment:
+  global:
+    EVENT_TESTS_PARALLEL: 20
+    EVENT_BUILD_PARALLEL: 10
+    MSYS_PATH: C:\msys64
+    CYGWIN_PATH: C:\cygwin64
+    MINGW_W64_5_3_0: C:\mingw-w64\i686-5.3.0-posix-dwarf-rt_v4-rev0
+    MINGW_W64_6_3_0_I686: C:\mingw-w64\i686-6.3.0-posix-dwarf-rt_v5-rev1
+    MINGW_W64_6_3_0_X86_64: C:\mingw-w64\x86_64-6.3.0-posix-seh-rt_v5-rev1
+    MINGW_W64_7_3_0_X86_64: C:\mingw-w64\x86_64-7.3.0-posix-seh-rt_v5-rev0
+    MINGW_W64_8_1_0_X86_64: C:\mingw-w64\x86_64-8.1.0-posix-seh-rt_v6-rev0
+    MINGW_W64_7_2_0_X86_64: C:\mingw-w64\x86_64-7.2.0-posix-seh-rt_v5-rev1
+  matrix:
+    - os: Visual Studio 2013
+      COMPILER: mingw
+      MINGW_PATH: %MINGW_W64_5_3_0%
+    - os: Visual Studio 2013
+      COMPILER: mingw
+      MINGW_PATH: %MINGW_W64_6_3_0_I686%
+    - os: Visual Studio 2013
+      COMPILER: mingw
+      MINGW_PATH: %MINGW_W64_6_3_0_X86_64%
+    - os: Visual Studio 2013
+      COMPILER: mingw
+      MINGW_PATH: %MINGW_W64_7_3_0_X86_64%
+    - os: Visual Studio 2013
+      COMPILER: mingw
+      MINGW_PATH: %MINGW_W64_8_1_0_X86_64%
+    - os: Visual Studio 2013
+      COMPILER: mingw
+      MINGW_PATH: %MINGW_W64_7_2_0_X86_64%
+    - os: Visual Studio 2015
+      COMPILER: mingw
+      MINGW_PATH: %MINGW_W64_5_3_0%
+    - os: Visual Studio 2015
+      COMPILER: mingw
+      MINGW_PATH: %MINGW_W64_6_3_0_I686%
+    - os: Visual Studio 2015
+      COMPILER: mingw
+      MINGW_PATH: %MINGW_W64_6_3_0_X86_64%
+    - os: Visual Studio 2015
+      COMPILER: mingw
+      MINGW_PATH: %MINGW_W64_7_3_0_X86_64%
+    - os: Visual Studio 2015
+      COMPILER: mingw
+      MINGW_PATH: %MINGW_W64_8_1_0_X86_64%
+    - os: Visual Studio 2015
+      COMPILER: mingw
+      MINGW_PATH: %MINGW_W64_7_2_0_X86_64%
+    - os: Visual Studio 2017
+      COMPILER: mingw
+      MINGW_PATH: %MINGW_W64_7_2_0_X86_64%
+    - os: Visual Studio 2015
+      COMPILER: cygwin
+    - os: Visual Studio 2017
+      COMPILER: cygwin
+      #    - os: Visual Studio 2019
+      #      COMPILER: cygwin
+init:
+  - 'echo Building libhttpserver %version% for Windows'
+  - 'echo System architecture: %PLATFORM%'
+  - 'echo Repo build branch is: %APPVEYOR_REPO_BRANCH%'
+  - 'echo Build folder is: %APPVEYOR_BUILD_FOLDER%'
+  - 'echo Repo build commit is: %APPVEYOR_REPO_COMMIT%'
+  - 'echo Cygwin root is: %CYG_ROOT%'
+install:
+  - |-
+      case $COMPILER in
+        mingw)
+          export msys2 = "$MSYS_PATH\msys2_shell.cmd -defterm -no-start"
+          export buildshell="$msys2 -mingw64 -full-path -here -c "\"\$@"\" --"
+          export msys2+=" -msys2 -c "\"\$@"\" --"
+          $msys2 pacman --sync --noconfirm --disable-download-timeout --needed mingw-w64-x86_64-toolchain
+          $msys2 pacman -Syu --noconfirm --disable-download-timeout autoconf libtool automake make autoconf-archive pkg-config mingw-w64-x86_64-libsystre mingw-w64-x86_64-doxygen mingw-w64-x86_64-gnutls mingw-w64-x86_64-graphviz mingw-w64-x86_64-curl
+          export PATH=$MINGW_PATH/bin:$PATH
+          export MAKE=mingw32-make  # so that Autotools can find it
+          ;;
+      esac
+  - curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.59.tar.gz -o libmicrohttpd-0.9.59.tar.gz
+  - tar -xzf libmicrohttpd-0.9.59.tar.gz
+  - cd libmicrohttpd-0.9.59
+  - $buildshell ./configure --disable-examples --enable-poll=no
+  - $buildshell make
+  - $buildshell make install
+  - cd ..
+  - $buildshell ./bootstrap
+  - mkdir build
+  - cd build
+  - export MANIFEST_TOOL='no'
+  - $buildshell make
+build_script:
+  - $buildshell make check
+  - $buildshell cat test/test-suite.log
