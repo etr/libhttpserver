@@ -75,15 +75,13 @@ init:
   - 'echo Cygwin root is: %CYG_ROOT%'
 install:
   - |-
-      if %COMPILER%==mingw (
-          set msys2="%MSYS_PATH%\msys2_shell.cmd -defterm -no-start"
-          set buildshell="%msys2% -mingw64 -full-path -here"
-          set msys2="%msys2% -msys2"
-          call %msys2% -c "pacman --sync --noconfirm --disable-download-timeout --needed mingw-w64-x86_64-toolchain"
-          call %msys2% -c "pacman -Syu --noconfirm --disable-download-timeout autoconf libtool automake make autoconf-archive pkg-config mingw-w64-x86_64-libsystre mingw-w64-x86_64-doxygen mingw-w64-x86_64-gnutls mingw-w64-x86_64-graphviz mingw-w64-x86_64-curl"
-          set PATH=%MINGW_PATH%/bin;%PATH%
-          set MAKE=mingw32-make  # so that Autotools can find it
-      )
+        set msys2="%MSYS_PATH%\msys2_shell.cmd -defterm -no-start"
+        set buildshell="%msys2% -mingw64 -full-path -here"
+        set msys2="%msys2% -msys2"
+        call %msys2% -c "pacman --sync --noconfirm --disable-download-timeout --needed mingw-w64-x86_64-toolchain"
+        call %msys2% -c "pacman -Syu --noconfirm --disable-download-timeout autoconf libtool automake make autoconf-archive pkg-config mingw-w64-x86_64-libsystre mingw-w64-x86_64-doxygen mingw-w64-x86_64-gnutls mingw-w64-x86_64-graphviz mingw-w64-x86_64-curl"
+        set PATH=%MINGW_PATH%/bin;%PATH%
+        set MAKE=mingw32-make  # so that Autotools can find it
   - curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.59.tar.gz -o libmicrohttpd-0.9.59.tar.gz
   - tar -xzf libmicrohttpd-0.9.59.tar.gz
   - cd libmicrohttpd-0.9.59
