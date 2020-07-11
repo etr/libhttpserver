@@ -83,7 +83,6 @@ install:
           call %msys2% -c "pacman -Syu --noconfirm --disable-download-timeout autoconf libtool automake make autoconf-archive pkg-config mingw-w64-x86_64-libsystre mingw-w64-x86_64-doxygen mingw-w64-x86_64-gnutls mingw-w64-x86_64-graphviz mingw-w64-x86_64-curl"
           set PATH=%MINGW_PATH%/bin;%PATH%
           set MAKE=mingw32-make  # so that Autotools can find it
-          ;;
       )
   - curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.59.tar.gz -o libmicrohttpd-0.9.59.tar.gz
   - tar -xzf libmicrohttpd-0.9.59.tar.gz
