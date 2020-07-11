@@ -75,7 +75,7 @@ init:
   - 'echo Cygwin root is: %CYG_ROOT%'
 install:
   - |-
-      if %COMPILER%==mingw(
+      if %COMPILER%==mingw (
           set msys2="%MSYS_PATH%\msys2_shell.cmd -defterm -no-start"
           set buildshell="%msys2% -mingw64 -full-path -here"
           set msys2="%msys2% -msys2"
