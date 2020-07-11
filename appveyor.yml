@@ -38,19 +38,19 @@ init:
 install:
   - |-
       set PATH="%MSYS_PATH%\usr\bin;%MINGW_PATH%\bin;%PATH%"
-      bash -lc "pacman --sync --noconfirm --disable-download-timeout --needed mingw-w64-x86_64-toolchain"
-      bash -lc "pacman -Syu --noconfirm --disable-download-timeout autoconf libtool automake make autoconf-archive pkg-config mingw-w64-x86_64-libsystre mingw-w64-x86_64-doxygen mingw-w64-x86_64-gnutls mingw-w64-x86_64-graphviz mingw-w64-x86_64-curl"
+      bash.exe -lc "pacman --sync --noconfirm --disable-download-timeout --needed mingw-w64-x86_64-toolchain"
+      bash.exe -lc "pacman -Syu --noconfirm --disable-download-timeout autoconf libtool automake make autoconf-archive pkg-config mingw-w64-x86_64-libsystre mingw-w64-x86_64-doxygen mingw-w64-x86_64-gnutls mingw-w64-x86_64-graphviz mingw-w64-x86_64-curl"
   - curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.59.tar.gz -o libmicrohttpd-0.9.59.tar.gz
   - tar -xzf libmicrohttpd-0.9.59.tar.gz
   - cd libmicrohttpd-0.9.59
-  - bash -lc "./configure --disable-examples --enable-poll=no"
-  - bash -lc "make"
-  - bash -lc "make install"
+  - bash.exe -lc "./configure --disable-examples --enable-poll=no"
+  - bash.exe -lc "make"
+  - bash.exe -lc "make install"
   - cd ..
-  - bash -lc "./bootstrap"
+  - bash.exe -lc "./bootstrap"
   - mkdir build
   - cd build
-  - bash -lc "MANIFEST_TOOL='no'; make"
+  - bash.exe -lc "MANIFEST_TOOL='no'; make"
 build_script:
-  - bash -lc "make check"
-  - bash -lc "cat test/test-suite.log"
+  - bash.exe -lc "make check"
+  - bash.exe -lc "cat test/test-suite.log"
