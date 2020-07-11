@@ -37,9 +37,6 @@ init:
   - 'echo Cygwin root is: %CYG_ROOT%'
 install:
   - |-
-      #set msys2="%MSYS_PATH%\msys2_shell.cmd -defterm -no-start"
-      #set buildshell="%msys2% -mingw64 -full-path -here"
-      #set msys2="%msys2% -msys2"
       set PATH="%MSYS_PATH%\usr\bin;%MINGW_PATH%\bin;%PATH%"
       bash -lc "pacman --sync --noconfirm --disable-download-timeout --needed mingw-w64-x86_64-toolchain"
       bash -lc "pacman -Syu --noconfirm --disable-download-timeout autoconf libtool automake make autoconf-archive pkg-config mingw-w64-x86_64-libsystre mingw-w64-x86_64-doxygen mingw-w64-x86_64-gnutls mingw-w64-x86_64-graphviz mingw-w64-x86_64-curl"
