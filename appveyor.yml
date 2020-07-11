@@ -21,6 +21,9 @@ environment:
     MINGW_W64_8_1_0_X86_64: C:\mingw-w64\x86_64-8.1.0-posix-seh-rt_v6-rev0
     MINGW_W64_7_2_0_X86_64: C:\mingw-w64\x86_64-7.2.0-posix-seh-rt_v5-rev1
   matrix:
+    - os: Visual Studio 2013
+    - os: Visual Studio 2015
+    - os: Visual Studio 2017
     - os: Visual Studio 2019
       #    - os: Visual Studio 2015
       #      COMPILER: cygwin
