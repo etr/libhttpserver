@@ -21,45 +21,7 @@ environment:
     MINGW_W64_8_1_0_X86_64: C:\mingw-w64\x86_64-8.1.0-posix-seh-rt_v6-rev0
     MINGW_W64_7_2_0_X86_64: C:\mingw-w64\x86_64-7.2.0-posix-seh-rt_v5-rev1
   matrix:
-    - os: Visual Studio 2013
-      COMPILER: mingw
-      MINGW_PATH: $MINGW_W64_5_3_0
-    - os: Visual Studio 2013
-      COMPILER: mingw
-      MINGW_PATH: $MINGW_W64_6_3_0_I686
-    - os: Visual Studio 2013
-      COMPILER: mingw
-      MINGW_PATH: $MINGW_W64_6_3_0_X86_64
-    - os: Visual Studio 2013
-      COMPILER: mingw
-      MINGW_PATH: $MINGW_W64_7_3_0_X86_64
-    - os: Visual Studio 2013
-      COMPILER: mingw
-      MINGW_PATH: $MINGW_W64_8_1_0_X86_64
-    - os: Visual Studio 2013
-      COMPILER: mingw
-      MINGW_PATH: $MINGW_W64_7_2_0_X86_64
-    - os: Visual Studio 2015
-      COMPILER: mingw
-      MINGW_PATH: $MINGW_W64_5_3_0
-    - os: Visual Studio 2015
-      COMPILER: mingw
-      MINGW_PATH: $MINGW_W64_6_3_0_I686
-    - os: Visual Studio 2015
-      COMPILER: mingw
-      MINGW_PATH: $MINGW_W64_6_3_0_X86_64
-    - os: Visual Studio 2015
-      COMPILER: mingw
-      MINGW_PATH: $MINGW_W64_7_3_0_X86_64
-    - os: Visual Studio 2015
-      COMPILER: mingw
-      MINGW_PATH: $MINGW_W64_8_1_0_X86_64
-    - os: Visual Studio 2015
-      COMPILER: mingw
-      MINGW_PATH: $MINGW_W64_7_2_0_X86_64
-    - os: Visual Studio 2017
-      COMPILER: mingw
-      MINGW_PATH: $MINGW_W64_7_2_0_X86_64
+    - os: Visual Studio 2019
       #    - os: Visual Studio 2015
       #      COMPILER: cygwin
       #    - os: Visual Studio 2017
@@ -75,25 +37,23 @@ init:
   - 'echo Cygwin root is: %CYG_ROOT%'
 install:
   - |-
-        set msys2="%MSYS_PATH%\msys2_shell.cmd -defterm -no-start"
-        set buildshell="%msys2% -mingw64 -full-path -here"
-        set msys2="%msys2% -msys2"
-        %msys2% -c "pacman --sync --noconfirm --disable-download-timeout --needed mingw-w64-x86_64-toolchain"
-        %msys2% -c "pacman -Syu --noconfirm --disable-download-timeout autoconf libtool automake make autoconf-archive pkg-config mingw-w64-x86_64-libsystre mingw-w64-x86_64-doxygen mingw-w64-x86_64-gnutls mingw-w64-x86_64-graphviz mingw-w64-x86_64-curl"
-        set PATH=%MINGW_PATH%/bin;%PATH%
-        set MAKE=mingw32-make  # so that Autotools can find it
+      #set msys2="%MSYS_PATH%\msys2_shell.cmd -defterm -no-start"
+      #set buildshell="%msys2% -mingw64 -full-path -here"
+      #set msys2="%msys2% -msys2"
+      set PATH="%MSYS_PATH%\usr\bin;%MINGW_PATH%\bin;%PATH%"
+      bash -lc "pacman --sync --noconfirm --disable-download-timeout --needed mingw-w64-x86_64-toolchain"
+      bash -lc "pacman -Syu --noconfirm --disable-download-timeout autoconf libtool automake make autoconf-archive pkg-config mingw-w64-x86_64-libsystre mingw-w64-x86_64-doxygen mingw-w64-x86_64-gnutls mingw-w64-x86_64-graphviz mingw-w64-x86_64-curl"
   - curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.59.tar.gz -o libmicrohttpd-0.9.59.tar.gz
   - tar -xzf libmicrohttpd-0.9.59.tar.gz
   - cd libmicrohttpd-0.9.59
-  - call %buildshell% -c "./configure --disable-examples --enable-poll=no"
-  - call %buildshell% -c "make"
-  - call %buildshell% -c "make install"
+  - bash -lc "./configure --disable-examples --enable-poll=no"
+  - bash -lc "make"
+  - bash -lc "make install"
   - cd ..
-  - call %buildshell% -c "./bootstrap"
+  - bash -lc "./bootstrap"
   - mkdir build
   - cd build
-  - export MANIFEST_TOOL='no'
-  - call %buildshell% -c "make"
+  - bash -lc "MANIFEST_TOOL='no'; make"
 build_script:
-  - call %buildshell% -c "make check"
-  - call %buildshell% -c "cat test/test-suite.log"
+  - bash -lc "make check"
+  - bash -lc "cat test/test-suite.log"
