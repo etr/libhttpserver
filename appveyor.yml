@@ -40,7 +40,6 @@ init:
   - 'echo Cygwin root is: %CYG_ROOT%'
 install:
   - ps: |-
-      C:\msys64\usr\bin\pacman --noconfirm --ask 20 --sync --refresh --refresh --sysupgrade --sysupgrade
       C:\msys64\usr\bin\pacman -Syu --noconfirm --disable-download-timeout autoconf libtool automake make autoconf-archive pkg-config mingw-w64-x86_64-libsystre mingw-w64-x86_64-doxygen mingw-w64-x86_64-gnutls mingw-w64-x86_64-graphviz mingw-w64-x86_64-curl
       $env:PATH="$env;C:\msys64\bin;C:\msys64\usr\bin;$($env:PATH)"
       $env:APPVEYOR_BUILD_FOLDER = $env:APPVEYOR_BUILD_FOLDER -replace "\\", "/"
