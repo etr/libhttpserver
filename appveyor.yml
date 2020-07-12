@@ -39,11 +39,10 @@ init:
   - 'echo Repo build commit is: %APPVEYOR_REPO_COMMIT%'
   - 'echo Cygwin root is: %CYG_ROOT%'
 install:
-  - ps: |-
-      C:\msys64\usr\bin\pacman --noconfirm --ask 20 --sync --refresh --refresh
-      C:\msys64\usr\bin\pacman -Syu --noconfirm --disable-download-timeout autoconf libtool automake make autoconf-archive pkg-config mingw-w64-x86_64-libsystre mingw-w64-x86_64-doxygen mingw-w64-x86_64-gnutls mingw-w64-x86_64-graphviz mingw-w64-x86_64-curl
-      $env:PATH="$env;C:\msys64\bin;C:\msys64\usr\bin;$($env:PATH)"
-      $env:APPVEYOR_BUILD_FOLDER = $env:APPVEYOR_BUILD_FOLDER -replace "\\", "/"
+  - C:\msys64\usr\bin\pacman --noconfirm --ask 20 --sync --refresh --refresh
+  - C:\msys64\usr\bin\pacman -Syu --noconfirm --disable-download-timeout autoconf libtool automake make autoconf-archive pkg-config mingw-w64-x86_64-libsystre mingw-w64-x86_64-doxygen mingw-w64-x86_64-gnutls mingw-w64-x86_64-graphviz mingw-w64-x86_64-curl
+  - $env:PATH="$env;C:\msys64\bin;C:\msys64\usr\bin;$($env:PATH)"
+  - $env:APPVEYOR_BUILD_FOLDER = $env:APPVEYOR_BUILD_FOLDER -replace "\\", "/"
   - curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.59.tar.gz -o libmicrohttpd-0.9.59.tar.gz
   - tar -xzf libmicrohttpd-0.9.59.tar.gz
   - bash -lc "cd $(echo '%APPVEYOR_BUILD_FOLDER%')/libmicrohttpd-0.9.59 && ./configure --disable-examples --enable-poll=no --enable-shared && make && make install"
