@@ -22,6 +22,7 @@ init:
   - 'echo Repo build commit is: %APPVEYOR_REPO_COMMIT%'
   - 'echo Cygwin root is: %CYG_ROOT%'
 install:
+  - 'if "%compiler%"=="msys2" C:\msys64\usr\bin\bash -lc "ls /C/msys64"'
   - 'if "%compiler%"=="msys2" C:\msys64\usr\bin\bash -lc "pacman --noconfirm --force -S --needed mingw-w64-$MSYS2_ARCH-{libtool,make,pkg-config,libsystre,doxygen,gnutls,graphviz,curl}"'
   - 'if "%compiler%"=="msys2" C:\msys64\usr\bin\bash -lc "cd $APPVEYOR_BUILD_FOLDER && curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.59.tar.gz -o libmicrohttpd-0.9.59.tar.gz"'
   - 'if "%compiler%"=="msys2" C:\msys64\usr\bin\bash -lc "cd $APPVEYOR_BUILD_FOLDER && tar -xzf libmicrohttpd-0.9.59.tar.gz"'
