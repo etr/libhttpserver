@@ -45,15 +45,10 @@ install:
       $env:APPVEYOR_BUILD_FOLDER = $env:APPVEYOR_BUILD_FOLDER -replace "\\", "/"
   - curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.59.tar.gz -o libmicrohttpd-0.9.59.tar.gz
   - tar -xzf libmicrohttpd-0.9.59.tar.gz
-  - cd libmicrohttpd-0.9.59
-  - bash -lc "echo $PWD && ls -l && ./configure --disable-examples --enable-poll=no"
-  - bash -lc "make"
-  - bash -lc "make install"
-  - cd ..
-  - bash -lc "./bootstrap"
+  - bash -lc "cd $(echo '%APPVEYOR_BUILD_FOLDER%')/libmicrohttpd-0.9.59 && ./configure --disable-examples --enable-poll=no && make && make install"
+  - bash -lc "cd $(echo '%APPVEYOR_BUILD_FOLDER%') && ./bootstrap"
   - mkdir build
-  - cd build
-  - bash -lc "MANIFEST_TOOL='no'; make"
+  - bash -lc "cd $(echo '%APPVEYOR_BUILD_FOLDER%')/build && MANIFEST_TOOL='no'; make"
 build_script:
-  - bash -lc "make check"
-  - bash -lc "cat test/test-suite.log"
+  - bash -lc "cd $(echo '%APPVEYOR_BUILD_FOLDER%')/build && make check"
+  - bash -lc "cd $(echo '%APPVEYOR_BUILD_FOLDER%')/build && cat test/test-suite.log"
