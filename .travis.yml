@@ -112,8 +112,6 @@ matrix:
     - compiler: clang
       env: DEBUG="debug" COVERAGE="coverage"
   include:
-    - os: windows
-      env: DEBUG="nodebug" COVERAGE="nocoverage" YARN_GPG=no
     - os: linux
       addons:
         apt:
