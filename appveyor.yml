@@ -48,7 +48,7 @@ install:
   - bash -lc "cd $(echo '%APPVEYOR_BUILD_FOLDER%')/libmicrohttpd-0.9.59 && ./configure --disable-examples --enable-poll=no && make && make install"
   - bash -lc "cd $(echo '%APPVEYOR_BUILD_FOLDER%') && ./bootstrap"
   - mkdir build
-  - bash -lc "cd $(echo '%APPVEYOR_BUILD_FOLDER%')/build && MANIFEST_TOOL='no'; make"
+  - bash -lc "cd $(echo '%APPVEYOR_BUILD_FOLDER%')/build && MANIFEST_TOOL='no'; ../configure --disable-fastopen; make"
 build_script:
   - bash -lc "cd $(echo '%APPVEYOR_BUILD_FOLDER%')/build && make check"
   - bash -lc "cd $(echo '%APPVEYOR_BUILD_FOLDER%')/build && cat test/test-suite.log"
