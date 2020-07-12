@@ -26,7 +26,8 @@ install:
   - 'if "%compiler%"=="msys2" C:\msys64\msys2_shell.cmd -defterm -no-start -mingw64 -full-path -here -c "cd $APPVEYOR_BUILD_FOLDER && tar -xzf libmicrohttpd-0.9.59.tar.gz"'
   - 'if "%compiler%"=="msys2" C:\msys64\msys2_shell.cmd -defterm -no-start -mingw64 -full-path -here -c "cd $APPVEYOR_BUILD_FOLDER/libmicrohttpd-0.9.59 && ./configure --disable-examples --enable-poll=no --prefix /C/msys64/ && make && make install"'
   - 'if "%compiler%"=="msys2" C:\msys64\msys2_shell.cmd -defterm -no-start -mingw64 -full-path -here -c "cd $APPVEYOR_BUILD_FOLDER && ./bootstrap"'
-  - 'if "%compiler%"=="msys2" C:\msys64\msys2_shell.cmd -defterm -no-start -mingw64 -full-path -here -c "ls /C/msys64/include && ls /C/msys64/usr/include"'
+  - 'if "%compiler%"=="msys2" C:\msys64\msys2_shell.cmd -defterm -no-start -mingw64 -full-path -here -c "ls /C/msys64/include"'
+  - 'if "%compiler%"=="msys2" C:\msys64\msys2_shell.cmd -defterm -no-start -mingw64 -full-path -here -c "ls /C/msys64/usr/include"'
   - 'if "%compiler%"=="msys2" C:\msys64\msys2_shell.cmd -defterm -no-start -mingw64 -full-path -here -c "cd $APPVEYOR_BUILD_FOLDER && mkdir build && cd build && MANIFEST_TOOL=no; ../configure --disable-fastopen --prefix /C/msys64/; make"'
 build_script:
   - 'if "%compiler%"=="msys2" C:\msys64\msys2_shell.cmd -defterm -no-start -mingw64 -full-path -here -c "cd $APPVEYOR_BUILD_FOLDER/build && make check"'
