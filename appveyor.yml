@@ -1,4 +1,4 @@
-version: 2.2.0.{build}
+platform: x64
 
 branches:
   except:
@@ -9,28 +9,11 @@ skip_commits:
     - .travis.yml
 
 environment:
-  global:
-    EVENT_TESTS_PARALLEL: 20
-    EVENT_BUILD_PARALLEL: 10
-    MSYS_PATH: C:\msys64
-    CYGWIN_PATH: C:\cygwin64
-    MINGW_W64_5_3_0: C:\mingw-w64\i686-5.3.0-posix-dwarf-rt_v4-rev0
-    MINGW_W64_6_3_0_I686: C:\mingw-w64\i686-6.3.0-posix-dwarf-rt_v5-rev1
-    MINGW_W64_6_3_0_X86_64: C:\mingw-w64\x86_64-6.3.0-posix-seh-rt_v5-rev1
-    MINGW_W64_7_3_0_X86_64: C:\mingw-w64\x86_64-7.3.0-posix-seh-rt_v5-rev0
-    MINGW_W64_8_1_0_X86_64: C:\mingw-w64\x86_64-8.1.0-posix-seh-rt_v6-rev0
-    MINGW_W64_7_2_0_X86_64: C:\mingw-w64\x86_64-7.2.0-posix-seh-rt_v5-rev1
   matrix:
-    - os: Visual Studio 2013
-    - os: Visual Studio 2015
-    - os: Visual Studio 2017
-    - os: Visual Studio 2019
-      #    - os: Visual Studio 2015
-      #      COMPILER: cygwin
-      #    - os: Visual Studio 2017
-      #      COMPILER: cygwin
-      #    - os: Visual Studio 2019
-      #      COMPILER: cygwin
+    - compiler: msys2
+      MINGW_PREFIX: /mingw32
+      MINGW_CHOST: i686-w64-mingw32
+      MSYS2_ARCH: i686
 init:
   - 'echo Building libhttpserver %version% for Windows'
   - 'echo System architecture: %PLATFORM%'
@@ -39,26 +22,12 @@ init:
   - 'echo Repo build commit is: %APPVEYOR_REPO_COMMIT%'
   - 'echo Cygwin root is: %CYG_ROOT%'
 install:
-  - C:\msys64\usr\bin\pacman --noconfirm --ask 20 --sync --refresh --refresh
-  - C:\msys64\usr\bin\pacman -Syu --noconfirm --disable-download-timeout autoconf
-  - C:\msys64\usr\bin\pacman -Syu --noconfirm --disable-download-timeout libtool
-  - C:\msys64\usr\bin\pacman -Syu --noconfirm --disable-download-timeout automake
-  - C:\msys64\usr\bin\pacman -Syu --noconfirm --disable-download-timeout make
-  - C:\msys64\usr\bin\pacman -Syu --noconfirm --disable-download-timeout autoconf-archive
-  - C:\msys64\usr\bin\pacman -Syu --noconfirm --disable-download-timeout pkg-config
-  - C:\msys64\usr\bin\pacman -Syu --noconfirm --disable-download-timeout mingw-w64-x86_64-libsystre
-  - C:\msys64\usr\bin\pacman -Syu --noconfirm --disable-download-timeout mingw-w64-x86_64-doxygen
-  - C:\msys64\usr\bin\pacman -Syu --noconfirm --disable-download-timeout mingw-w64-x86_64-gnutls
-  - C:\msys64\usr\bin\pacman -Syu --noconfirm --disable-download-timeout mingw-w64-x86_64-graphviz
-  - C:\msys64\usr\bin\pacman -Syu --noconfirm --disable-download-timeout mingw-w64-x86_64-curl
-  - pc: $env:PATH="$env;C:\msys64\bin;C:\msys64\usr\bin;$($env:PATH)"
-  - pc: $env:APPVEYOR_BUILD_FOLDER = $env:APPVEYOR_BUILD_FOLDER -replace "\\", "/"
-  - curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.59.tar.gz -o libmicrohttpd-0.9.59.tar.gz
-  - tar -xzf libmicrohttpd-0.9.59.tar.gz
-  - bash -lc "cd $(echo '%APPVEYOR_BUILD_FOLDER%')/libmicrohttpd-0.9.59 && ./configure --disable-examples --enable-poll=no --enable-shared && make && make install"
-  - bash -lc "cd $(echo '%APPVEYOR_BUILD_FOLDER%') && ./bootstrap"
-  - mkdir build
-  - bash -lc "cd $(echo '%APPVEYOR_BUILD_FOLDER%')/build && MANIFEST_TOOL='no'; ../configure --disable-fastopen; make"
+  - 'if "%compiler%"=="msys2" C:\msys64\usr\bin\bash -lc "pacman --noconfirm --force -S --needed mingw-w64-$MSYS2_ARCH-{autoconf,libtool,automake,make,autoconf-archive,pkg-config,libsystre,doxygen,gnutls,graphviz,curl}"'
+  - 'if "%compiler%"=="msys2" C:\msys64\usr\bin\bash -lc "curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.59.tar.gz -o libmicrohttpd-0.9.59.tar.gz"'
+  - 'if "%compiler%"=="msys2" C:\msys64\usr\bin\bash -lc "tar -xzf libmicrohttpd-0.9.59.tar.gz"'
+  - 'if "%compiler%"=="msys2" C:\msys64\usr\bin\bash -lc "cd $APPVEYOR_BUILD_FOLDER/libmicrohttpd-0.9.59 && ./configure --disable-examples --enable-poll=no --enable-shared && make && make install"'
+  - 'if "%compiler%"=="msys2" C:\msys64\usr\bin\bash -lc "cd $APPVEYOR_BUILD_FOLDER && ./bootstrap"'
+  - 'if "%compiler%"=="msys2" C:\msys64\usr\bin\bash -lc "cd $APPVEYOR_BUILD_FOLDER && mkdir build && cd build && MANIFEST_TOOL=no; ../configure --disable-fastopen; make"'
 build_script:
-  - bash -lc "cd $(echo '%APPVEYOR_BUILD_FOLDER%')/build && make check"
-  - bash -lc "cd $(echo '%APPVEYOR_BUILD_FOLDER%')/build && cat test/test-suite.log"
+  - 'if "%compiler%"=="msys2" C:\msys64\usr\bin\bash -lc "cd $APPVEYOR_BUILD_FOLDER/build && make check"'
+  - 'if "%compiler%"=="msys2" C:\msys64\usr\bin\bash -lc "cd $APPVEYOR_BUILD_FOLDER/build && cat test/test-suite.log"'
