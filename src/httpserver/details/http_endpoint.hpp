@@ -120,12 +120,12 @@ class http_endpoint
             return chunk_positions;
         }
 
-        const bool is_family_url()
+        bool is_family_url() const
         {
             return family_url;
         }
 
-        const bool is_regex_compiled()
+        bool is_regex_compiled() const
         {
             return reg_compiled;
         }
