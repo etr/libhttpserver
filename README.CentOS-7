@@ -1,0 +1,7 @@
+## Cent OS 7 / RHEL 7
+
+CentOS 7 has a lower version of gcc (4.8.7) that is barely C++11 capable and this library
+needs a better compiler.  We recommend at least gcc 5+
+
+We recommend installing devtoolset-8
+https://www.softwarecollections.org/en/scls/rhscl/devtoolset-8/

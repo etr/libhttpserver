@@ -284,6 +284,9 @@ case $host_os in
         AM_CXXFLAGS="$AM_CXXFLAGS -DDARWIN"
         AM_CFLAGS="$AM_CFLAGS -DDARWIN"
         ;;
+    freebsd* )
+        AM_LDFLAGS=""
+        ;;
 esac
 
 AC_MSG_CHECKING([whether to build with coverage information])

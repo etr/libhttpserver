@@ -70,7 +70,7 @@ class deferred_response : public string_response
         ssize_t (*cycle_callback)(std::shared_ptr<T>, char*, size_t);
         std::shared_ptr<T> closure_data;
 
-        static ssize_t cb(void* cls, uint64_t pos, char* buf, size_t max)
+        static ssize_t cb(void* cls, uint64_t, char* buf, size_t max)
         {
             deferred_response<T>* dfr = static_cast<deferred_response<T>*>(cls);
             return dfr->cycle_callback(dfr->closure_data, buf, max);

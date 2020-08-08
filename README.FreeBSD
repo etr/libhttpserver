@@ -1,0 +1,9 @@
+## Building on FreeBSD (Tested on 12.0)
+
+# Due to the differences in the directory structures on BSD systems some minor tweaks need to occur
+# Also, FreeBSD and AIX "make" command is not compatible with gmake, like Linux and Mingw are
+
+export MAKE=gmake
+bootstrap
+configure CPPFLAGS=-I/usr/local/include LDFLAGS=-L/usr/local/lib
+gmake
