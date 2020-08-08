@@ -76,7 +76,7 @@ Additionally, clients can specify resource limits on the overall number of conne
 [Back to TOC](#table-of-contents)
 
 ## Requirements
-libhttpserver can be used without any dependencies aside for libmicrohttpd.
+libhttpserver can be used without any dependencies aside from libmicrohttpd.
 
 The minimum versions required are:
 * g++ >= 5.5.0 or clang-3.6
@@ -91,6 +91,8 @@ For versions before 0.18.0, on MinGW, you will need:
 * libgnurx >= 2.5.1
 
 Furthermore, the testcases use [libcurl](http://curl.haxx.se/libcurl/) but you don't need it to compile the library.
+
+Please refer to the readme file for your particular distribution if there is one for important notes.
 
 [Back to TOC](#table-of-contents)
 
