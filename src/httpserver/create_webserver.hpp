@@ -120,6 +120,8 @@ class create_webserver
         create_webserver& no_ssl() { _use_ssl = false; return *this; }
         create_webserver& use_ipv6() { _use_ipv6 = true; return *this; }
         create_webserver& no_ipv6() { _use_ipv6 = false; return *this; }
+        create_webserver& use_dual_stack() { _use_dual_stack = true; return *this; }
+        create_webserver& no_dual_stack() { _use_dual_stack = false; return *this; }
         create_webserver& debug() { _debug = true; return *this; }
         create_webserver& no_debug() { _debug = false; return *this; }
         create_webserver& pedantic() { _pedantic = true; return *this; }
@@ -273,6 +275,7 @@ class create_webserver
         int _max_thread_stack_size = 0;
         bool _use_ssl = false;
         bool _use_ipv6 = false;
+        bool _use_dual_stack = false;
         bool _debug = false;
         bool _pedantic = false;
         std::string _https_mem_key = "";

@@ -154,6 +154,7 @@ class webserver
         const int max_thread_stack_size;
         const bool use_ssl;
         const bool use_ipv6;
+        const bool use_dual_stack;
         const bool debug;
         const bool pedantic;
         const std::string https_mem_key;
