@@ -51,7 +51,7 @@ install:
      ../configure --disable-fastopen;
    fi
  - if [ "$IWYU" = "iwyu" ]; then
-     make -k CXX='iwyu -Xiwyu --mapping_file=${top_builddir}/../custom_iwyu.imp' CXXFLAGS="-isystem /usr/lib/llvm-6.0/lib/clang/6.0.0/include -std=c++11 -DHTTPSERVER_COMPILATION -D_REENTRANT $CXXFLAGS";
+     make -k CXX='iwyu -Xiwyu --mapping_file=${top_builddir}/../custom_iwyu.imp' CXXFLAGS="-std=c++11 -DHTTPSERVER_COMPILATION -D_REENTRANT $CXXFLAGS";
    else
      make;
    fi
