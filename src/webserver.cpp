@@ -149,6 +149,7 @@ webserver::webserver(const create_webserver& params):
     max_thread_stack_size(params._max_thread_stack_size),
     use_ssl(params._use_ssl),
     use_ipv6(params._use_ipv6),
+    use_dual_stack(params._use_dual_stack),
     debug(params._debug),
     pedantic(params._pedantic),
     https_mem_key(params._https_mem_key),
@@ -311,6 +312,8 @@ bool webserver::start(bool blocking)
         start_conf |= MHD_USE_SSL;
     if(use_ipv6)
         start_conf |= MHD_USE_IPv6;
+    if(use_dual_stack)
+        start_conf |= MHD_USE_DUAL_STACK;
     if(debug)
         start_conf |= MHD_USE_DEBUG;
     if(pedantic)
