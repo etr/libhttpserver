@@ -143,6 +143,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, start_stop)
     }
 LT_END_AUTO_TEST(start_stop)
 
+#if defined(IPV6_TESTS_ENABLED)
+
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ipv6)
     {
     webserver ws = create_webserver(8080).use_ipv6();
@@ -192,6 +194,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, dual_stack)
     ws.stop();
     }
 LT_END_AUTO_TEST(dual_stack)
+
+#endif
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, sweet_kill)
     webserver ws = create_webserver(8080);
