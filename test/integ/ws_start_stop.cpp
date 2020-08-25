@@ -156,7 +156,6 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ipv6)
     CURLcode res;
     curl_easy_setopt(curl, CURLOPT_URL, "http://localhost:8080/base");
     curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V6);
-    curl_easy_setopt(curl, CURLOPT_DNS_LOCAL_IP6, "::1");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -182,7 +181,6 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, dual_stack)
     CURLcode res;
     curl_easy_setopt(curl, CURLOPT_URL, "http://localhost:8080/base");
     curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V6);
-    curl_easy_setopt(curl, CURLOPT_DNS_LOCAL_IP6, "::1");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
