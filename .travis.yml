@@ -9,54 +9,24 @@ env:
  - DEBUG="debug" COVERAGE="coverage"
  - DEBUG="nodebug" COVERAGE="nocoverage"
  - LINKING="static"
-before_cache:
-- |-
-    case $TRAVIS_OS_NAME in
-      windows)
-        # https://unix.stackexchange.com/a/137322/107554
-        $msys2 pacman --sync --clean --noconfirm
-        ;;
-    esac
-cache:
-    directories:
-    - $HOME/AppData/Local/Temp/chocolatey
-    - /C/tools/msys64
 before_install:
  - eval "${MATRIX_EVAL}"
- - if [ "$TRAVIS_OS_NAME" != "windows" ]; then export LDFLAGS="$LDFLAGS -L/usr/local/lib -L/usr/lib"; fi
- - if [ "$TRAVIS_OS_NAME" != "windows" ]; then export PATH=$PATH:/usr/local/lib; fi
- - if [ "$TRAVIS_OS_NAME" != "windows" ]; then export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib; fi
- - if [ "$TRAVIS_OS_NAME" != "windows" ]; then export DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH:/usr/local/lib; fi
- - if [ "$TRAVIS_OS_NAME" != "windows" ]; then export buildshell=''; fi
+ - export LDFLAGS="$LDFLAGS -L/usr/local/lib -L/usr/lib"
+ - export PATH=$PATH:/usr/local/lib
+ - export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib
+ - export DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH:/usr/local/lib
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo apt-get install info install-info; fi
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo pip install codecov; fi
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo pip install gcovr; fi
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo apt-get install cppcheck; fi
  - if [ "$TRAVIS_OS_NAME" = "osx" ]; then export CFLAGS='-mtune=generic'; fi
  - if [ "$TRAVIS_OS_NAME" = "osx" ]; then export IPV6_TESTS_ENABLED="true"; fi
- - |-
-    case $TRAVIS_OS_NAME in
-      windows)
-        [[ ! -f C:/tools/msys64/msys2_shell.cmd ]] && rm -rf C:/tools/msys64
-        choco uninstall -y mingw
-        choco upgrade --no-progress -y msys2
-        export msys2='cmd //C RefreshEnv.cmd '
-        export msys2+='& set MSYS=winsymlinks:nativestrict '
-        export msys2+='& C:\\tools\\msys64\\msys2_shell.cmd -defterm -no-start'
-        export buildshell="$msys2 -mingw64 -full-path -here -c "\"\$@"\" --"
-        export msys2+=" -msys2 -c "\"\$@"\" --"
-        $msys2 pacman --sync --noconfirm --disable-download-timeout --needed mingw-w64-x86_64-toolchain
-        $msys2 pacman -Syu --noconfirm --disable-download-timeout autoconf libtool automake make autoconf-archive pkg-config mingw-w64-x86_64-libsystre mingw-w64-x86_64-doxygen mingw-w64-x86_64-gnutls mingw-w64-x86_64-graphviz mingw-w64-x86_64-curl
-        export PATH=/C/tools/msys64/mingw64/bin:$PATH
-        export MAKE=mingw32-make  # so that Autotools can find it
-        ;;
-    esac
  - curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.59.tar.gz -o libmicrohttpd-0.9.59.tar.gz
  - tar -xzf libmicrohttpd-0.9.59.tar.gz
  - cd libmicrohttpd-0.9.59
- - if [ "$TRAVIS_OS_NAME" != "windows" ]; then $buildshell ./configure --disable-examples; else $buildshell ./configure --disable-examples --enable-poll=no; fi;
- - $buildshell make
- - if [ "$TRAVIS_OS_NAME" != "windows" ]; then sudo make install; else $buildshell make install; fi
+ - ./configure --disable-examples
+ - make
+ - sudo make install
  - cd ..
  - if [ "$BUILD_TYPE" = "asan" ]; then export CFLAGS='-fsanitize=address'; export CXXLAGS='-fsanitize=address'; export LDFLAGS='-fsanitize=address'; fi
  - if [ "$BUILD_TYPE" = "msan" ]; then export CFLAGS='-fsanitize=memory'; export CXXLAGS='-fsanitize=memory'; export LDFLAGS='-fsanitize=memory'; fi
@@ -64,25 +34,24 @@ before_install:
  - if [ "$BUILD_TYPE" = "tsan" ]; then export CFLAGS='-fsanitize=thread'; export CXXLAGS='-fsanitize=thread'; export LDFLAGS='-fsanitize=thread'; fi
  - if [ "$BUILD_TYPE" = "ubsan" ]; then export export CFLAGS='-fsanitize=undefined'; export CXXLAGS='-fsanitize=undefined'; export LDFLAGS='-fsanitize=undefined'; fi
 install:
- - $buildshell ./bootstrap
+ - ./bootstrap
  - mkdir build
  - cd build
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then export MANIFEST_TOOL='no'; fi
  - if [ "$LINKING" = "static" ]; then
-     $buildshell ../configure --enable-static --disable-fastopen;
+     ../configure --enable-static --disable-fastopen;
    elif [ "$DEBUG" = "debug" ] && [ "$COVERAGE" = "coverage" ]; then
-     $buildshell ../configure --enable-debug --enable-coverage --disable-shared --disable-fastopen;
+     ../configure --enable-debug --enable-coverage --disable-shared --disable-fastopen;
    elif [ "$DEBUG" = "debug" ]; then
-     $buildshell ../configure --enable-debug --disable-shared --disable-fastopen;
+     ../configure --enable-debug --disable-shared --disable-fastopen;
    elif [ "$VALGRIND" = "valgrind" ]; then
-     $buildshell ../configure --enable-debug --disable-fastopen --disable-valgrind-helgrind --disable-valgrind-drd --disable-valgrind-sgcheck;
+     ../configure --enable-debug --disable-fastopen --disable-valgrind-helgrind --disable-valgrind-drd --disable-valgrind-sgcheck;
    else
-     $buildshell ../configure --disable-fastopen;
+     ../configure --disable-fastopen;
    fi
- - $buildshell make
+ - make
 script:
- - $buildshell make check
- - $buildshell cat test/test-suite.log
+ - make check
+ - cat test/test-suite.log
  - if [ "$VALGRIND" = "valgrind" ]; then make check-valgrind; fi;
  - if [ "$VALGRIND" = "valgrind" ]; then cat test/test-suite-memcheck.log; fi;
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then cd ../src/; cppcheck --error-exitcode=1 .; cd ../build; fi
@@ -104,8 +73,6 @@ script:
     ./benchmark_threads 8080 &
     sleep 5 && ab -n 10000000 -c 100 localhost:8080/plaintext
    fi
-after_script:
-  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then taskkill //F //PID $(ps -Wla | tr -s ' ' | grep gpg | cut -f2 -d' ') ; fi
 after_success:
   - if [ "$DEBUG" = "debug" ] && [ "$COVERAGE" = "coverage" ] && [ "$TRAVIS_OS_NAME" = "linux" ]; then bash <(curl -s https://codecov.io/bash); fi
 matrix:
