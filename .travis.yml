@@ -45,13 +45,18 @@ install:
      ../configure --enable-debug --disable-shared --disable-fastopen;
    elif [ "$VALGRIND" = "valgrind" ]; then
      ../configure --enable-debug --disable-fastopen --disable-valgrind-helgrind --disable-valgrind-drd --disable-valgrind-sgcheck;
+   elif [ "$IWYU" = "iwyu" ]; then
+     ../configure --disable-examples
    else
      ../configure --disable-fastopen;
    fi
- - make
+ - if [ "$IWYU" = "iwyu" ]; then
+     make -k CXX='iwyu -Xiwyu --mapping_file=${top_builddir}/../custom_iwyu.imp' CXXFLAGS="-isystem /usr/lib/llvm-6.0/lib/clang/6.0.0/include -std=c++11 -DHTTPSERVER_COMPILATION -D_REENTRANT $CXXFLAGS";
+   elif
+     make;
+   fi
 script:
- - make check
- - cat test/test-suite.log
+ - if [ "$IWYU" != "iwyu" ]; then make check; cat test/test-suite.log; fi
  - if [ "$VALGRIND" = "valgrind" ]; then make check-valgrind; fi;
  - if [ "$VALGRIND" = "valgrind" ]; then cat test/test-suite-memcheck.log; fi;
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then cd ../src/; cppcheck --error-exitcode=1 .; cd ../build; fi
@@ -309,3 +314,11 @@ matrix:
             - clang-9
       env:
         - MATRIX_EVAL="CC=clang-9 && CXX=clang++-9"
+    - os: linux
+      addons:
+        apt:
+          packages:
+            - clang-6.0
+            - iwyu
+      env:
+        - MATRIX_EVAL="CC=clang-6.0 && CXX=clang++-6.0 && IWYU=iwyu"

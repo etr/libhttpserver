@@ -1,0 +1,17 @@
+[
+  { include: ["\"microhttpd.h\"", "private", "<microhttpd.h>", "public"] },
+  { include: ["<ext/alloc_traits.h>", "private", "<memory>", "public"] },
+  
+  { symbol: ["std::exception",     "private", "<exception>", "public"]},
+  { symbol: ["std::shared_ptr",    "private", "<memory>",    "public"]},
+  { symbol: ["std::uint16_t",      "private", "<cstdint>",   "public"]},
+  { symbol: ["std::uint64_t",      "private", "<cstdint>",   "public"]},
+  { symbol: ["std::istringstream", "private", "<sstream>",   "public"]},
+  { symbol: ["std::stringstream",  "private", "<sstream>",   "public"]},
+  { symbol: ["std::ifstream",      "private", "<fstream>",   "public"]},
+
+  { symbol: ["uint16_t", "private", "<stdint.h>", "public"]},
+  { symbol: ["uint64_t", "private", "<stdint.h>", "public"]},
+
+  { symbol: ["MHD_Connection", "private", "<microhttpd.h>", "public"]},
+]
