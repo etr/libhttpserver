@@ -46,7 +46,7 @@ install:
    elif [ "$VALGRIND" = "valgrind" ]; then
      ../configure --enable-debug --disable-fastopen --disable-valgrind-helgrind --disable-valgrind-drd --disable-valgrind-sgcheck;
    elif [ "$IWYU" = "iwyu" ]; then
-     ../configure --disable-examples
+     ../configure --disable-examples;
    else
      ../configure --disable-fastopen;
    fi
