@@ -11,6 +11,20 @@ compiler:
 # - LINKING="static"
 before_install:
  - eval "${MATRIX_EVAL}"
+ - if [ "$IWYU" = "iwyu" ]; then
+     CLANG_VERSION=`ls -t /usr/lib/ | grep '^llvm-' | head -n 1 | sed -E 's/llvm-(.+)/\1/'` ;
+     CLANG_PREFIX_PATH=`llvm-config-$VERSION --prefix` ;
+     CLANG_BIN_PATH=`llvm-config-$VERSION --bindir` ;
+     git clone https://github.com/include-what-you-use/include-what-you-use.git ;
+     cd include-what-you-use ;
+     git checkout clang_${VERSION}.0 ;
+     cd .. ;
+     mkdir build_iwyu ;
+     cd build_iwyu ;
+     cmake -G "Unix Makefiles" -DCMAKE_PREFIX_PATH=$CLANG_PREFIX_PATH -DCMAKE_C_COMPILER=$CLANG_BIN_PATH/clang -DCMAKE_CXX_COMPILER=$CLANG_BIN_PATH/clang++ ../include-what-you-use ;
+     make ;
+     sudo make install ;
+   fi
  - export LDFLAGS="$LDFLAGS -L/usr/local/lib -L/usr/lib"
  - export PATH=$PATH:/usr/local/lib
  - export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib
@@ -56,6 +70,8 @@ install:
      clang -print-resource-dir ;
      which clang ;
      which include-what-you-use ;
+     sudo updatedb ;
+     locate stdarg.h ;
      make -k CXX='iwyu -Xiwyu --mapping_file=${top_builddir}/../custom_iwyu.imp' CXXFLAGS="-std=c++11 -DHTTPSERVER_COMPILATION -D_REENTRANT $CXXFLAGS";
    else
      make;
@@ -320,6 +336,7 @@ matrix:
 #      env:
 #        - MATRIX_EVAL="CC=clang-9 && CXX=clang++-9"
     - os: linux
+      compiler: clang
       addons:
         apt:
           packages:
