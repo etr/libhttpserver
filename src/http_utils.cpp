@@ -34,8 +34,6 @@
 #include <sys/types.h>
 #endif // WIN32 check
 
-#include "httpserver/http_utils.hpp"
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <fstream>
