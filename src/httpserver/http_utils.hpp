@@ -43,8 +43,8 @@
 #endif
 
 #include <microhttpd.h>
-
 #include <stddef.h>
+
 #if !defined(__MINGW32__)
 #include <sys/socket.h>
 #endif
