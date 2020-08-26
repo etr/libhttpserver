@@ -43,9 +43,10 @@
 #endif
 
 #include <microhttpd.h>
+#include <stddef.h>
+#include <sys/socket.h>
 #include <algorithm>
 #include <cctype>
-#include <exception>
 #include <iosfwd>
 #include <map>
 #include <string>
