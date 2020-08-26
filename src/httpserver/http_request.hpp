@@ -42,14 +42,6 @@ struct MHD_Connection;
 namespace httpserver
 {
 
-class webserver;
-
-namespace http
-{
-    class header_comparator;
-    class arg_comparator;
-};
-
 /**
  * Class representing an abstraction for an Http Request. It is used from classes using these apis to receive information through http protocol.
 **/
