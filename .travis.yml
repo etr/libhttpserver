@@ -13,8 +13,10 @@ before_install:
  - eval "${MATRIX_EVAL}"
  - if [ "$IWYU" = "iwyu" ]; then
      CLANG_VERSION=`ls -t /usr/lib/ | grep '^llvm-' | head -n 1 | sed -E 's/llvm-(.+)/\1/'` ;
-     CLANG_PREFIX_PATH="/usr/lib/llvm-${CLANG_VERSION}/" ;
-     CLANG_BIN_PATH="/usr/lib/llvm-${CLANG_VERSION}/bin/" ;
+     CLANG_PREFIX_PATH="/usr/lib/llvm-${CLANG_VERSION}" ;
+     CLANG_BIN_PATH="/usr/lib/llvm-${CLANG_VERSION}/bin" ;
+     ls -l $CLANG_PREFIX_PATH ;
+     ls -l $CLANG_BIN_PATH ;
      git clone https://github.com/include-what-you-use/include-what-you-use.git ;
      cd include-what-you-use ;
      echo "$CLANG_VERSION" | grep '\.[0-9]$' ;
