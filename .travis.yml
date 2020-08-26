@@ -12,13 +12,13 @@ compiler:
 before_install:
  - eval "${MATRIX_EVAL}"
  - if [ "$IWYU" = "iwyu" ]; then
-     CLANG_VERSION=`ls -t /usr/bin/ | grep '^clang-' | head -n 1 | sed -E 's/clang-(.+)/\1/'` ;
-     CLANG_PREFIX_PATH="/usr/lib/clang/${CLANG_VERSION}" ;
-     CLANG_BIN_PATH="/usr/lib/llvm-${CLANG_VERSION}/bin/clang" ;
+     CLANG_VERSION=`ls -t /usr/lib/ | grep '^llvm-' | head -n 1 | sed -E 's/llvm-(.+)/\1/'` ;
+     CLANG_PREFIX_PATH="/usr/lib/llvm-${CLANG_VERSION}/" ;
+     CLANG_BIN_PATH="/usr/lib/llvm-${CLANG_VERSION}/bin/" ;
      git clone https://github.com/include-what-you-use/include-what-you-use.git ;
      cd include-what-you-use ;
      echo "$CLANG_VERSION" | grep '\.0$'
-     if [$? -eq 0]; then
+     if [ $? -eq 0 ]; then
        git checkout clang_${CLANG_VERSION} ;
      else
        git checkout clang_${CLANG_VERSION}.0 ;
@@ -344,7 +344,13 @@ matrix:
       compiler: clang
       addons:
         apt:
+          sources:
+            - llvm-toolchain-xenial-7
+            - ubuntu-toolchain-r-test
           packages:
             - iwyu
+            - cmake
+            - llvm-dev
+            - libclang-dev
       env:
         - MATRIX_EVAL="IWYU=iwyu"
