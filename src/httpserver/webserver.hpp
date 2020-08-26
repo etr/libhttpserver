@@ -35,7 +35,11 @@
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdlib.h>
+
+#if !defined(__MINGW32__)
 #include <sys/socket.h>
+#endif
+
 #include <map>
 #include <memory>
 #include <set>
