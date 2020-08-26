@@ -19,6 +19,7 @@ before_install:
      cmake -G "Unix Makefiles" -DCMAKE_PREFIX_PATH=/usr/lib/llvm-7 ../include-what-you-use;
      make;
      sudo make install;
+     cd ..;
    fi
  - export LDFLAGS="$LDFLAGS -L/usr/local/lib -L/usr/lib"
  - export PATH=$PATH:/usr/local/lib
@@ -327,6 +328,9 @@ matrix:
     - os: linux
       addons:
         apt:
+          sources:
+            - llvm-toolchain-xenial-7
+            - ubuntu-toolchain-r-test
           packages:
             - clang-7
             - llvm-7-dev
