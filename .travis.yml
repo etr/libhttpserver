@@ -14,7 +14,7 @@ before_install:
  - if [ "$IWYU" = "iwyu" ]; then
      CLANG_VERSION=`clang --version | grep version | cut -f3 -d' ' | cut -f1 -d'-'` ;
      CLANG_PKG_VERSION=`echo $CLANG_VERSION | cut -f1,2 -d'.'`
-     CLANG_PREFIX_PATH="/usr/local/clang-${CLANG_VERSION}/lib/clang/${CLANG_VERSION}/" ;
+     CLANG_PREFIX_PATH="/usr/local/clang-${CLANG_VERSION}/lib/clang/${CLANG_VERSION}" ;
      CLANG_BIN_PATH="/usr/local/clang-${CLANG_VERSION}/bin" ;
      sudo updatedb ;
      locate stddef.h ;
@@ -84,7 +84,7 @@ install:
      which include-what-you-use ;
      sudo updatedb ;
      locate stdarg.h ;
-     make -k CXX='/usr/local/bin/include-what-you-use -Xiwyu --mapping_file=${top_builddir}/../custom_iwyu.imp' CXXFLAGS="-std=c++11 -DHTTPSERVER_COMPILATION -D_REENTRANT $CXXFLAGS";
+     make -k CXX='/usr/local/bin/include-what-you-use -Xiwyu --mapping_file=${top_builddir}/../custom_iwyu.imp' CXXFLAGS="-isystem ${CLANG_PREFIX_PATH}/include -std=c++11 -DHTTPSERVER_COMPILATION -D_REENTRANT $CXXFLAGS";
    else
      make;
    fi
