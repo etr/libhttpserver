@@ -1,10 +1,10 @@
 language: cpp
 os:
  - linux
- - osx
-compiler: 
- - gcc
- - clang
+# - osx
+#compiler: 
+# - gcc
+# - clang
 env:
  - DEBUG="debug" COVERAGE="coverage"
  - DEBUG="nodebug" COVERAGE="nocoverage"
@@ -91,235 +91,235 @@ matrix:
     - compiler: clang
       env: DEBUG="debug" COVERAGE="coverage"
   include:
-    - os: linux
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-            - llvm-toolchain-precise-3.8
-          packages:
-            - clang-3.8
-      env: MATRIX_EVAL="BUILD_TYPE=asan && CC=clang-3.8 && CXX=clang++-3.8 && DEBUG=debug && COVERAGE=nocoverage"
-    - os: linux
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-            - llvm-toolchain-precise-3.8
-          packages:
-            - clang-3.8
-      env: MATRIX_EVAL="BUILD_TYPE=msan && CC=clang-3.8 && CXX=clang++-3.8 && DEBUG=debug && COVERAGE=nocoverage"
-    - os: linux
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-            - llvm-toolchain-precise-3.8
-          packages:
-            - clang-3.8
-      env: MATRIX_EVAL="BUILD_TYPE=lsan && CC=clang-3.8 && CXX=clang++-3.8 && DEBUG=debug && COVERAGE=nocoverage"
-    - os: linux
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-            - llvm-toolchain-precise-3.8
-          packages:
-            - clang-3.8
-      env: MATRIX_EVAL="BUILD_TYPE=tsan && CC=clang-3.8 && CXX=clang++-3.8 && DEBUG=debug && COVERAGE=nocoverage"
-    - os: linux
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-            - llvm-toolchain-precise-3.8
-          packages:
-            - clang-3.8
-      env: MATRIX_EVAL="BUILD_TYPE=ubsan && CC=clang-3.8 && CXX=clang++-3.8 && DEBUG=debug && COVERAGE=nocoverage"
-    - os: linux
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-          packages:
-            - g++-5
-      env:
-         - MATRIX_EVAL="CC=gcc-5 && CXX=g++-5"
-    - os: linux
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-          packages:
-            - g++-6
-      env:
-        - MATRIX_EVAL="CC=gcc-6 && CXX=g++-6"
-    - os: linux
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-          packages:
-            - g++-7
-      env:
-        - MATRIX_EVAL="CC=gcc-7 && CXX=g++-7"
-    - os: linux
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-          packages:
-            - g++-8
-      env:
-        - MATRIX_EVAL="CC=gcc-8 && CXX=g++-8"
-    - os: linux
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-          packages:
-            - g++-9
-      env:
-        - MATRIX_EVAL="CC=gcc-9 && CXX=g++-9"
-    - os: linux
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-          packages:
-            - g++-7
-            - valgrind
-            - valgrind-dbg
-      env:
-        - MATRIX_EVAL="CC=gcc-7 && CXX=g++-7 && VALGRIND=valgrind"
-    - os: linux
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-          packages:
-            - g++-7
-            - apache2-utils
-      env:
-        - MATRIX_EVAL="CC=gcc-7 && CXX=g++-7 && PERFORMANCE=select"
-    - os: linux
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-          packages:
-            - g++-7
-            - apache2-utils
-      env:
-        - MATRIX_EVAL="CC=gcc-7 && CXX=g++-7 && PERFORMANCE=nodelay"
-    - os: linux
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-          packages:
-            - g++-7
-            - apache2-utils
-      env:
-        - MATRIX_EVAL="CC=gcc-7 && CXX=g++-7 && PERFORMANCE=threads"
-    # works on Precise and Trusty
-    - os: linux
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-            - llvm-toolchain-precise-3.6
-          packages:
-            - clang-3.6
-      env:
-        - MATRIX_EVAL="CC=clang-3.6 && CXX=clang++-3.6"
-    # works on Precise and Trusty
-    - os: linux
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-            - llvm-toolchain-precise-3.7
-          packages:
-            - clang-3.7
-      env:
-        - MATRIX_EVAL="CC=clang-3.7 && CXX=clang++-3.7"
-    # works on Precise and Trusty
-    - os: linux
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-            - llvm-toolchain-precise-3.8
-          packages:
-            - clang-3.8
-      env:
-        - MATRIX_EVAL="CC=clang-3.8 && CXX=clang++-3.8"
-    # works on Trusty
-    - os: linux
-      addons:
-        apt:
-          sources:
-            - llvm-toolchain-trusty-3.9
-          packages:
-            - clang-3.9
-      env:
-        - MATRIX_EVAL="CC=clang-3.9 && CXX=clang++-3.9"
-    # works on Trusty
-    - os: linux
-      addons:
-        apt:
-          packages:
-            - clang-4.0
-      env:
-        - MATRIX_EVAL="CC=clang-4.0 && CXX=clang++-4.0"
-    # works on Trusty
-    - os: linux
-      addons:
-        apt:
-          packages:
-            - clang-5.0
-      env:
-        - MATRIX_EVAL="CC=clang-5.0 && CXX=clang++-5.0"
-    - os: linux
-      addons:
-        apt:
-          packages:
-            - clang-6.0
-      env:
-        - MATRIX_EVAL="CC=clang-6.0 && CXX=clang++-6.0"
-    - os: linux
-      addons:
-        apt:
-          sources:
-            - llvm-toolchain-xenial-7
-            - ubuntu-toolchain-r-test
-          packages:
-            - clang-7
-      env:
-        - MATRIX_EVAL="CC=clang-7 && CXX=clang++-7"
-    - os: linux
-      addons:
-        apt:
-          sources:
-            - llvm-toolchain-xenial-8
-            - ubuntu-toolchain-r-test
-          packages:
-            - clang-8
-      env:
-        - MATRIX_EVAL="CC=clang-8 && CXX=clang++-8"
-    - os: linux
-      addons:
-        apt:
-          sources:
-            - llvm-toolchain-xenial-9
-            - ubuntu-toolchain-r-test
-            - sourceline: 'deb https://apt.llvm.org/xenial/ llvm-toolchain-xenial-9 main'
-              key_url: 'https://apt.llvm.org/llvm-snapshot.gpg.key'
-          packages:
-            - clang-9
-      env:
-        - MATRIX_EVAL="CC=clang-9 && CXX=clang++-9"
+#    - os: linux
+#      addons:
+#        apt:
+#          sources:
+#            - ubuntu-toolchain-r-test
+#            - llvm-toolchain-precise-3.8
+#          packages:
+#            - clang-3.8
+#      env: MATRIX_EVAL="BUILD_TYPE=asan && CC=clang-3.8 && CXX=clang++-3.8 && DEBUG=debug && COVERAGE=nocoverage"
+#    - os: linux
+#      addons:
+#        apt:
+#          sources:
+#            - ubuntu-toolchain-r-test
+#            - llvm-toolchain-precise-3.8
+#          packages:
+#            - clang-3.8
+#      env: MATRIX_EVAL="BUILD_TYPE=msan && CC=clang-3.8 && CXX=clang++-3.8 && DEBUG=debug && COVERAGE=nocoverage"
+#    - os: linux
+#      addons:
+#        apt:
+#          sources:
+#            - ubuntu-toolchain-r-test
+#            - llvm-toolchain-precise-3.8
+#          packages:
+#            - clang-3.8
+#      env: MATRIX_EVAL="BUILD_TYPE=lsan && CC=clang-3.8 && CXX=clang++-3.8 && DEBUG=debug && COVERAGE=nocoverage"
+#    - os: linux
+#      addons:
+#        apt:
+#          sources:
+#            - ubuntu-toolchain-r-test
+#            - llvm-toolchain-precise-3.8
+#          packages:
+#            - clang-3.8
+#      env: MATRIX_EVAL="BUILD_TYPE=tsan && CC=clang-3.8 && CXX=clang++-3.8 && DEBUG=debug && COVERAGE=nocoverage"
+#    - os: linux
+#      addons:
+#        apt:
+#          sources:
+#            - ubuntu-toolchain-r-test
+#            - llvm-toolchain-precise-3.8
+#          packages:
+#            - clang-3.8
+#      env: MATRIX_EVAL="BUILD_TYPE=ubsan && CC=clang-3.8 && CXX=clang++-3.8 && DEBUG=debug && COVERAGE=nocoverage"
+#    - os: linux
+#      addons:
+#        apt:
+#          sources:
+#            - ubuntu-toolchain-r-test
+#          packages:
+#            - g++-5
+#      env:
+#         - MATRIX_EVAL="CC=gcc-5 && CXX=g++-5"
+#    - os: linux
+#      addons:
+#        apt:
+#          sources:
+#            - ubuntu-toolchain-r-test
+#          packages:
+#            - g++-6
+#      env:
+#        - MATRIX_EVAL="CC=gcc-6 && CXX=g++-6"
+#    - os: linux
+#      addons:
+#        apt:
+#          sources:
+#            - ubuntu-toolchain-r-test
+#          packages:
+#            - g++-7
+#      env:
+#        - MATRIX_EVAL="CC=gcc-7 && CXX=g++-7"
+#    - os: linux
+#      addons:
+#        apt:
+#          sources:
+#            - ubuntu-toolchain-r-test
+#          packages:
+#            - g++-8
+#      env:
+#        - MATRIX_EVAL="CC=gcc-8 && CXX=g++-8"
+#    - os: linux
+#      addons:
+#        apt:
+#          sources:
+#            - ubuntu-toolchain-r-test
+#          packages:
+#            - g++-9
+#      env:
+#        - MATRIX_EVAL="CC=gcc-9 && CXX=g++-9"
+#    - os: linux
+#      addons:
+#        apt:
+#          sources:
+#            - ubuntu-toolchain-r-test
+#          packages:
+#            - g++-7
+#            - valgrind
+#            - valgrind-dbg
+#      env:
+#        - MATRIX_EVAL="CC=gcc-7 && CXX=g++-7 && VALGRIND=valgrind"
+#    - os: linux
+#      addons:
+#        apt:
+#          sources:
+#            - ubuntu-toolchain-r-test
+#          packages:
+#            - g++-7
+#            - apache2-utils
+#      env:
+#        - MATRIX_EVAL="CC=gcc-7 && CXX=g++-7 && PERFORMANCE=select"
+#    - os: linux
+#      addons:
+#        apt:
+#          sources:
+#            - ubuntu-toolchain-r-test
+#          packages:
+#            - g++-7
+#            - apache2-utils
+#      env:
+#        - MATRIX_EVAL="CC=gcc-7 && CXX=g++-7 && PERFORMANCE=nodelay"
+#    - os: linux
+#      addons:
+#        apt:
+#          sources:
+#            - ubuntu-toolchain-r-test
+#          packages:
+#            - g++-7
+#            - apache2-utils
+#      env:
+#        - MATRIX_EVAL="CC=gcc-7 && CXX=g++-7 && PERFORMANCE=threads"
+#    # works on Precise and Trusty
+#    - os: linux
+#      addons:
+#        apt:
+#          sources:
+#            - ubuntu-toolchain-r-test
+#            - llvm-toolchain-precise-3.6
+#          packages:
+#            - clang-3.6
+#      env:
+#        - MATRIX_EVAL="CC=clang-3.6 && CXX=clang++-3.6"
+#    # works on Precise and Trusty
+#    - os: linux
+#      addons:
+#        apt:
+#          sources:
+#            - ubuntu-toolchain-r-test
+#            - llvm-toolchain-precise-3.7
+#          packages:
+#            - clang-3.7
+#      env:
+#        - MATRIX_EVAL="CC=clang-3.7 && CXX=clang++-3.7"
+#    # works on Precise and Trusty
+#    - os: linux
+#      addons:
+#        apt:
+#          sources:
+#            - ubuntu-toolchain-r-test
+#            - llvm-toolchain-precise-3.8
+#          packages:
+#            - clang-3.8
+#      env:
+#        - MATRIX_EVAL="CC=clang-3.8 && CXX=clang++-3.8"
+#    # works on Trusty
+#    - os: linux
+#      addons:
+#        apt:
+#          sources:
+#            - llvm-toolchain-trusty-3.9
+#          packages:
+#            - clang-3.9
+#      env:
+#        - MATRIX_EVAL="CC=clang-3.9 && CXX=clang++-3.9"
+#    # works on Trusty
+#    - os: linux
+#      addons:
+#        apt:
+#          packages:
+#            - clang-4.0
+#      env:
+#        - MATRIX_EVAL="CC=clang-4.0 && CXX=clang++-4.0"
+#    # works on Trusty
+#    - os: linux
+#      addons:
+#        apt:
+#          packages:
+#            - clang-5.0
+#      env:
+#        - MATRIX_EVAL="CC=clang-5.0 && CXX=clang++-5.0"
+#    - os: linux
+#      addons:
+#        apt:
+#          packages:
+#            - clang-6.0
+#      env:
+#        - MATRIX_EVAL="CC=clang-6.0 && CXX=clang++-6.0"
+#    - os: linux
+#      addons:
+#        apt:
+#          sources:
+#            - llvm-toolchain-xenial-7
+#            - ubuntu-toolchain-r-test
+#          packages:
+#            - clang-7
+#      env:
+#        - MATRIX_EVAL="CC=clang-7 && CXX=clang++-7"
+#    - os: linux
+#      addons:
+#        apt:
+#          sources:
+#            - llvm-toolchain-xenial-8
+#            - ubuntu-toolchain-r-test
+#          packages:
+#            - clang-8
+#      env:
+#        - MATRIX_EVAL="CC=clang-8 && CXX=clang++-8"
+#    - os: linux
+#      addons:
+#        apt:
+#          sources:
+#            - llvm-toolchain-xenial-9
+#            - ubuntu-toolchain-r-test
+#            - sourceline: 'deb https://apt.llvm.org/xenial/ llvm-toolchain-xenial-9 main'
+#              key_url: 'https://apt.llvm.org/llvm-snapshot.gpg.key'
+#          packages:
+#            - clang-9
+#      env:
+#        - MATRIX_EVAL="CC=clang-9 && CXX=clang++-9"
     - os: linux
       addons:
         apt:
@@ -328,5 +328,6 @@ matrix:
             - ubuntu-toolchain-r-test
           packages:
             - iwyu
+            - clang-7
       env:
         - MATRIX_EVAL="CC=clang-7 && CXX=clang++-7 && IWYU=iwyu"
