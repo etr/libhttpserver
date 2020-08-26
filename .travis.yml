@@ -11,6 +11,15 @@ env:
  - LINKING="static"
 before_install:
  - eval "${MATRIX_EVAL}"
+ - if [ "$IWYU" = "iwyu" ]; then
+     git clone https://github.com/include-what-you-use/include-what-you-use.git;
+     cd include-what-you-use;
+     git checkout clang_7.0;
+     cd ../ mkdir build_iwyu && cd build_iwyu;
+     cmake -G "Unix Makefiles" -DCMAKE_PREFIX_PATH=/usr/lib/llvm-7 ../include-what-you-use;
+     make;
+     sudo make install;
+   fi
  - export LDFLAGS="$LDFLAGS -L/usr/local/lib -L/usr/lib"
  - export PATH=$PATH:/usr/local/lib
  - export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib
@@ -319,6 +328,9 @@ matrix:
       addons:
         apt:
           packages:
-            - iwyu
+            - clang-7
+            - llvm-7-dev
+            - libclang-7-dev
+            - libncurses-dev
       env:
-        - MATRIX_EVAL="IWYU=iwyu"
+        - MATRIX_EVAL="CC=clang-7 && CXX=clang++-7 && IWYU=iwyu"
