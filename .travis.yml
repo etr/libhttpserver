@@ -5,10 +5,10 @@ os:
 compiler: 
 # - gcc
  - clang
-env:
- - DEBUG="debug" COVERAGE="coverage"
- - DEBUG="nodebug" COVERAGE="nocoverage"
- - LINKING="static"
+#env:
+# - DEBUG="debug" COVERAGE="coverage"
+# - DEBUG="nodebug" COVERAGE="nocoverage"
+# - LINKING="static"
 before_install:
  - eval "${MATRIX_EVAL}"
  - export LDFLAGS="$LDFLAGS -L/usr/local/lib -L/usr/lib"
