@@ -17,6 +17,7 @@ before_install:
      CLANG_BIN_PATH=`llvm-config-$CLANG_VERSION --bindir` ;
      sudo updatedb ;
      locate stddef.h ;
+     which clang ;
      ls -l $CLANG_PREFIX_PATH ;
      ls -l $CLANG_BIN_PATH ;
      git clone https://github.com/include-what-you-use/include-what-you-use.git ;
