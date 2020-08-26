@@ -17,10 +17,11 @@ before_install:
      CLANG_BIN_PATH=`/usr/lib/llvm-${CLANG_VERSION}/bin/clang` ;
      git clone https://github.com/include-what-you-use/include-what-you-use.git ;
      cd include-what-you-use ;
-     if "$VERSION" | sed 's/\.0$//'; then
-       git checkout clang_${VERSION} ;
+     echo "$CLANG_VERSION" | grep '\.0$'
+     if [$? -eq 0]; then
+       git checkout clang_${CLANG_VERSION} ;
      else
-       git checkout clang_${VERSION}.0 ;
+       git checkout clang_${CLANG_VERSION}.0 ;
      fi;
      cd .. ;
      mkdir build_iwyu ;
