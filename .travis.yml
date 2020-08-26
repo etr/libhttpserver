@@ -2,9 +2,9 @@ language: cpp
 os:
  - linux
 # - osx
-#compiler: 
+compiler: 
 # - gcc
-# - clang
+ - clang
 env:
  - DEBUG="debug" COVERAGE="coverage"
  - DEBUG="nodebug" COVERAGE="nocoverage"
