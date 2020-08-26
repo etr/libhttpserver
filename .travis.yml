@@ -15,6 +15,8 @@ before_install:
      CLANG_VERSION=`ls -t /usr/lib/ | grep '^llvm-' | head -n 1 | sed -E 's/llvm-(.+)/\1/'` ;
      CLANG_PREFIX_PATH=`llvm-config-$CLANG_VERSION --prefix` ;
      CLANG_BIN_PATH=`llvm-config-$CLANG_VERSION --bindir` ;
+     sudo updatedb ;
+     locate stddef.h ;
      ls -l $CLANG_PREFIX_PATH ;
      ls -l $CLANG_BIN_PATH ;
      git clone https://github.com/include-what-you-use/include-what-you-use.git ;
