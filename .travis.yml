@@ -11,15 +11,18 @@ env:
  - LINKING="static"
 before_install:
  - eval "${MATRIX_EVAL}"
- - if [ "$IWYU" = "iwyu" ]; then
-     git clone https://github.com/include-what-you-use/include-what-you-use.git;
-     cd include-what-you-use;
-     git checkout clang_7.0;
-     cd ../ mkdir build_iwyu && cd build_iwyu;
-     cmake -G "Unix Makefiles" -DCMAKE_PREFIX_PATH=/usr/lib/llvm-7 ../include-what-you-use;
-     make;
-     sudo make install;
-     cd ..;
+ - |
+   if [ "$IWYU" = "iwyu" ]; then
+     git clone https://github.com/include-what-you-use/include-what-you-use.git ;
+     cd include-what-you-use ;
+     git checkout clang_7.0 ;
+     cd .. ;
+     mkdir build_iwyu ;
+     cd build_iwyu ;
+     cmake -G "Unix Makefiles" -DCMAKE_PREFIX_PATH=/usr/lib/llvm-7 ../include-what-you-use ;
+     make ;
+     sudo make install ;
+     cd .. ;
    fi
  - export LDFLAGS="$LDFLAGS -L/usr/local/lib -L/usr/lib"
  - export PATH=$PATH:/usr/local/lib
@@ -47,7 +50,8 @@ install:
  - ./bootstrap
  - mkdir build
  - cd build
- - if [ "$LINKING" = "static" ]; then
+ - |
+   if [ "$LINKING" = "static" ]; then
      ../configure --enable-static --disable-fastopen;
    elif [ "$DEBUG" = "debug" ] && [ "$COVERAGE" = "coverage" ]; then
      ../configure --enable-debug --enable-coverage --disable-shared --disable-fastopen;
@@ -60,7 +64,8 @@ install:
    else
      ../configure --disable-fastopen;
    fi
- - if [ "$IWYU" = "iwyu" ]; then
+ - |
+   if [ "$IWYU" = "iwyu" ]; then
      clang -print-resource-dir;
      make -k CXX='iwyu -Xiwyu --mapping_file=${top_builddir}/../custom_iwyu.imp' CXXFLAGS="-isystem /usr/local/clang-7.0.0/lib/clang/7.0.0/include -std=c++11 -DHTTPSERVER_COMPILATION -D_REENTRANT $CXXFLAGS";
    else
