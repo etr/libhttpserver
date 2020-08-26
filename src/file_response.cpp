@@ -19,8 +19,12 @@
 */
 
 #include "httpserver/file_response.hpp"
-
 #include <fcntl.h>
+#include <microhttpd.h>
+#include <stddef.h>
+#include <unistd.h>
+
+struct MHD_Response;
 
 using namespace std;
 

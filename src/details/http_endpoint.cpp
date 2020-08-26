@@ -18,12 +18,18 @@
      USA
 */
 
+#include <ctype.h>
+#include <map>
+#include <memory>
+#include <regex>
+#include <sstream>
 #include <stdexcept>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "httpserver/details/http_endpoint.hpp"
-
 #include "httpserver/http_utils.hpp"
-#include "httpserver/string_utilities.hpp"
 
 using namespace std;
 

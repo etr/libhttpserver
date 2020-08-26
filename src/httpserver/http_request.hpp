@@ -25,6 +25,10 @@
 #ifndef _HTTP_REQUEST_HPP_
 #define _HTTP_REQUEST_HPP_
 
+#include <microhttpd.h>
+
+#include <stddef.h>
+#include <algorithm>
 #include <iosfwd>
 #include <map>
 #include <string>

@@ -34,12 +34,14 @@
 #include <sys/types.h>
 #endif // WIN32 check
 
+#include "httpserver/http_utils.hpp"
+
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <iomanip>
 #include <fstream>
-#include <iostream>
+#include <iomanip>
+#include <iterator>
+#include <memory>
 #include <sstream>
 #include <stdexcept>
 #include <utility>
