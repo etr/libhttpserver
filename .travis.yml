@@ -12,9 +12,9 @@ compiler:
 before_install:
  - eval "${MATRIX_EVAL}"
  - if [ "$IWYU" = "iwyu" ]; then
-     CLANG_VERSION=`ls -t /usr/lib/ | grep '^llvm-' | head -n 1 | sed -E 's/llvm-(.+)/\1/'` ;
-     CLANG_PREFIX_PATH=`llvm-config-$CLANG_VERSION --prefix` ;
-     CLANG_BIN_PATH=`llvm-config-$CLANG_VERSION --bindir` ;
+     CLANG_VERSION=`clang --version | grep version | cut -f3 -d' ' | cut -f1 -d'-' | cut -f1,2 -d'.'` ;
+     CLANG_PREFIX_PATH="/usr/local/clang-${CLANG_VERSION}/lib/clang/${CLANG_VERSION}/" ;
+     CLANG_BIN_PATH="/usr/local/clang-${CLANG_VERSION}/bin" ;
      sudo updatedb ;
      locate stddef.h ;
      which clang ;
