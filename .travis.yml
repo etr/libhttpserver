@@ -52,7 +52,7 @@ install:
    fi
  - if [ "$IWYU" = "iwyu" ]; then
      clang -print-resource-dir;
-     make -k CXX='iwyu -Xiwyu --mapping_file=${top_builddir}/../custom_iwyu.imp' CXXFLAGS="-std=c++11 -DHTTPSERVER_COMPILATION -D_REENTRANT $CXXFLAGS";
+     make -k CXX='iwyu -Xiwyu --mapping_file=${top_builddir}/../custom_iwyu.imp' CXXFLAGS="-isystem /usr/local/clang-7.0.0/lib/clang/7.0.0/include -std=c++11 -DHTTPSERVER_COMPILATION -D_REENTRANT $CXXFLAGS";
    else
      make;
    fi
@@ -319,7 +319,6 @@ matrix:
       addons:
         apt:
           packages:
-            - clang-6.0
             - iwyu
       env:
-        - MATRIX_EVAL="CC=clang-6.0 && CXX=clang++-6.0 && IWYU=iwyu"
+        - MATRIX_EVAL="IWYU=iwyu"
