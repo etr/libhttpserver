@@ -17,7 +17,7 @@ before_install:
      CLANG_BIN_PATH="/usr/lib/llvm-${CLANG_VERSION}/bin/" ;
      git clone https://github.com/include-what-you-use/include-what-you-use.git ;
      cd include-what-you-use ;
-     echo "$CLANG_VERSION" | grep '\.0$'
+     echo "$CLANG_VERSION" | grep '\.0$' ;
      if [ $? -eq 0 ]; then
        git checkout clang_${CLANG_VERSION} ;
      else
