@@ -1,13 +1,5 @@
 platform: x64
 
-branches:
-  except:
-    - /.*travis.*/
-skip_commits:
-  message: /travis/
-  files:
-    - .travis.yml
-
 environment:
   matrix:
     - compiler: msys2
