@@ -12,7 +12,8 @@ compiler:
 before_install:
  - eval "${MATRIX_EVAL}"
  - if [ "$IWYU" = "iwyu" ]; then
-     CLANG_VERSION=`clang --version | grep version | cut -f3 -d' ' | cut -f1 -d'-' | cut -f1,2 -d'.'` ;
+     CLANG_VERSION=`clang --version | grep version | cut -f3 -d' ' | cut -f1 -d'-'` ;
+     CLANG_PKG_VERSION=`echo $CLANG_VERSION | cut -f1,2 -d'.'`
      CLANG_PREFIX_PATH="/usr/local/clang-${CLANG_VERSION}/lib/clang/${CLANG_VERSION}/" ;
      CLANG_BIN_PATH="/usr/local/clang-${CLANG_VERSION}/bin" ;
      sudo updatedb ;
@@ -22,11 +23,11 @@ before_install:
      ls -l $CLANG_BIN_PATH ;
      git clone https://github.com/include-what-you-use/include-what-you-use.git ;
      cd include-what-you-use ;
-     echo "$CLANG_VERSION" | grep '\.[0-9]$' ;
+     echo "$CLANG_PKG_VERSION" | grep '\.[0-9]$' ;
      if [ $? -eq 0 ]; then
-       git checkout clang_${CLANG_VERSION} ;
+       git checkout clang_${CLANG_PKG_VERSION} ;
      else
-       git checkout clang_${CLANG_VERSION}.0 ;
+       git checkout clang_${CLANG_PKG_VERSION}.0 ;
      fi;
      cd .. ;
      mkdir build_iwyu ;
