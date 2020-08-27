@@ -10,7 +10,7 @@ Copyright (C)  2011-2019  Sebastiano Merlino.
 
 # The libhttpserver reference manual
 
-[![Build Status](https://travis-ci.org/etr/libhttpserver.png?branch=master)](https://travis-ci.org/etr/libhttpserver)
+[![Build Status](https://api.travis-ci.com/etr/libhttpserver.svg?branch=master)](https://travis-ci.com/etr/libhttpserver)
 [![Build status](https://ci.appveyor.com/api/projects/status/ktoy6ewkrf0q1hw6/branch/master?svg=true)](https://ci.appveyor.com/project/etr/libhttpserver/branch/master)
 [![codecov](https://codecov.io/gh/etr/libhttpserver/branch/master/graph/badge.svg)](https://codecov.io/gh/etr/libhttpserver)
 [![Codacy Badge](https://api.codacy.com/project/badge/Grade/5fa4bdc3815b4c10977f3badefedecd6)](https://www.codacy.com/app/etr/libhttpserver?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=etr/libhttpserver&amp;utm_campaign=Badge_Grade)
