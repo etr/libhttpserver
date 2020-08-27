@@ -27,11 +27,7 @@
 
 #include <iosfwd>
 #include <map>
-#include <stdint.h>
 #include <string>
-#include <utility>
-#include <vector>
-
 #include "httpserver/http_utils.hpp"
 
 struct MHD_Connection;

@@ -43,9 +43,14 @@
 #endif
 
 #include <microhttpd.h>
+#include <stddef.h>
+
+#if !defined(__MINGW32__)
+#include <sys/socket.h>
+#endif
+
 #include <algorithm>
 #include <cctype>
-#include <exception>
 #include <iosfwd>
 #include <map>
 #include <string>

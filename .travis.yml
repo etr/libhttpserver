@@ -11,6 +11,28 @@ env:
  - LINKING="static"
 before_install:
  - eval "${MATRIX_EVAL}"
+ # Installing iwyu manually because clang and iwyu paths won't match on Ubuntu otherwise.
+ - if [ "$IWYU" = "iwyu" ]; then
+     CLANG_VERSION=`clang --version | grep version | cut -f3 -d' ' | cut -f1 -d'-'` ;
+     CLANG_PKG_VERSION=`echo $CLANG_VERSION | cut -f1,2 -d'.'`
+     CLANG_PREFIX_PATH="/usr/local/clang-${CLANG_VERSION}/lib/clang/${CLANG_VERSION}" ;
+     CLANG_BIN_PATH="/usr/local/clang-${CLANG_VERSION}/bin" ;
+     git clone https://github.com/include-what-you-use/include-what-you-use.git ;
+     cd include-what-you-use ;
+     echo "$CLANG_PKG_VERSION" | grep '\.[0-9]$' ;
+     if [ $? -eq 0 ]; then
+       git checkout clang_${CLANG_PKG_VERSION} ;
+     else
+       git checkout clang_${CLANG_PKG_VERSION}.0 ;
+     fi;
+     cd .. ;
+     mkdir build_iwyu ;
+     cd build_iwyu ;
+     cmake -G "Unix Makefiles" -DCMAKE_PREFIX_PATH=$CLANG_PREFIX_PATH -DCMAKE_C_COMPILER=$CLANG_BIN_PATH/clang -DCMAKE_CXX_COMPILER=$CLANG_BIN_PATH/clang++ ../include-what-you-use ;
+     make ;
+     sudo make install ;
+     cd .. ;
+   fi
  - export LDFLAGS="$LDFLAGS -L/usr/local/lib -L/usr/lib"
  - export PATH=$PATH:/usr/local/lib
  - export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib
@@ -37,7 +59,8 @@ install:
  - ./bootstrap
  - mkdir build
  - cd build
- - if [ "$LINKING" = "static" ]; then
+ - |
+   if [ "$LINKING" = "static" ]; then
      ../configure --enable-static --disable-fastopen;
    elif [ "$DEBUG" = "debug" ] && [ "$COVERAGE" = "coverage" ]; then
      ../configure --enable-debug --enable-coverage --disable-shared --disable-fastopen;
@@ -45,13 +68,23 @@ install:
      ../configure --enable-debug --disable-shared --disable-fastopen;
    elif [ "$VALGRIND" = "valgrind" ]; then
      ../configure --enable-debug --disable-fastopen --disable-valgrind-helgrind --disable-valgrind-drd --disable-valgrind-sgcheck;
+   elif [ "$IWYU" = "iwyu" ]; then
+     ../configure --disable-examples;
    else
      ../configure --disable-fastopen;
    fi
- - make
+ # Make or run iwyu. If running iwyu, check for the result code to be 2 (IWYU always returns an error code, if it is 2, no corrections are necessary).
+ - |
+   if [ "$IWYU" = "iwyu" ]; then
+     make -k CXX='/usr/local/bin/include-what-you-use -Xiwyu --mapping_file=${top_builddir}/../custom_iwyu.imp' CXXFLAGS="-isystem ${CLANG_PREFIX_PATH}/include -std=c++11 -DHTTPSERVER_COMPILATION -D_REENTRANT $CXXFLAGS" ;
+     if [ $? -ne 2 ]; then 
+       return 1;
+     fi
+   else
+     make;
+   fi
 script:
- - make check
- - cat test/test-suite.log
+ - if [ "$IWYU" != "iwyu" ]; then make check; cat test/test-suite.log; fi
  - if [ "$VALGRIND" = "valgrind" ]; then make check-valgrind; fi;
  - if [ "$VALGRIND" = "valgrind" ]; then cat test/test-suite-memcheck.log; fi;
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then cd ../src/; cppcheck --error-exitcode=1 .; cd ../build; fi
@@ -309,3 +342,17 @@ matrix:
             - clang-9
       env:
         - MATRIX_EVAL="CC=clang-9 && CXX=clang++-9"
+    - os: linux
+      compiler: clang
+      addons:
+        apt:
+          sources:
+            - llvm-toolchain-xenial-7
+            - ubuntu-toolchain-r-test
+          packages:
+            - iwyu
+            - cmake
+            - llvm-dev
+            - libclang-dev
+      env:
+        - MATRIX_EVAL="IWYU=iwyu"

@@ -25,7 +25,12 @@
 #ifndef _STRING_RESPONSE_HPP_
 #define _STRING_RESPONSE_HPP_
 
+#include <string>
+#include <utility>
+#include "http_utils.hpp"
 #include "httpserver/http_response.hpp"
+
+struct MHD_Response;
 
 namespace httpserver
 {

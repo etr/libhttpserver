@@ -24,9 +24,6 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #else // WIN32 check
-#if defined(__FreeBSD__)
-#include <netinet/in.h>
-#endif // FreeBSD
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <netinet/in.h>
@@ -36,10 +33,10 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <iomanip>
 #include <fstream>
-#include <iostream>
+#include <iomanip>
+#include <iterator>
+#include <memory>
 #include <sstream>
 #include <stdexcept>
 #include <utility>
