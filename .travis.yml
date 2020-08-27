@@ -73,9 +73,13 @@ install:
    else
      ../configure --disable-fastopen;
    fi
+ # Make or run iwyu. If running iwyu, check for the result code to be 2 (IWYU always returns an error code, if it is 2, no corrections are necessary).
  - |
    if [ "$IWYU" = "iwyu" ]; then
-     make -k CXX='/usr/local/bin/include-what-you-use -Xiwyu --mapping_file=${top_builddir}/../custom_iwyu.imp' CXXFLAGS="-isystem ${CLANG_PREFIX_PATH}/include -std=c++11 -DHTTPSERVER_COMPILATION -D_REENTRANT $CXXFLAGS";
+     make -k CXX='/usr/local/bin/include-what-you-use -Xiwyu --mapping_file=${top_builddir}/../custom_iwyu.imp' CXXFLAGS="-isystem ${CLANG_PREFIX_PATH}/include -std=c++11 -DHTTPSERVER_COMPILATION -D_REENTRANT $CXXFLAGS" ;
+     if [ $? -ne 2 ]; then 
+       return 1;
+     fi
    else
      make;
    fi
