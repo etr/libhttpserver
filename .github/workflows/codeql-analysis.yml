@@ -66,9 +66,7 @@ jobs:
     - name: Manual steps to build the library
       run: |
         ./bootstrap ;
-        mkdir build ;
-        cd build ;
-        ../configure ;
+        ./configure --enable-same-directory-build;
         make ;
  
     - name: Perform CodeQL Analysis
