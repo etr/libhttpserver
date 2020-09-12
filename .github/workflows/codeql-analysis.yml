@@ -56,20 +56,19 @@ jobs:
 
     - name: Install libmicrohttpd dependency
       run: |
-       curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.59.tar.gz -o libmicrohttpd-0.9.59.tar.gz
-       cd libmicrohttpd-0.9.59
-       ./configure --disable-examples
-       make
-       sudo make install
-      working-directory: ./temp
+        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.59.tar.gz -o libmicrohttpd-0.9.59.tar.gz ;
+        cd libmicrohttpd-0.9.59 ;
+        ./configure --disable-examples ;
+        make ;
+        sudo make install ;
 
     - name: Manual steps to build the library
       run: |
-       ./bootstrap
-       mkdir build
-       cd build
-       ../configure
-       make release
+        ./bootstrap ;
+        mkdir build ;
+        cd build ;
+        ../configure ;
+        make release ;
  
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v1
