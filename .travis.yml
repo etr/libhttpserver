@@ -13,7 +13,7 @@ before_install:
  - eval "${MATRIX_EVAL}"
  # Check code using cpplint (fails early)
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo pip install cpplint; fi
- - if [ "$TRAVIS_OS_NAME" = "linux" ]; then cpplint --extensions=cpp,hpp --headers=hpp --recursive .; fi
+ - if [ "$TRAVIS_OS_NAME" = "linux" ]; then cpplint --recursive .; fi
  # Installing iwyu manually because clang and iwyu paths won't match on Ubuntu otherwise.
  - if [ "$IWYU" = "iwyu" ]; then
      CLANG_VERSION=`clang --version | grep version | cut -f3 -d' ' | cut -f1 -d'-'` ;

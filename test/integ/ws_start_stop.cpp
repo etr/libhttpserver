@@ -18,7 +18,7 @@
      USA
 */
 
-#if defined(_WIN32) && ! defined(__CYGWIN__)
+#if defined(_WIN32) && !defined(__CYGWIN__)
 #define _WINDOWS
 #undef _WIN32_WINNT
 #define _WIN32_WINNT 0x600
@@ -37,47 +37,39 @@
 #include "httpserver.hpp"
 #include "littletest.hpp"
 
-using namespace std;
-using namespace httpserver;
+using std::shared_ptr;
 
-size_t writefunc(void *ptr, size_t size, size_t nmemb, std::string *s)
-{
-    s->append((char*) ptr, size*nmemb);
+size_t writefunc(void *ptr, size_t size, size_t nmemb, std::string *s) {
+    s->append(reinterpret_cast<char*>(ptr), size*nmemb);
     return size*nmemb;
 }
 
-class ok_resource : public http_resource
-{
-    public:
-        const shared_ptr<http_response> render_GET(const http_request& req)
-        {
-            return shared_ptr<string_response>(new string_response("OK", 200, "text/plain"));
-        }
+class ok_resource : public httpserver::http_resource {
+ public:
+     const shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request& req) {
+         return shared_ptr<httpserver::string_response>(new httpserver::string_response("OK", 200, "text/plain"));
+     }
 };
 
-const shared_ptr<http_response> not_found_custom(const http_request& req)
-{
-    return shared_ptr<string_response>(new string_response("Not found custom", 404, "text/plain"));
+const shared_ptr<httpserver::http_response> not_found_custom(const httpserver::http_request& req) {
+    return shared_ptr<httpserver::string_response>(new httpserver::string_response("Not found custom", 404, "text/plain"));
 }
 
-const shared_ptr<http_response> not_allowed_custom(const http_request& req)
-{
-    return shared_ptr<string_response>(new string_response("Not allowed custom", 405, "text/plain"));
+const shared_ptr<httpserver::http_response> not_allowed_custom(const httpserver::http_request& req) {
+    return shared_ptr<httpserver::string_response>(new httpserver::string_response("Not allowed custom", 405, "text/plain"));
 }
 
 LT_BEGIN_SUITE(ws_start_stop_suite)
-    void set_up()
-    {
+    void set_up() {
     }
 
-    void tear_down()
-    {
+    void tear_down() {
     }
 LT_END_SUITE(ws_start_stop_suite)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, start_stop)
-    {
-    webserver ws = create_webserver(8080);
+    { // NOLINT (internal scope opening - not method start)
+    httpserver::webserver ws = httpserver::create_webserver(8080);
     ok_resource ok;
     ws.register_resource("base", &ok);
     ws.start(false);
@@ -99,7 +91,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, start_stop)
     }
 
     {
-    webserver ws = create_webserver(8080).start_method(http::http_utils::INTERNAL_SELECT);
+    httpserver::webserver ws = httpserver::create_webserver(8080).start_method(httpserver::http::http_utils::INTERNAL_SELECT);
     ok_resource ok;
     ws.register_resource("base", &ok);
     ws.start(false);
@@ -121,7 +113,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, start_stop)
     }
 
     {
-    webserver ws = create_webserver(8080).start_method(http::http_utils::THREAD_PER_CONNECTION);
+    httpserver::webserver ws = httpserver::create_webserver(8080).start_method(httpserver::http::http_utils::THREAD_PER_CONNECTION);
     ok_resource ok;
     ws.register_resource("base", &ok);
     ws.start(false);
@@ -146,8 +138,8 @@ LT_END_AUTO_TEST(start_stop)
 #if defined(IPV6_TESTS_ENABLED)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ipv6)
-    {
-    webserver ws = create_webserver(8080).use_ipv6();
+    { // NOLINT (internal scope opening - not method start)
+    httpserver::webserver ws = httpserver::create_webserver(8080).use_ipv6();
     ok_resource ok;
     ws.register_resource("base", &ok);
     ws.start(false);
@@ -171,8 +163,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ipv6)
 LT_END_AUTO_TEST(ipv6)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, dual_stack)
-    {
-    webserver ws = create_webserver(8080).use_dual_stack();
+    { // NOLINT (internal scope opening - not method start)
+    httpserver::webserver ws = httpserver::create_webserver(8080).use_dual_stack();
     ok_resource ok;
     ws.register_resource("base", &ok);
     ws.start(false);
@@ -198,7 +190,7 @@ LT_END_AUTO_TEST(dual_stack)
 #endif
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, sweet_kill)
-    webserver ws = create_webserver(8080);
+    httpserver::webserver ws = httpserver::create_webserver(8080);
     ok_resource ok;
     ws.register_resource("base", &ok);
     ws.start(false);
@@ -236,7 +228,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, sweet_kill)
 LT_END_AUTO_TEST(sweet_kill)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, disable_options)
-    webserver ws = create_webserver(8080)
+    httpserver::webserver ws = httpserver::create_webserver(8080)
         .no_ssl()
         .no_ipv6()
         .no_debug()
@@ -268,7 +260,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, disable_options)
 LT_END_AUTO_TEST(disable_options)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, enable_options)
-    webserver ws = create_webserver(8080)
+    httpserver::webserver ws = httpserver::create_webserver(8080)
         .debug()
         .pedantic()
         .deferred()
@@ -306,7 +298,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_socket)
     bind(fd, (struct sockaddr*) &address, sizeof(address));
     listen(fd, 10000);
 
-    webserver ws = create_webserver(-1).bind_socket(fd); //whatever port here doesn't matter
+    httpserver::webserver ws = httpserver::create_webserver(-1).bind_socket(fd);  // whatever port here doesn't matter
     ok_resource ok;
     ws.register_resource("base", &ok);
     ws.start(false);
@@ -329,7 +321,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_socket)
 LT_END_AUTO_TEST(custom_socket)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, single_resource)
-    webserver ws = create_webserver(8080).single_resource();
+    httpserver::webserver ws = httpserver::create_webserver(8080).single_resource();
     ok_resource ok;
     ws.register_resource("/", &ok, true);
     ws.start(false);
@@ -351,7 +343,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, single_resource)
 LT_END_AUTO_TEST(single_resource)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, single_resource_not_default_resource)
-    webserver ws = create_webserver(8080).single_resource();
+    httpserver::webserver ws = httpserver::create_webserver(8080).single_resource();
     ok_resource ok;
     LT_CHECK_THROW(ws.register_resource("/other", &ok, true));
     LT_CHECK_THROW(ws.register_resource("/", &ok, false));
@@ -361,32 +353,31 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, single_resource_not_default_resource)
 LT_END_AUTO_TEST(single_resource_not_default_resource)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, thread_per_connection_fails_with_max_threads)
-    {
-    webserver ws = create_webserver(8080)
-        .start_method(http::http_utils::THREAD_PER_CONNECTION)
+    { // NOLINT (internal scope opening - not method start)
+    httpserver::webserver ws = httpserver::create_webserver(8080)
+        .start_method(httpserver::http::http_utils::THREAD_PER_CONNECTION)
         .max_threads(5);
     LT_CHECK_THROW(ws.start(false));
     }
 LT_END_AUTO_TEST(thread_per_connection_fails_with_max_threads)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, thread_per_connection_fails_with_max_threads_stack_size)
-    {
-    webserver ws = create_webserver(8080)
-        .start_method(http::http_utils::THREAD_PER_CONNECTION)
+    { // NOLINT (internal scope opening - not method start)
+    httpserver::webserver ws = httpserver::create_webserver(8080)
+        .start_method(httpserver::http::http_utils::THREAD_PER_CONNECTION)
         .max_thread_stack_size(4*1024*1024);
     LT_CHECK_THROW(ws.start(false));
     }
 LT_END_AUTO_TEST(thread_per_connection_fails_with_max_threads_stack_size)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, tuning_options)
-    webserver ws = create_webserver(8080)
+    httpserver::webserver ws = httpserver::create_webserver(8080)
         .max_connections(10)
         .max_threads(10)
         .memory_limit(10000)
         .per_IP_connection_limit(10)
         .max_thread_stack_size(4*1024*1024)
         .nonce_nc_size(10);
-       ;
 
     ok_resource ok;
     ws.register_resource("base", &ok);
@@ -409,7 +400,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, tuning_options)
 LT_END_AUTO_TEST(tuning_options)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_base)
-    webserver ws = create_webserver(8080)
+    httpserver::webserver ws = httpserver::create_webserver(8080)
         .use_ssl()
         .https_mem_key("key.pem")
         .https_mem_cert("cert.pem");
@@ -422,8 +413,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_base)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L); // avoid verifying ssl
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L); // avoid verifying ssl
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);  // avoid verifying ssl
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);  // avoid verifying ssl
     curl_easy_setopt(curl, CURLOPT_URL, "https://localhost:8080/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
@@ -438,7 +429,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_base)
 LT_END_AUTO_TEST(ssl_base)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_with_protocol_priorities)
-    webserver ws = create_webserver(8080)
+    httpserver::webserver ws = httpserver::create_webserver(8080)
         .use_ssl()
         .https_mem_key("key.pem")
         .https_mem_cert("cert.pem")
@@ -452,8 +443,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_with_protocol_priorities)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L); // avoid verifying ssl
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L); // avoid verifying ssl
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);  // avoid verifying ssl
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);  // avoid verifying ssl
     curl_easy_setopt(curl, CURLOPT_URL, "https://localhost:8080/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
@@ -467,7 +458,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_with_protocol_priorities)
 LT_END_AUTO_TEST(ssl_with_protocol_priorities)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_with_trust)
-    webserver ws = create_webserver(8080)
+    httpserver::webserver ws = httpserver::create_webserver(8080)
         .use_ssl()
         .https_mem_key("key.pem")
         .https_mem_cert("cert.pem")
@@ -481,8 +472,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_with_trust)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L); // avoid verifying ssl
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L); // avoid verifying ssl
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);  // avoid verifying ssl
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);  // avoid verifying ssl
     curl_easy_setopt(curl, CURLOPT_URL, "https://localhost:8080/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
@@ -495,9 +486,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_with_trust)
     ws.stop();
 LT_END_AUTO_TEST(ssl_with_trust)
 
-void* start_ws_blocking(void* par)
-{
-    webserver* ws = (webserver*) par;
+void* start_ws_blocking(void* par) {
+    httpserver::webserver* ws = (httpserver::webserver*) par;
     ok_resource ok;
     ws->register_resource("base", &ok);
     ws->start(true);
@@ -506,10 +496,10 @@ void* start_ws_blocking(void* par)
 }
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, blocking_server)
-    webserver ws = create_webserver(8080);
+    httpserver::webserver ws = httpserver::create_webserver(8080);
 
     pthread_t tid;
-    pthread_create(&tid, NULL, start_ws_blocking, (void *) &ws);
+    pthread_create(&tid, NULL, start_ws_blocking, reinterpret_cast<void*>(&ws));
 
     sleep(1);
 
@@ -529,12 +519,12 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, blocking_server)
     ws.stop();
 
     char* b;
-    pthread_join(tid,(void**) &b);
+    pthread_join(tid, reinterpret_cast<void**>(&b));
     free(b);
 LT_END_AUTO_TEST(blocking_server)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_error_resources)
-    webserver ws = create_webserver(8080)
+    httpserver::webserver ws = httpserver::create_webserver(8080)
         .not_found_resource(not_found_custom)
         .method_not_allowed_resource(not_allowed_custom);
 
@@ -570,8 +560,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_error_resources)
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "Not found custom");
 
-    long http_code = 0;
-    curl_easy_getinfo (curl, CURLINFO_RESPONSE_CODE, &http_code);
+    int64_t http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
     LT_ASSERT_EQ(http_code, 404);
 
     curl_easy_cleanup(curl);
@@ -592,8 +582,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_error_resources)
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "Not allowed custom");
 
-    long http_code = 0;
-    curl_easy_getinfo (curl, CURLINFO_RESPONSE_CODE, &http_code);
+    int64_t http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
     LT_ASSERT_EQ(http_code, 405);
 
     curl_easy_cleanup(curl);

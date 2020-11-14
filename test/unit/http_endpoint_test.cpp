@@ -22,17 +22,15 @@
 
 #include "littletest.hpp"
 
-using namespace httpserver;
-using namespace std;
-using namespace details;
+using httpserver::details::http_endpoint;
+using std::string;
+using std::vector;
 
 LT_BEGIN_SUITE(http_endpoint_suite)
-    void set_up()
-    {
+    void set_up() {
     }
 
-    void tear_down()
-    {
+    void tear_down() {
     }
 LT_END_SUITE(http_endpoint_suite)
 

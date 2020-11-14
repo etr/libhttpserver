@@ -24,44 +24,42 @@
 
 #include "littletest.hpp"
 
-using namespace httpserver;
-using namespace std;
+using std::string;
+using std::vector;
 
 LT_BEGIN_SUITE(string_utilities_suite)
-    void set_up()
-    {
+    void set_up() {
     }
 
-    void tear_down()
-    {
+    void tear_down() {
     }
 LT_END_SUITE(string_utilities_suite)
 
 LT_BEGIN_AUTO_TEST(string_utilities_suite, to_upper_copy)
-    LT_CHECK_EQ(string_utilities::to_upper_copy("test message"), string("TEST MESSAGE"));
-    LT_CHECK_EQ(string_utilities::to_upper_copy("tEsT mEssAge 245&$"), string("TEST MESSAGE 245&$"));
+    LT_CHECK_EQ(httpserver::string_utilities::to_upper_copy("test message"), string("TEST MESSAGE"));
+    LT_CHECK_EQ(httpserver::string_utilities::to_upper_copy("tEsT mEssAge 245&$"), string("TEST MESSAGE 245&$"));
 LT_END_AUTO_TEST(to_upper_copy)
 
 LT_BEGIN_AUTO_TEST(string_utilities_suite, to_upper)
     string value = "test message";
-    string_utilities::to_upper(value);
+    httpserver::string_utilities::to_upper(value);
     LT_CHECK_EQ(value, string("TEST MESSAGE"));
 
     value = "tEsT mEssAge 245&$";
-    string_utilities::to_upper(value);
+    httpserver::string_utilities::to_upper(value);
     LT_CHECK_EQ(value, string("TEST MESSAGE 245&$"));
 LT_END_AUTO_TEST(to_upper)
 
 LT_BEGIN_AUTO_TEST(string_utilities_suite, to_lower_copy)
-    LT_CHECK_EQ(string_utilities::to_lower_copy("TEST MESSAGE"), string("test message"));
-    LT_CHECK_EQ(string_utilities::to_lower_copy("tEsT mEssAge 245&$"), string("test message 245&$"));
+    LT_CHECK_EQ(httpserver::string_utilities::to_lower_copy("TEST MESSAGE"), string("test message"));
+    LT_CHECK_EQ(httpserver::string_utilities::to_lower_copy("tEsT mEssAge 245&$"), string("test message 245&$"));
 LT_END_AUTO_TEST(to_lower_copy)
 
 LT_BEGIN_AUTO_TEST(string_utilities_suite, split_string)
     string value = "test this message here";
     string expected_arr[] = { "test", "this", "message", "here" };
     vector<string> expected(expected_arr, expected_arr + sizeof(expected_arr) / sizeof(expected_arr[0]));
-    vector<string> actual = string_utilities::string_split(value, ' ', false);
+    vector<string> actual = httpserver::string_utilities::string_split(value, ' ', false);
 
     LT_CHECK_COLLECTIONS_EQ(expected.begin(), expected.end(), actual.begin());
 LT_END_AUTO_TEST(split_string)
@@ -70,7 +68,7 @@ LT_BEGIN_AUTO_TEST(string_utilities_suite, split_string_multiple_spaces)
     string value = "test  this  message  here";
     string expected_arr[] = { "test", "", "this", "", "message", "", "here" };
     vector<string> expected(expected_arr, expected_arr + sizeof(expected_arr) / sizeof(expected_arr[0]));
-    vector<string> actual = string_utilities::string_split(value, ' ', false);
+    vector<string> actual = httpserver::string_utilities::string_split(value, ' ', false);
 
     LT_CHECK_COLLECTIONS_EQ(expected.begin(), expected.end(), actual.begin());
 LT_END_AUTO_TEST(split_string_multiple_spaces)
@@ -79,7 +77,7 @@ LT_BEGIN_AUTO_TEST(string_utilities_suite, split_string_multiple_spaces_collapse
     string value = "test  this  message  here";
     string expected_arr[] = { "test", "this", "message", "here" };
     vector<string> expected(expected_arr, expected_arr + sizeof(expected_arr) / sizeof(expected_arr[0]));
-    vector<string> actual = string_utilities::string_split(value, ' ', true);
+    vector<string> actual = httpserver::string_utilities::string_split(value, ' ', true);
 
     LT_CHECK_COLLECTIONS_EQ(expected.begin(), expected.end(), actual.begin());
 LT_END_AUTO_TEST(split_string_multiple_spaces_collapse)
@@ -88,7 +86,7 @@ LT_BEGIN_AUTO_TEST(string_utilities_suite, split_string_end_space)
     string value = "test this message here ";
     string expected_arr[] = { "test", "this", "message", "here" };
     vector<string> expected(expected_arr, expected_arr + sizeof(expected_arr) / sizeof(expected_arr[0]));
-    vector<string> actual = string_utilities::string_split(value, ' ', false);
+    vector<string> actual = httpserver::string_utilities::string_split(value, ' ', false);
 
     LT_CHECK_COLLECTIONS_EQ(expected.begin(), expected.end(), actual.begin());
 LT_END_AUTO_TEST(split_string_end_space)
