@@ -25,6 +25,12 @@
 #include "httpserver.hpp"
 #include "littletest.hpp"
 
+#if defined(_WIN32) && ! defined(__CYGWIN__)
+#define _WINDOWS
+#endif
+
+#ifndef _WINDOWS
+
 using namespace httpserver;
 using namespace std;
 
@@ -73,3 +79,5 @@ LT_END_AUTO_TEST(base)
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()
+
+#endif
