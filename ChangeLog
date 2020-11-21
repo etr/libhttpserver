@@ -1,3 +1,15 @@
+Sat Nov 21 07:20:00 2020 -0800
+    Added support on build for CodeQL security checks.
+    Moved builds to travis.com
+    Added IWYU checks as part of build and cleaned-up accordingly.
+    Introduced dual-stack support.
+    Added OS specific tips, and cleaned up some compiler warnings.
+    Updates to readme and documentation.
+    Slight performances improvement by allowing to skip a copy in
+        string_response constructor.
+    Moved windows builds to AppVeyor.
+    Made the library compatible with libmicrohttpd v0.9.71 and above.
+
 Sat Jun 6 10:21:05 2020 -0800
     Prevent use of regex in http_endpoint outside of registration which could
 	allow DOS attacks.
