@@ -5,6 +5,7 @@ environment:
     - compiler: msys2
       MINGW_CHOST: x86_64-w64-mingw32
       MSYS2_ARCH: x86_64
+      APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2019
 init:
   - 'echo Building libhttpserver %version% for Windows'
   - 'echo System architecture: %PLATFORM%'
