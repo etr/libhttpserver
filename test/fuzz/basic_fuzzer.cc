@@ -31,6 +31,16 @@ class fuzz_resource : public http_resource {
 public:
     const std::shared_ptr<http_response> render(const http_request& req) {
         std::stringstream ss;
+        req.get_args();
+        req.get_headers();
+        req.get_footers();
+        req.get_cookies();
+        req.get_querystring();
+        req.get_user();
+        req.get_pass();
+        req.get_digested_user();
+        req.get_requestor();
+        req.get_requestor_port();
         for (unsigned int i = 0; i < req.get_path_pieces().size(); i++)
             ss << req.get_path_piece(i) << ",";
         return std::shared_ptr<http_response>(new string_response(ss.str(), 200));

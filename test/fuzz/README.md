@@ -25,10 +25,14 @@ make && sudo make install
 ```
 cd libhttpserver/test/fuzz
 clang++ $CXXFLAGS basic_fuzzer.cc -o basic_fuzzer -fsanitize=fuzzer,undefined /usr/local/lib/libhttpserver.a /usr/local/lib/libmicrohttpd.a -lgnutls
+clang++ $CXXFLAGS ip_representation.cc -o ip_representation -fsanitize=fuzzer,undefined /usr/local/lib/libhttpserver.a /usr/local/lib/libmicrohttpd.a -lgnutls
 ```
 
 ## Run the fuzz target
 ```
 unzip basic_fuzzer_seed_corpus.zip
 ./basic_fuzzer corpus/
+
+unzip ip_representation_seed_corpus.zip
+./ip_representation ip_corpus/
 ```
