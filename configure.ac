@@ -43,6 +43,8 @@ CXXFLAGS=$OLD_CXXFLAGS
 AC_LANG([C++])
 AC_SYS_LARGEFILE
 
+EL7_GCC_CHECK
+
 native_srcdir=$srcdir
 
 AC_MSG_CHECKING([whether it is possible to compile in the same directory])
