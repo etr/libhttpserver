@@ -25,9 +25,15 @@
 #ifndef _DEFERRED_RESPONSE_HPP_
 #define _DEFERRED_RESPONSE_HPP_
 
+#include <stddef.h>
+#include <stdint.h>
+#include <sys/types.h>
 #include <memory>
-
+#include <string>
+#include "http_utils.hpp"
 #include "httpserver/string_response.hpp"
+
+struct MHD_Response;
 
 namespace httpserver
 {

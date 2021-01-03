@@ -31,26 +31,16 @@
 #if defined(__CYGWIN__)
 #include <sys/select.h>
 #endif
-#include <netinet/ip.h>
+#include <netinet/in.h>
 #include <netinet/tcp.h>
 #endif
 
 #include <errno.h>
-#include <fcntl.h>
-#include <inttypes.h>
 #include <microhttpd.h>
 #include <signal.h>
-#include <stdexcept>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/stat.h>
-#include <sys/time.h>
-#include <sys/types.h>
-#include <unistd.h>
-#include <algorithm>
-#include <iostream>
-#include <strings.h>
 #include <cstring>
 #include <exception>
 #include <memory>
@@ -67,7 +57,8 @@
 #include "httpserver/http_response.hpp"
 #include "httpserver/http_utils.hpp"
 #include "httpserver/string_response.hpp"
-#include "httpserver/string_utilities.hpp"
+
+struct MHD_Connection;
 
 #define _REENTRANT 1
 
@@ -149,6 +140,7 @@ webserver::webserver(const create_webserver& params):
     max_thread_stack_size(params._max_thread_stack_size),
     use_ssl(params._use_ssl),
     use_ipv6(params._use_ipv6),
+    use_dual_stack(params._use_dual_stack),
     debug(params._debug),
     pedantic(params._pedantic),
     https_mem_key(params._https_mem_key),
@@ -311,6 +303,8 @@ bool webserver::start(bool blocking)
         start_conf |= MHD_USE_SSL;
     if(use_ipv6)
         start_conf |= MHD_USE_IPv6;
+    if(use_dual_stack)
+        start_conf |= MHD_USE_DUAL_STACK;
     if(debug)
         start_conf |= MHD_USE_DEBUG;
     if(pedantic)

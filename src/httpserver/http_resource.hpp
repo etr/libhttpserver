@@ -28,24 +28,18 @@
 #ifdef DEBUG
 #include <iostream>
 #endif
+
 #include <map>
 #include <memory>
 #include <string>
+#include <utility>
 
-#include "httpserver/http_response.hpp"
+namespace httpserver { class http_request; }
+namespace httpserver { class http_response; }
 
-namespace httpserver
-{
+namespace httpserver {
 
-class webserver;
-class http_request;
-
-namespace details
-{
-
-std::shared_ptr<http_response> empty_render(const http_request& r);
-
-};
+namespace details { std::shared_ptr<http_response> empty_render(const http_request& r); };
 
 /**
  * Class representing a callable http resource.

@@ -9,53 +9,46 @@ env:
  - DEBUG="debug" COVERAGE="coverage"
  - DEBUG="nodebug" COVERAGE="nocoverage"
  - LINKING="static"
-before_cache:
-- |-
-    case $TRAVIS_OS_NAME in
-      windows)
-        # https://unix.stackexchange.com/a/137322/107554
-        $msys2 pacman --sync --clean --noconfirm
-        ;;
-    esac
-cache:
-    directories:
-    - $HOME/AppData/Local/Temp/chocolatey
-    - /C/tools/msys64
 before_install:
  - eval "${MATRIX_EVAL}"
- - if [ "$TRAVIS_OS_NAME" != "windows" ]; then export LDFLAGS="$LDFLAGS -L/usr/local/lib -L/usr/lib"; fi
- - if [ "$TRAVIS_OS_NAME" != "windows" ]; then export PATH=$PATH:/usr/local/lib; fi
- - if [ "$TRAVIS_OS_NAME" != "windows" ]; then export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib; fi
- - if [ "$TRAVIS_OS_NAME" != "windows" ]; then export DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH:/usr/local/lib; fi
- - if [ "$TRAVIS_OS_NAME" != "windows" ]; then export buildshell=''; fi
+ # Installing iwyu manually because clang and iwyu paths won't match on Ubuntu otherwise.
+ - if [ "$IWYU" = "iwyu" ]; then
+     CLANG_VERSION=`clang --version | grep version | cut -f3 -d' ' | cut -f1 -d'-'` ;
+     CLANG_PKG_VERSION=`echo $CLANG_VERSION | cut -f1,2 -d'.'`
+     CLANG_PREFIX_PATH="/usr/local/clang-${CLANG_VERSION}/lib/clang/${CLANG_VERSION}" ;
+     CLANG_BIN_PATH="/usr/local/clang-${CLANG_VERSION}/bin" ;
+     git clone https://github.com/include-what-you-use/include-what-you-use.git ;
+     cd include-what-you-use ;
+     echo "$CLANG_PKG_VERSION" | grep '\.[0-9]$' ;
+     if [ $? -eq 0 ]; then
+       git checkout clang_${CLANG_PKG_VERSION} ;
+     else
+       git checkout clang_${CLANG_PKG_VERSION}.0 ;
+     fi;
+     cd .. ;
+     mkdir build_iwyu ;
+     cd build_iwyu ;
+     cmake -G "Unix Makefiles" -DCMAKE_PREFIX_PATH=$CLANG_PREFIX_PATH -DCMAKE_C_COMPILER=$CLANG_BIN_PATH/clang -DCMAKE_CXX_COMPILER=$CLANG_BIN_PATH/clang++ ../include-what-you-use ;
+     make ;
+     sudo make install ;
+     cd .. ;
+   fi
+ - export LDFLAGS="$LDFLAGS -L/usr/local/lib -L/usr/lib"
+ - export PATH=$PATH:/usr/local/lib
+ - export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib
+ - export DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH:/usr/local/lib
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo apt-get install info install-info; fi
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo pip install codecov; fi
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo pip install gcovr; fi
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo apt-get install cppcheck; fi
  - if [ "$TRAVIS_OS_NAME" = "osx" ]; then export CFLAGS='-mtune=generic'; fi
- - |-
-    case $TRAVIS_OS_NAME in
-      windows)
-        [[ ! -f C:/tools/msys64/msys2_shell.cmd ]] && rm -rf C:/tools/msys64
-        choco uninstall -y mingw
-        choco upgrade --no-progress -y msys2
-        export msys2='cmd //C RefreshEnv.cmd '
-        export msys2+='& set MSYS=winsymlinks:nativestrict '
-        export msys2+='& C:\\tools\\msys64\\msys2_shell.cmd -defterm -no-start'
-        export buildshell="$msys2 -mingw64 -full-path -here -c "\"\$@"\" --"
-        export msys2+=" -msys2 -c "\"\$@"\" --"
-        $msys2 pacman --sync --noconfirm --disable-download-timeout --needed mingw-w64-x86_64-toolchain
-        $msys2 pacman -Syu --noconfirm --disable-download-timeout autoconf libtool automake make autoconf-archive pkg-config mingw-w64-x86_64-libsystre mingw-w64-x86_64-doxygen mingw-w64-x86_64-gnutls mingw-w64-x86_64-graphviz mingw-w64-x86_64-curl
-        export PATH=/C/tools/msys64/mingw64/bin:$PATH
-        export MAKE=mingw32-make  # so that Autotools can find it
-        ;;
-    esac
+ - if [ "$TRAVIS_OS_NAME" = "osx" ]; then export IPV6_TESTS_ENABLED="true"; fi
  - curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.59.tar.gz -o libmicrohttpd-0.9.59.tar.gz
  - tar -xzf libmicrohttpd-0.9.59.tar.gz
  - cd libmicrohttpd-0.9.59
- - if [ "$TRAVIS_OS_NAME" != "windows" ]; then $buildshell ./configure --disable-examples; else $buildshell ./configure --disable-examples --enable-poll=no; fi;
- - $buildshell make
- - if [ "$TRAVIS_OS_NAME" != "windows" ]; then sudo make install; else $buildshell make install; fi
+ - ./configure --disable-examples
+ - make
+ - sudo make install
  - cd ..
  - if [ "$BUILD_TYPE" = "asan" ]; then export CFLAGS='-fsanitize=address'; export CXXLAGS='-fsanitize=address'; export LDFLAGS='-fsanitize=address'; fi
  - if [ "$BUILD_TYPE" = "msan" ]; then export CFLAGS='-fsanitize=memory'; export CXXLAGS='-fsanitize=memory'; export LDFLAGS='-fsanitize=memory'; fi
@@ -63,25 +56,35 @@ before_install:
  - if [ "$BUILD_TYPE" = "tsan" ]; then export CFLAGS='-fsanitize=thread'; export CXXLAGS='-fsanitize=thread'; export LDFLAGS='-fsanitize=thread'; fi
  - if [ "$BUILD_TYPE" = "ubsan" ]; then export export CFLAGS='-fsanitize=undefined'; export CXXLAGS='-fsanitize=undefined'; export LDFLAGS='-fsanitize=undefined'; fi
 install:
- - $buildshell ./bootstrap
+ - ./bootstrap
  - mkdir build
  - cd build
- - if [ "$TRAVIS_OS_NAME" = "windows" ]; then export MANIFEST_TOOL='no'; fi
- - if [ "$LINKING" = "static" ]; then
-     $buildshell ../configure --enable-static --disable-fastopen;
+ - |
+   if [ "$LINKING" = "static" ]; then
+     ../configure --enable-static --disable-fastopen;
    elif [ "$DEBUG" = "debug" ] && [ "$COVERAGE" = "coverage" ]; then
-     $buildshell ../configure --enable-debug --enable-coverage --disable-shared --disable-fastopen;
+     ../configure --enable-debug --enable-coverage --disable-shared --disable-fastopen;
    elif [ "$DEBUG" = "debug" ]; then
-     $buildshell ../configure --enable-debug --disable-shared --disable-fastopen;
+     ../configure --enable-debug --disable-shared --disable-fastopen;
    elif [ "$VALGRIND" = "valgrind" ]; then
-     $buildshell ../configure --enable-debug --disable-fastopen --disable-valgrind-helgrind --disable-valgrind-drd --disable-valgrind-sgcheck;
+     ../configure --enable-debug --disable-fastopen --disable-valgrind-helgrind --disable-valgrind-drd --disable-valgrind-sgcheck;
+   elif [ "$IWYU" = "iwyu" ]; then
+     ../configure --disable-examples;
    else
-     $buildshell ../configure --disable-fastopen;
+     ../configure --disable-fastopen;
    fi
- - $buildshell make
+ # Make or run iwyu. If running iwyu, check for the result code to be 2 (IWYU always returns an error code, if it is 2, no corrections are necessary).
+ - |
+   if [ "$IWYU" = "iwyu" ]; then
+     make -k CXX='/usr/local/bin/include-what-you-use -Xiwyu --mapping_file=${top_builddir}/../custom_iwyu.imp' CXXFLAGS="-isystem ${CLANG_PREFIX_PATH}/include -std=c++11 -DHTTPSERVER_COMPILATION -D_REENTRANT $CXXFLAGS" ;
+     if [ $? -ne 2 ]; then 
+       return 1;
+     fi
+   else
+     make;
+   fi
 script:
- - $buildshell make check
- - $buildshell cat test/test-suite.log
+ - if [ "$IWYU" != "iwyu" ]; then make check; cat test/test-suite.log; fi
  - if [ "$VALGRIND" = "valgrind" ]; then make check-valgrind; fi;
  - if [ "$VALGRIND" = "valgrind" ]; then cat test/test-suite-memcheck.log; fi;
  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then cd ../src/; cppcheck --error-exitcode=1 .; cd ../build; fi
@@ -103,8 +106,6 @@ script:
     ./benchmark_threads 8080 &
     sleep 5 && ab -n 10000000 -c 100 localhost:8080/plaintext
    fi
-after_script:
-  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then taskkill //F //PID $(ps -Wla | tr -s ' ' | grep gpg | cut -f2 -d' ') ; fi
 after_success:
   - if [ "$DEBUG" = "debug" ] && [ "$COVERAGE" = "coverage" ] && [ "$TRAVIS_OS_NAME" = "linux" ]; then bash <(curl -s https://codecov.io/bash); fi
 matrix:
@@ -341,3 +342,17 @@ matrix:
             - clang-9
       env:
         - MATRIX_EVAL="CC=clang-9 && CXX=clang++-9"
+    - os: linux
+      compiler: clang
+      addons:
+        apt:
+          sources:
+            - llvm-toolchain-xenial-7
+            - ubuntu-toolchain-r-test
+          packages:
+            - iwyu
+            - cmake
+            - llvm-dev
+            - libclang-dev
+      env:
+        - MATRIX_EVAL="IWYU=iwyu"

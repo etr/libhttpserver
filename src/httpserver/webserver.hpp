@@ -30,35 +30,32 @@
 #define NOT_METHOD_ERROR "Method not Acceptable"
 #define GENERIC_ERROR "Internal Error"
 
+#include <microhttpd.h>
 #include <pthread.h>
+#include <stdarg.h>
+#include <stdint.h>
 #include <stdlib.h>
-#include <cstring>
-#include <deque>
+
+#if !defined(__MINGW32__)
+#include <sys/socket.h>
+#endif
+
 #include <map>
 #include <memory>
 #include <set>
-#include <stdexcept>
 #include <string>
-#include <utility>
-#include <vector>
 
+#include "http_utils.hpp"
 #include "httpserver/create_webserver.hpp"
 #include "httpserver/details/http_endpoint.hpp"
-#include "httpserver/http_response.hpp"
+
+namespace httpserver { class http_resource; }
+namespace httpserver { class http_response; }
+namespace httpserver { namespace details { struct modded_request; } }
+
+struct MHD_Connection;
 
 namespace httpserver {
-
-class http_resource;
-class create_webserver;
-
-namespace http {
-struct ip_representation;
-struct httpserver_ska;
-};
-
-namespace details {
-    struct modded_request;
-}
 
 /**
  * Class representing the webserver. Main class of the apis.
@@ -154,6 +151,7 @@ class webserver
         const int max_thread_stack_size;
         const bool use_ssl;
         const bool use_ipv6;
+        const bool use_dual_stack;
         const bool debug;
         const bool pedantic;
         const std::string https_mem_key;
