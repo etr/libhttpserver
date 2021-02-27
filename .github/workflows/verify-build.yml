@@ -1,0 +1,181 @@
+name: "Verify Build"
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    # The branches below must be a subset of the branches above
+    branches: [master]
+  schedule:
+    - cron: '0 0 * * 0'
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        compiler:
+          - 'CC=gcc && CXX=g++'
+          - 'CC=clang && CXX=clang++'
+        env:
+          - 'DEBUG="debug" && COVERAGE="coverage"'
+          - 'DEBUG="nodebug" && COVERAGE="nocoverage"'
+          - 'LINKING="static"'
+        exclude:
+          - compiler: 'CC=clang && CXX=clang++' 
+            env: 'DEBUG="debug" && COVERAGE="coverage"'
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      with:
+        # We must fetch at least the immediate parents so that if this is
+        # a pull request then we can checkout the head.
+        fetch-depth: 2
+
+    # If this run was triggered by a pull request event, then checkout
+    # the head of the pull request instead of the merge commit.
+    - run: git checkout HEAD^2
+      if: ${{ github.event_name == 'pull_request' }}
+
+    # Extract combination of environment variables
+    - name: Apply environment variables
+      run: |
+        eval "${{ matrix.compiler }}"
+        eval "${{ matrix.env }}"
+
+    # Installing iwyu manually because clang and iwyu paths won't match on Ubuntu otherwise.
+    - name: Install IWYU if requested
+      run: if [ "$IWYU" = "iwyu" ]; then
+             CLANG_VERSION=`clang --version | grep version | cut -f3 -d' ' | cut -f1 -d'-'` ;
+             CLANG_PKG_VERSION=`echo $CLANG_VERSION | cut -f1,2 -d'.'`
+             CLANG_PREFIX_PATH="/usr/local/clang-${CLANG_VERSION}/lib/clang/${CLANG_VERSION}" ;
+             CLANG_BIN_PATH="/usr/local/clang-${CLANG_VERSION}/bin" ;
+             git clone https://github.com/include-what-you-use/include-what-you-use.git ;
+             cd include-what-you-use ;
+             echo "$CLANG_PKG_VERSION" | grep '\.[0-9]$' ;
+             if [ $? -eq 0 ]; then
+               git checkout clang_${CLANG_PKG_VERSION} ;
+             else
+               git checkout clang_${CLANG_PKG_VERSION}.0 ;
+             fi;
+             cd .. ;
+             mkdir build_iwyu ;
+             cd build_iwyu ;
+             cmake -G "Unix Makefiles" -DCMAKE_PREFIX_PATH=$CLANG_PREFIX_PATH -DCMAKE_C_COMPILER=$CLANG_BIN_PATH/clang -DCMAKE_CXX_COMPILER=$CLANG_BIN_PATH/clang++ ../include-what-you-use ;
+             make ;
+             sudo make install ;
+             cd .. ;
+           fi
+
+    # Set paths
+    - run: |
+        export LDFLAGS="$LDFLAGS -L/usr/local/lib -L/usr/lib"
+        export PATH=$PATH:/usr/local/lib
+        export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib
+        export DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH:/usr/local/lib
+
+    - name: Setup coverage dependencies (only on linux)
+      run: |
+        sudo apt-get install info install-info ;
+        sudo pip install codecov ;
+        sudo pip install gcovr ;
+        sudo apt-get install cppcheck ;
+      if: ${{ matrix.os == 'ubuntu-latest' }}
+
+    # Additional flags on mac
+    - run: |
+        export CFLAGS='-mtune=generic' ;
+        export IPV6_TESTS_ENABLED="true" ;
+      if: ${{ matrix.os == 'macos-latest' }}
+
+    - name: Install libmicrohttpd dependency
+      run: |
+        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.59.tar.gz -o libmicrohttpd-0.9.59.tar.gz ;
+        tar -xzf libmicrohttpd-0.9.59.tar.gz ;
+        cd libmicrohttpd-0.9.59 ;
+        ./configure --disable-examples ;
+        make ;
+        sudo make install ;
+        cd .. ;
+
+    - name: Set flags for memory checks
+      run: |
+        if [ "$BUILD_TYPE" = "asan" ]; then export CFLAGS='-fsanitize=address'; export CXXLAGS='-fsanitize=address'; export LDFLAGS='-fsanitize=address'; fi
+        if [ "$BUILD_TYPE" = "msan" ]; then export CFLAGS='-fsanitize=memory'; export CXXLAGS='-fsanitize=memory'; export LDFLAGS='-fsanitize=memory'; fi
+        if [ "$BUILD_TYPE" = "lsan" ]; then export CFLAGS='-fsanitize=leak'; export CXXLAGS='-fsanitize=leak'; export LDFLAGS='-fsanitize=leak'; fi
+        if [ "$BUILD_TYPE" = "tsan" ]; then export CFLAGS='-fsanitize=thread'; export CXXLAGS='-fsanitize=thread'; export LDFLAGS='-fsanitize=thread'; fi
+        if [ "$BUILD_TYPE" = "ubsan" ]; then export export CFLAGS='-fsanitize=undefined'; export CXXLAGS='-fsanitize=undefined'; export LDFLAGS='-fsanitize=undefined'; fi
+
+    - name: Run libhttpserver configure
+      run: |
+        ./bootstrap ;
+        mkdir build ;
+        cd build ;
+        if [ "$LINKING" = "static" ]; then
+          ../configure --enable-static --disable-fastopen;
+        elif [ "$DEBUG" = "debug" ] && [ "$COVERAGE" = "coverage" ]; then
+          ../configure --enable-debug --enable-coverage --disable-shared --disable-fastopen;
+        elif [ "$DEBUG" = "debug" ]; then
+          ../configure --enable-debug --disable-shared --disable-fastopen;
+        elif [ "$VALGRIND" = "valgrind" ]; then
+          ../configure --enable-debug --disable-fastopen --disable-valgrind-helgrind --disable-valgrind-drd --disable-valgrind-sgcheck;
+        elif [ "$IWYU" = "iwyu" ]; then
+          ../configure --disable-examples;
+        else
+          ../configure --disable-fastopen;
+        fi
+
+    # Make or run iwyu. If running iwyu, check for the result code to be 2 (IWYU always returns an error code, if it is 2, no corrections are necessary).
+    - name: Make or run IWYU
+      run: |
+        if [ "$IWYU" = "iwyu" ]; then
+          make -k CXX='/usr/local/bin/include-what-you-use -Xiwyu --mapping_file=${top_builddir}/../custom_iwyu.imp' CXXFLAGS="-isystem ${CLANG_PREFIX_PATH}/include -std=c++11 -DHTTPSERVER_COMPILATION -D_REENTRANT $CXXFLAGS" ;
+          if [ $? -ne 2 ]; then 
+            return 1;
+          fi
+        else
+          make;
+        fi
+
+    - name: Run tests
+      run: if [ "$IWYU" != "iwyu" ]; then make check; cat test/test-suite.log; fi
+
+    - name: Run Valgrind checks
+      run: if [ "$VALGRIND" = "valgrind" ]; then make check-valgrind; cat test/test-suite-memcheck.log; fi;
+
+    - name: Run cppcheck
+      run: cd ../src/; cppcheck --error-exitcode=1 .; cd ../build;
+      if: ${{ matrix.os == 'ubuntu-latest' }}
+
+    - name: Run performance tests (select)
+      run: |
+        if [ "$PERFORMANCE" = "select" ]; then
+          cd examples
+          ./benchmark_select 8080 $(nproc) &
+          sleep 5 && ab -n 10000000 -c 100 localhost:8080/plaintext
+        fi
+
+    - name: Run performance tests (nodelay)
+      run: |
+        if [ "$PERFORMANCE" = "nodelay" ]; then
+          cd examples
+          ./benchmark_nodelay 8080 $(nproc) &
+          sleep 5 && ab -n 10000000 -c 100 localhost:8080/plaintext
+        fi
+
+    - name: Run performance tests (threads)
+      run: |
+       if [ "$PERFORMANCE" = "threads" ]; then
+         cd examples
+         ./benchmark_threads 8080 &
+         sleep 5 && ab -n 10000000 -c 100 localhost:8080/plaintext
+       fi
+
+    - name: Push code coverage data
+      run: if [ "$DEBUG" = "debug" ] && [ "$COVERAGE" = "coverage" ]; then bash <(curl -s https://codecov.io/bash); fi
+      if: ${{ matrix.os == 'ubuntu-latest' }}
