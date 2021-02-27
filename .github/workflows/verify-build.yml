@@ -133,6 +133,7 @@ jobs:
     # Make or run iwyu. If running iwyu, check for the result code to be 2 (IWYU always returns an error code, if it is 2, no corrections are necessary).
     - name: Make or run IWYU
       run: |
+        cd build ;
         if [ "$IWYU" = "iwyu" ]; then
           make -k CXX='/usr/local/bin/include-what-you-use -Xiwyu --mapping_file=${top_builddir}/../custom_iwyu.imp' CXXFLAGS="-isystem ${CLANG_PREFIX_PATH}/include -std=c++11 -DHTTPSERVER_COMPILATION -D_REENTRANT $CXXFLAGS" ;
           if [ $? -ne 2 ]; then 
@@ -143,18 +144,19 @@ jobs:
         fi
 
     - name: Run tests
-      run: if [ "$IWYU" != "iwyu" ]; then make check; cat test/test-suite.log; fi
+      run: if [ "$IWYU" != "iwyu" ]; then cd build ; make check; cat test/test-suite.log; fi
 
     - name: Run Valgrind checks
-      run: if [ "$VALGRIND" = "valgrind" ]; then make check-valgrind; cat test/test-suite-memcheck.log; fi;
+      run: if [ "$VALGRIND" = "valgrind" ]; then cd build ; make check-valgrind; cat test/test-suite-memcheck.log; fi;
 
     - name: Run cppcheck
-      run: cd ../src/; cppcheck --error-exitcode=1 .; cd ../build;
+      run: cd src/; cppcheck --error-exitcode=1 .;
       if: ${{ matrix.os == 'ubuntu-latest' }}
 
     - name: Run performance tests (select)
       run: |
         if [ "$PERFORMANCE" = "select" ]; then
+          cd build
           cd examples
           ./benchmark_select 8080 $(nproc) &
           sleep 5 && ab -n 10000000 -c 100 localhost:8080/plaintext
@@ -163,6 +165,7 @@ jobs:
     - name: Run performance tests (nodelay)
       run: |
         if [ "$PERFORMANCE" = "nodelay" ]; then
+          cd build
           cd examples
           ./benchmark_nodelay 8080 $(nproc) &
           sleep 5 && ab -n 10000000 -c 100 localhost:8080/plaintext
@@ -171,11 +174,12 @@ jobs:
     - name: Run performance tests (threads)
       run: |
        if [ "$PERFORMANCE" = "threads" ]; then
+         cd build
          cd examples
          ./benchmark_threads 8080 &
          sleep 5 && ab -n 10000000 -c 100 localhost:8080/plaintext
        fi
 
     - name: Push code coverage data
-      run: if [ "$DEBUG" = "debug" ] && [ "$COVERAGE" = "coverage" ]; then bash <(curl -s https://codecov.io/bash); fi
+      run: if [ "$DEBUG" = "debug" ] && [ "$COVERAGE" = "coverage" ]; then cd build ; bash <(curl -s https://codecov.io/bash); fi
       if: ${{ matrix.os == 'ubuntu-latest' }}
