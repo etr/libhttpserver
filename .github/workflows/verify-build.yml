@@ -17,6 +17,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
+        test-group: [basic]
         compiler:
           - 'CC=gcc && CXX=g++'
           - 'CC=clang && CXX=clang++'
@@ -27,7 +28,32 @@ jobs:
         exclude:
           - compiler: 'CC=clang && CXX=clang++' 
             env: 'DEBUG="debug" && COVERAGE="coverage"'
-
+        include:
+          - compiler-family: clang
+            compiler-version: 3.9
+            test-group: extra
+            os: ubuntu-latest
+            env: 'BUILD_TYPE=asan && CC=clang-3.9 && CXX=clang++-3.9 && DEBUG=debug && COVERAGE=nocoverage'
+          - compiler-family: clang
+            compiler-version: 3.9
+            test-group: extra
+            os: ubuntu-latest
+            env: 'BUILD_TYPE=msan && CC=clang-3.9 && CXX=clang++-3.9 && DEBUG=debug && COVERAGE=nocoverage'
+          - compiler-family: clang
+            compiler-version: 3.9
+            test-group: extra
+            os: ubuntu-latest
+            env: 'BUILD_TYPE=lsan && CC=clang-3.9 && CXX=clang++-3.9 && DEBUG=debug && COVERAGE=nocoverage'
+          - compiler-family: clang
+            compiler-version: 3.9
+            test-group: extra
+            os: ubuntu-latest
+            env: 'BUILD_TYPE=tsan && CC=clang-3.9 && CXX=clang++-3.9 && DEBUG=debug && COVERAGE=nocoverage'            
+          - compiler-family: clang
+            compiler-version: 3.9
+            test-group: extra
+            os: ubuntu-latest
+            env: 'BUILD_TYPE=ubsan && CC=clang-3.9 && CXX=clang++-3.9 && DEBUG=debug && COVERAGE=nocoverage'            
     steps:
     - name: Checkout repository
       uses: actions/checkout@v2
@@ -46,6 +72,18 @@ jobs:
       run: |
         eval "${{ matrix.compiler }}"
         eval "${{ matrix.env }}"
+        
+    - name: Install Ubuntu test sources (for extra builds)
+      run: |
+        sudo add-apt-repository ppa:ubuntu-toolchain-r/test ;
+        sudo apt-get update ;
+      if: ${{ matrix.test-group == 'extra' && matrix.os == 'ubuntu-latest' }}
+      
+    - name: Install optional clang if needed
+      run: |
+        sudo apt-get install llvm-toolchain-${{ matrix.compiler-version }} ;
+        sudo apt-get install clang-${{ matrix.compiler-version }}
+      if: ${{ matrix.compiler-family == 'clang' && matrix.os == 'ubuntu-latest' }}
     
     - name: CURL from cache (for testing)
       id: cache-CURL
