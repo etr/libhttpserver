@@ -68,7 +68,7 @@ jobs:
       if: steps.cache-CURL.outputs.cache-hit != 'true'
       
     - name: Install CURL (for testing) 
-      run: make install ;
+      run: cd curl-7.75.0 ; sudo make install ;
       
     - name: Install autotools on mac
       run: brew install autoconf automake libtool
