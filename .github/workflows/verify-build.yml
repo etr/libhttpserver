@@ -13,7 +13,6 @@ jobs:
   verify:
     name: Verify
     runs-on: ${{ matrix.os }}
-    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
@@ -41,6 +40,10 @@ jobs:
     # the head of the pull request instead of the merge commit.
     - run: git checkout HEAD^2
       if: ${{ github.event_name == 'pull_request' }}
+      
+    # Add a conclusion action
+    - name: Workflow Conclusion Action
+      uses: technote-space/workflow-conclusion-action@v2.0.1
 
     # Extract combination of environment variables
     - name: Apply environment variables
@@ -166,6 +169,7 @@ jobs:
       
     - name: Print tests results
       run: if [ "$IWYU" != "iwyu" ]; then cd build ; cat test/test-suite.log; fi
+      if: env.WORKFLOW_CONCLUSION == 'failure'
 
     - name: Run Valgrind checks
       run: if [ "$VALGRIND" = "valgrind" ]; then cd build ; make check-valgrind; cat test/test-suite-memcheck.log; fi;
