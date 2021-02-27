@@ -47,30 +47,28 @@ jobs:
         eval "${{ matrix.compiler }}"
         eval "${{ matrix.env }}"
     
-    - name: Install CURL (for testing on linux)
-      run: sudo apt-get install libcurl4-openssl-dev
-      if: ${{ matrix.os == 'ubuntu-latest' }}
+    #- name: Install CURL (for testing on linux)
+    #  run: sudo apt-get install libcurl4-openssl-dev
+    #  if: ${{ matrix.os == 'ubuntu-latest' }}
     
-    - name: CURL from cache (for testing on mac)
+    - name: CURL from cache (for testing)
       id: cache-CURL
       uses: actions/cache@v2
       with:
         path: curl-7.75.0.tar.gz
-        key: ${{ matrix.os }}-primes
-      if: ${{ matrix.os == 'macos-latest' }}
+        key: ${{ matrix.os }}-CURL
     
-    - name: Build CURL (for testing on mac)
+    - name: Build CURL (for testing)
       run: |
         curl https://libhttpserver.s3.amazonaws.com/travis_stuff/curl-7.75.0.tar.gz -o curl-7.75.0.tar.gz ;
         tar -xzf curl-7.75.0.tar.gz ;
         cd curl-7.75.0 ;
         ./configure ;
         make ;
-      if: steps.cache-CURL.outputs.cache-hit != 'true' && ${{ matrix.os == 'macos-latest' }}
+      if: steps.cache-CURL.outputs.cache-hit != 'true'
       
-    - name: Install CURL (for testing on mac) 
+    - name: Install CURL (for testing) 
       run: make install ;
-      if: ${{ matrix.os == 'macos-latest' }}
       
     - name: Install autotools on mac
       run: brew install autoconf automake libtool
