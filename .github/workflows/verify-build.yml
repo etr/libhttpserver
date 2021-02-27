@@ -118,7 +118,7 @@ jobs:
         ./configure --disable-examples ;
         make ;
         sudo make install ;
-        cd .. ;
+        sudo ldconfig ;
 
     - name: Set flags for memory checks
       run: |
