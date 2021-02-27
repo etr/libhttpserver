@@ -118,7 +118,10 @@ jobs:
         ./configure --disable-examples ;
         make ;
         sudo make install ;
-        sudo ldconfig ;
+    
+    - name: Refresh links to shared libs
+      run: sudo ldconfig ;
+      if: ${{ matrix.os == 'ubuntu-latest' }}
 
     - name: Set flags for memory checks
       run: |
