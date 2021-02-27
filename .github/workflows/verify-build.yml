@@ -13,47 +13,81 @@ jobs:
   verify:
     name: Verify
     runs-on: ${{ matrix.os }}
+    env:
+      DEBUG: ${{ matrix.debug }}
+      COVERAGE: ${{ matrix.coverage }}
+      LINKING: ${{ matrix.linking }}
+      BUILD_TYPE: ${{ matrix.build-type }}
+      CC: ${{ matrix.c-compiler }}
+      CXX: ${{ matrix.cc-compiler }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
         test-group: [basic]
-        compiler:
-          - 'CC=gcc && CXX=g++'
-          - 'CC=clang && CXX=clang++'
-        env:
-          - 'DEBUG="debug" && COVERAGE="coverage"'
-          - 'DEBUG="nodebug" && COVERAGE="nocoverage"'
-          - 'LINKING="static"'
+        compiler-family: [none]
+        c-compiler: [gcc, clang]
+        cc-compiler: [g++, clang++]
+        debug: [debug, nodebug]
+        coverage: [coverage, nocoverage]
+        linking: [dynamic, static]
+        build-type: [classic]
         exclude:
-          - compiler: 'CC=clang && CXX=clang++' 
-            env: 'DEBUG="debug" && COVERAGE="coverage"'
+          - c-compiler: gcc
+            cc-compiler: clang++
+          - c-compiler: clang
+            cc-compiler: g++
+          - c-compiler: clang
+            debug: debug
+          - debug: debug
+            coverage: nocoverage
+          - debug: nodebug
+            coverage: coverage
+          - linking: static
+            debug: debug
+          - linking: static
+            coverage: coverage
         include:
-          - compiler-family: clang
-            compiler-version: 3.9
-            test-group: extra
+          - test-group: extra
             os: ubuntu-latest
-            env: 'BUILD_TYPE=asan && CC=clang-3.9 && CXX=clang++-3.9 && DEBUG=debug && COVERAGE=nocoverage'
-          - compiler-family: clang
-            compiler-version: 3.9
-            test-group: extra
+            build-type: asan
+            compiler-family: clang
+            c-compiler: clang-3.9
+            cc-compiler: clang++-3.9
+            debug: debug
+            coverage: nocoverage
+          - test-group: extra
             os: ubuntu-latest
-            env: 'BUILD_TYPE=msan && CC=clang-3.9 && CXX=clang++-3.9 && DEBUG=debug && COVERAGE=nocoverage'
-          - compiler-family: clang
-            compiler-version: 3.9
-            test-group: extra
+            build-type: msan
+            compiler-family: clang
+            c-compiler: clang-3.9
+            cc-compiler: clang++-3.9
+            debug: debug
+            coverage: nocoverage
+          - test-group: extra
             os: ubuntu-latest
-            env: 'BUILD_TYPE=lsan && CC=clang-3.9 && CXX=clang++-3.9 && DEBUG=debug && COVERAGE=nocoverage'
-          - compiler-family: clang
-            compiler-version: 3.9
-            test-group: extra
+            build-type: lsan
+            compiler-family: clang
+            c-compiler: clang-3.9
+            cc-compiler: clang++-3.9
+            debug: debug
+            coverage: nocoverage
+          - test-group: extra
             os: ubuntu-latest
-            env: 'BUILD_TYPE=tsan && CC=clang-3.9 && CXX=clang++-3.9 && DEBUG=debug && COVERAGE=nocoverage'            
-          - compiler-family: clang
-            compiler-version: 3.9
-            test-group: extra
+            build-type: tsan
+            compiler-family: clang
+            c-compiler: clang-3.9
+            cc-compiler: clang++-3.9
+            debug: debug
+            coverage: nocoverage           
+          - test-group: extra
             os: ubuntu-latest
-            env: 'BUILD_TYPE=ubsan && CC=clang-3.9 && CXX=clang++-3.9 && DEBUG=debug && COVERAGE=nocoverage'            
+            build-type: ubsan
+            compiler-family: clang
+            c-compiler: clang-3.9
+            cc-compiler: clang++-3.9
+            debug: debug
+            coverage: nocoverage         
     steps:
     - name: Checkout repository
       uses: actions/checkout@v2
@@ -66,12 +100,6 @@ jobs:
     # the head of the pull request instead of the merge commit.
     - run: git checkout HEAD^2
       if: ${{ github.event_name == 'pull_request' }}
-
-    # Extract combination of environment variables
-    - name: Apply environment variables
-      run: |
-        eval "${{ matrix.compiler }}"
-        eval "${{ matrix.env }}"
         
     - name: Install Ubuntu test sources (for extra builds)
       run: |
@@ -81,7 +109,7 @@ jobs:
       
     - name: Install optional clang if needed
       run: |
-        sudo apt-get install clang-${{ matrix.compiler-version }}
+        sudo apt-get install ${{ matrix.c-compiler }}
       if: ${{ matrix.compiler-family == 'clang' && matrix.os == 'ubuntu-latest' }}
     
     - name: CURL from cache (for testing)
@@ -263,4 +291,4 @@ jobs:
 
     - name: Push code coverage data
       run: if [ "$DEBUG" = "debug" ] && [ "$COVERAGE" = "coverage" ]; then cd build ; bash <(curl -s https://codecov.io/bash); fi
-      if: ${{ matrix.os == 'ubuntu-latest' }}
+      if: ${{ matrix.os == 'ubuntu-latest' && matrix.c-compiler == 'gcc' }}
