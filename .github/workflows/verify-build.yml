@@ -55,8 +55,8 @@ jobs:
       id: cache-CURL
       uses: actions/cache@v2
       with:
-        path: curl-7.75.0.tar.gz
-        key: ${{ matrix.os }}-CURL
+        path: curl-7.75.0
+        key: ${{ matrix.os }}-CURL-pre-built
     
     - name: Build CURL (for testing)
       run: |
