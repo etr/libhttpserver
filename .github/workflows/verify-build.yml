@@ -66,7 +66,7 @@ jobs:
         cd curl-7.75.0 ;
         ./configure ;
         make ;
-      if: steps.cache-CURL.outputs.cache-hit != 'true'
+      if: steps.cache-CURL.outputs.cache-hit != 'true' && ${{ matrix.os == 'macos-latest' }}
       
     - name: Install CURL (for testing on mac) 
       run: make install ;
