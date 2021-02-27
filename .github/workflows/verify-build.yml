@@ -13,9 +13,6 @@ jobs:
   verify:
     name: Verify
     runs-on: ${{ matrix.os }}
-    container:
-      ports:
-        - 8080
     strategy:
       fail-fast: false
       matrix:
