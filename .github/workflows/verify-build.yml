@@ -67,9 +67,14 @@ jobs:
         make ;
       if: steps.cache-CURL.outputs.cache-hit != 'true'
       
-    - name: Install CURL (for testing) 
+    - name: Install CURL (for testing on mac only) 
       run: cd curl-7.75.0 ; sudo make install ;
-      
+      if: ${{ matrix.os == 'macos-latest' }}
+ 
+    - name: Install CURL (for testing on linux)
+      run: sudo apt-get install libcurl4-openssl-dev
+      if: ${{ matrix.os == 'ubuntu-latest' }}
+ 
     - name: Install autotools on mac
       run: brew install autoconf automake libtool
       if: ${{ matrix.os == 'macos-latest' }}
