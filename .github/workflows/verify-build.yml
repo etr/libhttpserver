@@ -81,7 +81,6 @@ jobs:
       
     - name: Install optional clang if needed
       run: |
-        sudo apt-get install llvm-toolchain-${{ matrix.compiler-version }} ;
         sudo apt-get install clang-${{ matrix.compiler-version }}
       if: ${{ matrix.compiler-family == 'clang' && matrix.os == 'ubuntu-latest' }}
     
