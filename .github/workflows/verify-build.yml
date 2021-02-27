@@ -51,14 +51,25 @@ jobs:
       run: sudo apt-get install libcurl4-openssl-dev
       if: ${{ matrix.os == 'ubuntu-latest' }}
     
-    - name: Install CURL (for testing on mac)
+    - name: CURL from cache (for testing on mac)
+      id: cache-CURL
+      uses: actions/cache@v2
+      with:
+        path: curl-7.75.0.tar.gz
+        key: ${{ matrix.os }}-primes
+      if: ${{ matrix.os == 'macos-latest' }}
+    
+    - name: Build CURL (for testing on mac)
       run: |
         curl https://libhttpserver.s3.amazonaws.com/travis_stuff/curl-7.75.0.tar.gz -o curl-7.75.0.tar.gz ;
         tar -xzf curl-7.75.0.tar.gz ;
         cd curl-7.75.0 ;
         ./configure ;
         make ;
-        make install ;
+      if: steps.cache-CURL.outputs.cache-hit != 'true'
+      
+    - name: Install CURL (for testing on mac) 
+      run: make install ;
       if: ${{ matrix.os == 'macos-latest' }}
       
     - name: Install autotools on mac
