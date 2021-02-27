@@ -13,6 +13,7 @@ jobs:
   verify:
     name: Verify
     runs-on: ${{ matrix.os }}
+    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
@@ -161,7 +162,10 @@ jobs:
         fi
 
     - name: Run tests
-      run: if [ "$IWYU" != "iwyu" ]; then cd build ; make check; cat test/test-suite.log; fi
+      run: if [ "$IWYU" != "iwyu" ]; then cd build ; make check; fi
+      
+    - name: Print tests results
+      run: if [ "$IWYU" != "iwyu" ]; then cd build ; cat test/test-suite.log; fi
 
     - name: Run Valgrind checks
       run: if [ "$VALGRIND" = "valgrind" ]; then cd build ; make check-valgrind; cat test/test-suite-memcheck.log; fi;
