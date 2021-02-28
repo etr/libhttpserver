@@ -274,6 +274,11 @@ jobs:
              CLANG_PKG_VERSION=`echo $CLANG_VERSION | cut -f1,2 -d'.'`
              CLANG_PREFIX_PATH="/usr/local/clang-${CLANG_VERSION}/lib/clang/${CLANG_VERSION}" ;
              CLANG_BIN_PATH="/usr/local/clang-${CLANG_VERSION}/bin" ;
+             which clang ;
+             echo $CLANG_VERSION ;
+             echo $CLANG_PKG_VERSION ;
+             echo $CLANG_PREFIX_PATH ;
+             echo $CLANG_BIN_PATH ;
              git clone https://github.com/include-what-you-use/include-what-you-use.git ;
              cd include-what-you-use ;
              echo "$CLANG_PKG_VERSION" | grep '\.[0-9]$' ;
