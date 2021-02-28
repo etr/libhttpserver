@@ -253,14 +253,9 @@ jobs:
         CLANG_ROOT_PATH="/usr/lib/llvm-${CLANG_PKG_VERSION}" ;
         CLANG_PREFIX_PATH="${CLANG_ROOT_PATH}/lib/clang/${CLANG_VERSION}" ;
         CLANG_BIN_PATH="${CLANG_ROOT_PATH}/bin" ;
-        git clone https://github.com/include-what-you-use/include-what-you-use.git ;
+        curl "https://libhttpserver.s3.amazonaws.com/travis_stuff/include-what-you-use-clang-${CLANG_PKG_VERSION}.tgz" -o "include-what-you-use-clang-${CLANG_PKG_VERSION}.tgz" ;
+        tar -xzf "include-what-you-use-clang-${CLANG_PKG_VERSION}.tgz" ;
         cd include-what-you-use ;
-        echo "$CLANG_PKG_VERSION" | grep '\.[0-9]$' ;
-        if [ $? -eq 0 ]; then
-          git checkout clang_${CLANG_PKG_VERSION} ;
-        else
-          git checkout clang_${CLANG_PKG_VERSION}.0 ;
-        fi;
         cd .. ;
         mkdir build_iwyu ;
         cd build_iwyu ;
