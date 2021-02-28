@@ -164,13 +164,6 @@ jobs:
              cd .. ;
            fi
 
-    # Set paths
-    - run: |
-        export LDFLAGS="$LDFLAGS -L/usr/local/lib -L/usr/lib"
-        export PATH=$PATH:/usr/local/lib
-        export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib
-        export DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH:/usr/local/lib
-
     - name: Setup coverage dependencies (only on linux)
       run: |
         sudo apt-get install info install-info ;
@@ -178,12 +171,6 @@ jobs:
         sudo pip install gcovr ;
         sudo apt-get install cppcheck ;
       if: ${{ matrix.os == 'ubuntu-latest' }}
-
-    # Additional flags on mac
-    - run: |
-        export CFLAGS='-mtune=generic' ;
-        export IPV6_TESTS_ENABLED="true" ;
-      if: ${{ matrix.os == 'macos-latest' }}
 
     - name: Fetch libmicrohttpd from cache
       id: cache-libmicrohttpd
@@ -208,16 +195,21 @@ jobs:
       run: sudo ldconfig ;
       if: ${{ matrix.os == 'ubuntu-latest' }}
 
-    - name: Set flags for memory checks
+    - name: Run libhttpserver configure
       run: |
+        # Set memory check flags. They need to stay in step as env variables don't propagate across steps.
         if [ "$BUILD_TYPE" = "asan" ]; then export CFLAGS='-fsanitize=address'; export CXXLAGS='-fsanitize=address'; export LDFLAGS='-fsanitize=address'; fi
         if [ "$BUILD_TYPE" = "msan" ]; then export CFLAGS='-fsanitize=memory'; export CXXLAGS='-fsanitize=memory'; export LDFLAGS='-fsanitize=memory'; fi
         if [ "$BUILD_TYPE" = "lsan" ]; then export CFLAGS='-fsanitize=leak'; export CXXLAGS='-fsanitize=leak'; export LDFLAGS='-fsanitize=leak'; fi
         if [ "$BUILD_TYPE" = "tsan" ]; then export CFLAGS='-fsanitize=thread'; export CXXLAGS='-fsanitize=thread'; export LDFLAGS='-fsanitize=thread'; fi
         if [ "$BUILD_TYPE" = "ubsan" ]; then export export CFLAGS='-fsanitize=undefined'; export CXXLAGS='-fsanitize=undefined'; export LDFLAGS='-fsanitize=undefined'; fi
 
-    - name: Run libhttpserver configure
-      run: |
+        # Additional flags on mac. They need to stay in step as env variables don't propagate across steps.
+        if [ "$matrix.os" = "macos-latest" ]; then
+          export CFLAGS='-mtune=generic' ;
+          export IPV6_TESTS_ENABLED="true" ;
+        fi
+
         ./bootstrap ;
         mkdir build ;
         cd build ;
