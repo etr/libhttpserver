@@ -363,7 +363,7 @@ jobs:
           strings /usr/bin/iwyu | grep LLVM ;
           clang -print-resource-dir ;
           /usr/local/bin/include-what-you-use -print-resource-dir ;
-          make -k CXX='/usr/local/bin/include-what-you-use -Xiwyu --mapping_file=${top_builddir}/../custom_iwyu.imp' CXXFLAGS="-isystem ${CLANG_PREFIX_PATH}/include -std=c++11 -DHTTPSERVER_COMPILATION -D_REENTRANT $CXXFLAGS" ;
+          make -k CXX='/usr/local/bin/include-what-you-use -Xiwyu --mapping_file=${top_builddir}/../custom_iwyu.imp' CXXFLAGS="-std=c++11 -DHTTPSERVER_COMPILATION -D_REENTRANT $CXXFLAGS" ;
           if [ $? -ne 2 ]; then 
             return 1;
           fi
