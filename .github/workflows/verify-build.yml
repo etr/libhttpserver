@@ -184,6 +184,22 @@ jobs:
             cc-compiler: clang++-9
             debug: nodebug
             coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-latest
+            build-type: valgrind
+            compiler-family: gcc
+            c-compiler: gcc-7
+            cc-compiler: g++-7
+            debug: nodebug
+            coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-latest
+            build-type: iwyu
+            compiler-family: clang
+            c-compiler: clang
+            cc-compiler: clang++
+            debug: nodebug
+            coverage: nocoverage
     steps:
     - name: Checkout repository
       uses: actions/checkout@v2
@@ -212,6 +228,16 @@ jobs:
       run: |
         sudo apt-get install ${{ matrix.cc-compiler }}
       if: ${{ matrix.compiler-family == 'gcc' && matrix.os == 'ubuntu-latest' }}
+
+    - name: Install valgrind if needed
+      run: |
+        sudo apt-get install valgrind valgrind-dbg
+      if: ${{ matrix.build-type == 'valgrind' }}
+
+    - name: Install IWYU if needed
+      run: |
+        sudo apt-get install iwyu cmake llvm-dev libclang-dev
+      if: ${{ matrix.build-type == 'iwyu' }}
 
     - name: CURL from cache (for testing)
       id: cache-CURL
@@ -243,7 +269,7 @@ jobs:
 
     # Installing iwyu manually because clang and iwyu paths won't match on Ubuntu otherwise.
     - name: Install IWYU if requested
-      run: if [ "$IWYU" = "iwyu" ]; then
+      run: |
              CLANG_VERSION=`clang --version | grep version | cut -f3 -d' ' | cut -f1 -d'-'` ;
              CLANG_PKG_VERSION=`echo $CLANG_VERSION | cut -f1,2 -d'.'`
              CLANG_PREFIX_PATH="/usr/local/clang-${CLANG_VERSION}/lib/clang/${CLANG_VERSION}" ;
@@ -263,7 +289,7 @@ jobs:
              make ;
              sudo make install ;
              cd .. ;
-           fi
+      if: ${{ matrix.build-type == 'iwyu' }}
 
     - name: Setup coverage dependencies (only on linux)
       run: |
@@ -320,9 +346,9 @@ jobs:
           ../configure --enable-debug --enable-coverage --disable-shared --disable-fastopen;
         elif [ "$DEBUG" = "debug" ]; then
           ../configure --enable-debug --disable-shared --disable-fastopen;
-        elif [ "$VALGRIND" = "valgrind" ]; then
+        elif [ "$BUILD_TYPE" = "valgrind" ]; then
           ../configure --enable-debug --disable-fastopen --disable-valgrind-helgrind --disable-valgrind-drd --disable-valgrind-sgcheck;
-        elif [ "$IWYU" = "iwyu" ]; then
+        elif [ "$BUILD_TYPE" = "iwyu" ]; then
           ../configure --disable-examples;
         else
           ../configure --disable-fastopen;
@@ -332,7 +358,7 @@ jobs:
     - name: Make or run IWYU
       run: |
         cd build ;
-        if [ "$IWYU" = "iwyu" ]; then
+        if [ "$BUILD_TYPE" = "iwyu" ]; then
           make -k CXX='/usr/local/bin/include-what-you-use -Xiwyu --mapping_file=${top_builddir}/../custom_iwyu.imp' CXXFLAGS="-isystem ${CLANG_PREFIX_PATH}/include -std=c++11 -DHTTPSERVER_COMPILATION -D_REENTRANT $CXXFLAGS" ;
           if [ $? -ne 2 ]; then 
             return 1;
@@ -342,14 +368,14 @@ jobs:
         fi
 
     - name: Run tests
-      run: if [ "$IWYU" != "iwyu" ]; then cd build ; make check; cat test/test-suite.log ; fi
+      run: if [ "$BUILD_TYPE" != "iwyu" ]; then cd build ; make check; cat test/test-suite.log ; fi
       
     - name: Print tests results
-      run: if [ "$IWYU" != "iwyu" ]; then cd build ; cat test/test-suite.log; fi
+      run: if [ "$BUILD_TYPE" != "iwyu" ]; then cd build ; cat test/test-suite.log; fi
       if: ${{ failure() }}
 
     - name: Run Valgrind checks
-      run: if [ "$VALGRIND" = "valgrind" ]; then cd build ; make check-valgrind; cat test/test-suite-memcheck.log; fi;
+      run: if [ "$BUILD_TYPE" = "valgrind" ]; then cd build ; make check-valgrind; cat test/test-suite-memcheck.log; fi;
 
     - name: Run cppcheck
       run: cd src/; cppcheck --error-exitcode=1 .;
