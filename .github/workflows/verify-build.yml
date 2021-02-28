@@ -245,9 +245,13 @@ jobs:
              CLANG_VERSION=`clang --version | grep version | cut -f3 -d' ' | cut -f1 -d'-'` ;
              CLANG_PKG_VERSION=`echo $CLANG_VERSION | cut -f1,2 -d'.'`
              CLANG_BIN_PATH=`readlink -f /usr/bin/clang` ;
-             CLANG_PREFIX_PATH="${CLANG_BIN_PATH}/../lib/clang/${CLANG_VERSION}" ;
+             CLANGPP_BIN_PATH=`readlink -f /usr/bin/clang++` ;
+             CLANG_BIN_DIR_PATH=`dirname "${CLANG_BIN_PATH}"`
+             CLANG_PREFIX_PATH="${CLANG_BIN_DIR_PATH}/../lib/clang/${CLANG_VERSION}" ;
              which clang ;
              ls -l `which clang` ;
+             ls -l "${CLANG_BIN_DIR_PATH}/../lib/" ;
+             ls -l "${CLANG_BIN_DIR_PATH}/../lib/clang/" ;
              echo $CLANG_VERSION ;
              echo $CLANG_PKG_VERSION ;
              echo $CLANG_PREFIX_PATH ;
@@ -263,7 +267,7 @@ jobs:
              cd .. ;
              mkdir build_iwyu ;
              cd build_iwyu ;
-             cmake -G "Unix Makefiles" -DCMAKE_PREFIX_PATH=$CLANG_PREFIX_PATH -DCMAKE_C_COMPILER=$CLANG_BIN_PATH/clang -DCMAKE_CXX_COMPILER=$CLANG_BIN_PATH/clang++ ../include-what-you-use ;
+             cmake -G "Unix Makefiles" -DCMAKE_PREFIX_PATH=$CLANG_PREFIX_PATH -DCMAKE_C_COMPILER=$CLANG_BIN_PATH -DCMAKE_CXX_COMPILER=$CLANGPP_BIN_PATH ../include-what-you-use ;
              make ;
              sudo make install ;
              cd .. ;
