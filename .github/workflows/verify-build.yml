@@ -267,35 +267,6 @@ jobs:
       run: brew install autoconf automake libtool
       if: ${{ matrix.os == 'macos-latest' }}
 
-    # Installing iwyu manually because clang and iwyu paths won't match on Ubuntu otherwise.
-    - name: Install IWYU if requested
-      run: |
-             CLANG_VERSION=`clang --version | grep version | cut -f3 -d' ' | cut -f1 -d'-'` ;
-             CLANG_PKG_VERSION=`echo $CLANG_VERSION | cut -f1,2 -d'.'`
-             CLANG_PREFIX_PATH="/usr/local/clang-${CLANG_VERSION}/lib/clang/${CLANG_VERSION}" ;
-             CLANG_BIN_PATH="/usr/local/clang-${CLANG_VERSION}/bin" ;
-             ls -l `which clang` ;
-             echo $CLANG_VERSION ;
-             echo $CLANG_PKG_VERSION ;
-             echo $CLANG_PREFIX_PATH ;
-             echo $CLANG_BIN_PATH ;
-             git clone https://github.com/include-what-you-use/include-what-you-use.git ;
-             cd include-what-you-use ;
-             echo "$CLANG_PKG_VERSION" | grep '\.[0-9]$' ;
-             if [ $? -eq 0 ]; then
-               git checkout clang_${CLANG_PKG_VERSION} ;
-             else
-               git checkout clang_${CLANG_PKG_VERSION}.0 ;
-             fi;
-             cd .. ;
-             mkdir build_iwyu ;
-             cd build_iwyu ;
-             cmake -G "Unix Makefiles" -DCMAKE_PREFIX_PATH=$CLANG_PREFIX_PATH -DCMAKE_C_COMPILER=$CLANG_BIN_PATH/clang -DCMAKE_CXX_COMPILER=$CLANG_BIN_PATH/clang++ ../include-what-you-use ;
-             make ;
-             sudo make install ;
-             cd .. ;
-      if: ${{ matrix.build-type == 'iwyu' }}
-
     - name: Setup coverage dependencies (only on linux)
       run: |
         sudo apt-get install info install-info ;
