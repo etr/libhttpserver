@@ -234,10 +234,10 @@ jobs:
         sudo apt-get install valgrind valgrind-dbg
       if: ${{ matrix.build-type == 'valgrind' }}
 
-    - name: Install IWYU if needed
-      run: |
-        sudo apt-get install iwyu
-      if: ${{ matrix.build-type == 'iwyu' }}
+   # - name: Install IWYU if needed
+   #   run: |
+   #     sudo apt-get install iwyu
+   #   if: ${{ matrix.build-type == 'iwyu' }}
 
     # Installing iwyu manually because clang and iwyu paths won't match on Ubuntu otherwise.
     # - name: Install IWYU if requested
