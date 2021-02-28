@@ -196,8 +196,8 @@ jobs:
             os: ubuntu-latest
             build-type: iwyu
             compiler-family: clang
-            c-compiler: clang-5
-            cc-compiler: clang++-5
+            c-compiler: clang-9
+            cc-compiler: clang++-9
             debug: nodebug
             coverage: nocoverage
     steps:
@@ -220,39 +220,40 @@ jobs:
       if: ${{ matrix.test-group == 'extra' && matrix.os == 'ubuntu-latest' }}
       
     - name: Install optional clang if needed
-      run: |
-        sudo apt-get install ${{ matrix.c-compiler }}
+      run: sudo apt-get install ${{ matrix.c-compiler }}
       if: ${{ matrix.compiler-family == 'clang' && matrix.os == 'ubuntu-latest' }}
 
     - name: Install optional gcc if needed
-      run: |
-        sudo apt-get install ${{ matrix.cc-compiler }}
+      run: sudo apt-get install ${{ matrix.cc-compiler }}
       if: ${{ matrix.compiler-family == 'gcc' && matrix.os == 'ubuntu-latest' }}
 
     - name: Install valgrind if needed
-      run: |
-        sudo apt-get install valgrind valgrind-dbg
+      run: sudo apt-get install valgrind valgrind-dbg
       if: ${{ matrix.build-type == 'valgrind' }}
-
-    - name: Install IWYU if needed
+    
+    - name: Install IWYU dependencies if needed
       run: |
-        sudo apt-get install iwyu
+        # Use same deps used by iwyu in their setup for travis
+        sudo apt-get install llvm-9-dev llvm-9-tools libclang-9-dev ;
+        # Use same CMAKE used by iwyu in their setup for travis
+        wget -O cmake.sh https://cmake.org/files/v3.10/cmake-3.10.0-Linux-x86_64.sh ;
+        sudo sh cmake.sh --skip-license --exclude-subdir --prefix=/usr/local ;
       if: ${{ matrix.build-type == 'iwyu' }}
 
     # Installing iwyu manually because clang and iwyu paths won't match on Ubuntu otherwise.
-    #- name: Install IWYU if requested
-    #  run: |
-    #    CLANG_ROOT_PATH=`llvm-config-9 --prefix` ;
-    #    CLANG_BIN_PATH=`llvm-config-9 --bindir` ;
-    #    curl "https://libhttpserver.s3.amazonaws.com/travis_stuff/include-what-you-use-clang-9.tgz" -o "include-what-you-use-clang-9.tgz" ;
-    #    tar -xzf "include-what-you-use-clang-9.tgz" ;
-    #    cd include-what-you-use ;
-    #    mkdir build_iwyu ;
-    #    cd build_iwyu ;
-    #    cmake -G "Unix Makefiles" -DCMAKE_CXX_FLAGS=-std=gnu++14 -DCMAKE_PREFIX_PATH=$ROOT_PATH -DCMAKE_C_COMPILER=$CLANG_BIN_PATH/clang -DCMAKE_CXX_COMPILER=$CLANG_BIN_PATH/clang++ ../ ;
-    #    make ;
-    #    sudo make install ;
-    #  if: ${{ matrix.build-type == 'iwyu' }}
+    - name: Install IWYU if requested
+      run: |
+        CLANG_ROOT_PATH=`llvm-config-9 --prefix` ;
+        CLANG_BIN_PATH=`llvm-config-9 --bindir` ;
+        curl "https://libhttpserver.s3.amazonaws.com/travis_stuff/include-what-you-use-clang-9.tgz" -o "include-what-you-use-clang-9.tgz" ;
+        tar -xzf "include-what-you-use-clang-9.tgz" ;
+        cd include-what-you-use ;
+        mkdir build_iwyu ;
+        cd build_iwyu ;
+        cmake -G "Unix Makefiles" -DCMAKE_PREFIX_PATH=$CLANG_ROOT_PATH -DCMAKE_C_COMPILER=$CLANG_BIN_PATH/clang -DCMAKE_CXX_COMPILER=$CLANG_BIN_PATH/clang++ ../ ;
+        make ;
+        sudo make install ;
+      if: ${{ matrix.build-type == 'iwyu' }}
 
     - name: CURL from cache (for testing)
       id: cache-CURL
@@ -350,11 +351,13 @@ jobs:
       run: |
         cd build ;
         if [ "$BUILD_TYPE" = "iwyu" ]; then
-          clang-5 -print-resource-dir ;
-          /usr/bin/include-what-you-use -print-resource-dir ;
-          sudo ln -s `clang-5 -print-resource dir`/include `/usr/bin/include-what-you-use -print-resource-dir`/include ;
-          sudo ln -s `clang-5 -print-resource dir`/lib `/usr/bin/include-what-you-use -print-resource-dir`/lib ;
-          make -k CXX='/usr/bin/include-what-you-use -Xiwyu --mapping_file=${top_builddir}/../custom_iwyu.imp' CXXFLAGS="-std=c++11 -DHTTPSERVER_COMPILATION -D_REENTRANT $CXXFLAGS" ;
+          echo "Print resource directories" ;
+          clang-9 -print-resource-dir ;
+          /usr/local/bin/include-what-you-use -print-resource-dir ;
+          #sudo ln -s `clang-5 -print-resource dir`/include `/usr/local/bin/include-what-you-use -print-resource-dir`/include ;
+          #sudo ln -s `clang-5 -print-resource dir`/lib `/usr/local/bin/include-what-you-use -print-resource-dir`/lib ;
+          echo "Running IWYU" ;
+          make -k CXX='/usr/local/bin/include-what-you-use -Xiwyu --mapping_file=${top_builddir}/../custom_iwyu.imp' CXXFLAGS="-std=c++11 -DHTTPSERVER_COMPILATION -D_REENTRANT $CXXFLAGS" ;
           if [ $? -ne 2 ]; then 
             return 1;
           fi
