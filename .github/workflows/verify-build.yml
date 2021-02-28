@@ -234,9 +234,9 @@ jobs:
         sudo apt-get install valgrind valgrind-dbg
       if: ${{ matrix.build-type == 'valgrind' }}
 
-    - name: Install IWYU dependencies if needed
+    - name: Install IWYU if needed
       run: |
-        sudo apt-get install cmake llvm-7-dev llvm-7-tools libclang-7-dev clang-7 iwyu
+        sudo apt-get install iwyu
       if: ${{ matrix.build-type == 'iwyu' }}
 
     # Installing iwyu manually because clang and iwyu paths won't match on Ubuntu otherwise.
