@@ -244,8 +244,9 @@ jobs:
       run: |
         CLANG_VERSION=`clang --version | grep version | cut -f3 -d' ' | cut -f1 -d'-'` ;
         CLANG_PKG_VERSION=`echo $CLANG_VERSION | cut -f1,2 -d'.'`
-        CLANG_PREFIX_PATH="/usr/lib/llvm-${CLANG_PKG_VERSION}/lib/clang/${CLANG_VERSION}" ;
-        CLANG_BIN_PATH="/usr/lib/llvm-${CLANG_PKG_VERSION}/bin" ;
+        CLANG_ROOT_PATH="/usr/lib/llvm-${CLANG_PKG_VERSION}"
+        CLANG_PREFIX_PATH="${CLANG_ROOT_PATH}/lib/clang/${CLANG_VERSION}" ;
+        CLANG_BIN_PATH="${CLANG_ROOT_PATH}/bin" ;
         git clone https://github.com/include-what-you-use/include-what-you-use.git ;
         cd include-what-you-use ;
         echo "$CLANG_PKG_VERSION" | grep '\.[0-9]$' ;
@@ -257,7 +258,7 @@ jobs:
         cd .. ;
         mkdir build_iwyu ;
         cd build_iwyu ;
-        cmake -G "Unix Makefiles" -DCMAKE_PREFIX_PATH=$CLANG_PREFIX_PATH -DIWYU_LLVM_ROOT_PATH=$CLANG_PREFIX_PATH -DCMAKE_C_COMPILER=$CLANG_BIN_PATH/clang -DCMAKE_CXX_COMPILER=$CLANG_BIN_PATH/clang++ ../include-what-you-use ;
+        cmake -G "Unix Makefiles" -DCMAKE_PREFIX_PATH=$CLANG_ROOT_PATH -DIWYU_LLVM_ROOT_PATH=$CLANG_ROOT_PATH -DCMAKE_C_COMPILER=$CLANG_BIN_PATH/clang -DCMAKE_CXX_COMPILER=$CLANG_BIN_PATH/clang++ ../include-what-you-use ;
         make ;
         sudo make install ;
         cd .. ;
