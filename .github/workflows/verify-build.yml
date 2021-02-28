@@ -340,8 +340,8 @@ jobs:
           ../configure --enable-debug --disable-shared --disable-fastopen;
         elif [ "$BUILD_TYPE" = "valgrind" ]; then
           ../configure --enable-debug --disable-fastopen --disable-valgrind-helgrind --disable-valgrind-drd --disable-valgrind-sgcheck;
-        elif [ "$BUILD_TYPE" = "iwyu" ]; then
-          ../configure --disable-examples;
+        #elif [ "$BUILD_TYPE" = "iwyu" ]; then
+        #  ../configure --disable-examples;
         else
           ../configure --disable-fastopen;
         fi
