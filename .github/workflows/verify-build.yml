@@ -274,7 +274,7 @@ jobs:
              CLANG_PKG_VERSION=`echo $CLANG_VERSION | cut -f1,2 -d'.'`
              CLANG_PREFIX_PATH="/usr/local/clang-${CLANG_VERSION}/lib/clang/${CLANG_VERSION}" ;
              CLANG_BIN_PATH="/usr/local/clang-${CLANG_VERSION}/bin" ;
-             which clang ;
+             ls -l `which clang` ;
              echo $CLANG_VERSION ;
              echo $CLANG_PKG_VERSION ;
              echo $CLANG_PREFIX_PATH ;
