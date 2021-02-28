@@ -247,10 +247,9 @@ jobs:
         curl "https://libhttpserver.s3.amazonaws.com/travis_stuff/include-what-you-use-clang-9.tgz" -o "include-what-you-use-clang-9.tgz" ;
         tar -xzf "include-what-you-use-clang-9.tgz" ;
         cd include-what-you-use ;
-
         mkdir build_iwyu ;
         cd build_iwyu ;
-        cmake -G "Unix Makefiles" -DCMAKE_CXX_FLAGS=-std=gnu++14 -DCMAKE_PREFIX_PATH=$ROOT_PATH -DCMAKE_C_COMPILER=$CLANG_BIN_PATH/clang -DCMAKE_CXX_COMPILER=$CLANG_BIN_PATH/clang++ ../include-what-you-use ;
+        cmake -G "Unix Makefiles" -DCMAKE_CXX_FLAGS=-std=gnu++14 -DCMAKE_PREFIX_PATH=$ROOT_PATH -DCMAKE_C_COMPILER=$CLANG_BIN_PATH/clang -DCMAKE_CXX_COMPILER=$CLANG_BIN_PATH/clang++ ../ ;
         make ;
         sudo make install ;
         cd .. ;
