@@ -236,14 +236,14 @@ jobs:
 
     - name: Install IWYU dependencies if needed
       run: |
-        sudo apt-get install cmake llvm-9-dev libclang-9-dev clang-9
+        sudo apt-get install cmake llvm-9-dev llvm-9-tools libclang-9-dev clang-9
       if: ${{ matrix.build-type == 'iwyu' }}
 
     # Installing iwyu manually because clang and iwyu paths won't match on Ubuntu otherwise.
     - name: Install IWYU if requested
       run: |
-        CLANG_ROOT_PATH="/usr/lib/llvm-9" ;
-        CLANG_BIN_PATH="/usr/lib/llvm-9/bin" ;
+        CLANG_ROOT_PATH=`llvm-config-$VERSION --prefix` ;
+        CLANG_BIN_PATH=`llvm-config-$VERSION --bindir` ;
         curl "https://libhttpserver.s3.amazonaws.com/travis_stuff/include-what-you-use-clang-9.tgz" -o "include-what-you-use-clang-9.tgz" ;
         tar -xzf "include-what-you-use-clang-9.tgz" ;
         cd include-what-you-use ;
