@@ -196,8 +196,8 @@ jobs:
             os: ubuntu-latest
             build-type: iwyu
             compiler-family: clang
-            c-compiler: clang-7
-            cc-compiler: clang++-7
+            c-compiler: clang-5
+            cc-compiler: clang++-5
             debug: nodebug
             coverage: nocoverage
     steps:
@@ -240,7 +240,7 @@ jobs:
       if: ${{ matrix.build-type == 'iwyu' }}
 
     # Installing iwyu manually because clang and iwyu paths won't match on Ubuntu otherwise.
-    # - name: Install IWYU if requested
+    #- name: Install IWYU if requested
     #  run: |
     #    CLANG_ROOT_PATH=`llvm-config-9 --prefix` ;
     #    CLANG_BIN_PATH=`llvm-config-9 --bindir` ;
@@ -252,7 +252,6 @@ jobs:
     #    cmake -G "Unix Makefiles" -DCMAKE_CXX_FLAGS=-std=gnu++14 -DCMAKE_PREFIX_PATH=$ROOT_PATH -DCMAKE_C_COMPILER=$CLANG_BIN_PATH/clang -DCMAKE_CXX_COMPILER=$CLANG_BIN_PATH/clang++ ../ ;
     #    make ;
     #    sudo make install ;
-    #    cd .. ;
     #  if: ${{ matrix.build-type == 'iwyu' }}
 
     - name: CURL from cache (for testing)
@@ -351,10 +350,10 @@ jobs:
       run: |
         cd build ;
         if [ "$BUILD_TYPE" = "iwyu" ]; then
-          clang-7 -print-resource-dir ;
+          clang-5 -print-resource-dir ;
           /usr/bin/include-what-you-use -print-resource-dir ;
-          sudo ln -s `clang-7 -print-resource dir`/include `/usr/bin/include-what-you-use -print-resource-dir`/include ;
-          sudo ln -s `clang-7 -print-resource dir`/lib `/usr/bin/include-what-you-use -print-resource-dir`/lib ;
+          sudo ln -s `clang-5 -print-resource dir`/include `/usr/bin/include-what-you-use -print-resource-dir`/include ;
+          sudo ln -s `clang-5 -print-resource dir`/lib `/usr/bin/include-what-you-use -print-resource-dir`/lib ;
           make -k CXX='/usr/bin/include-what-you-use -Xiwyu --mapping_file=${top_builddir}/../custom_iwyu.imp' CXXFLAGS="-std=c++11 -DHTTPSERVER_COMPILATION -D_REENTRANT $CXXFLAGS" ;
           if [ $? -ne 2 ]; then 
             return 1;
