@@ -79,7 +79,7 @@ jobs:
             c-compiler: clang-3.9
             cc-compiler: clang++-3.9
             debug: debug
-            coverage: nocoverage           
+            coverage: nocoverage
           - test-group: extra
             os: ubuntu-latest
             build-type: ubsan
@@ -87,7 +87,47 @@ jobs:
             c-compiler: clang-3.9
             cc-compiler: clang++-3.9
             debug: debug
-            coverage: nocoverage         
+            coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-latest
+            build-type: none
+            compiler-family: gcc
+            c-compiler: gcc-5
+            cc-compiler: g++-5
+            debug: nodebug
+            coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-latest
+            build-type: none
+            compiler-family: gcc
+            c-compiler: gcc-6
+            cc-compiler: g++-6
+            debug: nodebug
+            coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-latest
+            build-type: none
+            compiler-family: gcc
+            c-compiler: gcc-7
+            cc-compiler: g++-7
+            debug: nodebug
+            coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-latest
+            build-type: none
+            compiler-family: gcc
+            c-compiler: gcc-8
+            cc-compiler: g++-8
+            debug: nodebug
+            coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-latest
+            build-type: none
+            compiler-family: gcc
+            c-compiler: gcc-9
+            cc-compiler: g++-9
+            debug: nodebug
+            coverage: nocoverage
     steps:
     - name: Checkout repository
       uses: actions/checkout@v2
@@ -111,7 +151,12 @@ jobs:
       run: |
         sudo apt-get install ${{ matrix.c-compiler }}
       if: ${{ matrix.compiler-family == 'clang' && matrix.os == 'ubuntu-latest' }}
-    
+
+    - name: Install optional gcc if needed
+      run: |
+        sudo apt-get install ${{ matrix.cc-compiler }}
+      if: ${{ matrix.compiler-family == 'gcc' && matrix.os == 'ubuntu-latest' }}
+
     - name: CURL from cache (for testing)
       id: cache-CURL
       uses: actions/cache@v2
