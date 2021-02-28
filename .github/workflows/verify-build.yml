@@ -247,15 +247,20 @@ jobs:
              CLANG_BIN_PATH=`readlink -f /usr/bin/clang` ;
              CLANGPP_BIN_PATH=`readlink -f /usr/bin/clang++` ;
              CLANG_BIN_DIR_PATH=`dirname "${CLANG_BIN_PATH}"`
-             CLANG_PREFIX_PATH="${CLANG_BIN_DIR_PATH}/../lib/clang/${CLANG_VERSION}" ;
+             CLANG_PREFIX_PATH="${CLANG_BIN_DIR_PATH}/../" ;
              which clang ;
              ls -l `which clang` ;
+             echo CLANG_ROOT
+             ls -l "${CLANG_BIN_DIR_PATH}/../" ;
+             echo CLANG_LIB
              ls -l "${CLANG_BIN_DIR_PATH}/../lib/" ;
+             echo CLANG_LIB_CLANG
              ls -l "${CLANG_BIN_DIR_PATH}/../lib/clang/" ;
              echo $CLANG_VERSION ;
              echo $CLANG_PKG_VERSION ;
              echo $CLANG_PREFIX_PATH ;
              echo $CLANG_BIN_PATH ;
+             echo $CLANGPP_BIN_PATH ;
              git clone https://github.com/include-what-you-use/include-what-you-use.git ;
              cd include-what-you-use ;
              echo "$CLANG_PKG_VERSION" | grep '\.[0-9]$' ;
