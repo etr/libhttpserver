@@ -349,14 +349,22 @@ jobs:
     # Make or run iwyu. If running iwyu, check for the result code to be 2 (IWYU always returns an error code, if it is 2, no corrections are necessary).
     - name: Make or run IWYU
       run: |
-        cd build ;
-        if [ "$BUILD_TYPE" = "iwyu" ]; then
+        # IWYU always return an error code. If it returns "2" it indicates a success so we manage this within the function below.
+        function safe_make_iwyu() {
+
           make -k CXX='/usr/local/bin/include-what-you-use -Xiwyu --mapping_file=${top_builddir}/../custom_iwyu.imp' CXXFLAGS="-std=c++11 -DHTTPSERVER_COMPILATION -D_REENTRANT $CXXFLAGS" ;
           if [ $? -ne 2 ]; then 
             return 1;
           fi
+
+          return 0;
+        }
+
+        cd build ;
+        if [ "$BUILD_TYPE" = "iwyu" ]; then
+          safe_make_iwyu ;
         else
-          make;
+          make ;
         fi
 
     - name: Run tests
