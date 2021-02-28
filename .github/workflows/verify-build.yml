@@ -128,6 +128,62 @@ jobs:
             cc-compiler: g++-9
             debug: nodebug
             coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-latest
+            build-type: none
+            compiler-family: clang
+            c-compiler: clang-3.9
+            cc-compiler: clang++-3.9
+            debug: nodebug
+            coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-latest
+            build-type: none
+            compiler-family: clang
+            c-compiler: clang-4.0
+            cc-compiler: clang++-4.0
+            debug: nodebug
+            coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-latest
+            build-type: none
+            compiler-family: clang
+            c-compiler: clang-5.0
+            cc-compiler: clang++-5.0
+            debug: nodebug
+            coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-latest
+            build-type: none
+            compiler-family: clang
+            c-compiler: clang-6.0
+            cc-compiler: clang++-6.0
+            debug: nodebug
+            coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-latest
+            build-type: none
+            compiler-family: clang
+            c-compiler: clang-7
+            cc-compiler: clang++-7
+            debug: nodebug
+            coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-latest
+            build-type: none
+            compiler-family: clang
+            c-compiler: clang-8
+            cc-compiler: clang++-8
+            debug: nodebug
+            coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-latest
+            build-type: none
+            compiler-family: clang
+            c-compiler: clang-9
+            cc-compiler: clang++-9
+            debug: nodebug
+            coverage: nocoverage
     steps:
     - name: Checkout repository
       uses: actions/checkout@v2
