@@ -351,12 +351,6 @@ jobs:
       run: |
         cd build ;
         if [ "$BUILD_TYPE" = "iwyu" ]; then
-          echo "Print resource directories" ;
-          clang-9 -print-resource-dir ;
-          /usr/local/bin/include-what-you-use -print-resource-dir ;
-          #sudo ln -s `clang-5 -print-resource dir`/include `/usr/local/bin/include-what-you-use -print-resource-dir`/include ;
-          #sudo ln -s `clang-5 -print-resource dir`/lib `/usr/local/bin/include-what-you-use -print-resource-dir`/lib ;
-          echo "Running IWYU" ;
           make -k CXX='/usr/local/bin/include-what-you-use -Xiwyu --mapping_file=${top_builddir}/../custom_iwyu.imp' CXXFLAGS="-std=c++11 -DHTTPSERVER_COMPILATION -D_REENTRANT $CXXFLAGS" ;
           if [ $? -ne 2 ]; then 
             return 1;
