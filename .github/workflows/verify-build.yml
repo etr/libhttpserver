@@ -250,7 +250,7 @@ jobs:
         cd
         mkdir build_iwyu ;
         cd build_iwyu ;
-        cmake -G "Unix Makefiles" -DCMAKE_PREFIX_PATH=$ROOT_PATH -DCMAKE_C_COMPILER=$CLANG_BIN_PATH/clang -DCMAKE_CXX_COMPILER=$CLANG_BIN_PATH/clang++ ../include-what-you-use ;
+        cmake -G "Unix Makefiles" -DCMAKE_CXX_FLAGS=-std=gnu++14 -DCMAKE_PREFIX_PATH=$ROOT_PATH -DCMAKE_C_COMPILER=$CLANG_BIN_PATH/clang -DCMAKE_CXX_COMPILER=$CLANG_BIN_PATH/clang++ ../include-what-you-use ;
         make ;
         sudo make install ;
         cd .. ;
