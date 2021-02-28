@@ -196,8 +196,8 @@ jobs:
             os: ubuntu-latest
             build-type: iwyu
             compiler-family: clang
-            c-compiler: clang-7
-            cc-compiler: clang-7++
+            c-compiler: clang-9
+            cc-compiler: clang-9++
             debug: nodebug
             coverage: nocoverage
     steps:
@@ -234,18 +234,18 @@ jobs:
         sudo apt-get install valgrind valgrind-dbg
       if: ${{ matrix.build-type == 'valgrind' }}
 
-    - name: Install IWYU if needed
+    - name: Install IWYU dependencies if needed
       run: |
-        sudo apt-get install cmake llvm-7-dev libclang-7-dev clang-7
+        sudo apt-get install cmake llvm-9-dev libclang-9-dev clang-9
       if: ${{ matrix.build-type == 'iwyu' }}
 
     # Installing iwyu manually because clang and iwyu paths won't match on Ubuntu otherwise.
     - name: Install IWYU if requested
       run: |
-        CLANG_ROOT_PATH="/usr/lib/llvm-7" ;
-        CLANG_BIN_PATH="/usr/lib/llvm-7/bin" ;
-        curl "https://libhttpserver.s3.amazonaws.com/travis_stuff/include-what-you-use-clang-7.tgz" -o "include-what-you-use-clang-7.tgz" ;
-        tar -xzf "include-what-you-use-clang-7.tgz" ;
+        CLANG_ROOT_PATH="/usr/lib/llvm-9" ;
+        CLANG_BIN_PATH="/usr/lib/llvm-9/bin" ;
+        curl "https://libhttpserver.s3.amazonaws.com/travis_stuff/include-what-you-use-clang-9.tgz" -o "include-what-you-use-clang-9.tgz" ;
+        tar -xzf "include-what-you-use-clang-9.tgz" ;
         cd include-what-you-use ;
         cd .. ;
         mkdir build_iwyu ;
@@ -352,7 +352,7 @@ jobs:
       run: |
         cd build ;
         if [ "$BUILD_TYPE" = "iwyu" ]; then
-          clang-7 -print-resource-dir ;
+          clang-9 -print-resource-dir ;
           /usr/local/bin/include-what-you-use -print-resource-dir ;
           make -k CXX='/usr/local/bin/include-what-you-use -Xiwyu --mapping_file=${top_builddir}/../custom_iwyu.imp' CXXFLAGS="-std=c++11 -DHTTPSERVER_COMPILATION -D_REENTRANT $CXXFLAGS" ;
           if [ $? -ne 2 ]; then 
