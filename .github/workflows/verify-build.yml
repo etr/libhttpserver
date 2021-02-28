@@ -244,8 +244,8 @@ jobs:
       run: |
         CLANG_VERSION=`clang --version | grep version | cut -f3 -d' ' | cut -f1 -d'-'` ;
         CLANG_PKG_VERSION=`echo $CLANG_VERSION | cut -f1,2 -d'.'`
-        CLANG_PREFIX_PATH="/usr/local/llvm-${CLANG_PKG_VERSION}/lib/clang/${CLANG_VERSION}" ;
-        CLANG_BIN_PATH="/usr/local/llvm-${CLANG_PKG_VERSION}/bin" ;
+        CLANG_PREFIX_PATH="/usr/lib/llvm-${CLANG_PKG_VERSION}/lib/clang/${CLANG_VERSION}" ;
+        CLANG_BIN_PATH="/usr/lib/llvm-${CLANG_PKG_VERSION}/bin" ;
         git clone https://github.com/include-what-you-use/include-what-you-use.git ;
         cd include-what-you-use ;
         echo "$CLANG_PKG_VERSION" | grep '\.[0-9]$' ;
