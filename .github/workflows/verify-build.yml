@@ -236,7 +236,7 @@ jobs:
 
     - name: Install IWYU if needed
       run: |
-        sudo apt-get install iwyu cmake llvm-dev libclang-dev
+        sudo apt-get install iwyu cmake llvm-dev libclang-dev clang-7 clang-8 clang-9
       if: ${{ matrix.build-type == 'iwyu' }}
 
     - name: CURL from cache (for testing)
