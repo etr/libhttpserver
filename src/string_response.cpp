@@ -21,6 +21,7 @@
 #include "httpserver/string_response.hpp"
 #include <microhttpd.h>
 #include <stddef.h>
+#include <iosfwd>
 
 struct MHD_Response;
 

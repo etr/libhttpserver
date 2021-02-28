@@ -41,6 +41,9 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <strings.h>
+#include <algorithm>
+#include <iosfwd>
 #include <cstring>
 #include <exception>
 #include <memory>
