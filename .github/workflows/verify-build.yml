@@ -243,7 +243,7 @@ jobs:
     - name: Install IWYU if requested
       run: |
         CLANG_ROOT_PATH="/usr/lib/llvm-7" ;
-        CLANG_ROOT_PATH="/usr/lib/llvm-7/bin" ;
+        CLANG_BIN_PATH="/usr/lib/llvm-7/bin" ;
         curl "https://libhttpserver.s3.amazonaws.com/travis_stuff/include-what-you-use-clang-7.tgz" -o "include-what-you-use-clang-7.tgz" ;
         tar -xzf "include-what-you-use-clang-7.tgz" ;
         cd include-what-you-use ;
