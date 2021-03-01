@@ -1,0 +1,470 @@
+name: "Verify Build"
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    # The branches below must be a subset of the branches above
+    branches: [master]
+  schedule:
+    - cron: '0 0 * * 0'
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ${{ matrix.os }}
+    env:
+      DEBUG: ${{ matrix.debug }}
+      COVERAGE: ${{ matrix.coverage }}
+      LINKING: ${{ matrix.linking }}
+      BUILD_TYPE: ${{ matrix.build-type }}
+      CC: ${{ matrix.c-compiler }}
+      CXX: ${{ matrix.cc-compiler }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        test-group: [basic]
+        compiler-family: [none]
+        c-compiler: [gcc, clang]
+        cc-compiler: [g++, clang++]
+        debug: [debug, nodebug]
+        coverage: [coverage, nocoverage]
+        linking: [dynamic, static]
+        build-type: [classic]
+        exclude:
+          - c-compiler: gcc
+            cc-compiler: clang++
+          - c-compiler: clang
+            cc-compiler: g++
+          - c-compiler: clang
+            debug: debug
+          - debug: debug
+            coverage: nocoverage
+          - debug: nodebug
+            coverage: coverage
+          - linking: static
+            debug: debug
+          - linking: static
+            coverage: coverage
+        include:
+          - test-group: extra
+            os: ubuntu-latest
+            build-type: asan
+            compiler-family: clang
+            c-compiler: clang-3.9
+            cc-compiler: clang++-3.9
+            debug: debug
+            coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-latest
+            build-type: msan
+            compiler-family: clang
+            c-compiler: clang-3.9
+            cc-compiler: clang++-3.9
+            debug: debug
+            coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-latest
+            build-type: lsan
+            compiler-family: clang
+            c-compiler: clang-3.9
+            cc-compiler: clang++-3.9
+            debug: debug
+            coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-latest
+            build-type: tsan
+            compiler-family: clang
+            c-compiler: clang-3.9
+            cc-compiler: clang++-3.9
+            debug: debug
+            coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-latest
+            build-type: ubsan
+            compiler-family: clang
+            c-compiler: clang-3.9
+            cc-compiler: clang++-3.9
+            debug: debug
+            coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-latest
+            build-type: none
+            compiler-family: gcc
+            c-compiler: gcc-5
+            cc-compiler: g++-5
+            debug: nodebug
+            coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-latest
+            build-type: none
+            compiler-family: gcc
+            c-compiler: gcc-6
+            cc-compiler: g++-6
+            debug: nodebug
+            coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-latest
+            build-type: none
+            compiler-family: gcc
+            c-compiler: gcc-7
+            cc-compiler: g++-7
+            debug: nodebug
+            coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-latest
+            build-type: none
+            compiler-family: gcc
+            c-compiler: gcc-8
+            cc-compiler: g++-8
+            debug: nodebug
+            coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-latest
+            build-type: none
+            compiler-family: gcc
+            c-compiler: gcc-9
+            cc-compiler: g++-9
+            debug: nodebug
+            coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-latest
+            build-type: none
+            compiler-family: clang
+            c-compiler: clang-3.9
+            cc-compiler: clang++-3.9
+            debug: nodebug
+            coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-latest
+            build-type: none
+            compiler-family: clang
+            c-compiler: clang-4.0
+            cc-compiler: clang++-4.0
+            debug: nodebug
+            coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-latest
+            build-type: none
+            compiler-family: clang
+            c-compiler: clang-5.0
+            cc-compiler: clang++-5.0
+            debug: nodebug
+            coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-latest
+            build-type: none
+            compiler-family: clang
+            c-compiler: clang-6.0
+            cc-compiler: clang++-6.0
+            debug: nodebug
+            coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-latest
+            build-type: none
+            compiler-family: clang
+            c-compiler: clang-7
+            cc-compiler: clang++-7
+            debug: nodebug
+            coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-latest
+            build-type: none
+            compiler-family: clang
+            c-compiler: clang-8
+            cc-compiler: clang++-8
+            debug: nodebug
+            coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-latest
+            build-type: none
+            compiler-family: clang
+            c-compiler: clang-9
+            cc-compiler: clang++-9
+            debug: nodebug
+            coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-latest
+            build-type: valgrind
+            compiler-family: gcc
+            c-compiler: gcc-7
+            cc-compiler: g++-7
+            debug: nodebug
+            coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-latest
+            build-type: iwyu
+            compiler-family: clang
+            c-compiler: clang-9
+            cc-compiler: clang++-9
+            debug: nodebug
+            coverage: nocoverage
+          - test-group: performance
+            os: ubuntu-latest
+            build-type: select
+            compiler-family: gcc
+            c-compiler: gcc-7
+            cc-compiler: g++-7
+            debug: nodebug
+            coverage: nocoverage
+          - test-group: performance
+            os: ubuntu-latest
+            build-type: nodelay
+            compiler-family: gcc
+            c-compiler: gcc-7
+            cc-compiler: g++-7
+            debug: nodebug
+            coverage: nocoverage
+          - test-group: performance
+            os: ubuntu-latest
+            build-type: threads
+            compiler-family: gcc
+            c-compiler: gcc-7
+            cc-compiler: g++-7
+            debug: nodebug
+            coverage: nocoverage
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      with:
+        # We must fetch at least the immediate parents so that if this is
+        # a pull request then we can checkout the head.
+        fetch-depth: 2
+
+    # If this run was triggered by a pull request event, then checkout
+    # the head of the pull request instead of the merge commit.
+    - run: git checkout HEAD^2
+      if: ${{ github.event_name == 'pull_request' }}
+        
+    - name: Install Ubuntu test sources (for extra builds)
+      run: |
+        sudo add-apt-repository ppa:ubuntu-toolchain-r/test ;
+        sudo apt-get update ;
+      if: ${{ matrix.test-group == 'extra' && matrix.os == 'ubuntu-latest' }}
+
+    - name: Install apache benchmark if needed
+      run: sudo apt-get install apache2-utils ;
+      if: ${{ matrix.test-group == 'performance' && matrix.os == 'ubuntu-latest' }}
+
+    - name: Install optional clang if needed
+      run: sudo apt-get install ${{ matrix.c-compiler }}
+      if: ${{ matrix.compiler-family == 'clang' && matrix.os == 'ubuntu-latest' }}
+
+    - name: Install optional gcc if needed
+      run: sudo apt-get install ${{ matrix.cc-compiler }}
+      if: ${{ matrix.compiler-family == 'gcc' && matrix.os == 'ubuntu-latest' }}
+
+    - name: Install valgrind if needed
+      run: sudo apt-get install valgrind valgrind-dbg
+      if: ${{ matrix.build-type == 'valgrind' && matrix.os == 'ubuntu-latest' }}
+    
+    - name: Install IWYU dependencies if needed
+      run: |
+        # Use same deps used by iwyu in their setup for travis
+        sudo apt-get install llvm-9-dev llvm-9-tools libclang-9-dev ;
+        # Use same CMAKE used by iwyu in their setup for travis
+        wget -O cmake.sh https://cmake.org/files/v3.10/cmake-3.10.0-Linux-x86_64.sh ;
+        sudo sh cmake.sh --skip-license --exclude-subdir --prefix=/usr/local ;
+      if: ${{ matrix.build-type == 'iwyu' && matrix.os == 'ubuntu-latest' }}
+
+    - name: IWYU from cache (for testing)
+      id: cache-IWYU
+      uses: actions/cache@v2
+      with:
+        path: include-what-you-use
+        key: ${{ matrix.os }}-include-what-you-use-pre-built
+      if: ${{ matrix.build-type == 'iwyu' && matrix.os == 'ubuntu-latest' }}
+
+    # Installing iwyu manually because clang and iwyu paths won't match on Ubuntu otherwise.
+    - name: Build IWYU if requested
+      run: |
+        CLANG_ROOT_PATH=`llvm-config-9 --prefix` ;
+        CLANG_BIN_PATH=`llvm-config-9 --bindir` ;
+        curl "https://libhttpserver.s3.amazonaws.com/travis_stuff/include-what-you-use-clang-9.tgz" -o "include-what-you-use-clang-9.tgz" ;
+        tar -xzf "include-what-you-use-clang-9.tgz" ;
+        cd include-what-you-use ;
+        mkdir build_iwyu ;
+        cd build_iwyu ;
+        cmake -G "Unix Makefiles" -DCMAKE_PREFIX_PATH=$CLANG_ROOT_PATH -DCMAKE_C_COMPILER=$CLANG_BIN_PATH/clang -DCMAKE_CXX_COMPILER=$CLANG_BIN_PATH/clang++ ../ ;
+        make ;
+        sudo make install ;
+      if: ${{ matrix.build-type == 'iwyu' && matrix.os == 'ubuntu-latest' && steps.cache-IWYU.outputs.cache-hit != 'true' }}
+
+    - name: Install IWYU if requested
+      run: |
+        cd include-what-you-use/build_iwyu ;
+        sudo make install ;
+      if: ${{ matrix.build-type == 'iwyu' && matrix.os == 'ubuntu-latest' }}
+
+    - name: CURL from cache (for testing)
+      id: cache-CURL
+      uses: actions/cache@v2
+      with:
+        path: curl-7.75.0
+        key: ${{ matrix.os }}-CURL-pre-built
+      if: ${{ matrix.os == 'macos-latest' }}
+    
+    - name: Build CURL (for testing)
+      run: |
+        curl https://libhttpserver.s3.amazonaws.com/travis_stuff/curl-7.75.0.tar.gz -o curl-7.75.0.tar.gz ;
+        tar -xzf curl-7.75.0.tar.gz ;
+        cd curl-7.75.0 ;
+        if [ "$matrix.os" = "ubuntu-latest" ]; then ./configure ; else ./configure --with-darwinssl ; fi
+        make ;
+      if: ${{ matrix.os == 'macos-latest' && steps.cache-CURL.outputs.cache-hit != 'true' }}
+      
+    - name: Install CURL (for testing on mac only) 
+      run: cd curl-7.75.0 ; sudo make install ;
+      if: ${{ matrix.os == 'macos-latest' }}
+ 
+    - name: Install CURL (for testing on linux)
+      run: sudo apt-get install libcurl4-openssl-dev
+      if: ${{ matrix.os == 'ubuntu-latest' }}
+ 
+    - name: Install autotools on mac
+      run: brew install autoconf automake libtool
+      if: ${{ matrix.os == 'macos-latest' }}
+
+    - name: Setup coverage dependencies (only on linux)
+      run: |
+        sudo apt-get install info install-info ;
+        sudo pip install codecov ;
+        sudo pip install gcovr ;
+        sudo apt-get install cppcheck ;
+      if: ${{ matrix.os == 'ubuntu-latest' }}
+
+    - name: Fetch libmicrohttpd from cache
+      id: cache-libmicrohttpd
+      uses: actions/cache@v2
+      with:
+        path: libmicrohttpd-0.9.59
+        key: ${{ matrix.os }}-libmicrohttpd-pre-built
+
+    - name: Build libmicrohttpd dependency (if not cached)
+      run: |
+        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.59.tar.gz -o libmicrohttpd-0.9.59.tar.gz ;
+        tar -xzf libmicrohttpd-0.9.59.tar.gz ;
+        cd libmicrohttpd-0.9.59 ;
+        ./configure --disable-examples ;
+        make ;
+      if: steps.cache-libmicrohttpd.outputs.cache-hit != 'true'
+      
+    - name: Install libmicrohttpd
+      run: cd libmicrohttpd-0.9.59 ; sudo make install ;
+      
+    - name: Refresh links to shared libs
+      run: sudo ldconfig ;
+      if: ${{ matrix.os == 'ubuntu-latest' }}
+
+    - name: Run libhttpserver configure
+      run: |
+        # Set memory check flags. They need to stay in step as env variables don't propagate across steps.
+        if [ "$BUILD_TYPE" = "asan" ]; then export CFLAGS='-fsanitize=address'; export CXXLAGS='-fsanitize=address'; export LDFLAGS='-fsanitize=address'; fi
+        if [ "$BUILD_TYPE" = "msan" ]; then export CFLAGS='-fsanitize=memory'; export CXXLAGS='-fsanitize=memory'; export LDFLAGS='-fsanitize=memory'; fi
+        if [ "$BUILD_TYPE" = "lsan" ]; then export CFLAGS='-fsanitize=leak'; export CXXLAGS='-fsanitize=leak'; export LDFLAGS='-fsanitize=leak'; fi
+        if [ "$BUILD_TYPE" = "tsan" ]; then export CFLAGS='-fsanitize=thread'; export CXXLAGS='-fsanitize=thread'; export LDFLAGS='-fsanitize=thread'; fi
+        if [ "$BUILD_TYPE" = "ubsan" ]; then export export CFLAGS='-fsanitize=undefined'; export CXXLAGS='-fsanitize=undefined'; export LDFLAGS='-fsanitize=undefined'; fi
+
+        # Additional flags on mac. They need to stay in step as env variables don't propagate across steps.
+        if [ "$matrix.os" = "macos-latest" ]; then
+          export CFLAGS='-mtune=generic' ;
+          export IPV6_TESTS_ENABLED="true" ;
+        fi
+
+        ./bootstrap ;
+        mkdir build ;
+        cd build ;
+        if [ "$LINKING" = "static" ]; then
+          ../configure --enable-static --disable-fastopen;
+        elif [ "$DEBUG" = "debug" ] && [ "$COVERAGE" = "coverage" ]; then
+          ../configure --enable-debug --enable-coverage --disable-shared --disable-fastopen;
+        elif [ "$DEBUG" = "debug" ]; then
+          ../configure --enable-debug --disable-shared --disable-fastopen;
+        elif [ "$BUILD_TYPE" = "valgrind" ]; then
+          ../configure --enable-debug --disable-fastopen --disable-valgrind-helgrind --disable-valgrind-drd --disable-valgrind-sgcheck;
+        elif [ "$BUILD_TYPE" = "iwyu" ]; then
+          ../configure --disable-examples;
+        else
+          ../configure --disable-fastopen;
+        fi
+
+    # Make or run iwyu. If running iwyu, check for the result code to be 2 (IWYU always returns an error code, if it is 2, no corrections are necessary).
+    - name: Make or run IWYU
+      run: |
+        # IWYU always return an error code. If it returns "2" it indicates a success so we manage this within the function below.
+        function safe_make_iwyu() {
+          {
+            make -k CXX='/usr/local/bin/include-what-you-use -Xiwyu --mapping_file=${top_builddir}/../custom_iwyu.imp' CXXFLAGS="-std=c++11 -DHTTPSERVER_COMPILATION -D_REENTRANT $CXXFLAGS" ;
+          } || {
+            if [ $? -ne 2 ]; then
+              return 1;
+            else
+              return 0;
+            fi
+          }
+
+          return 0;
+        }
+
+        cd build ;
+        if [ "$BUILD_TYPE" = "iwyu" ]; then
+          safe_make_iwyu ;
+        else
+          make ;
+        fi
+
+    - name: Run tests
+      run: |
+        cd build ;
+        make check;
+      if: ${{ matrix.build-type != 'iwyu' }}
+      
+    - name: Print tests results
+      run: |
+        cd build ;
+        cat test/test-suite.log ;
+      if: ${{ failure() && matrix.build-type != 'iwyu' }}
+
+    - name: Run Valgrind checks
+      run: |
+        cd build ;
+        make check-valgrind ;
+        cat test/test-suite-memcheck.log ;
+      if: ${{ matrix.build-type == 'valgrind' }}
+
+    - name: Run cppcheck
+      run: |
+        cd src/ ;
+        cppcheck --error-exitcode=1 . ;
+      if: ${{ matrix.os == 'ubuntu-latest' }}
+
+    - name: Run performance tests (select)
+      run: |
+        cd build
+        cd examples
+        ./benchmark_select 8080 $(nproc) &
+        sleep 5 && ab -n 1000000 -c 100 127.0.0.1:8080/plaintext
+      if: ${{ matrix.build-type == 'select' }}
+
+    - name: Run performance tests (nodelay)
+      run: |
+        cd build
+        cd examples
+        ./benchmark_nodelay 8080 $(nproc) &
+        sleep 5 && ab -n 1000000 -c 100 127.0.0.1:8080/plaintext
+      if: ${{ matrix.build-type == 'nodelay' }}
+
+    - name: Run performance tests (threads)
+      run: |
+         cd build
+         cd examples
+         ./benchmark_threads 8080 &
+         sleep 5 && ab -n 1000000 -c 100 127.0.0.1:8080/plaintext
+      if: ${{ matrix.build-type == 'threads' }}
+
+    - name: Push code coverage data
+      run: |
+        cd build ;
+        bash <(curl -s https://codecov.io/bash) ;
+      if: ${{ matrix.os == 'ubuntu-latest' && matrix.c-compiler == 'gcc' && matrix.debug == 'debug' && matrix.coverage == 'coverage' && success() }}

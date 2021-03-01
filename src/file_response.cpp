@@ -23,6 +23,7 @@
 #include <microhttpd.h>
 #include <stddef.h>
 #include <unistd.h>
+#include <iosfwd>
 
 struct MHD_Response;
 

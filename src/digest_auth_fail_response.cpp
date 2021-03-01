@@ -20,6 +20,7 @@
 
 #include "httpserver/digest_auth_fail_response.hpp"
 #include <microhttpd.h>
+#include <iosfwd>
 
 struct MHD_Connection;
 struct MHD_Response;
