@@ -200,6 +200,30 @@ jobs:
             cc-compiler: clang++-9
             debug: nodebug
             coverage: nocoverage
+          - test-group: performance
+            os: ubuntu-latest
+            build-type: select
+            compiler-family: gcc
+            c-compiler: gcc-7
+            cc-compiler: g++-7
+            debug: nodebug
+            coverage: nocoverage
+          - test-group: performance
+            os: ubuntu-latest
+            build-type: nodelay
+            compiler-family: gcc
+            c-compiler: gcc-7
+            cc-compiler: g++-7
+            debug: nodebug
+            coverage: nocoverage
+          - test-group: performance
+            os: ubuntu-latest
+            build-type: threads
+            compiler-family: gcc
+            c-compiler: gcc-7
+            cc-compiler: g++-7
+            debug: nodebug
+            coverage: nocoverage
     steps:
     - name: Checkout repository
       uses: actions/checkout@v2
@@ -218,7 +242,11 @@ jobs:
         sudo add-apt-repository ppa:ubuntu-toolchain-r/test ;
         sudo apt-get update ;
       if: ${{ matrix.test-group == 'extra' && matrix.os == 'ubuntu-latest' }}
-      
+
+    - name: Install apache benchmark if needed
+      run: sudo apt-get install apache2-utils ;
+      if: ${{ matrix.test-group == 'performance' && matrix.os == 'ubuntu-latest' }}
+
     - name: Install optional clang if needed
       run: sudo apt-get install ${{ matrix.c-compiler }}
       if: ${{ matrix.compiler-family == 'clang' && matrix.os == 'ubuntu-latest' }}
@@ -229,7 +257,7 @@ jobs:
 
     - name: Install valgrind if needed
       run: sudo apt-get install valgrind valgrind-dbg
-      if: ${{ matrix.build-type == 'valgrind' }}
+      if: ${{ matrix.build-type == 'valgrind' && matrix.os == 'ubuntu-latest' }}
     
     - name: Install IWYU dependencies if needed
       run: |
@@ -238,10 +266,18 @@ jobs:
         # Use same CMAKE used by iwyu in their setup for travis
         wget -O cmake.sh https://cmake.org/files/v3.10/cmake-3.10.0-Linux-x86_64.sh ;
         sudo sh cmake.sh --skip-license --exclude-subdir --prefix=/usr/local ;
-      if: ${{ matrix.build-type == 'iwyu' }}
+      if: ${{ matrix.build-type == 'iwyu' && matrix.os == 'ubuntu-latest' }}
+
+    - name: IWYU from cache (for testing)
+      id: cache-IWYU
+      uses: actions/cache@v2
+      with:
+        path: include-what-you-use
+        key: ${{ matrix.os }}-include-what-you-use-pre-built
+      if: ${{ matrix.build-type == 'iwyu' && matrix.os == 'ubuntu-latest' }}
 
     # Installing iwyu manually because clang and iwyu paths won't match on Ubuntu otherwise.
-    - name: Install IWYU if requested
+    - name: Build IWYU if requested
       run: |
         CLANG_ROOT_PATH=`llvm-config-9 --prefix` ;
         CLANG_BIN_PATH=`llvm-config-9 --bindir` ;
@@ -253,7 +289,13 @@ jobs:
         cmake -G "Unix Makefiles" -DCMAKE_PREFIX_PATH=$CLANG_ROOT_PATH -DCMAKE_C_COMPILER=$CLANG_BIN_PATH/clang -DCMAKE_CXX_COMPILER=$CLANG_BIN_PATH/clang++ ../ ;
         make ;
         sudo make install ;
-      if: ${{ matrix.build-type == 'iwyu' }}
+      if: ${{ matrix.build-type == 'iwyu' && matrix.os == 'ubuntu-latest' && steps.cache-IWYU.outputs.cache-hit != 'true' }}
+
+    - name: Install IWYU if requested
+      run: |
+        cd include-what-you-use/build_iwyu ;
+        sudo make install ;
+      if: ${{ matrix.build-type == 'iwyu' && matrix.os == 'ubuntu-latest' }}
 
     - name: CURL from cache (for testing)
       id: cache-CURL
@@ -261,6 +303,7 @@ jobs:
       with:
         path: curl-7.75.0
         key: ${{ matrix.os }}-CURL-pre-built
+      if: ${{ matrix.os == 'macos-latest' }}
     
     - name: Build CURL (for testing)
       run: |
@@ -269,7 +312,7 @@ jobs:
         cd curl-7.75.0 ;
         if [ "$matrix.os" = "ubuntu-latest" ]; then ./configure ; else ./configure --with-darwinssl ; fi
         make ;
-      if: steps.cache-CURL.outputs.cache-hit != 'true'
+      if: ${{ matrix.os == 'macos-latest' && steps.cache-CURL.outputs.cache-hit != 'true' }}
       
     - name: Install CURL (for testing on mac only) 
       run: cd curl-7.75.0 ; sudo make install ;
@@ -387,31 +430,31 @@ jobs:
 
     - name: Run performance tests (select)
       run: |
-        if [ "$PERFORMANCE" = "select" ]; then
+        if [ "$BUILD_TYPE" = "select" ]; then
           cd build
           cd examples
           ./benchmark_select 8080 $(nproc) &
-          sleep 5 && ab -n 10000000 -c 100 localhost:8080/plaintext
+          sleep 5 && ab -n 1000000 -c 100 localhost:8080/plaintext
         fi
 
     - name: Run performance tests (nodelay)
       run: |
-        if [ "$PERFORMANCE" = "nodelay" ]; then
+        if [ "$BUILD_TYPE" = "nodelay" ]; then
           cd build
           cd examples
           ./benchmark_nodelay 8080 $(nproc) &
-          sleep 5 && ab -n 10000000 -c 100 localhost:8080/plaintext
+          sleep 5 && ab -n 1000000 -c 100 localhost:8080/plaintext
         fi
 
     - name: Run performance tests (threads)
       run: |
-       if [ "$PERFORMANCE" = "threads" ]; then
+       if [ "$BUILD_TYPE" = "threads" ]; then
          cd build
          cd examples
          ./benchmark_threads 8080 &
-         sleep 5 && ab -n 10000000 -c 100 localhost:8080/plaintext
+         sleep 5 && ab -n 1000000 -c 100 localhost:8080/plaintext
        fi
 
     - name: Push code coverage data
       run: if [ "$DEBUG" = "debug" ] && [ "$COVERAGE" = "coverage" ]; then cd build ; bash <(curl -s https://codecov.io/bash); fi
-      if: ${{ matrix.os == 'ubuntu-latest' && matrix.c-compiler == 'gcc' }}
+      if: ${{ matrix.os == 'ubuntu-latest' && matrix.c-compiler == 'gcc' && success() }}
