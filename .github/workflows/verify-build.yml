@@ -351,11 +351,15 @@ jobs:
       run: |
         # IWYU always return an error code. If it returns "2" it indicates a success so we manage this within the function below.
         function safe_make_iwyu() {
-
-          make -k CXX='/usr/local/bin/include-what-you-use -Xiwyu --mapping_file=${top_builddir}/../custom_iwyu.imp' CXXFLAGS="-std=c++11 -DHTTPSERVER_COMPILATION -D_REENTRANT $CXXFLAGS" ;
-          if [ $? -ne 2 ]; then 
-            return 1;
-          fi
+          {
+            make -k CXX='/usr/local/bin/include-what-you-use -Xiwyu --mapping_file=${top_builddir}/../custom_iwyu.imp' CXXFLAGS="-std=c++11 -DHTTPSERVER_COMPILATION -D_REENTRANT $CXXFLAGS" ;
+          } || {
+            if [ $? -ne 2 ]; then
+              return 1;
+            else
+              return 0;
+            fi
+          }
 
           return 0;
         }
