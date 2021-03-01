@@ -462,8 +462,9 @@ jobs:
          ./benchmark_threads 8080 &
          sleep 5 && ab -n 1000000 -c 100 localhost:8080/plaintext
       if: ${{ matrix.build-type == 'threads' }}
-       fi
 
     - name: Push code coverage data
-      run: if [ "$DEBUG" = "debug" ] && [ "$COVERAGE" = "coverage" ]; then cd build ; bash <(curl -s https://codecov.io/bash); fi
-      if: ${{ matrix.os == 'ubuntu-latest' && matrix.c-compiler == 'gcc' && success() }}
+      run: |
+        cd build ;
+        bash <(curl -s https://codecov.io/bash) ;
+      if: ${{ matrix.os == 'ubuntu-latest' && matrix.c-compiler == 'gcc' && matrix.debug == 'debug' && matrix.coverage == 'coverage' && success() }}
