@@ -444,7 +444,7 @@ jobs:
         cd build
         cd examples
         ./benchmark_select 8080 $(nproc) &
-        sleep 5 && ab -n 1000000 -c 100 localhost:8080/plaintext
+        sleep 5 && ab -n 1000000 -c 100 127.0.0.1:8080/plaintext
       if: ${{ matrix.build-type == 'select' }}
 
     - name: Run performance tests (nodelay)
@@ -452,7 +452,7 @@ jobs:
         cd build
         cd examples
         ./benchmark_nodelay 8080 $(nproc) &
-        sleep 5 && ab -n 1000000 -c 100 localhost:8080/plaintext
+        sleep 5 && ab -n 1000000 -c 100 127.0.0.1:8080/plaintext
       if: ${{ matrix.build-type == 'nodelay' }}
 
     - name: Run performance tests (threads)
@@ -460,7 +460,7 @@ jobs:
          cd build
          cd examples
          ./benchmark_threads 8080 &
-         sleep 5 && ab -n 1000000 -c 100 localhost:8080/plaintext
+         sleep 5 && ab -n 1000000 -c 100 127.0.0.1:8080/plaintext
       if: ${{ matrix.build-type == 'threads' }}
 
     - name: Push code coverage data
