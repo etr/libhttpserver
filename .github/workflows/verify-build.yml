@@ -415,44 +415,53 @@ jobs:
         fi
 
     - name: Run tests
-      run: if [ "$BUILD_TYPE" != "iwyu" ]; then cd build ; make check; cat test/test-suite.log ; fi
+      run: |
+        cd build ;
+        make check;
+      if: ${{ matrix.build-type != 'iwyu' }}
       
     - name: Print tests results
-      run: if [ "$BUILD_TYPE" != "iwyu" ]; then cd build ; cat test/test-suite.log; fi
-      if: ${{ failure() }}
+      run: |
+        cd build ;
+        cat test/test-suite.log ;
+      if: ${{ failure() && matrix.build-type != 'iwyu' }}
 
     - name: Run Valgrind checks
-      run: if [ "$BUILD_TYPE" = "valgrind" ]; then cd build ; make check-valgrind; cat test/test-suite-memcheck.log; fi;
+      run: |
+        cd build ;
+        make check-valgrind ;
+        cat test/test-suite-memcheck.log ;
+      if: ${{ matrix.build-type == 'valgrind' }}
 
     - name: Run cppcheck
-      run: cd src/; cppcheck --error-exitcode=1 .;
+      run: |
+        cd src/ ;
+        cppcheck --error-exitcode=1 . ;
       if: ${{ matrix.os == 'ubuntu-latest' }}
 
     - name: Run performance tests (select)
       run: |
-        if [ "$BUILD_TYPE" = "select" ]; then
-          cd build
-          cd examples
-          ./benchmark_select 8080 $(nproc) &
-          sleep 5 && ab -n 1000000 -c 100 localhost:8080/plaintext
-        fi
+        cd build
+        cd examples
+        ./benchmark_select 8080 $(nproc) &
+        sleep 5 && ab -n 1000000 -c 100 localhost:8080/plaintext
+      if: ${{ matrix.build-type == 'select' }}
 
     - name: Run performance tests (nodelay)
       run: |
-        if [ "$BUILD_TYPE" = "nodelay" ]; then
-          cd build
-          cd examples
-          ./benchmark_nodelay 8080 $(nproc) &
-          sleep 5 && ab -n 1000000 -c 100 localhost:8080/plaintext
-        fi
+        cd build
+        cd examples
+        ./benchmark_nodelay 8080 $(nproc) &
+        sleep 5 && ab -n 1000000 -c 100 localhost:8080/plaintext
+      if: ${{ matrix.build-type == 'nodelay' }}
 
     - name: Run performance tests (threads)
       run: |
-       if [ "$BUILD_TYPE" = "threads" ]; then
          cd build
          cd examples
          ./benchmark_threads 8080 &
          sleep 5 && ab -n 1000000 -c 100 localhost:8080/plaintext
+      if: ${{ matrix.build-type == 'threads' }}
        fi
 
     - name: Push code coverage data
