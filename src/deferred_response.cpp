@@ -20,6 +20,7 @@
 
 #include "httpserver/deferred_response.hpp"
 #include <microhttpd.h>
+#include <iosfwd>
 
 struct MHD_Response;
 
