@@ -42,3 +42,6 @@ bcsgh (Github: https://github.com/bcsgh)
 - Management of large uploads
 Walter Landry <wlandry@caltech.edu>
 Jagat <pellucide@yahoo.com>
+
+- Simplification of microhttpd dependency management
+Christian Grothoff <grothoff@gnu.org>
