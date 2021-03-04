@@ -224,6 +224,14 @@ jobs:
             cc-compiler: g++-7
             debug: nodebug
             coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-latest
+            build-type: lint
+            compiler-family: gcc
+            c-compiler: gcc-7
+            cc-compiler: g++-7
+            debug: debug
+            coverage: nocoverage
     steps:
     - name: Checkout repository
       uses: actions/checkout@v2
@@ -258,6 +266,10 @@ jobs:
     - name: Install valgrind if needed
       run: sudo apt-get install valgrind valgrind-dbg
       if: ${{ matrix.build-type == 'valgrind' && matrix.os == 'ubuntu-latest' }}
+
+    - name: Install cpplint if needed
+      run: sudo pip3 install cpplint ;
+      if: ${{ matrix.build-type == 'lint' && matrix.os == 'ubuntu-latest' }}
     
     - name: Install IWYU dependencies if needed
       run: |
@@ -356,6 +368,10 @@ jobs:
     - name: Refresh links to shared libs
       run: sudo ldconfig ;
       if: ${{ matrix.os == 'ubuntu-latest' }}
+
+    - name: Run cpplint on code
+      run: cpplint --extensions=cpp,hpp --headers=hpp --recursive . ;
+      if: ${{ matrix.build-type == 'lint' && matrix.os == 'ubuntu-latest' }}
 
     - name: Run libhttpserver configure
       run: |
