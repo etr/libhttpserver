@@ -22,7 +22,7 @@
 AC_PREREQ(2.57)
 m4_define([libhttpserver_MAJOR_VERSION],[0])dnl
 m4_define([libhttpserver_MINOR_VERSION],[18])dnl
-m4_define([libhttpserver_REVISION],[1])dnl
+m4_define([libhttpserver_REVISION],[2])dnl
 m4_define([libhttpserver_PKG_VERSION],[libhttpserver_MAJOR_VERSION.libhttpserver_MINOR_VERSION.libhttpserver_REVISION])dnl
 m4_define([libhttpserver_LDF_VERSION],[libhttpserver_MAJOR_VERSION:libhttpserver_MINOR_VERSION:libhttpserver_REVISION])dnl
 AC_INIT([libhttpserver], libhttpserver_PKG_VERSION, [electrictwister2000@gmail.com])
@@ -97,17 +97,17 @@ AC_CHECK_HEADER([gnutls/gnutls.h],[have_gnutls="yes"],[AC_MSG_WARN("gnutls/gnutl
 if test x"$host" = x"$build"; then
     AC_CHECK_HEADER([microhttpd.h],
         AC_CHECK_LIB([microhttpd], [MHD_get_fdset2],
-            [AC_MSG_CHECKING([for libmicrohttpd >= 0.9.52])
+            [AC_MSG_CHECKING([for libmicrohttpd >= 0.9.53])
                 AC_COMPILE_IFELSE(
                     [AC_LANG_SOURCE([
                         #include <microhttpd.h>
-                        #if (MHD_VERSION < 0x00095102)
-                        #error needs at least version 0.9.52
+                        #if (MHD_VERSION < 0x00095300)
+                        #error needs at least version 0.9.53
                         #endif
                         int main () { return 0; }
                     ])],
                 [],
-                [AC_MSG_ERROR("libmicrohttpd is too old - install libmicrohttpd >= 0.9.52")]
+                [AC_MSG_ERROR("libmicrohttpd is too old - install libmicrohttpd >= 0.9.53")]
                 )
             ],
             [AC_MSG_ERROR(["libmicrohttpd not found"])]
@@ -155,83 +155,6 @@ if test x"$fastopen" = x"yes"; then
             fi
         fi
     fi
-fi
-
-AC_ARG_ENABLE([[poll]],
-  [AS_HELP_STRING([[--enable-poll[=ARG]]], [enable poll support (yes, no, auto) [auto]])],
-    [enable_poll=${enableval}],
-    [enable_poll='auto']
-  )
-
-if test "$enable_poll" != "no"; then
-  if test "$os_is_native_w32" != "yes"; then
-    AC_CHECK_HEADERS([poll.h],
-      [
-        AC_CHECK_FUNCS([poll], [have_poll='yes'], [have_poll='no'])
-      ], [], [AC_INCLUDES_DEFAULT])
-  else
-    AC_MSG_CHECKING([for WSAPoll()])
-    AC_LINK_IFELSE([
-      AC_LANG_PROGRAM([[
-#include <winsock2.h>
-       ]], [[
-WSAPOLLFD fda[2];
-WSAPoll(fda, 2, 0);]])],
-        [
-          have_poll='yes'
-          AC_DEFINE([HAVE_POLL],[1])
-        ], [have_poll='no'])
-    AC_MSG_RESULT([$have_poll])
-  fi
-  if test "$enable_poll" = "yes" && test "$have_poll" != "yes"; then
-    AC_MSG_ERROR([[Support for poll was explicitly requested but cannot be enabled on this platform.]])
-  fi
-  enable_poll="$have_poll"
-fi
-
-if test x"$enable_poll" = x"yes"; then
-    AM_CXXFLAGS="$AM_CXXFLAGS -DENABLE_POLL"
-    AM_CFLAGS="$AM_CXXFLAGS -DENABLE_POLL"
-fi
-
-AC_ARG_ENABLE([[epoll]],
-  [AS_HELP_STRING([[--enable-epoll[=ARG]]], [enable epoll support (yes, no, auto) [auto]])],
-    [enable_epoll=${enableval}],
-    [enable_epoll='auto']
-  )
-
-if test "$enable_epoll" != "no"; then
-  AX_HAVE_EPOLL
-  if test "${ax_cv_have_epoll}" = "yes"; then
-    AC_DEFINE([[EPOLL_SUPPORT]],[[1]],[Define to 1 to enable epoll support])
-    enable_epoll='yes'
-  else
-    if test "$enable_epoll" = "yes"; then
-      AC_MSG_ERROR([[Support for epoll was explicitly requested but cannot be enabled on this platform.]])
-    fi
-    enable_epoll='no'
-  fi
-fi
-
-AM_CONDITIONAL([MHD_HAVE_EPOLL], [[test "x$enable_epoll" = xyes]])
-
-if test "x$enable_epoll" = "xyes"; then
-  AC_CACHE_CHECK([for epoll_create1()], [mhd_cv_have_epoll_create1], [
-    AC_LINK_IFELSE([
-      AC_LANG_PROGRAM([[
-#include <sys/epoll.h>
-        ]], [[
-int fd;
-fd = epoll_create1(EPOLL_CLOEXEC);]])],
-      [mhd_cv_have_epoll_create1=yes],
-      [mhd_cv_have_epoll_create1=no])])
-  AS_IF([test "x$mhd_cv_have_epoll_create1" = "xyes"],[
-    AC_DEFINE([[HAVE_EPOLL_CREATE1]], [[1]], [Define if you have epoll_create1 function.])])
-fi
-
-if test x"$enable_epoll" = x"yes"; then
-    AM_CXXFLAGS="$AM_CXXFLAGS -DENABLE_EPOLL"
-    AM_CFLAGS="$AM_CXXFLAGS -DENABLE_EPOLL"
 fi
 
 AC_MSG_CHECKING([whether to link statically])
@@ -371,8 +294,6 @@ AC_MSG_NOTICE([Configuration Summary:
   Debug	          :  ${debugit}
   TLS Enabled     :  ${have_gnutls}
   TCP_FASTOPEN    :  ${is_fastopen_supported}
-  poll support    :  ${enable_poll=no}
-  epoll support   :  ${enable_epoll=no}
   Static          :  ${static}
   Build examples  :  ${enable_examples}
 ])
