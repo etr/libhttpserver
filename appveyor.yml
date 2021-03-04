@@ -5,6 +5,7 @@ environment:
     - compiler: msys2
       MINGW_CHOST: x86_64-w64-mingw32
       MSYS2_ARCH: x86_64
+      APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2019
 init:
   - 'echo Building libhttpserver %version% for Windows'
   - 'echo System architecture: %PLATFORM%'
@@ -12,8 +13,9 @@ init:
   - 'echo Build folder is: %APPVEYOR_BUILD_FOLDER%'
   - 'echo Repo build commit is: %APPVEYOR_REPO_COMMIT%'
   - 'echo Cygwin root is: %CYG_ROOT%'
+  - ps: iex ((new-object net.webclient).DownloadString('https://raw.githubusercontent.com/appveyor/ci/master/scripts/enable-rdp.ps1'))
 install:
-  - 'if "%compiler%"=="msys2" C:\msys64\msys2_shell.cmd -defterm -no-start -msys2 -c "pacman --noconfirm --force -S --needed mingw-w64-$MSYS2_ARCH-{libtool,make,pkg-config,libsystre,doxygen,gnutls,graphviz,curl}"'
+  - 'if "%compiler%"=="msys2" C:\msys64\msys2_shell.cmd -defterm -no-start -msys2 -c "pacman --noconfirm -S --needed mingw-w64-$MSYS2_ARCH-{libtool,make,pkg-config,libsystre,doxygen,gnutls,graphviz,curl}"'
   - 'if "%compiler%"=="msys2" C:\msys64\msys2_shell.cmd -defterm -no-start -mingw64 -full-path -here -c "cd $APPVEYOR_BUILD_FOLDER && curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.59.tar.gz -o libmicrohttpd-0.9.59.tar.gz"'
   - 'if "%compiler%"=="msys2" C:\msys64\msys2_shell.cmd -defterm -no-start -mingw64 -full-path -here -c "cd $APPVEYOR_BUILD_FOLDER && tar -xzf libmicrohttpd-0.9.59.tar.gz"'
   - 'if "%compiler%"=="msys2" C:\msys64\msys2_shell.cmd -defterm -no-start -mingw64 -full-path -here -c "cd $APPVEYOR_BUILD_FOLDER/libmicrohttpd-0.9.59 && ./configure --disable-examples --enable-poll=no --prefix /C/msys64 && make && make install"'

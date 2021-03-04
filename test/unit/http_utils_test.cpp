@@ -67,7 +67,7 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, unescape)
 LT_END_AUTO_TEST(unescape)
 
 LT_BEGIN_AUTO_TEST(http_utils_suite, unescape_plus)
-    int with_plus_buff_len = 6;
+    int with_plus_buff_len = 4;
     char* with_plus = reinterpret_cast<char*>(malloc(with_plus_buff_len * sizeof(char)));
     snprintf(with_plus, with_plus_buff_len, "%s", "A+B");
     std::string string_with_plus = with_plus;
@@ -83,6 +83,22 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, unescape_plus)
     free(with_plus);
     free(expected);
 LT_END_AUTO_TEST(unescape_plus)
+
+LT_BEGIN_AUTO_TEST(http_utils_suite, unescape_partial_marker)
+    char* with_marker = (char*) malloc(6 * sizeof(char));
+    sprintf(with_marker, "%s", "A+B%0");
+    std::string string_with_marker = with_marker;
+    int expected_size = http::http_unescape(string_with_marker);
+
+    char* expected = (char*) malloc(6 * sizeof(char));
+    sprintf(expected, "%s", "A B%0");
+
+    LT_CHECK_EQ(string_with_marker, string(expected));
+    LT_CHECK_EQ(expected_size, 5);
+
+    free(with_marker);
+    free(expected);
+LT_END_AUTO_TEST(unescape_partial_marker)
 
 LT_BEGIN_AUTO_TEST(http_utils_suite, tokenize_url)
     string value = "test/this/url/here";

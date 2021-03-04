@@ -67,6 +67,8 @@ LT_BEGIN_SUITE(ws_start_stop_suite)
     }
 LT_END_SUITE(ws_start_stop_suite)
 
+#ifndef _WINDOWS
+
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, start_stop)
     { // NOLINT (internal scope opening - not method start)
     httpserver::webserver ws = httpserver::create_webserver(8080);
@@ -591,6 +593,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_error_resources)
 
     ws.stop();
 LT_END_AUTO_TEST(custom_error_resources)
+
+#endif
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

@@ -19,13 +19,13 @@
 */
 
 #include <ctype.h>
+#include <algorithm>
 #include <map>
 #include <memory>
 #include <regex>
 #include <sstream>
 #include <stdexcept>
 #include <string>
-#include <utility>
 #include <vector>
 
 #include "httpserver/details/http_endpoint.hpp"

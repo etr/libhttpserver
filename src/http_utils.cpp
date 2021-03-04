@@ -304,12 +304,13 @@ size_t http_unescape(std::string& val)
 {
     if (val.empty()) return 0;
 
-    int rpos = 0;
-    int wpos = 0;
+    unsigned int rpos = 0;
+    unsigned int wpos = 0;
 
     unsigned int num;
+    unsigned int size = val.size();
 
-    while ('\0' != val[rpos])
+    while (rpos < size && val[rpos] != '\0')
     {
         switch (val[rpos])
         {
@@ -319,8 +320,8 @@ size_t http_unescape(std::string& val)
                 rpos++;
                 break;
             case '%':
-                if ( (1 == sscanf (val.substr(rpos + 1).c_str(), "%2x", &num)) ||
-                    (1 == sscanf (val.substr(rpos + 1).c_str(), "%2X", &num))
+                if (size > rpos + 2 && ((1 == sscanf (val.substr(rpos + 1, 2).c_str(), "%2x", &num)) ||
+                    (1 == sscanf (val.substr(rpos + 1, 2).c_str(), "%2X", &num)))
                 )
                 {
                     val[wpos] = (unsigned char) num;
