@@ -88,7 +88,7 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, unescape_partial_marker)
     char* with_marker = (char*) malloc(6 * sizeof(char));
     sprintf(with_marker, "%s", "A+B%0");
     std::string string_with_marker = with_marker;
-    int expected_size = http::http_unescape(string_with_marker);
+    int expected_size = httpserver::http::http_unescape(string_with_marker);
 
     char* expected = (char*) malloc(6 * sizeof(char));
     sprintf(expected, "%s", "A B%0");
