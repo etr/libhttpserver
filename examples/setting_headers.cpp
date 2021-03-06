@@ -20,19 +20,17 @@
 
 #include <httpserver.hpp>
 
-using namespace httpserver;
-
-class hello_world_resource : public http_resource {
-public:
-    const std::shared_ptr<http_response> render(const http_request&) {
-        std::shared_ptr<http_response> response = std::shared_ptr<http_response>(new string_response("Hello, World!"));
-        response->with_header("MyHeader", "MyValue");
-        return response;
-    }
+class hello_world_resource : public httpserver::http_resource {
+ public:
+     const std::shared_ptr<httpserver::http_response> render(const httpserver::http_request&) {
+         std::shared_ptr<httpserver::http_response> response = std::shared_ptr<httpserver::http_response>(new httpserver::string_response("Hello, World!"));
+         response->with_header("MyHeader", "MyValue");
+         return response;
+     }
 };
 
 int main(int argc, char** argv) {
-    webserver ws = create_webserver(8080);
+    httpserver::webserver ws = httpserver::create_webserver(8080);
 
     hello_world_resource hwr;
     ws.register_resource("/hello", &hwr);

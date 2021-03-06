@@ -20,31 +20,29 @@
 
 #include <httpserver.hpp>
 
-using namespace httpserver;
-
-class hello_world_resource : public http_resource {
-public:
-    const std::shared_ptr<http_response> render(const http_request&) {
-        return std::shared_ptr<http_response>(new string_response("Hello, World!"));
-    }
+class hello_world_resource : public httpserver::http_resource {
+ public:
+     const std::shared_ptr<httpserver::http_response> render(const httpserver::http_request&) {
+         return std::shared_ptr<httpserver::http_response>(new httpserver::string_response("Hello, World!"));
+     }
 };
 
-class handling_multiple_resource : public http_resource {
-public:
-    const std::shared_ptr<http_response> render(const http_request& req) {
-        return std::shared_ptr<http_response>(new string_response("Your URL: " + req.get_path()));
-    }
+class handling_multiple_resource : public httpserver::http_resource {
+ public:
+     const std::shared_ptr<httpserver::http_response> render(const httpserver::http_request& req) {
+         return std::shared_ptr<httpserver::http_response>(new httpserver::string_response("Your URL: " + req.get_path()));
+     }
 };
 
-class url_args_resource : public http_resource {
-public:
-    const std::shared_ptr<http_response> render(const http_request& req) {
-        return std::shared_ptr<http_response>(new string_response("ARGS: " + req.get_arg("arg1") + " and " + req.get_arg("arg2")));
-    }
+class url_args_resource : public httpserver::http_resource {
+ public:
+     const std::shared_ptr<httpserver::http_response> render(const httpserver::http_request& req) {
+         return std::shared_ptr<httpserver::http_response>(new httpserver::string_response("ARGS: " + req.get_arg("arg1") + " and " + req.get_arg("arg2")));
+     }
 };
 
 int main(int argc, char** argv) {
-    webserver ws = create_webserver(8080);
+    httpserver::webserver ws = httpserver::create_webserver(8080);
 
     hello_world_resource hwr;
     ws.register_resource("/hello", &hwr);
