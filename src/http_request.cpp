@@ -144,17 +144,18 @@ MHD_Result http_request::build_request_args(void *cls, enum MHD_ValueKind kind, 
 MHD_Result http_request::build_request_querystring(void *cls, enum MHD_ValueKind kind, const char *key, const char *arg_value) {
     std::string* querystring = static_cast<std::string*>(cls);
     std::string value = ((arg_value == NULL) ? "" : arg_value);
-    {
-        int buffer_size = std::string(key).size() + value.size() + 3;
-        char* buf = new char[buffer_size];
-        if (*querystring == "") {
-            snprintf(buf, buffer_size, "?%s=%s", key, value.c_str());
-            *querystring = buf;
-        } else {
-            snprintf(buf, buffer_size, "&%s=%s", key, value.c_str());
-            *querystring += std::string(buf);
-        }
+
+    int buffer_size = std::string(key).size() + value.size() + 3;
+    char* buf = new char[buffer_size];
+    if (*querystring == "") {
+        snprintf(buf, buffer_size, "?%s=%s", key, value.c_str());
+        *querystring = std::string(buf);
+    } else {
+        snprintf(buf, buffer_size, "&%s=%s", key, value.c_str());
+        *querystring += std::string(buf);
     }
+
+    delete[] buf;
 
     return MHD_YES;
 }
