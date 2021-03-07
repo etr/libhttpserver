@@ -27,27 +27,16 @@
 
 struct MHD_Response;
 
-using namespace std;
+namespace httpserver {
 
-namespace httpserver
-{
-
-MHD_Response* file_response::get_raw_response()
-{
+MHD_Response* file_response::get_raw_response() {
     int fd = open(filename.c_str(), O_RDONLY);
     size_t size = lseek(fd, 0, SEEK_END);
-    if(size)
-    {
+    if (size) {
         return MHD_create_response_from_fd(size, fd);
-    }
-    else
-    {
-        return MHD_create_response_from_buffer(
-                0,
-                (void*) "",
-                MHD_RESPMEM_PERSISTENT
-        );
+    } else {
+        return MHD_create_response_from_buffer(0, 0x0, MHD_RESPMEM_PERSISTENT);
     }
 }
 
-}
+}  // namespace httpserver

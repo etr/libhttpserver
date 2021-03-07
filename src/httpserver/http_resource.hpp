@@ -41,12 +41,11 @@ namespace httpserver {
 
 namespace details { std::shared_ptr<http_response> empty_render(const http_request& r); };
 
+void resource_init(std::map<std::string, bool>* res);
+
 /**
  * Class representing a callable http resource.
 **/
-
-void resource_init(std::map<std::string, bool>& res);
-
 class http_resource
 {
     public:
@@ -204,7 +203,7 @@ class http_resource
         **/
         http_resource()
         {
-            resource_init(allowed_methods);
+            resource_init(&allowed_methods);
         }
 
         /**
@@ -217,7 +216,7 @@ class http_resource
 
     private:
         friend class webserver;
-        friend void resource_init(std::map<std::string, bool>& res);
+        friend void resource_init(std::map<std::string, bool>* res);
         std::map<std::string, bool> allowed_methods;
 };
 

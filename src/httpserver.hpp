@@ -18,8 +18,8 @@
      USA
 */
 
-#ifndef _HTTPSERVER_HPP_
-#define _HTTPSERVER_HPP_
+#ifndef SRC_HTTPSERVER_HPP_
+#define SRC_HTTPSERVER_HPP_
 
 #define _HTTPSERVER_HPP_INSIDE_
 

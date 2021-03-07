@@ -48,7 +48,7 @@ namespace httpserver
 class http_request
 {
     public:
-        static const std::string EMPTY;
+        static const char EMPTY[];
 
         /**
          * Method used to get the username eventually passed through basic authentication.

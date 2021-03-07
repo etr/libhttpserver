@@ -540,22 +540,22 @@ MHD_Result webserver::requests_answer_first_step(
     const char *encoding = MHD_lookup_connection_value (
             connection,
             MHD_HEADER_KIND,
-            http_utils::http_header_content_type.c_str()
+            http_utils::http_header_content_type
     );
 
     if ( post_process_enabled &&
         (
             0x0 != encoding &&
             ((0 == strncasecmp (
-                                http_utils::http_post_encoding_form_urlencoded.c_str(),
+                                http_utils::http_post_encoding_form_urlencoded,
                                 encoding,
-                                http_utils::http_post_encoding_form_urlencoded.size()
+                                strlen(http_utils::http_post_encoding_form_urlencoded)
                                 )
               )
              || (0 == strncasecmp (
-                                   http_utils::http_post_encoding_multipart_formdata.c_str(),
+                                   http_utils::http_post_encoding_multipart_formdata,
                                    encoding,
-                                   http_utils::http_post_encoding_multipart_formdata.size()
+                                   strlen(http_utils::http_post_encoding_multipart_formdata)
                                    )))
         )
     )
@@ -786,7 +786,7 @@ MHD_Result webserver::answer_to_connection(void* cls, MHD_Connection* connection
 
     std::string t_url = url;
 
-    base_unescaper(t_url, static_cast<webserver*>(cls)->unescaper);
+    base_unescaper(&t_url, static_cast<webserver*>(cls)->unescaper);
     mr->standardized_url = new string(http_utils::standardize_url(t_url));
 
     mr->has_body = false;
@@ -796,43 +796,43 @@ MHD_Result webserver::answer_to_connection(void* cls, MHD_Connection* connection
             *(mr->complete_uri) + " METHOD: " + method
     );
 
-    if( 0 == strcasecmp(method, http_utils::http_method_get.c_str()))
+    if( 0 == strcasecmp(method, http_utils::http_method_get))
     {
         mr->callback = &http_resource::render_GET;
     }
-    else if (0 == strcmp(method, http_utils::http_method_post.c_str()))
+    else if (0 == strcmp(method, http_utils::http_method_post))
     {
         mr->callback = &http_resource::render_POST;
         mr->has_body = true;
     }
-    else if (0 == strcasecmp(method, http_utils::http_method_put.c_str()))
+    else if (0 == strcasecmp(method, http_utils::http_method_put))
     {
         mr->callback = &http_resource::render_PUT;
         mr->has_body = true;
     }
-    else if (0 == strcasecmp(method,http_utils::http_method_delete.c_str()))
+    else if (0 == strcasecmp(method,http_utils::http_method_delete))
     {
         mr->callback = &http_resource::render_DELETE;
         mr->has_body = true;
     }
-    else if (0 == strcasecmp(method, http_utils::http_method_patch.c_str()))
+    else if (0 == strcasecmp(method, http_utils::http_method_patch))
     {
         mr->callback = &http_resource::render_PATCH;
         mr->has_body = true;
     }
-    else if (0 == strcasecmp(method, http_utils::http_method_head.c_str()))
+    else if (0 == strcasecmp(method, http_utils::http_method_head))
     {
         mr->callback = &http_resource::render_HEAD;
     }
-    else if (0 ==strcasecmp(method,http_utils::http_method_connect.c_str()))
+    else if (0 ==strcasecmp(method,http_utils::http_method_connect))
     {
         mr->callback = &http_resource::render_CONNECT;
     }
-    else if (0 == strcasecmp(method, http_utils::http_method_trace.c_str()))
+    else if (0 == strcasecmp(method, http_utils::http_method_trace))
     {
         mr->callback = &http_resource::render_TRACE;
     }
-    else if (0 ==strcasecmp(method,http_utils::http_method_options.c_str()))
+    else if (0 ==strcasecmp(method,http_utils::http_method_options))
     {
         mr->callback = &http_resource::render_OPTIONS;
     }

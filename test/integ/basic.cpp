@@ -225,6 +225,15 @@ class file_response_resource : public http_resource
         }
 };
 
+class file_response_resource_empty : public http_resource
+{
+    public:
+        const shared_ptr<http_response> render_GET(const http_request& req)
+        {
+            return shared_ptr<file_response>(new file_response("test_content_empty", 200, "text/plain"));
+        }
+};
+
 class exception_resource : public http_resource
 {
     public:
@@ -860,6 +869,24 @@ LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource)
     LT_CHECK_EQ(s, "test content of file\n");
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(file_serving_resource)
+
+LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource_empty)
+    file_response_resource_empty resource;
+    ws->register_resource("base", &resource);
+    curl_global_init(CURL_GLOBAL_ALL);
+
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "");
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(file_serving_resource_empty)
 
 LT_BEGIN_AUTO_TEST(basic_suite, exception_forces_500)
     exception_resource resource;

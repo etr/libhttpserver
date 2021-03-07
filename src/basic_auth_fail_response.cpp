@@ -25,18 +25,10 @@
 struct MHD_Connection;
 struct MHD_Response;
 
-using namespace std;
+namespace httpserver {
 
-namespace httpserver
-{
-
-int basic_auth_fail_response::enqueue_response(MHD_Connection* connection, MHD_Response* response)
-{
-    return MHD_queue_basic_auth_fail_response(
-            connection,
-            realm.c_str(),
-            response
-    );
+int basic_auth_fail_response::enqueue_response(MHD_Connection* connection, MHD_Response* response) {
+    return MHD_queue_basic_auth_fail_response(connection, realm.c_str(), response);
 }
 
-}
+}  // namespace httpserver

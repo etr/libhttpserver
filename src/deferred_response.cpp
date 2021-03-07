@@ -24,19 +24,14 @@
 
 struct MHD_Response;
 
-using namespace std;
+namespace httpserver {
 
-namespace httpserver
-{
+namespace details {
 
-namespace details
-{
-
-MHD_Response* get_raw_response_helper(void* cls, ssize_t (*cb)(void*, uint64_t, char*, size_t))
-{
+MHD_Response* get_raw_response_helper(void* cls, ssize_t (*cb)(void*, uint64_t, char*, size_t)) {
     return MHD_create_response_from_callback(MHD_SIZE_UNKNOWN, 1024, cb, cls, NULL);
 }
 
-}
+}  // namespace details
 
-}
+}  // namespace httpserver

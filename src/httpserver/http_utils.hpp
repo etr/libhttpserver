@@ -173,93 +173,89 @@ class http_utils
     static const int shoutcast_response;
 
     /* See also: http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html */
-    static const std::string http_header_accept;
-    static const std::string http_header_accept_charset;
-    static const std::string http_header_accept_encoding;
-    static const std::string http_header_accept_language;
-    static const std::string http_header_accept_ranges;
-    static const std::string http_header_age;
-    static const std::string http_header_allow;
-    static const std::string http_header_authorization;
-    static const std::string http_header_cache_control;
-    static const std::string http_header_connection;
-    static const std::string http_header_content_encoding;
-    static const std::string http_header_content_language;
-    static const std::string http_header_content_length;
-    static const std::string http_header_content_location;
-    static const std::string http_header_content_md5;
-    static const std::string http_header_content_range;
-    static const std::string http_header_content_type;
-    static const std::string http_header_date;
-    static const std::string http_header_etag;
-    static const std::string http_header_expect;
-    static const std::string http_header_expires;
-    static const std::string http_header_from;
-    static const std::string http_header_host;
-    static const std::string http_header_if_match;
-    static const std::string http_header_if_modified_since;
-    static const std::string http_header_if_none_match;
-    static const std::string http_header_if_range;
-    static const std::string http_header_if_unmodified_since;
-    static const std::string http_header_last_modified;
-    static const std::string http_header_location;
-    static const std::string http_header_max_forwards;
-    static const std::string http_header_pragma;
-    static const std::string http_header_proxy_authenticate;
-    static const std::string http_header_proxy_authentication;
-    static const std::string http_header_range;
-    static const std::string http_header_referer;
-    static const std::string http_header_retry_after;
-    static const std::string http_header_server;
-    static const std::string http_header_te;
-    static const std::string http_header_trailer;
-    static const std::string http_header_transfer_encoding;
-    static const std::string http_header_upgrade;
-    static const std::string http_header_user_agent;
-    static const std::string http_header_vary;
-    static const std::string http_header_via;
-    static const std::string http_header_warning;
-    static const std::string http_header_www_authenticate;
+    static const char* http_header_accept;
+    static const char* http_header_accept_charset;
+    static const char* http_header_accept_encoding;
+    static const char* http_header_accept_language;
+    static const char* http_header_accept_ranges;
+    static const char* http_header_age;
+    static const char* http_header_allow;
+    static const char* http_header_authorization;
+    static const char* http_header_cache_control;
+    static const char* http_header_connection;
+    static const char* http_header_content_encoding;
+    static const char* http_header_content_language;
+    static const char* http_header_content_length;
+    static const char* http_header_content_location;
+    static const char* http_header_content_md5;
+    static const char* http_header_content_range;
+    static const char* http_header_content_type;
+    static const char* http_header_date;
+    static const char* http_header_etag;
+    static const char* http_header_expect;
+    static const char* http_header_expires;
+    static const char* http_header_from;
+    static const char* http_header_host;
+    static const char* http_header_if_match;
+    static const char* http_header_if_modified_since;
+    static const char* http_header_if_none_match;
+    static const char* http_header_if_range;
+    static const char* http_header_if_unmodified_since;
+    static const char* http_header_last_modified;
+    static const char* http_header_location;
+    static const char* http_header_max_forwards;
+    static const char* http_header_pragma;
+    static const char* http_header_proxy_authenticate;
+    static const char* http_header_proxy_authentication;
+    static const char* http_header_range;
+    static const char* http_header_referer;
+    static const char* http_header_retry_after;
+    static const char* http_header_server;
+    static const char* http_header_te;
+    static const char* http_header_trailer;
+    static const char* http_header_transfer_encoding;
+    static const char* http_header_upgrade;
+    static const char* http_header_user_agent;
+    static const char* http_header_vary;
+    static const char* http_header_via;
+    static const char* http_header_warning;
+    static const char* http_header_www_authenticate;
 
-    static const std::string http_version_1_0;
-    static const std::string http_version_1_1;
+    static const char* http_version_1_0;
+    static const char* http_version_1_1;
 
-    static const std::string http_method_connect;
-    static const std::string http_method_delete;
-    static const std::string http_method_head;
-    static const std::string http_method_get;
-    static const std::string http_method_options;
-    static const std::string http_method_post;
-    static const std::string http_method_put;
-    static const std::string http_method_trace;
-    static const std::string http_method_patch;
+    static const char* http_method_connect;
+    static const char* http_method_delete;
+    static const char* http_method_head;
+    static const char* http_method_get;
+    static const char* http_method_options;
+    static const char* http_method_post;
+    static const char* http_method_put;
+    static const char* http_method_trace;
+    static const char* http_method_patch;
 
-    static const std::string http_post_encoding_form_urlencoded;
-    static const std::string http_post_encoding_multipart_formdata;
+    static const char* http_post_encoding_form_urlencoded;
+    static const char* http_post_encoding_multipart_formdata;
 
-    static const std::string text_plain;
+    static const char* text_plain;
 
-    static std::vector<std::string> tokenize_url(const std::string&,
-        const char separator = '/'
-    );
+    static std::vector<std::string> tokenize_url(const std::string&, const char separator = '/');
     static std::string standardize_url(const std::string&);
 };
 
-#define COMPARATOR(x, y, op) \
-    { \
-        size_t l1 = (x).size();\
-        size_t l2 = (y).size();\
-        if (l1 < l2) return true;\
-        if (l1 > l2) return false;\
+#define COMPARATOR(x, y, op) { \
+        size_t l1 = (x).size(); \
+        size_t l2 = (y).size(); \
+        if (l1 < l2) return true; \
+        if (l1 > l2) return false; \
         \
-        for (size_t n = 0; n < l1; n++)\
-        {\
-            int xc = op((x)[n]);\
-            int yc = op((y)[n]);\
-            if (xc < yc) return true;\
-            if (xc > yc) return false;\
-        }\
-        return false;\
+        for (size_t n = 0; n < l1; n++) { \
+            int xc = op((x)[n]); \
+            int yc = op((y)[n]); \
+            if (xc < yc) return true; \
+            if (xc > yc) return false; \
+        } \
+        return false; \
     }
 
 class header_comparator {
@@ -269,8 +265,7 @@ class header_comparator {
          * @param first string
          * @param second string
         **/
-        bool operator()(const std::string& x,const std::string& y) const
-        {
+        bool operator()(const std::string& x,const std::string& y) const {
             COMPARATOR(x, y, std::toupper);
         }
 };
@@ -287,8 +282,7 @@ class arg_comparator {
          * @param first string
          * @param second string
         **/
-        bool operator()(const std::string& x,const std::string& y) const
-        {
+        bool operator()(const std::string& x,const std::string& y) const {
 #ifdef CASE_INSENSITIVE
             COMPARATOR(x, y, std::toupper);
 #else
@@ -297,27 +291,24 @@ class arg_comparator {
         }
 };
 
-struct ip_representation
-{
+struct ip_representation {
     http_utils::IP_version_T ip_version;
-    unsigned short pieces[16];
-    unsigned short mask;
+    uint16_t pieces[16];
+    uint16_t mask;
 
     ip_representation(http_utils::IP_version_T ip_version) :
-        ip_version(ip_version)
-    {
-        mask = DEFAULT_MASK_VALUE;
-        std::fill(pieces, pieces + 16, 0);
+        ip_version(ip_version) {
+            mask = DEFAULT_MASK_VALUE;
+            std::fill(pieces, pieces + 16, 0);
     }
 
     ip_representation(const std::string& ip);
     ip_representation(const struct sockaddr* ip);
 
     bool operator <(const ip_representation& b) const;
-    int weight() const
-    {
+    int weight() const {
         //variable-precision SWAR algorithm
-        unsigned short x = mask;
+        uint16_t x = mask;
         x = x - ((x >> 1) & 0x55555555);
         x = (x & 0x33333333) + ((x >> 2) & 0x33333333);
         return (((x + (x >> 4)) & 0x0F0F0F0F) * 0x01010101) >> 24;
@@ -338,7 +329,7 @@ std::string get_ip_str_new(const struct sockaddr* sa, socklen_t maxlen = 0);
  * @param sa The sockaddr object to find the port from
  * @return short representing the port
 **/
-unsigned short get_port(const struct sockaddr* sa);
+uint16_t get_port(const struct sockaddr* sa);
 
 /**
  * Method to output the contents of a headers map to a std::ostream
@@ -346,8 +337,7 @@ unsigned short get_port(const struct sockaddr* sa);
  * @param prefix Prefix to identify the map
  * @param map
 **/
-void dump_header_map(std::ostream &os, const std::string &prefix,
-                     const std::map<std::string,std::string,header_comparator> &map);
+void dump_header_map(std::ostream &os, const std::string &prefix, const std::map<std::string,std::string,header_comparator> &map);
 
 /**
  * Method to output the contents of an arguments map to a std::ostream
@@ -355,8 +345,7 @@ void dump_header_map(std::ostream &os, const std::string &prefix,
  * @param prefix Prefix to identify the map
  * @param map
 **/
-void dump_arg_map(std::ostream &os, const std::string &prefix,
-                     const std::map<std::string,std::string,arg_comparator> &map);
+void dump_arg_map(std::ostream &os, const std::string &prefix, const std::map<std::string,std::string,arg_comparator> &map);
 
 /**
  * Process escape sequences ('+'=space, %HH) Updates val in place; the
@@ -367,11 +356,11 @@ void dump_arg_map(std::ostream &os, const std::string &prefix,
  * @return length of the resulting val (strlen(val) maybe
  *  shorter afterwards due to elimination of escape sequences)
  */
-size_t http_unescape (std::string& val);
+size_t http_unescape (std::string* val);
 
 const std::string load_file (const std::string& filename);
 
-size_t base_unescaper(std::string&, unescaper_ptr unescaper);
+size_t base_unescaper(std::string*, unescaper_ptr unescaper);
 
 };
 };

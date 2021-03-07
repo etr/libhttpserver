@@ -270,6 +270,7 @@ AC_SUBST(EXT_LIB_PATH)
 AC_SUBST(EXT_LIBS)
 
 AC_CONFIG_FILES([test/test_content:test/test_content])
+AC_CONFIG_FILES([test/test_content_empty:test/test_content_empty])
 AC_CONFIG_FILES([test/cert.pem:test/cert.pem])
 AC_CONFIG_FILES([test/key.pem:test/key.pem])
 AC_CONFIG_FILES([test/test_root_ca.pem:test/test_root_ca.pem])
