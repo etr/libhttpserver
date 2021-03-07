@@ -22,8 +22,8 @@
 #error "Only <httpserver.hpp> or <httpserverpp> can be included directly."
 #endif
 
-#ifndef _BASIC_AUTH_FAIL_RESPONSE_HPP_
-#define _BASIC_AUTH_FAIL_RESPONSE_HPP_
+#ifndef SRC_HTTPSERVER_BASIC_AUTH_FAIL_RESPONSE_HPP_
+#define SRC_HTTPSERVER_BASIC_AUTH_FAIL_RESPONSE_HPP_
 
 #include <string>
 #include "http_utils.hpp"
@@ -32,37 +32,33 @@
 struct MHD_Connection;
 struct MHD_Response;
 
-namespace httpserver
-{
+namespace httpserver {
 
-class basic_auth_fail_response : public string_response
-{
-    public:
-        basic_auth_fail_response() = default;
+class basic_auth_fail_response : public string_response {
+ public:
+     basic_auth_fail_response() = default;
 
-        explicit basic_auth_fail_response(
+     explicit basic_auth_fail_response(
                 const std::string& content,
                 const std::string& realm = "",
                 int response_code = http::http_utils::http_ok,
-                const std::string& content_type = http::http_utils::text_plain
-        ):
+                const std::string& content_type = http::http_utils::text_plain):
             string_response(content, response_code, content_type),
-            realm(realm)
-        {
+            realm(realm) {
         }
 
-        basic_auth_fail_response(const basic_auth_fail_response& other) = default;
-        basic_auth_fail_response(basic_auth_fail_response&& other) noexcept = default;
-        basic_auth_fail_response& operator=(const basic_auth_fail_response& b) = default;
-        basic_auth_fail_response& operator=(basic_auth_fail_response&& b) = default;
+     basic_auth_fail_response(const basic_auth_fail_response& other) = default;
+     basic_auth_fail_response(basic_auth_fail_response&& other) noexcept = default;
+     basic_auth_fail_response& operator=(const basic_auth_fail_response& b) = default;
+     basic_auth_fail_response& operator=(basic_auth_fail_response&& b) = default;
 
-        ~basic_auth_fail_response() = default;
+     ~basic_auth_fail_response() = default;
 
-        int enqueue_response(MHD_Connection* connection, MHD_Response* response);
+     int enqueue_response(MHD_Connection* connection, MHD_Response* response);
 
-    private:
-        std::string realm = "";
+ private:
+     std::string realm = "";
 };
 
-}
-#endif // _BASIC_AUTH_FAIL_RESPONSE_HPP_
+}  // namespace httpserver
+#endif  // SRC_HTTPSERVER_BASIC_AUTH_FAIL_RESPONSE_HPP_
