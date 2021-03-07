@@ -97,7 +97,7 @@ struct compare_value
 };
 
 #if !defined(_WIN32) && !defined(__MINGW32__) && !defined(__CYGWIN__)
-static void catcher (int sig)
+static void catcher (int)
 {
 }
 #endif
@@ -191,6 +191,11 @@ void webserver::request_completed (
         enum MHD_RequestTerminationCode toe
 )
 {
+    // These parameters are passed to respect the MHD interface, but are not needed here.
+    std::ignore = cls;
+    std::ignore = connection;
+    std::ignore = toe;
+
     details::modded_request* mr = static_cast<details::modded_request*>(*con_cls);
     if (mr == 0x0) return;
 
@@ -424,6 +429,9 @@ void webserver::disallow_ip(const string& ip)
 
 MHD_Result policy_callback (void *cls, const struct sockaddr* addr, socklen_t addrlen)
 {
+    // Parameter needed to respect MHD interface, but not needed here.
+    std::ignore = addrlen;
+
     if(!(static_cast<webserver*>(cls))->ban_system_enabled) return MHD_YES;
 
     if((((static_cast<webserver*>(cls))->default_policy == http_utils::ACCEPT) &&
@@ -443,6 +451,9 @@ MHD_Result policy_callback (void *cls, const struct sockaddr* addr, socklen_t ad
 
 void* uri_log(void* cls, const char* uri)
 {
+    // Parameter needed to respect MHD interface, but not needed here.
+    std::ignore = cls;
+
     struct details::modded_request* mr = new details::modded_request();
     mr->complete_uri = new string(uri);
     mr->second = false;
@@ -451,6 +462,9 @@ void* uri_log(void* cls, const char* uri)
 
 void error_log(void* cls, const char* fmt, va_list ap)
 {
+    // Parameter needed to respect MHD interface, but not needed here.
+    std::ignore = ap;
+
     webserver* dws = static_cast<webserver*>(cls);
     if(dws->log_error != 0x0) dws->log_error(fmt);
 }
@@ -462,6 +476,10 @@ void access_log(webserver* dws, string uri)
 
 size_t unescaper_func(void * cls, struct MHD_Connection *c, char *s)
 {
+    // Parameter needed to respect MHD interface, but not needed here.
+    std::ignore = cls;
+    std::ignore = c;
+
     // THIS IS USED TO AVOID AN UNESCAPING OF URL BEFORE THE ANSWER.
     // IT IS DUE TO A BOGUS ON libmicrohttpd (V0.99) THAT PRODUCING A
     // STRING CONTAINING '\0' AFTER AN UNESCAPING, IS UNABLE TO PARSE
@@ -477,6 +495,13 @@ MHD_Result webserver::post_iterator (void *cls, enum MHD_ValueKind kind,
     const char *data, uint64_t off, size_t size
     )
 {
+    // Parameter needed to respect MHD interface, but not needed here.
+    std::ignore = kind;
+    std::ignore = filename;
+    std::ignore = content_type;
+    std::ignore = transfer_encoding;
+    std::ignore = off;
+
     struct details::modded_request* mr = (struct details::modded_request*) cls;
     mr->dhr->set_arg(key, mr->dhr->get_arg(key) + std::string(data, size));
     return MHD_YES;
@@ -485,6 +510,10 @@ MHD_Result webserver::post_iterator (void *cls, enum MHD_ValueKind kind,
 void webserver::upgrade_handler (void *cls, struct MHD_Connection* connection,
     void **con_cls, int upgrade_socket)
 {
+    std::ignore = cls;
+    std::ignore = connection;
+    std::ignore = con_cls;
+    std::ignore = upgrade_socket;
 }
 
 const std::shared_ptr<http_response> webserver::not_found_page(details::modded_request* mr) const
@@ -840,4 +869,4 @@ MHD_Result webserver::answer_to_connection(void* cls, MHD_Connection* connection
     return static_cast<webserver*>(cls)->requests_answer_first_step(connection, mr);
 }
 
-};
+}

@@ -153,5 +153,5 @@ class http_response
 
 std::ostream &operator<< (std::ostream &os, const http_response &r);
 
-};
+}
 #endif

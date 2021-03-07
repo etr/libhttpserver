@@ -56,13 +56,13 @@ ssize_t test_callback(std::shared_ptr<std::atomic<int> > closure_data, char* buf
 
 class deferred_resource : public httpserver::http_resource {
  public:
-     const std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request& req) {
+     const std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request&) {
          std::shared_ptr<std::atomic<int> > closure_data(new std::atomic<int>(counter++));
          return std::shared_ptr<httpserver::deferred_response<std::atomic<int> > >(new httpserver::deferred_response<std::atomic<int> >(test_callback, closure_data, "cycle callback response"));
      }
 };
 
-int main(int argc, char** argv) {
+int main() {
     httpserver::webserver ws = httpserver::create_webserver(8080);
 
     deferred_resource hwr;

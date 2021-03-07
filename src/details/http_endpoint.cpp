@@ -161,6 +161,6 @@ bool http_endpoint::match(const http_endpoint& url) const {
     return regex_match(nn, re_url_normalized);
 }
 
-};  // namespace details
+}  // namespace details
 
-};  // namespace httpserver
+}  // namespace httpserver

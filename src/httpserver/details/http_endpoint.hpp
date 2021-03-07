@@ -200,7 +200,7 @@ class http_endpoint
         bool reg_compiled;
 };
 
-};
+}
 
-};
+}
 #endif

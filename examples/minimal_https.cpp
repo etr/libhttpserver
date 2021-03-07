@@ -27,7 +27,7 @@ class hello_world_resource : public httpserver::http_resource {
      }
 };
 
-int main(int argc, char** argv) {
+int main() {
     httpserver::webserver ws = httpserver::create_webserver(8080)
         .use_ssl()
         .https_mem_key("key.pem")

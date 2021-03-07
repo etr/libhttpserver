@@ -351,5 +351,5 @@ class http_request
 
 std::ostream &operator<< (std::ostream &os, const http_request &r);
 
-};
+}
 #endif

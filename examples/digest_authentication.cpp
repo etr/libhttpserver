@@ -37,7 +37,7 @@ class digest_resource : public httpserver::http_resource {
      }
 };
 
-int main(int argc, char** argv) {
+int main() {
     httpserver::webserver ws = httpserver::create_webserver(8080);
 
     digest_resource hwr;

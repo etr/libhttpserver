@@ -20,11 +20,11 @@
 
 #include <httpserver.hpp>
 
-const std::shared_ptr<httpserver::http_response> not_found_custom(const httpserver::http_request& req) {
+const std::shared_ptr<httpserver::http_response> not_found_custom(const httpserver::http_request&) {
     return std::shared_ptr<httpserver::string_response>(new httpserver::string_response("Not found custom", 404, "text/plain"));
 }
 
-const std::shared_ptr<httpserver::http_response> not_allowed_custom(const httpserver::http_request& req) {
+const std::shared_ptr<httpserver::http_response> not_allowed_custom(const httpserver::http_request&) {
     return std::shared_ptr<httpserver::string_response>(new httpserver::string_response("Not allowed custom", 405, "text/plain"));
 }
 
@@ -35,7 +35,7 @@ class hello_world_resource : public httpserver::http_resource {
      }
 };
 
-int main(int argc, char** argv) {
+int main() {
     httpserver::webserver ws = httpserver::create_webserver(8080)
         .not_found_resource(not_found_custom)
         .method_not_allowed_resource(not_allowed_custom);

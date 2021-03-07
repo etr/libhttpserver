@@ -27,7 +27,7 @@ class hello_world_resource : public httpserver::http_resource {
      }
 };
 
-int main(int argc, char** argv) {
+int main() {
     httpserver::webserver ws = httpserver::create_webserver(8080).default_policy(httpserver::http::http_utils::REJECT);
 
     ws.allow_ip("127.0.0.1");

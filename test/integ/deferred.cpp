@@ -55,6 +55,8 @@ struct test_data
 
 ssize_t test_callback(std::shared_ptr<void> closure_data, char* buf, size_t max)
 {
+    std::ignore = closure_data;
+
     if (counter == 2)
     {
         return -1;
@@ -89,7 +91,7 @@ ssize_t test_callback_with_data(std::shared_ptr<test_data> closure_data, char* b
 class deferred_resource : public http_resource
 {
     public:
-        const shared_ptr<http_response> render_GET(const http_request& req)
+        const shared_ptr<http_response> render_GET(const http_request&)
         {
             return shared_ptr<deferred_response<void>>(new deferred_response<void>(test_callback, nullptr, "cycle callback response"));
         }
@@ -98,7 +100,7 @@ class deferred_resource : public http_resource
 class deferred_resource_with_data : public http_resource
 {
     public:
-        const shared_ptr<http_response> render_GET(const http_request& req)
+        const shared_ptr<http_response> render_GET(const http_request&)
         {
             std::shared_ptr<test_data> internal_info(new test_data);
             internal_info->value = 42;

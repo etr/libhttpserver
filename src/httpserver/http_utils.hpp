@@ -321,9 +321,8 @@ struct ip_representation {
  * @param maxlen Maxlen of the address (automatically discovered if not passed)
  * @return string containing the ip address
 **/
-std::string get_ip_str(const struct sockaddr *sa, socklen_t maxlen = 0);
+std::string get_ip_str(const struct sockaddr *sa);
 
-std::string get_ip_str_new(const struct sockaddr* sa, socklen_t maxlen = 0);
 /**
  * Method used to get a port from a sockaddr
  * @param sa The sockaddr object to find the port from
@@ -362,7 +361,7 @@ const std::string load_file (const std::string& filename);
 
 size_t base_unescaper(std::string*, unescaper_ptr unescaper);
 
-};
-};
+}
+}
 #endif
 

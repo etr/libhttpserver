@@ -45,7 +45,7 @@ const std::vector<std::string> string_split(const std::string& s,
         char sep = ' ', bool collapse = true
 );
 void to_upper(std::string& str);
-};
-};
+}
+}
 
 #endif

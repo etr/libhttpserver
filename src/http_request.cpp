@@ -64,6 +64,9 @@ const std::string http_request::get_connection_value(const std::string& key, enu
 }
 
 MHD_Result http_request::build_request_header(void *cls, enum MHD_ValueKind kind, const char *key, const char *value) {
+    // Parameters needed to respect MHD interface, but not used in the implementation.
+    std::ignore = kind;
+
     std::map<std::string, std::string, http::header_comparator>* dhr = static_cast<std::map<std::string, std::string, http::header_comparator>*>(cls);
     (*dhr)[key] = value;
     return MHD_YES;
@@ -133,6 +136,9 @@ const std::string http_request::get_querystring() const {
 }
 
 MHD_Result http_request::build_request_args(void *cls, enum MHD_ValueKind kind, const char *key, const char *arg_value) {
+    // Parameters needed to respect MHD interface, but not used in the implementation.
+    std::ignore = kind;
+
     arguments_accumulator* aa = static_cast<arguments_accumulator*>(cls);
     std::string value = ((arg_value == NULL) ? "" : arg_value);
 
@@ -142,6 +148,9 @@ MHD_Result http_request::build_request_args(void *cls, enum MHD_ValueKind kind, 
 }
 
 MHD_Result http_request::build_request_querystring(void *cls, enum MHD_ValueKind kind, const char *key, const char *arg_value) {
+    // Parameters needed to respect MHD interface, but not used in the implementation.
+    std::ignore = kind;
+
     std::string* querystring = static_cast<std::string*>(cls);
     std::string value = ((arg_value == NULL) ? "" : arg_value);
 

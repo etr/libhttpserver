@@ -247,5 +247,5 @@ class webserver
         friend class http_response;
 };
 
-};
+}
 #endif //_FRAMEWORK_WEBSERVER_HPP__

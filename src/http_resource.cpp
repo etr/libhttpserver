@@ -42,10 +42,10 @@ void resource_init(std::map<std::string, bool>* allowed_methods) {
 
 namespace details {
 
-std::shared_ptr<http_response> empty_render(const http_request& r) {
+std::shared_ptr<http_response> empty_render(const http_request&) {
     return std::shared_ptr<http_response>(new string_response());
 }
 
-};  // namespace details
+}  // namespace details
 
-};  // namespace httpserver
+}  // namespace httpserver

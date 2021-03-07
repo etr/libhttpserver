@@ -215,7 +215,7 @@ std::string http_utils::standardize_url(const std::string& url) {
     return result;
 }
 
-std::string get_ip_str(const struct sockaddr *sa, socklen_t maxlen) {
+std::string get_ip_str(const struct sockaddr *sa) {
     if (!sa) throw std::invalid_argument("socket pointer is null");
 
     char to_ret[NI_MAXHOST];
@@ -489,5 +489,5 @@ size_t base_unescaper(std::string* s, unescaper_ptr unescaper) {
     return http_unescape(s);
 }
 
-};  // namespace http
-};  // namespace httpserver
+}  // namespace http
+}  // namespace httpserver

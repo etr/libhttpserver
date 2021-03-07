@@ -499,7 +499,7 @@ class test_base
 {
     public:
         const char* __lt_name__;
-        virtual void run_test(test_runner* tr) { }
+        virtual void run_test(test_runner*) { }
         virtual void operator()() { }
 };
 
@@ -586,6 +586,6 @@ class test : public test_base
         friend class test_runner;
 };
 
-};
+}
 
 #endif //_LITTLETEST_HPP_
