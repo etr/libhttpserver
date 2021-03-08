@@ -333,7 +333,7 @@ class suite
         }
 
         suite() { }
-        suite(const suite<suite_impl>& s) { }
+        suite(const suite<suite_impl>&) { }
 };
 
 double calculate_duration(timeval* before, timeval* after)
@@ -581,7 +581,7 @@ class test : public test_base
         }
     protected:
         test() { }
-        test(const test<test_impl>& t) { }
+        test(const test<test_impl>&) { }
 
         friend class test_runner;
 };
