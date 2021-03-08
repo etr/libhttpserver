@@ -194,8 +194,8 @@ AM_LDFLAGS="-lstdc++"
 
 if test x"$debugit" = x"yes"; then
     AC_DEFINE([DEBUG],[],[Debug Mode])
-    AM_CXXFLAGS="$AM_CXXFLAGS -DDEBUG -g -Wall -Wextra -Werror -pedantic -std=c++14 -O0"
-    AM_CFLAGS="$AM_CXXFLAGS -DDEBUG -g -Wall -Wextra -Werror -pedantic -O0"
+    AM_CXXFLAGS="$AM_CXXFLAGS -DDEBUG -g -Wall -Wextra -Werror -pedantic -std=c++14 -Wno-unused-command-line-argument -O0"
+    AM_CFLAGS="$AM_CXXFLAGS -DDEBUG -g -Wall -Wextra -Werror -pedantic -Wno-unused-command-line-argument -O0"
 else
     AC_DEFINE([NDEBUG],[],[No-debug Mode])
     AM_CXXFLAGS="$AM_CXXFLAGS -O3"
