@@ -111,7 +111,7 @@ static void ignore_sigpipe() {
     sig.sa_flags = SA_RESTART;
 #endif  // SA_INTERRUPTT
     if (0 != sigaction(SIGPIPE, &sig, &oldsig)) {
-        fprintf(stderr, gettext("Failed to install SIGPIPE handler: %s\n"), strerror(errno));
+        fprintf(stderr, "Failed to install SIGPIPE handler: %s\n", strerror(errno));
     }
 #endif
 }
