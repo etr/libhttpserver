@@ -18,7 +18,7 @@
      USA
 */
 
-#if defined(_WIN32) && ! defined(__CYGWIN__)
+#if defined(_WIN32) && !defined(__CYGWIN__)
 #define _WINDOWS
 #undef _WIN32_WINNT
 #define _WIN32_WINNT 0x600
@@ -37,49 +37,46 @@
 #include "httpserver.hpp"
 #include "littletest.hpp"
 
-using namespace std;
-using namespace httpserver;
+using std::shared_ptr;
+using std::string;
 
-size_t writefunc(void *ptr, size_t size, size_t nmemb, std::string *s)
-{
-    s->append((char*) ptr, size*nmemb);
+using httpserver::webserver;
+using httpserver::create_webserver;
+using httpserver::http_response;
+using httpserver::http_request;
+using httpserver::http_resource;
+using httpserver::deferred_response;
+
+size_t writefunc(void *ptr, size_t size, size_t nmemb, string *s) {
+    s->append(reinterpret_cast<char*>(ptr), size*nmemb);
     return size*nmemb;
 }
 
 static int counter = 0;
 
-struct test_data
-{
+struct test_data {
     int value;
 };
 
-ssize_t test_callback(std::shared_ptr<void> closure_data, char* buf, size_t max)
-{
+ssize_t test_callback(shared_ptr<void> closure_data, char* buf, size_t max) {
     std::ignore = closure_data;
 
-    if (counter == 2)
-    {
+    if (counter == 2) {
         return -1;
-    }
-    else
-    {
+    } else {
         memset(buf, 0, max);
-        strcat(buf, "test");
+        snprintf(buf, max, "%s", "test");
         counter++;
-        return std::string(buf).size();
+        return string(buf).size();
     }
 }
 
-ssize_t test_callback_with_data(std::shared_ptr<test_data> closure_data, char* buf, size_t max)
-{
-    if (counter == 2)
-    {
+ssize_t test_callback_with_data(shared_ptr<test_data> closure_data, char* buf, size_t max) {
+    if (counter == 2) {
         return -1;
-    }
-    else
-    {
+    } else {
         memset(buf, 0, max);
-        strcat(buf, ("test" + std::to_string(closure_data->value)).c_str());
+        snprintf(buf, max, "%s%s", "test", std::to_string(closure_data->value).c_str());
 
         closure_data->value = 84;
 
@@ -88,37 +85,31 @@ ssize_t test_callback_with_data(std::shared_ptr<test_data> closure_data, char* b
     }
 }
 
-class deferred_resource : public http_resource
-{
-    public:
-        const shared_ptr<http_response> render_GET(const http_request&)
-        {
-            return shared_ptr<deferred_response<void>>(new deferred_response<void>(test_callback, nullptr, "cycle callback response"));
-        }
+class deferred_resource : public http_resource {
+ public:
+     const shared_ptr<http_response> render_GET(const http_request&) {
+         return shared_ptr<deferred_response<void>>(new deferred_response<void>(test_callback, nullptr, "cycle callback response"));
+     }
 };
 
-class deferred_resource_with_data : public http_resource
-{
-    public:
-        const shared_ptr<http_response> render_GET(const http_request&)
-        {
-            std::shared_ptr<test_data> internal_info(new test_data);
-            internal_info->value = 42;
-            return shared_ptr<deferred_response<test_data>>(new deferred_response<test_data>(test_callback_with_data, internal_info, "cycle callback response"));
-        }
+class deferred_resource_with_data : public http_resource {
+ public:
+     const shared_ptr<http_response> render_GET(const http_request&) {
+         shared_ptr<test_data> internal_info(new test_data);
+         internal_info->value = 42;
+         return shared_ptr<deferred_response<test_data>>(new deferred_response<test_data>(test_callback_with_data, internal_info, "cycle callback response"));
+     }
 };
 
 LT_BEGIN_SUITE(deferred_suite)
     webserver* ws;
 
-    void set_up()
-    {
+    void set_up() {
         ws = new webserver(create_webserver(8080));
         ws->start(false);
     }
 
-    void tear_down()
-    {
+    void tear_down() {
         counter = 0;
 
         ws->stop();
@@ -126,7 +117,7 @@ LT_BEGIN_SUITE(deferred_suite)
     }
 LT_END_SUITE(deferred_suite)
 
-LT_BEGIN_AUTO_TEST(deferred_suite, deferred_response)
+LT_BEGIN_AUTO_TEST(deferred_suite, deferred_response_suite)
     deferred_resource resource;
     ws->register_resource("base", &resource);
     curl_global_init(CURL_GLOBAL_ALL);
@@ -142,7 +133,7 @@ LT_BEGIN_AUTO_TEST(deferred_suite, deferred_response)
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "testtest");
     curl_easy_cleanup(curl);
-LT_END_AUTO_TEST(deferred_response)
+LT_END_AUTO_TEST(deferred_response_suite)
 
 LT_BEGIN_AUTO_TEST(deferred_suite, deferred_response_with_data)
     deferred_resource_with_data resource;

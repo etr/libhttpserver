@@ -40,16 +40,6 @@ LT_BEGIN_AUTO_TEST(string_utilities_suite, to_upper_copy)
     LT_CHECK_EQ(httpserver::string_utilities::to_upper_copy("tEsT mEssAge 245&$"), string("TEST MESSAGE 245&$"));
 LT_END_AUTO_TEST(to_upper_copy)
 
-LT_BEGIN_AUTO_TEST(string_utilities_suite, to_upper)
-    string value = "test message";
-    httpserver::string_utilities::to_upper(value);
-    LT_CHECK_EQ(value, string("TEST MESSAGE"));
-
-    value = "tEsT mEssAge 245&$";
-    httpserver::string_utilities::to_upper(value);
-    LT_CHECK_EQ(value, string("TEST MESSAGE 245&$"));
-LT_END_AUTO_TEST(to_upper)
-
 LT_BEGIN_AUTO_TEST(string_utilities_suite, to_lower_copy)
     LT_CHECK_EQ(httpserver::string_utilities::to_lower_copy("TEST MESSAGE"), string("test message"));
     LT_CHECK_EQ(httpserver::string_utilities::to_lower_copy("tEsT mEssAge 245&$"), string("test message 245&$"));

@@ -44,8 +44,7 @@ class basic_auth_fail_response : public string_response {
                 int response_code = http::http_utils::http_ok,
                 const std::string& content_type = http::http_utils::text_plain):
             string_response(content, response_code, content_type),
-            realm(realm) {
-        }
+            realm(realm) { }
 
      basic_auth_fail_response(const basic_auth_fail_response& other) = default;
      basic_auth_fail_response(basic_auth_fail_response&& other) noexcept = default;

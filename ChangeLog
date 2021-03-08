@@ -1,3 +1,7 @@
+Sun Mar 07 20:02:10 2021 -0800
+	Cleaned code to support cpplint and extra warnings.
+	Use pointers in place of non-const references.
+
 Thu Feb 25 20:27:12 2021 -0800
 	Simplified dependency management for libmicrohttpd
 

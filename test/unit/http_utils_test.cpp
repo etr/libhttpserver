@@ -47,13 +47,13 @@ LT_END_SUITE(http_utils_suite)
 
 LT_BEGIN_AUTO_TEST(http_utils_suite, unescape)
     int with_plus_buff_len = 6;
-    char* with_plus = reinterpret_cast<char*>(malloc(with_plus_buff_len * sizeof(char)));
+    char* with_plus = new char[with_plus_buff_len];
     snprintf(with_plus, with_plus_buff_len, "%s", "A%20B");
     std::string string_with_plus = with_plus;
     int expected_size = httpserver::http::http_unescape(&string_with_plus);
 
     int expected_buff_len = 4;
-    char* expected = reinterpret_cast<char*>(malloc(expected_buff_len * sizeof(char)));
+    char* expected = new char[expected_buff_len];
     snprintf(expected, expected_buff_len, "%s", "A B");
 
     std::cout << "|||||" << string_with_plus << "||||" << std::endl;
@@ -62,42 +62,43 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, unescape)
     LT_CHECK_EQ(string_with_plus, string(expected));
     LT_CHECK_EQ(expected_size, 3);
 
-    free(with_plus);
-    free(expected);
+    delete[] with_plus;
+    delete[] expected;
 LT_END_AUTO_TEST(unescape)
 
 LT_BEGIN_AUTO_TEST(http_utils_suite, unescape_plus)
     int with_plus_buff_len = 4;
-    char* with_plus = reinterpret_cast<char*>(malloc(with_plus_buff_len * sizeof(char)));
+    char* with_plus = new char[with_plus_buff_len];
     snprintf(with_plus, with_plus_buff_len, "%s", "A+B");
     std::string string_with_plus = with_plus;
     int expected_size = httpserver::http::http_unescape(&string_with_plus);
 
     int expected_buff_len = 4;
-    char* expected = reinterpret_cast<char*>(malloc(expected_buff_len * sizeof(char)));
+    char* expected = new char[expected_buff_len];
     snprintf(expected, expected_buff_len, "%s", "A B");
 
     LT_CHECK_EQ(string_with_plus, string(expected));
     LT_CHECK_EQ(expected_size, 3);
 
-    free(with_plus);
-    free(expected);
+    delete[] with_plus;
+    delete[] expected;
 LT_END_AUTO_TEST(unescape_plus)
 
 LT_BEGIN_AUTO_TEST(http_utils_suite, unescape_partial_marker)
-    char* with_marker = (char*) malloc(6 * sizeof(char));
-    sprintf(with_marker, "%s", "A+B%0");
+    int size = 6;
+    char* with_marker = new char[size];
+    snprintf(with_marker, size, "%s", "A+B%0");
     std::string string_with_marker = with_marker;
     int expected_size = httpserver::http::http_unescape(&string_with_marker);
 
-    char* expected = (char*) malloc(6 * sizeof(char));
-    sprintf(expected, "%s", "A B%0");
+    char* expected = new char[size];
+    snprintf(expected, size, "%s", "A B%0");
 
     LT_CHECK_EQ(string_with_marker, string(expected));
     LT_CHECK_EQ(expected_size, 5);
 
-    free(with_marker);
-    free(expected);
+    delete[] with_marker;
+    delete[] expected;
 LT_END_AUTO_TEST(unescape_partial_marker)
 
 LT_BEGIN_AUTO_TEST(http_utils_suite, tokenize_url)

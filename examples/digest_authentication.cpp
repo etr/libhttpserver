@@ -29,7 +29,7 @@ class digest_resource : public httpserver::http_resource {
              return std::shared_ptr<httpserver::digest_auth_fail_response>(new httpserver::digest_auth_fail_response("FAIL", "test@example.com", MY_OPAQUE, true));
          } else {
              bool reload_nonce = false;
-             if (!req.check_digest_auth("test@example.com", "mypass", 300, reload_nonce)) {
+             if (!req.check_digest_auth("test@example.com", "mypass", 300, &reload_nonce)) {
                  return std::shared_ptr<httpserver::digest_auth_fail_response>(new httpserver::digest_auth_fail_response("FAIL", "test@example.com", MY_OPAQUE, reload_nonce));
              }
          }

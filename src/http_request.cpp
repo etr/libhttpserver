@@ -39,19 +39,19 @@ void http_request::set_method(const std::string& method) {
     this->method = string_utilities::to_upper_copy(method);
 }
 
-bool http_request::check_digest_auth(const std::string& realm, const std::string& password, int nonce_timeout, bool& reload_nonce) const {
+bool http_request::check_digest_auth(const std::string& realm, const std::string& password, int nonce_timeout, bool* reload_nonce) const {
     std::string digested_user = get_digested_user();
 
     int val = MHD_digest_auth_check(underlying_connection, realm.c_str(), digested_user.c_str(), password.c_str(), nonce_timeout);
 
     if (val == MHD_INVALID_NONCE) {
-        reload_nonce = true;
+        *reload_nonce = true;
         return false;
     } else if (val == MHD_NO) {
-        reload_nonce = false;
+        *reload_nonce = false;
         return false;
     }
-    reload_nonce = false;
+    *reload_nonce = false;
     return true;
 }
 
