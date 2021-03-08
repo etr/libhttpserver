@@ -22,21 +22,19 @@
 
 #include <httpserver.hpp>
 
-using namespace httpserver;
-
 void custom_access_log(const std::string& url) {
     std::cout << "ACCESSING: " << url << std::endl;
 }
 
-class hello_world_resource : public http_resource {
-public:
-    const std::shared_ptr<http_response> render(const http_request&) {
-        return std::shared_ptr<http_response>(new string_response("Hello, World!"));
-    }
+class hello_world_resource : public httpserver::http_resource {
+ public:
+     const std::shared_ptr<httpserver::http_response> render(const httpserver::http_request&) {
+         return std::shared_ptr<httpserver::http_response>(new httpserver::string_response("Hello, World!"));
+     }
 };
 
-int main(int argc, char** argv) {
-    webserver ws = create_webserver(8080)
+int main() {
+    httpserver::webserver ws = httpserver::create_webserver(8080)
         .log_access(custom_access_log);
 
     hello_world_resource hwr;

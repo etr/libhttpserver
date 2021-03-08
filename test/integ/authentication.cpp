@@ -18,7 +18,7 @@
      USA
 */
 
-#if defined(_WIN32) && ! defined(__CYGWIN__)
+#if defined(_WIN32) && !defined(__CYGWIN__)
 #define _WINDOWS
 #undef _WIN32_WINNT
 #define _WIN32_WINNT 0x600
@@ -37,55 +37,51 @@
 
 #define MY_OPAQUE "11733b200778ce33060f31c9af70a870ba96ddd4"
 
-using namespace std;
-using namespace httpserver;
+using std::shared_ptr;
+using httpserver::webserver;
+using httpserver::create_webserver;
+using httpserver::http_response;
+using httpserver::basic_auth_fail_response;
+using httpserver::digest_auth_fail_response;
+using httpserver::string_response;
+using httpserver::http_resource;
+using httpserver::http_request;
 
-size_t writefunc(void *ptr, size_t size, size_t nmemb, std::string *s)
-{
-    s->append((char*) ptr, size*nmemb);
+size_t writefunc(void *ptr, size_t size, size_t nmemb, std::string *s) {
+    s->append(reinterpret_cast<char*>(ptr), size*nmemb);
     return size*nmemb;
 }
 
-class user_pass_resource : public httpserver::http_resource
-{
-    public:
-        const shared_ptr<http_response> render_GET(const http_request& req)
-        {
-            if (req.get_user() != "myuser" || req.get_pass() != "mypass")
-            {
-                return shared_ptr<basic_auth_fail_response>(new basic_auth_fail_response("FAIL", "examplerealm"));
-            }
-            return shared_ptr<string_response>(new string_response(req.get_user() + " " + req.get_pass(), 200, "text/plain"));
-        }
+class user_pass_resource : public http_resource {
+ public:
+     const shared_ptr<http_response> render_GET(const http_request& req) {
+         if (req.get_user() != "myuser" || req.get_pass() != "mypass") {
+             return shared_ptr<basic_auth_fail_response>(new basic_auth_fail_response("FAIL", "examplerealm"));
+         }
+         return shared_ptr<string_response>(new string_response(req.get_user() + " " + req.get_pass(), 200, "text/plain"));
+     }
 };
 
-class digest_resource : public httpserver::http_resource
-{
-    public:
-        const shared_ptr<http_response> render_GET(const http_request& req)
-        {
-            if (req.get_digested_user() == "") {
-                return shared_ptr<digest_auth_fail_response>(new digest_auth_fail_response("FAIL", "examplerealm", MY_OPAQUE, true));
-            }
-            else
-            {
-                bool reload_nonce = false;
-                if(!req.check_digest_auth("examplerealm", "mypass", 300, reload_nonce))
-                {
-                    return shared_ptr<digest_auth_fail_response>(new digest_auth_fail_response("FAIL", "examplerealm", MY_OPAQUE, reload_nonce));
-                }
-            }
-            return shared_ptr<string_response>(new string_response("SUCCESS", 200, "text/plain"));
-        }
+class digest_resource : public http_resource {
+ public:
+     const shared_ptr<http_response> render_GET(const http_request& req) {
+         if (req.get_digested_user() == "") {
+             return shared_ptr<digest_auth_fail_response>(new digest_auth_fail_response("FAIL", "examplerealm", MY_OPAQUE, true));
+         } else {
+             bool reload_nonce = false;
+             if (!req.check_digest_auth("examplerealm", "mypass", 300, &reload_nonce)) {
+                 return shared_ptr<digest_auth_fail_response>(new digest_auth_fail_response("FAIL", "examplerealm", MY_OPAQUE, reload_nonce));
+             }
+         }
+         return shared_ptr<string_response>(new string_response("SUCCESS", 200, "text/plain"));
+     }
 };
 
 LT_BEGIN_SUITE(authentication_suite)
-    void set_up()
-    {
+    void set_up() {
     }
 
-    void tear_down()
-    {
+    void tear_down() {
     }
 LT_END_SUITE(authentication_suite)
 
@@ -139,9 +135,9 @@ LT_BEGIN_AUTO_TEST(authentication_suite, base_auth_fail)
     ws.stop();
 LT_END_AUTO_TEST(base_auth_fail)
 
-// do not run the digest auth tests on windows as curl
-// appears to have problems with it.
-// Will fix this separately
+//  do not run the digest auth tests on windows as curl
+//  appears to have problems with it.
+//  Will fix this separately
 #ifndef _WINDOWS
 
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth)
@@ -154,7 +150,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth)
     ws.start(false);
 
 #if defined(_WINDOWS)
-    curl_global_init(CURL_GLOBAL_WIN32 );
+    curl_global_init(CURL_GLOBAL_WIN32);
 #else
     curl_global_init(CURL_GLOBAL_ALL);
 #endif
@@ -194,7 +190,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_wrong_pass)
     ws.start(false);
 
 #if defined(_WINDOWS)
-    curl_global_init(CURL_GLOBAL_WIN32 );
+    curl_global_init(CURL_GLOBAL_WIN32);
 #else
     curl_global_init(CURL_GLOBAL_ALL);
 #endif

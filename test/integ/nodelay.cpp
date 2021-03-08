@@ -25,30 +25,32 @@
 #include "httpserver.hpp"
 #include "littletest.hpp"
 
-using namespace httpserver;
-using namespace std;
+using std::shared_ptr;
 
-class ok_resource : public http_resource
-{
-    public:
-        const shared_ptr<http_response> render_GET(const http_request& req)
-        {
-            return shared_ptr<string_response>(new string_response("OK", 200, "text/plain"));
-        }
+using httpserver::http_resource;
+using httpserver::http_response;
+using httpserver::string_response;
+using httpserver::http_request;
+using httpserver::http_resource;
+using httpserver::webserver;
+using httpserver::create_webserver;
+
+class ok_resource : public http_resource {
+ public:
+     const shared_ptr<http_response> render_GET(const http_request&) {
+         return shared_ptr<string_response>(new string_response("OK", 200, "text/plain"));
+     }
 };
 
 LT_BEGIN_SUITE(threaded_suite)
-
     webserver* ws;
 
-    void set_up()
-    {
+    void set_up() {
         ws = new webserver(create_webserver(8080).tcp_nodelay());
         ws->start(false);
     }
 
-    void tear_down()
-    {
+    void tear_down() {
         ws->stop();
         delete ws;
     }

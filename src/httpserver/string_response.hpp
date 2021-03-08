@@ -22,8 +22,8 @@
 #error "Only <httpserver.hpp> or <httpserverpp> can be included directly."
 #endif
 
-#ifndef _STRING_RESPONSE_HPP_
-#define _STRING_RESPONSE_HPP_
+#ifndef SRC_HTTPSERVER_STRING_RESPONSE_HPP_
+#define SRC_HTTPSERVER_STRING_RESPONSE_HPP_
 
 #include <string>
 #include <utility>
@@ -32,37 +32,32 @@
 
 struct MHD_Response;
 
-namespace httpserver
-{
+namespace httpserver {
 
-class string_response : public http_response
-{
-    public:
-        string_response() = default;
+class string_response : public http_response {
+ public:
+     string_response() = default;
 
-        explicit string_response(
-                std::string content,
-                int response_code = http::http_utils::http_ok,
-                const std::string& content_type = http::http_utils::text_plain
-        ):
-            http_response(response_code, content_type),
-            content(std::move(content))
-        {
-        }
+     explicit string_response(
+             std::string content,
+             int response_code = http::http_utils::http_ok,
+             const std::string& content_type = http::http_utils::text_plain):
+         http_response(response_code, content_type),
+         content(std::move(content)) { }
 
-        string_response(const string_response& other) = default;
-        string_response(string_response&& other) noexcept = default;
+     string_response(const string_response& other) = default;
+     string_response(string_response&& other) noexcept = default;
 
-        string_response& operator=(const string_response& b) = default;
-        string_response& operator=(string_response&& b) = default;
+     string_response& operator=(const string_response& b) = default;
+     string_response& operator=(string_response&& b) = default;
 
-        ~string_response() = default;
+     ~string_response() = default;
 
-        MHD_Response* get_raw_response();
+     MHD_Response* get_raw_response();
 
-    private:
-        std::string content = "";
+ private:
+     std::string content = "";
 };
 
-}
-#endif // _STRING_RESPONSE_HPP_
+}  // namespace httpserver
+#endif  // SRC_HTTPSERVER_STRING_RESPONSE_HPP_

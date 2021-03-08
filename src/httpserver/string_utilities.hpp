@@ -22,16 +22,15 @@
 #error "Only <httpserver.hpp> or <httpserverpp> can be included directly."
 #endif
 
-#ifndef _STRING_UTILITIES_H_
-#define _STRING_UTILITIES_H_
+#ifndef SRC_HTTPSERVER_STRING_UTILITIES_HPP_
+#define SRC_HTTPSERVER_STRING_UTILITIES_HPP_
 
 #include <string>
 #include <vector>
 
-namespace httpserver
-{
-namespace string_utilities
-{
+namespace httpserver {
+
+namespace string_utilities {
 
 /**
  * Function used to convert a string to its uppercase version.
@@ -41,11 +40,10 @@ namespace string_utilities
 **/
 const std::string to_upper_copy(const std::string& str);
 const std::string to_lower_copy(const std::string& str);
-const std::vector<std::string> string_split(const std::string& s,
-        char sep = ' ', bool collapse = true
-);
-void to_upper(std::string& str);
-};
-};
+const std::vector<std::string> string_split(const std::string& s, char sep = ' ', bool collapse = true);
 
-#endif
+}  // namespace string_utilities
+
+}  // namespace httpserver
+
+#endif  // SRC_HTTPSERVER_STRING_UTILITIES_HPP_

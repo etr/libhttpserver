@@ -26,60 +26,34 @@
 #include <string>
 #include <vector>
 
-namespace httpserver
-{
-namespace string_utilities
-{
+namespace httpserver {
+namespace string_utilities {
 
-const std::string to_upper_copy(const std::string& str)
-{
+const std::string to_upper_copy(const std::string& str) {
     std::string result = str;
-    std::transform(result.begin(),
-        result.end(),
-        result.begin(),
-        (int(*)(int)) std::toupper
-    );
+    std::transform(result.begin(), result.end(), result.begin(), (int(*)(int)) std::toupper);
 
     return result;
 }
 
-void to_upper(std::string& str)
-{
-    std::transform(str.begin(),
-        str.end(),
-        str.begin(),
-        (int(*)(int)) std::toupper
-    );
-}
-
-const std::string to_lower_copy(const std::string& str)
-{
+const std::string to_lower_copy(const std::string& str) {
     std::string result = str;
-    std::transform(result.begin(),
-        result.end(),
-        result.begin(),
-        (int(*)(int)) std::tolower
-    );
+    std::transform(result.begin(), result.end(), result.begin(), (int(*)(int)) std::tolower);
 
     return result;
 }
 
-const std::vector<std::string> string_split(
-        const std::string& s,
-        char sep,
-        bool collapse
-)
-{
+const std::vector<std::string> string_split(const std::string& s, char sep, bool collapse) {
     std::vector<std::string> result;
 
     std::istringstream buf(s);
-    for(std::string token; getline(buf, token, sep); )
-    {
-        if((collapse && token != "") || !collapse)
+    for (std::string token; getline(buf, token, sep); ) {
+        if ((collapse && token != "") || !collapse) {
             result.push_back(token);
+        }
     }
     return result;
 }
 
-};
-};
+}  // namespace string_utilities
+}  // namespace httpserver

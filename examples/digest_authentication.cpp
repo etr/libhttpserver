@@ -22,26 +22,23 @@
 
 #define MY_OPAQUE "11733b200778ce33060f31c9af70a870ba96ddd4"
 
-using namespace httpserver;
-
 class digest_resource : public httpserver::http_resource {
-public:
-    const std::shared_ptr<http_response> render_GET(const http_request& req) {
-        if (req.get_digested_user() == "") {
-            return std::shared_ptr<digest_auth_fail_response>(new digest_auth_fail_response("FAIL", "test@example.com", MY_OPAQUE, true));
-        }
-        else {
-            bool reload_nonce = false;
-            if(!req.check_digest_auth("test@example.com", "mypass", 300, reload_nonce)) {
-                return std::shared_ptr<digest_auth_fail_response>(new digest_auth_fail_response("FAIL", "test@example.com", MY_OPAQUE, reload_nonce));
-            }
-        }
-        return std::shared_ptr<string_response>(new string_response("SUCCESS", 200, "text/plain"));
-    }
+ public:
+     const std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request& req) {
+         if (req.get_digested_user() == "") {
+             return std::shared_ptr<httpserver::digest_auth_fail_response>(new httpserver::digest_auth_fail_response("FAIL", "test@example.com", MY_OPAQUE, true));
+         } else {
+             bool reload_nonce = false;
+             if (!req.check_digest_auth("test@example.com", "mypass", 300, &reload_nonce)) {
+                 return std::shared_ptr<httpserver::digest_auth_fail_response>(new httpserver::digest_auth_fail_response("FAIL", "test@example.com", MY_OPAQUE, reload_nonce));
+             }
+         }
+         return std::shared_ptr<httpserver::string_response>(new httpserver::string_response("SUCCESS", 200, "text/plain"));
+     }
 };
 
-int main(int argc, char** argv) {
-    webserver ws = create_webserver(8080);
+int main() {
+    httpserver::webserver ws = httpserver::create_webserver(8080);
 
     digest_resource hwr;
     ws.register_resource("/hello", &hwr);

@@ -26,32 +26,33 @@
 #include "httpserver/http_utils.hpp"
 #include "littletest.hpp"
 
-using namespace httpserver;
-using namespace std;
-using namespace http;
+using std::shared_ptr;
 
-size_t writefunc(void *ptr, size_t size, size_t nmemb, std::string *s)
-{
-    s->append((char*) ptr, size*nmemb);
+using httpserver::webserver;
+using httpserver::create_webserver;
+using httpserver::http_resource;
+using httpserver::http_response;
+using httpserver::string_response;
+using httpserver::http_request;
+using httpserver::http::http_utils;
+
+size_t writefunc(void *ptr, size_t size, size_t nmemb, std::string *s) {
+    s->append(reinterpret_cast<char*>(ptr), size*nmemb);
     return size*nmemb;
 }
 
-class ok_resource : public http_resource
-{
-    public:
-        const shared_ptr<http_response> render_GET(const http_request& req)
-        {
-            return shared_ptr<string_response>(new string_response("OK", 200, "text/plain"));
-        }
+class ok_resource : public http_resource {
+ public:
+     const shared_ptr<http_response> render_GET(const http_request&) {
+         return shared_ptr<string_response>(new string_response("OK", 200, "text/plain"));
+     }
 };
 
 LT_BEGIN_SUITE(ban_system_suite)
-    void set_up()
-    {
+    void set_up() {
     }
 
-    void tear_down()
-    {
+    void tear_down() {
     }
 LT_END_SUITE(ban_system_suite)
 

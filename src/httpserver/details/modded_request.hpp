@@ -22,19 +22,19 @@
 #error "Only <httpserver.hpp> or <httpserverpp> can be included directly."
 #endif
 
-#ifndef _MODDED_REQUEST_HPP_
-#define _MODDED_REQUEST_HPP_
+#ifndef SRC_HTTPSERVER_DETAILS_MODDED_REQUEST_HPP_
+#define SRC_HTTPSERVER_DETAILS_MODDED_REQUEST_HPP_
+
+#include <string>
+#include <memory>
 
 #include "httpserver/http_request.hpp"
 
-namespace httpserver
-{
+namespace httpserver {
 
-namespace details
-{
+namespace details {
 
-struct modded_request
-{
+struct modded_request {
     struct MHD_PostProcessor *pp = 0x0;
     std::string* complete_uri = 0x0;
     std::string* standardized_url = 0x0;
@@ -55,22 +55,20 @@ struct modded_request
     modded_request& operator=(const modded_request& b) = default;
     modded_request& operator=(modded_request&& b) = default;
 
-    ~modded_request()
-    {
-        if (NULL != pp)
-        {
-            MHD_destroy_post_processor (pp);
+    ~modded_request() {
+        if (NULL != pp) {
+            MHD_destroy_post_processor(pp);
         }
-        if(second)
-            delete dhr; //TODO: verify. It could be an error
+        if (second) {
+            delete dhr;
+        }
         delete complete_uri;
         delete standardized_url;
     }
-
 };
 
-} //details
+}  // namespace details
 
-} //httpserver
+}  // namespace httpserver
 
-#endif //_MODDED_REQUEST_HPP_
+#endif  // SRC_HTTPSERVER_DETAILS_MODDED_REQUEST_HPP_

@@ -333,7 +333,7 @@ class suite
         }
 
         suite() { }
-        suite(const suite<suite_impl>& s) { }
+        suite(const suite<suite_impl>&) { }
 };
 
 double calculate_duration(timeval* before, timeval* after)
@@ -499,7 +499,7 @@ class test_base
 {
     public:
         const char* __lt_name__;
-        virtual void run_test(test_runner* tr) { }
+        virtual void run_test(test_runner*) { }
         virtual void operator()() { }
 };
 
@@ -581,11 +581,11 @@ class test : public test_base
         }
     protected:
         test() { }
-        test(const test<test_impl>& t) { }
+        test(const test<test_impl>&) { }
 
         friend class test_runner;
 };
 
-};
+}
 
 #endif //_LITTLETEST_HPP_

@@ -18,7 +18,7 @@
      USA
 */
 
-#if defined(_WIN32) && ! defined(__CYGWIN__)
+#if defined(_WIN32) && !defined(__CYGWIN__)
 #define _WINDOWS
 #endif
 
@@ -29,16 +29,20 @@
 #include "httpserver.hpp"
 #include "littletest.hpp"
 
-using namespace httpserver;
-using namespace std;
+using std::shared_ptr;
 
-class ok_resource : public http_resource
-{
-    public:
-        const shared_ptr<http_response> render_GET(const http_request& req)
-        {
-            return shared_ptr<string_response>(new string_response("OK", 200, "text/plain"));
-        }
+using httpserver::http_resource;
+using httpserver::http_request;
+using httpserver::http_response;
+using httpserver::string_response;
+using httpserver::webserver;
+using httpserver::create_webserver;
+
+class ok_resource : public http_resource {
+ public:
+     const shared_ptr<http_response> render_GET(const http_request&) {
+         return shared_ptr<string_response>(new string_response("OK", 200, "text/plain"));
+     }
 };
 
 LT_BEGIN_SUITE(threaded_suite)
@@ -47,16 +51,14 @@ LT_BEGIN_SUITE(threaded_suite)
     webserver* ws;
 #endif
 
-    void set_up()
-    {
+    void set_up() {
 #ifndef _WINDOWS
-        ws = new webserver(create_webserver(8080).start_method(http::http_utils::INTERNAL_SELECT).max_threads(5));
+        ws = new webserver(create_webserver(8080).start_method(httpserver::http::http_utils::INTERNAL_SELECT).max_threads(5));
         ws->start(false);
 #endif
     }
 
-    void tear_down()
-    {
+    void tear_down() {
 #ifndef _WINDOWS
         ws->stop();
         delete ws;

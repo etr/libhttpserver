@@ -22,8 +22,8 @@
 #error "Only <httpserver.hpp> or <httpserverpp> can be included directly."
 #endif
 
-#ifndef _DIGEST_AUTH_FAIL_RESPONSE_HPP_
-#define _DIGEST_AUTH_FAIL_RESPONSE_HPP_
+#ifndef SRC_HTTPSERVER_DIGEST_AUTH_FAIL_RESPONSE_HPP_
+#define SRC_HTTPSERVER_DIGEST_AUTH_FAIL_RESPONSE_HPP_
 
 #include <string>
 #include "http_utils.hpp"
@@ -32,44 +32,38 @@
 struct MHD_Connection;
 struct MHD_Response;
 
-namespace httpserver
-{
+namespace httpserver {
 
-class digest_auth_fail_response : public string_response
-{
-    public:
-        digest_auth_fail_response() = default;
+class digest_auth_fail_response : public string_response {
+ public:
+     digest_auth_fail_response() = default;
 
-        digest_auth_fail_response(
-                const std::string& content,
-                const std::string& realm = "",
-                const std::string& opaque = "",
-                bool reload_nonce = false,
-                int response_code = http::http_utils::http_ok,
-                const std::string& content_type = http::http_utils::text_plain
-        ):
-            string_response(content, response_code, content_type),
-            realm(realm),
-            opaque(opaque),
-            reload_nonce(reload_nonce)
-        {
-        }
+     digest_auth_fail_response(const std::string& content,
+             const std::string& realm = "",
+             const std::string& opaque = "",
+             bool reload_nonce = false,
+             int response_code = http::http_utils::http_ok,
+             const std::string& content_type = http::http_utils::text_plain):
+         string_response(content, response_code, content_type),
+         realm(realm),
+         opaque(opaque),
+         reload_nonce(reload_nonce) { }
 
-        digest_auth_fail_response(const digest_auth_fail_response& other) = default;
-        digest_auth_fail_response(digest_auth_fail_response&& other) noexcept = default;
-        digest_auth_fail_response& operator=(const digest_auth_fail_response& b) = default;
-        digest_auth_fail_response& operator=(digest_auth_fail_response&& b) = default;
+     digest_auth_fail_response(const digest_auth_fail_response& other) = default;
+     digest_auth_fail_response(digest_auth_fail_response&& other) noexcept = default;
+     digest_auth_fail_response& operator=(const digest_auth_fail_response& b) = default;
+     digest_auth_fail_response& operator=(digest_auth_fail_response&& b) = default;
 
-        ~digest_auth_fail_response() = default;
+     ~digest_auth_fail_response() = default;
 
-        int enqueue_response(MHD_Connection* connection, MHD_Response* response);
+     int enqueue_response(MHD_Connection* connection, MHD_Response* response);
 
-    private:
-        std::string realm = "";
-        std::string opaque = "";
-        bool reload_nonce = false;
+ private:
+     std::string realm = "";
+     std::string opaque = "";
+     bool reload_nonce = false;
 };
 
-}
+}  // namespace httpserver
 
-#endif // _DIGEST_AUTH_FAIL_RESPONSE_HPP_
+#endif  // SRC_HTTPSERVER_DIGEST_AUTH_FAIL_RESPONSE_HPP_

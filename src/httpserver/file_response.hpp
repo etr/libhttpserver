@@ -22,8 +22,8 @@
 #error "Only <httpserver.hpp> or <httpserverpp> can be included directly."
 #endif
 
-#ifndef _FILE_RESPONSE_HPP_
-#define _FILE_RESPONSE_HPP_
+#ifndef SRC_HTTPSERVER_FILE_RESPONSE_HPP_
+#define SRC_HTTPSERVER_FILE_RESPONSE_HPP_
 
 #include <string>
 #include "http_utils.hpp"
@@ -31,37 +31,32 @@
 
 struct MHD_Response;
 
-namespace httpserver
-{
+namespace httpserver {
 
-class file_response : public http_response
-{
-    public:
-        file_response() = default;
+class file_response : public http_response {
+ public:
+     file_response() = default;
 
-        explicit file_response(
-                const std::string& filename,
-                int response_code = http::http_utils::http_ok,
-                const std::string& content_type = http::http_utils::text_plain
-        ):
-            http_response(response_code, content_type),
-            filename(filename)
-        {
-        }
+     explicit file_response(
+             const std::string& filename,
+             int response_code = http::http_utils::http_ok,
+             const std::string& content_type = http::http_utils::text_plain):
+         http_response(response_code, content_type),
+         filename(filename) { }
 
-        file_response(const file_response& other) = default;
-        file_response(file_response&& other) noexcept = default;
+     file_response(const file_response& other) = default;
+     file_response(file_response&& other) noexcept = default;
 
-        file_response& operator=(const file_response& b) = default;
-        file_response& operator=(file_response&& b) = default;
+     file_response& operator=(const file_response& b) = default;
+     file_response& operator=(file_response&& b) = default;
 
-        ~file_response() = default;
+     ~file_response() = default;
 
-        MHD_Response* get_raw_response();
+     MHD_Response* get_raw_response();
 
-    private:
-        std::string filename = "";
+ private:
+     std::string filename = "";
 };
 
-}
-#endif // _FILE_RESPONSE_HPP_
+}  // namespace httpserver
+#endif  // SRC_HTTPSERVER_FILE_RESPONSE_HPP_

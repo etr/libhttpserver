@@ -18,8 +18,8 @@
      USA
 */
 
-#ifndef _HTTPSERVER_HPP_
-#define _HTTPSERVER_HPP_
+#ifndef SRC_HTTPSERVER_HPP_
+#define SRC_HTTPSERVER_HPP_
 
 #define _HTTPSERVER_HPP_INSIDE_
 
@@ -34,4 +34,4 @@
 #include "httpserver/string_response.hpp"
 #include "httpserver/webserver.hpp"
 
-#endif
+#endif  // SRC_HTTPSERVER_HPP_

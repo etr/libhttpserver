@@ -19,16 +19,16 @@
 */
 
 #include <atomic>
-#include <chrono>
-#include <thread>
+// cpplint errors on chrono and thread because they are replaced (in Chromium) by other google libraries.
+// This is not an issue here.
+#include <chrono> // NOLINT [build/c++11]
+#include <thread> // NOLINT [build/c++11]
 
 #include <httpserver.hpp>
 
-using namespace httpserver;
-
 std::atomic<int> counter;
 
-ssize_t test_callback (std::shared_ptr<std::atomic<int> > closure_data, char* buf, size_t max) {
+ssize_t test_callback(std::shared_ptr<std::atomic<int> > closure_data, char* buf, size_t max) {
     int reqid;
     if (closure_data == nullptr) {
         reqid = -1;
@@ -54,16 +54,16 @@ ssize_t test_callback (std::shared_ptr<std::atomic<int> > closure_data, char* bu
     }
 }
 
-class deferred_resource : public http_resource {
-    public:
-        const std::shared_ptr<http_response> render_GET(const http_request& req) {
-            std::shared_ptr<std::atomic<int> > closure_data(new std::atomic<int>(counter++));
-            return std::shared_ptr<deferred_response<std::atomic<int> > >(new deferred_response<std::atomic<int> >(test_callback, closure_data, "cycle callback response"));
-        }
+class deferred_resource : public httpserver::http_resource {
+ public:
+     const std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request&) {
+         std::shared_ptr<std::atomic<int> > closure_data(new std::atomic<int>(counter++));
+         return std::shared_ptr<httpserver::deferred_response<std::atomic<int> > >(new httpserver::deferred_response<std::atomic<int> >(test_callback, closure_data, "cycle callback response"));
+     }
 };
 
-int main(int argc, char** argv) {
-    webserver ws = create_webserver(8080);
+int main() {
+    httpserver::webserver ws = httpserver::create_webserver(8080);
 
     deferred_resource hwr;
     ws.register_resource("/hello", &hwr);
