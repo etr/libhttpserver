@@ -144,6 +144,15 @@ jobs:
             debug: nodebug
             coverage: nocoverage
           - test-group: extra
+            os: ubuntu-latest
+            os-type: ubuntu
+            build-type: none
+            compiler-family: gcc
+            c-compiler: gcc-10
+            cc-compiler: g++-10
+            debug: nodebug
+            coverage: nocoverage
+          - test-group: extra
             os: ubuntu-18.04
             os-type: ubuntu
             build-type: none
@@ -204,6 +213,15 @@ jobs:
             compiler-family: clang
             c-compiler: clang-9
             cc-compiler: clang++-9
+            debug: nodebug
+            coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-latest
+            os-type: ubuntu
+            build-type: none
+            compiler-family: clang
+            c-compiler: clang-10
+            cc-compiler: clang++-10
             debug: nodebug
             coverage: nocoverage
           - test-group: extra
