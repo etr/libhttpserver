@@ -52,40 +52,40 @@ jobs:
             os: ubuntu-latest
             build-type: asan
             compiler-family: clang
-            c-compiler: clang-3.9
-            cc-compiler: clang++-3.9
+            c-compiler: clang-6.0
+            cc-compiler: clang++-6.0
             debug: debug
             coverage: nocoverage
           - test-group: extra
             os: ubuntu-latest
             build-type: msan
             compiler-family: clang
-            c-compiler: clang-3.9
-            cc-compiler: clang++-3.9
+            c-compiler: clang-6.0
+            cc-compiler: clang++-6.0
             debug: debug
             coverage: nocoverage
           - test-group: extra
             os: ubuntu-latest
             build-type: lsan
             compiler-family: clang
-            c-compiler: clang-3.9
-            cc-compiler: clang++-3.9
+            c-compiler: clang-6.0
+            cc-compiler: clang++-6.0
             debug: debug
             coverage: nocoverage
           - test-group: extra
             os: ubuntu-latest
             build-type: tsan
             compiler-family: clang
-            c-compiler: clang-3.9
-            cc-compiler: clang++-3.9
+            c-compiler: clang-6.0
+            cc-compiler: clang++-6.0
             debug: debug
             coverage: nocoverage
           - test-group: extra
             os: ubuntu-latest
             build-type: ubsan
             compiler-family: clang
-            c-compiler: clang-3.9
-            cc-compiler: clang++-3.9
+            c-compiler: clang-6.0
+            cc-compiler: clang++-6.0
             debug: debug
             coverage: nocoverage
           - test-group: extra
