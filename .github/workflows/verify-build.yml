@@ -24,6 +24,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
+        os-type: [ubuntu, mac]
         test-group: [basic]
         compiler-family: [none]
         c-compiler: [gcc, clang]
@@ -33,6 +34,10 @@ jobs:
         linking: [dynamic, static]
         build-type: [classic]
         exclude:
+          - os: ubuntu-latest
+            os-type: mac
+          - os: macos-latest
+            os-type: ubuntu
           - c-compiler: gcc
             cc-compiler: clang++
           - c-compiler: clang
@@ -50,46 +55,52 @@ jobs:
         include:
           - test-group: extra
             os: ubuntu-latest
+            os-type: ubuntu
             build-type: asan
             compiler-family: clang
-            c-compiler: clang-3.9
-            cc-compiler: clang++-3.9
+            c-compiler: clang-6.0
+            cc-compiler: clang++-6.0
             debug: debug
             coverage: nocoverage
           - test-group: extra
             os: ubuntu-latest
+            os-type: ubuntu
             build-type: msan
             compiler-family: clang
-            c-compiler: clang-3.9
-            cc-compiler: clang++-3.9
+            c-compiler: clang-6.0
+            cc-compiler: clang++-6.0
             debug: debug
             coverage: nocoverage
           - test-group: extra
             os: ubuntu-latest
+            os-type: ubuntu
             build-type: lsan
             compiler-family: clang
-            c-compiler: clang-3.9
-            cc-compiler: clang++-3.9
+            c-compiler: clang-6.0
+            cc-compiler: clang++-6.0
             debug: debug
             coverage: nocoverage
           - test-group: extra
             os: ubuntu-latest
+            os-type: ubuntu
             build-type: tsan
             compiler-family: clang
-            c-compiler: clang-3.9
-            cc-compiler: clang++-3.9
+            c-compiler: clang-6.0
+            cc-compiler: clang++-6.0
             debug: debug
             coverage: nocoverage
           - test-group: extra
             os: ubuntu-latest
+            os-type: ubuntu
             build-type: ubsan
             compiler-family: clang
-            c-compiler: clang-3.9
-            cc-compiler: clang++-3.9
+            c-compiler: clang-6.0
+            cc-compiler: clang++-6.0
             debug: debug
             coverage: nocoverage
           - test-group: extra
-            os: ubuntu-latest
+            os: ubuntu-18.04
+            os-type: ubuntu
             build-type: none
             compiler-family: gcc
             c-compiler: gcc-5
@@ -97,7 +108,8 @@ jobs:
             debug: nodebug
             coverage: nocoverage
           - test-group: extra
-            os: ubuntu-latest
+            os: ubuntu-18.04
+            os-type: ubuntu
             build-type: none
             compiler-family: gcc
             c-compiler: gcc-6
@@ -106,6 +118,7 @@ jobs:
             coverage: nocoverage
           - test-group: extra
             os: ubuntu-latest
+            os-type: ubuntu
             build-type: none
             compiler-family: gcc
             c-compiler: gcc-7
@@ -114,6 +127,7 @@ jobs:
             coverage: nocoverage
           - test-group: extra
             os: ubuntu-latest
+            os-type: ubuntu
             build-type: none
             compiler-family: gcc
             c-compiler: gcc-8
@@ -122,6 +136,7 @@ jobs:
             coverage: nocoverage
           - test-group: extra
             os: ubuntu-latest
+            os-type: ubuntu
             build-type: none
             compiler-family: gcc
             c-compiler: gcc-9
@@ -129,7 +144,8 @@ jobs:
             debug: nodebug
             coverage: nocoverage
           - test-group: extra
-            os: ubuntu-latest
+            os: ubuntu-18.04
+            os-type: ubuntu
             build-type: none
             compiler-family: clang
             c-compiler: clang-3.9
@@ -137,7 +153,8 @@ jobs:
             debug: nodebug
             coverage: nocoverage
           - test-group: extra
-            os: ubuntu-latest
+            os: ubuntu-18.04
+            os-type: ubuntu
             build-type: none
             compiler-family: clang
             c-compiler: clang-4.0
@@ -145,7 +162,8 @@ jobs:
             debug: nodebug
             coverage: nocoverage
           - test-group: extra
-            os: ubuntu-latest
+            os: ubuntu-18.04
+            os-type: ubuntu
             build-type: none
             compiler-family: clang
             c-compiler: clang-5.0
@@ -154,6 +172,7 @@ jobs:
             coverage: nocoverage
           - test-group: extra
             os: ubuntu-latest
+            os-type: ubuntu
             build-type: none
             compiler-family: clang
             c-compiler: clang-6.0
@@ -162,6 +181,7 @@ jobs:
             coverage: nocoverage
           - test-group: extra
             os: ubuntu-latest
+            os-type: ubuntu
             build-type: none
             compiler-family: clang
             c-compiler: clang-7
@@ -170,6 +190,7 @@ jobs:
             coverage: nocoverage
           - test-group: extra
             os: ubuntu-latest
+            os-type: ubuntu
             build-type: none
             compiler-family: clang
             c-compiler: clang-8
@@ -178,6 +199,7 @@ jobs:
             coverage: nocoverage
           - test-group: extra
             os: ubuntu-latest
+            os-type: ubuntu
             build-type: none
             compiler-family: clang
             c-compiler: clang-9
@@ -186,6 +208,7 @@ jobs:
             coverage: nocoverage
           - test-group: extra
             os: ubuntu-latest
+            os-type: ubuntu
             build-type: valgrind
             compiler-family: gcc
             c-compiler: gcc-7
@@ -194,6 +217,7 @@ jobs:
             coverage: nocoverage
           - test-group: extra
             os: ubuntu-latest
+            os-type: ubuntu
             build-type: iwyu
             compiler-family: clang
             c-compiler: clang-9
@@ -202,6 +226,7 @@ jobs:
             coverage: nocoverage
           - test-group: performance
             os: ubuntu-latest
+            os-type: ubuntu
             build-type: select
             compiler-family: gcc
             c-compiler: gcc-7
@@ -210,6 +235,7 @@ jobs:
             coverage: nocoverage
           - test-group: performance
             os: ubuntu-latest
+            os-type: ubuntu
             build-type: nodelay
             compiler-family: gcc
             c-compiler: gcc-7
@@ -218,6 +244,7 @@ jobs:
             coverage: nocoverage
           - test-group: performance
             os: ubuntu-latest
+            os-type: ubuntu
             build-type: threads
             compiler-family: gcc
             c-compiler: gcc-7
@@ -226,6 +253,7 @@ jobs:
             coverage: nocoverage
           - test-group: extra
             os: ubuntu-latest
+            os-type: ubuntu
             build-type: lint
             compiler-family: gcc
             c-compiler: gcc-7
@@ -249,27 +277,27 @@ jobs:
       run: |
         sudo add-apt-repository ppa:ubuntu-toolchain-r/test ;
         sudo apt-get update ;
-      if: ${{ matrix.test-group == 'extra' && matrix.os == 'ubuntu-latest' }}
+      if: ${{ matrix.test-group == 'extra' && matrix.os-type == 'ubuntu' }}
 
     - name: Install apache benchmark if needed
       run: sudo apt-get install apache2-utils ;
-      if: ${{ matrix.test-group == 'performance' && matrix.os == 'ubuntu-latest' }}
+      if: ${{ matrix.test-group == 'performance' && matrix.os-type == 'ubuntu' }}
 
     - name: Install optional clang if needed
       run: sudo apt-get install ${{ matrix.c-compiler }}
-      if: ${{ matrix.compiler-family == 'clang' && matrix.os == 'ubuntu-latest' }}
+      if: ${{ matrix.compiler-family == 'clang' && matrix.os-type == 'ubuntu' }}
 
     - name: Install optional gcc if needed
       run: sudo apt-get install ${{ matrix.cc-compiler }}
-      if: ${{ matrix.compiler-family == 'gcc' && matrix.os == 'ubuntu-latest' }}
+      if: ${{ matrix.compiler-family == 'gcc' && matrix.os-type == 'ubuntu' }}
 
     - name: Install valgrind if needed
       run: sudo apt-get install valgrind valgrind-dbg
-      if: ${{ matrix.build-type == 'valgrind' && matrix.os == 'ubuntu-latest' }}
+      if: ${{ matrix.build-type == 'valgrind' && matrix.os-type == 'ubuntu' }}
 
     - name: Install cpplint if needed
       run: sudo pip3 install cpplint ;
-      if: ${{ matrix.build-type == 'lint' && matrix.os == 'ubuntu-latest' }}
+      if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
     
     - name: Install IWYU dependencies if needed
       run: |
@@ -278,15 +306,15 @@ jobs:
         # Use same CMAKE used by iwyu in their setup for travis
         wget -O cmake.sh https://cmake.org/files/v3.10/cmake-3.10.0-Linux-x86_64.sh ;
         sudo sh cmake.sh --skip-license --exclude-subdir --prefix=/usr/local ;
-      if: ${{ matrix.build-type == 'iwyu' && matrix.os == 'ubuntu-latest' }}
+      if: ${{ matrix.build-type == 'iwyu' && matrix.os-type == 'ubuntu' }}
 
     - name: IWYU from cache (for testing)
       id: cache-IWYU
       uses: actions/cache@v2
       with:
         path: include-what-you-use
-        key: ${{ matrix.os }}-include-what-you-use-pre-built
-      if: ${{ matrix.build-type == 'iwyu' && matrix.os == 'ubuntu-latest' }}
+        key: ${{ matrix.os }}-${{ matrix.c-compiler }}-include-what-you-use-pre-built
+      if: ${{ matrix.build-type == 'iwyu' && matrix.os-type == 'ubuntu' }}
 
     # Installing iwyu manually because clang and iwyu paths won't match on Ubuntu otherwise.
     - name: Build IWYU if requested
@@ -301,13 +329,13 @@ jobs:
         cmake -G "Unix Makefiles" -DCMAKE_PREFIX_PATH=$CLANG_ROOT_PATH -DCMAKE_C_COMPILER=$CLANG_BIN_PATH/clang -DCMAKE_CXX_COMPILER=$CLANG_BIN_PATH/clang++ ../ ;
         make ;
         sudo make install ;
-      if: ${{ matrix.build-type == 'iwyu' && matrix.os == 'ubuntu-latest' && steps.cache-IWYU.outputs.cache-hit != 'true' }}
+      if: ${{ matrix.build-type == 'iwyu' && matrix.os-type == 'ubuntu' && steps.cache-IWYU.outputs.cache-hit != 'true' }}
 
     - name: Install IWYU if requested
       run: |
         cd include-what-you-use/build_iwyu ;
         sudo make install ;
-      if: ${{ matrix.build-type == 'iwyu' && matrix.os == 'ubuntu-latest' }}
+      if: ${{ matrix.build-type == 'iwyu' && matrix.os-type == 'ubuntu' }}
 
     - name: CURL from cache (for testing)
       id: cache-CURL
@@ -322,7 +350,7 @@ jobs:
         curl https://libhttpserver.s3.amazonaws.com/travis_stuff/curl-7.75.0.tar.gz -o curl-7.75.0.tar.gz ;
         tar -xzf curl-7.75.0.tar.gz ;
         cd curl-7.75.0 ;
-        if [ "$matrix.os" = "ubuntu-latest" ]; then ./configure ; else ./configure --with-darwinssl ; fi
+        if [ "$matrix.os-type" = "ubuntu" ]; then ./configure ; else ./configure --with-darwinssl ; fi
         make ;
       if: ${{ matrix.os == 'macos-latest' && steps.cache-CURL.outputs.cache-hit != 'true' }}
       
@@ -332,7 +360,7 @@ jobs:
  
     - name: Install CURL (for testing on linux)
       run: sudo apt-get install libcurl4-openssl-dev
-      if: ${{ matrix.os == 'ubuntu-latest' }}
+      if: ${{ matrix.os-type == 'ubuntu' }}
  
     - name: Install autotools on mac
       run: brew install autoconf automake libtool
@@ -344,14 +372,14 @@ jobs:
         sudo pip install codecov ;
         sudo pip install gcovr ;
         sudo apt-get install cppcheck ;
-      if: ${{ matrix.os == 'ubuntu-latest' }}
+      if: ${{ matrix.os-type == 'ubuntu' }}
 
     - name: Fetch libmicrohttpd from cache
       id: cache-libmicrohttpd
       uses: actions/cache@v2
       with:
         path: libmicrohttpd-0.9.59
-        key: ${{ matrix.os }}-libmicrohttpd-pre-built
+        key: ${{ matrix.os }}-${{ matrix.c-compiler }}-libmicrohttpd-pre-built
 
     - name: Build libmicrohttpd dependency (if not cached)
       run: |
@@ -367,11 +395,11 @@ jobs:
       
     - name: Refresh links to shared libs
       run: sudo ldconfig ;
-      if: ${{ matrix.os == 'ubuntu-latest' }}
+      if: ${{ matrix.os-type == 'ubuntu' }}
 
     - name: Run cpplint on code
       run: cpplint --extensions=cpp,hpp --headers=hpp --recursive . ;
-      if: ${{ matrix.build-type == 'lint' && matrix.os == 'ubuntu-latest' }}
+      if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
 
     - name: Run libhttpserver configure
       run: |
@@ -453,7 +481,7 @@ jobs:
       run: |
         cd src/ ;
         cppcheck --error-exitcode=1 . ;
-      if: ${{ matrix.os == 'ubuntu-latest' }}
+      if: ${{ matrix.os-type == 'ubuntu' }}
 
     - name: Run performance tests (select)
       run: |
@@ -483,4 +511,4 @@ jobs:
       run: |
         cd build ;
         bash <(curl -s https://codecov.io/bash) ;
-      if: ${{ matrix.os == 'ubuntu-latest' && matrix.c-compiler == 'gcc' && matrix.debug == 'debug' && matrix.coverage == 'coverage' && success() }}
+      if: ${{ matrix.os-type == 'ubuntu' && matrix.c-compiler == 'gcc' && matrix.debug == 'debug' && matrix.coverage == 'coverage' && success() }}
