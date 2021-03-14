@@ -351,7 +351,7 @@ jobs:
       uses: actions/cache@v2
       with:
         path: libmicrohttpd-0.9.59
-        key: ${{ matrix.os }}-libmicrohttpd-pre-built
+        key: ${{ matrix.os }}-${{ matrix.c-compiler }}-libmicrohttpd-pre-built
 
     - name: Build libmicrohttpd dependency (if not cached)
       run: |
