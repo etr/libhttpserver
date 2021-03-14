@@ -350,7 +350,7 @@ jobs:
         curl https://libhttpserver.s3.amazonaws.com/travis_stuff/curl-7.75.0.tar.gz -o curl-7.75.0.tar.gz ;
         tar -xzf curl-7.75.0.tar.gz ;
         cd curl-7.75.0 ;
-        if [ "$matrix.os" = "ubuntu-latest" ]; then ./configure ; else ./configure --with-darwinssl ; fi
+        if [ "$matrix.os-type" = "ubuntu" ]; then ./configure ; else ./configure --with-darwinssl ; fi
         make ;
       if: ${{ matrix.os == 'macos-latest' && steps.cache-CURL.outputs.cache-hit != 'true' }}
       
@@ -395,7 +395,7 @@ jobs:
       
     - name: Refresh links to shared libs
       run: sudo ldconfig ;
-      if: ${{ matrix.os == 'ubuntu-latest' }}
+      if: ${{ matrix.os-type == 'ubuntu' }}
 
     - name: Run cpplint on code
       run: cpplint --extensions=cpp,hpp --headers=hpp --recursive . ;
