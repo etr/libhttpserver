@@ -114,8 +114,6 @@ Here are listed the libhttpserver specific options (the canonical configure opti
 * _\-\-enable-debug:_ enable debug data generation. (def=no)
 * _\-\-disable-doxygen-doc:_ don't generate any doxygen documentation. Doxygen is automatically invoked if present on the system. Automatically disabled otherwise.
 * _\-\-enable-fastopen:_ enable use of TCP_FASTOPEN (def=yes)
-* _\-\-enable-poll[=ARG]:_ enable poll support. Internal behavior of the `INTERNAL_SELECT` (yes, no, auto) [auto]
-* _\-\-enable-epoll[=ARG]:_ enable epoll support. Internal behavior of the `INTERNAL_SELECT` (yes, no, auto) [auto]
 * _\-\-enable-static:_ enable use static linking (def=yes)
 
 [Back to TOC](#table-of-contents)
