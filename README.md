@@ -114,8 +114,6 @@ Here are listed the libhttpserver specific options (the canonical configure opti
 * _\-\-enable-debug:_ enable debug data generation. (def=no)
 * _\-\-disable-doxygen-doc:_ don't generate any doxygen documentation. Doxygen is automatically invoked if present on the system. Automatically disabled otherwise.
 * _\-\-enable-fastopen:_ enable use of TCP_FASTOPEN (def=yes)
-* _\-\-enable-poll[=ARG]:_ enable poll support. Internal behavior of the `INTERNAL_SELECT` (yes, no, auto) [auto]
-* _\-\-enable-epoll[=ARG]:_ enable epoll support. Internal behavior of the `INTERNAL_SELECT` (yes, no, auto) [auto]
 * _\-\-enable-static:_ enable use static linking (def=yes)
 
 [Back to TOC](#table-of-contents)
@@ -564,7 +562,7 @@ The `http_request` class has a set of methods you will have access to when imple
 * _**const std::string** get_user() **const**:_ Returns the `user` as self-identified through basic authentication. The content of the user header will be parsed only if basic authentication is enabled on the server (enabled by default).
 * _**const std::string** get_pass() **const**:_ Returns the `password` as self-identified through basic authentication. The content of the password header will be parsed only if basic authentication is enabled on the server (enabled by default).
 * _**const std::string** get_digested_user() **const**:_ Returns the `digested user` as self-identified through digest authentication. The content of the user header will be parsed only if digest authentication is enabled on the server (enabled by default).
-* _**bool** check_digest_auth(**const std::string&** realm, **const std::string&** password, **int** nonce_timeout, **bool&** reload_nonce) **const**:_ Allows to check the validity of the authentication token sent through digest authentication (if the provided values in the WWW-Authenticate header are valid and sound according to RFC2716). Takes in input the `realm` of validity of the authentication, the `password` as known to the server to compare against, the `nonce_timeout` to indicate how long the nonce is valid and `reload_nonce` a boolean that will be set by the method to indicate a nonce being reloaded. The method returns `true` if the authentication is valid, `false` otherwise.
+* _**bool** check_digest_auth(**const std::string&** realm, **const std::string&** password, **int** nonce_timeout, **bool*** reload_nonce) **const**:_ Allows to check the validity of the authentication token sent through digest authentication (if the provided values in the WWW-Authenticate header are valid and sound according to RFC2716). Takes in input the `realm` of validity of the authentication, the `password` as known to the server to compare against, the `nonce_timeout` to indicate how long the nonce is valid and `reload_nonce` a boolean that will be set by the method to indicate a nonce being reloaded. The method returns `true` if the authentication is valid, `false` otherwise.
 
 #### Example of handler reading arguments from a request
     #include <httpserver.hpp>
