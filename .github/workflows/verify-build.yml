@@ -419,10 +419,6 @@ jobs:
       run: cpplint --extensions=cpp,hpp --headers=hpp --recursive . ;
       if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
 
-    - name: Run cpplint on code
-      run: cpplint --extensions=cpp,hpp --headers=hpp --recursive . ;
-      if: ${{ matrix.build-type == 'lint' && matrix.os == 'ubuntu-latest' }}
-
     - name: Run libhttpserver configure
       run: |
         # Set memory check flags. They need to stay in step as env variables don't propagate across steps.
