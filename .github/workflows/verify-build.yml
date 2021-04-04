@@ -291,11 +291,11 @@ jobs:
     - run: git checkout HEAD^2
       if: ${{ github.event_name == 'pull_request' }}
         
-    - name: Install Ubuntu test sources (for extra builds)
+    - name: Install Ubuntu test sources
       run: |
         sudo add-apt-repository ppa:ubuntu-toolchain-r/test ;
         sudo apt-get update ;
-      if: ${{ matrix.test-group == 'extra' && matrix.os-type == 'ubuntu' }}
+      if: ${{ matrix.os-type == 'ubuntu' }}
 
     - name: Install apache benchmark if needed
       run: sudo apt-get install apache2-utils ;
