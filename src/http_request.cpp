@@ -219,7 +219,7 @@ gnutls_session_t http_request::get_tls_session() const
 
     return static_cast<gnutls_session_t>(conninfo->tls_session);
 }
-#endif  //HAVE_GNUTLS
+#endif  // HAVE_GNUTLS
 
 const std::string http_request::get_requestor() const {
     const MHD_ConnectionInfo * conninfo = MHD_get_connection_info(underlying_connection, MHD_CONNECTION_INFO_CLIENT_ADDRESS);
