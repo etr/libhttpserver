@@ -27,6 +27,10 @@
 
 #include <microhttpd.h>
 
+#ifdef HAVE_GNUTLS
+#include <gnutls/gnutls.h>
+#endif  // HAVE_GNUTLS
+
 #include <stddef.h>
 #include <algorithm>
 #include <iosfwd>
@@ -182,6 +186,14 @@ class http_request {
      const std::string& get_version() const {
          return version;
      }
+
+#ifdef HAVE_GNUTLS
+     /**
+      * Method used to get the TLS session.
+      * @return the TLS session
+      **/
+      gnutls_session_t get_tls_session() const;
+#endif  // HAVE_GNUTLS
 
      /**
       * Method used to get the requestor.
