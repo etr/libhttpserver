@@ -189,6 +189,12 @@ class http_request {
 
 #ifdef HAVE_GNUTLS
      /**
+      * Method used to check if there is a TLS session.
+      * @return the TLS session
+      **/
+      bool has_tls_session() const;
+
+     /**
       * Method used to get the TLS session.
       * @return the TLS session
       **/

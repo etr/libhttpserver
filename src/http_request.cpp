@@ -213,6 +213,11 @@ const std::string http_request::get_digested_user() const {
 }
 
 #ifdef HAVE_GNUTLS
+bool http_request::has_tls_session() const {
+    const MHD_ConnectionInfo * conninfo = MHD_get_connection_info(underlying_connection, MHD_CONNECTION_INFO_GNUTLS_SESSION);
+    return (conninfo != nullptr);
+}
+
 gnutls_session_t http_request::get_tls_session() const {
     const MHD_ConnectionInfo * conninfo = MHD_get_connection_info(underlying_connection, MHD_CONNECTION_INFO_GNUTLS_SESSION);
 
