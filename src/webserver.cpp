@@ -32,6 +32,10 @@
 #include <netinet/tcp.h>
 #endif
 
+#include <fcntl.h>
+#include <microhttpd_ws.h>
+#include <iostream>
+
 #include <errno.h>
 #include <microhttpd.h>
 #include <signal.h>
@@ -49,6 +53,8 @@
 #include <vector>
 
 #include "httpserver/create_webserver.hpp"
+#include "httpserver/websocket.hpp"
+#include "httpserver/websocket_handler.hpp"
 #include "httpserver/details/http_endpoint.hpp"
 #include "httpserver/details/modded_request.hpp"
 #include "httpserver/http_request.hpp"
@@ -68,6 +74,9 @@ struct MHD_Connection;
 #if MHD_VERSION < 0x00097002
 typedef int MHD_Result;
 #endif
+
+#define PAGE_INVALID_WEBSOCKET_REQUEST \
+  "Invalid WebSocket request!"
 
 using std::string;
 using std::pair;
@@ -305,6 +314,8 @@ bool webserver::start(bool blocking) {
     if (deferred_enabled) {
         start_conf |= MHD_USE_SUSPEND_RESUME;
     }
+    start_conf |= MHD_USE_ERROR_LOG;
+    start_conf |= MHD_ALLOW_UPGRADE;
 
 #ifdef USE_FASTOPEN
     start_conf |= MHD_USE_TCP_FASTOPEN;
@@ -464,13 +475,6 @@ MHD_Result webserver::post_iterator(void *cls, enum MHD_ValueKind kind,
     return MHD_YES;
 }
 
-void webserver::upgrade_handler(void *cls, struct MHD_Connection* connection, void **con_cls, int upgrade_socket) {
-    std::ignore = cls;
-    std::ignore = connection;
-    std::ignore = con_cls;
-    std::ignore = upgrade_socket;
-}
-
 const std::shared_ptr<http_response> webserver::not_found_page(details::modded_request* mr) const {
     if (not_found_resource != 0x0) {
         return not_found_resource(*mr->dhr);
@@ -536,6 +540,457 @@ MHD_Result webserver::requests_answer_second_step(MHD_Connection* connection, co
     return MHD_YES;
 }
 
+/**
+ * Change socket to blocking.
+ *
+ * @param fd the socket to manipulate
+ */
+static void
+make_blocking (MHD_socket fd)
+{
+#if defined(MHD_POSIX_SOCKETS)
+  int flags;
+
+  flags = fcntl (fd, F_GETFL);
+  if (-1 == flags)
+    return;
+  if ((flags & ~O_NONBLOCK) != flags)
+    if (-1 == fcntl (fd, F_SETFL, flags & ~O_NONBLOCK))
+      abort ();
+#elif defined(MHD_WINSOCK_SOCKETS)
+  unsigned long flags = 0;
+
+  ioctlsocket (fd, FIONBIO, &flags);
+#endif /* MHD_WINSOCK_SOCKETS */
+
+}
+
+/**
+* Parses received data from the TCP/IP socket with the websocket stream
+*
+* @param cu           The connected user
+* @param new_name     The new user name
+* @param new_name_len The length of the new name
+* @return             0 on success, other values on error
+*/
+int webserver::connecteduser_parse_received_websocket_stream (websocket* cu,
+                                                              char* buf,
+                                                              size_t buf_len)
+{
+  size_t buf_offset = 0;
+  while (buf_offset < buf_len)
+  {
+    size_t new_offset = 0;
+    char *frame_data = NULL;
+    size_t frame_len  = 0;
+    int status = MHD_websocket_decode (cu->ws,
+                                       buf + buf_offset,
+                                       buf_len - buf_offset,
+                                       &new_offset,
+                                       &frame_data,
+                                       &frame_len);
+    if (0 > status)
+    {
+      /* an error occurred and the connection must be closed */
+      if (NULL != frame_data)
+      {
+        /* depending on the WebSocket flag */
+        /* MHD_WEBSOCKET_FLAG_GENERATE_CLOSE_FRAMES_ON_ERROR */
+        /* close frames might be generated on errors */
+        cu->send_raw(frame_data, frame_len);
+        MHD_websocket_free (cu->ws, frame_data);
+      }
+      return 1;
+    }
+    else
+    {
+      buf_offset += new_offset;
+
+      if (0 < status)
+      {
+        /* the frame is complete */
+        switch (status)
+        {
+        case MHD_WEBSOCKET_STATUS_TEXT_FRAME:
+        case MHD_WEBSOCKET_STATUS_BINARY_FRAME:
+          /**
+           * a text or binary frame has been received.
+           * in this chat server example we use a simple protocol where
+           * the JavaScript added a prefix like "<command>|<to_user_id>|data".
+           * Some examples:
+           * "||test" means a regular chat message to everyone with the message "test".
+           * "private|1|secret" means a private chat message to user with id 1 with the message "secret".
+           * "name||MyNewName" means that the user requests a rename to "MyNewName"
+           * "ping|1|" means that the user with id 1 shall get a ping
+           *
+           * Binary data is handled here like text data.
+           * The difference in the data is only checked by the JavaScript.
+           */
+          cu->insert_into_receive_queue(std::string(frame_data, frame_len));
+          MHD_websocket_free (cu->ws,
+                              frame_data);
+          return 0;
+
+        case MHD_WEBSOCKET_STATUS_CLOSE_FRAME:
+          /* if we receive a close frame, we will respond with one */
+          MHD_websocket_free (cu->ws,
+                              frame_data);
+          {
+            char*result = NULL;
+            size_t result_len = 0;
+            int er = MHD_websocket_encode_close (cu->ws,
+                                                 MHD_WEBSOCKET_CLOSEREASON_REGULAR,
+                                                 NULL,
+                                                 0,
+                                                 &result,
+                                                 &result_len);
+            if (MHD_WEBSOCKET_STATUS_OK == er)
+            {
+              cu->send_raw(result, result_len);
+              MHD_websocket_free (cu->ws, result);
+            }
+          }
+          return 1;
+
+        case MHD_WEBSOCKET_STATUS_PING_FRAME:
+          /* if we receive a ping frame, we will respond */
+          /* with the corresponding pong frame */
+          std::cerr << "ping not yet implemented" << std::endl;
+          return 0;
+
+        case MHD_WEBSOCKET_STATUS_PONG_FRAME:
+          /* if we receive a pong frame, */
+          /* we will check whether we requested this frame and */
+          /* whether it is the last requested pong */
+          std::cerr << "pong not yet implemented" << std::endl;
+          return 0;
+
+        default:
+          /* This case should really never happen, */
+          /* because there are only five types of (finished) websocket frames. */
+          /* If it is ever reached, it means that there is memory corruption. */
+          MHD_websocket_free (cu->ws,
+                              frame_data);
+          return 1;
+        }
+      }
+    }
+  }
+
+  return 0;
+}
+
+/**
+ * Receives messages from the TCP/IP socket and
+ * initializes the connected user.
+ *
+ * @param cls The connected user
+ * @return    Always NULL
+ */
+void* webserver::connecteduser_receive_messages (void* cls)
+{
+    websocket* cu = (websocket*)cls;
+
+    /* make the socket blocking */
+    make_blocking (cu->fd);
+
+    /* initialize the web socket stream for encoding/decoding */
+    int result = MHD_websocket_stream_init (&cu->ws,
+                                            MHD_WEBSOCKET_FLAG_SERVER
+                                            | MHD_WEBSOCKET_FLAG_NO_FRAGMENTS,
+                                            0);
+    if (MHD_WEBSOCKET_STATUS_OK != result)
+    {
+        MHD_upgrade_action (cu->urh,
+                            MHD_UPGRADE_ACTION_CLOSE);
+        free (cu);
+        return NULL;
+    }
+
+    /* start the message-send thread */
+    std::thread thread = cu->ws_handler->handle_websocket(cu);
+
+    /* start by parsing extra data MHD may have already read, if any */
+    if (0 != cu->extra_in_size)
+    {
+        if (0 != connecteduser_parse_received_websocket_stream (cu,
+                                                                cu->extra_in,
+                                                                cu->extra_in_size))
+        {
+            cu->disconnect_ = true;
+            thread.join();
+            struct MHD_UpgradeResponseHandle* urh = cu->urh;
+            if (NULL != urh)
+            {
+                cu->urh = NULL;
+                MHD_upgrade_action (urh,
+                                    MHD_UPGRADE_ACTION_CLOSE);
+            }
+            MHD_websocket_stream_free (cu->ws);
+            free (cu->extra_in);
+            free (cu);
+            return NULL;
+        }
+        free (cu->extra_in);
+        cu->extra_in = NULL;
+    }
+
+    /* the main loop for receiving data */
+    while (1)
+    {
+        char buf[128];
+        ssize_t got = recv (cu->fd,
+                            buf,
+                            sizeof (buf),
+                            0);
+        if (0 >= got)
+        {
+            /* the TCP/IP socket has been closed */
+            break;
+        }
+        if (0 < got)
+        {
+            if (0 != connecteduser_parse_received_websocket_stream (cu, buf,
+                                                                    (size_t) got))
+            {
+                /* A websocket protocol error occurred */
+                cu->disconnect_ = true;
+                thread.join();
+                struct MHD_UpgradeResponseHandle*urh = cu->urh;
+                if (NULL != urh)
+                {
+                    cu->urh = NULL;
+                    MHD_upgrade_action (urh,
+                                        MHD_UPGRADE_ACTION_CLOSE);
+                }
+                MHD_websocket_stream_free (cu->ws);
+                free (cu);
+                return NULL;
+            }
+        }
+    }
+
+    /* cleanup */
+    cu->disconnect_ = true;
+    thread.join();
+    struct MHD_UpgradeResponseHandle* urh = cu->urh;
+    if (NULL != urh)
+    {
+        cu->urh = NULL;
+        MHD_upgrade_action (urh,
+                            MHD_UPGRADE_ACTION_CLOSE);
+    }
+    MHD_websocket_stream_free (cu->ws);
+    free (cu);
+
+    return NULL;
+}
+
+/**
+ * Function called after a protocol "upgrade" response was sent
+ * successfully and the socket should now be controlled by some
+ * protocol other than HTTP.
+ *
+ * Any data already received on the socket will be made available in
+ * @e extra_in.  This can happen if the application sent extra data
+ * before MHD send the upgrade response.  The application should
+ * treat data from @a extra_in as if it had read it from the socket.
+ *
+ * Note that the application must not close() @a sock directly,
+ * but instead use #MHD_upgrade_action() for special operations
+ * on @a sock.
+ *
+ * Data forwarding to "upgraded" @a sock will be started as soon
+ * as this function return.
+ *
+ * Except when in 'thread-per-connection' mode, implementations
+ * of this function should never block (as it will still be called
+ * from within the main event loop).
+ *
+ * @param cls closure, whatever was given to #MHD_create_response_for_upgrade().
+ * @param connection original HTTP connection handle,
+ *                   giving the function a last chance
+ *                   to inspect the original HTTP request
+ * @param con_cls last value left in `con_cls` of the `MHD_AccessHandlerCallback`
+ * @param extra_in if we happened to have read bytes after the
+ *                 HTTP header already (because the client sent
+ *                 more than the HTTP header of the request before
+ *                 we sent the upgrade response),
+ *                 these are the extra bytes already read from @a sock
+ *                 by MHD.  The application should treat these as if
+ *                 it had read them from @a sock.
+ * @param extra_in_size number of bytes in @a extra_in
+ * @param sock socket to use for bi-directional communication
+ *        with the client.  For HTTPS, this may not be a socket
+ *        that is directly connected to the client and thus certain
+ *        operations (TCP-specific setsockopt(), getsockopt(), etc.)
+ *        may not work as expected (as the socket could be from a
+ *        socketpair() or a TCP-loopback).  The application is expected
+ *        to perform read()/recv() and write()/send() calls on the socket.
+ *        The application may also call shutdown(), but must not call
+ *        close() directly.
+ * @param urh argument for #MHD_upgrade_action()s on this @a connection.
+ *        Applications must eventually use this callback to (indirectly)
+ *        perform the close() action on the @a sock.
+ */
+void webserver::upgrade_handler (void *cls,
+                 struct MHD_Connection *connection,
+                 void *con_cls,
+                 const char *extra_in,
+                 size_t extra_in_size,
+                 MHD_socket fd,
+                 struct MHD_UpgradeResponseHandle *urh)
+{
+    pthread_t pt;
+    (void) connection;  /* Unused. Silent compiler warning. */
+    (void) con_cls;     /* Unused. Silent compiler warning. */
+
+    /* This callback must return as soon as possible. */
+
+    /* allocate new connected user */
+    websocket* cu = new websocket();
+    if (0 != extra_in_size)
+    {
+        cu->extra_in = (char*)malloc (extra_in_size);
+        if (NULL == cu->extra_in)
+            abort ();
+        memcpy (cu->extra_in,
+                extra_in,
+                extra_in_size);
+    }
+    cu->extra_in_size = extra_in_size;
+    cu->fd = fd;
+    cu->urh = urh;
+    cu->ws_handler = (websocket_handler*)cls;
+
+    /* create thread for the new connected user */
+    if (0 != pthread_create (&pt,
+                            NULL,
+                            &connecteduser_receive_messages,
+                            cu))
+        abort ();
+    pthread_detach (pt);
+}
+
+MHD_Result webserver::create_websocket_connection(
+    websocket_handler* ws_handler,
+    MHD_Connection *connection)
+{
+    /**
+     * The path for the chat has been accessed.
+     * For a valid WebSocket request, at least five headers are required:
+     * 1. "Host: <name>"
+     * 2. "Connection: Upgrade"
+     * 3. "Upgrade: websocket"
+     * 4. "Sec-WebSocket-Version: 13"
+     * 5. "Sec-WebSocket-Key: <base64 encoded value>"
+     * Values are compared in a case-insensitive manner.
+     * Furthermore it must be a HTTP/1.1 or higher GET request.
+     * See: https://tools.ietf.org/html/rfc6455#section-4.2.1
+     *
+     * To ease this example we skip the following checks:
+     * - Whether the HTTP version is 1.1 or newer
+     * - Whether Connection is Upgrade, because this header may
+     *   contain multiple values.
+     * - The requested Host (because we don't know)
+     */
+
+    MHD_Result ret;
+
+    /* check whether a websocket upgrade is requested */
+    const char*value = MHD_lookup_connection_value (connection,
+                                                    MHD_HEADER_KIND,
+                                                    MHD_HTTP_HEADER_UPGRADE);
+    if ((0 == value) || (0 != strcasecmp (value, "websocket")))
+    {
+        struct MHD_Response*response = MHD_create_response_from_buffer (strlen (
+                                                                            PAGE_INVALID_WEBSOCKET_REQUEST),
+                                                                        (void*)PAGE_INVALID_WEBSOCKET_REQUEST,
+                                                                        MHD_RESPMEM_PERSISTENT);
+        ret = MHD_queue_response (connection,
+                                    MHD_HTTP_BAD_REQUEST,
+                                    response);
+        MHD_destroy_response (response);
+        return ret;
+    }
+
+    /* check the protocol version */
+    value = MHD_lookup_connection_value (connection,
+                                         MHD_HEADER_KIND,
+                                         MHD_HTTP_HEADER_SEC_WEBSOCKET_VERSION);
+    if ((0 == value) || (0 != strcasecmp (value, "13")))
+    {
+        struct MHD_Response*response = MHD_create_response_from_buffer (strlen (
+                                                                            PAGE_INVALID_WEBSOCKET_REQUEST),
+                                                                        (void*)PAGE_INVALID_WEBSOCKET_REQUEST,
+                                                                        MHD_RESPMEM_PERSISTENT);
+        ret = MHD_queue_response (connection,
+                                    MHD_HTTP_BAD_REQUEST,
+                                    response);
+        MHD_destroy_response (response);
+        return ret;
+    }
+
+    /* read the websocket key (required for the response) */
+    value = MHD_lookup_connection_value (connection, MHD_HEADER_KIND,
+                                         MHD_HTTP_HEADER_SEC_WEBSOCKET_KEY);
+    if (0 == value)
+    {
+        struct MHD_Response*response = MHD_create_response_from_buffer (strlen (
+                                                                            PAGE_INVALID_WEBSOCKET_REQUEST),
+                                                                        (void*)PAGE_INVALID_WEBSOCKET_REQUEST,
+                                                                        MHD_RESPMEM_PERSISTENT);
+        ret = MHD_queue_response (connection,
+                                    MHD_HTTP_BAD_REQUEST,
+                                    response);
+        MHD_destroy_response (response);
+        return ret;
+    }
+
+    /* generate the response accept header */
+    char sec_websocket_accept[29];
+    if (0 != MHD_websocket_create_accept (value, sec_websocket_accept))
+    {
+        struct MHD_Response*response = MHD_create_response_from_buffer (strlen (
+                                                                            PAGE_INVALID_WEBSOCKET_REQUEST),
+                                                                        (void*)PAGE_INVALID_WEBSOCKET_REQUEST,
+                                                                        MHD_RESPMEM_PERSISTENT);
+        ret = MHD_queue_response (connection,
+                                    MHD_HTTP_BAD_REQUEST,
+                                    response);
+        MHD_destroy_response (response);
+        return ret;
+    }
+
+    /* create the response for upgrade */
+    MHD_Response* response = MHD_create_response_for_upgrade(
+        &upgrade_handler, ws_handler);
+
+    /**
+     * For the response we need at least the following headers:
+     * 1. "Connection: Upgrade"
+     * 2. "Upgrade: websocket"
+     * 3. "Sec-WebSocket-Accept: <base64value>"
+     * The value for Sec-WebSocket-Accept can be generated with MHD_websocket_create_accept.
+     * It requires the value of the Sec-WebSocket-Key header of the request.
+     * See also: https://tools.ietf.org/html/rfc6455#section-4.2.2
+     */
+    MHD_add_response_header (response,
+                             MHD_HTTP_HEADER_CONNECTION,
+                             "Upgrade");
+    MHD_add_response_header (response,
+                             MHD_HTTP_HEADER_UPGRADE,
+                             "websocket");
+    MHD_add_response_header (response,
+                             MHD_HTTP_HEADER_SEC_WEBSOCKET_ACCEPT,
+                             sec_websocket_accept);
+    ret = MHD_queue_response (connection,
+                              MHD_HTTP_SWITCHING_PROTOCOLS,
+                              response);
+    MHD_destroy_response (response);
+    return ret;
+}
+
 MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct details::modded_request* mr, const char* method) {
     int to_ret = MHD_NO;
 
@@ -595,9 +1050,25 @@ MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct details
     if (found) {
         try {
             if (hrm->is_allowed(method)) {
-                mr->dhrs = ((hrm)->*(mr->callback))(*mr->dhr);  // copy in memory (move in case)
-                if (mr->dhrs->get_response_code() == -1) {
-                    mr->dhrs = internal_error_page(mr);
+                bool is_websocket = false;
+                if (mr->callback == &http_resource::render_GET) {
+                    const char* value = MHD_lookup_connection_value (connection,
+                                                                     MHD_HEADER_KIND,
+                                                                     MHD_HTTP_HEADER_UPGRADE);
+                    is_websocket = ((0 != value) && (0 == strcasecmp (value, "websocket")));
+                }
+                if (is_websocket) {
+                    websocket_handler* ws_handler = dynamic_cast<websocket_handler*>(hrm);
+                    if (ws_handler == nullptr) {
+                        mr->dhrs = internal_error_page(mr);
+                    } else {
+                        return create_websocket_connection(ws_handler, connection);
+                    }
+                } else {
+                    mr->dhrs = ((hrm)->*(mr->callback))(*mr->dhr);  // copy in memory (move in case)
+                    if (mr->dhrs->get_response_code() == -1) {
+                        mr->dhrs = internal_error_page(mr);
+                    }
                 }
             } else {
                 mr->dhrs = method_not_allowed_page(mr);

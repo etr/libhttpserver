@@ -19,7 +19,7 @@
 AM_CPPFLAGS = -I../ -I$(srcdir)/httpserver/
 METASOURCES = AUTO
 lib_LTLIBRARIES = libhttpserver.la
-libhttpserver_la_SOURCES = string_utilities.cpp webserver.cpp http_utils.cpp http_request.cpp http_response.cpp string_response.cpp basic_auth_fail_response.cpp digest_auth_fail_response.cpp deferred_response.cpp file_response.cpp http_resource.cpp details/http_endpoint.cpp
+libhttpserver_la_SOURCES = string_utilities.cpp webserver.cpp http_utils.cpp http_request.cpp http_response.cpp string_response.cpp websocket.cpp basic_auth_fail_response.cpp digest_auth_fail_response.cpp deferred_response.cpp file_response.cpp http_resource.cpp details/http_endpoint.cpp
 noinst_HEADERS = httpserver/string_utilities.hpp httpserver/details/modded_request.hpp gettext.h
 nobase_include_HEADERS = httpserver.hpp httpserver/create_webserver.hpp httpserver/webserver.hpp httpserver/http_utils.hpp httpserver/details/http_endpoint.hpp httpserver/http_request.hpp httpserver/http_response.hpp httpserver/http_resource.hpp httpserver/string_response.hpp httpserver/basic_auth_fail_response.hpp httpserver/digest_auth_fail_response.hpp httpserver/deferred_response.hpp httpserver/file_response.hpp
 
@@ -32,7 +32,7 @@ AM_LDFLAGS += -O0 --coverage -lgcov --no-inline
 endif
 
 if !COND_CROSS_COMPILE
-libhttpserver_la_LIBADD = -lmicrohttpd
+libhttpserver_la_LIBADD = -lmicrohttpd -lmicrohttpd_ws
 endif
 
 libhttpserver_la_CFLAGS = $(AM_CFLAGS)

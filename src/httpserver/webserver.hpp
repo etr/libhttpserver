@@ -51,6 +51,8 @@
 
 namespace httpserver { class http_resource; }
 namespace httpserver { class http_response; }
+namespace httpserver { class websocket; }
+namespace httpserver { class websocket_handler; }
 namespace httpserver { namespace details { struct modded_request; } }
 
 struct MHD_Connection;
@@ -182,6 +184,10 @@ class webserver {
      const std::shared_ptr<http_response> internal_error_page(details::modded_request* mr, bool force_our = false) const;
      const std::shared_ptr<http_response> not_found_page(details::modded_request* mr) const;
 
+     MHD_Result create_websocket_connection(
+         websocket_handler* ws_handler,
+         MHD_Connection *connection);
+
      static void request_completed(void *cls,
              struct MHD_Connection *connection, void **con_cls,
              enum MHD_RequestTerminationCode toe);
@@ -194,7 +200,19 @@ class webserver {
              const char *filename, const char *content_type, const char *transfer_encoding,
              const char *data, uint64_t off, size_t size);
 
-     static void upgrade_handler(void *cls, struct MHD_Connection* connection, void **con_cls, int upgrade_socket);
+     static int connecteduser_parse_received_websocket_stream (websocket* cu,
+                                                               char* buf,
+                                                               size_t buf_len);
+
+     static void* connecteduser_receive_messages (void* cls);
+
+     static void upgrade_handler(void *cls,
+             struct MHD_Connection *connection,
+             void *con_cls,
+             const char *extra_in,
+             size_t extra_in_size,
+             MHD_socket fd,
+             struct MHD_UpgradeResponseHandle *urh);
 
      MHD_Result requests_answer_first_step(MHD_Connection* connection, struct details::modded_request* mr);
 
