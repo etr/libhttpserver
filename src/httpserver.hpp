@@ -29,6 +29,8 @@
 #include "httpserver/file_response.hpp"
 #include "httpserver/http_request.hpp"
 #include "httpserver/http_resource.hpp"
+#include "httpserver/websocket.hpp"
+#include "httpserver/websocket_handler.hpp"
 #include "httpserver/http_response.hpp"
 #include "httpserver/http_utils.hpp"
 #include "httpserver/string_response.hpp"
