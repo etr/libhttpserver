@@ -596,7 +596,7 @@ MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct details
         try {
             if (hrm->is_allowed(method)) {
                 mr->dhrs = ((hrm)->*(mr->callback))(*mr->dhr);  // copy in memory (move in case)
-                if (mr->dhrs->get_response_code() == -1) {
+                if (mr->dhrs.get() == nullptr || mr->dhrs->get_response_code() == -1) {
                     mr->dhrs = internal_error_page(mr);
                 }
             } else {

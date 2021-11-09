@@ -193,6 +193,13 @@ class no_response_resource : public http_resource {
      }
 };
 
+class empty_response_resource : public http_resource {
+ public:
+     const shared_ptr<http_response> render_GET(const http_request&) {
+         return shared_ptr<http_response>(nullptr);
+     }
+};
+
 class file_response_resource : public http_resource {
  public:
      const shared_ptr<http_response> render_GET(const http_request&) {
@@ -628,6 +635,22 @@ LT_BEGIN_AUTO_TEST(basic_suite, no_response)
     LT_ASSERT_EQ(http_code, 500);
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(no_response)
+
+LT_BEGIN_AUTO_TEST(basic_suite, empty_response)
+    empty_response_resource resource;
+    ws->register_resource("base", &resource);
+    curl_global_init(CURL_GLOBAL_ALL);
+
+    CURL* curl = curl_easy_init();
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    CURLcode res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    int64_t http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    LT_ASSERT_EQ(http_code, 500);
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(empty_response)
 
 LT_BEGIN_AUTO_TEST(basic_suite, regex_matching)
     simple_resource resource;
