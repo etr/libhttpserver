@@ -366,7 +366,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, resource_setting_header)
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
     curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, headerfunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEHEADER, &ss);
+    curl_easy_setopt(curl, CURLOPT_HEADERDATA, &ss);
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "OK");
