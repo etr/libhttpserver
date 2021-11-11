@@ -33,6 +33,7 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace httpserver { class http_request; }
 namespace httpserver { class http_response; }
@@ -191,6 +192,22 @@ class http_resource {
 #endif  // DEBUG
              return false;
          }
+     }
+
+     /**
+      * Method used to return a list of currently allowed HTTP methods for this resource
+      * @return vector of strings
+     **/
+     std::vector<std::string> get_allowed_methods() {
+         std::vector<std::string> allowed_methods;
+
+         for (auto it = method_state.cbegin(); it != method_state.cend(); ++it) {
+             if ( (*it).second ) {
+                 allowed_methods.push_back((*it).first);
+             }
+         }
+
+         return allowed_methods;
      }
 
  protected:
