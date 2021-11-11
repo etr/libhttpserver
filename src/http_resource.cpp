@@ -28,16 +28,16 @@ namespace httpserver { class http_response; }
 namespace httpserver {
 
 // RESOURCE
-void resource_init(std::map<std::string, bool>* allowed_methods) {
-    (*allowed_methods)[MHD_HTTP_METHOD_GET] = true;
-    (*allowed_methods)[MHD_HTTP_METHOD_POST] = true;
-    (*allowed_methods)[MHD_HTTP_METHOD_PUT] = true;
-    (*allowed_methods)[MHD_HTTP_METHOD_HEAD] = true;
-    (*allowed_methods)[MHD_HTTP_METHOD_DELETE] = true;
-    (*allowed_methods)[MHD_HTTP_METHOD_TRACE] = true;
-    (*allowed_methods)[MHD_HTTP_METHOD_CONNECT] = true;
-    (*allowed_methods)[MHD_HTTP_METHOD_OPTIONS] = true;
-    (*allowed_methods)[MHD_HTTP_METHOD_PATCH] = true;
+void resource_init(std::map<std::string, bool>* method_state) {
+    (*method_state)[MHD_HTTP_METHOD_GET] = true;
+    (*method_state)[MHD_HTTP_METHOD_POST] = true;
+    (*method_state)[MHD_HTTP_METHOD_PUT] = true;
+    (*method_state)[MHD_HTTP_METHOD_HEAD] = true;
+    (*method_state)[MHD_HTTP_METHOD_DELETE] = true;
+    (*method_state)[MHD_HTTP_METHOD_TRACE] = true;
+    (*method_state)[MHD_HTTP_METHOD_CONNECT] = true;
+    (*method_state)[MHD_HTTP_METHOD_OPTIONS] = true;
+    (*method_state)[MHD_HTTP_METHOD_PATCH] = true;
 }
 
 namespace details {
