@@ -525,7 +525,7 @@ MHD_Result webserver::requests_answer_second_step(MHD_Connection* connection, co
 
     if (mr->has_body) {
 #ifdef DEBUG
-        std::cout << "Writing content: " << upload_data << std::endl;
+        std::cout << "Writing content: " << std::string(upload_data, *upload_data_size) << std::endl;
 #endif  // DEBUG
         mr->dhr->grow_content(upload_data, *upload_data_size);
 
