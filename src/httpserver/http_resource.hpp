@@ -33,6 +33,7 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace httpserver { class http_request; }
 namespace httpserver { class http_response; }
@@ -149,8 +150,8 @@ class http_resource {
       * @param allowed boolean indicating if the method is allowed or not
      **/
      void set_allowing(const std::string& method, bool allowed) {
-         if (allowed_methods.count(method)) {
-             allowed_methods[method] = allowed;
+         if (method_state.count(method)) {
+             method_state[method] = allowed;
          }
      }
 
@@ -159,8 +160,8 @@ class http_resource {
      **/
      void allow_all() {
          std::map<std::string, bool>::iterator it;
-         for (it=allowed_methods.begin(); it != allowed_methods.end(); ++it) {
-             allowed_methods[(*it).first] = true;
+         for (it=method_state.begin(); it != method_state.end(); ++it) {
+             method_state[(*it).first] = true;
          }
      }
 
@@ -169,8 +170,8 @@ class http_resource {
      **/
      void disallow_all() {
          std::map<std::string, bool>::iterator it;
-         for (it=allowed_methods.begin(); it != allowed_methods.end(); ++it) {
-             allowed_methods[(*it).first] = false;
+         for (it=method_state.begin(); it != method_state.end(); ++it) {
+             method_state[(*it).first] = false;
          }
      }
 
@@ -180,12 +181,12 @@ class http_resource {
       * @return true if the method is allowed
      **/
      bool is_allowed(const std::string& method) {
-         if (allowed_methods.count(method)) {
-             return allowed_methods[method];
+         if (method_state.count(method)) {
+             return method_state[method];
          } else {
 #ifdef DEBUG
              std::map<std::string, bool>::iterator it;
-             for (it = allowed_methods.begin(); it != allowed_methods.end(); ++it) {
+             for (it = method_state.begin(); it != method_state.end(); ++it) {
                  std::cout << (*it).first << " -> " << (*it).second << std::endl;
              }
 #endif  // DEBUG
@@ -193,12 +194,28 @@ class http_resource {
          }
      }
 
+     /**
+      * Method used to return a list of currently allowed HTTP methods for this resource
+      * @return vector of strings
+     **/
+     std::vector<std::string> get_allowed_methods() {
+         std::vector<std::string> allowed_methods;
+
+         for (auto it = method_state.cbegin(); it != method_state.cend(); ++it) {
+             if ( (*it).second ) {
+                 allowed_methods.push_back((*it).first);
+             }
+         }
+
+         return allowed_methods;
+     }
+
  protected:
      /**
       * Constructor of the class
      **/
      http_resource() {
-         resource_init(&allowed_methods);
+         resource_init(&method_state);
      }
 
      /**
@@ -212,7 +229,7 @@ class http_resource {
  private:
      friend class webserver;
      friend void resource_init(std::map<std::string, bool>* res);
-     std::map<std::string, bool> allowed_methods;
+     std::map<std::string, bool> method_state;
 };
 
 }  // namespace httpserver

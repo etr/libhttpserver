@@ -366,7 +366,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, resource_setting_header)
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
     curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, headerfunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEHEADER, &ss);
+    curl_easy_setopt(curl, CURLOPT_HEADERDATA, &ss);
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "OK");
@@ -1020,6 +1020,33 @@ LT_BEGIN_AUTO_TEST(basic_suite, url_with_regex_like_pieces)
     LT_CHECK_EQ(s, "settings,{},");
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(url_with_regex_like_pieces)
+
+LT_BEGIN_AUTO_TEST(basic_suite, method_not_allowed_header)
+    simple_resource resource;
+    resource.disallow_all();
+    resource.set_allowing("POST", true);
+    resource.set_allowing("HEAD", true);
+    ws->register_resource("base", &resource);
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    map<string, string> ss;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, headerfunc);
+    curl_easy_setopt(curl, CURLOPT_HEADERDATA, &ss);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    int64_t http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    LT_ASSERT_EQ(http_code, 405);
+    // elements in http_resource::method_state are sorted (std::map)
+    LT_CHECK_EQ(ss["Allow"], "HEAD, POST");
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(method_not_allowed_header)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

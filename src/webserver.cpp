@@ -601,6 +601,15 @@ MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct details
                 }
             } else {
                 mr->dhrs = method_not_allowed_page(mr);
+
+                vector<string> allowed_methods = hrm->get_allowed_methods();
+                if (allowed_methods.size() > 0) {
+                    string header_value = allowed_methods[0];
+                    for (auto it = allowed_methods.cbegin() + 1; it != allowed_methods.cend(); ++it) {
+                        header_value += ", " + (*it);
+                    }
+                    mr->dhrs->with_header(http_utils::http_header_allow, header_value);
+                }
             }
         } catch(const std::exception& e) {
             mr->dhrs = internal_error_page(mr);
