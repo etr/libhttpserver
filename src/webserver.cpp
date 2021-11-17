@@ -152,6 +152,7 @@ webserver::webserver(const create_webserver& params):
     regex_checking(params._regex_checking),
     ban_system_enabled(params._ban_system_enabled),
     post_process_enabled(params._post_process_enabled),
+    post_upload_dir(params._post_upload_dir),
     deferred_enabled(params._deferred_enabled),
     single_resource(params._single_resource),
     tcp_nodelay(params._tcp_nodelay),
@@ -454,13 +455,32 @@ MHD_Result webserver::post_iterator(void *cls, enum MHD_ValueKind kind,
         const char *transfer_encoding, const char *data, uint64_t off, size_t size) {
     // Parameter needed to respect MHD interface, but not needed here.
     std::ignore = kind;
-    std::ignore = filename;
     std::ignore = content_type;
     std::ignore = transfer_encoding;
     std::ignore = off;
 
     struct details::modded_request* mr = (struct details::modded_request*) cls;
-    mr->dhr->set_arg(key, mr->dhr->get_arg(key) + std::string(data, size));
+
+    if (filename == nullptr) {
+        mr->dhr->set_arg(key, mr->dhr->get_arg(key) + std::string(data, size));
+    } else {
+        // TODO(LeSpocky): basename only.
+        mr->dhr->set_arg(key, filename);
+
+        // (re)open file
+        if (!mr->fname.empty() && 0 != strcmp(filename, mr->fname.c_str())) {
+            mr->ostrm.close();
+        }
+
+        if (!mr->ostrm.is_open()) {
+            mr->ostrm.open(filename, std::ios::binary | std::ios::app);
+            mr->fname = filename;
+        }
+
+        // append data to file
+        if (size > 0) mr->ostrm.write(data, size);
+    }
+
     return MHD_YES;
 }
 
@@ -527,9 +547,11 @@ MHD_Result webserver::requests_answer_second_step(MHD_Connection* connection, co
 #ifdef DEBUG
         std::cout << "Writing content: " << std::string(upload_data, *upload_data_size) << std::endl;
 #endif  // DEBUG
-        mr->dhr->grow_content(upload_data, *upload_data_size);
-
-        if (mr->pp != NULL) MHD_post_process(mr->pp, upload_data, *upload_data_size);
+        if (mr->pp != NULL) {
+            MHD_post_process(mr->pp, upload_data, *upload_data_size);
+        } else {
+            mr->dhr->grow_content(upload_data, *upload_data_size);
+        }
     }
 
     *upload_data_size = 0;

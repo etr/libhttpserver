@@ -25,6 +25,7 @@
 #ifndef SRC_HTTPSERVER_DETAILS_MODDED_REQUEST_HPP_
 #define SRC_HTTPSERVER_DETAILS_MODDED_REQUEST_HPP_
 
+#include <fstream>
 #include <string>
 #include <memory>
 
@@ -46,6 +47,9 @@ struct modded_request {
     std::shared_ptr<http_response> dhrs;
     bool second = false;
     bool has_body = false;
+
+    std::string fname;
+    std::ofstream ostrm;
 
     modded_request() = default;
 

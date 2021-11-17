@@ -296,6 +296,11 @@ class create_webserver {
          return *this;
      }
 
+     create_webserver& post_upload_dir(const std::string& post_upload_dir) {
+         _post_upload_dir = post_upload_dir;
+         return *this;
+     }
+
      create_webserver& single_resource() {
          _single_resource = true;
          return *this;
@@ -360,6 +365,7 @@ class create_webserver {
      bool _regex_checking = true;
      bool _ban_system_enabled = true;
      bool _post_process_enabled = true;
+     std::string _post_upload_dir = "";
      bool _deferred_enabled = false;
      bool _single_resource = false;
      bool _tcp_nodelay = false;
