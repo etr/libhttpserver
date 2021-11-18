@@ -159,8 +159,8 @@ webserver::webserver(const create_webserver& params):
     method_not_allowed_resource(params._method_not_allowed_resource),
     internal_error_resource(params._internal_error_resource) {
         ignore_sigpipe();
-        pthread_mutex_init(&mutexwait, NULL);
-        pthread_cond_init(&mutexcond, NULL);
+        pthread_mutex_init(&mutexwait, nullptr);
+        pthread_cond_init(&mutexcond, nullptr);
 }
 
 webserver::~webserver() {
@@ -180,10 +180,10 @@ void webserver::request_completed(void *cls, struct MHD_Connection *connection, 
     std::ignore = toe;
 
     details::modded_request* mr = static_cast<details::modded_request*>(*con_cls);
-    if (mr == 0x0) return;
+    if (mr == nullptr) return;
 
     delete mr;
-    mr = 0x0;
+    mr = nullptr;
 }
 
 bool webserver::register_resource(const std::string& resource, http_resource* hrm, bool family) {
@@ -204,14 +204,14 @@ bool webserver::register_resource(const std::string& resource, http_resource* hr
 
 bool webserver::start(bool blocking) {
     struct {
-        MHD_OptionItem operator ()(enum MHD_OPTION opt, intptr_t val, void *ptr = 0) {
+        MHD_OptionItem operator ()(enum MHD_OPTION opt, intptr_t val, void *ptr = nullptr) {
             MHD_OptionItem x = {opt, val, ptr};
             return x;
         }
     } gen;
     vector<struct MHD_OptionItem> iov;
 
-    iov.push_back(gen(MHD_OPTION_NOTIFY_COMPLETED, (intptr_t) &request_completed, NULL));
+    iov.push_back(gen(MHD_OPTION_NOTIFY_COMPLETED, (intptr_t) &request_completed, nullptr));
     iov.push_back(gen(MHD_OPTION_URI_LOG_CALLBACK, (intptr_t) &uri_log, this));
     iov.push_back(gen(MHD_OPTION_EXTERNAL_LOGGER, (intptr_t) &error_log, this));
     iov.push_back(gen(MHD_OPTION_UNESCAPE_CALLBACK, (intptr_t) &unescaper_func, this));
@@ -279,7 +279,7 @@ bool webserver::start(bool blocking) {
     }
 #endif  // HAVE_GNUTLS
 
-    iov.push_back(gen(MHD_OPTION_END, 0, NULL));
+    iov.push_back(gen(MHD_OPTION_END, 0, nullptr));
 
     int start_conf = start_method;
 
@@ -310,8 +310,8 @@ bool webserver::start(bool blocking) {
     start_conf |= MHD_USE_TCP_FASTOPEN;
 #endif
 
-    daemon = NULL;
-    if (bind_address == 0x0) {
+    daemon = nullptr;
+    if (bind_address == nullptr) {
         daemon = MHD_start_daemon(start_conf, port, &policy_callback, this,
                 &answer_to_connection, this, MHD_OPTION_ARRAY,
                 &iov[0], MHD_OPTION_END);
@@ -321,7 +321,7 @@ bool webserver::start(bool blocking) {
                 &iov[0], MHD_OPTION_SOCK_ADDR, bind_address, MHD_OPTION_END);
     }
 
-    if (daemon == NULL) {
+    if (daemon == nullptr) {
         throw std::invalid_argument("Unable to connect daemon to port: " + std::to_string(port));
     }
 
@@ -430,11 +430,11 @@ void error_log(void* cls, const char* fmt, va_list ap) {
     std::ignore = ap;
 
     webserver* dws = static_cast<webserver*>(cls);
-    if (dws->log_error != 0x0) dws->log_error(fmt);
+    if (dws->log_error != nullptr) dws->log_error(fmt);
 }
 
 void access_log(webserver* dws, string uri) {
-    if (dws->log_access != 0x0) dws->log_access(uri);
+    if (dws->log_access != nullptr) dws->log_access(uri);
 }
 
 size_t unescaper_func(void * cls, struct MHD_Connection *c, char *s) {
@@ -472,7 +472,7 @@ void webserver::upgrade_handler(void *cls, struct MHD_Connection* connection, vo
 }
 
 const std::shared_ptr<http_response> webserver::not_found_page(details::modded_request* mr) const {
-    if (not_found_resource != 0x0) {
+    if (not_found_resource != nullptr) {
         return not_found_resource(*mr->dhr);
     } else {
         return std::shared_ptr<http_response>(new string_response(NOT_FOUND_ERROR, http_utils::http_not_found));
@@ -480,7 +480,7 @@ const std::shared_ptr<http_response> webserver::not_found_page(details::modded_r
 }
 
 const std::shared_ptr<http_response> webserver::method_not_allowed_page(details::modded_request* mr) const {
-    if (method_not_allowed_resource != 0x0) {
+    if (method_not_allowed_resource != nullptr) {
         return method_not_allowed_resource(*mr->dhr);
     } else {
         return std::shared_ptr<http_response>(new string_response(METHOD_ERROR, http_utils::http_method_not_allowed));
@@ -488,7 +488,7 @@ const std::shared_ptr<http_response> webserver::method_not_allowed_page(details:
 }
 
 const std::shared_ptr<http_response> webserver::internal_error_page(details::modded_request* mr, bool force_our) const {
-    if (internal_error_resource != 0x0 && !force_our) {
+    if (internal_error_resource != nullptr && !force_our) {
         return internal_error_resource(*mr->dhr);
     } else {
         return std::shared_ptr<http_response>(new string_response(GENERIC_ERROR, http_utils::http_internal_server_error, "text/plain"));
@@ -507,13 +507,13 @@ MHD_Result webserver::requests_answer_first_step(MHD_Connection* connection, str
     const char *encoding = MHD_lookup_connection_value(connection, MHD_HEADER_KIND, http_utils::http_header_content_type);
 
     if (post_process_enabled &&
-        (0x0 != encoding &&
+        (nullptr != encoding &&
             ((0 == strncasecmp(http_utils::http_post_encoding_form_urlencoded, encoding, strlen(http_utils::http_post_encoding_form_urlencoded))) ||
              (0 == strncasecmp(http_utils::http_post_encoding_multipart_formdata, encoding, strlen(http_utils::http_post_encoding_multipart_formdata)))))) {
         const size_t post_memory_limit(32 * 1024);  // Same as #MHD_POOL_SIZE_DEFAULT
         mr->pp = MHD_create_post_processor(connection, post_memory_limit, &post_iterator, mr);
     } else {
-        mr->pp = NULL;
+        mr->pp = nullptr;
     }
     return MHD_YES;
 }
@@ -529,7 +529,7 @@ MHD_Result webserver::requests_answer_second_step(MHD_Connection* connection, co
 #endif  // DEBUG
         mr->dhr->grow_content(upload_data, *upload_data_size);
 
-        if (mr->pp != NULL) MHD_post_process(mr->pp, upload_data, *upload_data_size);
+        if (mr->pp != nullptr) MHD_post_process(mr->pp, upload_data, *upload_data_size);
     }
 
     *upload_data_size = 0;

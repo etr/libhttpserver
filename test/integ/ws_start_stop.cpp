@@ -494,14 +494,14 @@ void* start_ws_blocking(void* par) {
     ws->register_resource("base", &ok);
     ws->start(true);
 
-    return 0x0;
+    return nullptr;
 }
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, blocking_server)
     httpserver::webserver ws = httpserver::create_webserver(8080);
 
     pthread_t tid;
-    pthread_create(&tid, NULL, start_ws_blocking, reinterpret_cast<void*>(&ws));
+    pthread_create(&tid, nullptr, start_ws_blocking, reinterpret_cast<void*>(&ws));
 
     sleep(1);
 

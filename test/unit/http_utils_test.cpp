@@ -193,7 +193,7 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, ip_to_str_invalid_family)
 LT_END_AUTO_TEST(ip_to_str_invalid_family)
 
 LT_BEGIN_AUTO_TEST(http_utils_suite, ip_to_str_null)
-    LT_CHECK_THROW(httpserver::http::get_ip_str((struct sockaddr*) 0x0));
+    LT_CHECK_THROW(httpserver::http::get_ip_str((struct sockaddr*) nullptr));
 LT_END_AUTO_TEST(ip_to_str_null)
 
 LT_BEGIN_AUTO_TEST(http_utils_suite, get_port_invalid_family)
@@ -207,7 +207,7 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, get_port_invalid_family)
 LT_END_AUTO_TEST(get_port_invalid_family)
 
 LT_BEGIN_AUTO_TEST(http_utils_suite, get_port_null)
-    LT_CHECK_THROW(httpserver::http::get_port((struct sockaddr*) 0x0));
+    LT_CHECK_THROW(httpserver::http::get_port((struct sockaddr*) nullptr));
 LT_END_AUTO_TEST(get_port_null)
 
 LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation4_str)

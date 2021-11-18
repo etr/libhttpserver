@@ -158,7 +158,7 @@ int main(int argc, char **argv) {
     while ((c = getopt(argc, argv, "p:k:c:sv?")) != EOF) {
         switch (c) {
         case 'p':
-            port = strtoul(optarg, NULL, 10);
+            port = strtoul(optarg, nullptr, 10);
             break;
         case 'k':
             key = optarg;
