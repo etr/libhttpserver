@@ -416,7 +416,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, request_with_header)
     curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
 
-    struct curl_slist *list = NULL;
+    struct curl_slist *list = nullptr;
     list = curl_slist_append(list, "MyHeader: MyValue");
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, list);
 
@@ -502,7 +502,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, complete)
     CURL* curl = curl_easy_init();
     curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
     curl_easy_setopt(curl, CURLOPT_POST, 1L);
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, NULL);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, nullptr);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, 0);
     CURLcode res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
@@ -579,7 +579,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, only_render)
     curl = curl_easy_init();
     curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
     curl_easy_setopt(curl, CURLOPT_POST, 1L);
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, NULL);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, nullptr);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, 0);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -931,8 +931,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, request_is_printable)
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
 
-    struct curl_slist *list = NULL;
-    list = curl_slist_append(NULL, "MyHeader: MyValue");
+    struct curl_slist *list = nullptr;
+    list = curl_slist_append(nullptr, "MyHeader: MyValue");
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, list);
 
     res = curl_easy_perform(curl);
@@ -966,8 +966,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, response_is_printable)
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
 
-    struct curl_slist *list = NULL;
-    list = curl_slist_append(NULL, "MyHeader: MyValue");
+    struct curl_slist *list = nullptr;
+    list = curl_slist_append(nullptr, "MyHeader: MyValue");
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, list);
 
     res = curl_easy_perform(curl);

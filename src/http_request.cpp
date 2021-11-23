@@ -58,7 +58,7 @@ bool http_request::check_digest_auth(const std::string& realm, const std::string
 const std::string http_request::get_connection_value(const std::string& key, enum MHD_ValueKind kind) const {
     const char* header_c = MHD_lookup_connection_value(underlying_connection, kind, key.c_str());
 
-    if (header_c == NULL) return EMPTY;
+    if (header_c == nullptr) return EMPTY;
 
     return header_c;
 }
@@ -140,7 +140,7 @@ MHD_Result http_request::build_request_args(void *cls, enum MHD_ValueKind kind, 
     std::ignore = kind;
 
     arguments_accumulator* aa = static_cast<arguments_accumulator*>(cls);
-    std::string value = ((arg_value == NULL) ? "" : arg_value);
+    std::string value = ((arg_value == nullptr) ? "" : arg_value);
 
     http::base_unescaper(&value, aa->unescaper);
     (*aa->arguments)[key] = value;
@@ -152,7 +152,7 @@ MHD_Result http_request::build_request_querystring(void *cls, enum MHD_ValueKind
     std::ignore = kind;
 
     std::string* querystring = static_cast<std::string*>(cls);
-    std::string value = ((arg_value == NULL) ? "" : arg_value);
+    std::string value = ((arg_value == nullptr) ? "" : arg_value);
 
     int buffer_size = std::string(key).size() + value.size() + 3;
     char* buf = new char[buffer_size];
@@ -170,14 +170,14 @@ MHD_Result http_request::build_request_querystring(void *cls, enum MHD_ValueKind
 }
 
 const std::string http_request::get_user() const {
-    char* username = 0x0;
-    char* password = 0x0;
+    char* username = nullptr;
+    char* password = nullptr;
 
     username = MHD_basic_auth_get_username_password(underlying_connection, &password);
-    if (password != 0x0) free(password);
+    if (password != nullptr) free(password);
 
     std::string user;
-    if (username != 0x0) user = username;
+    if (username != nullptr) user = username;
 
     free(username);
 
@@ -185,14 +185,14 @@ const std::string http_request::get_user() const {
 }
 
 const std::string http_request::get_pass() const {
-    char* username = 0x0;
-    char* password = 0x0;
+    char* username = nullptr;
+    char* password = nullptr;
 
     username = MHD_basic_auth_get_username_password(underlying_connection, &password);
-    if (username != 0x0) free(username);
+    if (username != nullptr) free(username);
 
     std::string pass;
-    if (password != 0x0) pass = password;
+    if (password != nullptr) pass = password;
 
     free(password);
 
@@ -200,11 +200,11 @@ const std::string http_request::get_pass() const {
 }
 
 const std::string http_request::get_digested_user() const {
-    char* digested_user_c = 0x0;
+    char* digested_user_c = nullptr;
     digested_user_c = MHD_digest_auth_get_username(underlying_connection);
 
     std::string digested_user = EMPTY;
-    if (digested_user_c != 0x0) {
+    if (digested_user_c != nullptr) {
         digested_user = digested_user_c;
         free(digested_user_c);
     }

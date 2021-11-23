@@ -244,9 +244,9 @@ class http_request {
      size_t content_size_limit = static_cast<size_t>(-1);
      std::string version;
 
-     struct MHD_Connection* underlying_connection = 0x0;
+     struct MHD_Connection* underlying_connection = nullptr;
 
-     unescaper_ptr unescaper = 0x0;
+     unescaper_ptr unescaper = nullptr;
 
      static MHD_Result build_request_header(void *cls, enum MHD_ValueKind kind, const char *key, const char *value);
 

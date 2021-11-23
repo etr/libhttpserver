@@ -335,11 +335,11 @@ class create_webserver {
      size_t _content_size_limit = static_cast<size_t>(-1);
      int _connection_timeout = DEFAULT_WS_TIMEOUT;
      int _per_IP_connection_limit = 0;
-     log_access_ptr _log_access = 0x0;
-     log_error_ptr _log_error = 0x0;
-     validator_ptr _validator = 0x0;
-     unescaper_ptr _unescaper = 0x0;
-     const struct sockaddr* _bind_address = 0x0;
+     log_access_ptr _log_access = nullptr;
+     log_error_ptr _log_error = nullptr;
+     validator_ptr _validator = nullptr;
+     unescaper_ptr _unescaper = nullptr;
+     const struct sockaddr* _bind_address = nullptr;
      int _bind_socket = 0;
      int _max_thread_stack_size = 0;
      bool _use_ssl = false;
@@ -363,9 +363,9 @@ class create_webserver {
      bool _deferred_enabled = false;
      bool _single_resource = false;
      bool _tcp_nodelay = false;
-     render_ptr _not_found_resource = 0x0;
-     render_ptr _method_not_allowed_resource = 0x0;
-     render_ptr _internal_error_resource = 0x0;
+     render_ptr _not_found_resource = nullptr;
+     render_ptr _method_not_allowed_resource = nullptr;
+     render_ptr _internal_error_resource = nullptr;
 
      friend class webserver;
 };

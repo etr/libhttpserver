@@ -345,8 +345,8 @@ ip_representation::ip_representation(const std::string& ip) {
                 }
 
                 if (parts[i].size() == 4) {
-                    pieces[y] = strtol((parts[i].substr(0, 2)).c_str(), NULL, 16);
-                    pieces[y+1] = strtol((parts[i].substr(2, 2)).c_str(), NULL, 16);
+                    pieces[y] = strtol((parts[i].substr(0, 2)).c_str(), nullptr, 16);
+                    pieces[y+1] = strtol((parts[i].substr(2, 2)).c_str(), nullptr, 16);
 
                     y += 2;
                 } else {
@@ -371,7 +371,7 @@ ip_representation::ip_representation(const std::string& ip) {
 
                             for (unsigned int ii = 0; ii < subparts.size(); ii++) {
                                 if (subparts[ii] != "*") {
-                                    pieces[y+ii] = strtol(subparts[ii].c_str(), NULL, 10);
+                                    pieces[y+ii] = strtol(subparts[ii].c_str(), nullptr, 10);
                                     if (pieces[y+ii] > 255) throw std::invalid_argument("IP is badly formatted. 255 is max value for ip part.");
                                 } else {
                                     CLEAR_BIT(mask, y+ii);
@@ -396,7 +396,7 @@ ip_representation::ip_representation(const std::string& ip) {
         if (parts.size() == 4) {
             for (unsigned int i = 0; i < parts.size(); i++) {
                 if (parts[i] != "*") {
-                    pieces[12+i] = strtol(parts[i].c_str(), NULL, 10);
+                    pieces[12+i] = strtol(parts[i].c_str(), nullptr, 10);
                     if (pieces[12+i] > 255) throw std::invalid_argument("IP is badly formatted. 255 is max value for ip part.");
                 } else {
                     CLEAR_BIT(mask, 12+i);
@@ -481,7 +481,7 @@ void dump_arg_map(std::ostream &os, const std::string &prefix, const std::map<st
 size_t base_unescaper(std::string* s, unescaper_ptr unescaper) {
     if ((*s)[0] == 0) return 0;
 
-    if (unescaper != 0x0) {
+    if (unescaper != nullptr) {
         unescaper(*s);
         return s->size();
     }

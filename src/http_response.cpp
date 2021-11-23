@@ -27,7 +27,7 @@
 namespace httpserver {
 
 MHD_Response* http_response::get_raw_response() {
-    return MHD_create_response_from_buffer(0, 0x0, MHD_RESPMEM_PERSISTENT);
+    return MHD_create_response_from_buffer(0, nullptr, MHD_RESPMEM_PERSISTENT);
 }
 
 void http_response::decorate_response(MHD_Response* response) {

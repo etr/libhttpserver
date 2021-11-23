@@ -35,7 +35,7 @@ MHD_Response* file_response::get_raw_response() {
     if (size) {
         return MHD_create_response_from_fd(size, fd);
     } else {
-        return MHD_create_response_from_buffer(0, 0x0, MHD_RESPMEM_PERSISTENT);
+        return MHD_create_response_from_buffer(0, nullptr, MHD_RESPMEM_PERSISTENT);
     }
 }
 

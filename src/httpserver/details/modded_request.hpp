@@ -35,14 +35,14 @@ namespace httpserver {
 namespace details {
 
 struct modded_request {
-    struct MHD_PostProcessor *pp = 0x0;
-    std::string* complete_uri = 0x0;
-    std::string* standardized_url = 0x0;
-    webserver* ws = 0x0;
+    struct MHD_PostProcessor *pp = nullptr;
+    std::string* complete_uri = nullptr;
+    std::string* standardized_url = nullptr;
+    webserver* ws = nullptr;
 
     const std::shared_ptr<http_response> (httpserver::http_resource::*callback)(const httpserver::http_request&);
 
-    http_request* dhr = 0x0;
+    http_request* dhr = nullptr;
     std::shared_ptr<http_response> dhrs;
     bool second = false;
     bool has_body = false;
@@ -56,7 +56,7 @@ struct modded_request {
     modded_request& operator=(modded_request&& b) = default;
 
     ~modded_request() {
-        if (NULL != pp) {
+        if (nullptr != pp) {
             MHD_destroy_post_processor(pp);
         }
         if (second) {
