@@ -45,3 +45,6 @@ Jagat <pellucide@yahoo.com>
 
 - Simplification of microhttpd dependency management
 Christian Grothoff <grothoff@gnu.org>
+
+- Fixes to the behavior of "Method Not Allowed" and other cleanups
+Alexander Dahl <post@lespocky.de>
