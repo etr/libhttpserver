@@ -40,7 +40,7 @@ class file_response : public http_response {
      explicit file_response(
              const std::string& filename,
              int response_code = http::http_utils::http_ok,
-             const std::string& content_type = http::http_utils::text_plain):
+             const std::string& content_type = http::http_utils::application_octet_stream):
          http_response(response_code, content_type),
          filename(filename) { }
 
