@@ -1,6 +1,6 @@
 #
 #     This file is part of libhttpserver
-#     Copyright (C) 2011, 2012, 2013, 2014, 2015 Sebastiano Merlino
+#     Copyright (C) 2011-2021 Sebastiano Merlino
 #
 #     This library is free software; you can redistribute it and/or
 #     modify it under the terms of the GNU Lesser General Public
@@ -118,7 +118,7 @@ if test x"$host" = x"$build"; then
         [AC_MSG_ERROR(["microhttpd.h not found"])]
     )
 
-    CXXFLAGS="-std=c++11 -DHTTPSERVER_COMPILATION -D_REENTRANT $LIBMICROHTTPD_CFLAGS $CXXFLAGS"
+    CXXFLAGS="-DHTTPSERVER_COMPILATION -D_REENTRANT $LIBMICROHTTPD_CFLAGS $CXXFLAGS"
     LDFLAGS="$LIBMICROHTTPD_LIBS $NETWORK_LIBS $ADDITIONAL_LIBS $LDFLAGS"
 
     cond_cross_compile="no"
@@ -131,7 +131,7 @@ else
         [AC_MSG_ERROR(["microhttpd.h not found"])]
     )
 
-    CXXFLAGS="-std=c++11 -DHTTPSERVER_COMPILATION -D_REENTRANT $CXXFLAGS"
+    CXXFLAGS="-DHTTPSERVER_COMPILATION -D_REENTRANT $CXXFLAGS"
     LDFLAGS="$NETWORK_LIBS $ADDITIONAL_LIBS $LDFLAGS"
 
     cond_cross_compile="yes"
