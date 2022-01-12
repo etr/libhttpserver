@@ -157,7 +157,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
 * _http_request:_ Represents the request received by the resource that process it.
 * _http_response:_ Represents the response sent by the server once the resource finished its work.
 	* _string_response:_ A simple string response.
-	* _file_response:_ A response getting content from a fail.
+	* _file_response:_ A response getting content from a file.
 	* _basic_auth_fail_response:_ A failure in basic authentication.
 	* _digest_auth_fail_response:_ A failure in digest authentication.
 	* _deferred_response:_ A response getting content from a callback.
