@@ -26,11 +26,3 @@ else
 fi
 automake --add-missing
 autoconf
-
-# Optionally do the build as well.
-if [ "$1" = "-build" -o "$1" = "--build" ] ; then
-    shift
-    ./configure "$@"
-    make
-    make check
-fi
