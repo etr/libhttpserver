@@ -221,6 +221,13 @@ class file_response_resource_default_content_type : public http_resource {
      }
 };
 
+class file_response_resource_missing : public http_resource {
+ public:
+     const shared_ptr<http_response> render_GET(const http_request&) {
+         return shared_ptr<file_response>(new file_response("missing", 200));
+     }
+};
+
 class exception_resource : public http_resource {
  public:
      const shared_ptr<http_response> render_GET(const http_request&) {
@@ -895,6 +902,29 @@ LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource_default_content_type)
     LT_CHECK_EQ(ss["Content-Type"], "application/octet-stream");
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(file_serving_resource_default_content_type)
+
+LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource_missing)
+    file_response_resource_missing resource;
+    ws->register_resource("base", &resource);
+    curl_global_init(CURL_GLOBAL_ALL);
+
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "Internal Error");
+
+    int64_t http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    LT_ASSERT_EQ(http_code, 500);
+
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(file_serving_resource_missing)
 
 LT_BEGIN_AUTO_TEST(basic_suite, exception_forces_500)
     exception_resource resource;
