@@ -623,6 +623,10 @@ MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct details
     try {
         try {
             raw_response = mr->dhrs->get_raw_response();
+            if (raw_response == nullptr) {
+                mr->dhrs = internal_error_page(mr);
+                raw_response = mr->dhrs->get_raw_response();
+            }
         } catch(const std::invalid_argument& iae) {
             mr->dhrs = not_found_page(mr);
             raw_response = mr->dhrs->get_raw_response();
