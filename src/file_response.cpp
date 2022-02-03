@@ -22,6 +22,8 @@
 #include <fcntl.h>
 #include <microhttpd.h>
 #include <stddef.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <iosfwd>
 
@@ -30,8 +32,21 @@ struct MHD_Response;
 namespace httpserver {
 
 MHD_Response* file_response::get_raw_response() {
+    struct stat sb;
+
+    // Deny everything but regular files
+    if (stat(filename.c_str(), &sb) == 0) {
+        if (!S_ISREG(sb.st_mode)) return nullptr;
+    } else {
+        return nullptr;
+    }
+
     int fd = open(filename.c_str(), O_RDONLY);
-    size_t size = lseek(fd, 0, SEEK_END);
+    if (fd == -1) return nullptr;
+
+    off_t size = lseek(fd, 0, SEEK_END);
+    if (size == (off_t) -1) return nullptr;
+
     if (size) {
         return MHD_create_response_from_fd(size, fd);
     } else {

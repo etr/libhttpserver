@@ -37,6 +37,19 @@ class file_response : public http_response {
  public:
      file_response() = default;
 
+     /**
+      * Constructor of the class file_response.  You usually use this to pass a
+      * filename to the instance.
+      * @param filename Name of the file which content should be sent with the
+      *                 response.  User must make sure file exists and is a
+      *                 regular file, otherwise libhttpserver will return a
+      *                 generic response with HTTP status 500 (Internal Server
+      *                 Error).
+      * @param response_code HTTP response code in good case, optional,
+      *                      default is 200 (OK).
+      * @param content_type Mime type of the file content, e.g. "text/html",
+      *                     optional, default is "application/octet-stream".
+     **/
      explicit file_response(
              const std::string& filename,
              int response_code = http::http_utils::http_ok,
