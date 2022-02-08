@@ -296,6 +296,36 @@ class create_webserver {
          return *this;
      }
 
+     create_webserver& no_put_processed_data_to_content() {
+         _put_processed_data_to_content = false;
+         return *this;
+     }
+
+     create_webserver& put_processed_data_to_content() {
+         _put_processed_data_to_content = true;
+         return *this;
+     }
+
+     create_webserver& file_upload_target(file_upload_target_T file_upload_target) {
+         _file_upload_target = file_upload_target;
+         return *this;
+     }
+
+     create_webserver& post_upload_dir(const std::string& post_upload_dir) {
+         _post_upload_dir = post_upload_dir;
+         return *this;
+     }
+
+     create_webserver& no_generate_random_filename_on_upload() {
+         _generate_random_filename_on_upload = false;
+         return *this;
+     }
+
+     create_webserver& generate_random_filename_on_upload() {
+         _generate_random_filename_on_upload = true;
+         return *this;
+     }
+
      create_webserver& single_resource() {
          _single_resource = true;
          return *this;
@@ -360,6 +390,10 @@ class create_webserver {
      bool _regex_checking = true;
      bool _ban_system_enabled = true;
      bool _post_process_enabled = true;
+     bool _put_processed_data_to_content = true;
+     file_upload_target_T _file_upload_target = FILE_UPLOAD_MEMORY_ONLY;
+     std::string _post_upload_dir = "/tmp";
+     bool _generate_random_filename_on_upload = false;
      bool _deferred_enabled = false;
      bool _single_resource = false;
      bool _tcp_nodelay = false;

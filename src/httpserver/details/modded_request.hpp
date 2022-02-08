@@ -27,6 +27,7 @@
 
 #include <string>
 #include <memory>
+#include <fstream>
 
 #include "httpserver/http_request.hpp"
 
@@ -46,6 +47,9 @@ struct modded_request {
     std::shared_ptr<http_response> dhrs;
     bool second = false;
     bool has_body = false;
+
+    std::string upload_filename;
+    std::ofstream upload_ostrm;
 
     modded_request() = default;
 

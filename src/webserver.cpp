@@ -152,6 +152,10 @@ webserver::webserver(const create_webserver& params):
     regex_checking(params._regex_checking),
     ban_system_enabled(params._ban_system_enabled),
     post_process_enabled(params._post_process_enabled),
+    put_processed_data_to_content(params._put_processed_data_to_content),
+    file_upload_target(params._file_upload_target),
+    post_upload_dir(params._post_upload_dir),
+    generate_random_filename_on_upload(params._generate_random_filename_on_upload),
     deferred_enabled(params._deferred_enabled),
     single_resource(params._single_resource),
     tcp_nodelay(params._tcp_nodelay),
@@ -454,13 +458,49 @@ MHD_Result webserver::post_iterator(void *cls, enum MHD_ValueKind kind,
         const char *transfer_encoding, const char *data, uint64_t off, size_t size) {
     // Parameter needed to respect MHD interface, but not needed here.
     std::ignore = kind;
-    std::ignore = filename;
     std::ignore = content_type;
     std::ignore = transfer_encoding;
     std::ignore = off;
 
     struct details::modded_request* mr = (struct details::modded_request*) cls;
-    mr->dhr->set_arg(key, mr->dhr->get_arg(key) + std::string(data, size));
+
+    if (filename == nullptr || mr->ws->file_upload_target != FILE_UPLOAD_DISK_ONLY) {
+        mr->dhr->set_arg(key, mr->dhr->get_arg(key) + std::string(data, size));
+    }
+
+    if (filename && mr->ws->file_upload_target != FILE_UPLOAD_MEMORY_ONLY) {
+        // either get the existing file info struct or create a new one in the file map
+        file_info_s &file_info = mr->dhr->get_or_create_file_info(filename);
+        // if the file_system_file_name is not filled yet, this is a new entry and the name has to be set
+        // (either random or copy of the original filename)
+        if (file_info.file_system_file_name.empty()) {
+            if (mr->ws->generate_random_filename_on_upload) {
+                file_info.file_system_file_name = http_utils::generate_random_upload_filename(mr->ws->post_upload_dir);
+            }
+            else {
+                file_info.file_system_file_name = mr->ws->post_upload_dir + "/" + std::string(filename);
+            }
+            /* to not append to an already existing file, delete an already existing file the file */
+            unlink(file_info.file_system_file_name.c_str());
+        }
+
+        // if multiple files are uploaded, a different filename indicates the start of a new file, so close the previous one
+        if (!mr->upload_filename.empty() && 0 != strcmp(filename, mr->upload_filename.c_str())) {
+            mr->upload_ostrm.close();
+        }
+
+        if (!mr->upload_ostrm.is_open()) {
+            mr->upload_filename = filename;
+            mr->upload_ostrm.open(file_info.file_system_file_name, std::ios::binary | std::ios::app);
+        }
+
+        if (size > 0) {
+            mr->upload_ostrm.write(data, size);
+        }
+
+        // update the file size in the map
+        file_info.file_size += size;
+    }
     return MHD_YES;
 }
 
@@ -527,9 +567,14 @@ MHD_Result webserver::requests_answer_second_step(MHD_Connection* connection, co
 #ifdef DEBUG
         std::cout << "Writing content: " << std::string(upload_data, *upload_data_size) << std::endl;
 #endif  // DEBUG
-        mr->dhr->grow_content(upload_data, *upload_data_size);
+        if (mr->pp == nullptr || put_processed_data_to_content) {
+            mr->dhr->grow_content(upload_data, *upload_data_size);
+        }
 
-        if (mr->pp != nullptr) MHD_post_process(mr->pp, upload_data, *upload_data_size);
+        if (mr->pp != nullptr) {
+            mr->ws = this;
+            MHD_post_process(mr->pp, upload_data, *upload_data_size);
+        }
     }
 
     *upload_data_size = 0;

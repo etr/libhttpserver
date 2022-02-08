@@ -193,6 +193,8 @@ const char* http_utils::http_post_encoding_multipart_formdata = MHD_HTTP_POST_EN
 const char* http_utils::application_octet_stream = "application/octet-stream";
 const char* http_utils::text_plain = "text/plain";
 
+const char* http_utils::upload_filename_template = "libhttpserver.XXXXXX";
+
 std::vector<std::string> http_utils::tokenize_url(const std::string& str, const char separator) {
     return string_utilities::string_split(str, separator);
 }
@@ -214,6 +216,22 @@ std::string http_utils::standardize_url(const std::string& url) {
     }
 
     return result;
+}
+
+std::string http_utils::generate_random_upload_filename(std::string &directory) {
+    char *filename = NULL;
+    if (asprintf(&filename, "%s/%s", directory.c_str(), http_utils::upload_filename_template) == -1) {
+        return "";
+    }
+    int fd = mkstemp(filename);
+    if (fd == -1) {
+        free(filename);
+        return "";
+    }
+    close(fd);
+    std::string ret_filename = std::string(filename);
+    free(filename);
+    return ret_filename;
 }
 
 std::string get_ip_str(const struct sockaddr *sa) {
