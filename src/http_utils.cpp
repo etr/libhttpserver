@@ -61,6 +61,12 @@ typedef unsigned char u_char;
 
 #endif  // CYGWIN
 
+// libmicrohttpd deprecated some definitions with v0.9.74, and introduced new ones
+#if MHD_VERSION < 0x00097314
+#define MHD_HTTP_CONTENT_TOO_LARGE      MHD_HTTP_PAYLOAD_TOO_LARGE
+#define MHD_HTTP_UNPROCESSABLE_CONTENT  MHD_HTTP_UNPROCESSABLE_ENTITY
+#endif
+
 namespace httpserver {
 namespace http {
 
@@ -101,12 +107,12 @@ const int http_utils::http_conflict = MHD_HTTP_CONFLICT;
 const int http_utils::http_gone = MHD_HTTP_GONE;
 const int http_utils::http_length_required = MHD_HTTP_LENGTH_REQUIRED;
 const int http_utils::http_precondition_failed = MHD_HTTP_PRECONDITION_FAILED;
-const int http_utils::http_request_entity_too_large = MHD_HTTP_PAYLOAD_TOO_LARGE;
+const int http_utils::http_request_entity_too_large = MHD_HTTP_CONTENT_TOO_LARGE;
 const int http_utils::http_request_uri_too_long = MHD_HTTP_URI_TOO_LONG;
 const int http_utils::http_unsupported_media_type = MHD_HTTP_UNSUPPORTED_MEDIA_TYPE;
 const int http_utils::http_requested_range_not_satisfiable = MHD_HTTP_RANGE_NOT_SATISFIABLE;
 const int http_utils::http_expectation_failed = MHD_HTTP_EXPECTATION_FAILED;
-const int http_utils::http_unprocessable_entity = MHD_HTTP_UNPROCESSABLE_ENTITY;
+const int http_utils::http_unprocessable_entity = MHD_HTTP_UNPROCESSABLE_CONTENT;
 const int http_utils::http_locked = MHD_HTTP_LOCKED;
 const int http_utils::http_failed_dependency = MHD_HTTP_FAILED_DEPENDENCY;
 const int http_utils::http_upgrade_required = MHD_HTTP_UPGRADE_REQUIRED;
