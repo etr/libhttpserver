@@ -47,7 +47,6 @@ void resource_init(std::map<std::string, bool>* res);
 /**
  * Class representing a callable http resource.
 **/
-
 class http_resource {
  public:
      /**
