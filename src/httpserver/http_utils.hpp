@@ -64,11 +64,12 @@ typedef int MHD_Result;
 
 namespace httpserver {
 
-enum file_upload_target_T{
+enum file_upload_target_T {
      FILE_UPLOAD_MEMORY_ONLY,
      FILE_UPLOAD_DISK_ONLY,
      FILE_UPLOAD_MEMORY_AND_DISK,
 };
+
 struct file_info_s {
     size_t file_size;
     std::string file_system_file_name;

@@ -476,11 +476,10 @@ MHD_Result webserver::post_iterator(void *cls, enum MHD_ValueKind kind,
         if (file_info.file_system_file_name.empty()) {
             if (mr->ws->generate_random_filename_on_upload) {
                 file_info.file_system_file_name = http_utils::generate_random_upload_filename(mr->ws->post_upload_dir);
-            }
-            else {
+            } else {
                 file_info.file_system_file_name = mr->ws->post_upload_dir + "/" + std::string(filename);
             }
-            /* to not append to an already existing file, delete an already existing file the file */
+            // to not append to an already existing file, delete an already existing file
             unlink(file_info.file_system_file_name.c_str());
         }
 

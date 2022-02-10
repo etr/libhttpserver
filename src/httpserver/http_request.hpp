@@ -136,8 +136,9 @@ class http_request {
      const std::map<std::string, std::string, http::arg_comparator> get_args() const;
 
      /**
-      * Method to get or create a file info struct in the map if the provided filename is already in the map, return the exiting file info struct, otherwise create one in the map and return it.
-      * @param upload_file_name he file name the user uploaded (this is the identifier for the map entry)
+      * Method to get or create a file info struct in the map if the provided filename is already in the map
+      * return the exiting file info struct, otherwise create one in the map and return it.
+      * @param upload_file_name the file name the user uploaded (this is the identifier for the map entry)
       * @result a file info struct file_info_s
      **/
      file_info_s &get_or_create_file_info(const char *upload_file_name);
@@ -315,17 +316,6 @@ class http_request {
          if (this->content.size() > content_size_limit) {
              this->content.resize(content_size_limit);
          }
-     }
-
-     /**
-      * Method used to set a file info into the map by key.
-      * @param upload_file_name The file name the user uploaded (identifying the map entry)
-      * @param file_system_file_name The path to the file in the file system (the name may not be the original name depending on configuration of the webserver)
-      * @param size The size in number of char of the file.
-     **/
-     void set_file(const char* upload_file_name, const char* file_system_file_name, size_t file_size) {
-         file_info_s file_info = { file_size, file_system_file_name };
-         files[upload_file_name] = file_info;
      }
 
      /**
