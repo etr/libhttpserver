@@ -464,43 +464,47 @@ MHD_Result webserver::post_iterator(void *cls, enum MHD_ValueKind kind,
 
     struct details::modded_request* mr = (struct details::modded_request*) cls;
 
-    if (filename == nullptr || mr->ws->file_upload_target != FILE_UPLOAD_DISK_ONLY) {
-        mr->dhr->set_arg(key, mr->dhr->get_arg(key) + std::string(data, size));
-    }
+    try {
+        if (filename == nullptr || mr->ws->file_upload_target != FILE_UPLOAD_DISK_ONLY) {
+            mr->dhr->set_arg(key, mr->dhr->get_arg(key) + std::string(data, size));
+        }
 
-    if (filename && mr->ws->file_upload_target != FILE_UPLOAD_MEMORY_ONLY) {
-        // either get the existing file info struct or create a new one in the file map
-        file_info_s &file_info = mr->dhr->get_or_create_file_info(filename);
-        // if the file_system_file_name is not filled yet, this is a new entry and the name has to be set
-        // (either random or copy of the original filename)
-        if (file_info.file_system_file_name.empty()) {
-            if (mr->ws->generate_random_filename_on_upload) {
-                file_info.file_system_file_name = http_utils::generate_random_upload_filename(mr->ws->post_upload_dir);
-            } else {
-                file_info.file_system_file_name = mr->ws->post_upload_dir + "/" + std::string(filename);
+        if (filename && mr->ws->file_upload_target != FILE_UPLOAD_MEMORY_ONLY) {
+            // either get the existing file info struct or create a new one in the file map
+            file_info_s &file_info = mr->dhr->get_or_create_file_info(filename);
+            // if the file_system_file_name is not filled yet, this is a new entry and the name has to be set
+            // (either random or copy of the original filename)
+            if (file_info.file_system_file_name.empty()) {
+                if (mr->ws->generate_random_filename_on_upload) {
+                    file_info.file_system_file_name = http_utils::generate_random_upload_filename(mr->ws->post_upload_dir);
+                } else {
+                    file_info.file_system_file_name = mr->ws->post_upload_dir + "/" + std::string(filename);
+                }
+                // to not append to an already existing file, delete an already existing file
+                unlink(file_info.file_system_file_name.c_str());
             }
-            // to not append to an already existing file, delete an already existing file
-            unlink(file_info.file_system_file_name.c_str());
-        }
 
-        // if multiple files are uploaded, a different filename indicates the start of a new file, so close the previous one
-        if (!mr->upload_filename.empty() && 0 != strcmp(filename, mr->upload_filename.c_str())) {
-            mr->upload_ostrm.close();
-        }
+            // if multiple files are uploaded, a different filename indicates the start of a new file, so close the previous one
+            if (!mr->upload_filename.empty() && 0 != strcmp(filename, mr->upload_filename.c_str())) {
+                mr->upload_ostrm.close();
+            }
 
-        if (!mr->upload_ostrm.is_open()) {
-            mr->upload_filename = filename;
-            mr->upload_ostrm.open(file_info.file_system_file_name, std::ios::binary | std::ios::app);
-        }
+            if (!mr->upload_ostrm.is_open()) {
+                mr->upload_filename = filename;
+                mr->upload_ostrm.open(file_info.file_system_file_name, std::ios::binary | std::ios::app);
+            }
 
-        if (size > 0) {
-            mr->upload_ostrm.write(data, size);
-        }
+            if (size > 0) {
+                mr->upload_ostrm.write(data, size);
+            }
 
-        // update the file size in the map
-        file_info.file_size += size;
+            // update the file size in the map
+            file_info.file_size += size;
+        }
+        return MHD_YES;
+    } catch(const std::exception& e) {
+        return MHD_NO;
     }
-    return MHD_YES;
 }
 
 void webserver::upgrade_handler(void *cls, struct MHD_Connection* connection, void **con_cls, int upgrade_socket) {
