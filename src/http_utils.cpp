@@ -33,6 +33,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <fstream>
 #include <iomanip>
 #include <iterator>
@@ -219,18 +220,17 @@ std::string http_utils::standardize_url(const std::string& url) {
 }
 
 std::string http_utils::generate_random_upload_filename(std::string &directory) {
-    char *filename = NULL;
-    if (asprintf(&filename, "%s/%s", directory.c_str(), http_utils::upload_filename_template) == -1) {
-        return "";
-    }
-    int fd = mkstemp(filename);
+    std::string filename = directory + "/" + http_utils::upload_filename_template;
+    char *template_filename = strdup(filename.c_str());
+
+    int fd = mkstemp(template_filename);
     if (fd == -1) {
-        free(filename);
+        free(template_filename);
         return "";
     }
     close(fd);
-    std::string ret_filename = std::string(filename);
-    free(filename);
+    std::string ret_filename = std::string(template_filename);
+    free(template_filename);
     return ret_filename;
 }
 
