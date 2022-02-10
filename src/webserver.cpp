@@ -47,6 +47,7 @@
 #include <stdexcept>
 #include <utility>
 #include <vector>
+#include <iostream>
 
 #include "httpserver/create_webserver.hpp"
 #include "httpserver/details/http_endpoint.hpp"
@@ -463,6 +464,13 @@ MHD_Result webserver::post_iterator(void *cls, enum MHD_ValueKind kind,
     std::ignore = off;
 
     struct details::modded_request* mr = (struct details::modded_request*) cls;
+
+if (key) {
+    std::cout << "got key '" << key << "'" << std::endl;
+}
+if (filename) {
+    std::cout << "got filename '" << filename << "'" << std::endl;
+}
 
     try {
         if (filename == nullptr || mr->ws->file_upload_target != FILE_UPLOAD_DISK_ONLY) {

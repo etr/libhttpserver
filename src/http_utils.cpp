@@ -23,6 +23,7 @@
 #if defined(_WIN32) && !defined(__CYGWIN__)
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <io.h>
 #else  // WIN32 check
 #include <arpa/inet.h>
 #include <netdb.h>
@@ -237,14 +238,20 @@ const std::string http_utils::generate_random_upload_filename(const std::string 
     if (0 != _sopen_s(&fd, path, _O_CREAT | _O_EXCL | _O_NOINHERIT, _SH_DENYRW, _S_IREAD | _S_IWRITE)) {
         throw std::exception();
     }
+    if (fd == -1) {
+        free(template_filename);
+        throw std::exception();
+    }
+    _close(fd);
 #else
     fd = mkstemp(template_filename);
-#endif
+
     if (fd == -1) {
         free(template_filename);
         throw std::exception();
     }
     close(fd);
+#endif
     std::string ret_filename = std::string(template_filename);
     free(template_filename);
     return ret_filename;
