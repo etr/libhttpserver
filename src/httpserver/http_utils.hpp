@@ -251,7 +251,7 @@ class http_utils {
      static std::vector<std::string> tokenize_url(const std::string&, const char separator = '/');
      static std::string standardize_url(const std::string&);
 
-     static std::string generate_random_upload_filename(std::string &directory);
+     static const std::string generate_random_upload_filename(const std::string &directory);
 };
 
 #define COMPARATOR(x, y, op) { \

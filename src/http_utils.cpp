@@ -225,7 +225,7 @@ std::string http_utils::standardize_url(const std::string& url) {
     return result;
 }
 
-std::string http_utils::generate_random_upload_filename(std::string &directory) {
+const std::string http_utils::generate_random_upload_filename(const std::string &directory) {
     std::string filename = directory + path_separator + http_utils::upload_filename_template;
     char *template_filename = strdup(filename.c_str());
     int fd = 0;
