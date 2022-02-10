@@ -24,6 +24,9 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <io.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <share.h>
 #else  // WIN32 check
 #include <arpa/inet.h>
 #include <netdb.h>
@@ -235,7 +238,7 @@ const std::string http_utils::generate_random_upload_filename(const std::string 
     if (0 != _mktemp_s(template_filename, strlen(template_filename) + 1)) {
         throw std::exception();
     }
-    if (0 != _sopen_s(&fd, path, _O_CREAT | _O_EXCL | _O_NOINHERIT, _SH_DENYRW, _S_IREAD | _S_IWRITE)) {
+    if (0 != _sopen_s(&fd, template_filename, _O_CREAT | _O_EXCL | _O_NOINHERIT, _SH_DENYNO, _S_IREAD | _S_IWRITE)) {
         throw std::exception();
     }
     if (fd == -1) {
