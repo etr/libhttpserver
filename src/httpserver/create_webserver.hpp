@@ -306,7 +306,7 @@ class create_webserver {
          return *this;
      }
 
-     create_webserver& file_upload_target(file_upload_target_T file_upload_target) {
+     create_webserver& file_upload_target(const file_upload_target_T& file_upload_target) {
          _file_upload_target = file_upload_target;
          return *this;
      }
