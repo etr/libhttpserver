@@ -61,7 +61,7 @@ class file_upload_resource : public httpserver::http_resource {
             </tr>";
 
         std::map<std::string, file_info_s> files = req.get_files();
-        for (std::map<std::string, file_info_s>::iterator it = files.begin(); it != files.end(); it++) {
+        for (std::map<std::string, file_info_s>::iterator it = files.begin(); it != files.end(); ++it) {
              post_response += "<tr><td>";
              post_response += it->first;
              post_response += "</td><td>";
