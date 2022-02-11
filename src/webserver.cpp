@@ -471,14 +471,14 @@ MHD_Result webserver::post_iterator(void *cls, enum MHD_ValueKind kind,
 
         if (filename && mr->ws->file_upload_target != FILE_UPLOAD_MEMORY_ONLY) {
             // either get the existing file info struct or create a new one in the file map
-            file_info_s &file_info = mr->dhr->get_or_create_file_info(filename);
+            const file_info_s &file_info = mr->dhr->get_or_create_file_info(filename);
             // if the file_system_file_name is not filled yet, this is a new entry and the name has to be set
             // (either random or copy of the original filename)
             if (file_info.file_system_file_name.empty()) {
                 if (mr->ws->generate_random_filename_on_upload) {
-                    file_info.file_system_file_name = http_utils::generate_random_upload_filename(mr->ws->post_upload_dir);
+                    mr->dhr->set_file_system_file_name(filename, http_utils::generate_random_upload_filename(mr->ws->post_upload_dir));
                 } else {
-                    file_info.file_system_file_name = mr->ws->post_upload_dir + "/" + std::string(filename);
+                    mr->dhr->set_file_system_file_name(filename, mr->ws->post_upload_dir + "/" + std::string(filename));
                 }
                 // to not append to an already existing file, delete an already existing file
                 unlink(file_info.file_system_file_name.c_str());
@@ -499,7 +499,7 @@ MHD_Result webserver::post_iterator(void *cls, enum MHD_ValueKind kind,
             }
 
             // update the file size in the map
-            file_info.file_size += size;
+            mr->dhr->grow_file_size(filename, size);
         }
         return MHD_YES;
     } catch(const std::exception& e) {

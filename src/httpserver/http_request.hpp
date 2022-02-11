@@ -141,7 +141,7 @@ class http_request {
       * @param upload_file_name the file name the user uploaded (this is the identifier for the map entry)
       * @result a file info struct file_info_s
      **/
-     file_info_s &get_or_create_file_info(const char *upload_file_name);
+     const file_info_s& get_or_create_file_info(const std::string& upload_file_name);
 
      /**
       * Method used to get all files passed with the request.
@@ -316,6 +316,24 @@ class http_request {
          if (this->content.size() > content_size_limit) {
              this->content.resize(content_size_limit);
          }
+     }
+
+     /**
+      * Method used to set the file system file name into the map by key.
+      * @param upload_file_name The file name the user uploaded (identifying the map entry)
+      * @param file_system_file_name The path to the file in the file system (the name may not be the original name depending on configuration of the webserver)
+     **/
+     void set_file_system_file_name(const std::string& upload_file_name, const std::string& file_system_file_name) {
+         files[upload_file_name].file_system_file_name = file_system_file_name;
+     }
+
+     /**
+      * Method used grow the filesize of an entry in the map by key.
+      * @param upload_file_name The file name the user uploaded (identifying the map entry)
+      * @param additional_file_size The additional size as a number to be added to the entry.
+     **/
+     void grow_file_size(const std::string& upload_file_name, size_t additional_file_size) {
+         files[upload_file_name].file_size += additional_file_size;
      }
 
      /**
