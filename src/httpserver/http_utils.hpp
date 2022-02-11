@@ -246,12 +246,10 @@ class http_utils {
      static const char* application_octet_stream;
      static const char* text_plain;
 
-     static const char* upload_filename_template;
-
      static std::vector<std::string> tokenize_url(const std::string&, const char separator = '/');
      static std::string standardize_url(const std::string&);
 
-     static const std::string generate_random_upload_filename(const std::string &directory);
+     static const std::string generate_random_upload_filename(const std::string& directory);
 };
 
 #define COMPARATOR(x, y, op) { \

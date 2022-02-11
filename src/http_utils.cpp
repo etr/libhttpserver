@@ -198,7 +198,7 @@ const char* http_utils::http_post_encoding_multipart_formdata = MHD_HTTP_POST_EN
 const char* http_utils::application_octet_stream = "application/octet-stream";
 const char* http_utils::text_plain = "text/plain";
 
-const char* http_utils::upload_filename_template = "libhttpserver.XXXXXX";
+static const char* upload_filename_template = "libhttpserver.XXXXXX";
 
 #ifdef _WIN32
     static const char path_separator = '\\';
@@ -229,8 +229,8 @@ std::string http_utils::standardize_url(const std::string& url) {
     return result;
 }
 
-const std::string http_utils::generate_random_upload_filename(const std::string &directory) {
-    std::string filename = directory + path_separator + http_utils::upload_filename_template;
+const std::string http_utils::generate_random_upload_filename(const std::string& directory) {
+    std::string filename = directory + path_separator + upload_filename_template;
     char *template_filename = strdup(filename.c_str());
     int fd = 0;
 
