@@ -234,11 +234,17 @@ const std::string http_utils::generate_random_upload_filename(const std::string&
     char *template_filename = strdup(filename.c_str());
     int fd = 0;
 
+    if (template_filename == NULL) {
+        throw std::exception();
+    }
+
 #if defined(_WIN32)
     if (0 != _mktemp_s(template_filename, strlen(template_filename) + 1)) {
+        free(template_filename);
         throw std::exception();
     }
     if (0 != _sopen_s(&fd, template_filename, _O_CREAT | _O_EXCL | _O_NOINHERIT, _SH_DENYNO, _S_IREAD | _S_IWRITE)) {
+        free(template_filename);
         throw std::exception();
     }
     if (fd == -1) {
