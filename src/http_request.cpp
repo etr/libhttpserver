@@ -127,8 +127,8 @@ const std::map<std::string, std::string, http::arg_comparator> http_request::get
     return arguments;
 }
 
-const file_info_s& http_request::get_or_create_file_info(const std::string& upload_file_name) {
-    return files[upload_file_name];
+const file_info_s& http_request::get_or_create_file_info(const std::string& key, const std::string& upload_file_name) {
+    return files[key][upload_file_name];
 }
 
 const std::string http_request::get_querystring() const {

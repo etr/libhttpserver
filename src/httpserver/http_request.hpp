@@ -141,13 +141,13 @@ class http_request {
       * @param upload_file_name the file name the user uploaded (this is the identifier for the map entry)
       * @result a file info struct file_info_s
      **/
-     const file_info_s& get_or_create_file_info(const std::string& upload_file_name);
+     const file_info_s& get_or_create_file_info(const std::string &key, const std::string& upload_file_name);
 
      /**
       * Method used to get all files passed with the request.
       * @result result a map<string, file_info_s> > that will be filled with all files
      **/
-     const std::map<std::string, file_info_s> get_files() const {
+     const std::map<std::string, std::map<std::string, file_info_s>> get_files() const {
           return files;
      }
 
@@ -256,7 +256,7 @@ class http_request {
      std::string path;
      std::string method;
      std::map<std::string, std::string, http::arg_comparator> args;
-     std::map<std::string, file_info_s> files;
+     std::map<std::string, std::map<std::string, file_info_s>> files;
      std::string content = "";
      size_t content_size_limit = static_cast<size_t>(-1);
      std::string version;
@@ -323,8 +323,8 @@ class http_request {
       * @param upload_file_name The file name the user uploaded (identifying the map entry)
       * @param file_system_file_name The path to the file in the file system (the name may not be the original name depending on configuration of the webserver)
      **/
-     void set_file_system_file_name(const std::string& upload_file_name, const std::string& file_system_file_name) {
-         files[upload_file_name].file_system_file_name = file_system_file_name;
+     void set_file_system_file_name(const std::string& key, const std::string& upload_file_name, const std::string& file_system_file_name) {
+         files[key][upload_file_name].file_system_file_name = file_system_file_name;
      }
 
      /**
@@ -332,8 +332,8 @@ class http_request {
       * @param upload_file_name The file name the user uploaded (identifying the map entry)
       * @param additional_file_size The additional size as a number to be added to the entry.
      **/
-     void grow_file_size(const std::string& upload_file_name, size_t additional_file_size) {
-         files[upload_file_name].file_size += additional_file_size;
+     void grow_file_size(const std::string& key, const std::string& upload_file_name, size_t additional_file_size) {
+         files[key][upload_file_name].file_size += additional_file_size;
      }
 
      /**

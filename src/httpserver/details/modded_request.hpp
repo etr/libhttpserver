@@ -48,6 +48,7 @@ struct modded_request {
     bool second = false;
     bool has_body = false;
 
+    std::string upload_key;
     std::string upload_filename;
     std::ofstream upload_ostrm;
 
