@@ -18,60 +18,67 @@
      USA
 */
 
-#include <httpserver.hpp>
 #include <iostream>
-
-using namespace httpserver;
+#include <httpserver.hpp>
 
 class file_upload_resource : public httpserver::http_resource {
  public:
-     const std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request& req) {
-         std::string get_response = " \
-         <html> \
-           <body> \
-             <form method=\"POST\" enctype=\"multipart/form-data\"> \
-               <input type=\"file\" name=\"files\" multiple> \
-               <br><br> \
-               <input type=\"submit\" value=\"Upload\"> \
-             </form> \
-           </body> \
-         </html>";
+     const std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request&) {
+         std::string get_response = "<html>\n";
+         get_response += "  <body>\n";
+         get_response += "    <form method=\"POST\" enctype=\"multipart/form-data\">\n";
+         get_response += "      <h1>Upload 1 (key is 'files', multiple files can be selected)</h1><br>\n";
+         get_response += "      <input type=\"file\" name=\"files\" multiple>\n";
+         get_response += "      <br><br>\n";
+         get_response += "      <h1>Upload 2 (key is 'files2', multiple files can be selected)</h1><br>\n";
+         get_response += "      <input type=\"file\" name=\"files2\" multiple><br><br>\n";
+         get_response += "      <input type=\"submit\" value=\"Upload\">\n";
+         get_response += "    </form>\n";
+         get_response += "  </body>\n";
+         get_response += "</html>\n";
+
          return std::shared_ptr<httpserver::http_response>(new httpserver::string_response(get_response, 200, "text/html"));
      }
 
      const std::shared_ptr<httpserver::http_response> render_POST(const httpserver::http_request& req) {
-        std::string post_response = " \
-        <html> \
-          <head> \
-            <style> \
-              table, th, td { \
-                border: 1px solid black; \
-                border-collapse: collapse; \
-              } \
-            </style> \
-          </head> \
-        <body> \
-          Uploaded files: \
-          <br><br> \
-          <table> \
-            <tr> \
-              <th>Uploaded filename</th> \
-              <th>File system path</th> \
-              <th>File size</th> \
-            </tr>";
+        std::string post_response = "<html>\n";
+        post_response += "<head>\n";
+        post_response += "  <style>\n";
+        post_response += "    table, th, td {\n";
+        post_response += "      border: 1px solid black;\n";
+        post_response += "      border-collapse: collapse;\n";
+        post_response += "    }\n";
+        post_response += "  </style>\n";
+        post_response += "</head>\n";
+        post_response += "<body>\n";
+        post_response += "  Uploaded files:\n";
+        post_response += "  <br><br>\n";
+        post_response += "  <table>\n";
+        post_response += "    <tr>\n";
+        post_response += "      <th>Key</th>\n";
+        post_response += "      <th>Uploaded filename</th>\n";
+        post_response += "      <th>File system path</th>\n";
+        post_response += "      <th>File size</th>\n";
+        post_response += "    </tr>\n";
 
-        std::map<std::string, file_info_s> files = req.get_files();
-        for (std::map<std::string, file_info_s>::iterator it = files.begin(); it != files.end(); ++it) {
-             post_response += "<tr><td>";
-             post_response += it->first;
-             post_response += "</td><td>";
-             post_response += it->second.file_system_file_name;
-             post_response += "</td><td>";
-             post_response += std::to_string(it->second.file_size);
-             post_response += "</td></tr>";
+
+        for (auto &file_key : req.get_files()) {
+            for (auto &files : file_key.second) {
+                post_response += "    <tr><td>";
+                post_response += file_key.first;
+                post_response += "</td><td>";
+                post_response += files.first;
+                post_response += "</td><td>";
+                post_response += files.second.file_system_file_name;
+                post_response += "</td><td>";
+                post_response += std::to_string(files.second.file_size);
+                post_response += "</td></tr>\n";
+            }
         }
 
-        post_response += "</table><br><br><a href=\"/\">back</a></body></html>";
+        post_response += "  </table><br><br>\n";
+        post_response += "  <a href=\"/\">back</a>\n";
+        post_response += "</body>\n</html>";
         return std::shared_ptr<httpserver::http_response>(new httpserver::string_response(post_response, 201, "text/html"));
     }
 };
@@ -93,7 +100,7 @@ int main(int argc, char** argv) {
                               .no_put_processed_data_to_content()
                               .post_upload_dir(std::string(argv[1]))
                               .generate_random_filename_on_upload()
-                              .file_upload_target(FILE_UPLOAD_DISK_ONLY);
+                              .file_upload_target(httpserver::FILE_UPLOAD_DISK_ONLY);
 
     file_upload_resource fur;
     ws.register_resource("/", &fur);
