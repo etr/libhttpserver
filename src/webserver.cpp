@@ -486,17 +486,20 @@ MHD_Result webserver::post_iterator(void *cls, enum MHD_ValueKind kind,
 
             // if multiple files are uploaded, a different filename indicates the start of a new file, so close the previous one
             if (mr->upload_filename.empty() || mr->upload_key.empty() || 0 != strcmp(filename, mr->upload_filename.c_str()) || 0 != strcmp(key, mr->upload_key.c_str())) {
-                mr->upload_ostrm.close();
+                if (mr->upload_ostrm != nullptr) {
+                    mr->upload_ostrm->close();
+                }
             }
 
-            if (!mr->upload_ostrm.is_open()) {
+            if (mr->upload_ostrm == nullptr || !mr->upload_ostrm->is_open()) {
                 mr->upload_key = key;
                 mr->upload_filename = filename;
-                mr->upload_ostrm.open(file_info.file_system_file_name, std::ios::binary | std::ios::app);
+                mr->upload_ostrm = new std::ofstream();
+                mr->upload_ostrm->open(file_info.file_system_file_name, std::ios::binary | std::ios::app);
             }
 
             if (size > 0) {
-                mr->upload_ostrm.write(data, size);
+                mr->upload_ostrm->write(data, size);
             }
 
             // update the file size in the map

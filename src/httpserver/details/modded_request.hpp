@@ -50,7 +50,7 @@ struct modded_request {
 
     std::string upload_key;
     std::string upload_filename;
-    std::ofstream upload_ostrm;
+    std::ofstream* upload_ostrm = nullptr;
 
     modded_request() = default;
 
@@ -69,6 +69,7 @@ struct modded_request {
         }
         delete complete_uri;
         delete standardized_url;
+        delete upload_ostrm;
     }
 };
 
