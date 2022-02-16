@@ -471,17 +471,17 @@ MHD_Result webserver::post_iterator(void *cls, enum MHD_ValueKind kind,
 
         if (filename && mr->ws->file_upload_target != FILE_UPLOAD_MEMORY_ONLY) {
             // either get the existing file info struct or create a new one in the file map
-            const file_info_s &file_info = mr->dhr->get_or_create_file_info(key, filename);
+            http::file_info &file = mr->dhr->get_or_create_file_info(key, filename);
             // if the file_system_file_name is not filled yet, this is a new entry and the name has to be set
             // (either random or copy of the original filename)
-            if (file_info.file_system_file_name.empty()) {
+            if (file.get_file_system_file_name().empty()) {
                 if (mr->ws->generate_random_filename_on_upload) {
-                    mr->dhr->set_file_system_file_name(key, filename, http_utils::generate_random_upload_filename(mr->ws->post_upload_dir));
+                    file.set_file_system_file_name(http_utils::generate_random_upload_filename(mr->ws->post_upload_dir));
                 } else {
-                    mr->dhr->set_file_system_file_name(key, filename, mr->ws->post_upload_dir + "/" + std::string(filename));
+                    file.set_file_system_file_name(mr->ws->post_upload_dir + "/" + std::string(filename));
                 }
                 // to not append to an already existing file, delete an already existing file
-                unlink(file_info.file_system_file_name.c_str());
+                unlink(file.get_file_system_file_name().c_str());
             }
 
             // if multiple files are uploaded, a different filename indicates the start of a new file, so close the previous one
@@ -495,7 +495,7 @@ MHD_Result webserver::post_iterator(void *cls, enum MHD_ValueKind kind,
                 mr->upload_key = key;
                 mr->upload_filename = filename;
                 mr->upload_ostrm = new std::ofstream();
-                mr->upload_ostrm->open(file_info.file_system_file_name, std::ios::binary | std::ios::app);
+                mr->upload_ostrm->open(file.get_file_system_file_name(), std::ios::binary | std::ios::app);
             }
 
             if (size > 0) {
@@ -503,7 +503,7 @@ MHD_Result webserver::post_iterator(void *cls, enum MHD_ValueKind kind,
             }
 
             // update the file size in the map
-            mr->dhr->grow_file_size(key, filename, size);
+            file.grow_file_size(size);
         }
         return MHD_YES;
     } catch(const std::exception& e) {

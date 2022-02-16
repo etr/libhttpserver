@@ -18,21 +18,32 @@
      USA
 */
 
-#ifndef SRC_HTTPSERVER_HPP_
-#define SRC_HTTPSERVER_HPP_
+#if !defined (_HTTPSERVER_HPP_INSIDE_) && !defined (HTTPSERVER_COMPILATION)
+#error "Only <httpserver.hpp> or <httpserverpp> can be included directly."
+#endif
 
-#define _HTTPSERVER_HPP_INSIDE_
+#ifndef SRC_HTTPSERVER_FILE_INFO_HPP_
+#define SRC_HTTPSERVER_FILE_INFO_HPP_
 
-#include "httpserver/basic_auth_fail_response.hpp"
-#include "httpserver/deferred_response.hpp"
-#include "httpserver/digest_auth_fail_response.hpp"
-#include "httpserver/file_response.hpp"
-#include "httpserver/http_request.hpp"
-#include "httpserver/http_resource.hpp"
-#include "httpserver/http_response.hpp"
-#include "httpserver/http_utils.hpp"
-#include "httpserver/file_info.hpp"
-#include "httpserver/string_response.hpp"
-#include "httpserver/webserver.hpp"
+#include <string>
 
-#endif  // SRC_HTTPSERVER_HPP_
+namespace httpserver {
+
+namespace http {
+
+class file_info {
+ public:
+     void set_file_system_file_name(const std::string file_system_file_name);
+     void grow_file_size(size_t additional_file_size);
+     size_t get_file_size() const;
+     const std::string get_file_system_file_name() const;
+
+ private:
+     size_t _file_size;
+     std::string _file_system_file_name;
+};
+
+}  // namespace http
+}  // namespace httpserver
+#endif  // SRC_HTTPSERVER_FILE_INFO_HPP_
+

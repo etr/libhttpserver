@@ -18,21 +18,26 @@
      USA
 */
 
-#ifndef SRC_HTTPSERVER_HPP_
-#define SRC_HTTPSERVER_HPP_
-
-#define _HTTPSERVER_HPP_INSIDE_
-
-#include "httpserver/basic_auth_fail_response.hpp"
-#include "httpserver/deferred_response.hpp"
-#include "httpserver/digest_auth_fail_response.hpp"
-#include "httpserver/file_response.hpp"
-#include "httpserver/http_request.hpp"
-#include "httpserver/http_resource.hpp"
-#include "httpserver/http_response.hpp"
-#include "httpserver/http_utils.hpp"
+#include <string.h>
 #include "httpserver/file_info.hpp"
-#include "httpserver/string_response.hpp"
-#include "httpserver/webserver.hpp"
 
-#endif  // SRC_HTTPSERVER_HPP_
+namespace httpserver {
+namespace http {
+
+void file_info::set_file_system_file_name(const std::string file_system_file_name) {
+    _file_system_file_name = file_system_file_name;
+}
+
+void file_info::grow_file_size(size_t additional_file_size) {
+    _file_size += additional_file_size;
+}
+size_t file_info::get_file_size() const {
+    return _file_size;
+}
+const std::string file_info::get_file_system_file_name() const {
+    return _file_system_file_name;
+}
+
+
+}  // namespace http
+}  // namespace httpserver

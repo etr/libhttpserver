@@ -70,11 +70,6 @@ enum file_upload_target_T {
      FILE_UPLOAD_MEMORY_AND_DISK,
 };
 
-struct file_info_s {
-    size_t file_size;
-    std::string file_system_file_name;
-};
-
 typedef void(*unescaper_ptr)(std::string&);
 
 namespace http {
