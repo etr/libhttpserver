@@ -469,7 +469,7 @@ MHD_Result webserver::post_iterator(void *cls, enum MHD_ValueKind kind,
             mr->dhr->set_arg(key, mr->dhr->get_arg(key) + std::string(data, size));
         }
 
-        if (filename && mr->ws->file_upload_target != FILE_UPLOAD_MEMORY_ONLY) {
+        if (filename && *filename != '\0' && mr->ws->file_upload_target != FILE_UPLOAD_MEMORY_ONLY) {
             // either get the existing file info struct or create a new one in the file map
             http::file_info &file = mr->dhr->get_or_create_file_info(key, filename);
             // if the file_system_file_name is not filled yet, this is a new entry and the name has to be set
