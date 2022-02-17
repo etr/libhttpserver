@@ -24,7 +24,7 @@
 namespace httpserver {
 namespace http {
 
-void file_info::set_file_system_file_name(const std::string file_system_file_name) {
+void file_info::set_file_system_file_name(const std::string& file_system_file_name) {
     _file_system_file_name = file_system_file_name;
 }
 
