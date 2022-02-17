@@ -28,19 +28,23 @@
 #include <string>
 
 namespace httpserver {
+class webserver;
 
 namespace http {
 
 class file_info {
  public:
-     void set_file_system_file_name(const std::string file_system_file_name);
-     void grow_file_size(size_t additional_file_size);
      size_t get_file_size() const;
      const std::string get_file_system_file_name() const;
 
  private:
      size_t _file_size;
      std::string _file_system_file_name;
+
+     void set_file_system_file_name(const std::string file_system_file_name);
+     void grow_file_size(size_t additional_file_size);
+
+     friend class httpserver::webserver;
 };
 
 }  // namespace http
