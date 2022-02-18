@@ -74,6 +74,8 @@ typedef void(*unescaper_ptr)(std::string&);
 
 namespace http {
 
+struct generateFilenameException : public std::exception {};
+
 class http_utils {
  public:
      enum cred_type_T {

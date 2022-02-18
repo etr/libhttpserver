@@ -42,7 +42,6 @@
 #include <algorithm>
 #include <iosfwd>
 #include <cstring>
-#include <exception>
 #include <memory>
 #include <stdexcept>
 #include <utility>
@@ -509,7 +508,7 @@ MHD_Result webserver::post_iterator(void *cls, enum MHD_ValueKind kind,
             file.grow_file_size(size);
         }
         return MHD_YES;
-    } catch(const std::exception& e) {
+    } catch(const http::generateFilenameException& e) {
         return MHD_NO;
     }
 }
