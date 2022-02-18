@@ -235,10 +235,16 @@ const std::string http_utils::generate_random_upload_filename(const std::string&
     int fd = 0;
 
 #if defined(_WIN32)
+    // only function for win32 which creates unique filenames and can handle a given template including a path
+    // all other functions like tmpnam() always create filenames in the 'temp' directory
     if (0 != _mktemp_s(template_filename, filename.size() + 1)) {
         free(template_filename);
         throw generateFilenameException("Failed to create unique filename");
     }
+
+    // as no existing file should be overwritten the operation should fail if the file already exists
+    // fstream or ofstream classes don't feature such an option
+    // with the function _sopen_s this can be achieved by setting the flag _O_EXCL
     if (0 != _sopen_s(&fd, template_filename, _O_CREAT | _O_EXCL | _O_NOINHERIT, _SH_DENYNO, _S_IREAD | _S_IWRITE)) {
         free(template_filename);
         throw generateFilenameException("Failed to create file");
