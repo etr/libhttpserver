@@ -486,8 +486,12 @@ MHD_Result webserver::post_iterator(void *cls, enum MHD_ValueKind kind,
                 unlink(file.get_file_system_file_name().c_str());
             }
 
-            // if multiple files are uploaded, a different filename indicates the start of a new file, so close the previous one
-            if (mr->upload_filename.empty() || mr->upload_key.empty() || 0 != strcmp(filename, mr->upload_filename.c_str()) || 0 != strcmp(key, mr->upload_key.c_str())) {
+            // if multiple files are uploaded, a different filename or a different key indicates
+            // the start of a new file, so close the previous one
+            if (mr->upload_filename.empty() ||
+                mr->upload_key.empty() ||
+                0 != strcmp(filename, mr->upload_filename.c_str()) ||
+                0 != strcmp(key, mr->upload_key.c_str())) {
                 if (mr->upload_ostrm != nullptr) {
                     mr->upload_ostrm->close();
                 }
@@ -576,6 +580,10 @@ MHD_Result webserver::requests_answer_second_step(MHD_Connection* connection, co
 #ifdef DEBUG
         std::cout << "Writing content: " << std::string(upload_data, *upload_data_size) << std::endl;
 #endif  // DEBUG
+        // The post iterator is only created from the libmicrohttpd for content of type
+        // multipart/form-data and application/x-www-form-urlencoded
+        // all other content (which is indicated by mr-pp == nullptr)
+        // has to be put to the content even if put_processed_data_to_content is set to false
         if (mr->pp == nullptr || put_processed_data_to_content) {
             mr->dhr->grow_content(upload_data, *upload_data_size);
         }
