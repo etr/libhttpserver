@@ -164,7 +164,7 @@ class webserver {
      const bool post_process_enabled;
      const bool put_processed_data_to_content;
      const file_upload_target_T file_upload_target;
-     const std::string post_upload_dir;
+     const std::string file_upload_dir;
      const bool generate_random_filename_on_upload;
      const bool deferred_enabled;
      bool single_resource;

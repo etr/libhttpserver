@@ -98,7 +98,7 @@ int main(int argc, char** argv) {
 
     httpserver::webserver ws = httpserver::create_webserver(8080)
                               .no_put_processed_data_to_content()
-                              .post_upload_dir(std::string(argv[1]))
+                              .file_upload_dir(std::string(argv[1]))
                               .generate_random_filename_on_upload()
                               .file_upload_target(httpserver::FILE_UPLOAD_DISK_ONLY);
 

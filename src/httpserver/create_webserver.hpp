@@ -311,8 +311,8 @@ class create_webserver {
          return *this;
      }
 
-     create_webserver& post_upload_dir(const std::string& post_upload_dir) {
-         _post_upload_dir = post_upload_dir;
+     create_webserver& file_upload_dir(const std::string& file_upload_dir) {
+         _file_upload_dir = file_upload_dir;
          return *this;
      }
 
@@ -392,7 +392,7 @@ class create_webserver {
      bool _post_process_enabled = true;
      bool _put_processed_data_to_content = true;
      file_upload_target_T _file_upload_target = FILE_UPLOAD_MEMORY_ONLY;
-     std::string _post_upload_dir = "/tmp";
+     std::string _file_upload_dir = "/tmp";
      bool _generate_random_filename_on_upload = false;
      bool _deferred_enabled = false;
      bool _single_resource = false;

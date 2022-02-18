@@ -154,7 +154,7 @@ webserver::webserver(const create_webserver& params):
     post_process_enabled(params._post_process_enabled),
     put_processed_data_to_content(params._put_processed_data_to_content),
     file_upload_target(params._file_upload_target),
-    post_upload_dir(params._post_upload_dir),
+    file_upload_dir(params._file_upload_dir),
     generate_random_filename_on_upload(params._generate_random_filename_on_upload),
     deferred_enabled(params._deferred_enabled),
     single_resource(params._single_resource),
@@ -465,20 +465,23 @@ MHD_Result webserver::post_iterator(void *cls, enum MHD_ValueKind kind,
     struct details::modded_request* mr = (struct details::modded_request*) cls;
 
     try {
-        if (filename == nullptr || mr->ws->file_upload_target != FILE_UPLOAD_DISK_ONLY) {
+        if (filename == nullptr ||
+            mr->ws->file_upload_target != FILE_UPLOAD_DISK_ONLY) {
             mr->dhr->set_arg(key, mr->dhr->get_arg(key) + std::string(data, size));
         }
 
-        if (filename && *filename != '\0' && mr->ws->file_upload_target != FILE_UPLOAD_MEMORY_ONLY) {
+        if (filename &&
+            *filename != '\0' &&
+            mr->ws->file_upload_target != FILE_UPLOAD_MEMORY_ONLY) {
             // either get the existing file info struct or create a new one in the file map
-            http::file_info &file = mr->dhr->get_or_create_file_info(key, filename);
+            http::file_info& file = mr->dhr->get_or_create_file_info(key, filename);
             // if the file_system_file_name is not filled yet, this is a new entry and the name has to be set
             // (either random or copy of the original filename)
             if (file.get_file_system_file_name().empty()) {
                 if (mr->ws->generate_random_filename_on_upload) {
-                    file.set_file_system_file_name(http_utils::generate_random_upload_filename(mr->ws->post_upload_dir));
+                    file.set_file_system_file_name(http_utils::generate_random_upload_filename(mr->ws->file_upload_dir));
                 } else {
-                    file.set_file_system_file_name(mr->ws->post_upload_dir + "/" + std::string(filename));
+                    file.set_file_system_file_name(mr->ws->file_upload_dir + "/" + std::string(filename));
                 }
                 // to not append to an already existing file, delete an already existing file
                 unlink(file.get_file_system_file_name().c_str());

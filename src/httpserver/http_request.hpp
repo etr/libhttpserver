@@ -142,7 +142,7 @@ class http_request {
       * @param upload_file_name the file name the user uploaded (this is the identifier for the map entry)
       * @result a file info struct file_info_s
      **/
-     http::file_info& get_or_create_file_info(const std::string &key, const std::string& upload_file_name);
+     http::file_info& get_or_create_file_info(const std::string& key, const std::string& upload_file_name);
 
      /**
       * Method used to get all files passed with the request.
