@@ -74,7 +74,18 @@ typedef void(*unescaper_ptr)(std::string&);
 
 namespace http {
 
-struct generateFilenameException : public std::exception {};
+struct generateFilenameException : public std::exception {
+ public:
+     explicit generateFilenameException(const std::string& message) noexcept : error_message(message) {
+     }
+
+     const char* what() const noexcept {
+          return this->error_message.c_str();
+     }
+
+ private:
+     std::string error_message;
+};
 
 class http_utils {
  public:
