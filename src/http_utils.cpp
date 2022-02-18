@@ -257,7 +257,7 @@ const std::string http_utils::generate_random_upload_filename(const std::string&
     }
     close(fd);
 #endif  // _WIN32
-    std::string ret_filename = std::string(template_filename);
+    std::string ret_filename = template_filename;
     free(template_filename);
     return ret_filename;
 }
