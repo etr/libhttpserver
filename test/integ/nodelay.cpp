@@ -22,8 +22,8 @@
 #include <map>
 #include <string>
 
-#include "httpserver.hpp"
-#include "littletest.hpp"
+#include "./httpserver.hpp"
+#include "./littletest.hpp"
 
 using std::shared_ptr;
 

@@ -32,7 +32,7 @@
 
 #include <cstdio>
 
-#include "littletest.hpp"
+#include "./littletest.hpp"
 
 using std::string;
 using std::vector;
