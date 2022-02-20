@@ -34,7 +34,7 @@ namespace http {
 
 class file_info {
  public:
-     const size_t get_file_size() const;
+     size_t get_file_size() const;
      const std::string get_file_system_file_name() const;
 
      file_info() = default;

@@ -31,7 +31,7 @@ void file_info::set_file_system_file_name(const std::string& file_system_file_na
 void file_info::grow_file_size(size_t additional_file_size) {
     _file_size += additional_file_size;
 }
-const size_t file_info::get_file_size() const {
+size_t file_info::get_file_size() const {
     return _file_size;
 }
 const std::string file_info::get_file_system_file_name() const {
