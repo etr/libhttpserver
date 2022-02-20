@@ -25,8 +25,8 @@
 #include <string>
 #include <vector>
 
-#include "httpserver.hpp"
-#include "littletest.hpp"
+#include "./httpserver.hpp"
+#include "./littletest.hpp"
 
 using std::shared_ptr;
 using std::sort;

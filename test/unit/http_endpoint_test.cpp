@@ -20,7 +20,7 @@
 
 #include "httpserver/details/http_endpoint.hpp"
 
-#include "littletest.hpp"
+#include "./littletest.hpp"
 
 using httpserver::details::http_endpoint;
 using std::string;
