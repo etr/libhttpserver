@@ -30,8 +30,9 @@
 #include <arpa/inet.h>
 #endif
 
+#include <sys/stat.h>
 #include <cstdio>
-#include <filesystem>
+
 #include "./littletest.hpp"
 
 using std::string;
@@ -155,6 +156,7 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, standardize_url)
 LT_END_AUTO_TEST(standardize_url)
 
 LT_BEGIN_AUTO_TEST(http_utils_suite, generate_random_upload_filename)
+    struct stat sb;
     const char* UPLOAD_FILENAME_TEMPLATE = "libhttpserver.XXXXXX";
 
     #if defined(_WIN32)
@@ -170,7 +172,7 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, generate_random_upload_filename)
     } catch(const httpserver::http::generateFilenameException& e) {
         LT_FAIL(e.what());
     }
-    LT_CHECK_EQ(std::filesystem::exists(filename), true);
+    LT_CHECK_EQ(stat(filename.c_str(), &sb), 0);
     // unlink the file again, to not mess up the test directory with files
     unlink(filename.c_str());
     // omit the last 6 signs in the check, as the "XXXXXX" is substituted to be random and unique
