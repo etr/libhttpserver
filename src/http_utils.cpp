@@ -109,7 +109,6 @@ const int http_utils::http_expectation_failed = MHD_HTTP_EXPECTATION_FAILED;
 const int http_utils::http_unprocessable_entity = MHD_HTTP_UNPROCESSABLE_ENTITY;
 const int http_utils::http_locked = MHD_HTTP_LOCKED;
 const int http_utils::http_failed_dependency = MHD_HTTP_FAILED_DEPENDENCY;
-const int http_utils::http_unordered_collection = MHD_HTTP_UNORDERED_COLLECTION;
 const int http_utils::http_upgrade_required = MHD_HTTP_UPGRADE_REQUIRED;
 const int http_utils::http_retry_with = MHD_HTTP_RETRY_WITH;
 
