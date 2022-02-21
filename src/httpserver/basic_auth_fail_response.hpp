@@ -26,7 +26,7 @@
 #define SRC_HTTPSERVER_BASIC_AUTH_FAIL_RESPONSE_HPP_
 
 #include <string>
-#include "http_utils.hpp"
+#include "httpserver/http_utils.hpp"
 #include "httpserver/string_response.hpp"
 
 struct MHD_Connection;

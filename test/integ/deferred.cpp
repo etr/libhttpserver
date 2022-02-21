@@ -34,8 +34,8 @@
 #include <signal.h>
 #include <unistd.h>
 
-#include "httpserver.hpp"
-#include "littletest.hpp"
+#include "./httpserver.hpp"
+#include "./littletest.hpp"
 
 using std::shared_ptr;
 using std::string;

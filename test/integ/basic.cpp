@@ -23,9 +23,9 @@
 #include <sstream>
 #include <string>
 
-#include "httpserver.hpp"
+#include "./httpserver.hpp"
 #include "httpserver/string_utilities.hpp"
-#include "littletest.hpp"
+#include "./littletest.hpp"
 
 using std::string;
 using std::map;

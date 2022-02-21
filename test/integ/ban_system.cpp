@@ -22,9 +22,9 @@
 #include <map>
 #include <string>
 
-#include "httpserver.hpp"
+#include "./httpserver.hpp"
 #include "httpserver/http_utils.hpp"
-#include "littletest.hpp"
+#include "./littletest.hpp"
 
 using std::shared_ptr;
 
