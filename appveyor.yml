@@ -17,9 +17,9 @@ init:
 install:
   - 'if "%compiler%"=="msys2" C:\msys64\msys2_shell.cmd -defterm -no-start -msys2 -c "pacman --noconfirm -S --needed mingw-w64-$MSYS2_ARCH-{libtool,make,pkg-config,libsystre,doxygen,gnutls,graphviz,curl}"'
   - 'if "%compiler%"=="msys2" C:\msys64\msys2_shell.cmd -defterm -no-start -msys2 -c "pacman --noconfirm -S --needed autotools"'
-  - 'if "%compiler%"=="msys2" C:\msys64\msys2_shell.cmd -defterm -no-start -mingw64 -full-path -here -c "cd $APPVEYOR_BUILD_FOLDER && curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.59.tar.gz -o libmicrohttpd-0.9.59.tar.gz"'
-  - 'if "%compiler%"=="msys2" C:\msys64\msys2_shell.cmd -defterm -no-start -mingw64 -full-path -here -c "cd $APPVEYOR_BUILD_FOLDER && tar -xzf libmicrohttpd-0.9.59.tar.gz"'
-  - 'if "%compiler%"=="msys2" C:\msys64\msys2_shell.cmd -defterm -no-start -mingw64 -full-path -here -c "cd $APPVEYOR_BUILD_FOLDER/libmicrohttpd-0.9.59 && ./configure --disable-examples --enable-poll=no --prefix /C/msys64 && make && make install"'
+  - 'if "%compiler%"=="msys2" C:\msys64\msys2_shell.cmd -defterm -no-start -mingw64 -full-path -here -c "cd $APPVEYOR_BUILD_FOLDER && curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.64.tar.gz -o libmicrohttpd-0.9.64.tar.gz"'
+  - 'if "%compiler%"=="msys2" C:\msys64\msys2_shell.cmd -defterm -no-start -mingw64 -full-path -here -c "cd $APPVEYOR_BUILD_FOLDER && tar -xzf libmicrohttpd-0.9.64.tar.gz"'
+  - 'if "%compiler%"=="msys2" C:\msys64\msys2_shell.cmd -defterm -no-start -mingw64 -full-path -here -c "cd $APPVEYOR_BUILD_FOLDER/libmicrohttpd-0.9.64 && ./configure --disable-examples --enable-poll=no --prefix /C/msys64 && make && make install"'
   - 'if "%compiler%"=="msys2" C:\msys64\msys2_shell.cmd -defterm -no-start -mingw64 -full-path -here -c "cd $APPVEYOR_BUILD_FOLDER && ./bootstrap"'
   - 'if "%compiler%"=="msys2" C:\msys64\msys2_shell.cmd -defterm -no-start -mingw64 -full-path -here -c "cd $APPVEYOR_BUILD_FOLDER && mkdir build && cd build && MANIFEST_TOOL=no; ../configure --disable-fastopen --prefix /C/msys64 CXXFLAGS=-I/C/msys64/include LDFLAGS=-L/C/msys64/lib; make"'
 build_script:

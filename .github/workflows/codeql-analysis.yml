@@ -56,9 +56,9 @@ jobs:
 
     - name: Install libmicrohttpd dependency
       run: |
-        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.59.tar.gz -o libmicrohttpd-0.9.59.tar.gz ;
-        tar -xzf libmicrohttpd-0.9.59.tar.gz ;
-        cd libmicrohttpd-0.9.59 ;
+        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.64.tar.gz -o libmicrohttpd-0.9.64.tar.gz ;
+        tar -xzf libmicrohttpd-0.9.64.tar.gz ;
+        cd libmicrohttpd-0.9.64 ;
         ./configure --disable-examples ;
         make ;
         sudo make install ;
