@@ -72,9 +72,9 @@ class file_upload_resource : public httpserver::http_resource {
                 post_response += "</td><td>";
                 post_response += files.second.get_file_system_file_name();
                 post_response += "</td><td>";
-                post_response += std::to_string(files.second.get_file_size();
+                post_response += std::to_string(files.second.get_file_size());
                 post_response += "</td><td>";
-                post_response += files.second.get_content_type());
+                post_response += files.second.get_content_type();
                 post_response += "</td><td>";
                 post_response += files.second.get_transfer_encoding();
                 post_response += "</td></tr>\n";
