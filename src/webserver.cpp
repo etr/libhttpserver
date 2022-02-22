@@ -588,6 +588,9 @@ MHD_Result webserver::requests_answer_second_step(MHD_Connection* connection, co
         if (mr->pp != nullptr) {
             mr->ws = this;
             MHD_post_process(mr->pp, upload_data, *upload_data_size);
+            if (mr->upload_ostrm != nullptr && mr->upload_ostrm->is_open()) {
+                mr->upload_ostrm->close();
+            }
         }
     }
 
