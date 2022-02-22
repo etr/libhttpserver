@@ -457,8 +457,6 @@ MHD_Result webserver::post_iterator(void *cls, enum MHD_ValueKind kind,
         const char *transfer_encoding, const char *data, uint64_t off, size_t size) {
     // Parameter needed to respect MHD interface, but not needed here.
     std::ignore = kind;
-    std::ignore = content_type;
-    std::ignore = transfer_encoding;
     std::ignore = off;
 
     struct details::modded_request* mr = (struct details::modded_request*) cls;
@@ -481,6 +479,12 @@ MHD_Result webserver::post_iterator(void *cls, enum MHD_ValueKind kind,
                 }
                 // to not append to an already existing file, delete an already existing file
                 unlink(file.get_file_system_file_name().c_str());
+                if (content_type != nullptr) {
+                    file.set_content_type(content_type);
+                }
+                if (transfer_encoding != nullptr) {
+                    file.set_transfer_encoding(transfer_encoding);
+                }
             }
 
             // if multiple files are uploaded, a different filename or a different key indicates

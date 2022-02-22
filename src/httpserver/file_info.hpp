@@ -36,14 +36,20 @@ class file_info {
  public:
      size_t get_file_size() const;
      const std::string get_file_system_file_name() const;
+     const std::string get_content_type() const;
+     const std::string get_transfer_encoding() const;
 
      file_info() = default;
 
  private:
      size_t _file_size;
      std::string _file_system_file_name;
+     std::string _content_type;
+     std::string _transfer_encoding;
 
      void set_file_system_file_name(const std::string& file_system_file_name);
+     void set_content_type(const std::string& content_type);
+     void set_transfer_encoding(const std::string& transfer_encoding);
      void grow_file_size(size_t additional_file_size);
 
      friend class httpserver::webserver;

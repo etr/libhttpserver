@@ -59,8 +59,9 @@ class file_upload_resource : public httpserver::http_resource {
         post_response += "      <th>Uploaded filename</th>\n";
         post_response += "      <th>File system path</th>\n";
         post_response += "      <th>File size</th>\n";
+        post_response += "      <th>Content type</th>\n";
+        post_response += "      <th>Transfer encoding</th>\n";
         post_response += "    </tr>\n";
-
 
         for (auto &file_key : req.get_files()) {
             for (auto &files : file_key.second) {
@@ -71,7 +72,11 @@ class file_upload_resource : public httpserver::http_resource {
                 post_response += "</td><td>";
                 post_response += files.second.get_file_system_file_name();
                 post_response += "</td><td>";
-                post_response += std::to_string(files.second.get_file_size());
+                post_response += std::to_string(files.second.get_file_size();
+                post_response += "</td><td>";
+                post_response += files.second.get_content_type());
+                post_response += "</td><td>";
+                post_response += files.second.get_transfer_encoding();
                 post_response += "</td></tr>\n";
             }
         }
