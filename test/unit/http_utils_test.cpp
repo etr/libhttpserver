@@ -157,16 +157,8 @@ LT_END_AUTO_TEST(standardize_url)
 
 LT_BEGIN_AUTO_TEST(http_utils_suite, generate_random_upload_filename)
     struct stat sb;
-    const char* UPLOAD_FILENAME_TEMPLATE = "libhttpserver.XXXXXX";
-
-    #if defined(_WIN32)
-        const char PATH_SEPARATOR = '\\';
-    #else  // _WIN32
-        const char PATH_SEPARATOR = '/';
-    #endif  // _WIN32
-
     string directory = ".", filename = "";
-    string expected_output = directory + PATH_SEPARATOR + UPLOAD_FILENAME_TEMPLATE;
+    string expected_output = directory + httpserver::http::http_utils::path_separator + httpserver::http::http_utils::upload_filename_template;
     try {
         filename = httpserver::http::http_utils::generate_random_upload_filename(directory);
     } catch(const httpserver::http::generateFilenameException& e) {

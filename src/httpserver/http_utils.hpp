@@ -254,6 +254,9 @@ class http_utils {
      static const char* application_octet_stream;
      static const char* text_plain;
 
+     static const char* upload_filename_template;
+     static const char path_separator;
+
      static std::vector<std::string> tokenize_url(const std::string&, const char separator = '/');
      static std::string standardize_url(const std::string&);
 

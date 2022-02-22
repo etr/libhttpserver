@@ -198,12 +198,12 @@ const char* http_utils::http_post_encoding_multipart_formdata = MHD_HTTP_POST_EN
 const char* http_utils::application_octet_stream = "application/octet-stream";
 const char* http_utils::text_plain = "text/plain";
 
-static const char* UPLOAD_FILENAME_TEMPLATE = "libhttpserver.XXXXXX";
+const char* http_utils::upload_filename_template = "libhttpserver.XXXXXX";
 
 #if defined(_WIN32)
-    static const char PATH_SEPARATOR = '\\';
+    const char http_utils::path_separator = '\\';
 #else  // _WIN32
-    static const char PATH_SEPARATOR = '/';
+    const char http_utils::path_separator = '/';
 #endif  // _WIN32
 
 std::vector<std::string> http_utils::tokenize_url(const std::string& str, const char separator) {
@@ -230,7 +230,7 @@ std::string http_utils::standardize_url(const std::string& url) {
 }
 
 const std::string http_utils::generate_random_upload_filename(const std::string& directory) {
-    std::string filename = directory + PATH_SEPARATOR + UPLOAD_FILENAME_TEMPLATE;
+    std::string filename = directory + http_utils::path_separator + http_utils::upload_filename_template;
     char *template_filename = strdup(filename.c_str());
     int fd = 0;
 
