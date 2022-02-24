@@ -36,6 +36,15 @@ jobs:
     - run: git checkout HEAD^2
       if: ${{ github.event_name == 'pull_request' }}
 
+    - name: Install libmicrohttpd dependency
+      run: |
+        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.64.tar.gz -o libmicrohttpd-0.9.64.tar.gz ;
+        tar -xzf libmicrohttpd-0.9.64.tar.gz ;
+        cd libmicrohttpd-0.9.64 ;
+        ./configure --disable-examples ;
+        make ;
+        sudo make install ;
+
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
       uses: github/codeql-action/init@v1
@@ -54,20 +63,11 @@ jobs:
     #    and modify them (or add more) to build your code if your project
     #    uses a compiled language
 
-    - name: Install libmicrohttpd dependency
-      run: |
-        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.59.tar.gz -o libmicrohttpd-0.9.59.tar.gz ;
-        tar -xzf libmicrohttpd-0.9.59.tar.gz ;
-        cd libmicrohttpd-0.9.59 ;
-        ./configure --disable-examples ;
-        make ;
-        sudo make install ;
-
     - name: Manual steps to build the library
       run: |
         ./bootstrap ;
         ./configure --enable-same-directory-build;
         make ;
- 
+
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v1

@@ -79,7 +79,7 @@ libhttpserver can be used without any dependencies aside from libmicrohttpd.
 
 The minimum versions required are:
 * g++ >= 5.5.0 or clang-3.6
-* libmicrohttpd >= 0.9.53
+* libmicrohttpd >= 0.9.64
 * [Optionally]: for TLS (HTTPS) support, you'll need [libgnutls](http://www.gnutls.org/).
 * [Optionally]: to compile the code-reference, you'll need [doxygen](http://www.doxygen.nl/).
 

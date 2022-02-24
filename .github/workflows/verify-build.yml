@@ -396,20 +396,20 @@ jobs:
       id: cache-libmicrohttpd
       uses: actions/cache@v2
       with:
-        path: libmicrohttpd-0.9.59
+        path: libmicrohttpd-0.9.64
         key: ${{ matrix.os }}-${{ matrix.c-compiler }}-libmicrohttpd-pre-built
 
     - name: Build libmicrohttpd dependency (if not cached)
       run: |
-        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.59.tar.gz -o libmicrohttpd-0.9.59.tar.gz ;
-        tar -xzf libmicrohttpd-0.9.59.tar.gz ;
-        cd libmicrohttpd-0.9.59 ;
+        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.64.tar.gz -o libmicrohttpd-0.9.64.tar.gz ;
+        tar -xzf libmicrohttpd-0.9.64.tar.gz ;
+        cd libmicrohttpd-0.9.64 ;
         ./configure --disable-examples ;
         make ;
       if: steps.cache-libmicrohttpd.outputs.cache-hit != 'true'
       
     - name: Install libmicrohttpd
-      run: cd libmicrohttpd-0.9.59 ; sudo make install ;
+      run: cd libmicrohttpd-0.9.64 ; sudo make install ;
       
     - name: Refresh links to shared libs
       run: sudo ldconfig ;
