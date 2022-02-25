@@ -19,11 +19,12 @@
 LDADD = $(top_builddir)/src/libhttpserver.la
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/
 METASOURCES = AUTO
-check_PROGRAMS = basic http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource
+check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource
 
 MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
 
-basic_SOURCES = integ/basic.cpp 
+basic_SOURCES = integ/basic.cpp
+file_upload_SOURCES = integ/file_upload.cpp
 threaded_SOURCES = integ/threaded.cpp
 ban_system_SOURCES = integ/ban_system.cpp
 ws_start_stop_SOURCES = integ/ws_start_stop.cpp
