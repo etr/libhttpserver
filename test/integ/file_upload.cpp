@@ -55,7 +55,7 @@ static CURLcode send_file_to_webserver() {
 
     curl_mime *form = curl_mime_init(curl);
     curl_mimepart *field = curl_mime_addpart(form);
-    curl_mime_name(field, TEST_CONTENT);
+    curl_mime_name(field, TEST_KEY);
     curl_mime_filedata(field, TEST_CONTENT_FILEPATH);
 
     CURLcode res;
