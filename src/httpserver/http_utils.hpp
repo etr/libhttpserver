@@ -169,7 +169,6 @@ class http_utils {
      static const int http_unprocessable_entity;
      static const int http_locked;
      static const int http_failed_dependency;
-     static const int http_unordered_collection;
      static const int http_upgrade_required;
      static const int http_retry_with;
 

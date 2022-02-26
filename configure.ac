@@ -100,17 +100,17 @@ AC_CHECK_HEADER([gnutls/gnutls.h],[have_gnutls="yes"],[AC_MSG_WARN("gnutls/gnutl
 if test x"$host" = x"$build"; then
     AC_CHECK_HEADER([microhttpd.h],
         AC_CHECK_LIB([microhttpd], [MHD_get_fdset2],
-            [AC_MSG_CHECKING([for libmicrohttpd >= 0.9.53])
+            [AC_MSG_CHECKING([for libmicrohttpd >= 0.9.64])
                 AC_COMPILE_IFELSE(
                     [AC_LANG_SOURCE([
                         #include <microhttpd.h>
-                        #if (MHD_VERSION < 0x00095300)
-                        #error needs at least version 0.9.53
+                        #if (MHD_VERSION < 0x00096400)
+                        #error needs at least version 0.9.64
                         #endif
                         int main () { return 0; }
                     ])],
                 [],
-                [AC_MSG_ERROR("libmicrohttpd is too old - install libmicrohttpd >= 0.9.53")]
+                [AC_MSG_ERROR("libmicrohttpd is too old - install libmicrohttpd >= 0.9.64")]
                 )
             ],
             [AC_MSG_ERROR(["libmicrohttpd not found"])]
