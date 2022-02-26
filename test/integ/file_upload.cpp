@@ -101,11 +101,6 @@ LT_BEGIN_SUITE(file_upload_suite)
     }
 LT_END_SUITE(file_upload_suite)
 
-LT_BEGIN_AUTO_TEST(file_upload_suite, server_runs)
-
-LT_END_AUTO_TEST(server_runs)
-
-
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk)
     stringstream content;
     std::map<std::string, std::string, httpserver::http::arg_comparator> args;
