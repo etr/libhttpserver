@@ -71,26 +71,30 @@ static CURLcode send_file_to_webserver() {
 
 class print_file_upload_resource : public http_resource {
  public:
-     explicit print_file_upload_resource(std::map <std::string, std::string, httpserver::http::arg_comparator>* args,
-                                         std::map<std::string, std::map<std::string, httpserver::http::file_info>>* files,
-                                         stringstream* content) {
-         this->args = args;
-         this->content = content;
-         this->files = files;
-     }
-
      const shared_ptr<http_response> render_POST(const http_request& req) {
-         (*content) << req.get_content();
-         (*args) = req.get_args();
-         (*files) = req.get_files();
+         content = req.get_content();
+         args = req.get_args();
+         files = req.get_files();
          shared_ptr<string_response> hresp(new string_response("OK", 201, "text/plain"));
          return hresp;
      }
 
+     const map<string, string, httpserver::http::arg_comparator> get_args() const {
+         return args;
+     }
+
+     const map<string, map<string, httpserver::http::file_info>> get_files() const {
+          return files;
+     }
+
+     const string get_content() const {
+         return content;
+     }
+
  private:
-     std::map <std::string, std::string, httpserver::http::arg_comparator>* args;
-     std::map<std::string, std::map<std::string, httpserver::http::file_info>>* files;
-     stringstream *content;
+     map <string, string, httpserver::http::arg_comparator> args;
+     map<string, map<string, httpserver::http::file_info>> files;
+     string content;
 };
 
 LT_BEGIN_SUITE(file_upload_suite)
@@ -102,9 +106,6 @@ LT_BEGIN_SUITE(file_upload_suite)
 LT_END_SUITE(file_upload_suite)
 
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk)
-    stringstream content;
-    std::map<std::string, std::string, httpserver::http::arg_comparator> args;
-    std::map<std::string, std::map<std::string, httpserver::http::file_info>> files;
     string upload_directory = ".";
     webserver* ws;
 
@@ -116,32 +117,37 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk)
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
 
-    print_file_upload_resource resource(&args, &files, &content);
+    print_file_upload_resource resource;
     ws->register_resource("upload", &resource);
 
     CURLcode res = send_file_to_webserver();
     LT_ASSERT_EQ(res, 0);
 
-    string actual_content = content.str();
+    string actual_content = resource.get_content();
     LT_CHECK_EQ(actual_content.find(FILENAME_IN_GET_CONTENT) != string::npos, true);
     LT_CHECK_EQ(actual_content.find(TEST_CONTENT) != string::npos, true);
 
+    auto args = resource.get_args();
     LT_CHECK_EQ(args.size(), 1);
-    std::map<std::string, std::string, httpserver::http::arg_comparator>::iterator arg = args.begin();
+    auto arg = args.begin();
     LT_CHECK_EQ(arg->first, TEST_KEY);
     LT_CHECK_EQ(arg->second, TEST_CONTENT);
 
+    auto files = resource.get_files();
     LT_CHECK_EQ(files.size(), 1);
-    std::map<std::string, std::map<std::string, httpserver::http::file_info>>::iterator file_key = files.begin();
+    auto file_key = files.begin();
     LT_CHECK_EQ(file_key->first, TEST_KEY);
     LT_CHECK_EQ(file_key->second.size(), 1);
-    std::map<std::string, httpserver::http::file_info>::iterator file = file_key->second.begin();
+    auto file = file_key->second.begin();
     LT_CHECK_EQ(file->first, TEST_CONTENT_FILENAME);
     LT_CHECK_EQ(file->second.get_file_size(), TEST_CONTENT_SIZE);
     LT_CHECK_EQ(file->second.get_content_type(), httpserver::http::http_utils::application_octet_stream);
 
-    string expected_filename = upload_directory + httpserver::http::http_utils::path_separator + httpserver::http::http_utils::upload_filename_template;
-    LT_CHECK_EQ(file->second.get_file_system_file_name().substr(0, file->second.get_file_system_file_name().size() - 6), expected_filename.substr(0, expected_filename.size() - 6));
+    string expected_filename = upload_directory +
+                               httpserver::http::http_utils::path_separator +
+                               httpserver::http::http_utils::upload_filename_template;
+    LT_CHECK_EQ(file->second.get_file_system_file_name().substr(0, file->second.get_file_system_file_name().size() - 6),
+                expected_filename.substr(0, expected_filename.size() - 6));
     unlink(file->second.get_file_system_file_name().c_str());
 
     ws->stop();
@@ -149,9 +155,6 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk)
 LT_END_AUTO_TEST(file_upload_memory_and_disk)
 
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_disk_only)
-    stringstream content;
-    std::map<std::string, std::string, httpserver::http::arg_comparator> args;
-    std::map<std::string, std::map<std::string, httpserver::http::file_info>> files;
     string upload_directory = ".";
     webserver* ws;
 
@@ -163,28 +166,33 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_disk_only)
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
 
-    print_file_upload_resource resource(&args, &files, &content);
+    print_file_upload_resource resource;
     ws->register_resource("upload", &resource);
 
     CURLcode res = send_file_to_webserver();
     LT_ASSERT_EQ(res, 0);
 
-    string actual_content = content.str();
+    string actual_content = resource.get_content();
     LT_CHECK_EQ(actual_content.size(), 0);
 
+    auto args = resource.get_args();
     LT_CHECK_EQ(args.size(), 0);
 
+    auto files = resource.get_files();
     LT_CHECK_EQ(files.size(), 1);
-    std::map<std::string, std::map<std::string, httpserver::http::file_info>>::iterator file_key = files.begin();
+    auto file_key = files.begin();
     LT_CHECK_EQ(file_key->first, TEST_KEY);
     LT_CHECK_EQ(file_key->second.size(), 1);
-    std::map<std::string, httpserver::http::file_info>::iterator file = file_key->second.begin();
+    auto file = file_key->second.begin();
     LT_CHECK_EQ(file->first, TEST_CONTENT_FILENAME);
     LT_CHECK_EQ(file->second.get_file_size(), TEST_CONTENT_SIZE);
     LT_CHECK_EQ(file->second.get_content_type(), httpserver::http::http_utils::application_octet_stream);
 
-    string expected_filename = upload_directory + httpserver::http::http_utils::path_separator + httpserver::http::http_utils::upload_filename_template;
-    LT_CHECK_EQ(file->second.get_file_system_file_name().substr(0, file->second.get_file_system_file_name().size() - 6), expected_filename.substr(0, expected_filename.size() - 6));
+    string expected_filename = upload_directory +
+                               httpserver::http::http_utils::path_separator +
+                               httpserver::http::http_utils::upload_filename_template;
+    LT_CHECK_EQ(file->second.get_file_system_file_name().substr(0, file->second.get_file_system_file_name().size() - 6),
+                expected_filename.substr(0, expected_filename.size() - 6));
     unlink(file->second.get_file_system_file_name().c_str());
 
     ws->stop();
@@ -192,9 +200,6 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_disk_only)
 LT_END_AUTO_TEST(file_upload_disk_only)
 
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_only_incl_content)
-    stringstream content;
-    std::map<std::string, std::string, httpserver::http::arg_comparator> args;
-    std::map<std::string, std::map<std::string, httpserver::http::file_info>> files;
     string upload_directory = ".";
     webserver* ws;
 
@@ -204,31 +209,30 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_only_incl_content)
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
 
-    print_file_upload_resource resource(&args, &files, &content);
+    print_file_upload_resource resource;
     ws->register_resource("upload", &resource);
 
     CURLcode res = send_file_to_webserver();
     LT_ASSERT_EQ(res, 0);
 
-    string actual_content = content.str();
+    string actual_content = resource.get_content();
     LT_CHECK_EQ(actual_content.find(FILENAME_IN_GET_CONTENT) != string::npos, true);
     LT_CHECK_EQ(actual_content.find(TEST_CONTENT) != string::npos, true);
 
+    auto args = resource.get_args();
     LT_CHECK_EQ(args.size(), 1);
-    std::map<std::string, std::string, httpserver::http::arg_comparator>::iterator arg = args.begin();
+    auto arg = args.begin();
     LT_CHECK_EQ(arg->first, TEST_KEY);
     LT_CHECK_EQ(arg->second, TEST_CONTENT);
 
-    LT_CHECK_EQ(files.size(), 0);
+    auto files = resource.get_files();
+    LT_CHECK_EQ(resource.get_files().size(), 0);
 
     ws->stop();
     delete ws;
 LT_END_AUTO_TEST(file_upload_memory_only_incl_content)
 
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_only_excl_content)
-    stringstream content;
-    std::map<std::string, std::string, httpserver::http::arg_comparator> args;
-    std::map<std::string, std::map<std::string, httpserver::http::file_info>> files;
     string upload_directory = ".";
     webserver* ws;
 
@@ -238,20 +242,22 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_only_excl_content)
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
 
-    print_file_upload_resource resource(&args, &files, &content);
+    print_file_upload_resource resource;
     ws->register_resource("upload", &resource);
 
     CURLcode res = send_file_to_webserver();
     LT_ASSERT_EQ(res, 0);
 
-    string actual_content = content.str();
+    string actual_content = resource.get_content();
     LT_CHECK_EQ(actual_content.size(), 0);
 
+    auto args = resource.get_args();
     LT_CHECK_EQ(args.size(), 1);
-    std::map<std::string, std::string, httpserver::http::arg_comparator>::iterator arg = args.begin();
+    auto arg = args.begin();
     LT_CHECK_EQ(arg->first, TEST_KEY);
     LT_CHECK_EQ(arg->second, TEST_CONTENT);
 
+    auto files = resource.get_files();
     LT_CHECK_EQ(files.size(), 0);
 
     ws->stop();
