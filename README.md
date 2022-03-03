@@ -560,7 +560,6 @@ The `http_request` class has a set of methods you will have access to when imple
 * _**const std::map<std::string, std::string, http::header_comparator>** get_cookies() **const**:_ Returns a map containing all the cookies present in the HTTP request.
 * _**const std::map<std::string, std::string, http::header_comparator>** get_footers() **const**:_ Returns a map containing all the footers present in the HTTP request (only for http 1.1 chunked encodings).
 * _**const std::map<std::string, std::string, http::arg_comparator>** get_args() **const**:_ Returns all the arguments present in the HTTP request. Arguments can be (1) querystring parameters, (2) path argument (in case of parametric endpoint, (3) parameters parsed from the HTTP request body if the body is in `application/x-www-form-urlencoded` or `multipart/form-data` formats and the postprocessor is enabled in the webserver (enabled by default).
-* _**const std::map<std::string, file_info_s>** get_files() **const**:_ Returns information about all the uploaded files (if the files are stored to disk). This information includes the original file name, the size of the file and the path to the file in the file system.
 * _**const std::map<std::string, std::map<std::string, http::file_info>>** get_files() **const**:_ Returns information about all the uploaded files (if the files are stored to disk). This information includes the key (as identifier of the outer map), the original file name (as identifier of the inner map) and a class `file_info`, which includes the size of the file and the path to the file in the file system.
 * _**const std::string&** get_content() **const**:_ Returns the body of the HTTP request.
 * _**bool**  content_too_large() **const**:_ Returns `true` if the body length of the HTTP request sent by the client is longer than the max allowed on the server.
@@ -574,6 +573,13 @@ The `http_request` class has a set of methods you will have access to when imple
 * _**bool** check_digest_auth(**const std::string&** realm, **const std::string&** password, **int** nonce_timeout, **bool*** reload_nonce) **const**:_ Allows to check the validity of the authentication token sent through digest authentication (if the provided values in the WWW-Authenticate header are valid and sound according to RFC2716). Takes in input the `realm` of validity of the authentication, the `password` as known to the server to compare against, the `nonce_timeout` to indicate how long the nonce is valid and `reload_nonce` a boolean that will be set by the method to indicate a nonce being reloaded. The method returns `true` if the authentication is valid, `false` otherwise.
 * _**gnutls_session_t** get_tls_session() **const**:_ Tests if there is am underlying TLS state of the current request.
 * _**gnutls_session_t** get_tls_session() **const**:_ Returns the underlying TLS state of the current request for inspection. (It is an error to call this if the state does not exist.)
+
+Details on the `http::file_info` structure.
+
+* _**size_t** get_file_size() **const**:_ Returns the size of the file uploaded through the HTTP request.
+* _**const std::string** get_file_system_file_name() **const**:_ Returns the name of the file uploaded through the HTTP request as stored on the filesystem.
+* _**const std::string** get_content_type() **const**:_ Returns the content type of the file uploaded through the HTTP request.
+* _**const std::string** get_transfer_encoding() **const**:_ Returns the transfer encoding of the file uploaded through the HTTP request.
 
 #### Example of handler reading arguments from a request
     #include <httpserver.hpp>
