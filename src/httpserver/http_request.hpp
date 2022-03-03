@@ -140,13 +140,13 @@ class http_request {
       * Method to get or create a file info struct in the map if the provided filename is already in the map
       * return the exiting file info struct, otherwise create one in the map and return it.
       * @param upload_file_name the file name the user uploaded (this is the identifier for the map entry)
-      * @result a file info struct file_info_s
+      * @result a http::file_info
      **/
      http::file_info& get_or_create_file_info(const std::string& key, const std::string& upload_file_name);
 
      /**
       * Method used to get all files passed with the request.
-      * @result result a map<string, file_info_s> > that will be filled with all files
+      * @result result a map<std::string, map<std::string, http::file_info> > that will be filled with all files
      **/
      const std::map<std::string, std::map<std::string, http::file_info>> get_files() const {
           return files;
