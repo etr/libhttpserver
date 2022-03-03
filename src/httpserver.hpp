@@ -31,6 +31,7 @@
 #include "httpserver/http_resource.hpp"
 #include "httpserver/http_response.hpp"
 #include "httpserver/http_utils.hpp"
+#include "httpserver/file_info.hpp"
 #include "httpserver/string_response.hpp"
 #include "httpserver/webserver.hpp"
 

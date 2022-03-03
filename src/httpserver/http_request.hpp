@@ -40,6 +40,7 @@
 #include <vector>
 
 #include "httpserver/http_utils.hpp"
+#include "httpserver/file_info.hpp"
 
 struct MHD_Connection;
 
@@ -134,6 +135,22 @@ class http_request {
       * @result the size of the map
      **/
      const std::map<std::string, std::string, http::arg_comparator> get_args() const;
+
+     /**
+      * Method to get or create a file info struct in the map if the provided filename is already in the map
+      * return the exiting file info struct, otherwise create one in the map and return it.
+      * @param upload_file_name the file name the user uploaded (this is the identifier for the map entry)
+      * @result a file info struct file_info_s
+     **/
+     http::file_info& get_or_create_file_info(const std::string& key, const std::string& upload_file_name);
+
+     /**
+      * Method used to get all files passed with the request.
+      * @result result a map<string, file_info_s> > that will be filled with all files
+     **/
+     const std::map<std::string, std::map<std::string, http::file_info>> get_files() const {
+          return files;
+     }
 
      /**
       * Method used to get a specific header passed with the request.
@@ -240,6 +257,7 @@ class http_request {
      std::string path;
      std::string method;
      std::map<std::string, std::string, http::arg_comparator> args;
+     std::map<std::string, std::map<std::string, http::file_info>> files;
      std::string content = "";
      size_t content_size_limit = static_cast<size_t>(-1);
      std::string version;

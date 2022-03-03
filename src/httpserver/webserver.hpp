@@ -162,6 +162,10 @@ class webserver {
      const bool regex_checking;
      const bool ban_system_enabled;
      const bool post_process_enabled;
+     const bool put_processed_data_to_content;
+     const file_upload_target_T file_upload_target;
+     const std::string file_upload_dir;
+     const bool generate_random_filename_on_upload;
      const bool deferred_enabled;
      bool single_resource;
      bool tcp_nodelay;

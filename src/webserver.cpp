@@ -42,7 +42,6 @@
 #include <algorithm>
 #include <iosfwd>
 #include <cstring>
-#include <exception>
 #include <memory>
 #include <stdexcept>
 #include <utility>
@@ -152,6 +151,10 @@ webserver::webserver(const create_webserver& params):
     regex_checking(params._regex_checking),
     ban_system_enabled(params._ban_system_enabled),
     post_process_enabled(params._post_process_enabled),
+    put_processed_data_to_content(params._put_processed_data_to_content),
+    file_upload_target(params._file_upload_target),
+    file_upload_dir(params._file_upload_dir),
+    generate_random_filename_on_upload(params._generate_random_filename_on_upload),
     deferred_enabled(params._deferred_enabled),
     single_resource(params._single_resource),
     tcp_nodelay(params._tcp_nodelay),
@@ -454,14 +457,66 @@ MHD_Result webserver::post_iterator(void *cls, enum MHD_ValueKind kind,
         const char *transfer_encoding, const char *data, uint64_t off, size_t size) {
     // Parameter needed to respect MHD interface, but not needed here.
     std::ignore = kind;
-    std::ignore = filename;
-    std::ignore = content_type;
-    std::ignore = transfer_encoding;
     std::ignore = off;
 
     struct details::modded_request* mr = (struct details::modded_request*) cls;
-    mr->dhr->set_arg(key, mr->dhr->get_arg(key) + std::string(data, size));
-    return MHD_YES;
+
+    try {
+        if (filename == nullptr || mr->ws->file_upload_target != FILE_UPLOAD_DISK_ONLY) {
+            mr->dhr->set_arg(key, mr->dhr->get_arg(key) + std::string(data, size));
+        }
+
+        if (filename && *filename != '\0' && mr->ws->file_upload_target != FILE_UPLOAD_MEMORY_ONLY) {
+            // either get the existing file info struct or create a new one in the file map
+            http::file_info& file = mr->dhr->get_or_create_file_info(key, filename);
+            // if the file_system_file_name is not filled yet, this is a new entry and the name has to be set
+            // (either random or copy of the original filename)
+            if (file.get_file_system_file_name().empty()) {
+                if (mr->ws->generate_random_filename_on_upload) {
+                    file.set_file_system_file_name(http_utils::generate_random_upload_filename(mr->ws->file_upload_dir));
+                } else {
+                    file.set_file_system_file_name(mr->ws->file_upload_dir + "/" + std::string(filename));
+                }
+                // to not append to an already existing file, delete an already existing file
+                unlink(file.get_file_system_file_name().c_str());
+                if (content_type != nullptr) {
+                    file.set_content_type(content_type);
+                }
+                if (transfer_encoding != nullptr) {
+                    file.set_transfer_encoding(transfer_encoding);
+                }
+            }
+
+            // if multiple files are uploaded, a different filename or a different key indicates
+            // the start of a new file, so close the previous one
+            if (mr->upload_filename.empty() ||
+                mr->upload_key.empty() ||
+                0 != strcmp(filename, mr->upload_filename.c_str()) ||
+                0 != strcmp(key, mr->upload_key.c_str())) {
+                if (mr->upload_ostrm != nullptr) {
+                    mr->upload_ostrm->close();
+                }
+            }
+
+            if (mr->upload_ostrm == nullptr || !mr->upload_ostrm->is_open()) {
+                mr->upload_key = key;
+                mr->upload_filename = filename;
+                delete mr->upload_ostrm;
+                mr->upload_ostrm = new std::ofstream();
+                mr->upload_ostrm->open(file.get_file_system_file_name(), std::ios::binary | std::ios::app);
+            }
+
+            if (size > 0) {
+                mr->upload_ostrm->write(data, size);
+            }
+
+            // update the file size in the map
+            file.grow_file_size(size);
+        }
+        return MHD_YES;
+    } catch(const http::generateFilenameException& e) {
+        return MHD_NO;
+    }
 }
 
 void webserver::upgrade_handler(void *cls, struct MHD_Connection* connection, void **con_cls, int upgrade_socket) {
@@ -527,9 +582,21 @@ MHD_Result webserver::requests_answer_second_step(MHD_Connection* connection, co
 #ifdef DEBUG
         std::cout << "Writing content: " << std::string(upload_data, *upload_data_size) << std::endl;
 #endif  // DEBUG
-        mr->dhr->grow_content(upload_data, *upload_data_size);
+        // The post iterator is only created from the libmicrohttpd for content of type
+        // multipart/form-data and application/x-www-form-urlencoded
+        // all other content (which is indicated by mr-pp == nullptr)
+        // has to be put to the content even if put_processed_data_to_content is set to false
+        if (mr->pp == nullptr || put_processed_data_to_content) {
+            mr->dhr->grow_content(upload_data, *upload_data_size);
+        }
 
-        if (mr->pp != nullptr) MHD_post_process(mr->pp, upload_data, *upload_data_size);
+        if (mr->pp != nullptr) {
+            mr->ws = this;
+            MHD_post_process(mr->pp, upload_data, *upload_data_size);
+            if (mr->upload_ostrm != nullptr && mr->upload_ostrm->is_open()) {
+                mr->upload_ostrm->close();
+            }
+        }
     }
 
     *upload_data_size = 0;

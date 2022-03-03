@@ -30,6 +30,7 @@
 #include <arpa/inet.h>
 #endif
 
+#include <sys/stat.h>
 #include <cstdio>
 
 #include "./littletest.hpp"
@@ -153,6 +154,22 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, standardize_url)
     result = httpserver::http::http_utils::standardize_url(url);
     LT_CHECK_EQ(result, "/abc/pqr");
 LT_END_AUTO_TEST(standardize_url)
+
+LT_BEGIN_AUTO_TEST(http_utils_suite, generate_random_upload_filename)
+    struct stat sb;
+    string directory = ".", filename = "";
+    string expected_output = directory + httpserver::http::http_utils::path_separator + httpserver::http::http_utils::upload_filename_template;
+    try {
+        filename = httpserver::http::http_utils::generate_random_upload_filename(directory);
+    } catch(const httpserver::http::generateFilenameException& e) {
+        LT_FAIL(e.what());
+    }
+    LT_CHECK_EQ(stat(filename.c_str(), &sb), 0);
+    // unlink the file again, to not mess up the test directory with files
+    unlink(filename.c_str());
+    // omit the last 6 signs in the check, as the "XXXXXX" is substituted to be random and unique
+    LT_CHECK_EQ(filename.substr(0, filename.size() - 6), expected_output.substr(0, expected_output.size() - 6));
+LT_END_AUTO_TEST(generate_random_upload_filename)
 
 LT_BEGIN_AUTO_TEST(http_utils_suite, ip_to_str)
     struct sockaddr_in ip4addr;

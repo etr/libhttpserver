@@ -64,9 +64,28 @@ typedef int MHD_Result;
 
 namespace httpserver {
 
+enum file_upload_target_T {
+     FILE_UPLOAD_MEMORY_ONLY,
+     FILE_UPLOAD_DISK_ONLY,
+     FILE_UPLOAD_MEMORY_AND_DISK,
+};
+
 typedef void(*unescaper_ptr)(std::string&);
 
 namespace http {
+
+struct generateFilenameException : public std::exception {
+ public:
+     explicit generateFilenameException(const std::string& message) noexcept : error_message(message) {
+     }
+
+     const char* what() const noexcept {
+          return this->error_message.c_str();
+     }
+
+ private:
+     std::string error_message;
+};
 
 class http_utils {
  public:
@@ -234,8 +253,13 @@ class http_utils {
      static const char* application_octet_stream;
      static const char* text_plain;
 
+     static const char* upload_filename_template;
+     static const char path_separator;
+
      static std::vector<std::string> tokenize_url(const std::string&, const char separator = '/');
      static std::string standardize_url(const std::string&);
+
+     static const std::string generate_random_upload_filename(const std::string& directory);
 };
 
 #define COMPARATOR(x, y, op) { \

@@ -27,6 +27,7 @@
 
 #include <string>
 #include <memory>
+#include <fstream>
 
 #include "httpserver/http_request.hpp"
 
@@ -47,6 +48,10 @@ struct modded_request {
     bool second = false;
     bool has_body = false;
 
+    std::string upload_key;
+    std::string upload_filename;
+    std::ofstream* upload_ostrm = nullptr;
+
     modded_request() = default;
 
     modded_request(const modded_request& b) = default;
@@ -64,6 +69,7 @@ struct modded_request {
         }
         delete complete_uri;
         delete standardized_url;
+        delete upload_ostrm;
     }
 };
 

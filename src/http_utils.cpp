@@ -23,6 +23,10 @@
 #if defined(_WIN32) && !defined(__CYGWIN__)
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <io.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <share.h>
 #else  // WIN32 check
 #include <arpa/inet.h>
 #include <netdb.h>
@@ -33,6 +37,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <fstream>
 #include <iomanip>
 #include <iterator>
@@ -198,6 +203,14 @@ const char* http_utils::http_post_encoding_multipart_formdata = MHD_HTTP_POST_EN
 const char* http_utils::application_octet_stream = "application/octet-stream";
 const char* http_utils::text_plain = "text/plain";
 
+const char* http_utils::upload_filename_template = "libhttpserver.XXXXXX";
+
+#if defined(_WIN32)
+    const char http_utils::path_separator = '\\';
+#else  // _WIN32
+    const char http_utils::path_separator = '/';
+#endif  // _WIN32
+
 std::vector<std::string> http_utils::tokenize_url(const std::string& str, const char separator) {
     return string_utilities::string_split(str, separator);
 }
@@ -219,6 +232,45 @@ std::string http_utils::standardize_url(const std::string& url) {
     }
 
     return result;
+}
+
+const std::string http_utils::generate_random_upload_filename(const std::string& directory) {
+    std::string filename = directory + http_utils::path_separator + http_utils::upload_filename_template;
+    char *template_filename = strdup(filename.c_str());
+    int fd = 0;
+
+#if defined(_WIN32)
+    // only function for win32 which creates unique filenames and can handle a given template including a path
+    // all other functions like tmpnam() always create filenames in the 'temp' directory
+    if (0 != _mktemp_s(template_filename, filename.size() + 1)) {
+        free(template_filename);
+        throw generateFilenameException("Failed to create unique filename");
+    }
+
+    // as no existing file should be overwritten the operation should fail if the file already exists
+    // fstream or ofstream classes don't feature such an option
+    // with the function _sopen_s this can be achieved by setting the flag _O_EXCL
+    if (0 != _sopen_s(&fd, template_filename, _O_CREAT | _O_EXCL | _O_NOINHERIT, _SH_DENYNO, _S_IREAD | _S_IWRITE)) {
+        free(template_filename);
+        throw generateFilenameException("Failed to create file");
+    }
+    if (fd == -1) {
+        free(template_filename);
+        throw generateFilenameException("File descriptor after successful _sopen_s is -1");
+    }
+    _close(fd);
+#else  // _WIN32
+    fd = mkstemp(template_filename);
+
+    if (fd == -1) {
+        free(template_filename);
+        throw generateFilenameException("Failed to create unique file");
+    }
+    close(fd);
+#endif  // _WIN32
+    std::string ret_filename = template_filename;
+    free(template_filename);
+    return ret_filename;
 }
 
 std::string get_ip_str(const struct sockaddr *sa) {
