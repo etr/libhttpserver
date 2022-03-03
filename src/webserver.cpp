@@ -501,6 +501,7 @@ MHD_Result webserver::post_iterator(void *cls, enum MHD_ValueKind kind,
             if (mr->upload_ostrm == nullptr || !mr->upload_ostrm->is_open()) {
                 mr->upload_key = key;
                 mr->upload_filename = filename;
+                delete mr->upload_ostrm;
                 mr->upload_ostrm = new std::ofstream();
                 mr->upload_ostrm->open(file.get_file_system_file_name(), std::ios::binary | std::ios::app);
             }
