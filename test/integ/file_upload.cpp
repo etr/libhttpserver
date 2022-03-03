@@ -195,18 +195,18 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk)
     LT_CHECK_EQ(actual_content.find(FILENAME_IN_GET_CONTENT) != string::npos, true);
     LT_CHECK_EQ(actual_content.find(TEST_CONTENT) != string::npos, true);
 
-    auto args = resource.get_args();
+    map<string, string, httpserver::http::arg_comparator> args = resource.get_args();
     LT_CHECK_EQ(args.size(), 1);
-    auto arg = args.begin();
+    map<string, string, httpserver::http::arg_comparator>::iterator arg = args.begin();
     LT_CHECK_EQ(arg->first, TEST_KEY);
     LT_CHECK_EQ(arg->second, TEST_CONTENT);
 
-    auto files = resource.get_files();
+    map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
     LT_CHECK_EQ(files.size(), 1);
-    auto file_key = files.begin();
+    map<string, map<string, httpserver::http::file_info>>::iterator file_key = files.begin();
     LT_CHECK_EQ(file_key->first, TEST_KEY);
     LT_CHECK_EQ(file_key->second.size(), 1);
-    auto file = file_key->second.begin();
+    map<string, httpserver::http::file_info>::iterator file = file_key->second.begin();
     LT_CHECK_EQ(file->first, TEST_CONTENT_FILENAME);
     LT_CHECK_EQ(file->second.get_file_size(), TEST_CONTENT_SIZE);
     LT_CHECK_EQ(file->second.get_content_type(), httpserver::http::http_utils::application_octet_stream);
@@ -243,10 +243,10 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_via_put)
     string actual_content = resource.get_content();
     LT_CHECK_EQ(actual_content, TEST_CONTENT);
 
-    auto args = resource.get_args();
+    map<string, string, httpserver::http::arg_comparator> args = resource.get_args();
     LT_CHECK_EQ(args.size(), 0);
 
-    auto files = resource.get_files();
+    map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
     LT_CHECK_EQ(files.size(), 0);
 
     ws->stop();
@@ -277,21 +277,21 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_additional_par
     LT_CHECK_EQ(actual_content.find(TEST_PARAM_KEY) != string::npos, true);
     LT_CHECK_EQ(actual_content.find(TEST_PARAM_VALUE) != string::npos, true);
 
-    auto args = resource.get_args();
+    map<string, string, httpserver::http::arg_comparator> args = resource.get_args();
     LT_CHECK_EQ(args.size(), 2);
-    auto arg = args.begin();
+    map<string, string, httpserver::http::arg_comparator>::iterator arg = args.begin();
     LT_CHECK_EQ(arg->first, TEST_KEY);
     LT_CHECK_EQ(arg->second, TEST_CONTENT);
     arg++;
     LT_CHECK_EQ(arg->first, TEST_PARAM_KEY);
     LT_CHECK_EQ(arg->second, TEST_PARAM_VALUE);
 
-    auto files = resource.get_files();
+    map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
     LT_CHECK_EQ(files.size(), 1);
-    auto file_key = files.begin();
+    map<string, map<string, httpserver::http::file_info>>::iterator file_key = files.begin();
     LT_CHECK_EQ(file_key->first, TEST_KEY);
     LT_CHECK_EQ(file_key->second.size(), 1);
-    auto file = file_key->second.begin();
+    map<string, httpserver::http::file_info>::iterator file = file_key->second.begin();
     LT_CHECK_EQ(file->first, TEST_CONTENT_FILENAME);
     LT_CHECK_EQ(file->second.get_file_size(), TEST_CONTENT_SIZE);
     LT_CHECK_EQ(file->second.get_content_type(), httpserver::http::http_utils::application_octet_stream);
@@ -331,21 +331,21 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_two_files)
     LT_CHECK_EQ(actual_content.find(FILENAME_IN_GET_CONTENT_2) != string::npos, true);
     LT_CHECK_EQ(actual_content.find(TEST_CONTENT_2) != string::npos, true);
 
-    auto args = resource.get_args();
+    map<string, string, httpserver::http::arg_comparator> args = resource.get_args();
     LT_CHECK_EQ(args.size(), 2);
-    auto arg = args.begin();
+    map<string, string, httpserver::http::arg_comparator>::iterator arg = args.begin();
     LT_CHECK_EQ(arg->first, TEST_KEY);
     LT_CHECK_EQ(arg->second, TEST_CONTENT);
     arg++;
     LT_CHECK_EQ(arg->first, TEST_KEY_2);
     LT_CHECK_EQ(arg->second, TEST_CONTENT_2);
 
-    auto files = resource.get_files();
+    map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
     LT_CHECK_EQ(files.size(), 2);
-    auto file_key = files.begin();
+    map<string, map<string, httpserver::http::file_info>>::iterator file_key = files.begin();
     LT_CHECK_EQ(file_key->first, TEST_KEY);
     LT_CHECK_EQ(file_key->second.size(), 1);
-    auto file = file_key->second.begin();
+    map<string, httpserver::http::file_info>::iterator file = file_key->second.begin();
     LT_CHECK_EQ(file->first, TEST_CONTENT_FILENAME);
     LT_CHECK_EQ(file->second.get_file_size(), TEST_CONTENT_SIZE);
     LT_CHECK_EQ(file->second.get_content_type(), httpserver::http::http_utils::application_octet_stream);
@@ -398,15 +398,15 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_disk_only)
     string actual_content = resource.get_content();
     LT_CHECK_EQ(actual_content.size(), 0);
 
-    auto args = resource.get_args();
+    map<string, string, httpserver::http::arg_comparator> args = resource.get_args();
     LT_CHECK_EQ(args.size(), 0);
 
-    auto files = resource.get_files();
+    map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
     LT_CHECK_EQ(files.size(), 1);
-    auto file_key = files.begin();
+    map<string, map<string, httpserver::http::file_info>>::iterator file_key = files.begin();
     LT_CHECK_EQ(file_key->first, TEST_KEY);
     LT_CHECK_EQ(file_key->second.size(), 1);
-    auto file = file_key->second.begin();
+    map<string, httpserver::http::file_info>::iterator file = file_key->second.begin();
     LT_CHECK_EQ(file->first, TEST_CONTENT_FILENAME);
     LT_CHECK_EQ(file->second.get_file_size(), TEST_CONTENT_SIZE);
     LT_CHECK_EQ(file->second.get_content_type(), httpserver::http::http_utils::application_octet_stream);
@@ -442,13 +442,13 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_only_incl_content)
     LT_CHECK_EQ(actual_content.find(FILENAME_IN_GET_CONTENT) != string::npos, true);
     LT_CHECK_EQ(actual_content.find(TEST_CONTENT) != string::npos, true);
 
-    auto args = resource.get_args();
+    map<string, string, httpserver::http::arg_comparator> args = resource.get_args();
     LT_CHECK_EQ(args.size(), 1);
-    auto arg = args.begin();
+    map<string, string, httpserver::http::arg_comparator>::iterator arg = args.begin();
     LT_CHECK_EQ(arg->first, TEST_KEY);
     LT_CHECK_EQ(arg->second, TEST_CONTENT);
 
-    auto files = resource.get_files();
+    map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
     LT_CHECK_EQ(resource.get_files().size(), 0);
 
     ws->stop();
@@ -474,13 +474,13 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_only_excl_content)
     string actual_content = resource.get_content();
     LT_CHECK_EQ(actual_content.size(), 0);
 
-    auto args = resource.get_args();
+    map<string, string, httpserver::http::arg_comparator> args = resource.get_args();
     LT_CHECK_EQ(args.size(), 1);
-    auto arg = args.begin();
+    map<string, string, httpserver::http::arg_comparator>::iterator arg = args.begin();
     LT_CHECK_EQ(arg->first, TEST_KEY);
     LT_CHECK_EQ(arg->second, TEST_CONTENT);
 
-    auto files = resource.get_files();
+    map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
     LT_CHECK_EQ(files.size(), 0);
 
     ws->stop();
