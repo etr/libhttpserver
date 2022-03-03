@@ -117,7 +117,7 @@ static bool send_file_via_put() {
     curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/upload");
     curl_easy_setopt(curl, CURLOPT_UPLOAD, 1L);
     curl_easy_setopt(curl, CURLOPT_READDATA, fd);
-    curl_easy_setopt(curl, CURLOPT_INFILESIZE_LARGE, (curl_off_t)file_info.st_size);
+    curl_easy_setopt(curl, CURLOPT_INFILESIZE_LARGE, (curl_off_t) file_info.st_size);
 
     res = curl_easy_perform(curl);
     curl_easy_cleanup(curl);
@@ -138,6 +138,7 @@ class print_file_upload_resource : public http_resource {
          shared_ptr<string_response> hresp(new string_response("OK", 201, "text/plain"));
          return hresp;
      }
+
      const shared_ptr<http_response> render_PUT(const http_request& req) {
          content = req.get_content();
          args = req.get_args();
