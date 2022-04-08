@@ -197,6 +197,9 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk)
     CURLcode res = send_file_to_webserver(false, false);
     LT_ASSERT_EQ(res, 0);
 
+    ws->stop();
+    delete ws;
+
     string actual_content = resource.get_content();
     LT_CHECK_EQ(actual_content.find(FILENAME_IN_GET_CONTENT) != string::npos, true);
     LT_CHECK_EQ(actual_content.find(TEST_CONTENT) != string::npos, true);
@@ -223,9 +226,6 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk)
     LT_CHECK_EQ(file->second.get_file_system_file_name().substr(0, file->second.get_file_system_file_name().size() - 6),
                 expected_filename.substr(0, expected_filename.size() - 6));
     LT_CHECK_EQ(file_exists(file->second.get_file_system_file_name()), false);
-
-    ws->stop();
-    delete ws;
 LT_END_AUTO_TEST(file_upload_memory_and_disk)
 
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_via_put)
@@ -277,6 +277,9 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_additional_par
     CURLcode res = send_file_to_webserver(false, true);
     LT_ASSERT_EQ(res, 0);
 
+    ws->stop();
+    delete ws;
+
     string actual_content = resource.get_content();
     LT_CHECK_EQ(actual_content.find(FILENAME_IN_GET_CONTENT) != string::npos, true);
     LT_CHECK_EQ(actual_content.find(TEST_CONTENT) != string::npos, true);
@@ -308,9 +311,6 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_additional_par
     LT_CHECK_EQ(file->second.get_file_system_file_name().substr(0, file->second.get_file_system_file_name().size() - 6),
                 expected_filename.substr(0, expected_filename.size() - 6));
     LT_CHECK_EQ(file_exists(file->second.get_file_system_file_name()), false);
-
-    ws->stop();
-    delete ws;
 LT_END_AUTO_TEST(file_upload_memory_and_disk_additional_params)
 
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_two_files)
@@ -330,6 +330,9 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_two_files)
 
     CURLcode res = send_file_to_webserver(true, false);
     LT_ASSERT_EQ(res, 0);
+
+    ws->stop();
+    delete ws;
 
     string actual_content = resource.get_content();
     LT_CHECK_EQ(actual_content.find(FILENAME_IN_GET_CONTENT) != string::npos, true);
@@ -377,10 +380,6 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_two_files)
     LT_CHECK_EQ(file->second.get_file_system_file_name().substr(0, file->second.get_file_system_file_name().size() - 6),
                 expected_filename.substr(0, expected_filename.size() - 6));
     LT_CHECK_EQ(file_exists(file->second.get_file_system_file_name()), false);
-
-
-    ws->stop();
-    delete ws;
 LT_END_AUTO_TEST(file_upload_memory_and_disk_two_files)
 
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_disk_only)
@@ -400,6 +399,9 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_disk_only)
 
     CURLcode res = send_file_to_webserver(false, false);
     LT_ASSERT_EQ(res, 0);
+
+    ws->stop();
+    delete ws;
 
     string actual_content = resource.get_content();
     LT_CHECK_EQ(actual_content.size(), 0);
@@ -423,9 +425,6 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_disk_only)
     LT_CHECK_EQ(file->second.get_file_system_file_name().substr(0, file->second.get_file_system_file_name().size() - 6),
                 expected_filename.substr(0, expected_filename.size() - 6));
     LT_CHECK_EQ(file_exists(file->second.get_file_system_file_name()), false);
-
-    ws->stop();
-    delete ws;
 LT_END_AUTO_TEST(file_upload_disk_only)
 
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_only_incl_content)
