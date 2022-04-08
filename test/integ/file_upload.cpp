@@ -59,6 +59,12 @@ static size_t TEST_CONTENT_SIZE_2 = 28;
 static const char* TEST_PARAM_KEY = "param_key";
 static const char* TEST_PARAM_VALUE = "Value of test param";
 
+static bool file_exists(const string &path) {
+    struct stat sb;
+
+    return (stat(path.c_str(), &sb) == 0);
+}
+
 static CURLcode send_file_to_webserver(bool add_second_file, bool append_parameters) {
     curl_global_init(CURL_GLOBAL_ALL);
 
@@ -216,6 +222,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk)
                                httpserver::http::http_utils::upload_filename_template;
     LT_CHECK_EQ(file->second.get_file_system_file_name().substr(0, file->second.get_file_system_file_name().size() - 6),
                 expected_filename.substr(0, expected_filename.size() - 6));
+    LT_CHECK_EQ(file_exists(file->second.get_file_system_file_name()), false);
 
     ws->stop();
     delete ws;
@@ -300,6 +307,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_additional_par
                                httpserver::http::http_utils::upload_filename_template;
     LT_CHECK_EQ(file->second.get_file_system_file_name().substr(0, file->second.get_file_system_file_name().size() - 6),
                 expected_filename.substr(0, expected_filename.size() - 6));
+    LT_CHECK_EQ(file_exists(file->second.get_file_system_file_name()), false);
 
     ws->stop();
     delete ws;
@@ -353,6 +361,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_two_files)
                                httpserver::http::http_utils::upload_filename_template;
     LT_CHECK_EQ(file->second.get_file_system_file_name().substr(0, file->second.get_file_system_file_name().size() - 6),
                 expected_filename.substr(0, expected_filename.size() - 6));
+    LT_CHECK_EQ(file_exists(file->second.get_file_system_file_name()), false);
 
     file_key++;
     LT_CHECK_EQ(file_key->first, TEST_KEY_2);
@@ -367,6 +376,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_two_files)
                                httpserver::http::http_utils::upload_filename_template;
     LT_CHECK_EQ(file->second.get_file_system_file_name().substr(0, file->second.get_file_system_file_name().size() - 6),
                 expected_filename.substr(0, expected_filename.size() - 6));
+    LT_CHECK_EQ(file_exists(file->second.get_file_system_file_name()), false);
 
 
     ws->stop();
@@ -412,6 +422,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_disk_only)
                                httpserver::http::http_utils::upload_filename_template;
     LT_CHECK_EQ(file->second.get_file_system_file_name().substr(0, file->second.get_file_system_file_name().size() - 6),
                 expected_filename.substr(0, expected_filename.size() - 6));
+    LT_CHECK_EQ(file_exists(file->second.get_file_system_file_name()), false);
 
     ws->stop();
     delete ws;
