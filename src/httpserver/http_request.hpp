@@ -46,6 +46,8 @@ struct MHD_Connection;
 
 namespace httpserver {
 
+namespace details { struct modded_request; }
+
 /**
  * Class representing an abstraction for an Http Request. It is used from classes using these apis to receive information through http protocol.
 **/
@@ -254,6 +256,8 @@ class http_request {
      http_request& operator=(const http_request& b) = default;
      http_request& operator=(http_request&& b) = default;
 
+     ~http_request();
+
      std::string path;
      std::string method;
      std::map<std::string, std::string, http::arg_comparator> args;
@@ -356,6 +360,7 @@ class http_request {
      const std::map<std::string, std::string, http::header_comparator> get_headerlike_values(enum MHD_ValueKind kind) const;
 
      friend class webserver;
+     friend struct details::modded_request;
 };
 
 std::ostream &operator<< (std::ostream &os, const http_request &r);

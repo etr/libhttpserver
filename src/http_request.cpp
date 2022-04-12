@@ -256,4 +256,13 @@ std::ostream &operator<< (std::ostream &os, const http_request &r) {
     return os;
 }
 
+http_request::~http_request() {
+    for ( const auto &file_key : this->get_files() ) {
+        for ( const auto &files : file_key.second ) {
+            // C++17 has std::filesystem::remove()
+            remove(files.second.get_file_system_file_name().c_str());
+        }
+    }
+}
+
 }  // namespace httpserver
