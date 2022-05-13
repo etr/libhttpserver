@@ -662,6 +662,11 @@ MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct details
     if (found) {
         try {
             if (hrm->is_allowed(method)) {
+                if (mr->pp != NULL) {
+                    MHD_destroy_post_processor(mr->pp);
+                    mr->pp = NULL;
+                }
+
                 mr->dhrs = ((hrm)->*(mr->callback))(*mr->dhr);  // copy in memory (move in case)
                 if (mr->dhrs.get() == nullptr || mr->dhrs->get_response_code() == -1) {
                     mr->dhrs = internal_error_page(mr);
