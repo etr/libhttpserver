@@ -120,7 +120,7 @@ Here are listed the libhttpserver specific options (the canonical configure opti
 
 ## Getting Started
 The most basic example of creating a server and handling a requests for the path `/hello`:
-
+```cpp
     #include <httpserver.hpp>
 
     using namespace httpserver;
@@ -141,7 +141,7 @@ The most basic example of creating a server and handling a requests for the path
         
         return 0;
     }
-
+```
 To test the above example, you could run the following command from a terminal:
     
     curl -XGET -v http://localhost:8080/hello
@@ -166,9 +166,9 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
 
 ## Create and work with a webserver
 As you can see from the example above, creating a webserver with standard configuration is quite simple:
-    
+```cpp
     webserver ws = create_webserver(8080);
-
+```
 The `create_webserver` class is a supporting _builder_ class that eases the building of a webserver through chained syntax.
 
 ### Basic Startup Options
@@ -214,6 +214,7 @@ In all these 3 cases libhttpserver would provide a standard HTTP response to the
 * _.internal_error_resource(**const  shared_ptr<http_response>(&ast;render_ptr)(const http_request&)** resource):_ Specifies a function to handle a request that is causing an uncaught exception during its execution. **REMEMBER:** is this callback is causing an exception itself, the standard default response from libhttpserver will be reported to the HTTP client.
 
 #### Example of custom errors:
+```cpp
       #include <httpserver.hpp>
 
       using namespace httpserver;
@@ -246,7 +247,7 @@ In all these 3 cases libhttpserver would provide a standard HTTP response to the
 
           return 0;
       }
-
+```
 To test the above example, you can run the following command from a terminal:
     
     curl -XGET -v http://localhost:8080/hello
@@ -262,6 +263,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
 * _.log_error(**void(&ast;log_error_ptr)(const std::string&)** functor):_ Specifies a function used to log errors generating from the server.
 
 #### Example of custom logging callback
+```cpp
     #include <httpserver.hpp>
     #include <iostream>
 
@@ -288,7 +290,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
 
         return 0;
     }
-
+```
 To test the above example, you can run the following command from a terminal:
     
     curl -XGET -v http://localhost:8080/hello
@@ -312,6 +314,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
 * _.https_priorities(**const std::string&** priority_string):_ SSL/TLS protocol version and ciphers. Must be followed by a string specifying the SSL/TLS protocol versions and ciphers that are acceptable for the application. The string is passed unchanged to gnutls_priority_init. If this option is not specified, `"NORMAL"` is used.
 
 #### Minimal example using HTTPS
+```cpp
     #include <httpserver.hpp>
 
     using namespace httpserver;
@@ -335,7 +338,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
 
         return 0;
     }
-
+```
 To test the above example, you can run the following command from a terminal:
     
     curl -XGET -v -k 'https://localhost:8080/hello'
@@ -355,10 +358,10 @@ You should calculate the value of NC_SIZE based on the number of connections per
 * _.digest_auth_random(**const std::string&** nonce_seed):_ Digest Authentication nonce’s seed. For security, you SHOULD provide a fresh random nonce when actually using Digest Authentication with libhttpserver in production.
 
 ### Examples of chaining syntax to create a webserver
-
+```cpp
     webserver ws = create_webserver(8080)
-	    .no_ssl()
-	    .no_ipv6()
+        .no_ssl()
+        .no_ipv6()
         .no_debug()
         .no_pedantic()
         .no_basic_auth()
@@ -367,12 +370,14 @@ You should calculate the value of NC_SIZE based on the number of connections per
         .no_regex_checking()
         .no_ban_system()
         .no_post_process();
+```
 ##
+```cpp
     webserver ws = create_webserver(8080)
         .use_ssl()
         .https_mem_key("key.pem")
         .https_mem_cert("cert.pem");
-
+```
 ### Starting and stopping a webserver
 Once a webserver is created, you can manage its execution through the following methods on the `webserver` class:
 * _**void** webserver::start(**bool** blocking):_ Allows to start a server. If the `blocking` flag is passed as `true`, it will block the execution of the current thread until a call to stop on the same webserver object is performed. 
@@ -397,6 +402,7 @@ Given this, the `http_resource` class contains the following extensible methods 
 * _**const std::shared_ptr<http_response>** http_resource::render(**const http_request&** req):_ Invoked as a backup method if the matching method is not implemented. It can be used whenever you want all the invocations on a URL to activate the same behavior regardless of the HTTP method requested. The default implementation of the `render` method returns an empty response with a `404`.
 
 #### Example of implementation of render methods
+```cpp
     #include <httpserver.hpp>
 
     using namespace httpserver;
@@ -421,7 +427,7 @@ Given this, the `http_resource` class contains the following extensible methods 
 
         return 0;
     }
-
+```
 To test the above example, you can run the following commands from a terminal:
  * `curl -XGET -v http://localhost:8080/hello`: will return `GET: Hello, World!`.
  * `curl -XPOST -v http://localhost:8080/hello`: will return `OTHER: Hello, World!`. You can try requesting other methods beside `POST` to verify how the same message will be returned.
@@ -436,6 +442,7 @@ The base `http_resource` class has a set of methods that can be used to allow an
 * _**void**  http_resource::disallow_all():_ Marks all HTTP methods as not allowed.
 
 #### Example of methods allowed/disallowed
+```cpp
       #include <httpserver.hpp>
 
       using namespace httpserver;
@@ -458,7 +465,7 @@ The base `http_resource` class has a set of methods that can be used to allow an
 
           return 0;
       }
-
+```
 To test the above example, you can run the following command from a terminal:
     
     curl -XGET -v http://localhost:8080/hello
@@ -482,7 +489,7 @@ There are essentially four ways to specify an endpoint string:
 * **A parametrized path. (e.g. `"/path/to/resource/with/{arg1}/{arg2}/in/url"`)**. In this case, the webserver will match the argument with any value passed. In addition to this, the arguments will be passed to the resource as part of the arguments (readable from the `http_request::get_arg` method - see [here](#parsing-requests)). For example, if passing `"/path/to/resource/with/{arg1}/{arg2}/in/url"` will match any request on URL with any value in place of `{arg1}` and `{arg2}`. 
 * **A parametrized path with custom parameters.** This is the same of a normal parametrized path, but allows to specify a regular expression for the argument (e.g. `"/path/to/resource/with/{arg1|[0-9]+}/{arg2|[a-z]+}/in/url"`. In this case, the webserver will match the arguments with any value passed that satisfies the regex. In addition to this, as above, the arguments will be passed to the resource as part of the arguments (readable from the `http_request::get_arg` method - see [here](#parsing-requests)). For example, if passing `"/path/to/resource/with/{arg1|[0-9]+}/{arg2|[a-z]+}/in/url"` will match requests on URLs like `"/path/to/resource/with/10/AA/in/url"` but not like `""/path/to/resource/with/BB/10/in/url""`
 * Any of the above marked as `family`. Will match any request on URLs having path that is prefixed by the path passed. For example, if family is set to `true` and endpoint is set to `"/path"`, the webserver will route to the resource not only the requests against  `"/path"` but also everything in its nested path `"/path/on/the/previous/one"`.
-
+```cpp
       #include <httpserver.hpp>
 
       using namespace httpserver;
@@ -526,7 +533,7 @@ There are essentially four ways to specify an endpoint string:
 
           return 0;
       }
-
+```
 To test the above example, you can run the following commands from a terminal:
     
 * `curl -XGET -v http://localhost:8080/hello`: will return the `Hello, World!` message.
@@ -582,6 +589,7 @@ Details on the `http::file_info` structure.
 * _**const std::string** get_transfer_encoding() **const**:_ Returns the transfer encoding of the file uploaded through the HTTP request.
 
 #### Example of handler reading arguments from a request
+```cpp
     #include <httpserver.hpp>
 
     using namespace httpserver;
@@ -602,7 +610,7 @@ Details on the `http::file_info` structure.
 
         return 0;
     }
-
+```
 To test the above example, you can run the following command from a terminal:
     
     curl -XGET -v "http://localhost:8080/hello?name=John"
@@ -634,6 +642,7 @@ The `http_response` class offers an additional set of methods to "decorate" your
 * _**void**  shoutCAST():_ Mark the response as a `shoutCAST` one.
 
 ### Example of response setting headers
+```cpp
     #include <httpserver.hpp>
 
     using namespace httpserver;
@@ -656,7 +665,7 @@ The `http_response` class offers an additional set of methods to "decorate" your
 
         return 0;
     }
-
+```
 To test the above example, you could run the following command from a terminal:
     
     curl -XGET -v "http://localhost:8080/hello"
@@ -691,6 +700,7 @@ Examples of valid IPs include:
 * `"::ffff:192.0.*.*"`: ranges of IPV4 IPs nested into IPV6.
 
 #### Example of IP Whitelisting/Blacklisting
+```cpp
     #include <httpserver.hpp>
 
     using namespace httpserver;
@@ -714,7 +724,7 @@ Examples of valid IPs include:
 
         return 0;
     }
-
+```
 To test the above example, you could run the following command from a terminal:
     
     curl -XGET -v "http://localhost:8080/hello"
@@ -733,6 +743,7 @@ Digest authentication uses a one-way authentication method based on MD5 hash alg
 Client certificate authentication uses a X.509 certificate from the client. This is the strongest authentication mechanism but it requires the use of HTTPS. Client certificate authentication can be used simultaneously with Basic or Digest Authentication in order to provide a two levels authentication (like for instance separate machine and user authentication). You can enable/disable support for Certificate authentication through the `use_ssl` and `no_ssl` methods of the `create_webserver` class.
 
 ### Using Basic Authentication
+```cpp
     #include <httpserver.hpp>
 
     using namespace httpserver;
@@ -756,7 +767,7 @@ Client certificate authentication uses a X.509 certificate from the client. This
 
         return 0;
     }
-
+```
 To test the above example, you can run the following command from a terminal:
     
     curl -XGET -v -u myuser:mypass "http://localhost:8080/hello"
@@ -766,6 +777,7 @@ You will receive back the user and password you passed in input. Try to pass the
 You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/basic_authentication.cpp).
 
 ### Using Digest Authentication
+```cpp
     #include <httpserver.hpp>
 
     #define MY_OPAQUE "11733b200778ce33060f31c9af70a870ba96ddd4"
@@ -797,25 +809,26 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
 
         return 0;
     }
-
+```
 To test the above example, you can run the following command from a terminal:
     
     curl -XGET -v --digest --user myuser:mypass localhost:8080/hello
 
-You will receive a `SUCCESS` in response (observe the response message from the server in detail and you'll  see the full interaction). Try to pass the wrong credentials or send a request without `digest` active to see the failure.
+You will receive a `SUCCESS` in response (observe the response message from the server in detail and you'll see the full interaction). Try to pass the wrong credentials or send a request without `digest` active to see the failure.
 
 You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/digest_authentication.cpp).
 
 [Back to TOC](#table-of-contents)
 
 ## HTTP Utils
-libhttpserver provides a set of constants to help you develop your HTTP server. It would be redudant to list them here; so, please, consult the list directly [here](https://github.com/etr/libhttpserver/blob/master/src/httpserver/http_utils.hpp).
+libhttpserver provides a set of constants to help you develop your HTTP server. It would be redundant to list them here; so, please, consult the list directly [here](https://github.com/etr/libhttpserver/blob/master/src/httpserver/http_utils.hpp).
 
 [Back to TOC](#table-of-contents)
 
 ## Other Examples
 
 #### Example of returning a response from a file
+```cpp
     #include <httpserver.hpp>
 
     using namespace httpserver;
@@ -836,7 +849,7 @@ libhttpserver provides a set of constants to help you develop your HTTP server. 
 
         return 0;
     }
-
+```
 To test the above example, you can run the following command from a terminal:
     
     curl -XGET -v localhost:8080/hello
@@ -844,6 +857,7 @@ To test the above example, you can run the following command from a terminal:
 You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/minimal_file_response.cpp).
 
 #### Example of a deferred response through callback
+```cpp
     #include <httpserver.hpp>
     
     using namespace httpserver;
@@ -878,7 +892,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
     
         return 0;
     }
-
+```
 To test the above example, you can run the following command from a terminal:
     
     curl -XGET -v localhost:8080/hello
@@ -886,6 +900,7 @@ To test the above example, you can run the following command from a terminal:
 You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/minimal_deferred.cpp).
 
 #### Example of a deferred response through callback (passing additional data along)
+```cpp
     #include <atomic>
     #include <httpserver.hpp>
     
@@ -935,7 +950,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
     
         return 0;
     }
-
+```
 To test the above example, you can run the following command from a terminal:
     
     curl -XGET -v localhost:8080/hello
