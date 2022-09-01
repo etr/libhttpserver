@@ -684,7 +684,7 @@ The system supports both IPV4 and IPV6 and manages them transparently. The only 
 You can explicitly ban or allow an IP address using the following methods on the `webserver` class:
 * _**void** ban_ip(**const std::string&** ip):_ Adds one IP (or a range of IPs) to the list of the banned ones. Takes in input a `string` that contains the IP (or range of IPs) to ban. To use when the `default_policy` is `ACCEPT`.
 * _**void** allow_ip(**const std::string&** ip):_ Adds one IP (or a range of IPs) to the list of the allowed ones. Takes in input a `string` that contains the IP (or range of IPs) to allow.  To use when the `default_policy` is `REJECT`.
-* _**void** unban_ip(**const std::string&** ip):_ Removes one IP (or a range of IPs) from the list of the banned ones. Takes in input a `string` that contains the IP (or range of IPs) to remove from the list.  To use when the `default_policy` is `REJECT`.
+* _**void** unban_ip(**const std::string&** ip):_ Removes one IP (or a range of IPs) from the list of the banned ones. Takes in input a `string` that contains the IP (or range of IPs) to remove from the list.  To use when the `default_policy` is `ACCEPT`.
 * _**void** disallow_ip(**const std::string&** ip):_ Removes one IP (or a range of IPs) from the list of the allowed ones. Takes in input a `string` that contains the IP (or range of IPs) to remove from the list.  To use when the `default_policy` is `REJECT`.
 
 ### IP String Format
