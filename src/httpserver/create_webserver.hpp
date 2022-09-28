@@ -27,6 +27,7 @@
 
 #include <stdlib.h>
 #include <memory>
+#include <functional>
 #include <string>
 
 #include "httpserver/http_response.hpp"
@@ -40,10 +41,10 @@ namespace httpserver {
 class webserver;
 class http_request;
 
-typedef const std::shared_ptr<http_response>(*render_ptr)(const http_request&);
-typedef bool(*validator_ptr)(const std::string&);
-typedef void(*log_access_ptr)(const std::string&);
-typedef void(*log_error_ptr)(const std::string&);
+typedef std::function<const std::shared_ptr<http_response>(const http_request&)> render_ptr;
+typedef std::function<bool(const std::string&)> validator_ptr;
+typedef std::function<void(const std::string&)> log_access_ptr;
+typedef std::function<void(const std::string&)> log_error_ptr;
 
 class create_webserver {
  public:
