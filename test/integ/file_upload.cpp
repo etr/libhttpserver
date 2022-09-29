@@ -137,7 +137,7 @@ static bool send_file_via_put() {
 
 class print_file_upload_resource : public http_resource {
  public:
-     const shared_ptr<http_response> render_POST(const http_request& req) {
+     shared_ptr<http_response> render_POST(const http_request& req) {
          content = req.get_content();
          args = req.get_args();
          files = req.get_files();
@@ -145,7 +145,7 @@ class print_file_upload_resource : public http_resource {
          return hresp;
      }
 
-     const shared_ptr<http_response> render_PUT(const http_request& req) {
+     shared_ptr<http_response> render_PUT(const http_request& req) {
          content = req.get_content();
          args = req.get_args();
          files = req.get_files();

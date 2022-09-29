@@ -37,7 +37,7 @@ using httpserver::create_webserver;
 
 class ok_resource : public http_resource {
  public:
-     const shared_ptr<http_response> render_GET(const http_request&) {
+     shared_ptr<http_response> render_GET(const http_request&) {
          return shared_ptr<string_response>(new string_response("OK", 200, "text/plain"));
      }
 };
