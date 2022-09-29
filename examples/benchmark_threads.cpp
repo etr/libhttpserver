@@ -28,7 +28,7 @@
 
 class hello_world_resource : public httpserver::http_resource {
  public:
-     explicit hello_world_resource(std::shared_ptr<httpserver::http_response>& resp):
+     explicit hello_world_resource(const std::shared_ptr<httpserver::http_response>& resp):
          resp(resp) {
      }
 
