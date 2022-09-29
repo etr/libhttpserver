@@ -41,7 +41,7 @@ namespace httpserver {
 class webserver;
 class http_request;
 
-typedef std::function<const std::shared_ptr<http_response>(const http_request&)> render_ptr;
+typedef std::function<std::shared_ptr<http_response>(const http_request&)> render_ptr;
 typedef std::function<bool(const std::string&)> validator_ptr;
 typedef std::function<void(const std::string&)> log_access_ptr;
 typedef std::function<void(const std::string&)> log_error_ptr;

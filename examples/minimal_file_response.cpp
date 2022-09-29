@@ -22,7 +22,7 @@
 
 class file_response_resource : public httpserver::http_resource {
  public:
-     const std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request&) {
+     std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request&) {
          return std::shared_ptr<httpserver::file_response>(new httpserver::file_response("test_content", 200, "text/plain"));
      }
 };

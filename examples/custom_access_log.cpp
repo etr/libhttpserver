@@ -28,7 +28,7 @@ void custom_access_log(const std::string& url) {
 
 class hello_world_resource : public httpserver::http_resource {
  public:
-     const std::shared_ptr<httpserver::http_response> render(const httpserver::http_request&) {
+     std::shared_ptr<httpserver::http_response> render(const httpserver::http_request&) {
          return std::shared_ptr<httpserver::http_response>(new httpserver::string_response("Hello, World!"));
      }
 };

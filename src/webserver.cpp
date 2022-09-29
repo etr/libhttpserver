@@ -526,7 +526,7 @@ void webserver::upgrade_handler(void *cls, struct MHD_Connection* connection, vo
     std::ignore = upgrade_socket;
 }
 
-const std::shared_ptr<http_response> webserver::not_found_page(details::modded_request* mr) const {
+std::shared_ptr<http_response> webserver::not_found_page(details::modded_request* mr) const {
     if (not_found_resource != nullptr) {
         return not_found_resource(*mr->dhr);
     } else {
@@ -534,7 +534,7 @@ const std::shared_ptr<http_response> webserver::not_found_page(details::modded_r
     }
 }
 
-const std::shared_ptr<http_response> webserver::method_not_allowed_page(details::modded_request* mr) const {
+std::shared_ptr<http_response> webserver::method_not_allowed_page(details::modded_request* mr) const {
     if (method_not_allowed_resource != nullptr) {
         return method_not_allowed_resource(*mr->dhr);
     } else {
@@ -542,7 +542,7 @@ const std::shared_ptr<http_response> webserver::method_not_allowed_page(details:
     }
 }
 
-const std::shared_ptr<http_response> webserver::internal_error_page(details::modded_request* mr, bool force_our) const {
+std::shared_ptr<http_response> webserver::internal_error_page(details::modded_request* mr, bool force_our) const {
     if (internal_error_resource != nullptr && !force_our) {
         return internal_error_resource(*mr->dhr);
     } else {

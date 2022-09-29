@@ -24,7 +24,7 @@
 
 class digest_resource : public httpserver::http_resource {
  public:
-     const std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request& req) {
+     std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request& req) {
          if (req.get_digested_user() == "") {
              return std::shared_ptr<httpserver::digest_auth_fail_response>(new httpserver::digest_auth_fail_response("FAIL", "test@example.com", MY_OPAQUE, true));
          } else {
