@@ -32,7 +32,7 @@ class hello_world_resource : public httpserver::http_resource {
          resp(resp) {
      }
 
-     const std::shared_ptr<httpserver::http_response> render(const httpserver::http_request&) {
+     std::shared_ptr<httpserver::http_response> render(const httpserver::http_request&) {
          return resp;
      }
 

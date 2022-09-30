@@ -87,14 +87,14 @@ ssize_t test_callback_with_data(shared_ptr<test_data> closure_data, char* buf, s
 
 class deferred_resource : public http_resource {
  public:
-     const shared_ptr<http_response> render_GET(const http_request&) {
+     shared_ptr<http_response> render_GET(const http_request&) {
          return shared_ptr<deferred_response<void>>(new deferred_response<void>(test_callback, nullptr, "cycle callback response"));
      }
 };
 
 class deferred_resource_with_data : public http_resource {
  public:
-     const shared_ptr<http_response> render_GET(const http_request&) {
+     shared_ptr<http_response> render_GET(const http_request&) {
          shared_ptr<test_data> internal_info(new test_data);
          internal_info->value = 42;
          return shared_ptr<deferred_response<test_data>>(new deferred_response<test_data>(test_callback_with_data, internal_info, "cycle callback response"));

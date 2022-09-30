@@ -23,7 +23,7 @@
 
 class file_upload_resource : public httpserver::http_resource {
  public:
-     const std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request&) {
+     std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request&) {
          std::string get_response = "<html>\n";
          get_response += "  <body>\n";
          get_response += "    <form method=\"POST\" enctype=\"multipart/form-data\">\n";
@@ -40,7 +40,7 @@ class file_upload_resource : public httpserver::http_resource {
          return std::shared_ptr<httpserver::http_response>(new httpserver::string_response(get_response, 200, "text/html"));
      }
 
-     const std::shared_ptr<httpserver::http_response> render_POST(const httpserver::http_request& req) {
+     std::shared_ptr<httpserver::http_response> render_POST(const httpserver::http_request& req) {
         std::string post_response = "<html>\n";
         post_response += "<head>\n";
         post_response += "  <style>\n";

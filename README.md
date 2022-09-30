@@ -127,7 +127,7 @@ The most basic example of creating a server and handling a requests for the path
 
     class hello_world_resource : public http_resource {
     public:
-        const std::shared_ptr<http_response> render(const http_request&) {
+        std::shared_ptr<http_response> render(const http_request&) {
             return std::shared_ptr<http_response>(new string_response("Hello, World!"));
         }
     };
@@ -219,17 +219,17 @@ In all these 3 cases libhttpserver would provide a standard HTTP response to the
 
       using namespace httpserver;
 
-      const std::shared_ptr<http_response> not_found_custom(const http_request& req) {
+      std::shared_ptr<http_response> not_found_custom(const http_request& req) {
           return std::shared_ptr<string_response>(new string_response("Not found custom", 404, "text/plain"));
       }
 
-      const std::shared_ptr<http_response> not_allowed_custom(const http_request& req) {
+      std::shared_ptr<http_response> not_allowed_custom(const http_request& req) {
           return std::shared_ptr<string_response>(new string_response("Not allowed custom", 405, "text/plain"));
       }
 
       class hello_world_resource : public http_resource {
       public:
-          const std::shared_ptr<http_response> render(const http_request&) {
+          std::shared_ptr<http_response> render(const http_request&) {
               return std::shared_ptr<http_response>(new string_response("Hello, World!"));
           }
       };
@@ -275,7 +275,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
 
     class hello_world_resource : public http_resource {
     public:
-        const std::shared_ptr<http_response> render(const http_request&) {
+        std::shared_ptr<http_response> render(const http_request&) {
             return std::shared_ptr<http_response>(new string_response("Hello, World!"));
         }
     };
@@ -321,7 +321,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
 
     class hello_world_resource : public http_resource {
     public:
-        const std::shared_ptr<http_response> render(const http_request&) {
+        std::shared_ptr<http_response> render(const http_request&) {
             return std::shared_ptr<http_response>(new string_response("Hello, World!"));
         }
     };
@@ -391,15 +391,15 @@ Once a webserver is created, you can manage its execution through the following 
 The `http_resource` class represents a logical collection of HTTP methods that will be associated to a URL when registered on the webserver. The class is **designed for extension** and it is where most of your code should ideally live. When the webserver matches a request against a resource (see: [resource registration](#registering-resources)), the method correspondent to the one in the request (GET, POST, etc..) (see below) is called on the resource.
 
 Given this, the `http_resource` class contains the following extensible methods (also called `handlers` or `render methods`):
-* _**const std::shared_ptr<http_response>** http_resource::render_GET(**const http_request&** req):_ Invoked on an HTTP GET request.
-* _**const std::shared_ptr<http_response>** http_resource::render_POST(**const http_request&** req):_ Invoked on an HTTP POST request.
-* _**const std::shared_ptr<http_response>** http_resource::render_PUT(**const http_request&** req):_ Invoked on an HTTP PUT request.
-* _**const std::shared_ptr<http_response>** http_resource::render_HEAD(**const http_request&** req):_ Invoked on an HTTP HEAD request.
-* _**const std::shared_ptr<http_response>** http_resource::render_DELETE(**const http_request&** req):_ Invoked on an HTTP DELETE request.
-* _**const std::shared_ptr<http_response>** http_resource::render_TRACE(**const http_request&** req):_ Invoked on an HTTP TRACE request.
-* _**const std::shared_ptr<http_response>** http_resource::render_OPTIONS(**const http_request&** req):_ Invoked on an HTTP OPTIONS request.
-* _**const std::shared_ptr<http_response>** http_resource::render_CONNECT(**const http_request&** req):_ Invoked on an HTTP CONNECT request.
-* _**const std::shared_ptr<http_response>** http_resource::render(**const http_request&** req):_ Invoked as a backup method if the matching method is not implemented. It can be used whenever you want all the invocations on a URL to activate the same behavior regardless of the HTTP method requested. The default implementation of the `render` method returns an empty response with a `404`.
+* _**std::shared_ptr<http_response>** http_resource::render_GET(**const http_request&** req):_ Invoked on an HTTP GET request.
+* _**std::shared_ptr<http_response>** http_resource::render_POST(**const http_request&** req):_ Invoked on an HTTP POST request.
+* _**std::shared_ptr<http_response>** http_resource::render_PUT(**const http_request&** req):_ Invoked on an HTTP PUT request.
+* _**std::shared_ptr<http_response>** http_resource::render_HEAD(**const http_request&** req):_ Invoked on an HTTP HEAD request.
+* _**std::shared_ptr<http_response>** http_resource::render_DELETE(**const http_request&** req):_ Invoked on an HTTP DELETE request.
+* _**std::shared_ptr<http_response>** http_resource::render_TRACE(**const http_request&** req):_ Invoked on an HTTP TRACE request.
+* _**std::shared_ptr<http_response>** http_resource::render_OPTIONS(**const http_request&** req):_ Invoked on an HTTP OPTIONS request.
+* _**std::shared_ptr<http_response>** http_resource::render_CONNECT(**const http_request&** req):_ Invoked on an HTTP CONNECT request.
+* _**std::shared_ptr<http_response>** http_resource::render(**const http_request&** req):_ Invoked as a backup method if the matching method is not implemented. It can be used whenever you want all the invocations on a URL to activate the same behavior regardless of the HTTP method requested. The default implementation of the `render` method returns an empty response with a `404`.
 
 #### Example of implementation of render methods
 ```cpp
@@ -409,11 +409,11 @@ Given this, the `http_resource` class contains the following extensible methods 
 
     class hello_world_resource : public http_resource {
     public:
-        const std::shared_ptr<http_response> render_GET(const http_request&) {
+        std::shared_ptr<http_response> render_GET(const http_request&) {
             return std::shared_ptr<http_response>(new string_response("GET: Hello, World!"));
         }
 
-        const std::shared_ptr<http_response> render(const http_request&) {
+        std::shared_ptr<http_response> render(const http_request&) {
             return std::shared_ptr<http_response>(new string_response("OTHER: Hello, World!"));
         }
     };
@@ -449,7 +449,7 @@ The base `http_resource` class has a set of methods that can be used to allow an
 
       class hello_world_resource : public http_resource {
       public:
-          const std::shared_ptr<http_response> render(const http_request&) {
+          std::shared_ptr<http_response> render(const http_request&) {
               return std::shared_ptr<http_response>(new string_response("Hello, World!"));
           }
       };
@@ -496,21 +496,21 @@ There are essentially four ways to specify an endpoint string:
 
       class hello_world_resource : public http_resource {
       public:
-          const std::shared_ptr<http_response> render(const http_request&) {
+          std::shared_ptr<http_response> render(const http_request&) {
               return std::shared_ptr<http_response>(new string_response("Hello, World!"));
           }
       };
 
       class handling_multiple_resource : public http_resource {
       public:
-          const std::shared_ptr<http_response> render(const http_request& req) {
+          std::shared_ptr<http_response> render(const http_request& req) {
               return std::shared_ptr<http_response>(new string_response("Your URL: " + req.get_path()));
           }
       };
 
       class url_args_resource : public http_resource {
       public:
-          const std::shared_ptr<http_response> render(const http_request& req) {
+          std::shared_ptr<http_response> render(const http_request& req) {
               return std::shared_ptr<http_response>(new string_response("ARGS: " + req.get_arg("arg1") + " and " + req.get_arg("arg2")));
           }
       };
@@ -596,7 +596,7 @@ Details on the `http::file_info` structure.
 
     class hello_world_resource : public http_resource {
     public:
-        const std::shared_ptr<http_response> render(const http_request& req) {
+        std::shared_ptr<http_response> render(const http_request& req) {
             return std::shared_ptr<http_response>(new string_response("Hello: " + req.get_arg("name")));
         }
     };
@@ -649,7 +649,7 @@ The `http_response` class offers an additional set of methods to "decorate" your
 
     class hello_world_resource : public http_resource {
     public:
-        const std::shared_ptr<http_response> render(const http_request&) {
+        std::shared_ptr<http_response> render(const http_request&) {
             std::shared_ptr<http_response> response = std::shared_ptr<http_response>(new string_response("Hello, World!"));
             response->with_header("MyHeader", "MyValue");
             return response;
@@ -707,7 +707,7 @@ Examples of valid IPs include:
 
     class hello_world_resource : public http_resource {
     public:
-        const std::shared_ptr<http_response> render(const http_request&) {
+        std::shared_ptr<http_response> render(const http_request&) {
             return std::shared_ptr<http_response>(new string_response("Hello, World!"));
         }
     };
@@ -750,7 +750,7 @@ Client certificate authentication uses a X.509 certificate from the client. This
 
     class user_pass_resource : public httpserver::http_resource {
     public:
-        const std::shared_ptr<http_response> render_GET(const http_request& req) {
+        std::shared_ptr<http_response> render_GET(const http_request& req) {
             if (req.get_user() != "myuser" || req.get_pass() != "mypass") {
                 return std::shared_ptr<basic_auth_fail_response>(new basic_auth_fail_response("FAIL", "test@example.com"));
             }
@@ -786,7 +786,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
 
     class digest_resource : public httpserver::http_resource {
     public:
-        const std::shared_ptr<http_response> render_GET(const http_request& req) {
+        std::shared_ptr<http_response> render_GET(const http_request& req) {
             if (req.get_digested_user() == "") {
                 return std::shared_ptr<digest_auth_fail_response>(new digest_auth_fail_response("FAIL", "test@example.com", MY_OPAQUE, true));
             }
@@ -835,7 +835,7 @@ libhttpserver provides a set of constants to help you develop your HTTP server. 
 
     class file_response_resource : public http_resource {
     public:
-        const std::shared_ptr<http_response> render_GET(const http_request& req) {
+        std::shared_ptr<http_response> render_GET(const http_request& req) {
             return std::shared_ptr<file_response>(new file_response("test_content", 200, "text/plain"));
         }
     };
@@ -878,7 +878,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
     
     class deferred_resource : public http_resource {
         public:
-            const std::shared_ptr<http_response> render_GET(const http_request& req) {
+            std::shared_ptr<http_response> render_GET(const http_request& req) {
                 return std::shared_ptr<deferred_response<void> >(new deferred_response<void>(test_callback, nullptr, "cycle callback response"));
             }
     };
@@ -935,7 +935,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
     
     class deferred_resource : public http_resource {
         public:
-            const std::shared_ptr<http_response> render_GET(const http_request& req) {
+            std::shared_ptr<http_response> render_GET(const http_request& req) {
                 std::shared_ptr<std::atomic<int> > closure_data(new std::atomic<int>(counter++));
                 return std::shared_ptr<deferred_response<std::atomic<int> > >(new deferred_response<std::atomic<int> >(test_callback, closure_data, "cycle callback response"));
             }

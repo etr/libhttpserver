@@ -182,9 +182,9 @@ class webserver {
 
      struct MHD_Daemon* daemon;
 
-     const std::shared_ptr<http_response> method_not_allowed_page(details::modded_request* mr) const;
-     const std::shared_ptr<http_response> internal_error_page(details::modded_request* mr, bool force_our = false) const;
-     const std::shared_ptr<http_response> not_found_page(details::modded_request* mr) const;
+     std::shared_ptr<http_response> method_not_allowed_page(details::modded_request* mr) const;
+     std::shared_ptr<http_response> internal_error_page(details::modded_request* mr, bool force_our = false) const;
+     std::shared_ptr<http_response> not_found_page(details::modded_request* mr) const;
 
      static void request_completed(void *cls,
              struct MHD_Connection *connection, void **con_cls,

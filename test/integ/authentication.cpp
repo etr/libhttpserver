@@ -54,7 +54,7 @@ size_t writefunc(void *ptr, size_t size, size_t nmemb, std::string *s) {
 
 class user_pass_resource : public http_resource {
  public:
-     const shared_ptr<http_response> render_GET(const http_request& req) {
+     shared_ptr<http_response> render_GET(const http_request& req) {
          if (req.get_user() != "myuser" || req.get_pass() != "mypass") {
              return shared_ptr<basic_auth_fail_response>(new basic_auth_fail_response("FAIL", "examplerealm"));
          }
@@ -64,7 +64,7 @@ class user_pass_resource : public http_resource {
 
 class digest_resource : public http_resource {
  public:
-     const shared_ptr<http_response> render_GET(const http_request& req) {
+     shared_ptr<http_response> render_GET(const http_request& req) {
          if (req.get_digested_user() == "") {
              return shared_ptr<digest_auth_fail_response>(new digest_auth_fail_response("FAIL", "examplerealm", MY_OPAQUE, true));
          } else {
