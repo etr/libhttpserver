@@ -57,7 +57,7 @@ AC_ARG_ENABLE([same-directory-build],
 AC_MSG_RESULT([$samedirectory])
 
 if test x"$samedirectory" = x"no"; then
-    if test "`cd $srcdir; /bin/pwd`" = "`/bin/pwd`"; then 
+    if test "`cd $srcdir; /bin/pwd`" = "`/bin/pwd`"; then
         AC_MSG_ERROR("you must configure in a separate build directory")
     fi
 fi
@@ -197,7 +197,7 @@ AM_LDFLAGS="-lstdc++"
 
 if test x"$debugit" = x"yes"; then
     AC_DEFINE([DEBUG],[],[Debug Mode])
-    AM_CXXFLAGS="$AM_CXXFLAGS -DDEBUG -g -Wall -Wextra -Werror -pedantic -std=c++14 -Wno-unused-command-line-argument -O0"
+    AM_CXXFLAGS="$AM_CXXFLAGS -DDEBUG -g -Wall -Wextra -Werror -pedantic -std=c++17 -Wno-unused-command-line-argument -O0"
     AM_CFLAGS="$AM_CXXFLAGS -DDEBUG -g -Wall -Wextra -Werror -pedantic -Wno-unused-command-line-argument -O0"
 else
     AC_DEFINE([NDEBUG],[],[No-debug Mode])
@@ -292,7 +292,7 @@ AC_OUTPUT(
       examples/Makefile
 )
 
-AC_MSG_NOTICE([Configuration Summary:  
+AC_MSG_NOTICE([Configuration Summary:
   Operating System:  ${host_os}
   Target directory:  ${prefix}
   License         :  LGPL only
