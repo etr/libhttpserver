@@ -75,6 +75,7 @@ MHD_Result http_request::build_request_header(void *cls, enum MHD_ValueKind kind
 MHD_Result http_request::build_keys(void *cls, enum MHD_ValueKind kind, const char *key, const char *value) {
     // Parameters needed to respect MHD interface, but not used in the implementation.
     std::ignore = kind;
+    std::ignore = value;
 
     auto* keys = static_cast<std::vector<std::string_view>*>(cls);
     keys->push_back(std::string_view(key));
