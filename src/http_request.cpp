@@ -55,8 +55,8 @@ bool http_request::check_digest_auth(const std::string& realm, const std::string
     return true;
 }
 
-const std::string http_request::get_connection_value(const std::string& key, enum MHD_ValueKind kind) const {
-    const char* header_c = MHD_lookup_connection_value(underlying_connection, kind, key.c_str());
+std::string_view http_request::get_connection_value(std::string_view key, enum MHD_ValueKind kind) const {
+    const char* header_c = MHD_lookup_connection_value(underlying_connection, kind, key.data());
 
     if (header_c == nullptr) return EMPTY;
 
@@ -72,6 +72,15 @@ MHD_Result http_request::build_request_header(void *cls, enum MHD_ValueKind kind
     return MHD_YES;
 }
 
+MHD_Result http_request::build_keys(void *cls, enum MHD_ValueKind kind, const char *key, const char *value) {
+    // Parameters needed to respect MHD interface, but not used in the implementation.
+    std::ignore = kind;
+
+    auto* keys = static_cast<std::vector<std::string_view>*>(cls);
+    keys->push_back(std::string_view(key));
+    return MHD_YES;
+}
+
 const std::map<std::string, std::string, http::header_comparator> http_request::get_headerlike_values(enum MHD_ValueKind kind) const {
     std::map<std::string, std::string, http::header_comparator> headers;
 
@@ -80,7 +89,7 @@ const std::map<std::string, std::string, http::header_comparator> http_request::
     return headers;
 }
 
-const std::string http_request::get_header(const std::string& key) const {
+std::string_view http_request::get_header(std::string_view key) const {
     return get_connection_value(key, MHD_HEADER_KIND);
 }
 
@@ -88,7 +97,13 @@ const std::map<std::string, std::string, http::header_comparator> http_request::
     return get_headerlike_values(MHD_HEADER_KIND);
 }
 
-const std::string http_request::get_footer(const std::string& key) const {
+void http_request::get_header_keys(std::vector<std::string_view>* keys) const {
+    // TODO: is there any way to know in advance how many header keys there are so we
+    // can pre-allocate `keys`?
+    MHD_get_connection_values(underlying_connection, MHD_HEADER_KIND, &build_keys, reinterpret_cast<void*>(keys));
+}
+
+std::string_view http_request::get_footer(std::string_view key) const {
     return get_connection_value(key, MHD_FOOTER_KIND);
 }
 
@@ -96,7 +111,11 @@ const std::map<std::string, std::string, http::header_comparator> http_request::
     return get_headerlike_values(MHD_FOOTER_KIND);
 }
 
-const std::string http_request::get_cookie(const std::string& key) const {
+void http_request::get_footer_keys(std::vector<std::string_view>* keys) const {
+    MHD_get_connection_values(underlying_connection, MHD_FOOTER_KIND, &build_keys, reinterpret_cast<void*>(keys));
+}
+
+std::string_view http_request::get_cookie(std::string_view key) const {
     return get_connection_value(key, MHD_COOKIE_KIND);
 }
 
@@ -104,8 +123,12 @@ const std::map<std::string, std::string, http::header_comparator> http_request::
     return get_headerlike_values(MHD_COOKIE_KIND);
 }
 
-const std::string http_request::get_arg(const std::string& key) const {
-    std::map<std::string, std::string>::const_iterator it = args.find(key);
+void http_request::get_cookie_keys(std::vector<std::string_view>* keys) const {
+    MHD_get_connection_values(underlying_connection, MHD_COOKIE_KIND, &build_keys, reinterpret_cast<void*>(keys));
+}
+
+std::string_view http_request::get_arg(std::string_view key) const {
+    std::map<std::string, std::string>::const_iterator it = args.find(std::string(key));
 
     if (it != args.end()) {
         return it->second;
@@ -125,6 +148,10 @@ const std::map<std::string, std::string, http::arg_comparator> http_request::get
     MHD_get_connection_values(underlying_connection, MHD_GET_ARGUMENT_KIND, &build_request_args, reinterpret_cast<void*>(&aa));
 
     return arguments;
+}
+
+void http_request::get_arg_keys(std::vector<std::string_view>* keys) const {
+    MHD_get_connection_values(underlying_connection, MHD_GET_ARGUMENT_KIND, &build_keys, reinterpret_cast<void*>(keys));
 }
 
 http::file_info& http_request::get_or_create_file_info(const std::string& key, const std::string& upload_file_name) {

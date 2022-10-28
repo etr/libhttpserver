@@ -55,6 +55,7 @@ class string_response : public http_response {
 
      MHD_Response* get_raw_response();
 
+     std::string_view get_content() const { return std::string_view(content.c_str()); }
  private:
      std::string content = "";
 };

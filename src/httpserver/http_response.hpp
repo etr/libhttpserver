@@ -81,6 +81,10 @@ class http_response {
          return cookies[key];
      }
 
+     std::string_view get_content_type() const {
+         return headers.at(http::http_utils::http_header_content_type).c_str();
+     }
+
      /**
       * Method used to get all headers passed with the request.
       * @return a map<string,string> containing all headers.

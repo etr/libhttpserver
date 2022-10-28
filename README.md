@@ -52,7 +52,7 @@ libhttpserver is built upon  [libmicrohttpd](https://www.gnu.org/software/libmic
 
 #### Community
 * [Code of Conduct (on a separate page)](https://github.com/etr/libhttpserver/blob/master/CODE_OF_CONDUCT.md)
-* [Contributing (on a separate page)](https://github.com/etr/libhttpserver/blob/master/CONTRIBUTING.md) 
+* [Contributing (on a separate page)](https://github.com/etr/libhttpserver/blob/master/CONTRIBUTING.md)
 
 #### Appendices
 * [Copying statement](#copying)
@@ -97,11 +97,11 @@ Please refer to the readme file for your particular distribution if there is one
 
 ## Building
 libhttpserver uses the standard system where the usual build process involves running
-> ./bootstrap  
-> mkdir build  
-> cd build  
-> \.\./configure  
-> make  
+> ./bootstrap
+> mkdir build
+> cd build
+> \.\./configure
+> make
 > make install # (optionally to install on the system)
 
 [Back to TOC](#table-of-contents)
@@ -138,12 +138,12 @@ The most basic example of creating a server and handling a requests for the path
         hello_world_resource hwr;
         ws.register_resource("/hello", &hwr);
         ws.start(true);
-        
+
         return 0;
     }
 ```
 To test the above example, you could run the following command from a terminal:
-    
+
     curl -XGET -v http://localhost:8080/hello
 
 You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/minimal_hello_world.cpp).
@@ -202,7 +202,7 @@ For example, if your connection limit is “1”, a browser may open a first con
 
 ### Threading Models
 * _.start_method(**const http::http_utils::start_method_T&** start_method):_ libhttpserver can operate with two different threading models that can be selected through this method. Default value is `INTERNAL_SELECT`.
-	* `http::http_utils::INTERNAL_SELECT`: In this mode, libhttpserver uses only a single thread to handle listening on the port and processing of requests. This mode is preferable if spawning a thread for each connection would be costly. If the HTTP server is able to quickly produce responses without much computational overhead for each connection, this mode can be a great choice. Note that libhttpserver will still start a single thread for itself -- this way, the main program can continue with its operations after calling the start method. Naturally, if the HTTP server needs to interact with shared state in the main application, synchronization will be required. If such synchronization in code providing a response results in blocking, all HTTP server operations on all connections will stall. This mode is a bad choice if response data cannot always be provided instantly. The reason is that the code generating responses should not block (since that would block all other connections) and on the other hand, if response data is not available immediately, libhttpserver will start to busy wait on it. If you need to scale along the number of concurrent connection and scale on multiple thread you can specify a value for `max_threads` (see below) thus enabling a thread pool - this is different from `THREAD_PER_CONNECTION` below where a new thread is spawned for each connection. 
+	* `http::http_utils::INTERNAL_SELECT`: In this mode, libhttpserver uses only a single thread to handle listening on the port and processing of requests. This mode is preferable if spawning a thread for each connection would be costly. If the HTTP server is able to quickly produce responses without much computational overhead for each connection, this mode can be a great choice. Note that libhttpserver will still start a single thread for itself -- this way, the main program can continue with its operations after calling the start method. Naturally, if the HTTP server needs to interact with shared state in the main application, synchronization will be required. If such synchronization in code providing a response results in blocking, all HTTP server operations on all connections will stall. This mode is a bad choice if response data cannot always be provided instantly. The reason is that the code generating responses should not block (since that would block all other connections) and on the other hand, if response data is not available immediately, libhttpserver will start to busy wait on it. If you need to scale along the number of concurrent connection and scale on multiple thread you can specify a value for `max_threads` (see below) thus enabling a thread pool - this is different from `THREAD_PER_CONNECTION` below where a new thread is spawned for each connection.
 	* `http::http_utils::THREAD_PER_CONNECTION`: In this mode, libhttpserver starts one thread to listen on the port for new connections and then spawns a new thread to handle each connection. This mode is great if the HTTP server has hardly any state that is shared between connections (no synchronization issues!) and may need to perform blocking operations (such as extensive IO or running of code) to handle an individual connection.
 * _.max_threads(**int** max_threads):_ A thread pool can be combined with the `INTERNAL_SELECT` mode to benefit implementations that require scalability. As said before, by default this mode only uses a single thread. When combined with the thread pool option, it is possible to handle multiple connections with multiple threads. Any value greater than one for this option will activate the use of the thread pool. In contrast to the `THREAD_PER_CONNECTION` mode (where each thread handles one and only one connection), threads in the pool can handle a large number of concurrent connections. Using `INTERNAL_SELECT` in combination with a thread pool is typically the most scalable (but also hardest to debug) mode of operation for libhttpserver. Default value is `1`. This option is incompatible with `THREAD_PER_CONNECTION`.
 
@@ -249,7 +249,7 @@ In all these 3 cases libhttpserver would provide a standard HTTP response to the
       }
 ```
 To test the above example, you can run the following command from a terminal:
-    
+
     curl -XGET -v http://localhost:8080/hello
 
 If you try to run either of the two following commands, you'll see your custom errors:
@@ -292,7 +292,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
     }
 ```
 To test the above example, you can run the following command from a terminal:
-    
+
     curl -XGET -v http://localhost:8080/hello
 
 You'll notice how, on the terminal runing your server, the logs will now be printed in output for each request received.
@@ -340,7 +340,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
     }
 ```
 To test the above example, you can run the following command from a terminal:
-    
+
     curl -XGET -v -k 'https://localhost:8080/hello'
 
 You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/minimal_https.cpp).
@@ -380,7 +380,7 @@ You should calculate the value of NC_SIZE based on the number of connections per
 ```
 ### Starting and stopping a webserver
 Once a webserver is created, you can manage its execution through the following methods on the `webserver` class:
-* _**void** webserver::start(**bool** blocking):_ Allows to start a server. If the `blocking` flag is passed as `true`, it will block the execution of the current thread until a call to stop on the same webserver object is performed. 
+* _**void** webserver::start(**bool** blocking):_ Allows to start a server. If the `blocking` flag is passed as `true`, it will block the execution of the current thread until a call to stop on the same webserver object is performed.
 * _**void** webserver::stop():_ Allows to stop a server. It immediately stops it.
 * _**bool** webserver::is_running():_ Checks if a server is running
 * _**void** webserver::sweet_kill():_ Allows to stop a server. It doesn't guarantee an immediate halt to allow for thread termination and connection closure.
@@ -467,7 +467,7 @@ The base `http_resource` class has a set of methods that can be used to allow an
       }
 ```
 To test the above example, you can run the following command from a terminal:
-    
+
     curl -XGET -v http://localhost:8080/hello
 
 If you try to run the following command, you'll see a `method_not_allowed` error:
@@ -486,7 +486,7 @@ The `webserver` class offers a method to register a resource:
 There are essentially four ways to specify an endpoint string:
 * **A simple path (e.g. `"/path/to/resource"`).** In this case, the webserver will try to match exactly the value of the endpoint.
 * **A regular exception.** In this case, the webserver will try to match the URL of the request with the regex passed. For example, if passing `"/path/as/decimal/[0-9]+`, requests on URLs like `"/path/as/decimal/5"` or `"/path/as/decimal/42"` will be matched; instead, URLs like `"/path/as/decimal/three"` will not.
-* **A parametrized path. (e.g. `"/path/to/resource/with/{arg1}/{arg2}/in/url"`)**. In this case, the webserver will match the argument with any value passed. In addition to this, the arguments will be passed to the resource as part of the arguments (readable from the `http_request::get_arg` method - see [here](#parsing-requests)). For example, if passing `"/path/to/resource/with/{arg1}/{arg2}/in/url"` will match any request on URL with any value in place of `{arg1}` and `{arg2}`. 
+* **A parametrized path. (e.g. `"/path/to/resource/with/{arg1}/{arg2}/in/url"`)**. In this case, the webserver will match the argument with any value passed. In addition to this, the arguments will be passed to the resource as part of the arguments (readable from the `http_request::get_arg` method - see [here](#parsing-requests)). For example, if passing `"/path/to/resource/with/{arg1}/{arg2}/in/url"` will match any request on URL with any value in place of `{arg1}` and `{arg2}`.
 * **A parametrized path with custom parameters.** This is the same of a normal parametrized path, but allows to specify a regular expression for the argument (e.g. `"/path/to/resource/with/{arg1|[0-9]+}/{arg2|[a-z]+}/in/url"`. In this case, the webserver will match the arguments with any value passed that satisfies the regex. In addition to this, as above, the arguments will be passed to the resource as part of the arguments (readable from the `http_request::get_arg` method - see [here](#parsing-requests)). For example, if passing `"/path/to/resource/with/{arg1|[0-9]+}/{arg2|[a-z]+}/in/url"` will match requests on URLs like `"/path/to/resource/with/10/AA/in/url"` but not like `""/path/to/resource/with/BB/10/in/url""`
 * Any of the above marked as `family`. Will match any request on URLs having path that is prefixed by the path passed. For example, if family is set to `true` and endpoint is set to `"/path"`, the webserver will route to the resource not only the requests against  `"/path"` but also everything in its nested path `"/path/on/the/previous/one"`.
 ```cpp
@@ -535,7 +535,7 @@ There are essentially four ways to specify an endpoint string:
       }
 ```
 To test the above example, you can run the following commands from a terminal:
-    
+
 * `curl -XGET -v http://localhost:8080/hello`: will return the `Hello, World!` message.
 * `curl -XGET -v http://localhost:8080/family`: will return the `Your URL: /family` message.
 * `curl -XGET -v http://localhost:8080/family/with/suffix`: will return the `Your URL: /family/with/suffix` message.
@@ -557,16 +557,20 @@ As seen in the documentation of [http_resource](#the-resource-object), every ext
 The `http_request` class has a set of methods you will have access to when implementing your handlers:
 * _**const std::string&** get_path() **const**:_ Returns the path as requested from the HTTP client.
 * _**const std::vector\<std::string\>&** get_path_pieces() **const**:_ Returns the components of the path requested by the HTTP client (each piece of the path split by `'/'`.
-* _**const std::string&** get_path_piece(int index) **const**:_ Returns one piece of the path requested by the HTTP client. The piece is selected through the `index` parameter (0-indexed). 
+* _**const std::string&** get_path_piece(int index) **const**:_ Returns one piece of the path requested by the HTTP client. The piece is selected through the `index` parameter (0-indexed).
 * _**const std::string&** get_method() **const**:_ Returns the method requested by the HTTP client.
-* _**const std::string** get_header(**const std::string&** key) **const**:_ Returns the header with name equal to `key` if present in the HTTP request. Returns an `empty string` otherwise.
-* _**const std::string** get_cookie(**const std::string&** key) **const**:_ Returns the cookie with name equal to `key` if present in the HTTP request. Returns an `empty string` otherwise.
-* _**const std::string** get_footer(**const std::string&** key) **const**:_ Returns the footer with name equal to `key` if present in the HTTP request (only for http 1.1 chunked encodings). Returns an `empty string` otherwise.
-* _**const std::string** get_arg(**const std::string&** key) **const**:_ Returns the argument with name equal to `key` if present in the HTTP request. Arguments can be (1) querystring parameters, (2) path argument (in case of parametric endpoint, (3) parameters parsed from the HTTP request body if the body is in `application/x-www-form-urlencoded` or `multipart/form-data` formats and the postprocessor is enabled in the webserver (enabled by default).
+* _**std::string_view** get_header(**std::string_view** key) **const**:_ Returns the header with name equal to `key` if present in the HTTP request. Returns an `empty string` otherwise.
+* _**std::string_view** get_cookie(**std::string_view** key) **const**:_ Returns the cookie with name equal to `key` if present in the HTTP request. Returns an `empty string` otherwise.
+* _**std::string_view** get_footer(**std::string_view** key) **const**:_ Returns the footer with name equal to `key` if present in the HTTP request (only for http 1.1 chunked encodings). Returns an `empty string` otherwise.
+* _**std::string_view** get_arg(**std::string_view** key) **const**:_ Returns the argument with name equal to `key` if present in the HTTP request. Arguments can be (1) querystring parameters, (2) path argument (in case of parametric endpoint, (3) parameters parsed from the HTTP request body if the body is in `application/x-www-form-urlencoded` or `multipart/form-data` formats and the postprocessor is enabled in the webserver (enabled by default).
 * _**const std::map<std::string, std::string, http::header_comparator>** get_headers() **const**:_ Returns a map containing all the headers present in the HTTP request.
 * _**const std::map<std::string, std::string, http::header_comparator>** get_cookies() **const**:_ Returns a map containing all the cookies present in the HTTP request.
 * _**const std::map<std::string, std::string, http::header_comparator>** get_footers() **const**:_ Returns a map containing all the footers present in the HTTP request (only for http 1.1 chunked encodings).
 * _**const std::map<std::string, std::string, http::arg_comparator>** get_args() **const**:_ Returns all the arguments present in the HTTP request. Arguments can be (1) querystring parameters, (2) path argument (in case of parametric endpoint, (3) parameters parsed from the HTTP request body if the body is in `application/x-www-form-urlencoded` or `multipart/form-data` formats and the postprocessor is enabled in the webserver (enabled by default).
+* _**void** get_header_keys(**std::vector<std::string_view>**) **const**:_ Populate a vector with all present header keys. Can be used in conjunction with `get_header` to access headers without copying data.
+* _**void** get_footer_keys(**std::vector<std::string_view>**) **const**:_ Populate a vector with all present footer keys. Can be used in conjunction with `get_footer` to access footers without copying data.
+* _**void** get_cookie_keys(**std::vector<std::string_view>**) **const**:_ Populate a vector with all present cookie keys. Can be used in conjunction with `get_cookie` to access cookies without copying data.
+* _**void** get_arg_keys(**std::vector<std::string_view>**) **const**:_ Populate a vector with all present arg keys. Can be used in conjunction with `get_arg` to access args without copying data.
 * _**const std::map<std::string, std::map<std::string, http::file_info>>** get_files() **const**:_ Returns information about all the uploaded files (if the files are stored to disk). This information includes the key (as identifier of the outer map), the original file name (as identifier of the inner map) and a class `file_info`, which includes the size of the file and the path to the file in the file system.
 * _**const std::string&** get_content() **const**:_ Returns the body of the HTTP request.
 * _**bool**  content_too_large() **const**:_ Returns `true` if the body length of the HTTP request sent by the client is longer than the max allowed on the server.
@@ -612,7 +616,7 @@ Details on the `http::file_info` structure.
     }
 ```
 To test the above example, you can run the following command from a terminal:
-    
+
     curl -XGET -v "http://localhost:8080/hello?name=John"
 
 You will receive the message `Hello: John` in reply. Given that the body post processing is enabled, you can also run `curl -d "name=John" -X POST http://localhost:8080/hello` to obtain the same result.
@@ -638,7 +642,7 @@ There are 5 types of response that you can create - we will describe them here t
 The `http_response` class offers an additional set of methods to "decorate" your responses. This set of methods is:
 * _**void**  with_header(**const std::string&** key, **const std::string&** value):_ Sets an HTTP header with name set to `key` and value set to `value`.
 * _**void**  with_footer(**const std::string&** key, **const std::string&** value):_ Sets an HTTP footer with name set to `key` and value set to `value`.
-* _**void**  with_cookie(**const std::string&** key, **const std::string&** value):_ Sets an HTTP cookie with name set to `key` and value set to `value` (only for http 1.1 chunked encodings). 
+* _**void**  with_cookie(**const std::string&** key, **const std::string&** value):_ Sets an HTTP cookie with name set to `key` and value set to `value` (only for http 1.1 chunked encodings).
 * _**void**  shoutCAST():_ Mark the response as a `shoutCAST` one.
 
 ### Example of response setting headers
@@ -667,7 +671,7 @@ The `http_response` class offers an additional set of methods to "decorate" your
     }
 ```
 To test the above example, you could run the following command from a terminal:
-    
+
     curl -XGET -v "http://localhost:8080/hello"
 
 You will receive the message custom header in reply.
@@ -726,7 +730,7 @@ Examples of valid IPs include:
     }
 ```
 To test the above example, you could run the following command from a terminal:
-    
+
     curl -XGET -v "http://localhost:8080/hello"
 
 You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/minimal_ip_ban.cpp).
@@ -769,7 +773,7 @@ Client certificate authentication uses a X.509 certificate from the client. This
     }
 ```
 To test the above example, you can run the following command from a terminal:
-    
+
     curl -XGET -v -u myuser:mypass "http://localhost:8080/hello"
 
 You will receive back the user and password you passed in input. Try to pass the wrong credentials to see the failure.
@@ -811,7 +815,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
     }
 ```
 To test the above example, you can run the following command from a terminal:
-    
+
     curl -XGET -v --digest --user myuser:mypass localhost:8080/hello
 
 You will receive a `SUCCESS` in response (observe the response message from the server in detail and you'll see the full interaction). Try to pass the wrong credentials or send a request without `digest` active to see the failure.
@@ -851,7 +855,7 @@ libhttpserver provides a set of constants to help you develop your HTTP server. 
     }
 ```
 To test the above example, you can run the following command from a terminal:
-    
+
     curl -XGET -v localhost:8080/hello
 
 You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/minimal_file_response.cpp).
@@ -859,11 +863,11 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
 #### Example of a deferred response through callback
 ```cpp
     #include <httpserver.hpp>
-    
+
     using namespace httpserver;
-    
+
     static int counter = 0;
-    
+
     ssize_t test_callback (std::shared_ptr<void> closure_data, char* buf, size_t max) {
         if (counter == 2) {
             return -1;
@@ -875,26 +879,26 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
             return std::string(buf).size();
         }
     }
-    
+
     class deferred_resource : public http_resource {
         public:
             std::shared_ptr<http_response> render_GET(const http_request& req) {
                 return std::shared_ptr<deferred_response<void> >(new deferred_response<void>(test_callback, nullptr, "cycle callback response"));
             }
     };
-    
+
     int main(int argc, char** argv) {
         webserver ws = create_webserver(8080);
-    
+
         deferred_resource hwr;
         ws.register_resource("/hello", &hwr);
         ws.start(true);
-    
+
         return 0;
     }
 ```
 To test the above example, you can run the following command from a terminal:
-    
+
     curl -XGET -v localhost:8080/hello
 
 You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/minimal_deferred.cpp).
@@ -903,11 +907,11 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
 ```cpp
     #include <atomic>
     #include <httpserver.hpp>
-    
+
     using namespace httpserver;
-    
+
     std::atomic<int> counter;
-    
+
     ssize_t test_callback (std::shared_ptr<std::atomic<int> > closure_data, char* buf, size_t max) {
         int reqid;
         if (closure_data == nullptr) {
@@ -915,7 +919,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
         } else {
             reqid = *closure_data;
         }
-    
+
         // only first 5 connections can be established
         if (reqid >= 5) {
             return -1;
@@ -925,14 +929,14 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
             str += std::to_string(reqid) + " ";
             memset(buf, 0, max);
             std::copy(str.begin(), str.end(), buf);
-    
+
             // keep sending reqid
             sleep(1);
-    
+
             return (ssize_t)max;
         }
     }
-    
+
     class deferred_resource : public http_resource {
         public:
             std::shared_ptr<http_response> render_GET(const http_request& req) {
@@ -940,19 +944,19 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
                 return std::shared_ptr<deferred_response<std::atomic<int> > >(new deferred_response<std::atomic<int> >(test_callback, closure_data, "cycle callback response"));
             }
     };
-    
+
     int main(int argc, char** argv) {
         webserver ws = create_webserver(8080);
-    
+
         deferred_resource hwr;
         ws.register_resource("/hello", &hwr);
         ws.start(true);
-    
+
         return 0;
     }
 ```
 To test the above example, you can run the following command from a terminal:
-    
+
     curl -XGET -v localhost:8080/hello
 
 You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/deferred_with_accumulator.cpp).
@@ -1147,7 +1151,7 @@ the facility, other than as an argument passed when the facility
 is invoked, then you must make a good faith effort to ensure that,
 in the event an application does not supply such function or
 table, the facility still operates, and performs whatever part of
-its purpose remains meaningful.  
+its purpose remains meaningful.
 (For example, a function in a library to compute square roots has
 a purpose that is entirely well-defined independent of the
 application.  Therefore, Subsection 2d requires that any
@@ -1868,19 +1872,19 @@ public wiki that anybody can edit is an example of such a server.  A
 &ldquo;Massive Multiauthor Collaboration&rdquo; (or &ldquo;MMC&rdquo;) contained in the site
 means any set of copyrightable works thus published on the MMC site.
 
-&ldquo;CC-BY-SA&rdquo; means the Creative Commons Attribution-Share Alike 3.0 
-license published by Creative Commons Corporation, a not-for-profit 
-corporation with a principal place of business in San Francisco, 
-California, as well as future copyleft versions of that license 
+&ldquo;CC-BY-SA&rdquo; means the Creative Commons Attribution-Share Alike 3.0
+license published by Creative Commons Corporation, a not-for-profit
+corporation with a principal place of business in San Francisco,
+California, as well as future copyleft versions of that license
 published by that same organization.
 
-&ldquo;Incorporate&rdquo; means to publish or republish a Document, in whole or in 
+&ldquo;Incorporate&rdquo; means to publish or republish a Document, in whole or in
 part, as part of another Document.
 
-An MMC is &ldquo;eligible for relicensing&rdquo; if it is licensed under this 
-License, and if all works that were first published under this License 
-somewhere other than this MMC, and subsequently incorporated in whole or 
-in part into the MMC, (1) had no cover texts or invariant sections, and 
+An MMC is &ldquo;eligible for relicensing&rdquo; if it is licensed under this
+License, and if all works that were first published under this License
+somewhere other than this MMC, and subsequently incorporated in whole or
+in part into the MMC, (1) had no cover texts or invariant sections, and
 (2) were thus incorporated prior to November 1, 2008.
 
 The operator of an MMC Site may republish an MMC contained in the site
@@ -1924,46 +1928,46 @@ to permit their use in free software.
 This library has been originally developed under the zencoders flags and this community has always supported me all along this work so I am happy to put the logo on this readme.
 
               When you see this tree, know that you've came across ZenCoders
-    
-                                   with open('ZenCoders.                            
-                             `num` in numbers   synchronized                        
-                         datetime d      glob.     sys.argv[2] .                    
-                      def myclass   `..` @@oscla   org.   .  class {                
-                   displ  hooks(   public static void   ma    functor:              
-                 $myclass->method(  impport sys, os.pipe `   @param name`           
-               fcl   if(system(cmd) myc. /de   `  $card( array("a"   srand          
-             format  lists:  ++:   conc   ++ "my  an   WHERE  for(   == myi         
-           `sys:  myvalue(myvalue) sys.t   Console.W  try{    rais     using        
-          connec  SELECT * FROM table mycnf acco desc and or selector::clas  at     
-         openldap string  sys.   print "zenc der " { 'a':  `ls -l` >  appe &firs    
-        import Tkinter    paste( $obh  &a or it myval  bro roll:  :: [] require a   
-       case `` super. +y  <svg x="100">  expr    say " %rooms 1  --account fb- yy   
-      proc    meth Animate => send(D, open)    putd    EndIf 10  whi   myc`   cont  
-     and    main (--) import loop $$ or  end onload  UNION WITH tab   timer 150 *2  
-     end. begin True GtkLabel *label    doto partition te   let auto  i<- (i + d ); 
-    .mushup ``/.  ^/zenc/    myclass->her flv   op             <> element >> 71  or 
+
+                                   with open('ZenCoders.
+                             `num` in numbers   synchronized
+                         datetime d      glob.     sys.argv[2] .
+                      def myclass   `..` @@oscla   org.   .  class {
+                   displ  hooks(   public static void   ma    functor:
+                 $myclass->method(  impport sys, os.pipe `   @param name`
+               fcl   if(system(cmd) myc. /de   `  $card( array("a"   srand
+             format  lists:  ++:   conc   ++ "my  an   WHERE  for(   == myi
+           `sys:  myvalue(myvalue) sys.t   Console.W  try{    rais     using
+          connec  SELECT * FROM table mycnf acco desc and or selector::clas  at
+         openldap string  sys.   print "zenc der " { 'a':  `ls -l` >  appe &firs
+        import Tkinter    paste( $obh  &a or it myval  bro roll:  :: [] require a
+       case `` super. +y  <svg x="100">  expr    say " %rooms 1  --account fb- yy
+      proc    meth Animate => send(D, open)    putd    EndIf 10  whi   myc`   cont
+     and    main (--) import loop $$ or  end onload  UNION WITH tab   timer 150 *2
+     end. begin True GtkLabel *label    doto partition te   let auto  i<- (i + d );
+    .mushup ``/.  ^/zenc/    myclass->her flv   op             <> element >> 71  or
     QFileDi   :   and  ..    with myc  toA  channel::bo    myc isEmpty a  not  bodt;
     class T  public pol    str    mycalc d   pt &&a     *i fc  add               ^ac
     ::ZenCoders::core::namespac  boost::function st  f = std:   ;;     int    assert
     cout << endl   public genera   #include "b ost   ::ac myna const cast<char*> mys
     ac  size_t   return ran  int (*getNextValue)(void) ff   double sa_family_t famil
     pu        a   do puts("      ac   int main(int argc, char*   "%5d    struct nam
-    cs               float       for     typedef    enum  puts            getchar() 
-    if(                        else      #define     fp    FILE* f         char* s 
-     i++                                 strcat(           %s                  int 
-     31]                                 total+=                               do  
-      }do                                while(1)                             sle  
-      getc                              strcpy( a                            for   
-       prin                            scanf(%d, &                          get    
-         int                       void myfunc(int pa                     retu      
-           BEQ                   BNEQZ R1 10 ANDI R1 R2                  SYS        
-            XOR                SYSCALL 5 SLTIU MFLO 15 SW               JAL         
-              BNE            BLTZAL R1 1 LUI 001 NOOP MULTU           SLLV          
-                MOV R1     ADD R1 R2  JUMP  10 1001 BEQ R1 R2 1      ANDI            
-                   1101  1010001100  111 001 01  1010 101100 1001  100              
-                     110110 100   0  01 101 01100 100 100 1000100011                
-                        11101001001  00   11  100   11  10100010                    
-                            000101001001 10  1001   101000101                       
+    cs               float       for     typedef    enum  puts            getchar()
+    if(                        else      #define     fp    FILE* f         char* s
+     i++                                 strcat(           %s                  int
+     31]                                 total+=                               do
+      }do                                while(1)                             sle
+      getc                              strcpy( a                            for
+       prin                            scanf(%d, &                          get
+         int                       void myfunc(int pa                     retu
+           BEQ                   BNEQZ R1 10 ANDI R1 R2                  SYS
+            XOR                SYSCALL 5 SLTIU MFLO 15 SW               JAL
+              BNE            BLTZAL R1 1 LUI 001 NOOP MULTU           SLLV
+                MOV R1     ADD R1 R2  JUMP  10 1001 BEQ R1 R2 1      ANDI
+                   1101  1010001100  111 001 01  1010 101100 1001  100
+                     110110 100   0  01 101 01100 100 100 1000100011
+                        11101001001  00   11  100   11  10100010
+                            000101001001 10  1001   101000101
                                  010010010010110101001010
 
 For further information:

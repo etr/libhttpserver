@@ -44,7 +44,7 @@ AC_LANG([C++])
 AC_SYS_LARGEFILE
 
 # Minimal feature-set required
-AX_CXX_COMPILE_STDCXX([14])
+AX_CXX_COMPILE_STDCXX([17])
 
 native_srcdir=$srcdir
 

@@ -118,11 +118,23 @@ class http_request {
      const std::map<std::string, std::string, http::header_comparator> get_headers() const;
 
      /**
+      * Method used to get all header key values passed with the request.
+      * @param keys a vector of string_view into which the keys will be inserted
+     **/
+     void get_header_keys(std::vector<std::string_view>* keys) const;
+
+     /**
       * Method used to get all footers passed with the request.
       * @param result a map<string, string> > that will be filled with all footers
       * @result the size of the map
      **/
      const std::map<std::string, std::string, http::header_comparator> get_footers() const;
+
+     /**
+      * Method used to get all footer key values passed with the request.
+      * @param keys a vector of string_view into which the keys will be inserted
+     **/
+     void get_footer_keys(std::vector<std::string_view>* keys) const;
 
      /**
       * Method used to get all cookies passed with the request.
@@ -132,11 +144,23 @@ class http_request {
      const std::map<std::string, std::string, http::header_comparator> get_cookies() const;
 
      /**
+      * Method used to get all cookie key values passed with the request.
+      * @param keys a vector of string_view into which the keys will be inserted
+     **/
+     void get_cookie_keys(std::vector<std::string_view>* keys) const;
+
+     /**
       * Method used to get all args passed with the request.
       * @param result a map<string, string> > that will be filled with all args
       * @result the size of the map
      **/
      const std::map<std::string, std::string, http::arg_comparator> get_args() const;
+
+     /**
+      * Method used to get all arg key values passed with the request.
+      * @param keys a vector of string_view into which the keys will be inserted
+     **/
+     void get_arg_keys(std::vector<std::string_view>* keys) const;
 
      /**
       * Method to get or create a file info struct in the map if the provided filename is already in the map
@@ -159,29 +183,29 @@ class http_request {
       * @param key the specific header to get the value from
       * @return the value of the header.
      **/
-     const std::string get_header(const std::string& key) const;
+     std::string_view get_header(std::string_view key) const;
 
-     const std::string get_cookie(const std::string& key) const;
+     std::string_view get_cookie(std::string_view key) const;
 
      /**
       * Method used to get a specific footer passed with the request.
       * @param key the specific footer to get the value from
       * @return the value of the footer.
      **/
-     const std::string get_footer(const std::string& key) const;
+     std::string_view get_footer(std::string_view key) const;
 
      /**
       * Method used to get a specific argument passed with the request.
       * @param ket the specific argument to get the value from
       * @return the value of the arg.
      **/
-     const std::string get_arg(const std::string& key) const;
+     std::string_view get_arg(std::string_view key) const;
 
      /**
       * Method used to get the content of the request.
       * @return the content in string representation
      **/
-     const std::string& get_content() const {
+     std::string_view get_content() const {
          return content;
      }
 
@@ -276,6 +300,8 @@ class http_request {
 
      static MHD_Result build_request_querystring(void *cls, enum MHD_ValueKind kind, const char *key, const char *value);
 
+     static MHD_Result build_keys(void *cls, enum MHD_ValueKind kind, const char *key, const char *value);
+
      /**
       * Method used to set an argument value by key.
       * @param key The name identifying the argument
@@ -356,7 +382,7 @@ class http_request {
          }
      }
 
-     const std::string get_connection_value(const std::string& key, enum MHD_ValueKind kind) const;
+     std::string_view get_connection_value(std::string_view key, enum MHD_ValueKind kind) const;
      const std::map<std::string, std::string, http::header_comparator> get_headerlike_values(enum MHD_ValueKind kind) const;
 
      friend class webserver;

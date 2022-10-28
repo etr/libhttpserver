@@ -37,7 +37,7 @@ class handling_multiple_resource : public httpserver::http_resource {
 class url_args_resource : public httpserver::http_resource {
  public:
      std::shared_ptr<httpserver::http_response> render(const httpserver::http_request& req) {
-         return std::shared_ptr<httpserver::http_response>(new httpserver::string_response("ARGS: " + req.get_arg("arg1") + " and " + req.get_arg("arg2")));
+         return std::shared_ptr<httpserver::http_response>(new httpserver::string_response("ARGS: " + std::string(req.get_arg("arg1")) + " and " + std::string(req.get_arg("arg2"))));
      }
 };
 

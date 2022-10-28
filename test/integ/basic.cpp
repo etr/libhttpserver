@@ -63,14 +63,14 @@ class simple_resource : public http_resource {
          return shared_ptr<string_response>(new string_response("OK", 200, "text/plain"));
      }
      shared_ptr<http_response> render_POST(const http_request& req) {
-         return shared_ptr<string_response>(new string_response(req.get_arg("arg1")+req.get_arg("arg2"), 200, "text/plain"));
+         return shared_ptr<string_response>(new string_response(std::string(req.get_arg("arg1")) + std::string(req.get_arg("arg2")), 200, "text/plain"));
      }
 };
 
 class args_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request& req) {
-         return shared_ptr<string_response>(new string_response(req.get_arg("arg") + req.get_arg("arg2"), 200, "text/plain"));
+         return shared_ptr<string_response>(new string_response(std::string(req.get_arg("arg")) + std::string(req.get_arg("arg2")), 200, "text/plain"));
      }
 };
 
@@ -102,14 +102,24 @@ class cookie_set_test_resource : public http_resource {
 class cookie_reading_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request& req) {
-         return shared_ptr<string_response>(new string_response(req.get_cookie("name"), 200, "text/plain"));
+         return shared_ptr<string_response>(new string_response(std::string(req.get_cookie("name")), 200, "text/plain"));
      }
 };
 
 class header_reading_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request& req) {
-         return shared_ptr<string_response>(new string_response(req.get_header("MyHeader"), 200, "text/plain"));
+         std::vector<std::string_view> keys;
+         req.get_header_keys(&keys);
+         std::string response;
+         for (auto const & key : keys) {
+            auto val = req.get_header(key);
+            // Skip header values other than the special ones we added.
+            if(val.find("Value") != string::npos) {
+                response += std::string(val);
+            }
+         }
+         return shared_ptr<string_response>(new string_response(response, 200, "text/plain"));
      }
 };
 
@@ -439,13 +449,14 @@ LT_BEGIN_AUTO_TEST(basic_suite, request_with_header)
 
     struct curl_slist *list = nullptr;
     list = curl_slist_append(list, "MyHeader: MyValue");
+    list = curl_slist_append(list, "MySecondHeader: MySecondValue");
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, list);
 
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
-    LT_CHECK_EQ(s, "MyValue");
+    LT_CHECK_EQ(s, "MyValueMySecondValue");
     curl_slist_free_all(list);
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(request_with_header)
