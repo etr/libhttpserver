@@ -99,8 +99,6 @@ const std::map<std::string, std::string, http::header_comparator> http_request::
 }
 
 void http_request::get_header_keys(std::vector<std::string_view>* keys) const {
-    // TODO: is there any way to know in advance how many header keys there are so we
-    // can pre-allocate `keys`?
     MHD_get_connection_values(underlying_connection, MHD_HEADER_KIND, &build_keys, reinterpret_cast<void*>(keys));
 }
 
