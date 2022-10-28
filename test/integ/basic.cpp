@@ -115,7 +115,7 @@ class header_reading_resource : public http_resource {
          for (auto const & key : keys) {
             auto val = req.get_header(key);
             // Skip header values other than the special ones we added.
-            if(val.find("Value") != string::npos) {
+            if (val.find("Value") != string::npos) {
                 response += std::string(val);
             }
          }
