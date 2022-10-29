@@ -130,9 +130,9 @@ class http_response {
  private:
      int response_code = -1;
 
-     std::map<std::string, std::string, http::header_comparator> headers;
-     std::map<std::string, std::string, http::header_comparator> footers;
-     std::map<std::string, std::string, http::header_comparator> cookies;
+     http::value_map headers;
+     http::value_map footers;
+     http::value_map cookies;
 
  protected:
      friend std::ostream &operator<< (std::ostream &os, const http_response &r);

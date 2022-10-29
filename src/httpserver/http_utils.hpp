@@ -312,11 +312,7 @@ class arg_comparator {
 #endif
      }
      bool operator()(const std::string& x, const std::string& y) const {
-#ifdef CASE_INSENSITIVE
-         COMPARATOR(x, y, std::toupper);
-#else
-         COMPARATOR(x, y,);  // NOLINT(whitespace/comma)
-#endif
+        return operator()(std::string_view(x), std::string_view(y));
      }
 };
 
