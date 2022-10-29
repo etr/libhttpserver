@@ -32,7 +32,7 @@ const char http_request::EMPTY[] = "";
 
 struct arguments_accumulator {
     unescaper_ptr unescaper;
-    std::map<std::string, std::string, http::arg_comparator>* arguments;
+    http::arg_map* arguments;
 };
 
 void http_request::set_method(const std::string& method) {
@@ -55,8 +55,8 @@ bool http_request::check_digest_auth(const std::string& realm, const std::string
     return true;
 }
 
-const std::string http_request::get_connection_value(const std::string& key, enum MHD_ValueKind kind) const {
-    const char* header_c = MHD_lookup_connection_value(underlying_connection, kind, key.c_str());
+std::string_view http_request::get_connection_value(std::string_view key, enum MHD_ValueKind kind) const {
+    const char* header_c = MHD_lookup_connection_value(underlying_connection, kind, key.data());
 
     if (header_c == nullptr) return EMPTY;
 
@@ -67,45 +67,45 @@ MHD_Result http_request::build_request_header(void *cls, enum MHD_ValueKind kind
     // Parameters needed to respect MHD interface, but not used in the implementation.
     std::ignore = kind;
 
-    std::map<std::string, std::string, http::header_comparator>* dhr = static_cast<std::map<std::string, std::string, http::header_comparator>*>(cls);
+    http::value_map_view* dhr = static_cast<http::value_map_view*>(cls);
     (*dhr)[key] = value;
     return MHD_YES;
 }
 
-const std::map<std::string, std::string, http::header_comparator> http_request::get_headerlike_values(enum MHD_ValueKind kind) const {
-    std::map<std::string, std::string, http::header_comparator> headers;
+const http::value_map_view http_request::get_headerlike_values(enum MHD_ValueKind kind) const {
+    http::value_map_view headers;
 
     MHD_get_connection_values(underlying_connection, kind, &build_request_header, reinterpret_cast<void*>(&headers));
 
     return headers;
 }
 
-const std::string http_request::get_header(const std::string& key) const {
+std::string_view http_request::get_header(std::string_view key) const {
     return get_connection_value(key, MHD_HEADER_KIND);
 }
 
-const std::map<std::string, std::string, http::header_comparator> http_request::get_headers() const {
+const http::value_map_view http_request::get_headers() const {
     return get_headerlike_values(MHD_HEADER_KIND);
 }
 
-const std::string http_request::get_footer(const std::string& key) const {
+std::string_view http_request::get_footer(std::string_view key) const {
     return get_connection_value(key, MHD_FOOTER_KIND);
 }
 
-const std::map<std::string, std::string, http::header_comparator> http_request::get_footers() const {
+const http::value_map_view http_request::get_footers() const {
     return get_headerlike_values(MHD_FOOTER_KIND);
 }
 
-const std::string http_request::get_cookie(const std::string& key) const {
+std::string_view http_request::get_cookie(std::string_view key) const {
     return get_connection_value(key, MHD_COOKIE_KIND);
 }
 
-const std::map<std::string, std::string, http::header_comparator> http_request::get_cookies() const {
+const http::value_map_view http_request::get_cookies() const {
     return get_headerlike_values(MHD_COOKIE_KIND);
 }
 
-const std::string http_request::get_arg(const std::string& key) const {
-    std::map<std::string, std::string>::const_iterator it = args.find(key);
+std::string_view http_request::get_arg(std::string_view key) const {
+    std::map<std::string, std::string>::const_iterator it = args.find(std::string(key));
 
     if (it != args.end()) {
         return it->second;
@@ -114,8 +114,8 @@ const std::string http_request::get_arg(const std::string& key) const {
     return get_connection_value(key, MHD_GET_ARGUMENT_KIND);
 }
 
-const std::map<std::string, std::string, http::arg_comparator> http_request::get_args() const {
-    std::map<std::string, std::string, http::arg_comparator> arguments;
+const http::arg_map http_request::get_args() const {
+    http::arg_map arguments;
     arguments.insert(args.begin(), args.end());
 
     arguments_accumulator aa;

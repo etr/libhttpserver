@@ -115,28 +115,28 @@ class http_request {
       * @param result a map<string, string> > that will be filled with all headers
       * @result the size of the map
      **/
-     const std::map<std::string, std::string, http::header_comparator> get_headers() const;
+     const http::value_map_view get_headers() const;
 
      /**
       * Method used to get all footers passed with the request.
       * @param result a map<string, string> > that will be filled with all footers
       * @result the size of the map
      **/
-     const std::map<std::string, std::string, http::header_comparator> get_footers() const;
+     const http::value_map_view get_footers() const;
 
      /**
       * Method used to get all cookies passed with the request.
       * @param result a map<string, string> > that will be filled with all cookies
       * @result the size of the map
      **/
-     const std::map<std::string, std::string, http::header_comparator> get_cookies() const;
+     const http::value_map_view get_cookies() const;
 
      /**
       * Method used to get all args passed with the request.
       * @param result a map<string, string> > that will be filled with all args
       * @result the size of the map
      **/
-     const std::map<std::string, std::string, http::arg_comparator> get_args() const;
+     const http::arg_map get_args() const;
 
      /**
       * Method to get or create a file info struct in the map if the provided filename is already in the map
@@ -159,29 +159,29 @@ class http_request {
       * @param key the specific header to get the value from
       * @return the value of the header.
      **/
-     const std::string get_header(const std::string& key) const;
+     std::string_view get_header(std::string_view key) const;
 
-     const std::string get_cookie(const std::string& key) const;
+     std::string_view get_cookie(std::string_view key) const;
 
      /**
       * Method used to get a specific footer passed with the request.
       * @param key the specific footer to get the value from
       * @return the value of the footer.
      **/
-     const std::string get_footer(const std::string& key) const;
+     std::string_view get_footer(std::string_view key) const;
 
      /**
       * Method used to get a specific argument passed with the request.
       * @param ket the specific argument to get the value from
       * @return the value of the arg.
      **/
-     const std::string get_arg(const std::string& key) const;
+     std::string_view get_arg(std::string_view key) const;
 
      /**
       * Method used to get the content of the request.
       * @return the content in string representation
      **/
-     const std::string& get_content() const {
+     std::string_view get_content() const {
          return content;
      }
 
@@ -260,7 +260,7 @@ class http_request {
 
      std::string path;
      std::string method;
-     std::map<std::string, std::string, http::arg_comparator> args;
+     http::arg_map args;
      std::map<std::string, std::map<std::string, http::file_info>> files;
      std::string content = "";
      size_t content_size_limit = static_cast<size_t>(-1);
@@ -356,8 +356,8 @@ class http_request {
          }
      }
 
-     const std::string get_connection_value(const std::string& key, enum MHD_ValueKind kind) const;
-     const std::map<std::string, std::string, http::header_comparator> get_headerlike_values(enum MHD_ValueKind kind) const;
+     std::string_view get_connection_value(std::string_view key, enum MHD_ValueKind kind) const;
+     const http::value_map_view get_headerlike_values(enum MHD_ValueKind kind) const;
 
      friend class webserver;
      friend struct details::modded_request;

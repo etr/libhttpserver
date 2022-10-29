@@ -510,9 +510,10 @@ const std::string load_file(const std::string& filename) {
     }
 }
 
-void dump_header_map(std::ostream &os, const std::string &prefix, const std::map<std::string, std::string, header_comparator> &map) {
-    std::map<std::string, std::string, header_comparator>::const_iterator it = map.begin();
-    std::map<std::string, std::string, header_comparator>::const_iterator end = map.end();
+template<typename map_t>
+void dump_map(std::ostream &os, const std::string &prefix, const map_t &map) {
+    auto it = map.begin();
+    auto end = map.end();
 
     if (map.size()) {
         os << "    " << prefix << " [";
@@ -523,17 +524,20 @@ void dump_header_map(std::ostream &os, const std::string &prefix, const std::map
     }
 }
 
-void dump_arg_map(std::ostream &os, const std::string &prefix, const std::map<std::string, std::string, arg_comparator> &map) {
-    std::map<std::string, std::string, arg_comparator>::const_iterator it = map.begin();
-    std::map<std::string, std::string, arg_comparator>::const_iterator end = map.end();
+void dump_header_map(std::ostream &os, const std::string &prefix, const http::value_map &map) {
+    dump_map<decltype(map)>(os, prefix, map);
+}
 
-    if (map.size()) {
-        os << "    " << prefix << " [";
-        for (; it != end; ++it) {
-            os << (*it).first << ":\"" << (*it).second << "\" ";
-        }
-        os << "]" << std::endl;
-    }
+void dump_header_map(std::ostream &os, const std::string &prefix, const http::value_map_view &map) {
+    dump_map<decltype(map)>(os, prefix, map);
+}
+
+void dump_arg_map(std::ostream &os, const std::string &prefix, const http::arg_map &map) {
+    dump_map<decltype(map)>(os, prefix, map);
+}
+
+void dump_arg_map(std::ostream &os, const std::string &prefix, const http::arg_map_view &map) {
+    dump_map<decltype(map)>(os, prefix, map);
 }
 
 size_t base_unescaper(std::string* s, unescaper_ptr unescaper) {
