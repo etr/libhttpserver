@@ -115,28 +115,28 @@ class http_request {
       * @param result a map<string, string> > that will be filled with all headers
       * @result the size of the map
      **/
-     const http::value_map_view get_headers() const;
+     const http::header_view_map get_headers() const;
 
      /**
       * Method used to get all footers passed with the request.
       * @param result a map<string, string> > that will be filled with all footers
       * @result the size of the map
      **/
-     const http::value_map_view get_footers() const;
+     const http::header_view_map get_footers() const;
 
      /**
       * Method used to get all cookies passed with the request.
       * @param result a map<string, string> > that will be filled with all cookies
       * @result the size of the map
      **/
-     const http::value_map_view get_cookies() const;
+     const http::header_view_map get_cookies() const;
 
      /**
       * Method used to get all args passed with the request.
       * @param result a map<string, string> > that will be filled with all args
       * @result the size of the map
      **/
-     const http::arg_map get_args() const;
+     const http::arg_view_map get_args() const;
 
      /**
       * Method to get or create a file info struct in the map if the provided filename is already in the map
@@ -357,7 +357,7 @@ class http_request {
      }
 
      std::string_view get_connection_value(std::string_view key, enum MHD_ValueKind kind) const;
-     const http::value_map_view get_headerlike_values(enum MHD_ValueKind kind) const;
+     const http::header_view_map get_headerlike_values(enum MHD_ValueKind kind) const;
 
      friend class webserver;
      friend struct details::modded_request;

@@ -316,10 +316,10 @@ class arg_comparator {
      }
 };
 
-using value_map = std::map<std::string, std::string, http::header_comparator>;
+using header_map = std::map<std::string, std::string, http::header_comparator>;
 using arg_map = std::map<std::string, std::string, http::arg_comparator>;
-using value_map_view = std::map<std::string_view, std::string_view, http::header_comparator>;
-using arg_map_view = std::map<std::string_view, std::string_view, http::arg_comparator>;
+using header_view_map = std::map<std::string_view, std::string_view, http::header_comparator>;
+using arg_view_map = std::map<std::string_view, std::string_view, http::arg_comparator>;
 
 struct ip_representation {
     http_utils::IP_version_T ip_version;
@@ -367,8 +367,7 @@ uint16_t get_port(const struct sockaddr* sa);
  * @param prefix Prefix to identify the map
  * @param map
 **/
-void dump_header_map(std::ostream &os, const std::string &prefix, const http::value_map &map);
-void dump_header_map(std::ostream &os, const std::string &prefix, const http::value_map_view &map);
+void dump_header_map(std::ostream &os, const std::string &prefix, const http::header_view_map &map);
 
 /**
  * Method to output the contents of an arguments map to a std::ostream
@@ -376,8 +375,7 @@ void dump_header_map(std::ostream &os, const std::string &prefix, const http::va
  * @param prefix Prefix to identify the map
  * @param map
 **/
-void dump_arg_map(std::ostream &os, const std::string &prefix, const http::arg_map &map);
-void dump_arg_map(std::ostream &os, const std::string &prefix, const http::arg_map_view &map);
+void dump_arg_map(std::ostream &os, const std::string &prefix, const http::arg_view_map &map);
 
 /**
  * Process escape sequences ('+'=space, %HH) Updates val in place; the

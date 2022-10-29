@@ -32,7 +32,7 @@ const char http_request::EMPTY[] = "";
 
 struct arguments_accumulator {
     unescaper_ptr unescaper;
-    http::arg_map* arguments;
+    http::arg_view_map* arguments;
 };
 
 void http_request::set_method(const std::string& method) {
@@ -67,13 +67,13 @@ MHD_Result http_request::build_request_header(void *cls, enum MHD_ValueKind kind
     // Parameters needed to respect MHD interface, but not used in the implementation.
     std::ignore = kind;
 
-    http::value_map_view* dhr = static_cast<http::value_map_view*>(cls);
+    http::header_view_map* dhr = static_cast<http::header_view_map*>(cls);
     (*dhr)[key] = value;
     return MHD_YES;
 }
 
-const http::value_map_view http_request::get_headerlike_values(enum MHD_ValueKind kind) const {
-    http::value_map_view headers;
+const http::header_view_map http_request::get_headerlike_values(enum MHD_ValueKind kind) const {
+    http::header_view_map headers;
 
     MHD_get_connection_values(underlying_connection, kind, &build_request_header, reinterpret_cast<void*>(&headers));
 
@@ -84,7 +84,7 @@ std::string_view http_request::get_header(std::string_view key) const {
     return get_connection_value(key, MHD_HEADER_KIND);
 }
 
-const http::value_map_view http_request::get_headers() const {
+const http::header_view_map http_request::get_headers() const {
     return get_headerlike_values(MHD_HEADER_KIND);
 }
 
@@ -92,7 +92,7 @@ std::string_view http_request::get_footer(std::string_view key) const {
     return get_connection_value(key, MHD_FOOTER_KIND);
 }
 
-const http::value_map_view http_request::get_footers() const {
+const http::header_view_map http_request::get_footers() const {
     return get_headerlike_values(MHD_FOOTER_KIND);
 }
 
@@ -100,7 +100,7 @@ std::string_view http_request::get_cookie(std::string_view key) const {
     return get_connection_value(key, MHD_COOKIE_KIND);
 }
 
-const http::value_map_view http_request::get_cookies() const {
+const http::header_view_map http_request::get_cookies() const {
     return get_headerlike_values(MHD_COOKIE_KIND);
 }
 
@@ -114,8 +114,8 @@ std::string_view http_request::get_arg(std::string_view key) const {
     return get_connection_value(key, MHD_GET_ARGUMENT_KIND);
 }
 
-const http::arg_map http_request::get_args() const {
-    http::arg_map arguments;
+const http::arg_view_map http_request::get_args() const {
+    http::arg_view_map arguments;
     arguments.insert(args.begin(), args.end());
 
     arguments_accumulator aa;

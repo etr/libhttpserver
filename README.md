@@ -511,7 +511,9 @@ There are essentially four ways to specify an endpoint string:
       class url_args_resource : public http_resource {
       public:
           std::shared_ptr<http_response> render(const http_request& req) {
-              return std::shared_ptr<http_response>(new string_response("ARGS: " + req.get_arg("arg1") + " and " + req.get_arg("arg2")));
+              std::string arg1(req.get_arg("arg1"));
+              std::string arg2(req.get_arg("arg2"));
+              return std::shared_ptr<http_response>(new string_response("ARGS: " + arg1 + " and " + arg2));
           }
       };
 
@@ -597,7 +599,7 @@ Details on the `http::file_info` structure.
     class hello_world_resource : public http_resource {
     public:
         std::shared_ptr<http_response> render(const http_request& req) {
-            return std::shared_ptr<http_response>(new string_response("Hello: " + req.get_arg("name")));
+            return std::shared_ptr<http_response>(new string_response("Hello: " + std::string(req.get_arg("name"))));
         }
     };
 
