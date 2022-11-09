@@ -32,7 +32,7 @@ const char http_request::EMPTY[] = "";
 
 struct arguments_accumulator {
     unescaper_ptr unescaper;
-    http::arg_view_map* arguments;
+    http::arg_map* arguments;
 };
 
 void http_request::set_method(const std::string& method) {
@@ -114,8 +114,8 @@ std::string_view http_request::get_arg(std::string_view key) const {
     return get_connection_value(key, MHD_GET_ARGUMENT_KIND);
 }
 
-const http::arg_view_map http_request::get_args() const {
-    http::arg_view_map arguments;
+const http::arg_map http_request::get_args() const {
+    http::arg_map arguments;
     arguments.insert(args.begin(), args.end());
 
     arguments_accumulator aa;

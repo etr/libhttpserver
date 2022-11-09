@@ -136,7 +136,7 @@ class http_request {
       * @param result a map<string, string> > that will be filled with all args
       * @result the size of the map
      **/
-     const http::arg_view_map get_args() const;
+     const http::arg_map get_args() const;
 
      /**
       * Method to get or create a file info struct in the map if the provided filename is already in the map

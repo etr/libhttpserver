@@ -528,7 +528,7 @@ void dump_header_map(std::ostream &os, const std::string &prefix, const http::he
     dump_map<decltype(map)>(os, prefix, map);
 }
 
-void dump_arg_map(std::ostream &os, const std::string &prefix, const http::arg_view_map &map) {
+void dump_arg_map(std::ostream &os, const std::string &prefix, const http::arg_map &map) {
     dump_map<decltype(map)>(os, prefix, map);
 }
 
