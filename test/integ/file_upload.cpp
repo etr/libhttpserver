@@ -211,7 +211,6 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk)
     auto arg = args.begin();
     LT_CHECK_EQ(arg->first, TEST_KEY);
     LT_CHECK_EQ(arg->second, TEST_CONTENT);
-    std::string test(arg->second);
 
     map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
     LT_CHECK_EQ(files.size(), 1);
