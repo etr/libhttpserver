@@ -42,7 +42,7 @@ using httpserver::string_response;
 using httpserver::file_response;
 using httpserver::webserver;
 using httpserver::create_webserver;
-using httpserver::http::arg_view_map;
+using httpserver::http::arg_map;
 
 static const char* TEST_CONTENT_FILENAME = "test_content";
 static const char* TEST_CONTENT_FILEPATH = "./test_content";
@@ -141,7 +141,11 @@ class print_file_upload_resource : public http_resource {
  public:
      shared_ptr<http_response> render_POST(const http_request& req) {
          content = req.get_content();
-         args = req.get_args();
+         auto args_view = req.get_args();
+         // req may go out of scope, so we need to copy the values.
+         for (auto const & item : args_view) {
+            args[std::string(item.first)] = std::string(item.second);
+         }
          files = req.get_files();
          shared_ptr<string_response> hresp(new string_response("OK", 201, "text/plain"));
          return hresp;
@@ -149,13 +153,17 @@ class print_file_upload_resource : public http_resource {
 
      shared_ptr<http_response> render_PUT(const http_request& req) {
          content = req.get_content();
-         args = req.get_args();
+         auto args_view = req.get_args();
+         // req may go out of scope, so we need to copy the values.
+         for (auto const & item : args_view) {
+            args[std::string(item.first)] = std::string(item.second);
+         }
          files = req.get_files();
          shared_ptr<string_response> hresp(new string_response("OK", 200, "text/plain"));
          return hresp;
      }
 
-     const arg_view_map get_args() const {
+     const arg_map get_args() const {
          return args;
      }
 
@@ -168,7 +176,7 @@ class print_file_upload_resource : public http_resource {
      }
 
  private:
-     arg_view_map args;
+     arg_map args;
      map<string, map<string, httpserver::http::file_info>> files;
      string content;
 };
