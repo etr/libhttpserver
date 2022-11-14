@@ -319,6 +319,7 @@ class arg_comparator {
 using header_map = std::map<std::string, std::string, http::header_comparator>;
 using header_view_map = std::map<std::string_view, std::string_view, http::header_comparator>;
 using arg_map = std::map<std::string, std::string, http::arg_comparator>;
+using arg_view_map = std::map<std::string_view, std::string_view, http::arg_comparator>;
 
 struct ip_representation {
     http_utils::IP_version_T ip_version;
@@ -374,7 +375,7 @@ void dump_header_map(std::ostream &os, const std::string &prefix, const http::he
  * @param prefix Prefix to identify the map
  * @param map
 **/
-void dump_arg_map(std::ostream &os, const std::string &prefix, const http::arg_map &map);
+void dump_arg_map(std::ostream &os, const std::string &prefix, const http::arg_view_map &map);
 
 /**
  * Process escape sequences ('+'=space, %HH) Updates val in place; the

@@ -58,7 +58,7 @@ class user_pass_resource : public http_resource {
          if (req.get_user() != "myuser" || req.get_pass() != "mypass") {
              return shared_ptr<basic_auth_fail_response>(new basic_auth_fail_response("FAIL", "examplerealm"));
          }
-         return shared_ptr<string_response>(new string_response(req.get_user() + " " + req.get_pass(), 200, "text/plain"));
+         return shared_ptr<string_response>(new string_response(std::string(req.get_user()) + " " + std::string(req.get_pass()), 200, "text/plain"));
      }
 };
 

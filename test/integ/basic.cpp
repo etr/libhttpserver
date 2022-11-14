@@ -123,7 +123,7 @@ class full_args_resource : public http_resource {
 class querystring_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request& req) {
-         return shared_ptr<string_response>(new string_response(req.get_querystring(), 200, "text/plain"));
+         return shared_ptr<string_response>(new string_response(std::string(req.get_querystring()), 200, "text/plain"));
      }
 };
 

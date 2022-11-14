@@ -35,6 +35,7 @@
 #include <algorithm>
 #include <iosfwd>
 #include <map>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -59,25 +60,25 @@ class http_request {
       * Method used to get the username eventually passed through basic authentication.
       * @return string representation of the username.
      **/
-     const std::string get_user() const;
+     std::string_view get_user() const;
 
      /**
       * Method used to get the username extracted from a digest authentication
       * @return the username
      **/
-     const std::string get_digested_user() const;
+     std::string_view get_digested_user() const;
 
      /**
       * Method used to get the password eventually passed through basic authentication.
       * @return string representation of the password.
      **/
-     const std::string get_pass() const;
+     std::string_view get_pass() const;
 
      /**
       * Method used to get the path requested
       * @return string representing the path requested.
      **/
-     const std::string& get_path() const {
+     std::string_view get_path() const {
          return path;
      }
 
@@ -106,7 +107,7 @@ class http_request {
       * Method used to get the METHOD used to make the request.
       * @return string representing the method.
      **/
-     const std::string& get_method() const {
+     std::string_view get_method() const {
          return method;
      }
 
@@ -136,7 +137,7 @@ class http_request {
       * @param result a map<string, string> > that will be filled with all args
       * @result the size of the map
      **/
-     const http::arg_map get_args() const;
+     const http::arg_view_map get_args() const;
 
      /**
       * Method to get or create a file info struct in the map if the provided filename is already in the map
@@ -196,13 +197,13 @@ class http_request {
       * Method used to get the content of the query string..
       * @return the query string in string representation
      **/
-     const std::string get_querystring() const;
+     std::string_view get_querystring() const;
 
      /**
       * Method used to get the version of the request.
       * @return the version in string representation
      **/
-     const std::string& get_version() const {
+     std::string_view get_version() const {
          return version;
      }
 
@@ -224,7 +225,7 @@ class http_request {
       * Method used to get the requestor.
       * @return the requestor
      **/
-     const std::string get_requestor() const;
+     std::string_view get_requestor() const;
 
      /**
       * Method used to get the requestor port used.
@@ -240,11 +241,15 @@ class http_request {
      /**
       * Default constructor of the class. It is a specific responsibility of apis to initialize this type of objects.
      **/
-     http_request() = default;
+     http_request() {
+         cache = std::make_unique<data_cache>();
+     }
 
      http_request(MHD_Connection* underlying_connection, unescaper_ptr unescaper):
          underlying_connection(underlying_connection),
-         unescaper(unescaper) { }
+         unescaper(unescaper) {
+         cache = std::make_unique<data_cache>();
+    }
 
      /**
       * Copy constructor.
@@ -275,6 +280,8 @@ class http_request {
      static MHD_Result build_request_args(void *cls, enum MHD_ValueKind kind, const char *key, const char *value);
 
      static MHD_Result build_request_querystring(void *cls, enum MHD_ValueKind kind, const char *key, const char *value);
+
+    void fetch_user_pass() const;
 
      /**
       * Method used to set an argument value by key.
@@ -355,6 +362,21 @@ class http_request {
              this->args[it->first] = it->second.substr(0, content_size_limit);
          }
      }
+
+     // Cache certain data items on demand so we can consistently return views
+     // over the data. Some things we transform before returning to the user for
+     // simplicity (e.g. query_str, requestor), others out of necessity (arg unescaping).
+     // Others (username, password, digested_user) MHD returns as char* that we need
+     // to make a copy of and free anyway.
+     struct data_cache {
+        std::string username;
+        std::string password;
+        std::string query_str;
+        std::string requestor_ip;
+        std::string digested_user;
+        http::arg_map unescaped_mhd_args;
+     };
+     std::unique_ptr<data_cache> cache;
 
      std::string_view get_connection_value(std::string_view key, enum MHD_ValueKind kind) const;
      const http::header_view_map get_headerlike_values(enum MHD_ValueKind kind) const;
