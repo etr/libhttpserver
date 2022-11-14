@@ -30,7 +30,7 @@ class hello_world_resource : public httpserver::http_resource {
 class handling_multiple_resource : public httpserver::http_resource {
  public:
      std::shared_ptr<httpserver::http_response> render(const httpserver::http_request& req) {
-         return std::shared_ptr<httpserver::http_response>(new httpserver::string_response("Your URL: " + req.get_path()));
+         return std::shared_ptr<httpserver::http_response>(new httpserver::string_response("Your URL: " + std::string(req.get_path())));
      }
 };
 
