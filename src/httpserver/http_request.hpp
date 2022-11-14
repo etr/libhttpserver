@@ -241,15 +241,11 @@ class http_request {
      /**
       * Default constructor of the class. It is a specific responsibility of apis to initialize this type of objects.
      **/
-     http_request() {
-         cache = std::make_unique<data_cache>();
-     }
+     http_request() : cache(std::make_unique<data_cache>()) {}
 
      http_request(MHD_Connection* underlying_connection, unescaper_ptr unescaper):
          underlying_connection(underlying_connection),
-         unescaper(unescaper) {
-         cache = std::make_unique<data_cache>();
-    }
+         unescaper(unescaper), cache(std::make_unique<data_cache>()) {}
 
      http_request(const http_request& b) = delete;
      /**
