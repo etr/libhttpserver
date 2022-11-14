@@ -251,14 +251,14 @@ class http_request {
          cache = std::make_unique<data_cache>();
     }
 
+     http_request(const http_request& b) = delete;
      /**
-      * Copy constructor.
-      * @param b http_request b to copy attributes from.
+      * Move constructor.
+      * @param b http_request b to move attributes from.
      **/
-     http_request(const http_request& b) = default;
      http_request(http_request&& b) noexcept = default;
 
-     http_request& operator=(const http_request& b) = default;
+     http_request& operator=(const http_request& b) = delete;
      http_request& operator=(http_request&& b) = default;
 
      ~http_request();
