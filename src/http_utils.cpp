@@ -525,11 +525,11 @@ void dump_map(std::ostream &os, const std::string &prefix, const map_t &map) {
 }
 
 void dump_header_map(std::ostream &os, const std::string &prefix, const http::header_view_map &map) {
-    dump_map<decltype(map)>(os, prefix, map);
+    dump_map<http::header_view_map>(os, prefix, map);
 }
 
 void dump_arg_map(std::ostream &os, const std::string &prefix, const http::arg_view_map &map) {
-    dump_map<decltype(map)>(os, prefix, map);
+    dump_map<http::arg_view_map>(os, prefix, map);
 }
 
 size_t base_unescaper(std::string* s, unescaper_ptr unescaper) {

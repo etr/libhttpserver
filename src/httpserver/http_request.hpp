@@ -248,7 +248,11 @@ class http_request {
          unescaper(unescaper), cache(std::make_unique<http_request_data_cache>()) {}
 
      /**
-      * Copy constructor. Deleted to make class move-only. Also required due to presence of unique_ptr member.
+      * Copy constructor. Deleted to make class move-only. The class is move-only for several reasons:
+      *  - Internal cache structure is expensive to copy
+      *  - Various string members are expensive to copy
+      *  - The destructor removes transient files from disk, which must only happen once.
+      *  - unique_ptr members are not copyable.
      **/
      http_request(const http_request& b) = delete;
      /**
@@ -258,7 +262,11 @@ class http_request {
      http_request(http_request&& b) noexcept = default;
 
      /**
-      * Copy assign. Deleted to make class move-only. Also required due to presence of unique_ptr member.
+      * Copy-assign. Deleted to make class move-only. The class is move-only for several reasons:
+      *  - Internal cache structure is expensive to copy
+      *  - Various string members are expensive to copy
+      *  - The destructor removes transient files from disk, which must only happen once.
+      *  - unique_ptr members are not copyable.
      **/
      http_request& operator=(const http_request& b) = delete;
      http_request& operator=(http_request&& b) = default;

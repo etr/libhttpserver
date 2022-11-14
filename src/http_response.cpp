@@ -55,7 +55,7 @@ void http_response::shoutCAST() {
 }
 
 namespace {
-static inline http::header_view_map to_view_map(const http::header_map & hdr_map) {
+static inline http::header_view_map to_view_map(const http::header_map& hdr_map) {
     http::header_view_map view_map;
     for (const auto & item : hdr_map) {
         view_map[std::string_view(item.first)] = std::string_view(item.second);

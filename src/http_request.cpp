@@ -40,7 +40,7 @@ void http_request::set_method(const std::string& method) {
 }
 
 bool http_request::check_digest_auth(const std::string& realm, const std::string& password, int nonce_timeout, bool* reload_nonce) const {
-    auto digested_user = get_digested_user();
+    std::string_view digested_user = get_digested_user();
 
     int val = MHD_digest_auth_check(underlying_connection, realm.c_str(), digested_user.data(), password.c_str(), nonce_timeout);
 
@@ -216,7 +216,7 @@ std::string_view http_request::get_digested_user() const {
         return cache->digested_user;
     }
 
-    auto* digested_user_c = MHD_digest_auth_get_username(underlying_connection);
+    char* digested_user_c = MHD_digest_auth_get_username(underlying_connection);
 
     cache->digested_user = EMPTY;
     if (digested_user_c != nullptr) {
