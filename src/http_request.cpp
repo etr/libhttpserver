@@ -105,9 +105,9 @@ const http::header_view_map http_request::get_cookies() const {
 }
 
 std::string_view http_request::get_arg(std::string_view key) const {
-    std::map<std::string, std::string>::const_iterator it = args.find(std::string(key));
+    std::map<std::string, std::string>::const_iterator it = cache->unescaped_args.find(std::string(key));
 
-    if (it != args.end()) {
+    if (it != cache->unescaped_args.end()) {
         return it->second;
     }
 
@@ -116,20 +116,19 @@ std::string_view http_request::get_arg(std::string_view key) const {
 
 const http::arg_view_map http_request::get_args() const {
     http::arg_view_map arguments;
-    arguments.insert(args.begin(), args.end());
 
-    if (!cache->unescaped_mhd_args.empty()) {
-        arguments.insert(cache->unescaped_mhd_args.begin(), cache->unescaped_mhd_args.end());
+    if (!cache->unescaped_args.empty()) {
+        arguments.insert(cache->unescaped_args.begin(), cache->unescaped_args.end());
         return arguments;
     }
 
     arguments_accumulator aa;
     aa.unescaper = unescaper;
-    aa.arguments = &cache->unescaped_mhd_args;
+    aa.arguments = &cache->unescaped_args;
 
     MHD_get_connection_values(underlying_connection, MHD_GET_ARGUMENT_KIND, &build_request_args, reinterpret_cast<void*>(&aa));
 
-    arguments.insert(cache->unescaped_mhd_args.begin(), cache->unescaped_mhd_args.end());
+    arguments.insert(cache->unescaped_args.begin(), cache->unescaped_args.end());
 
     return arguments;
 }
@@ -139,13 +138,13 @@ http::file_info& http_request::get_or_create_file_info(const std::string& key, c
 }
 
 std::string_view http_request::get_querystring() const {
-    if (!cache->query_str.empty()) {
-        return cache->query_str;
+    if (!cache->querystring.empty()) {
+        return cache->querystring;
     }
 
-    MHD_get_connection_values(underlying_connection, MHD_GET_ARGUMENT_KIND, &build_request_querystring, reinterpret_cast<void*>(&cache->query_str));
+    MHD_get_connection_values(underlying_connection, MHD_GET_ARGUMENT_KIND, &build_request_querystring, reinterpret_cast<void*>(&cache->querystring));
 
-    return cache->query_str;
+    return cache->querystring;
 }
 
 MHD_Result http_request::build_request_args(void *cls, enum MHD_ValueKind kind, const char *key, const char *arg_value) {

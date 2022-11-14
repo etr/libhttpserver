@@ -241,12 +241,15 @@ class http_request {
      /**
       * Default constructor of the class. It is a specific responsibility of apis to initialize this type of objects.
      **/
-     http_request() : cache(std::make_unique<data_cache>()) {}
+     http_request() : cache(std::make_unique<http_request_data_cache>()) {}
 
      http_request(MHD_Connection* underlying_connection, unescaper_ptr unescaper):
          underlying_connection(underlying_connection),
-         unescaper(unescaper), cache(std::make_unique<data_cache>()) {}
+         unescaper(unescaper), cache(std::make_unique<http_request_data_cache>()) {}
 
+     /**
+      * Copy constructor. Deleted to make class move-only. Also required due to presence of unique_ptr member.
+     **/
      http_request(const http_request& b) = delete;
      /**
       * Move constructor.
@@ -254,6 +257,9 @@ class http_request {
      **/
      http_request(http_request&& b) noexcept = default;
 
+     /**
+      * Copy assign. Deleted to make class move-only. Also required due to presence of unique_ptr member.
+     **/
      http_request& operator=(const http_request& b) = delete;
      http_request& operator=(http_request&& b) = default;
 
@@ -261,7 +267,6 @@ class http_request {
 
      std::string path;
      std::string method;
-     http::arg_map args;
      std::map<std::string, std::map<std::string, http::file_info>> files;
      std::string content = "";
      size_t content_size_limit = static_cast<size_t>(-1);
@@ -277,7 +282,7 @@ class http_request {
 
      static MHD_Result build_request_querystring(void *cls, enum MHD_ValueKind kind, const char *key, const char *value);
 
-    void fetch_user_pass() const;
+     void fetch_user_pass() const;
 
      /**
       * Method used to set an argument value by key.
@@ -285,7 +290,7 @@ class http_request {
       * @param value The value assumed by the argument
      **/
      void set_arg(const std::string& key, const std::string& value) {
-         args[key] = value.substr(0, content_size_limit);
+         cache->unescaped_args[key] = value.substr(0, content_size_limit);
      }
 
      /**
@@ -295,7 +300,7 @@ class http_request {
       * @param size The size in number of char of the value parameter.
      **/
      void set_arg(const char* key, const char* value, size_t size) {
-         args[key] = std::string(value, std::min(size, content_size_limit));
+         cache->unescaped_args[key] = std::string(value, std::min(size, content_size_limit));
      }
 
      /**
@@ -355,27 +360,27 @@ class http_request {
      void set_args(const std::map<std::string, std::string>& args) {
          std::map<std::string, std::string>::const_iterator it;
          for (it = args.begin(); it != args.end(); ++it) {
-             this->args[it->first] = it->second.substr(0, content_size_limit);
+             this->cache->unescaped_args[it->first] = it->second.substr(0, content_size_limit);
          }
      }
+
+     std::string_view get_connection_value(std::string_view key, enum MHD_ValueKind kind) const;
+     const http::header_view_map get_headerlike_values(enum MHD_ValueKind kind) const;
 
      // Cache certain data items on demand so we can consistently return views
      // over the data. Some things we transform before returning to the user for
      // simplicity (e.g. query_str, requestor), others out of necessity (arg unescaping).
      // Others (username, password, digested_user) MHD returns as char* that we need
      // to make a copy of and free anyway.
-     struct data_cache {
+     struct http_request_data_cache {
         std::string username;
         std::string password;
-        std::string query_str;
+        std::string querystring;
         std::string requestor_ip;
         std::string digested_user;
-        http::arg_map unescaped_mhd_args;
+        http::arg_map unescaped_args;
      };
-     std::unique_ptr<data_cache> cache;
-
-     std::string_view get_connection_value(std::string_view key, enum MHD_ValueKind kind) const;
-     const http::header_view_map get_headerlike_values(enum MHD_ValueKind kind) const;
+     std::unique_ptr<http_request_data_cache> cache;
 
      friend class webserver;
      friend struct details::modded_request;
