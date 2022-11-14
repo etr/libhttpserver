@@ -143,7 +143,7 @@ class print_file_upload_resource : public http_resource {
          content = req.get_content();
          auto args_view = req.get_args();
          // req may go out of scope, so we need to copy the values.
-         for (auto const & item : args_view) {
+         for (auto const& item : args_view) {
             args[std::string(item.first)] = std::string(item.second);
          }
          files = req.get_files();
@@ -155,7 +155,7 @@ class print_file_upload_resource : public http_resource {
          content = req.get_content();
          auto args_view = req.get_args();
          // req may go out of scope, so we need to copy the values.
-         for (auto const & item : args_view) {
+         for (auto const& item : args_view) {
             args[std::string(item.first)] = std::string(item.second);
          }
          files = req.get_files();

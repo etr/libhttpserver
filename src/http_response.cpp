@@ -57,14 +57,14 @@ void http_response::shoutCAST() {
 namespace {
 static inline http::header_view_map to_view_map(const http::header_map& hdr_map) {
     http::header_view_map view_map;
-    for (const auto & item : hdr_map) {
+    for (const auto& item : hdr_map) {
         view_map[std::string_view(item.first)] = std::string_view(item.second);
     }
     return view_map;
 }
 }
 
-std::ostream &operator<< (std::ostream &os, const http_response &r) {
+std::ostream &operator<< (std::ostream& os, const http_response& r) {
     os << "Response [response_code:" << r.response_code << "]" << std::endl;
 
     http::dump_header_map(os, "Headers", to_view_map(r.headers));

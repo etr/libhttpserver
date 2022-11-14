@@ -367,7 +367,7 @@ uint16_t get_port(const struct sockaddr* sa);
  * @param prefix Prefix to identify the map
  * @param map
 **/
-void dump_header_map(std::ostream &os, const std::string &prefix, const http::header_view_map &map);
+void dump_header_map(std::ostream& os, const std::string& prefix, const http::header_view_map& map);
 
 /**
  * Method to output the contents of an arguments map to a std::ostream
@@ -375,7 +375,7 @@ void dump_header_map(std::ostream &os, const std::string &prefix, const http::he
  * @param prefix Prefix to identify the map
  * @param map
 **/
-void dump_arg_map(std::ostream &os, const std::string &prefix, const http::arg_view_map &map);
+void dump_arg_map(std::ostream& os, const std::string& prefix, const http::arg_view_map& map);
 
 /**
  * Process escape sequences ('+'=space, %HH) Updates val in place; the
