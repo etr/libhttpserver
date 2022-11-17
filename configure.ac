@@ -44,7 +44,7 @@ AC_LANG([C++])
 AC_SYS_LARGEFILE
 
 # Minimal feature-set required
-AX_CXX_COMPILE_STDCXX([14])
+AX_CXX_COMPILE_STDCXX([17])
 
 native_srcdir=$srcdir
 
@@ -197,7 +197,7 @@ AM_LDFLAGS="-lstdc++"
 
 if test x"$debugit" = x"yes"; then
     AC_DEFINE([DEBUG],[],[Debug Mode])
-    AM_CXXFLAGS="$AM_CXXFLAGS -DDEBUG -g -Wall -Wextra -Werror -pedantic -std=c++14 -Wno-unused-command-line-argument -O0"
+    AM_CXXFLAGS="$AM_CXXFLAGS -DDEBUG -g -Wall -Wextra -Werror -pedantic -std=c++17 -Wno-unused-command-line-argument -O0"
     AM_CFLAGS="$AM_CXXFLAGS -DDEBUG -g -Wall -Wextra -Werror -pedantic -Wno-unused-command-line-argument -O0"
 else
     AC_DEFINE([NDEBUG],[],[No-debug Mode])

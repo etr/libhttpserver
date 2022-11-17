@@ -463,7 +463,7 @@ MHD_Result webserver::post_iterator(void *cls, enum MHD_ValueKind kind,
 
     try {
         if (filename == nullptr || mr->ws->file_upload_target != FILE_UPLOAD_DISK_ONLY) {
-            mr->dhr->set_arg(key, mr->dhr->get_arg(key) + std::string(data, size));
+            mr->dhr->set_arg(key, std::string(mr->dhr->get_arg(key)) + std::string(data, size));
         }
 
         if (filename && *filename != '\0' && mr->ws->file_upload_target != FILE_UPLOAD_MEMORY_ONLY) {

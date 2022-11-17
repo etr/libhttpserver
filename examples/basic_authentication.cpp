@@ -27,7 +27,7 @@ class user_pass_resource : public httpserver::http_resource {
              return std::shared_ptr<httpserver::basic_auth_fail_response>(new httpserver::basic_auth_fail_response("FAIL", "test@example.com"));
          }
 
-         return std::shared_ptr<httpserver::string_response>(new httpserver::string_response(req.get_user() + " " + req.get_pass(), 200, "text/plain"));
+         return std::shared_ptr<httpserver::string_response>(new httpserver::string_response(std::string(req.get_user()) + " " + std::string(req.get_pass()), 200, "text/plain"));
      }
 };
 

@@ -32,7 +32,7 @@ const char http_request::EMPTY[] = "";
 
 struct arguments_accumulator {
     unescaper_ptr unescaper;
-    std::map<std::string, std::string, http::arg_comparator>* arguments;
+    http::arg_map* arguments;
 };
 
 void http_request::set_method(const std::string& method) {
@@ -40,9 +40,9 @@ void http_request::set_method(const std::string& method) {
 }
 
 bool http_request::check_digest_auth(const std::string& realm, const std::string& password, int nonce_timeout, bool* reload_nonce) const {
-    std::string digested_user = get_digested_user();
+    std::string_view digested_user = get_digested_user();
 
-    int val = MHD_digest_auth_check(underlying_connection, realm.c_str(), digested_user.c_str(), password.c_str(), nonce_timeout);
+    int val = MHD_digest_auth_check(underlying_connection, realm.c_str(), digested_user.data(), password.c_str(), nonce_timeout);
 
     if (val == MHD_INVALID_NONCE) {
         *reload_nonce = true;
@@ -55,8 +55,8 @@ bool http_request::check_digest_auth(const std::string& realm, const std::string
     return true;
 }
 
-const std::string http_request::get_connection_value(const std::string& key, enum MHD_ValueKind kind) const {
-    const char* header_c = MHD_lookup_connection_value(underlying_connection, kind, key.c_str());
+std::string_view http_request::get_connection_value(std::string_view key, enum MHD_ValueKind kind) const {
+    const char* header_c = MHD_lookup_connection_value(underlying_connection, kind, key.data());
 
     if (header_c == nullptr) return EMPTY;
 
@@ -67,62 +67,68 @@ MHD_Result http_request::build_request_header(void *cls, enum MHD_ValueKind kind
     // Parameters needed to respect MHD interface, but not used in the implementation.
     std::ignore = kind;
 
-    std::map<std::string, std::string, http::header_comparator>* dhr = static_cast<std::map<std::string, std::string, http::header_comparator>*>(cls);
+    http::header_view_map* dhr = static_cast<http::header_view_map*>(cls);
     (*dhr)[key] = value;
     return MHD_YES;
 }
 
-const std::map<std::string, std::string, http::header_comparator> http_request::get_headerlike_values(enum MHD_ValueKind kind) const {
-    std::map<std::string, std::string, http::header_comparator> headers;
+const http::header_view_map http_request::get_headerlike_values(enum MHD_ValueKind kind) const {
+    http::header_view_map headers;
 
     MHD_get_connection_values(underlying_connection, kind, &build_request_header, reinterpret_cast<void*>(&headers));
 
     return headers;
 }
 
-const std::string http_request::get_header(const std::string& key) const {
+std::string_view http_request::get_header(std::string_view key) const {
     return get_connection_value(key, MHD_HEADER_KIND);
 }
 
-const std::map<std::string, std::string, http::header_comparator> http_request::get_headers() const {
+const http::header_view_map http_request::get_headers() const {
     return get_headerlike_values(MHD_HEADER_KIND);
 }
 
-const std::string http_request::get_footer(const std::string& key) const {
+std::string_view http_request::get_footer(std::string_view key) const {
     return get_connection_value(key, MHD_FOOTER_KIND);
 }
 
-const std::map<std::string, std::string, http::header_comparator> http_request::get_footers() const {
+const http::header_view_map http_request::get_footers() const {
     return get_headerlike_values(MHD_FOOTER_KIND);
 }
 
-const std::string http_request::get_cookie(const std::string& key) const {
+std::string_view http_request::get_cookie(std::string_view key) const {
     return get_connection_value(key, MHD_COOKIE_KIND);
 }
 
-const std::map<std::string, std::string, http::header_comparator> http_request::get_cookies() const {
+const http::header_view_map http_request::get_cookies() const {
     return get_headerlike_values(MHD_COOKIE_KIND);
 }
 
-const std::string http_request::get_arg(const std::string& key) const {
-    std::map<std::string, std::string>::const_iterator it = args.find(key);
+std::string_view http_request::get_arg(std::string_view key) const {
+    std::map<std::string, std::string>::const_iterator it = cache->unescaped_args.find(std::string(key));
 
-    if (it != args.end()) {
+    if (it != cache->unescaped_args.end()) {
         return it->second;
     }
 
     return get_connection_value(key, MHD_GET_ARGUMENT_KIND);
 }
 
-const std::map<std::string, std::string, http::arg_comparator> http_request::get_args() const {
-    std::map<std::string, std::string, http::arg_comparator> arguments;
-    arguments.insert(args.begin(), args.end());
+const http::arg_view_map http_request::get_args() const {
+    http::arg_view_map arguments;
+
+    if (!cache->unescaped_args.empty()) {
+        arguments.insert(cache->unescaped_args.begin(), cache->unescaped_args.end());
+        return arguments;
+    }
 
     arguments_accumulator aa;
     aa.unescaper = unescaper;
-    aa.arguments = &arguments;
+    aa.arguments = &cache->unescaped_args;
 
     MHD_get_connection_values(underlying_connection, MHD_GET_ARGUMENT_KIND, &build_request_args, reinterpret_cast<void*>(&aa));
+
+    arguments.insert(cache->unescaped_args.begin(), cache->unescaped_args.end());
 
     return arguments;
 }
@@ -131,12 +137,14 @@ http::file_info& http_request::get_or_create_file_info(const std::string& key, c
     return files[key][upload_file_name];
 }
 
-const std::string http_request::get_querystring() const {
-    std::string querystring = "";
+std::string_view http_request::get_querystring() const {
+    if (!cache->querystring.empty()) {
+        return cache->querystring;
+    }
 
-    MHD_get_connection_values(underlying_connection, MHD_GET_ARGUMENT_KIND, &build_request_querystring, reinterpret_cast<void*>(&querystring));
+    MHD_get_connection_values(underlying_connection, MHD_GET_ARGUMENT_KIND, &build_request_querystring, reinterpret_cast<void*>(&cache->querystring));
 
-    return querystring;
+    return cache->querystring;
 }
 
 MHD_Result http_request::build_request_args(void *cls, enum MHD_ValueKind kind, const char *key, const char *arg_value) {
@@ -173,47 +181,50 @@ MHD_Result http_request::build_request_querystring(void *cls, enum MHD_ValueKind
     return MHD_YES;
 }
 
-const std::string http_request::get_user() const {
-    char* username = nullptr;
+void http_request::fetch_user_pass() const {
     char* password = nullptr;
+    auto* username = MHD_basic_auth_get_username_password(underlying_connection, &password);
 
-    username = MHD_basic_auth_get_username_password(underlying_connection, &password);
-    if (password != nullptr) free(password);
-
-    std::string user;
-    if (username != nullptr) user = username;
-
-    free(username);
-
-    return user;
+    if (username != nullptr) {
+        cache->username = username;
+        MHD_free(username);
+    }
+    if (password != nullptr) {
+        cache->password = password;
+        MHD_free(password);
+    }
 }
 
-const std::string http_request::get_pass() const {
-    char* username = nullptr;
-    char* password = nullptr;
-
-    username = MHD_basic_auth_get_username_password(underlying_connection, &password);
-    if (username != nullptr) free(username);
-
-    std::string pass;
-    if (password != nullptr) pass = password;
-
-    free(password);
-
-    return pass;
+std::string_view http_request::get_user() const {
+    if (!cache->username.empty()) {
+        return cache->username;
+    }
+    fetch_user_pass();
+    return cache->username;
 }
 
-const std::string http_request::get_digested_user() const {
-    char* digested_user_c = nullptr;
-    digested_user_c = MHD_digest_auth_get_username(underlying_connection);
+std::string_view http_request::get_pass() const {
+    if (!cache->password.empty()) {
+        return cache->password;
+    }
+    fetch_user_pass();
+    return cache->password;
+}
 
-    std::string digested_user = EMPTY;
+std::string_view http_request::get_digested_user() const {
+    if (!cache->digested_user.empty()) {
+        return cache->digested_user;
+    }
+
+    char* digested_user_c = MHD_digest_auth_get_username(underlying_connection);
+
+    cache->digested_user = EMPTY;
     if (digested_user_c != nullptr) {
-        digested_user = digested_user_c;
+        cache->digested_user = digested_user_c;
         free(digested_user_c);
     }
 
-    return digested_user;
+    return cache->digested_user;
 }
 
 #ifdef HAVE_GNUTLS
@@ -229,10 +240,15 @@ gnutls_session_t http_request::get_tls_session() const {
 }
 #endif  // HAVE_GNUTLS
 
-const std::string http_request::get_requestor() const {
+std::string_view http_request::get_requestor() const {
+    if (!cache->requestor_ip.empty()) {
+        return cache->requestor_ip;
+    }
+
     const MHD_ConnectionInfo * conninfo = MHD_get_connection_info(underlying_connection, MHD_CONNECTION_INFO_CLIENT_ADDRESS);
 
-    return http::get_ip_str(conninfo->client_addr);
+    cache->requestor_ip = http::get_ip_str(conninfo->client_addr);
+    return cache->requestor_ip;
 }
 
 uint16_t http_request::get_requestor_port() const {

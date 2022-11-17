@@ -284,6 +284,9 @@ class header_comparator {
       * @param first string
       * @param second string
      **/
+     bool operator()(std::string_view x, std::string_view y) const {
+         COMPARATOR(x, y, std::toupper);
+     }
      bool operator()(const std::string& x, const std::string& y) const {
          COMPARATOR(x, y, std::toupper);
      }
@@ -301,14 +304,22 @@ class arg_comparator {
       * @param first string
       * @param second string
      **/
-     bool operator()(const std::string& x, const std::string& y) const {
+     bool operator()(std::string_view x, std::string_view y) const {
 #ifdef CASE_INSENSITIVE
          COMPARATOR(x, y, std::toupper);
 #else
          COMPARATOR(x, y,);  // NOLINT(whitespace/comma)
 #endif
      }
+     bool operator()(const std::string& x, const std::string& y) const {
+        return operator()(std::string_view(x), std::string_view(y));
+     }
 };
+
+using header_map = std::map<std::string, std::string, http::header_comparator>;
+using header_view_map = std::map<std::string_view, std::string_view, http::header_comparator>;
+using arg_map = std::map<std::string, std::string, http::arg_comparator>;
+using arg_view_map = std::map<std::string_view, std::string_view, http::arg_comparator>;
 
 struct ip_representation {
     http_utils::IP_version_T ip_version;
@@ -356,7 +367,7 @@ uint16_t get_port(const struct sockaddr* sa);
  * @param prefix Prefix to identify the map
  * @param map
 **/
-void dump_header_map(std::ostream &os, const std::string &prefix, const std::map<std::string, std::string, header_comparator> &map);
+void dump_header_map(std::ostream& os, const std::string& prefix, const http::header_view_map& map);
 
 /**
  * Method to output the contents of an arguments map to a std::ostream
@@ -364,7 +375,7 @@ void dump_header_map(std::ostream &os, const std::string &prefix, const std::map
  * @param prefix Prefix to identify the map
  * @param map
 **/
-void dump_arg_map(std::ostream &os, const std::string &prefix, const std::map<std::string, std::string, arg_comparator> &map);
+void dump_arg_map(std::ostream& os, const std::string& prefix, const http::arg_view_map& map);
 
 /**
  * Process escape sequences ('+'=space, %HH) Updates val in place; the

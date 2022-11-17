@@ -596,7 +596,7 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation_less_than_with_masks)
 LT_END_AUTO_TEST(ip_representation_less_than_with_masks)
 
 LT_BEGIN_AUTO_TEST(http_utils_suite, dump_header_map)
-    std::map<std::string, std::string, httpserver::http::header_comparator> header_map;
+    std::map<std::string_view, std::string_view, httpserver::http::header_comparator> header_map;
     header_map["HEADER_ONE"] = "VALUE_ONE";
     header_map["HEADER_TWO"] = "VALUE_TWO";
     header_map["HEADER_THREE"] = "VALUE_THREE";
@@ -607,7 +607,7 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, dump_header_map)
 LT_END_AUTO_TEST(dump_header_map)
 
 LT_BEGIN_AUTO_TEST(http_utils_suite, dump_header_map_no_prefix)
-    std::map<std::string, std::string, httpserver::http::header_comparator> header_map;
+    std::map<std::string_view, std::string_view, httpserver::http::header_comparator> header_map;
     header_map["HEADER_ONE"] = "VALUE_ONE";
     header_map["HEADER_TWO"] = "VALUE_TWO";
     header_map["HEADER_THREE"] = "VALUE_THREE";
@@ -618,7 +618,7 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, dump_header_map_no_prefix)
 LT_END_AUTO_TEST(dump_header_map_no_prefix)
 
 LT_BEGIN_AUTO_TEST(http_utils_suite, dump_arg_map)
-    std::map<std::string, std::string, httpserver::http::arg_comparator> arg_map;
+    std::map<std::string_view, std::string_view, httpserver::http::arg_comparator> arg_map;
     arg_map["ARG_ONE"] = "VALUE_ONE";
     arg_map["ARG_TWO"] = "VALUE_TWO";
     arg_map["ARG_THREE"] = "VALUE_THREE";
@@ -629,7 +629,7 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, dump_arg_map)
 LT_END_AUTO_TEST(dump_arg_map)
 
 LT_BEGIN_AUTO_TEST(http_utils_suite, dump_arg_map_no_prefix)
-    std::map<std::string, std::string, httpserver::http::arg_comparator> arg_map;
+    std::map<std::string_view, std::string_view, httpserver::http::arg_comparator> arg_map;
     arg_map["ARG_ONE"] = "VALUE_ONE";
     arg_map["ARG_TWO"] = "VALUE_TWO";
     arg_map["ARG_THREE"] = "VALUE_THREE";

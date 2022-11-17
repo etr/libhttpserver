@@ -35,6 +35,7 @@
 #include <algorithm>
 #include <iosfwd>
 #include <map>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -59,25 +60,25 @@ class http_request {
       * Method used to get the username eventually passed through basic authentication.
       * @return string representation of the username.
      **/
-     const std::string get_user() const;
+     std::string_view get_user() const;
 
      /**
       * Method used to get the username extracted from a digest authentication
       * @return the username
      **/
-     const std::string get_digested_user() const;
+     std::string_view get_digested_user() const;
 
      /**
       * Method used to get the password eventually passed through basic authentication.
       * @return string representation of the password.
      **/
-     const std::string get_pass() const;
+     std::string_view get_pass() const;
 
      /**
       * Method used to get the path requested
       * @return string representing the path requested.
      **/
-     const std::string& get_path() const {
+     std::string_view get_path() const {
          return path;
      }
 
@@ -106,7 +107,7 @@ class http_request {
       * Method used to get the METHOD used to make the request.
       * @return string representing the method.
      **/
-     const std::string& get_method() const {
+     std::string_view get_method() const {
          return method;
      }
 
@@ -115,28 +116,28 @@ class http_request {
       * @param result a map<string, string> > that will be filled with all headers
       * @result the size of the map
      **/
-     const std::map<std::string, std::string, http::header_comparator> get_headers() const;
+     const http::header_view_map get_headers() const;
 
      /**
       * Method used to get all footers passed with the request.
       * @param result a map<string, string> > that will be filled with all footers
       * @result the size of the map
      **/
-     const std::map<std::string, std::string, http::header_comparator> get_footers() const;
+     const http::header_view_map get_footers() const;
 
      /**
       * Method used to get all cookies passed with the request.
       * @param result a map<string, string> > that will be filled with all cookies
       * @result the size of the map
      **/
-     const std::map<std::string, std::string, http::header_comparator> get_cookies() const;
+     const http::header_view_map get_cookies() const;
 
      /**
       * Method used to get all args passed with the request.
       * @param result a map<string, string> > that will be filled with all args
       * @result the size of the map
      **/
-     const std::map<std::string, std::string, http::arg_comparator> get_args() const;
+     const http::arg_view_map get_args() const;
 
      /**
       * Method to get or create a file info struct in the map if the provided filename is already in the map
@@ -159,29 +160,29 @@ class http_request {
       * @param key the specific header to get the value from
       * @return the value of the header.
      **/
-     const std::string get_header(const std::string& key) const;
+     std::string_view get_header(std::string_view key) const;
 
-     const std::string get_cookie(const std::string& key) const;
+     std::string_view get_cookie(std::string_view key) const;
 
      /**
       * Method used to get a specific footer passed with the request.
       * @param key the specific footer to get the value from
       * @return the value of the footer.
      **/
-     const std::string get_footer(const std::string& key) const;
+     std::string_view get_footer(std::string_view key) const;
 
      /**
       * Method used to get a specific argument passed with the request.
       * @param ket the specific argument to get the value from
       * @return the value of the arg.
      **/
-     const std::string get_arg(const std::string& key) const;
+     std::string_view get_arg(std::string_view key) const;
 
      /**
       * Method used to get the content of the request.
       * @return the content in string representation
      **/
-     const std::string& get_content() const {
+     std::string_view get_content() const {
          return content;
      }
 
@@ -196,13 +197,13 @@ class http_request {
       * Method used to get the content of the query string..
       * @return the query string in string representation
      **/
-     const std::string get_querystring() const;
+     std::string_view get_querystring() const;
 
      /**
       * Method used to get the version of the request.
       * @return the version in string representation
      **/
-     const std::string& get_version() const {
+     std::string_view get_version() const {
          return version;
      }
 
@@ -224,7 +225,7 @@ class http_request {
       * Method used to get the requestor.
       * @return the requestor
      **/
-     const std::string get_requestor() const;
+     std::string_view get_requestor() const;
 
      /**
       * Method used to get the requestor port used.
@@ -240,27 +241,40 @@ class http_request {
      /**
       * Default constructor of the class. It is a specific responsibility of apis to initialize this type of objects.
      **/
-     http_request() = default;
+     http_request() : cache(std::make_unique<http_request_data_cache>()) {}
 
      http_request(MHD_Connection* underlying_connection, unescaper_ptr unescaper):
          underlying_connection(underlying_connection),
-         unescaper(unescaper) { }
+         unescaper(unescaper), cache(std::make_unique<http_request_data_cache>()) {}
 
      /**
-      * Copy constructor.
-      * @param b http_request b to copy attributes from.
+      * Copy constructor. Deleted to make class move-only. The class is move-only for several reasons:
+      *  - Internal cache structure is expensive to copy
+      *  - Various string members are expensive to copy
+      *  - The destructor removes transient files from disk, which must only happen once.
+      *  - unique_ptr members are not copyable.
      **/
-     http_request(const http_request& b) = default;
+     http_request(const http_request& b) = delete;
+     /**
+      * Move constructor.
+      * @param b http_request b to move attributes from.
+     **/
      http_request(http_request&& b) noexcept = default;
 
-     http_request& operator=(const http_request& b) = default;
+     /**
+      * Copy-assign. Deleted to make class move-only. The class is move-only for several reasons:
+      *  - Internal cache structure is expensive to copy
+      *  - Various string members are expensive to copy
+      *  - The destructor removes transient files from disk, which must only happen once.
+      *  - unique_ptr members are not copyable.
+     **/
+     http_request& operator=(const http_request& b) = delete;
      http_request& operator=(http_request&& b) = default;
 
      ~http_request();
 
      std::string path;
      std::string method;
-     std::map<std::string, std::string, http::arg_comparator> args;
      std::map<std::string, std::map<std::string, http::file_info>> files;
      std::string content = "";
      size_t content_size_limit = static_cast<size_t>(-1);
@@ -276,13 +290,15 @@ class http_request {
 
      static MHD_Result build_request_querystring(void *cls, enum MHD_ValueKind kind, const char *key, const char *value);
 
+     void fetch_user_pass() const;
+
      /**
       * Method used to set an argument value by key.
       * @param key The name identifying the argument
       * @param value The value assumed by the argument
      **/
      void set_arg(const std::string& key, const std::string& value) {
-         args[key] = value.substr(0, content_size_limit);
+         cache->unescaped_args[key] = value.substr(0, content_size_limit);
      }
 
      /**
@@ -292,7 +308,7 @@ class http_request {
       * @param size The size in number of char of the value parameter.
      **/
      void set_arg(const char* key, const char* value, size_t size) {
-         args[key] = std::string(value, std::min(size, content_size_limit));
+         cache->unescaped_args[key] = std::string(value, std::min(size, content_size_limit));
      }
 
      /**
@@ -352,12 +368,27 @@ class http_request {
      void set_args(const std::map<std::string, std::string>& args) {
          std::map<std::string, std::string>::const_iterator it;
          for (it = args.begin(); it != args.end(); ++it) {
-             this->args[it->first] = it->second.substr(0, content_size_limit);
+             this->cache->unescaped_args[it->first] = it->second.substr(0, content_size_limit);
          }
      }
 
-     const std::string get_connection_value(const std::string& key, enum MHD_ValueKind kind) const;
-     const std::map<std::string, std::string, http::header_comparator> get_headerlike_values(enum MHD_ValueKind kind) const;
+     std::string_view get_connection_value(std::string_view key, enum MHD_ValueKind kind) const;
+     const http::header_view_map get_headerlike_values(enum MHD_ValueKind kind) const;
+
+     // Cache certain data items on demand so we can consistently return views
+     // over the data. Some things we transform before returning to the user for
+     // simplicity (e.g. query_str, requestor), others out of necessity (arg unescaping).
+     // Others (username, password, digested_user) MHD returns as char* that we need
+     // to make a copy of and free anyway.
+     struct http_request_data_cache {
+        std::string username;
+        std::string password;
+        std::string querystring;
+        std::string requestor_ip;
+        std::string digested_user;
+        http::arg_map unescaped_args;
+     };
+     std::unique_ptr<http_request_data_cache> cache;
 
      friend class webserver;
      friend struct details::modded_request;
