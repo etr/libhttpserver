@@ -442,6 +442,11 @@ jobs:
           ../configure --disable-fastopen;
         fi
 
+    - name: Print config.log
+      run: |
+        cd build ;
+        cat config.log ;
+
     # Make or run iwyu. If running iwyu, check for the result code to be 2 (IWYU always returns an error code, if it is 2, no corrections are necessary).
     - name: Make or run IWYU
       run: |
