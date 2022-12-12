@@ -225,12 +225,12 @@ jobs:
             debug: nodebug
             coverage: nocoverage
           - test-group: extra
-            os: ubuntu-latest
+            os: ubuntu-20.04
             os-type: ubuntu
             build-type: iwyu
             compiler-family: clang
-            c-compiler: clang-13
-            cc-compiler: clang++-13
+            c-compiler: clang-9
+            cc-compiler: clang++-9
             debug: nodebug
             coverage: nocoverage
           - test-group: performance
