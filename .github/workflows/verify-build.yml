@@ -58,8 +58,8 @@ jobs:
             os-type: ubuntu
             build-type: asan
             compiler-family: clang
-            c-compiler: clang-6.0
-            cc-compiler: clang++-6.0
+            c-compiler: clang-13
+            cc-compiler: clang++-13
             debug: debug
             coverage: nocoverage
           - test-group: extra
@@ -67,8 +67,8 @@ jobs:
             os-type: ubuntu
             build-type: msan
             compiler-family: clang
-            c-compiler: clang-6.0
-            cc-compiler: clang++-6.0
+            c-compiler: clang-13
+            cc-compiler: clang++-13
             debug: debug
             coverage: nocoverage
           - test-group: extra
@@ -76,8 +76,8 @@ jobs:
             os-type: ubuntu
             build-type: lsan
             compiler-family: clang
-            c-compiler: clang-6.0
-            cc-compiler: clang++-6.0
+            c-compiler: clang-13
+            cc-compiler: clang++-13
             debug: debug
             coverage: nocoverage
           - test-group: extra
@@ -85,8 +85,8 @@ jobs:
             os-type: ubuntu
             build-type: tsan
             compiler-family: clang
-            c-compiler: clang-6.0
-            cc-compiler: clang++-6.0
+            c-compiler: clang-13
+            cc-compiler: clang++-13
             debug: debug
             coverage: nocoverage
           - test-group: extra
@@ -94,12 +94,12 @@ jobs:
             os-type: ubuntu
             build-type: ubsan
             compiler-family: clang
-            c-compiler: clang-6.0
-            cc-compiler: clang++-6.0
+            c-compiler: clang-13
+            cc-compiler: clang++-13
             debug: debug
             coverage: nocoverage
           - test-group: extra
-            os: ubuntu-latest
+            os: ubuntu-20.04
             os-type: ubuntu
             build-type: none
             compiler-family: gcc
@@ -108,7 +108,7 @@ jobs:
             debug: nodebug
             coverage: nocoverage
           - test-group: extra
-            os: ubuntu-latest
+            os: ubuntu-20.04
             os-type: ubuntu
             build-type: none
             compiler-family: gcc
@@ -144,7 +144,7 @@ jobs:
             debug: nodebug
             coverage: nocoverage
           - test-group: extra
-            os: ubuntu-latest
+            os: ubuntu-20.04
             os-type: ubuntu
             build-type: none
             compiler-family: clang
@@ -153,7 +153,7 @@ jobs:
             debug: nodebug
             coverage: nocoverage
           - test-group: extra
-            os: ubuntu-latest
+            os: ubuntu-20.04
             os-type: ubuntu
             build-type: none
             compiler-family: clang
@@ -162,7 +162,7 @@ jobs:
             debug: nodebug
             coverage: nocoverage
           - test-group: extra
-            os: ubuntu-latest
+            os: ubuntu-20.04
             os-type: ubuntu
             build-type: none
             compiler-family: clang
@@ -171,7 +171,7 @@ jobs:
             debug: nodebug
             coverage: nocoverage
           - test-group: extra
-            os: ubuntu-latest
+            os: ubuntu-20.04
             os-type: ubuntu
             build-type: none
             compiler-family: clang
@@ -180,7 +180,7 @@ jobs:
             debug: nodebug
             coverage: nocoverage
           - test-group: extra
-            os: ubuntu-latest
+            os: ubuntu-20.04
             os-type: ubuntu
             build-type: none
             compiler-family: clang
@@ -191,14 +191,41 @@ jobs:
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
-            build-type: valgrind
-            compiler-family: gcc
-            c-compiler: gcc-7
-            cc-compiler: g++-7
+            build-type: none
+            compiler-family: clang
+            c-compiler: clang-11
+            cc-compiler: clang++-11
             debug: nodebug
             coverage: nocoverage
           - test-group: extra
             os: ubuntu-latest
+            os-type: ubuntu
+            build-type: none
+            compiler-family: clang
+            c-compiler: clang-12
+            cc-compiler: clang++-12
+            debug: nodebug
+            coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-latest
+            os-type: ubuntu
+            build-type: none
+            compiler-family: clang
+            c-compiler: clang-13
+            cc-compiler: clang++-13
+            debug: nodebug
+            coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-latest
+            os-type: ubuntu
+            build-type: valgrind
+            compiler-family: gcc
+            c-compiler: gcc-10
+            cc-compiler: g++-10
+            debug: nodebug
+            coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-20.04
             os-type: ubuntu
             build-type: iwyu
             compiler-family: clang
@@ -211,8 +238,8 @@ jobs:
             os-type: ubuntu
             build-type: select
             compiler-family: gcc
-            c-compiler: gcc-7
-            cc-compiler: g++-7
+            c-compiler: gcc-10
+            cc-compiler: g++-10
             debug: nodebug
             coverage: nocoverage
           - test-group: performance
@@ -220,8 +247,8 @@ jobs:
             os-type: ubuntu
             build-type: nodelay
             compiler-family: gcc
-            c-compiler: gcc-7
-            cc-compiler: g++-7
+            c-compiler: gcc-10
+            cc-compiler: g++-10
             debug: nodebug
             coverage: nocoverage
           - test-group: performance
@@ -229,8 +256,8 @@ jobs:
             os-type: ubuntu
             build-type: threads
             compiler-family: gcc
-            c-compiler: gcc-7
-            cc-compiler: g++-7
+            c-compiler: gcc-10
+            cc-compiler: g++-10
             debug: nodebug
             coverage: nocoverage
           - test-group: extra
@@ -238,8 +265,8 @@ jobs:
             os-type: ubuntu
             build-type: lint
             compiler-family: gcc
-            c-compiler: gcc-7
-            cc-compiler: g++-7
+            c-compiler: gcc-10
+            cc-compiler: g++-10
             debug: debug
             coverage: nocoverage
     steps:
