@@ -18,6 +18,7 @@
      USA
 */
 
+#include <cstring>
 #include <httpserver.hpp>
 
 static int counter = 0;
