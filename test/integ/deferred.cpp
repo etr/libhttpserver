@@ -30,10 +30,11 @@
 #include <sys/socket.h>
 #endif
 
-#include <cstring>
 #include <curl/curl.h>
 #include <signal.h>
 #include <unistd.h>
+
+#include <cstring>
 
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
