@@ -63,7 +63,7 @@ jobs:
             debug: debug
             coverage: nocoverage
           - test-group: extra
-            os: ubuntu-20.04
+            os: ubuntu-18.04
             os-type: ubuntu
             build-type: msan
             compiler-family: clang
