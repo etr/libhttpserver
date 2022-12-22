@@ -144,7 +144,7 @@ class print_file_upload_resource : public http_resource {
          auto args_view = req.get_args();
          // req may go out of scope, so we need to copy the values.
          for (auto const& item : args_view) {
-            args[std::string(item.first)] = std::string(item.second);
+            args[std::string(item.first)] = {std::string(item.second.front())};
          }
          files = req.get_files();
          shared_ptr<string_response> hresp(new string_response("OK", 201, "text/plain"));
@@ -156,7 +156,7 @@ class print_file_upload_resource : public http_resource {
          auto args_view = req.get_args();
          // req may go out of scope, so we need to copy the values.
          for (auto const& item : args_view) {
-            args[std::string(item.first)] = std::string(item.second);
+            args[std::string(item.first)] = {std::string(item.second.front())};
          }
          files = req.get_files();
          shared_ptr<string_response> hresp(new string_response("OK", 200, "text/plain"));
@@ -218,7 +218,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk)
     LT_CHECK_EQ(args.size(), 1);
     auto arg = args.begin();
     LT_CHECK_EQ(arg->first, TEST_KEY);
-    LT_CHECK_EQ(arg->second, TEST_CONTENT);
+    LT_CHECK_EQ(arg->second.front(), TEST_CONTENT);
 
     map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
     LT_CHECK_EQ(files.size(), 1);
@@ -300,10 +300,10 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_additional_par
     LT_CHECK_EQ(args.size(), 2);
     auto arg = args.begin();
     LT_CHECK_EQ(arg->first, TEST_KEY);
-    LT_CHECK_EQ(arg->second, TEST_CONTENT);
+    LT_CHECK_EQ(arg->second.front(), TEST_CONTENT);
     arg++;
     LT_CHECK_EQ(arg->first, TEST_PARAM_KEY);
-    LT_CHECK_EQ(arg->second, TEST_PARAM_VALUE);
+    LT_CHECK_EQ(arg->second.front(), TEST_PARAM_VALUE);
 
     map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
     LT_CHECK_EQ(files.size(), 1);
@@ -354,10 +354,10 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_two_files)
     LT_CHECK_EQ(args.size(), 2);
     auto arg = args.begin();
     LT_CHECK_EQ(arg->first, TEST_KEY);
-    LT_CHECK_EQ(arg->second, TEST_CONTENT);
+    LT_CHECK_EQ(arg->second.front(), TEST_CONTENT);
     arg++;
     LT_CHECK_EQ(arg->first, TEST_KEY_2);
-    LT_CHECK_EQ(arg->second, TEST_CONTENT_2);
+    LT_CHECK_EQ(arg->second.front(), TEST_CONTENT_2);
 
     map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
     LT_CHECK_EQ(files.size(), 2);
@@ -461,7 +461,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_only_incl_content)
     LT_CHECK_EQ(args.size(), 1);
     auto arg = args.begin();
     LT_CHECK_EQ(arg->first, TEST_KEY);
-    LT_CHECK_EQ(arg->second, TEST_CONTENT);
+    LT_CHECK_EQ(arg->second.front(), TEST_CONTENT);
 
     map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
     LT_CHECK_EQ(resource.get_files().size(), 0);
@@ -493,7 +493,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_only_excl_content)
     LT_CHECK_EQ(args.size(), 1);
     auto arg = args.begin();
     LT_CHECK_EQ(arg->first, TEST_KEY);
-    LT_CHECK_EQ(arg->second, TEST_CONTENT);
+    LT_CHECK_EQ(arg->second.front(), TEST_CONTENT);
 
     map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
     LT_CHECK_EQ(files.size(), 0);

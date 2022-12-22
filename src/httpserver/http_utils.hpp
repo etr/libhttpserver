@@ -318,8 +318,8 @@ class arg_comparator {
 
 using header_map = std::map<std::string, std::string, http::header_comparator>;
 using header_view_map = std::map<std::string_view, std::string_view, http::header_comparator>;
-using arg_map = std::map<std::string, std::string, http::arg_comparator>;
-using arg_view_map = std::map<std::string_view, std::string_view, http::arg_comparator>;
+using arg_map = std::map<std::string, std::vector<std::string>, http::arg_comparator>;
+using arg_view_map = std::map<std::string_view, std::vector<std::string_view>, http::arg_comparator>;
 
 struct ip_representation {
     http_utils::IP_version_T ip_version;

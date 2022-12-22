@@ -105,20 +105,31 @@ const http::header_view_map http_request::get_cookies() const {
 }
 
 std::string_view http_request::get_arg(std::string_view key) const {
-    std::map<std::string, std::string>::const_iterator it = cache->unescaped_args.find(std::string(key));
+    auto const it = cache->unescaped_args.find(std::string(key));
 
     if (it != cache->unescaped_args.end()) {
-        return it->second;
+        return it->second.front();
     }
 
     return get_connection_value(key, MHD_GET_ARGUMENT_KIND);
+}
+
+static void fill_arg_view_map(http::arg_view_map *arguments, const http::arg_map& cached_map) {
+    for (const auto& kv : cached_map) {
+        std::vector<std::string_view> vec;
+        vec.reserve(kv.second.size());
+        for (const auto& value : kv.second) {
+            vec.push_back(value);
+        }
+        arguments->emplace(std::string_view(kv.first), std::move(vec));
+    }
 }
 
 const http::arg_view_map http_request::get_args() const {
     http::arg_view_map arguments;
 
     if (!cache->unescaped_args.empty()) {
-        arguments.insert(cache->unescaped_args.begin(), cache->unescaped_args.end());
+        fill_arg_view_map(&arguments, cache->unescaped_args);
         return arguments;
     }
 
@@ -128,7 +139,7 @@ const http::arg_view_map http_request::get_args() const {
 
     MHD_get_connection_values(underlying_connection, MHD_GET_ARGUMENT_KIND, &build_request_args, reinterpret_cast<void*>(&aa));
 
-    arguments.insert(cache->unescaped_args.begin(), cache->unescaped_args.end());
+    fill_arg_view_map(&arguments, cache->unescaped_args);
 
     return arguments;
 }
@@ -155,7 +166,13 @@ MHD_Result http_request::build_request_args(void *cls, enum MHD_ValueKind kind, 
     std::string value = ((arg_value == nullptr) ? "" : arg_value);
 
     http::base_unescaper(&value, aa->unescaper);
-    (*aa->arguments)[key] = value;
+    auto existing_iter = aa->arguments->find(key);
+    if (existing_iter != aa->arguments->end()) {
+        // Key exists, add value to collection instead of overwriting previous value.
+        existing_iter->second.push_back(value);
+    } else {
+        (*aa->arguments)[key] = {value};
+    }
     return MHD_YES;
 }
 

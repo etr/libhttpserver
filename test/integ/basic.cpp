@@ -116,7 +116,10 @@ class header_reading_resource : public http_resource {
 class full_args_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request& req) {
-         return shared_ptr<string_response>(new string_response(std::string(req.get_args().at("arg")), 200, "text/plain"));
+         const auto args = req.get_args();
+         const auto arg = args.at("arg");
+         const auto resp = std::string(arg[0]) + std::string(arg[1]);
+         return shared_ptr<string_response>(new string_response(resp, 200, "text/plain"));
      }
 };
 
@@ -772,13 +775,13 @@ LT_BEGIN_AUTO_TEST(basic_suite, full_arguments_processing)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/this/captures/args/passed/in/the/querystring?arg=argument");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/this/captures/args/passed/in/the/querystring?arg=argument&arg=another");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
-    LT_CHECK_EQ(s, "argument");
+    LT_CHECK_EQ(s, "argumentanother");
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(full_arguments_processing)
 

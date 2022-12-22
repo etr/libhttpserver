@@ -525,11 +525,35 @@ void dump_map(std::ostream& os, const std::string& prefix, const map_t& map) {
 }
 
 void dump_header_map(std::ostream& os, const std::string& prefix, const http::header_view_map &map) {
-    dump_map<http::header_view_map>(os, prefix, map);
+    auto it = map.begin();
+    auto end = map.end();
+
+    if (map.size()) {
+        os << "    " << prefix << " [";
+        for (; it != end; ++it) {
+            os << (*it).first << ":\"" << (*it).second << "\" ";
+        }
+        os << "]" << std::endl;
+    }
 }
 
 void dump_arg_map(std::ostream& os, const std::string& prefix, const http::arg_view_map &map) {
-    dump_map<http::arg_view_map>(os, prefix, map);
+    auto it = map.begin();
+    auto end = map.end();
+
+    if (map.size()) {
+        os << "    " << prefix << " [";
+        for (; it != end; ++it) {
+            os << (*it).first << ":[";
+            std::string delim = "";
+            for (const auto & v : it->second) {
+                os << delim << "\"" << v << "\"";
+                delim = ", ";
+            }
+            os << "] ";
+        }
+        os << "]" << std::endl;
+    }
 }
 
 size_t base_unescaper(std::string* s, unescaper_ptr unescaper) {

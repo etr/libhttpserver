@@ -173,8 +173,8 @@ class http_request {
 
      /**
       * Method used to get a specific argument passed with the request.
-      * @param ket the specific argument to get the value from
-      * @return the value of the arg.
+      * @param key the specific argument to get the value from
+      * @return the value of the first arg matching the key.
      **/
      std::string_view get_arg(std::string_view key) const;
 
@@ -298,7 +298,12 @@ class http_request {
       * @param value The value assumed by the argument
      **/
      void set_arg(const std::string& key, const std::string& value) {
-         cache->unescaped_args[key] = value.substr(0, content_size_limit);
+         auto existing_iter = cache->unescaped_args.find(key);
+         if (existing_iter != cache->unescaped_args.end()) {
+            existing_iter->second.push_back(value.substr(0, content_size_limit));
+         } else {
+            cache->unescaped_args[key] = {value.substr(0, content_size_limit)};
+         }
      }
 
      /**
@@ -308,7 +313,13 @@ class http_request {
       * @param size The size in number of char of the value parameter.
      **/
      void set_arg(const char* key, const char* value, size_t size) {
-         cache->unescaped_args[key] = std::string(value, std::min(size, content_size_limit));
+         auto value_str = std::string(value, std::min(size, content_size_limit));
+         auto existing_iter = cache->unescaped_args.find(key);
+         if (existing_iter != cache->unescaped_args.end()) {
+            existing_iter->second.push_back(value_str);
+         } else {
+            cache->unescaped_args[key] = {value_str};
+         }
      }
 
      /**
@@ -365,10 +376,13 @@ class http_request {
       * Method used to set all arguments of the request.
       * @param args The args key-value map to set for the request.
      **/
-     void set_args(const std::map<std::string, std::string>& args) {
-         std::map<std::string, std::string>::const_iterator it;
-         for (it = args.begin(); it != args.end(); ++it) {
-             this->cache->unescaped_args[it->first] = it->second.substr(0, content_size_limit);
+     void set_args(const std::map<std::string, std::vector<std::string>>& args) {
+         for (auto it = args.begin(); it != args.end(); ++it) {
+             auto value_vec = it->second;
+             std::transform(value_vec.begin(), value_vec.end(), value_vec.begin(), [this](const std::string& s) {
+                return s.substr(0, content_size_limit);
+             });
+             this->cache->unescaped_args[it->first] = std::move(value_vec);
          }
      }
 
