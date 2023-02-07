@@ -135,6 +135,15 @@ jobs:
             debug: nodebug
             coverage: nocoverage
           - test-group: extra
+            os: ubuntu-latest
+            os-type: ubuntu
+            build-type: none
+            compiler-family: gcc
+            c-compiler: gcc-11
+            cc-compiler: g++-11
+            debug: nodebug
+            coverage: nocoverage
+          - test-group: extra
             os: ubuntu-18.04
             os-type: ubuntu
             build-type: none
