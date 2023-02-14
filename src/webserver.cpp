@@ -436,15 +436,16 @@ void error_log(void* cls, const char* fmt, va_list ap) {
 
     va_list va;
     va_copy(va, ap);
-    size_t r = vsnprintf(&*msg.begin(), msg.size(), fmt, va);
+
+    size_t r = vsnprintf(&*msg.begin(), msg.size(), fmt, ap);
     va_end(ap);
 
     if (msg.size() < r) {
       msg.resize(r);
       va_copy(va, ap);
       r = vsnprintf(&*msg.begin(), msg.size(), fmt, va);
-      va_end(ap);
     }
+    va_end(va);
     msg.resize(r);
 
     if (dws->log_error != nullptr) dws->log_error(msg);
