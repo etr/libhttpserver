@@ -435,14 +435,13 @@ void error_log(void* cls, const char* fmt, va_list ap) {
     msg.resize(80);  // Asssume one line will be enought most of the time.
 
     va_list va;
-    va_copy(va, ap);
+    va_copy(va, ap);  // Stash a copy in case we need to try again.
 
     size_t r = vsnprintf(&*msg.begin(), msg.size(), fmt, ap);
     va_end(ap);
 
     if (msg.size() < r) {
       msg.resize(r);
-      va_copy(va, ap);
       r = vsnprintf(&*msg.begin(), msg.size(), fmt, va);
     }
     va_end(va);
