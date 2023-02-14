@@ -429,11 +429,25 @@ void* uri_log(void* cls, const char* uri) {
 }
 
 void error_log(void* cls, const char* fmt, va_list ap) {
-    // Parameter needed to respect MHD interface, but not needed here.
-    std::ignore = ap;
-
     webserver* dws = static_cast<webserver*>(cls);
-    if (dws->log_error != nullptr) dws->log_error(fmt);
+
+    std::string msg;
+    msg.resize(80);  // Asssume one line will be enought most of the time.
+
+    va_list va;
+    va_copy(va, ap);
+    size_t r = vsnprintf(&*msg.begin(), msg.size(), fmt, va);
+    va_end(ap);
+
+    if (msg.size() < r) {
+      msg.resize(r);
+      va_copy(va, ap);
+      r = vsnprintf(&*msg.begin(), msg.size(), fmt, va);
+      va_end(ap);
+    }
+    msg.resize(r);
+
+    if (dws->log_error != nullptr) dws->log_error(msg);
 }
 
 void access_log(webserver* dws, string uri) {
