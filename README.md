@@ -67,7 +67,7 @@ The mission of this library is to support all possible HTTP features directly an
 The library is supposed to work transparently for the client Implementing the business logic and using the library itself to realize an interface.
 If the user wants it must be able to change every behavior of the library itself through the registration of callbacks.
 
-libhttpserver is able to decode certain body format a and automatically format them in object oriented fashion. This is true for query arguments and for *POST* and *PUT* requests bodies if *application/x-www-form-urlencoded* or *multipart/form-data* header are passed.
+libhttpserver is able to decode certain body formats and automatically format them in object oriented fashion. This is true for query arguments and for *POST* and *PUT* requests bodies if *application/x-www-form-urlencoded* or *multipart/form-data* header are passed.
 
 All functions are guaranteed to be completely reentrant and thread-safe (unless differently specified).
 Additionally, clients can specify resource limits on the overall number of connections, number of connections per IP address and memory used per connection to avoid resource exhaustion.
