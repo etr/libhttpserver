@@ -316,10 +316,41 @@ class arg_comparator {
      }
 };
 
+class http_arg_value {
+ public:
+
+    std::string_view get_flat_value() const
+    {
+        return values.empty() ? "" : values[0];
+    }
+
+    std::vector<std::string_view> get_all_values() const
+    {
+        return values;
+    }
+
+    operator std::string() const
+    {
+        return std::string(get_flat_value());
+    }
+
+    operator std::vector<std::string>() const
+    {
+        std::vector<std::string> result;
+        for (auto const & value : values) {
+            result.push_back(std::string(value));
+        }
+        return result;
+    }
+
+    std::vector<std::string_view> values;
+};
+
 using header_map = std::map<std::string, std::string, http::header_comparator>;
 using header_view_map = std::map<std::string_view, std::string_view, http::header_comparator>;
-using arg_map = std::map<std::string, std::string, http::arg_comparator>;
-using arg_view_map = std::map<std::string_view, std::string_view, http::arg_comparator>;
+using arg_map = std::map<std::string, http_arg_value, http::arg_comparator>;
+using arg_view_map = std::map<std::string_view, http_arg_value, http::arg_comparator>;
+
 
 struct ip_representation {
     http_utils::IP_version_T ip_version;

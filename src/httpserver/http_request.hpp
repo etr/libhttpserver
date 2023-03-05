@@ -134,10 +134,16 @@ class http_request {
 
      /**
       * Method used to get all args passed with the request.
-      * @param result a map<string, string> > that will be filled with all args
       * @result the size of the map
      **/
      const http::arg_view_map get_args() const;
+
+     /**
+      * Method used to get all args passed with the request. If any key has multiple
+      * values, one value is chosen and returned.
+      * @result the size of the map
+     **/
+     const std::map<std::string_view, std::string_view, http::arg_comparator> get_args_flat() const;
 
      /**
       * Method to get or create a file info struct in the map if the provided filename is already in the map
@@ -174,9 +180,17 @@ class http_request {
      /**
       * Method used to get a specific argument passed with the request.
       * @param ket the specific argument to get the value from
+      * @return the value(s) of the arg.
+     **/
+     http::http_arg_value get_arg(std::string_view key) const;
+
+     /**
+      * Method used to get a specific argument passed with the request.
+      * If the arg key has more than one value, only one is returned.
+      * @param ket the specific argument to get the value from
       * @return the value of the arg.
      **/
-     std::string_view get_arg(std::string_view key) const;
+     std::string_view get_arg_flat(std::string_view key) const;
 
      /**
       * Method used to get the content of the request.
@@ -298,7 +312,7 @@ class http_request {
       * @param value The value assumed by the argument
      **/
      void set_arg(const std::string& key, const std::string& value) {
-         cache->unescaped_args[key] = value.substr(0, content_size_limit);
+         cache->unescaped_args[key].push_back(value.substr(0, content_size_limit));
      }
 
      /**
@@ -308,9 +322,17 @@ class http_request {
       * @param size The size in number of char of the value parameter.
      **/
      void set_arg(const char* key, const char* value, size_t size) {
-         cache->unescaped_args[key] = std::string(value, std::min(size, content_size_limit));
+         cache->unescaped_args[key].push_back(std::string(value, std::min(size, content_size_limit)));
      }
 
+     /**
+      * Method used to set an argument value by key. If a key already exists, overwrites it.
+      * @param key The name identifying the argument
+      * @param value The value assumed by the argument
+     **/
+     void set_arg_flat(const std::string& key, const std::string& value) {
+         cache->unescaped_args[key] = { (value.substr(0, content_size_limit)) };
+     }
      /**
       * Method used to set the content of the request
       * @param content The content to set.
@@ -366,9 +388,8 @@ class http_request {
       * @param args The args key-value map to set for the request.
      **/
      void set_args(const std::map<std::string, std::string>& args) {
-         std::map<std::string, std::string>::const_iterator it;
-         for (it = args.begin(); it != args.end(); ++it) {
-             this->cache->unescaped_args[it->first] = it->second.substr(0, content_size_limit);
+         for (auto const& [key, value] : args) {
+             this->cache->unescaped_args[key].push_back(value.substr(0, content_size_limit));
          }
      }
 
@@ -386,9 +407,11 @@ class http_request {
         std::string querystring;
         std::string requestor_ip;
         std::string digested_user;
-        http::arg_map unescaped_args;
+        std::map<std::string, std::vector<std::string>, http::arg_comparator> unescaped_args;
      };
      std::unique_ptr<http_request_data_cache> cache;
+     // Populate the data cache unescaped_args
+     void populate_args() const;
 
      friend class webserver;
      friend struct details::modded_request;

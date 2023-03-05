@@ -20,6 +20,7 @@
 
 #include <curl/curl.h>
 #include <map>
+#include <numeric>
 #include <sstream>
 #include <string>
 
@@ -64,6 +65,23 @@ class simple_resource : public http_resource {
      }
      shared_ptr<http_response> render_POST(const http_request& req) {
          return shared_ptr<string_response>(new string_response(std::string(req.get_arg("arg1")) + std::string(req.get_arg("arg2")), 200, "text/plain"));
+     }
+};
+
+class arg_value_resource : public http_resource {
+ public:
+     shared_ptr<http_response> render_GET(const http_request&) {
+         return shared_ptr<string_response>(new string_response("OK", 200, "text/plain"));
+     }
+     shared_ptr<http_response> render_POST(const http_request& req) {
+         auto const arg_value = req.get_arg("arg").get_all_values();
+         for (auto const & a : arg_value) {
+            std::cerr << a << std::endl;
+         }
+         std::string all_values = std::accumulate(std::next(arg_value.begin()), arg_value.end(), std::string(arg_value[0]), [](std::string a, std::string_view in) {
+            return std::move(a) + std::string(in);
+         });
+         return shared_ptr<string_response>(new string_response(all_values, 200, "text/plain"));
      }
 };
 
@@ -626,6 +644,30 @@ LT_BEGIN_AUTO_TEST(basic_suite, postprocessor)
     LT_CHECK_EQ(s, "libhttpserver");
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(postprocessor)
+
+LT_BEGIN_AUTO_TEST(basic_suite, same_key_different_value)
+    arg_value_resource resource;
+    ws->register_resource("base", &resource);
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base?arg=beep&arg=boop&arg=hello&arg=what");
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, "arg=beep&arg=boop&arg=hello&arg=what");
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    struct curl_slist *list = NULL;
+    // Change the content type to trigger "normal" POST processing,
+    // otherwise the file processing logic is triggered which does
+    // not set the multiple arg values as expected.
+    list = curl_slist_append(list, "content-type: text/plain");
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, list);
+    res = curl_easy_perform(curl);
+    curl_slist_free_all(list);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "beepboophellowhat");
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(same_key_different_value)
 
 LT_BEGIN_AUTO_TEST(basic_suite, empty_arg)
     simple_resource resource;

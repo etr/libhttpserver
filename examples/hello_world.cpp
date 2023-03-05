@@ -33,7 +33,7 @@ class hello_world_resource : public httpserver::http_resource {
 std::shared_ptr<httpserver::http_response> hello_world_resource::render(const httpserver::http_request& req) {
     // It is possible to store data inside the resource object that can be altered through the requests
     std::cout << "Data was: " << data << std::endl;
-    std::string_view datapar = req.get_arg("data");
+    std::string_view datapar = req.get_arg_flat("data");
     set_some_data(datapar == "" ? "no data passed!!!" : std::string(datapar));
     std::cout << "Now data is:" << data << std::endl;
 
