@@ -301,6 +301,7 @@ class header_comparator {
 **/
 class arg_comparator {
  public:
+     using is_transparent = std::true_type;
      /**
       * Operator used to compare strings.
       * @param first string
@@ -315,6 +316,12 @@ class arg_comparator {
      }
      bool operator()(const std::string& x, const std::string& y) const {
         return operator()(std::string_view(x), std::string_view(y));
+     }
+     bool operator()(std::string_view x, const std::string& y) const {
+        return operator()(x, std::string_view(y));
+     }
+     bool operator()(const std::string& x, std::string_view y) const {
+        return operator()(std::string_view(x), std::string(y));
      }
 };
 

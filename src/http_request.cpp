@@ -117,7 +117,7 @@ void http_request::populate_args() const {
 http_arg_value http_request::get_arg(std::string_view key) const {
     populate_args();
 
-    auto it = cache->unescaped_args.find(std::string(key));
+    auto it = cache->unescaped_args.find(key);
     if (it != cache->unescaped_args.end()) {
         http_arg_value arg;
         arg.values.reserve(it->second.size());
