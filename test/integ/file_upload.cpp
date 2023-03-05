@@ -108,11 +108,6 @@ static CURLcode send_file_to_webserver(bool add_second_file, bool append_paramet
     return res;
 }
 
-static size_t file_size(const char* filename) {
-    std::ifstream infile(filename, std::ifstream::ate | std::ifstream::binary);
-    return infile.tellg();
-}
-
 static CURLcode send_large_file(string* content) {
     // Generate a large (100K) file of random bytes. Upload the file with
     // a curl request, then delete the file. The default chunk size of MHD
@@ -126,11 +121,11 @@ static CURLcode send_large_file(string* content) {
     curl_mime *form = curl_mime_init(curl);
     curl_mimepart *field = curl_mime_addpart(form);
 
-    auto const file_bytes = file_size(LARGE_CONTENT_FILEPATH);
-    content->resize(file_bytes);
     std::ifstream infile(LARGE_CONTENT_FILEPATH);
-    infile.read(content->data(), content->size());
+    std::stringstream buffer;
+    buffer << infile.rdbuf();
     infile.close();
+    *content = buffer.str();
 
     curl_mime_name(field, LARGE_KEY);
     curl_mime_filedata(field, LARGE_CONTENT_FILEPATH);
