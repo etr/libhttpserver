@@ -318,24 +318,19 @@ class arg_comparator {
 
 class http_arg_value {
  public:
-
-    std::string_view get_flat_value() const
-    {
+    std::string_view get_flat_value() const {
         return values.empty() ? "" : values[0];
     }
 
-    std::vector<std::string_view> get_all_values() const
-    {
+    std::vector<std::string_view> get_all_values() const {
         return values;
     }
 
-    operator std::string() const
-    {
+    operator std::string() const {
         return std::string(get_flat_value());
     }
 
-    operator std::vector<std::string>() const
-    {
+    operator std::vector<std::string>() const {
         std::vector<std::string> result;
         for (auto const & value : values) {
             result.push_back(std::string(value));

@@ -22,6 +22,8 @@
 #include <filesystem>
 #include <fstream>
 #include <sys/stat.h>
+#include <cassert>
+#include <fstream>
 #include <map>
 #include <random>
 #include <sstream>
@@ -123,7 +125,7 @@ static CURLcode send_large_file(string* content) {
     curl_mimepart *field = curl_mime_addpart(form);
 
     random_bytes_engine rbe;
-    std::vector<unsigned char> data(100000); // 1_MB
+    std::vector<unsigned char> data(100000);
     std::generate(begin(data), end(data), std::ref(rbe));
     *content = string(reinterpret_cast<const char*>(&data[0]), data.size());
 
@@ -143,7 +145,8 @@ static CURLcode send_large_file(string* content) {
     curl_easy_cleanup(curl);
     curl_mime_free(form);
 
-    std::filesystem::remove(LARGE_CONTENT_FILEPATH);
+    auto const remove_result = remove(LARGE_CONTENT_FILEPATH);
+    assert(remove_result == 0);
 
     return res;
 }
@@ -538,7 +541,6 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_large_content)
     LT_ASSERT_EQ(res, 0);
 
     string actual_content = resource.get_content();
-    //std::cerr << "actual content: " << actual_content << std::endl;
     LT_CHECK_EQ(actual_content.find(LARGE_FILENAME_IN_GET_CONTENT) != string::npos, true);
     LT_CHECK_EQ(actual_content.find(file_content) != string::npos, true);
 
