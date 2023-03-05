@@ -652,14 +652,32 @@ LT_BEGIN_AUTO_TEST(basic_suite, same_key_different_value)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
+    // The curl default content type triggers the file processing
+    // logic in the webserver. However, since there is no actual
+    // file, the arg handling should be the same.
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, "arg=inertia&arg=isaproperty&arg=ofmatter");
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "inertiaisapropertyofmatter");
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(same_key_different_value)
+
+
+LT_BEGIN_AUTO_TEST(basic_suite, same_key_different_value_plain_content)
+    arg_value_resource resource;
+    ws->register_resource("base", &resource);
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
     curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base?arg=beep&arg=boop&arg=hello&arg=what");
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, "arg=beep&arg=boop&arg=hello&arg=what");
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
     struct curl_slist *list = NULL;
-    // Change the content type to trigger "normal" POST processing,
-    // otherwise the file processing logic is triggered which does
-    // not set the multiple arg values as expected.
     list = curl_slist_append(list, "content-type: text/plain");
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, list);
     res = curl_easy_perform(curl);
@@ -667,7 +685,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, same_key_different_value)
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "beepboophellowhat");
     curl_easy_cleanup(curl);
-LT_END_AUTO_TEST(same_key_different_value)
+LT_END_AUTO_TEST(same_key_different_value_plain_content)
 
 LT_BEGIN_AUTO_TEST(basic_suite, empty_arg)
     simple_resource resource;

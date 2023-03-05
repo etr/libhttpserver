@@ -130,7 +130,7 @@ http_arg_value http_request::get_arg(std::string_view key) const {
 }
 
 std::string_view http_request::get_arg_flat(std::string_view key) const {
-    auto const it = cache->unescaped_args.find(std::string(key));
+    auto const it = cache->unescaped_args.find(key);
 
     if (it != cache->unescaped_args.end()) {
         return it->second[0];

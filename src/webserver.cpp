@@ -461,8 +461,14 @@ MHD_Result webserver::post_iterator(void *cls, enum MHD_ValueKind kind,
 
     struct details::modded_request* mr = (struct details::modded_request*) cls;
 
+    if (!filename) {
+        // There is no actual file, just set the arg key/value and return.
+        mr->dhr->set_arg(key, std::string(data, size));
+        return MHD_YES;
+    }
+
     try {
-        if (filename == nullptr || mr->ws->file_upload_target != FILE_UPLOAD_DISK_ONLY) {
+        if (filename && mr->ws->file_upload_target != FILE_UPLOAD_DISK_ONLY) {
             mr->dhr->set_arg_flat(key, std::string(mr->dhr->get_arg(key)) + std::string(data, size));
         }
 
