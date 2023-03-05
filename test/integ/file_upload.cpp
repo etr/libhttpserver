@@ -19,8 +19,6 @@
 */
 
 #include <curl/curl.h>
-#include <filesystem>
-#include <fstream>
 #include <sys/stat.h>
 #include <cassert>
 #include <fstream>
