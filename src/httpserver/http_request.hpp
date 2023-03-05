@@ -40,6 +40,7 @@
 #include <utility>
 #include <vector>
 
+#include "httpserver/http_arg_value.hpp"
 #include "httpserver/http_utils.hpp"
 #include "httpserver/file_info.hpp"
 
@@ -182,7 +183,7 @@ class http_request {
       * @param ket the specific argument to get the value from
       * @return the value(s) of the arg.
      **/
-     http::http_arg_value get_arg(std::string_view key) const;
+     http_arg_value get_arg(std::string_view key) const;
 
      /**
       * Method used to get a specific argument passed with the request.

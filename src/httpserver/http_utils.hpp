@@ -56,6 +56,8 @@
 #include <string>
 #include <vector>
 
+#include "httpserver/http_arg_value.hpp"
+
 #define DEFAULT_MASK_VALUE 0xFFFF
 
 #if MHD_VERSION < 0x00097002
@@ -314,31 +316,6 @@ class arg_comparator {
      bool operator()(const std::string& x, const std::string& y) const {
         return operator()(std::string_view(x), std::string_view(y));
      }
-};
-
-class http_arg_value {
- public:
-    std::string_view get_flat_value() const {
-        return values.empty() ? "" : values[0];
-    }
-
-    std::vector<std::string_view> get_all_values() const {
-        return values;
-    }
-
-    operator std::string() const {
-        return std::string(get_flat_value());
-    }
-
-    operator std::vector<std::string>() const {
-        std::vector<std::string> result;
-        for (auto const & value : values) {
-            result.push_back(std::string(value));
-        }
-        return result;
-    }
-
-    std::vector<std::string_view> values;
 };
 
 using header_map = std::map<std::string, std::string, http::header_comparator>;

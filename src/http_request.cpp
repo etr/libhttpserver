@@ -114,19 +114,19 @@ void http_request::populate_args() const {
     MHD_get_connection_values(underlying_connection, MHD_GET_ARGUMENT_KIND, &build_request_args, reinterpret_cast<void*>(&aa));
 }
 
-http::http_arg_value http_request::get_arg(std::string_view key) const {
+http_arg_value http_request::get_arg(std::string_view key) const {
     populate_args();
 
     auto it = cache->unescaped_args.find(std::string(key));
     if (it != cache->unescaped_args.end()) {
-        http::http_arg_value arg;
+        http_arg_value arg;
         arg.values.reserve(it->second.size());
         for (const auto& value : it->second) {
             arg.values.push_back(value);
         }
         return arg;
     }
-    return http::http_arg_value();
+    return http_arg_value();
 }
 
 std::string_view http_request::get_arg_flat(std::string_view key) const {
