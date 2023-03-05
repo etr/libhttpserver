@@ -45,6 +45,10 @@ class http_arg_value {
         return std::string(get_flat_value());
     }
 
+    operator std::string_view() const {
+        return get_flat_value();
+    }
+
     operator std::vector<std::string>() const {
         std::vector<std::string> result;
         for (auto const & value : values) {
