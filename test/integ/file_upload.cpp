@@ -64,12 +64,11 @@ static size_t TEST_CONTENT_SIZE_2 = 28;
 static const char* TEST_PARAM_KEY = "param_key";
 static const char* TEST_PARAM_VALUE = "Value of test param";
 
-
-static const char* LARGE_FILENAME_IN_GET_CONTENT = "filename=\"large_content\"";
-static const char* LARGE_CONTENT_FILEPATH = "./large_content";
+// The large file test_content_large is large enough to ensure
+// that MHD splits the underlying request into several chunks.
+static const char* LARGE_FILENAME_IN_GET_CONTENT = "filename=\"test_content_large\"";
+static const char* LARGE_CONTENT_FILEPATH = "./test_content_large";
 static const char* LARGE_KEY = "large_file";
-using random_bytes_engine = std::independent_bits_engine<
-    std::default_random_engine, CHAR_BIT, unsigned char>;
 
 static bool file_exists(const string &path) {
     struct stat sb;
@@ -109,6 +108,11 @@ static CURLcode send_file_to_webserver(bool add_second_file, bool append_paramet
     return res;
 }
 
+static size_t file_size(const char* filename) {
+    std::ifstream infile(LARGE_CONTENT_FILEPATH, std::ifstream::ate | std::ifstream::binary);
+    return infile.tellg();
+}
+
 static CURLcode send_large_file(string* content) {
     // Generate a large (100K) file of random bytes. Upload the file with
     // a curl request, then delete the file. The default chunk size of MHD
@@ -122,14 +126,11 @@ static CURLcode send_large_file(string* content) {
     curl_mime *form = curl_mime_init(curl);
     curl_mimepart *field = curl_mime_addpart(form);
 
-    random_bytes_engine rbe;
-    std::vector<unsigned char> data(100000);
-    std::generate(begin(data), end(data), std::ref(rbe));
-    *content = string(reinterpret_cast<const char*>(&data[0]), data.size());
-
-    std::ofstream outfile(LARGE_CONTENT_FILEPATH, std::ios::out);
-    outfile << *content;
-    outfile.close();
+    auto const file_bytes = file_size(LARGE_CONTENT_FILEPATH);
+    content->resize(file_bytes);
+    std::ifstream infile(LARGE_CONTENT_FILEPATH);
+    infile.read(content->data(), content->size());
+    infile.close();
 
     curl_mime_name(field, LARGE_KEY);
     curl_mime_filedata(field, LARGE_CONTENT_FILEPATH);
@@ -142,9 +143,6 @@ static CURLcode send_large_file(string* content) {
 
     curl_easy_cleanup(curl);
     curl_mime_free(form);
-
-    auto const remove_result = remove(LARGE_CONTENT_FILEPATH);
-    assert(remove_result == 0);
 
     return res;
 }

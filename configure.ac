@@ -57,7 +57,7 @@ AC_ARG_ENABLE([same-directory-build],
 AC_MSG_RESULT([$samedirectory])
 
 if test x"$samedirectory" = x"no"; then
-    if test "`cd $srcdir; /bin/pwd`" = "`/bin/pwd`"; then 
+    if test "`cd $srcdir; /bin/pwd`" = "`/bin/pwd`"; then
         AC_MSG_ERROR("you must configure in a separate build directory")
     fi
 fi
@@ -275,6 +275,7 @@ AC_SUBST(EXT_LIBS)
 AC_CONFIG_FILES([test/test_content:test/test_content])
 AC_CONFIG_FILES([test/test_content_2:test/test_content_2])
 AC_CONFIG_FILES([test/test_content_empty:test/test_content_empty])
+AC_CONFIG_FILES([test/test_content_large:test/test_content_large])
 AC_CONFIG_FILES([test/cert.pem:test/cert.pem])
 AC_CONFIG_FILES([test/key.pem:test/key.pem])
 AC_CONFIG_FILES([test/test_root_ca.pem:test/test_root_ca.pem])
@@ -292,7 +293,7 @@ AC_OUTPUT(
       examples/Makefile
 )
 
-AC_MSG_NOTICE([Configuration Summary:  
+AC_MSG_NOTICE([Configuration Summary:
   Operating System:  ${host_os}
   Target directory:  ${prefix}
   License         :  LGPL only
