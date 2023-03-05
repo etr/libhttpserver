@@ -109,7 +109,7 @@ static CURLcode send_file_to_webserver(bool add_second_file, bool append_paramet
 }
 
 static size_t file_size(const char* filename) {
-    std::ifstream infile(LARGE_CONTENT_FILEPATH, std::ifstream::ate | std::ifstream::binary);
+    std::ifstream infile(filename, std::ifstream::ate | std::ifstream::binary);
     return infile.tellg();
 }
 
