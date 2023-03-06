@@ -580,7 +580,7 @@ The `http_request` class has a set of methods you will have access to when imple
 * _**const std::string** get_pass() **const**:_ Returns the `password` as self-identified through basic authentication. The content of the password header will be parsed only if basic authentication is enabled on the server (enabled by default).
 * _**const std::string** get_digested_user() **const**:_ Returns the `digested user` as self-identified through digest authentication. The content of the user header will be parsed only if digest authentication is enabled on the server (enabled by default).
 * _**bool** check_digest_auth(**const std::string&** realm, **const std::string&** password, **int** nonce_timeout, **bool*** reload_nonce) **const**:_ Allows to check the validity of the authentication token sent through digest authentication (if the provided values in the WWW-Authenticate header are valid and sound according to RFC2716). Takes in input the `realm` of validity of the authentication, the `password` as known to the server to compare against, the `nonce_timeout` to indicate how long the nonce is valid and `reload_nonce` a boolean that will be set by the method to indicate a nonce being reloaded. The method returns `true` if the authentication is valid, `false` otherwise.
-* _**gnutls_session_t** get_tls_session() **const**:_ Tests if there is am underlying TLS state of the current request.
+* _**bool** has_tls_session() **const**:_ Tests if there is am underlying TLS state of the current request.
 * _**gnutls_session_t** get_tls_session() **const**:_ Returns the underlying TLS state of the current request for inspection. (It is an error to call this if the state does not exist.)
 
 Details on the `http::file_info` structure.
