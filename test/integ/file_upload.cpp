@@ -20,7 +20,10 @@
 
 #include <curl/curl.h>
 #include <sys/stat.h>
+#include <cassert>
+#include <fstream>
 #include <map>
+#include <random>
 #include <sstream>
 #include <string>
 
@@ -61,6 +64,12 @@ static size_t TEST_CONTENT_SIZE_2 = 28;
 static const char* TEST_PARAM_KEY = "param_key";
 static const char* TEST_PARAM_VALUE = "Value of test param";
 
+// The large file test_content_large is large enough to ensure
+// that MHD splits the underlying request into several chunks.
+static const char* LARGE_FILENAME_IN_GET_CONTENT = "filename=\"test_content_large\"";
+static const char* LARGE_CONTENT_FILEPATH = "./test_content_large";
+static const char* LARGE_KEY = "large_file";
+
 static bool file_exists(const string &path) {
     struct stat sb;
 
@@ -96,6 +105,44 @@ static CURLcode send_file_to_webserver(bool add_second_file, bool append_paramet
 
     curl_easy_cleanup(curl);
     curl_mime_free(form);
+    return res;
+}
+
+static CURLcode send_large_file(string* content, std::string args = "") {
+    // Generate a large (100K) file of random bytes. Upload the file with
+    // a curl request, then delete the file. The default chunk size of MHD
+    // appears to be around 16K, so 100K should be enough to trigger the
+    // behavior. Return the content via the pointer parameter so that test
+    // cases can make required checks for the content.
+    curl_global_init(CURL_GLOBAL_ALL);
+
+    CURL *curl = curl_easy_init();
+
+    curl_mime *form = curl_mime_init(curl);
+    curl_mimepart *field = curl_mime_addpart(form);
+
+    std::ifstream infile(LARGE_CONTENT_FILEPATH);
+    std::stringstream buffer;
+    buffer << infile.rdbuf();
+    infile.close();
+    *content = buffer.str();
+
+    curl_mime_name(field, LARGE_KEY);
+    curl_mime_filedata(field, LARGE_CONTENT_FILEPATH);
+
+    std::string url = "localhost:8080/upload";
+    if (!args.empty()) {
+        url.append(args);
+    }
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_MIMEPOST, form);
+
+    res = curl_easy_perform(curl);
+
+    curl_easy_cleanup(curl);
+    curl_mime_free(form);
+
     return res;
 }
 
@@ -144,7 +191,9 @@ class print_file_upload_resource : public http_resource {
          auto args_view = req.get_args();
          // req may go out of scope, so we need to copy the values.
          for (auto const& item : args_view) {
-            args[std::string(item.first)] = std::string(item.second);
+            for (auto const & value : item.second.get_all_values()) {
+                args[string(item.first)].push_back(string(value));
+            }
          }
          files = req.get_files();
          shared_ptr<string_response> hresp(new string_response("OK", 201, "text/plain"));
@@ -156,14 +205,16 @@ class print_file_upload_resource : public http_resource {
          auto args_view = req.get_args();
          // req may go out of scope, so we need to copy the values.
          for (auto const& item : args_view) {
-            args[std::string(item.first)] = std::string(item.second);
+            for (auto const & value : item.second.get_all_values()) {
+                args[string(item.first)].push_back(string(value));
+            }
          }
          files = req.get_files();
          shared_ptr<string_response> hresp(new string_response("OK", 200, "text/plain"));
          return hresp;
      }
 
-     const arg_map get_args() const {
+     const std::map<string, std::vector<string>, httpserver::http::arg_comparator> get_args() const {
          return args;
      }
 
@@ -176,7 +227,7 @@ class print_file_upload_resource : public http_resource {
      }
 
  private:
-     arg_map args;
+     std::map<std::string, std::vector<std::string>, httpserver::http::arg_comparator> args;
      map<string, map<string, httpserver::http::file_info>> files;
      string content;
 };
@@ -218,7 +269,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk)
     LT_CHECK_EQ(args.size(), 1);
     auto arg = args.begin();
     LT_CHECK_EQ(arg->first, TEST_KEY);
-    LT_CHECK_EQ(arg->second, TEST_CONTENT);
+    LT_CHECK_EQ(arg->second[0], TEST_CONTENT);
 
     map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
     LT_CHECK_EQ(files.size(), 1);
@@ -300,10 +351,10 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_additional_par
     LT_CHECK_EQ(args.size(), 2);
     auto arg = args.begin();
     LT_CHECK_EQ(arg->first, TEST_KEY);
-    LT_CHECK_EQ(arg->second, TEST_CONTENT);
+    LT_CHECK_EQ(arg->second[0], TEST_CONTENT);
     arg++;
     LT_CHECK_EQ(arg->first, TEST_PARAM_KEY);
-    LT_CHECK_EQ(arg->second, TEST_PARAM_VALUE);
+    LT_CHECK_EQ(arg->second[0], TEST_PARAM_VALUE);
 
     map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
     LT_CHECK_EQ(files.size(), 1);
@@ -354,10 +405,10 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_two_files)
     LT_CHECK_EQ(args.size(), 2);
     auto arg = args.begin();
     LT_CHECK_EQ(arg->first, TEST_KEY);
-    LT_CHECK_EQ(arg->second, TEST_CONTENT);
+    LT_CHECK_EQ(arg->second[0], TEST_CONTENT);
     arg++;
     LT_CHECK_EQ(arg->first, TEST_KEY_2);
-    LT_CHECK_EQ(arg->second, TEST_CONTENT_2);
+    LT_CHECK_EQ(arg->second[0], TEST_CONTENT_2);
 
     map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
     LT_CHECK_EQ(files.size(), 2);
@@ -461,7 +512,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_only_incl_content)
     LT_CHECK_EQ(args.size(), 1);
     auto arg = args.begin();
     LT_CHECK_EQ(arg->first, TEST_KEY);
-    LT_CHECK_EQ(arg->second, TEST_CONTENT);
+    LT_CHECK_EQ(arg->second[0], TEST_CONTENT);
 
     map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
     LT_CHECK_EQ(resource.get_files().size(), 0);
@@ -469,6 +520,92 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_only_incl_content)
     ws->stop();
     delete ws;
 LT_END_AUTO_TEST(file_upload_memory_only_incl_content)
+
+LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_large_content)
+    string upload_directory = ".";
+    webserver* ws;
+
+    ws = new webserver(create_webserver(8080)
+                       .put_processed_data_to_content()
+                       .file_upload_target(httpserver::FILE_UPLOAD_MEMORY_ONLY));
+    ws->start(false);
+    LT_CHECK_EQ(ws->is_running(), true);
+
+    print_file_upload_resource resource;
+    ws->register_resource("upload", &resource);
+
+    // Upload a large file to trigger the chunking behavior of MHD.
+    std::string file_content;
+    CURLcode res = send_large_file(&file_content);
+    LT_ASSERT_EQ(res, 0);
+
+    string actual_content = resource.get_content();
+    LT_CHECK_EQ(actual_content.find(LARGE_FILENAME_IN_GET_CONTENT) != string::npos, true);
+    LT_CHECK_EQ(actual_content.find(file_content) != string::npos, true);
+
+    // The chunks of the file should be concatenated into the first
+    // arg value of the key.
+    auto const args = resource.get_args();
+    LT_CHECK_EQ(args.size(), 1);
+    auto const file_arg_iter = args.find(std::string_view(LARGE_KEY));
+    if (file_arg_iter == args.end()) {
+        LT_FAIL("file arg not found");
+    }
+    LT_CHECK_EQ(file_arg_iter->second.size(), 1);
+    LT_CHECK_EQ(file_arg_iter->second[0], file_content);
+
+    map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
+    LT_CHECK_EQ(resource.get_files().size(), 0);
+
+    ws->stop();
+    delete ws;
+LT_END_AUTO_TEST(file_upload_large_content)
+
+LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_large_content_with_args)
+    string upload_directory = ".";
+    webserver* ws;
+
+    ws = new webserver(create_webserver(8080)
+                       .put_processed_data_to_content()
+                       .file_upload_target(httpserver::FILE_UPLOAD_MEMORY_ONLY));
+    ws->start(false);
+    LT_CHECK_EQ(ws->is_running(), true);
+
+    print_file_upload_resource resource;
+    ws->register_resource("upload", &resource);
+
+    // Upload a large file to trigger the chunking behavior of MHD.
+    // Include some additional args to make sure those are processed as well.
+    std::string file_content;
+    CURLcode res = send_large_file(&file_content, "?arg1=hello&arg1=world");
+    LT_ASSERT_EQ(res, 0);
+
+    string actual_content = resource.get_content();
+    LT_CHECK_EQ(actual_content.find(LARGE_FILENAME_IN_GET_CONTENT) != string::npos, true);
+    LT_CHECK_EQ(actual_content.find(file_content) != string::npos, true);
+
+    auto const args = resource.get_args();
+    LT_CHECK_EQ(args.size(), 2);
+    auto const file_arg_iter = args.find(std::string_view(LARGE_KEY));
+    if (file_arg_iter == args.end()) {
+        LT_FAIL("file arg not found");
+    }
+    LT_CHECK_EQ(file_arg_iter->second.size(), 1);
+    LT_CHECK_EQ(file_arg_iter->second[0], file_content);
+    auto const other_arg_iter = args.find(std::string_view("arg1"));
+    if (other_arg_iter == args.end()) {
+        LT_FAIL("other arg(s) not found");
+    }
+    LT_CHECK_EQ(other_arg_iter->second.size(), 2);
+    LT_CHECK_EQ(other_arg_iter->second[0], "hello");
+    LT_CHECK_EQ(other_arg_iter->second[1], "world");
+
+    map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
+    LT_CHECK_EQ(resource.get_files().size(), 0);
+
+    ws->stop();
+    delete ws;
+LT_END_AUTO_TEST(file_upload_large_content_with_args)
 
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_only_excl_content)
     string upload_directory = ".";
@@ -493,7 +630,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_only_excl_content)
     LT_CHECK_EQ(args.size(), 1);
     auto arg = args.begin();
     LT_CHECK_EQ(arg->first, TEST_KEY);
-    LT_CHECK_EQ(arg->second, TEST_CONTENT);
+    LT_CHECK_EQ(arg->second[0], TEST_CONTENT);
 
     map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
     LT_CHECK_EQ(files.size(), 0);

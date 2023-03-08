@@ -475,12 +475,18 @@ MHD_Result webserver::post_iterator(void *cls, enum MHD_ValueKind kind,
 
     struct details::modded_request* mr = (struct details::modded_request*) cls;
 
+    if (!filename) {
+        // There is no actual file, just set the arg key/value and return.
+        mr->dhr->set_arg(key, std::string(data, size));
+        return MHD_YES;
+    }
+
     try {
-        if (filename == nullptr || mr->ws->file_upload_target != FILE_UPLOAD_DISK_ONLY) {
-            mr->dhr->set_arg(key, std::string(mr->dhr->get_arg(key)) + std::string(data, size));
+        if (mr->ws->file_upload_target != FILE_UPLOAD_DISK_ONLY) {
+            mr->dhr->set_arg_flat(key, std::string(mr->dhr->get_arg(key)) + std::string(data, size));
         }
 
-        if (filename && *filename != '\0' && mr->ws->file_upload_target != FILE_UPLOAD_MEMORY_ONLY) {
+        if (*filename != '\0' && mr->ws->file_upload_target != FILE_UPLOAD_MEMORY_ONLY) {
             // either get the existing file info struct or create a new one in the file map
             http::file_info& file = mr->dhr->get_or_create_file_info(key, filename);
             // if the file_system_file_name is not filled yet, this is a new entry and the name has to be set

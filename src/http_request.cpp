@@ -32,7 +32,7 @@ const char http_request::EMPTY[] = "";
 
 struct arguments_accumulator {
     unescaper_ptr unescaper;
-    http::arg_map* arguments;
+    std::map<std::string, std::vector<std::string>, http::arg_comparator>* arguments;
 };
 
 void http_request::set_method(const std::string& method) {
@@ -104,33 +104,61 @@ const http::header_view_map http_request::get_cookies() const {
     return get_headerlike_values(MHD_COOKIE_KIND);
 }
 
-std::string_view http_request::get_arg(std::string_view key) const {
-    std::map<std::string, std::string>::const_iterator it = cache->unescaped_args.find(std::string(key));
+void http_request::populate_args() const {
+    if (!cache->unescaped_args.empty()) {
+        return;
+    }
+    arguments_accumulator aa;
+    aa.unescaper = unescaper;
+    aa.arguments = &cache->unescaped_args;
+    MHD_get_connection_values(underlying_connection, MHD_GET_ARGUMENT_KIND, &build_request_args, reinterpret_cast<void*>(&aa));
+}
+
+http_arg_value http_request::get_arg(std::string_view key) const {
+    populate_args();
+
+    auto it = cache->unescaped_args.find(key);
+    if (it != cache->unescaped_args.end()) {
+        http_arg_value arg;
+        arg.values.reserve(it->second.size());
+        for (const auto& value : it->second) {
+            arg.values.push_back(value);
+        }
+        return arg;
+    }
+    return http_arg_value();
+}
+
+std::string_view http_request::get_arg_flat(std::string_view key) const {
+    auto const it = cache->unescaped_args.find(key);
 
     if (it != cache->unescaped_args.end()) {
-        return it->second;
+        return it->second[0];
     }
 
     return get_connection_value(key, MHD_GET_ARGUMENT_KIND);
 }
 
 const http::arg_view_map http_request::get_args() const {
+    populate_args();
+
     http::arg_view_map arguments;
-
-    if (!cache->unescaped_args.empty()) {
-        arguments.insert(cache->unescaped_args.begin(), cache->unescaped_args.end());
-        return arguments;
+    for (const auto& [key, value] : cache->unescaped_args) {
+        auto& arg_values = arguments[key];
+        for (const auto& v : value) {
+            arg_values.values.push_back(v);
+        }
     }
-
-    arguments_accumulator aa;
-    aa.unescaper = unescaper;
-    aa.arguments = &cache->unescaped_args;
-
-    MHD_get_connection_values(underlying_connection, MHD_GET_ARGUMENT_KIND, &build_request_args, reinterpret_cast<void*>(&aa));
-
-    arguments.insert(cache->unescaped_args.begin(), cache->unescaped_args.end());
-
     return arguments;
+}
+
+const std::map<std::string_view, std::string_view, http::arg_comparator> http_request::get_args_flat() const {
+    populate_args();
+    std::map<std::string_view, std::string_view, http::arg_comparator> ret;
+    for (const auto&[key, val] : cache->unescaped_args) {
+        ret[key] = val[0];
+    }
+    return ret;
 }
 
 http::file_info& http_request::get_or_create_file_info(const std::string& key, const std::string& upload_file_name) {
@@ -155,7 +183,7 @@ MHD_Result http_request::build_request_args(void *cls, enum MHD_ValueKind kind, 
     std::string value = ((arg_value == nullptr) ? "" : arg_value);
 
     http::base_unescaper(&value, aa->unescaper);
-    (*aa->arguments)[key] = value;
+    (*aa->arguments)[key].push_back(value);
     return MHD_YES;
 }
 

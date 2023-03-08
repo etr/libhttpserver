@@ -618,25 +618,25 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, dump_header_map_no_prefix)
 LT_END_AUTO_TEST(dump_header_map_no_prefix)
 
 LT_BEGIN_AUTO_TEST(http_utils_suite, dump_arg_map)
-    std::map<std::string_view, std::string_view, httpserver::http::arg_comparator> arg_map;
-    arg_map["ARG_ONE"] = "VALUE_ONE";
-    arg_map["ARG_TWO"] = "VALUE_TWO";
-    arg_map["ARG_THREE"] = "VALUE_THREE";
+    httpserver::http::arg_view_map arg_map;
+    arg_map["ARG_ONE"].values.push_back("VALUE_ONE");
+    arg_map["ARG_TWO"].values.push_back("VALUE_TWO");
+    arg_map["ARG_THREE"].values.push_back("VALUE_THREE");
 
     std::stringstream ss;
     httpserver::http::dump_arg_map(ss, "prefix", arg_map);
-    LT_CHECK_EQ(ss.str(), "    prefix [ARG_ONE:\"VALUE_ONE\" ARG_TWO:\"VALUE_TWO\" ARG_THREE:\"VALUE_THREE\" ]\n");
+    LT_CHECK_EQ(ss.str(), "    prefix [ARG_ONE:[\"VALUE_ONE\"] ARG_TWO:[\"VALUE_TWO\"] ARG_THREE:[\"VALUE_THREE\"] ]\n");
 LT_END_AUTO_TEST(dump_arg_map)
 
 LT_BEGIN_AUTO_TEST(http_utils_suite, dump_arg_map_no_prefix)
-    std::map<std::string_view, std::string_view, httpserver::http::arg_comparator> arg_map;
-    arg_map["ARG_ONE"] = "VALUE_ONE";
-    arg_map["ARG_TWO"] = "VALUE_TWO";
-    arg_map["ARG_THREE"] = "VALUE_THREE";
+    httpserver::http::arg_view_map arg_map;
+    arg_map["ARG_ONE"].values.push_back("VALUE_ONE");
+    arg_map["ARG_TWO"].values.push_back("VALUE_TWO");
+    arg_map["ARG_THREE"].values.push_back("VALUE_THREE");
 
     std::stringstream ss;
     httpserver::http::dump_arg_map(ss, "", arg_map);
-    LT_CHECK_EQ(ss.str(), "     [ARG_ONE:\"VALUE_ONE\" ARG_TWO:\"VALUE_TWO\" ARG_THREE:\"VALUE_THREE\" ]\n");
+    LT_CHECK_EQ(ss.str(), "     [ARG_ONE:[\"VALUE_ONE\"] ARG_TWO:[\"VALUE_TWO\"] ARG_THREE:[\"VALUE_THREE\"] ]\n");
 LT_END_AUTO_TEST(dump_arg_map_no_prefix)
 
 LT_BEGIN_AUTO_TEST_ENV()
