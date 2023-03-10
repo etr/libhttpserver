@@ -595,10 +595,10 @@ Details on the `http::file_info` structure.
 Details on the `http_arg_value` structure.
 
 * _**std::string_view** get_flat_value() **const**:_ Returns only the first value provided for the key.
-* _**std::vector<std::string_view>** get_all_values() **const**:_ Returns all the values provided for the key.
+* _**std::vector\<std::string_view\>** get_all_values() **const**:_ Returns all the values provided for the key.
 * _**operator** std::string() **const**:_ Converts the http_arg_value to a string with the same logic as `get_flat_value`.
 * _**operator** std::string_view() **const**:_ Converts the http_arg_value to a string_view with the same logic as `get_flat_value`.
-* _**operator** std::vector<std::string>() **const**:_ Converts the http_arg_value to a std::vector<std::string> with the same logic as `get_value`.
+* _**operator** std::vector\<std::string\>() **const**:_ Converts the http_arg_value to a std::vector<std::string> with the same logic as `get_value`.
 
 #### Example of handler reading arguments from a request
 ```cpp
