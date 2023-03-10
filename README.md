@@ -564,11 +564,13 @@ The `http_request` class has a set of methods you will have access to when imple
 * _**std::string_view** get_header(**std::string_view** key) **const**:_ Returns the header with name equal to `key` if present in the HTTP request. Returns an `empty string` otherwise.
 * _**std::string_view** get_cookie(**std::string_view** key) **const**:_ Returns the cookie with name equal to `key` if present in the HTTP request. Returns an `empty string` otherwise.
 * _**std::string_view** get_footer(**std::string_view** key) **const**:_ Returns the footer with name equal to `key` if present in the HTTP request (only for http 1.1 chunked encodings). Returns an `empty string` otherwise.
-* _**std::string_view** get_arg(**std::string_view** key) **const**:_ Returns the argument with name equal to `key` if present in the HTTP request. Arguments can be (1) querystring parameters, (2) path argument (in case of parametric endpoint, (3) parameters parsed from the HTTP request body if the body is in `application/x-www-form-urlencoded` or `multipart/form-data` formats and the postprocessor is enabled in the webserver (enabled by default).
+* _**http_arg_value** get_arg(**std::string_view** key) **const**:_ Returns the argument with name equal to `key` if present in the HTTP request. Arguments can be (1) querystring parameters, (2) path argument (in case of parametric endpoint, (3) parameters parsed from the HTTP request body if the body is in `application/x-www-form-urlencoded` or `multipart/form-data` formats and the postprocessor is enabled in the webserver (enabled by default). Arguments are collected in a domain object that allows to collect multiple arguments with the same key while keeping the access transparent in the most common case of a single value provided per key.
+* _**std::string_view** get_arg_flat(**std::string_view** key) **const**_ Returns the argument in the same way as `get_arg` but as a string. If multiple values are provided with the same key, this method only returns the first value provided.
 * _**const std::map<std::string_view, std::string_view, http::header_comparator>** get_headers() **const**:_ Returns a map containing all the headers present in the HTTP request.
 * _**const std::map<std::string_view, std::string_view, http::header_comparator>** get_cookies() **const**:_ Returns a map containing all the cookies present in the HTTP request.
 * _**const std::map<std::string_view, std::string_view, http::header_comparator>** get_footers() **const**:_ Returns a map containing all the footers present in the HTTP request (only for http 1.1 chunked encodings).
-* _**const std::map<std::string, std::string, http::arg_comparator>** get_args() **const**:_ Returns all the arguments present in the HTTP request. Arguments can be (1) querystring parameters, (2) path argument (in case of parametric endpoint, (3) parameters parsed from the HTTP request body if the body is in `application/x-www-form-urlencoded` or `multipart/form-data` formats and the postprocessor is enabled in the webserver (enabled by default).
+* _**const std::map<http_arg_value, std::string, http::arg_comparator>** get_args() **const**:_ Returns all the arguments present in the HTTP request. Arguments can be (1) querystring parameters, (2) path argument (in case of parametric endpoint, (3) parameters parsed from the HTTP request body if the body is in `application/x-www-form-urlencoded` or `multipart/form-data` formats and the postprocessor is enabled in the webserver (enabled by default). For each key, arguments are collected in a domain object that allows to collect multiple arguments with the same key while keeping the access transparent in the most common case of a single value provided per key.
+* _**const std::map<std::string, std::string, http::arg_comparator>** get_args_flat() **const**:_ Returns all the arguments as the `get_args` method but as strings. If multiple values are provided with the same key, this method will only return the first value provided.
 * _**const std::map<std::string, std::map<std::string, http::file_info>>** get_files() **const**:_ Returns information about all the uploaded files (if the files are stored to disk). This information includes the key (as identifier of the outer map), the original file name (as identifier of the inner map) and a class `file_info`, which includes the size of the file and the path to the file in the file system.
 * _**const std::string&** get_content() **const**:_ Returns the body of the HTTP request.
 * _**bool**  content_too_large() **const**:_ Returns `true` if the body length of the HTTP request sent by the client is longer than the max allowed on the server.
@@ -589,6 +591,14 @@ Details on the `http::file_info` structure.
 * _**const std::string** get_file_system_file_name() **const**:_ Returns the name of the file uploaded through the HTTP request as stored on the filesystem.
 * _**const std::string** get_content_type() **const**:_ Returns the content type of the file uploaded through the HTTP request.
 * _**const std::string** get_transfer_encoding() **const**:_ Returns the transfer encoding of the file uploaded through the HTTP request.
+
+Details on the `http_arg_value` structure.
+
+* _**std::string_view** get_flat_value() **const**:_ Returns only the first value provided for the key.
+* _**std::vector<std::string_view>** get_all_values() **const**:_ Returns all the values provided for the key.
+* _**operator** std::string() **const**:_ Converts the http_arg_value to a string with the same logic as `get_flat_value`.
+* _**operator** std::string_view() **const**:_ Converts the http_arg_value to a string_view with the same logic as `get_flat_value`.
+* _**operator** std::vector<std::string>() **const**:_ Converts the http_arg_value to a std::vector<std::string> with the same logic as `get_value`.
 
 #### Example of handler reading arguments from a request
 ```cpp
