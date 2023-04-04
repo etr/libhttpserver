@@ -239,7 +239,7 @@ class file_response_resource_default_content_type : public http_resource {
          return shared_ptr<file_response>(new file_response("test_content", 200));
      }
 };
-#endif // HTTPSERVER_NO_LOCAL_FS
+#endif  // HTTPSERVER_NO_LOCAL_FS
 
 class file_response_resource_missing : public http_resource {
  public:
@@ -255,7 +255,7 @@ class file_response_resource_dir : public http_resource {
          return shared_ptr<file_response>(new file_response("integ", 200));
      }
 };
-#endif // HTTPSERVER_NO_LOCAL_FS
+#endif  // HTTPSERVER_NO_LOCAL_FS
 
 class exception_resource : public http_resource {
  public:
@@ -984,7 +984,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource_default_content_type)
     LT_CHECK_EQ(ss["Content-Type"], "application/octet-stream");
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(file_serving_resource_default_content_type)
-#endif // HTTPSERVER_NO_LOCAL_FS
+#endif  // HTTPSERVER_NO_LOCAL_FS
 
 LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource_missing)
     file_response_resource_missing resource;
@@ -1032,7 +1032,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource_dir)
 
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(file_serving_resource_dir)
-#endif // HTTPSERVER_NO_LOCAL_FS
+#endif  // HTTPSERVER_NO_LOCAL_FS
 
 LT_BEGIN_AUTO_TEST(basic_suite, exception_forces_500)
     exception_resource resource;
