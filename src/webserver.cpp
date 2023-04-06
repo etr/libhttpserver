@@ -198,7 +198,7 @@ bool webserver::register_resource(const std::string& resource, http_resource* hr
 
     pair<map<details::http_endpoint, http_resource*>::iterator, bool> result = registered_resources.insert(map<details::http_endpoint, http_resource*>::value_type(idx, hrm));
 
-    if (result.second) {
+    if (!family && result.second) {
         registered_resources_str.insert(pair<string, http_resource*>(idx.get_url_complete(), result.first->second));
     }
 
