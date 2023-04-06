@@ -47,7 +47,7 @@ using std::shared_ptr;
 
 #define STR2(p) #p
 #define STR(p) STR2(p)
-#define PORTS STR(PORT)
+#define PORT_STRING STR(PORT)
 
 size_t writefunc(void *ptr, size_t size, size_t nmemb, std::string *s) {
     s->append(reinterpret_cast<char*>(ptr), size*nmemb);
@@ -90,7 +90,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, start_stop)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORTS "/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -112,7 +112,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, start_stop)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORTS "/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -134,7 +134,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, start_stop)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORTS "/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -160,7 +160,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ipv6)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "http://localhost:" PORTS "/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "http://localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V6);
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
@@ -185,7 +185,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, dual_stack)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "http://localhost:" PORTS "/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "http://localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V6);
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
@@ -212,7 +212,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, sweet_kill)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORTS "/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -229,7 +229,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, sweet_kill)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORTS "/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -259,7 +259,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, disable_options)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORTS "/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -287,7 +287,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, enable_options)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORTS "/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -342,7 +342,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, single_resource)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORTS "/any/url/works");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/any/url/works");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -399,7 +399,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, tuning_options)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORTS "/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -427,7 +427,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_base)
     CURLcode res;
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);  // avoid verifying ssl
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);  // avoid verifying ssl
-    curl_easy_setopt(curl, CURLOPT_URL, "https://localhost:" PORTS "/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "https://localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -457,7 +457,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_with_protocol_priorities)
     CURLcode res;
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);  // avoid verifying ssl
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);  // avoid verifying ssl
-    curl_easy_setopt(curl, CURLOPT_URL, "https://localhost:" PORTS "/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "https://localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -486,7 +486,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_with_trust)
     CURLcode res;
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);  // avoid verifying ssl
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);  // avoid verifying ssl
-    curl_easy_setopt(curl, CURLOPT_URL, "https://localhost:" PORTS "/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "https://localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -519,7 +519,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, blocking_server)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORTS "/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -549,7 +549,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_error_resources)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORTS "/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -564,7 +564,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_error_resources)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORTS "/not_registered");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/not_registered");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -586,7 +586,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_error_resources)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORTS "/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "PUT");
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
