@@ -208,7 +208,7 @@ class static_resource : public http_resource {
  public:
      static_resource(std::string r) : resp(std::move(r)) {}
 
-     shared_ptr<http_response> render_GET(const http_request& req) {
+     shared_ptr<http_response> render_GET(const http_request&) {
          return shared_ptr<string_response>(new string_response(resp, 200, "text/plain"));
      }
 
