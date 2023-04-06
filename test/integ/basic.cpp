@@ -204,6 +204,17 @@ class nok_resource : public http_resource {
      }
 };
 
+class static_resource : public http_resource {
+ public:
+     static_resource(std::string r) : resp(std::move(r)) {}
+
+     shared_ptr<http_response> render_GET(const http_request& req) {
+         return shared_ptr<string_response>(new string_response(resp, 200, "text/plain"));
+     }
+
+     std::string resp;
+};
+
 class no_response_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request&) {
@@ -357,6 +368,68 @@ LT_BEGIN_AUTO_TEST(basic_suite, two_endpoints)
         curl_easy_cleanup(curl);
     }
 LT_END_AUTO_TEST(two_endpoints)
+
+LT_BEGIN_AUTO_TEST(basic_suite, duplicate_endpoints)
+    ok_resource ok1, ok2;
+    LT_CHECK_EQ(true, ws->register_resource("OK", &ok1));
+
+    // All of these collide and the registration fails
+    LT_CHECK_EQ(false, ws->register_resource("OK", &ok2));
+    LT_CHECK_EQ(false, ws->register_resource("/OK", &ok2));
+    LT_CHECK_EQ(false, ws->register_resource("/OK/", &ok2));
+    LT_CHECK_EQ(false, ws->register_resource("OK/", &ok2));
+
+    // Check how family interacts.
+    LT_CHECK_EQ(false, ws->register_resource("OK", &ok2, true));
+
+    // Check that switched case does the right thing, whatever that is here.
+#ifdef CASE_INSENSITIVE
+    LT_CHECK_EQ(true, ws->register_resource("ok", &ok2));
+#else
+    LT_CHECK_EQ(false, ws->register_resource("ok", &ok2));
+#endif
+LT_END_AUTO_TEST(duplicate_endpoints)
+
+LT_BEGIN_AUTO_TEST(basic_suite, overlapping_endpoints)
+    // Setup two different resources that can both match the same URL.
+    static_resource ok1("1"), ok2("2");
+    LT_CHECK_EQ(true, ws->register_resource("/foo/{var|([a-z]+)}/", &ok1));
+    LT_CHECK_EQ(true, ws->register_resource("/{var|([a-z]+)}/bar/", &ok2));
+
+    curl_global_init(CURL_GLOBAL_ALL);
+
+    {
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/foo/bar/");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "2");   // Not sure why regex wins, but it does...
+    curl_easy_cleanup(curl);
+    }
+
+    static_resource ok3("3");
+    LT_CHECK_EQ(true, ws->register_resource("/foo/bar/", &ok3));
+
+    {
+    // Check that an exact, non-RE match overrides both patterns.
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/foo/bar/");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "3");
+    curl_easy_cleanup(curl);
+    }
+LT_END_AUTO_TEST(overlapping_endpoints)
 
 LT_BEGIN_AUTO_TEST(basic_suite, read_body)
     simple_resource resource;
@@ -1165,6 +1238,28 @@ LT_BEGIN_AUTO_TEST(basic_suite, url_with_regex_like_pieces)
     LT_CHECK_EQ(s, "settings,{},");
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(url_with_regex_like_pieces)
+
+LT_BEGIN_AUTO_TEST(basic_suite, non_family_url_with_regex_like_pieces)
+    ok_resource resource;
+    ws->register_resource("/settings", &resource);
+    curl_global_init(CURL_GLOBAL_ALL);
+
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/settings/{}");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+
+    int64_t http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE , &http_code);
+    LT_ASSERT_EQ(http_code, 404) ;
+
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(non_family_url_with_regex_like_pieces)
 
 LT_BEGIN_AUTO_TEST(basic_suite, method_not_allowed_header)
     simple_resource resource;
