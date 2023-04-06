@@ -384,8 +384,10 @@ LT_BEGIN_AUTO_TEST(basic_suite, duplicate_endpoints)
 
     // Check that switched case does the right thing, whatever that is here.
 #ifdef CASE_INSENSITIVE
-    LT_CHECK_EQ(true, ws->register_resource("ok", &ok2));
+    LT_CHECK_EQ(false, ws->register_resource("ok", &ok2));
 #else
+    // TODO: this should be true.
+    // However, http_endpoint::operator< is always case-insensitive
     LT_CHECK_EQ(false, ws->register_resource("ok", &ok2));
 #endif
 LT_END_AUTO_TEST(duplicate_endpoints)
