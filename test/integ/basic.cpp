@@ -1256,10 +1256,56 @@ LT_BEGIN_AUTO_TEST(basic_suite, non_family_url_with_regex_like_pieces)
 
     int64_t http_code = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE , &http_code);
-    LT_ASSERT_EQ(http_code, 404) ;
+    LT_ASSERT_EQ(http_code, 404);
 
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(non_family_url_with_regex_like_pieces)
+
+LT_BEGIN_AUTO_TEST(basic_suite, regex_url_exact_match)
+    ok_resource resource;
+    ws->register_resource("/foo/{v|[a-z]}/bar", &resource);
+    curl_global_init(CURL_GLOBAL_ALL);
+
+    {
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/foo/a/bar/");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+
+    int64_t http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE , &http_code);
+    LT_ASSERT_EQ(http_code, 200);
+
+    LT_CHECK_EQ(s, "OK");
+    curl_easy_cleanup(curl);
+    }
+
+    {
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/foo/{v|[a-z]}/bar/");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+
+    int64_t http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE , &http_code);
+#if 0    //  https://github.com/etr/libhttpserver/issues/308
+    LT_ASSERT_EQ(http_code, 404);
+#else
+    LT_ASSERT_EQ(http_code, 200);
+#endif
+    curl_easy_cleanup(curl);
+    }
+LT_END_AUTO_TEST(regex_url_exact_match)
 
 LT_BEGIN_AUTO_TEST(basic_suite, method_not_allowed_header)
     simple_resource resource;
