@@ -62,15 +62,17 @@ jobs:
             cc-compiler: clang++-13
             debug: debug
             coverage: nocoverage
-          - test-group: extra
-            os: ubuntu-18.04
-            os-type: ubuntu
-            build-type: msan
-            compiler-family: clang
-            c-compiler: clang-6.0
-            cc-compiler: clang++-6.0
-            debug: debug
-            coverage: nocoverage
+          # This test gives false positives on newer versions of clang
+          # and ubuntu-18.04 is not supported anymore on github
+          #- test-group: extra
+          #  os: ubuntu-18.04
+          #  os-type: ubuntu
+          #  build-type: msan
+          #  compiler-family: clang
+          #  c-compiler: clang-6.0
+          #  cc-compiler: clang++-6.0
+          #  debug: debug
+          #  coverage: nocoverage
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
@@ -132,15 +134,6 @@ jobs:
             compiler-family: gcc
             c-compiler: gcc-10
             cc-compiler: g++-10
-            debug: nodebug
-            coverage: nocoverage
-          - test-group: extra
-            os: ubuntu-18.04
-            os-type: ubuntu
-            build-type: none
-            compiler-family: clang
-            c-compiler: clang-5.0
-            cc-compiler: clang++-5.0
             debug: nodebug
             coverage: nocoverage
           - test-group: extra
