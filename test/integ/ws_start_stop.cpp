@@ -39,6 +39,16 @@
 
 using std::shared_ptr;
 
+#ifdef HTTPSERVER_PORT
+#define PORT HTTPSERVER_PORT
+#else
+#define PORT 8080
+#endif  // PORT
+
+#define STR2(p) #p
+#define STR(p) STR2(p)
+#define PORT_STRING STR(PORT)
+
 size_t writefunc(void *ptr, size_t size, size_t nmemb, std::string *s) {
     s->append(reinterpret_cast<char*>(ptr), size*nmemb);
     return size*nmemb;
@@ -71,7 +81,7 @@ LT_END_SUITE(ws_start_stop_suite)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, start_stop)
     { // NOLINT (internal scope opening - not method start)
-    httpserver::webserver ws = httpserver::create_webserver(8080);
+    httpserver::webserver ws = httpserver::create_webserver(PORT);
     ok_resource ok;
     ws.register_resource("base", &ok);
     ws.start(false);
@@ -80,7 +90,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, start_stop)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -93,7 +103,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, start_stop)
     }
 
     {
-    httpserver::webserver ws = httpserver::create_webserver(8080).start_method(httpserver::http::http_utils::INTERNAL_SELECT);
+    httpserver::webserver ws = httpserver::create_webserver(PORT).start_method(httpserver::http::http_utils::INTERNAL_SELECT);
     ok_resource ok;
     ws.register_resource("base", &ok);
     ws.start(false);
@@ -102,7 +112,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, start_stop)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -115,7 +125,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, start_stop)
     }
 
     {
-    httpserver::webserver ws = httpserver::create_webserver(8080).start_method(httpserver::http::http_utils::THREAD_PER_CONNECTION);
+    httpserver::webserver ws = httpserver::create_webserver(PORT).start_method(httpserver::http::http_utils::THREAD_PER_CONNECTION);
     ok_resource ok;
     ws.register_resource("base", &ok);
     ws.start(false);
@@ -124,7 +134,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, start_stop)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -141,7 +151,7 @@ LT_END_AUTO_TEST(start_stop)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ipv6)
     { // NOLINT (internal scope opening - not method start)
-    httpserver::webserver ws = httpserver::create_webserver(8080).use_ipv6();
+    httpserver::webserver ws = httpserver::create_webserver(PORT).use_ipv6();
     ok_resource ok;
     ws.register_resource("base", &ok);
     ws.start(false);
@@ -150,7 +160,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ipv6)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "http://localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "http://localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V6);
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
@@ -166,7 +176,7 @@ LT_END_AUTO_TEST(ipv6)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, dual_stack)
     { // NOLINT (internal scope opening - not method start)
-    httpserver::webserver ws = httpserver::create_webserver(8080).use_dual_stack();
+    httpserver::webserver ws = httpserver::create_webserver(PORT).use_dual_stack();
     ok_resource ok;
     ws.register_resource("base", &ok);
     ws.start(false);
@@ -175,7 +185,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, dual_stack)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "http://localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "http://localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V6);
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
@@ -192,7 +202,7 @@ LT_END_AUTO_TEST(dual_stack)
 #endif
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, sweet_kill)
-    httpserver::webserver ws = httpserver::create_webserver(8080);
+    httpserver::webserver ws = httpserver::create_webserver(PORT);
     ok_resource ok;
     ws.register_resource("base", &ok);
     ws.start(false);
@@ -202,7 +212,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, sweet_kill)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -219,7 +229,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, sweet_kill)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -230,7 +240,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, sweet_kill)
 LT_END_AUTO_TEST(sweet_kill)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, disable_options)
-    httpserver::webserver ws = httpserver::create_webserver(8080)
+    httpserver::webserver ws = httpserver::create_webserver(PORT)
         .no_ssl()
         .no_ipv6()
         .no_debug()
@@ -249,7 +259,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, disable_options)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -262,7 +272,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, disable_options)
 LT_END_AUTO_TEST(disable_options)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, enable_options)
-    httpserver::webserver ws = httpserver::create_webserver(8080)
+    httpserver::webserver ws = httpserver::create_webserver(PORT)
         .debug()
         .pedantic()
         .deferred()
@@ -277,7 +287,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, enable_options)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -323,7 +333,7 @@ LT_END_AUTO_TEST(custom_socket)
 #endif
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, single_resource)
-    httpserver::webserver ws = httpserver::create_webserver(8080).single_resource();
+    httpserver::webserver ws = httpserver::create_webserver(PORT).single_resource();
     ok_resource ok;
     ws.register_resource("/", &ok, true);
     ws.start(false);
@@ -332,7 +342,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, single_resource)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/any/url/works");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/any/url/works");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -345,7 +355,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, single_resource)
 LT_END_AUTO_TEST(single_resource)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, single_resource_not_default_resource)
-    httpserver::webserver ws = httpserver::create_webserver(8080).single_resource();
+    httpserver::webserver ws = httpserver::create_webserver(PORT).single_resource();
     ok_resource ok;
     LT_CHECK_THROW(ws.register_resource("/other", &ok, true));
     LT_CHECK_THROW(ws.register_resource("/", &ok, false));
@@ -356,7 +366,7 @@ LT_END_AUTO_TEST(single_resource_not_default_resource)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, thread_per_connection_fails_with_max_threads)
     { // NOLINT (internal scope opening - not method start)
-    httpserver::webserver ws = httpserver::create_webserver(8080)
+    httpserver::webserver ws = httpserver::create_webserver(PORT)
         .start_method(httpserver::http::http_utils::THREAD_PER_CONNECTION)
         .max_threads(5);
     LT_CHECK_THROW(ws.start(false));
@@ -365,7 +375,7 @@ LT_END_AUTO_TEST(thread_per_connection_fails_with_max_threads)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, thread_per_connection_fails_with_max_threads_stack_size)
     { // NOLINT (internal scope opening - not method start)
-    httpserver::webserver ws = httpserver::create_webserver(8080)
+    httpserver::webserver ws = httpserver::create_webserver(PORT)
         .start_method(httpserver::http::http_utils::THREAD_PER_CONNECTION)
         .max_thread_stack_size(4*1024*1024);
     LT_CHECK_THROW(ws.start(false));
@@ -373,7 +383,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, thread_per_connection_fails_with_max_thr
 LT_END_AUTO_TEST(thread_per_connection_fails_with_max_threads_stack_size)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, tuning_options)
-    httpserver::webserver ws = httpserver::create_webserver(8080)
+    httpserver::webserver ws = httpserver::create_webserver(PORT)
         .max_connections(10)
         .max_threads(10)
         .memory_limit(10000)
@@ -389,7 +399,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, tuning_options)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -402,7 +412,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, tuning_options)
 LT_END_AUTO_TEST(tuning_options)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_base)
-    httpserver::webserver ws = httpserver::create_webserver(8080)
+    httpserver::webserver ws = httpserver::create_webserver(PORT)
         .use_ssl()
         .https_mem_key("key.pem")
         .https_mem_cert("cert.pem");
@@ -417,7 +427,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_base)
     CURLcode res;
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);  // avoid verifying ssl
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);  // avoid verifying ssl
-    curl_easy_setopt(curl, CURLOPT_URL, "https://localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "https://localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -431,7 +441,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_base)
 LT_END_AUTO_TEST(ssl_base)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_with_protocol_priorities)
-    httpserver::webserver ws = httpserver::create_webserver(8080)
+    httpserver::webserver ws = httpserver::create_webserver(PORT)
         .use_ssl()
         .https_mem_key("key.pem")
         .https_mem_cert("cert.pem")
@@ -447,7 +457,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_with_protocol_priorities)
     CURLcode res;
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);  // avoid verifying ssl
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);  // avoid verifying ssl
-    curl_easy_setopt(curl, CURLOPT_URL, "https://localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "https://localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -460,7 +470,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_with_protocol_priorities)
 LT_END_AUTO_TEST(ssl_with_protocol_priorities)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_with_trust)
-    httpserver::webserver ws = httpserver::create_webserver(8080)
+    httpserver::webserver ws = httpserver::create_webserver(PORT)
         .use_ssl()
         .https_mem_key("key.pem")
         .https_mem_cert("cert.pem")
@@ -476,7 +486,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_with_trust)
     CURLcode res;
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);  // avoid verifying ssl
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);  // avoid verifying ssl
-    curl_easy_setopt(curl, CURLOPT_URL, "https://localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "https://localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -498,7 +508,7 @@ void* start_ws_blocking(void* par) {
 }
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, blocking_server)
-    httpserver::webserver ws = httpserver::create_webserver(8080);
+    httpserver::webserver ws = httpserver::create_webserver(PORT);
 
     pthread_t tid;
     pthread_create(&tid, nullptr, start_ws_blocking, reinterpret_cast<void*>(&ws));
@@ -509,7 +519,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, blocking_server)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -526,7 +536,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, blocking_server)
 LT_END_AUTO_TEST(blocking_server)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_error_resources)
-    httpserver::webserver ws = httpserver::create_webserver(8080)
+    httpserver::webserver ws = httpserver::create_webserver(PORT)
         .not_found_resource(not_found_custom)
         .method_not_allowed_resource(not_allowed_custom);
 
@@ -539,7 +549,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_error_resources)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -554,7 +564,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_error_resources)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/not_registered");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/not_registered");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -576,7 +586,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_error_resources)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "PUT");
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
