@@ -423,7 +423,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, family_endpoints)
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
-    LT_CHECK_EQ(s, "1");   // Not sure why regex wins, but it does...
+    LT_CHECK_EQ(s, "1");
     curl_easy_cleanup(curl);
     }
 
@@ -437,7 +437,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, family_endpoints)
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
-    LT_CHECK_EQ(s, "1");   // Not sure why regex wins, but it does...
+    LT_CHECK_EQ(s, "1");
     curl_easy_cleanup(curl);
     }
 
@@ -466,7 +466,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, family_endpoints)
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
-    LT_CHECK_EQ(s, "1");   // Not sure why regex wins, but it does...
+    LT_CHECK_EQ(s, "1");
     curl_easy_cleanup(curl);
     }
 
@@ -480,7 +480,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, family_endpoints)
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
-    LT_CHECK_EQ(s, "1");   // Not sure why regex wins, but it does...
+    LT_CHECK_EQ(s, "1");
     curl_easy_cleanup(curl);
     }
 
