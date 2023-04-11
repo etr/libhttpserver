@@ -21,6 +21,10 @@
 #ifndef SRC_HTTPSERVER_HPP_
 #define SRC_HTTPSERVER_HPP_
 
+#if __cplusplus < 201703L
+#  error("libhttpserver requiers C++17 or later.")
+#endif
+
 #define _HTTPSERVER_HPP_INSIDE_
 
 #include "httpserver/basic_auth_fail_response.hpp"
