@@ -418,7 +418,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, overlapping_endpoints)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/foo/bar/");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/foo/bar/");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -436,7 +436,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, overlapping_endpoints)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/foo/bar/");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/foo/bar/");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1267,7 +1267,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, non_family_url_with_regex_like_pieces)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/settings/{}");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/settings/{}");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1290,7 +1290,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, regex_url_exact_match)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/foo/a/bar/");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/foo/a/bar/");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1309,7 +1309,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, regex_url_exact_match)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/foo/{v|[a-z]}/bar/");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/foo/{v|[a-z]}/bar/");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
