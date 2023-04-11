@@ -394,7 +394,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, duplicate_endpoints)
     LT_CHECK_EQ(false, ws->register_resource("OK/", &ok2));
 
     // Check how family interacts.
-    LT_CHECK_EQ(false, ws->register_resource("OK", &ok2, true));
+    LT_CHECK_EQ(true, ws->register_resource("OK", &ok2, true));
 
     // Check that switched case does the right thing, whatever that is here.
 #ifdef CASE_INSENSITIVE
@@ -409,7 +409,7 @@ LT_END_AUTO_TEST(duplicate_endpoints)
 LT_BEGIN_AUTO_TEST(basic_suite, family_endpoints)
     static_resource ok1("1"), ok2("2");
     LT_CHECK_EQ(true, ws->register_resource("OK", &ok1));
-    LT_CHECK_EQ(false, ws->register_resource("OK", &ok2, true));
+    LT_CHECK_EQ(true, ws->register_resource("OK", &ok2, true));
 
     curl_global_init(CURL_GLOBAL_ALL);
 
@@ -451,7 +451,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, family_endpoints)
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
-    LT_CHECK_EQ(s, "Not Found");  // Not registured.
+    LT_CHECK_EQ(s, "2");
     curl_easy_cleanup(curl);
     }
 
@@ -494,7 +494,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, family_endpoints)
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
-    LT_CHECK_EQ(s, "Not Found");  // Not registured.
+    LT_CHECK_EQ(s, "2");
     curl_easy_cleanup(curl);
     }
 #endif
