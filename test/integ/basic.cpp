@@ -406,6 +406,100 @@ LT_BEGIN_AUTO_TEST(basic_suite, duplicate_endpoints)
 #endif
 LT_END_AUTO_TEST(duplicate_endpoints)
 
+LT_BEGIN_AUTO_TEST(basic_suite, family_endpoints)
+    static_resource ok1("1"), ok2("2");
+    LT_CHECK_EQ(true, ws->register_resource("OK", &ok1));
+    LT_CHECK_EQ(false, ws->register_resource("OK", &ok2, true));
+
+    curl_global_init(CURL_GLOBAL_ALL);
+
+    {
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/OK");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "1");   // Not sure why regex wins, but it does...
+    curl_easy_cleanup(curl);
+    }
+
+    {
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/OK/");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "1");   // Not sure why regex wins, but it does...
+    curl_easy_cleanup(curl);
+    }
+
+    {
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/OK/go");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "Not Found");  // Not registured.
+    curl_easy_cleanup(curl);
+    }
+
+#ifdef CASE_INSENSITIVE
+    {
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/OK");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "1");   // Not sure why regex wins, but it does...
+    curl_easy_cleanup(curl);
+    }
+
+    {
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/OK/");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "1");   // Not sure why regex wins, but it does...
+    curl_easy_cleanup(curl);
+    }
+
+    {
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/OK/go");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "Not Found");  // Not registured.
+    curl_easy_cleanup(curl);
+    }
+#endif
+LT_END_AUTO_TEST(family_endpoints)
+
 LT_BEGIN_AUTO_TEST(basic_suite, overlapping_endpoints)
     // Setup two different resources that can both match the same URL.
     static_resource ok1("1"), ok2("2");
