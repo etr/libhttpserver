@@ -142,6 +142,7 @@ http_endpoint& http_endpoint::operator =(const http_endpoint& h) {
 }
 
 bool http_endpoint::operator <(const http_endpoint& b) const {
+    if (family_url != b.family_url) return family_url;
     COMPARATOR(url_normalized, b.url_normalized, std::toupper);
 }
 
