@@ -76,7 +76,7 @@ static bool file_exists(const string &path) {
     return (stat(path.c_str(), &sb) == 0);
 }
 
-static CURLcode send_file_to_webserver(bool add_second_file, bool append_parameters) {
+static std::pair<CURLcode, long> send_file_to_webserver(bool add_second_file, bool append_parameters) {
     curl_global_init(CURL_GLOBAL_ALL);
 
     CURL *curl = curl_easy_init();
@@ -102,13 +102,15 @@ static CURLcode send_file_to_webserver(bool add_second_file, bool append_paramet
     curl_easy_setopt(curl, CURLOPT_MIMEPOST, form);
 
     res = curl_easy_perform(curl);
+    long http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
 
     curl_easy_cleanup(curl);
     curl_mime_free(form);
-    return res;
+    return {res, http_code};
 }
 
-static CURLcode send_large_file(string* content, std::string args = "") {
+static std::pair<CURLcode, long> send_large_file(string* content, std::string args = "") {
     // Generate a large (100K) file of random bytes. Upload the file with
     // a curl request, then delete the file. The default chunk size of MHD
     // appears to be around 16K, so 100K should be enough to trigger the
@@ -139,14 +141,16 @@ static CURLcode send_large_file(string* content, std::string args = "") {
     curl_easy_setopt(curl, CURLOPT_MIMEPOST, form);
 
     res = curl_easy_perform(curl);
+    long http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
 
     curl_easy_cleanup(curl);
     curl_mime_free(form);
 
-    return res;
+    return {res, http_code};
 }
 
-static bool send_file_via_put() {
+static std::tuple<bool, CURLcode, long> send_file_via_put() {
     curl_global_init(CURL_GLOBAL_ALL);
 
     CURL *curl;
@@ -156,17 +160,17 @@ static bool send_file_via_put() {
 
     fd = fopen(TEST_CONTENT_FILEPATH, "rb");
     if (!fd) {
-        return false;
+        return {false, CURLcode{}, 0L};
     }
 
     if (fstat(fileno(fd), &file_info) != 0) {
-        return false;
+        return {false, CURLcode{}, 0L};
     }
 
     curl = curl_easy_init();
     if (!curl) {
         fclose(fd);
-        return false;
+        return {false, CURLcode{}, 0L};
     }
 
     curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/upload");
@@ -175,13 +179,14 @@ static bool send_file_via_put() {
     curl_easy_setopt(curl, CURLOPT_INFILESIZE_LARGE, (curl_off_t) file_info.st_size);
 
     res = curl_easy_perform(curl);
+    long http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+
     curl_easy_cleanup(curl);
 
     fclose(fd);
-    if (res == CURLE_OK) {
-        return true;
-    }
-    return false;
+
+    return {true, res, http_code};
 }
 
 class print_file_upload_resource : public http_resource {
@@ -267,8 +272,9 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk)
     print_file_upload_resource resource;
     ws->register_resource("upload", &resource);
 
-    CURLcode res = send_file_to_webserver(false, false);
-    LT_ASSERT_EQ(res, 0);
+    auto res = send_file_to_webserver(false, false);
+    LT_ASSERT_EQ(res.first, 0);
+    LT_ASSERT_EQ(res.second, 201);
 
     ws->stop();
     delete ws;
@@ -316,8 +322,10 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_via_put)
     print_file_upload_resource resource;
     ws->register_resource("upload", &resource);
 
-    int ret = send_file_via_put();
-    LT_ASSERT_EQ(ret, true);
+    auto ret = send_file_via_put();
+    LT_CHECK_EQ(std::get<1>(ret), 0);
+    LT_CHECK_EQ(std::get<2>(ret), 200);
+    LT_ASSERT_EQ(std::get<0>(ret), true);
 
     string actual_content = resource.get_content();
     LT_CHECK_EQ(actual_content, TEST_CONTENT);
@@ -347,8 +355,9 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_additional_par
     print_file_upload_resource resource;
     ws->register_resource("upload", &resource);
 
-    CURLcode res = send_file_to_webserver(false, true);
-    LT_ASSERT_EQ(res, 0);
+    auto res = send_file_to_webserver(false, true);
+    LT_ASSERT_EQ(res.first, 0);
+    LT_ASSERT_EQ(res.second, 201);
 
     ws->stop();
     delete ws;
@@ -401,8 +410,9 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_two_files)
     print_file_upload_resource resource;
     ws->register_resource("upload", &resource);
 
-    CURLcode res = send_file_to_webserver(true, false);
-    LT_ASSERT_EQ(res, 0);
+    auto res = send_file_to_webserver(true, false);
+    LT_ASSERT_EQ(res.first, 0);
+    LT_ASSERT_EQ(res.second, 201);
 
     ws->stop();
     delete ws;
@@ -470,8 +480,9 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_disk_only)
     print_file_upload_resource resource;
     ws->register_resource("upload", &resource);
 
-    CURLcode res = send_file_to_webserver(false, false);
-    LT_ASSERT_EQ(res, 0);
+    auto res = send_file_to_webserver(false, false);
+    LT_ASSERT_EQ(res.first, 0);
+    LT_ASSERT_EQ(res.second, 201);
 
     ws->stop();
     delete ws;
@@ -513,8 +524,9 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_only_incl_content)
     print_file_upload_resource resource;
     ws->register_resource("upload", &resource);
 
-    CURLcode res = send_file_to_webserver(false, false);
-    LT_ASSERT_EQ(res, 0);
+    auto res = send_file_to_webserver(false, false);
+    LT_ASSERT_EQ(res.first, 0);
+    LT_ASSERT_EQ(res.second, 201);
 
     string actual_content = resource.get_content();
     LT_CHECK_EQ(actual_content.find(FILENAME_IN_GET_CONTENT) != string::npos, true);
@@ -548,8 +560,9 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_large_content)
 
     // Upload a large file to trigger the chunking behavior of MHD.
     std::string file_content;
-    CURLcode res = send_large_file(&file_content);
-    LT_ASSERT_EQ(res, 0);
+    auto res = send_large_file(&file_content);
+    LT_ASSERT_EQ(res.first, 0);
+    LT_ASSERT_EQ(res.second, 201);
 
     string actual_content = resource.get_content();
     LT_CHECK_EQ(actual_content.find(LARGE_FILENAME_IN_GET_CONTENT) != string::npos, true);
@@ -589,8 +602,9 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_large_content_with_args)
     // Upload a large file to trigger the chunking behavior of MHD.
     // Include some additional args to make sure those are processed as well.
     std::string file_content;
-    CURLcode res = send_large_file(&file_content, "?arg1=hello&arg1=world");
-    LT_ASSERT_EQ(res, 0);
+    auto res = send_large_file(&file_content, "?arg1=hello&arg1=world");
+    LT_ASSERT_EQ(res.first, 0);
+    LT_ASSERT_EQ(res.second, 201);
 
     string actual_content = resource.get_content();
     LT_CHECK_EQ(actual_content.find(LARGE_FILENAME_IN_GET_CONTENT) != string::npos, true);
@@ -632,8 +646,9 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_only_excl_content)
     print_file_upload_resource resource;
     ws->register_resource("upload", &resource);
 
-    CURLcode res = send_file_to_webserver(false, false);
-    LT_ASSERT_EQ(res, 0);
+    auto res = send_file_to_webserver(false, false);
+    LT_ASSERT_EQ(res.first, 0);
+    LT_ASSERT_EQ(res.second, 201);
 
     string actual_content = resource.get_content();
     LT_CHECK_EQ(actual_content.size(), 0);
