@@ -36,6 +36,16 @@ using httpserver::string_response;
 using httpserver::http_request;
 using httpserver::http::http_utils;
 
+#ifdef HTTPSERVER_PORT
+#define PORT HTTPSERVER_PORT
+#else
+#define PORT 8080
+#endif  // PORT
+
+#define STR2(p) #p
+#define STR(p) STR2(p)
+#define PORT_STRING STR(PORT)
+
 size_t writefunc(void *ptr, size_t size, size_t nmemb, std::string *s) {
     s->append(reinterpret_cast<char*>(ptr), size*nmemb);
     return size*nmemb;
@@ -57,7 +67,7 @@ LT_BEGIN_SUITE(ban_system_suite)
 LT_END_SUITE(ban_system_suite)
 
 LT_BEGIN_AUTO_TEST(ban_system_suite, accept_default_ban_blocks)
-    webserver ws = create_webserver(8080).default_policy(http_utils::ACCEPT);
+    webserver ws = create_webserver(PORT).default_policy(http_utils::ACCEPT);
     ws.start(false);
 
     ok_resource resource;
@@ -69,7 +79,7 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, accept_default_ban_blocks)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -84,7 +94,7 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, accept_default_ban_blocks)
 
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     res = curl_easy_perform(curl);
     LT_ASSERT_NEQ(res, 0);
@@ -97,7 +107,7 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, accept_default_ban_blocks)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -112,7 +122,7 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, accept_default_ban_blocks)
 LT_END_AUTO_TEST(accept_default_ban_blocks)
 
 LT_BEGIN_AUTO_TEST(ban_system_suite, reject_default_allow_passes)
-    webserver ws = create_webserver(8080).default_policy(http_utils::REJECT);
+    webserver ws = create_webserver(PORT).default_policy(http_utils::REJECT);
     ws.start(false);
 
     ok_resource resource;
@@ -123,7 +133,7 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, reject_default_allow_passes)
     {
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     res = curl_easy_perform(curl);
     LT_ASSERT_NEQ(res, 0);
@@ -136,7 +146,7 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, reject_default_allow_passes)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -151,7 +161,7 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, reject_default_allow_passes)
 
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     res = curl_easy_perform(curl);
     LT_ASSERT_NEQ(res, 0);

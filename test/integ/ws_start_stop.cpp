@@ -312,7 +312,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_socket)
     struct sockaddr_in address;
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = inet_addr("127.0.0.1");
-    address.sin_port = htons(8181);
+    address.sin_port = htons(PORT);
     bind(fd, (struct sockaddr*) &address, sizeof(address));
     listen(fd, 10000);
 
@@ -325,7 +325,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_socket)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8181/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);

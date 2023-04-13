@@ -35,6 +35,16 @@ using httpserver::http_resource;
 using httpserver::webserver;
 using httpserver::create_webserver;
 
+#ifdef HTTPSERVER_PORT
+#define PORT HTTPSERVER_PORT
+#else
+#define PORT 8080
+#endif  // PORT
+
+#define STR2(p) #p
+#define STR(p) STR2(p)
+#define PORT_STRING STR(PORT)
+
 class ok_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request&) {
@@ -46,7 +56,7 @@ LT_BEGIN_SUITE(threaded_suite)
     webserver* ws;
 
     void set_up() {
-        ws = new webserver(create_webserver(8080).tcp_nodelay());
+        ws = new webserver(create_webserver(PORT).tcp_nodelay());
         ws->start(false);
     }
 
@@ -65,7 +75,7 @@ LT_BEGIN_AUTO_TEST(threaded_suite, base)
     CURLcode res;
 
     curl = curl_easy_init();
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);

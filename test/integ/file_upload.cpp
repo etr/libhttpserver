@@ -48,8 +48,15 @@ using httpserver::webserver;
 using httpserver::create_webserver;
 using httpserver::http::arg_map;
 
+#ifdef HTTPSERVER_PORT
+#define PORT HTTPSERVER_PORT
+#else
+#define PORT 8080
+#endif  // PORT
+
 #define STR2(p) #p
 #define STR(p) STR2(p)
+#define PORT_STRING STR(PORT)
 
 #ifdef HTTPSERVER_DATA_ROOT
 #define ROOT STR(HTTPSERVER_DATA_ROOT)
@@ -108,7 +115,7 @@ static std::pair<CURLcode, long> send_file_to_webserver(bool add_second_file, bo
     }
 
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/upload");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/upload");
     curl_easy_setopt(curl, CURLOPT_MIMEPOST, form);
 
     res = curl_easy_perform(curl);
@@ -142,7 +149,7 @@ static std::pair<CURLcode, long> send_large_file(string* content, std::string ar
     curl_mime_name(field, LARGE_KEY);
     curl_mime_filedata(field, LARGE_CONTENT_FILEPATH);
 
-    std::string url = "localhost:8080/upload";
+    std::string url = "localhost:" PORT_STRING "/upload";
     if (!args.empty()) {
         url.append(args);
     }
@@ -183,7 +190,7 @@ static std::tuple<bool, CURLcode, long> send_file_via_put() {
         return {false, CURLcode{}, 0L};
     }
 
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/upload");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/upload");
     curl_easy_setopt(curl, CURLOPT_UPLOAD, 1L);
     curl_easy_setopt(curl, CURLOPT_READDATA, fd);
     curl_easy_setopt(curl, CURLOPT_INFILESIZE_LARGE, (curl_off_t) file_info.st_size);
@@ -271,7 +278,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk)
     string upload_directory = ".";
     webserver* ws;
 
-    ws = new webserver(create_webserver(8080)
+    ws = new webserver(create_webserver(PORT)
                        .put_processed_data_to_content()
                        .file_upload_target(httpserver::FILE_UPLOAD_MEMORY_AND_DISK)
                        .file_upload_dir(upload_directory)
@@ -321,7 +328,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_via_put)
     string upload_directory = ".";
     webserver* ws;
 
-    ws = new webserver(create_webserver(8080)
+    ws = new webserver(create_webserver(PORT)
                        .put_processed_data_to_content()
                        .file_upload_target(httpserver::FILE_UPLOAD_MEMORY_AND_DISK)
                        .file_upload_dir(upload_directory)
@@ -354,7 +361,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_additional_par
     string upload_directory = ".";
     webserver* ws;
 
-    ws = new webserver(create_webserver(8080)
+    ws = new webserver(create_webserver(PORT)
                        .put_processed_data_to_content()
                        .file_upload_target(httpserver::FILE_UPLOAD_MEMORY_AND_DISK)
                        .file_upload_dir(upload_directory)
@@ -409,7 +416,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_two_files)
     string upload_directory = ".";
     webserver* ws;
 
-    ws = new webserver(create_webserver(8080)
+    ws = new webserver(create_webserver(PORT)
                        .put_processed_data_to_content()
                        .file_upload_target(httpserver::FILE_UPLOAD_MEMORY_AND_DISK)
                        .file_upload_dir(upload_directory)
@@ -479,7 +486,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_disk_only)
     string upload_directory = ".";
     webserver* ws;
 
-    ws = new webserver(create_webserver(8080)
+    ws = new webserver(create_webserver(PORT)
                        .no_put_processed_data_to_content()
                        .file_upload_target(httpserver::FILE_UPLOAD_DISK_ONLY)
                        .file_upload_dir(upload_directory)
@@ -524,7 +531,7 @@ LT_END_AUTO_TEST(file_upload_disk_only)
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_only_incl_content)
     webserver* ws;
 
-    ws = new webserver(create_webserver(8080)
+    ws = new webserver(create_webserver(PORT)
                        .put_processed_data_to_content()
                        .file_upload_target(httpserver::FILE_UPLOAD_MEMORY_ONLY));
     ws->start(false);
@@ -557,7 +564,7 @@ LT_END_AUTO_TEST(file_upload_memory_only_incl_content)
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_large_content)
     webserver* ws;
 
-    ws = new webserver(create_webserver(8080)
+    ws = new webserver(create_webserver(PORT)
                        .put_processed_data_to_content()
                        .file_upload_target(httpserver::FILE_UPLOAD_MEMORY_ONLY));
     ws->start(false);
@@ -597,7 +604,7 @@ LT_END_AUTO_TEST(file_upload_large_content)
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_large_content_with_args)
     webserver* ws;
 
-    ws = new webserver(create_webserver(8080)
+    ws = new webserver(create_webserver(PORT)
                        .put_processed_data_to_content()
                        .file_upload_target(httpserver::FILE_UPLOAD_MEMORY_ONLY));
     ws->start(false);
@@ -643,7 +650,7 @@ LT_END_AUTO_TEST(file_upload_large_content_with_args)
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_only_excl_content)
     webserver* ws;
 
-    ws = new webserver(create_webserver(8080)
+    ws = new webserver(create_webserver(PORT)
                        .no_put_processed_data_to_content()
                        .file_upload_target(httpserver::FILE_UPLOAD_MEMORY_ONLY));
     ws->start(false);
