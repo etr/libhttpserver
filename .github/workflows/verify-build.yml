@@ -375,6 +375,11 @@ jobs:
         sudo apt-get install cppcheck ;
       if: ${{ matrix.os-type == 'ubuntu' }}
 
+    - name: Setup gnutls dependency (only on linux)
+      run: |
+        sudo apt-get install libgnutls28-dev ;
+      if: ${{ matrix.os-type == 'ubuntu' }}
+
     - name: Fetch libmicrohttpd from cache
       id: cache-libmicrohttpd
       uses: actions/cache@v2
@@ -384,7 +389,6 @@ jobs:
 
     - name: Build libmicrohttpd dependency (if not cached)
       run: |
-        sudo apt-get install libgnutls28-dev ;
         curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.64.tar.gz -o libmicrohttpd-0.9.64.tar.gz ;
         tar -xzf libmicrohttpd-0.9.64.tar.gz ;
         cd libmicrohttpd-0.9.64 ;
