@@ -512,7 +512,6 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_disk_only)
 LT_END_AUTO_TEST(file_upload_disk_only)
 
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_only_incl_content)
-    string upload_directory = ".";
     webserver* ws;
 
     ws = new webserver(create_webserver(8080)
@@ -546,7 +545,6 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_only_incl_content)
 LT_END_AUTO_TEST(file_upload_memory_only_incl_content)
 
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_large_content)
-    string upload_directory = ".";
     webserver* ws;
 
     ws = new webserver(create_webserver(8080)
@@ -587,7 +585,6 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_large_content)
 LT_END_AUTO_TEST(file_upload_large_content)
 
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_large_content_with_args)
-    string upload_directory = ".";
     webserver* ws;
 
     ws = new webserver(create_webserver(8080)
@@ -634,7 +631,6 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_large_content_with_args)
 LT_END_AUTO_TEST(file_upload_large_content_with_args)
 
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_only_excl_content)
-    string upload_directory = ".";
     webserver* ws;
 
     ws = new webserver(create_webserver(8080)
