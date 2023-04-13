@@ -374,7 +374,7 @@ jobs:
         sudo pip install codecov ;
         sudo pip install gcovr ;
         sudo apt-get install cppcheck ;
-      if: ${{ matrix.os-type == 'ubuntu' }}
+      if: ${{ matrix.os-type == 'discard' }}
 
     - name: Fetch libmicrohttpd from cache
       id: cache-libmicrohttpd
@@ -519,4 +519,4 @@ jobs:
       run: |
         cd build ;
         bash <(curl -s https://codecov.io/bash) ;
-      if: ${{ matrix.os-type == 'ubuntu' && matrix.c-compiler == 'gcc' && matrix.debug == 'debug' && matrix.coverage == 'coverage' && success() }}
+      if: ${{ matrix.os-type == 'discard' && matrix.c-compiler == 'gcc' && matrix.debug == 'debug' && matrix.coverage == 'coverage' && success() }}
