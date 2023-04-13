@@ -371,10 +371,9 @@ jobs:
     - name: Setup coverage dependencies (only on linux)
       run: |
         sudo apt-get install info install-info ;
-        sudo pip install codecov ;
         sudo pip install gcovr ;
         sudo apt-get install cppcheck ;
-      if: ${{ matrix.os-type == 'discard' }}
+      if: ${{ matrix.os-type == 'ubuntu' }}
 
     - name: Fetch libmicrohttpd from cache
       id: cache-libmicrohttpd
