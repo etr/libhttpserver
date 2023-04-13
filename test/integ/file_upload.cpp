@@ -48,15 +48,24 @@ using httpserver::webserver;
 using httpserver::create_webserver;
 using httpserver::http::arg_map;
 
+#define STR2(p) #p
+#define STR(p) STR2(p)
+
+#ifdef HTTPSERVER_DATA_ROOT
+#define ROOT STR(HTTPSERVER_DATA_ROOT)
+#else
+#define ROOT "."
+#endif  // HTTPSERVER_DATA_ROOT
+
 static const char* TEST_CONTENT_FILENAME = "test_content";
-static const char* TEST_CONTENT_FILEPATH = "./test_content";
+static const char* TEST_CONTENT_FILEPATH = ROOT "/test_content";
 static const char* FILENAME_IN_GET_CONTENT = "filename=\"test_content\"";
 static const char* TEST_CONTENT = "test content of file\n";
 static const char* TEST_KEY = "file";
 static size_t TEST_CONTENT_SIZE = 21;
 
 static const char* TEST_CONTENT_FILENAME_2 = "test_content_2";
-static const char* TEST_CONTENT_FILEPATH_2 = "./test_content_2";
+static const char* TEST_CONTENT_FILEPATH_2 = ROOT "/test_content_2";
 static const char* FILENAME_IN_GET_CONTENT_2 = "filename=\"test_content_2\"";
 static const char* TEST_CONTENT_2 = "test content of second file\n";
 static const char* TEST_KEY_2 = "file2";
@@ -68,7 +77,7 @@ static const char* TEST_PARAM_VALUE = "Value of test param";
 // The large file test_content_large is large enough to ensure
 // that MHD splits the underlying request into several chunks.
 static const char* LARGE_FILENAME_IN_GET_CONTENT = "filename=\"test_content_large\"";
-static const char* LARGE_CONTENT_FILEPATH = "./test_content_large";
+static const char* LARGE_CONTENT_FILEPATH = ROOT "/test_content_large";
 static const char* LARGE_KEY = "large_file";
 
 static bool file_exists(const string &path) {
