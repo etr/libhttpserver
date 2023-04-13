@@ -21,6 +21,7 @@
 #include <curl/curl.h>
 #include <sys/stat.h>
 #include <cassert>
+#include <cstddef>
 #include <fstream>
 #include <map>
 #include <random>
@@ -93,7 +94,7 @@ static bool file_exists(const string &path) {
     return (stat(path.c_str(), &sb) == 0);
 }
 
-static std::pair<CURLcode, long> send_file_to_webserver(bool add_second_file, bool append_parameters) {
+static std::pair<CURLcode, int32_t> send_file_to_webserver(bool add_second_file, bool append_parameters) {
     curl_global_init(CURL_GLOBAL_ALL);
 
     CURL *curl = curl_easy_init();
@@ -119,7 +120,7 @@ static std::pair<CURLcode, long> send_file_to_webserver(bool add_second_file, bo
     curl_easy_setopt(curl, CURLOPT_MIMEPOST, form);
 
     res = curl_easy_perform(curl);
-    long http_code = 0;
+    long http_code = 0;   // NOLINT [runtime/int]
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
 
     curl_easy_cleanup(curl);
@@ -127,7 +128,7 @@ static std::pair<CURLcode, long> send_file_to_webserver(bool add_second_file, bo
     return {res, http_code};
 }
 
-static std::pair<CURLcode, long> send_large_file(string* content, std::string args = "") {
+static std::pair<CURLcode, int32_t> send_large_file(string* content, std::string args = "") {
     // Generate a large (100K) file of random bytes. Upload the file with
     // a curl request, then delete the file. The default chunk size of MHD
     // appears to be around 16K, so 100K should be enough to trigger the
@@ -158,7 +159,7 @@ static std::pair<CURLcode, long> send_large_file(string* content, std::string ar
     curl_easy_setopt(curl, CURLOPT_MIMEPOST, form);
 
     res = curl_easy_perform(curl);
-    long http_code = 0;
+    long http_code = 0;   // NOLINT [runtime/int]
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
 
     curl_easy_cleanup(curl);
@@ -167,7 +168,7 @@ static std::pair<CURLcode, long> send_large_file(string* content, std::string ar
     return {res, http_code};
 }
 
-static std::tuple<bool, CURLcode, long> send_file_via_put() {
+static std::tuple<bool, CURLcode, int32_t> send_file_via_put() {
     curl_global_init(CURL_GLOBAL_ALL);
 
     CURL *curl;
@@ -196,7 +197,7 @@ static std::tuple<bool, CURLcode, long> send_file_via_put() {
     curl_easy_setopt(curl, CURLOPT_INFILESIZE_LARGE, (curl_off_t) file_info.st_size);
 
     res = curl_easy_perform(curl);
-    long http_code = 0;
+    long http_code = 0;   // NOLINT [runtime/int]
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
 
     curl_easy_cleanup(curl);
