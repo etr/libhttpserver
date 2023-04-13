@@ -31,6 +31,7 @@
 #endif
 
 #include <curl/curl.h>
+#include <memory>
 #include <signal.h>
 #include <unistd.h>
 
@@ -90,16 +91,16 @@ ssize_t test_callback_with_data(shared_ptr<test_data> closure_data, char* buf, s
 class deferred_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request&) {
-         return shared_ptr<deferred_response<void>>(new deferred_response<void>(test_callback, nullptr, "cycle callback response"));
+         return std::make_shared<deferred_response<void>>(test_callback, nullptr, "cycle callback response");
      }
 };
 
 class deferred_resource_with_data : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request&) {
-         shared_ptr<test_data> internal_info(new test_data);
+         auto internal_info = std::make_shared<test_data>();
          internal_info->value = 42;
-         return shared_ptr<deferred_response<test_data>>(new deferred_response<test_data>(test_callback_with_data, internal_info, "cycle callback response"));
+         return std::make_shared<deferred_response<test_data>>(test_callback_with_data, internal_info, "cycle callback response");
      }
 };
 
@@ -114,10 +115,10 @@ class deferred_resource_with_data : public http_resource {
 #define PORT_STRING STR(PORT)
 
 LT_BEGIN_SUITE(deferred_suite)
-    webserver* ws;
+    std::unique_ptr<webserver> ws;
 
     void set_up() {
-        ws = new webserver(create_webserver(PORT));
+        ws = std::make_unique<webserver>(create_webserver(PORT));
         ws->start(false);
     }
 
@@ -125,7 +126,6 @@ LT_BEGIN_SUITE(deferred_suite)
         counter = 0;
 
         ws->stop();
-        delete ws;
     }
 LT_END_SUITE(deferred_suite)
 

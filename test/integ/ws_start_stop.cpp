@@ -33,6 +33,7 @@
 #include <curl/curl.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <memory>
 
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
@@ -63,16 +64,16 @@ size_t writefunc(void *ptr, size_t size, size_t nmemb, std::string *s) {
 class ok_resource : public httpserver::http_resource {
  public:
      shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request&) {
-         return shared_ptr<httpserver::string_response>(new httpserver::string_response("OK", 200, "text/plain"));
+         return std::make_shared<httpserver::string_response>("OK", 200, "text/plain");
      }
 };
 
 shared_ptr<httpserver::http_response> not_found_custom(const httpserver::http_request&) {
-    return shared_ptr<httpserver::string_response>(new httpserver::string_response("Not found custom", 404, "text/plain"));
+    return std::make_shared<httpserver::string_response>("Not found custom", 404, "text/plain");
 }
 
 shared_ptr<httpserver::http_response> not_allowed_custom(const httpserver::http_request&) {
-    return shared_ptr<httpserver::string_response>(new httpserver::string_response("Not allowed custom", 405, "text/plain"));
+    return std::make_shared<httpserver::string_response>("Not allowed custom", 405, "text/plain");
 }
 
 LT_BEGIN_SUITE(ws_start_stop_suite)
