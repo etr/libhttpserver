@@ -47,6 +47,16 @@ using httpserver::string_response;
 using httpserver::http_resource;
 using httpserver::http_request;
 
+#ifdef HTTPSERVER_PORT
+#define PORT HTTPSERVER_PORT
+#else
+#define PORT 8080
+#endif  // PORT
+
+#define STR2(p) #p
+#define STR(p) STR2(p)
+#define PORT_STRING STR(PORT)
+
 size_t writefunc(void *ptr, size_t size, size_t nmemb, std::string *s) {
     s->append(reinterpret_cast<char*>(ptr), size*nmemb);
     return size*nmemb;
@@ -86,7 +96,7 @@ LT_BEGIN_SUITE(authentication_suite)
 LT_END_SUITE(authentication_suite)
 
 LT_BEGIN_AUTO_TEST(authentication_suite, base_auth)
-    webserver ws = create_webserver(8080);
+    webserver ws = create_webserver(PORT);
 
     user_pass_resource user_pass;
     ws.register_resource("base", &user_pass);
@@ -98,7 +108,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, base_auth)
     CURLcode res;
     curl_easy_setopt(curl, CURLOPT_USERNAME, "myuser");
     curl_easy_setopt(curl, CURLOPT_PASSWORD, "mypass");
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -111,7 +121,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, base_auth)
 LT_END_AUTO_TEST(base_auth)
 
 LT_BEGIN_AUTO_TEST(authentication_suite, base_auth_fail)
-    webserver ws = create_webserver(8080);
+    webserver ws = create_webserver(PORT);
 
     user_pass_resource user_pass;
     ws.register_resource("base", &user_pass);
@@ -123,7 +133,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, base_auth_fail)
     CURLcode res;
     curl_easy_setopt(curl, CURLOPT_USERNAME, "myuser");
     curl_easy_setopt(curl, CURLOPT_PASSWORD, "wrongpass");
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -141,7 +151,7 @@ LT_END_AUTO_TEST(base_auth_fail)
 #ifndef _WINDOWS
 
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth)
-    webserver ws = create_webserver(8080)
+    webserver ws = create_webserver(PORT)
         .digest_auth_random("myrandom")
         .nonce_nc_size(300);
 
@@ -164,7 +174,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth)
 #else
     curl_easy_setopt(curl, CURLOPT_USERPWD, "myuser:mypass");
 #endif
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -181,7 +191,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth)
 LT_END_AUTO_TEST(digest_auth)
 
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_wrong_pass)
-    webserver ws = create_webserver(8080)
+    webserver ws = create_webserver(PORT)
         .digest_auth_random("myrandom")
         .nonce_nc_size(300);
 
@@ -204,7 +214,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_wrong_pass)
 #else
     curl_easy_setopt(curl, CURLOPT_USERPWD, "myuser:wrongpass");
 #endif
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
