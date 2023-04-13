@@ -71,7 +71,7 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, accept_default_ban_blocks)
     ws.start(false);
 
     ok_resource resource;
-    ws.register_resource("base", &resource);
+    LT_ASSERT_EQ(true, ws.register_resource("base", &resource));
 
     curl_global_init(CURL_GLOBAL_ALL);
 
@@ -126,7 +126,7 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, reject_default_allow_passes)
     ws.start(false);
 
     ok_resource resource;
-    ws.register_resource("base", &resource);
+    LT_ASSERT_EQ(true, ws.register_resource("base", &resource));
 
     curl_global_init(CURL_GLOBAL_ALL);
 

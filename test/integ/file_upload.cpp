@@ -287,7 +287,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    ws->register_resource("upload", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
 
     auto res = send_file_to_webserver(false, false);
     LT_ASSERT_EQ(res.first, 0);
@@ -337,7 +337,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_via_put)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    ws->register_resource("upload", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
 
     auto ret = send_file_via_put();
     LT_CHECK_EQ(std::get<1>(ret), 0);
@@ -370,7 +370,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_additional_par
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    ws->register_resource("upload", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
 
     auto res = send_file_to_webserver(false, true);
     LT_ASSERT_EQ(res.first, 0);
@@ -425,7 +425,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_two_files)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    ws->register_resource("upload", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
 
     auto res = send_file_to_webserver(true, false);
     LT_ASSERT_EQ(res.first, 0);
@@ -495,7 +495,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_disk_only)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    ws->register_resource("upload", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
 
     auto res = send_file_to_webserver(false, false);
     LT_ASSERT_EQ(res.first, 0);
@@ -538,7 +538,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_only_incl_content)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    ws->register_resource("upload", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
 
     auto res = send_file_to_webserver(false, false);
     LT_ASSERT_EQ(res.first, 0);
@@ -571,7 +571,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_large_content)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    ws->register_resource("upload", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
 
     // Upload a large file to trigger the chunking behavior of MHD.
     std::string file_content;
@@ -611,7 +611,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_large_content_with_args)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    ws->register_resource("upload", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
 
     // Upload a large file to trigger the chunking behavior of MHD.
     // Include some additional args to make sure those are processed as well.
@@ -657,7 +657,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_only_excl_content)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    ws->register_resource("upload", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
 
     auto res = send_file_to_webserver(false, false);
     LT_ASSERT_EQ(res.first, 0);
