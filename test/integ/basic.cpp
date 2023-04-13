@@ -349,9 +349,9 @@ LT_END_AUTO_TEST(server_runs)
 
 LT_BEGIN_AUTO_TEST(basic_suite, two_endpoints)
     ok_resource ok;
-    ws->register_resource("OK", &ok);
+    LT_ASSERT_EQ(true, ws->register_resource("OK", &ok));
     nok_resource nok;
-    ws->register_resource("NOK", &nok);
+    LT_ASSERT_EQ(true, ws->register_resource("NOK", &nok));
 
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
@@ -543,7 +543,7 @@ LT_END_AUTO_TEST(overlapping_endpoints)
 
 LT_BEGIN_AUTO_TEST(basic_suite, read_body)
     simple_resource resource;
-    ws->register_resource("base", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -560,7 +560,7 @@ LT_END_AUTO_TEST(read_body)
 
 LT_BEGIN_AUTO_TEST(basic_suite, read_long_body)
     long_content_resource resource;
-    ws->register_resource("base", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -577,7 +577,7 @@ LT_END_AUTO_TEST(read_long_body)
 
 LT_BEGIN_AUTO_TEST(basic_suite, resource_setting_header)
     header_set_test_resource resource;
-    ws->register_resource("base", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     map<string, string> ss;
@@ -598,7 +598,7 @@ LT_END_AUTO_TEST(resource_setting_header)
 
 LT_BEGIN_AUTO_TEST(basic_suite, resource_setting_cookie)
     cookie_set_test_resource resource;
-    ws->register_resource("base", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -630,7 +630,7 @@ LT_END_AUTO_TEST(resource_setting_cookie)
 
 LT_BEGIN_AUTO_TEST(basic_suite, request_with_header)
     header_reading_resource resource;
-    ws->register_resource("base", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -653,7 +653,7 @@ LT_END_AUTO_TEST(request_with_header)
 
 LT_BEGIN_AUTO_TEST(basic_suite, request_with_cookie)
     cookie_reading_resource resource;
-    ws->register_resource("base", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -671,7 +671,7 @@ LT_END_AUTO_TEST(request_with_cookie)
 
 LT_BEGIN_AUTO_TEST(basic_suite, complete)
     complete_test_resource resource;
-    ws->register_resource("base", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     {
@@ -734,7 +734,7 @@ LT_END_AUTO_TEST(complete)
 
 LT_BEGIN_AUTO_TEST(basic_suite, only_render)
     only_render_resource resource;
-    ws->register_resource("base", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL* curl;
@@ -813,7 +813,7 @@ LT_END_AUTO_TEST(only_render)
 
 LT_BEGIN_AUTO_TEST(basic_suite, postprocessor)
     simple_resource resource;
-    ws->register_resource("base", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -830,7 +830,7 @@ LT_END_AUTO_TEST(postprocessor)
 
 LT_BEGIN_AUTO_TEST(basic_suite, same_key_different_value)
     arg_value_resource resource;
-    ws->register_resource("base", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -851,7 +851,7 @@ LT_END_AUTO_TEST(same_key_different_value)
 
 LT_BEGIN_AUTO_TEST(basic_suite, same_key_different_value_plain_content)
     arg_value_resource resource;
-    ws->register_resource("base", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -872,7 +872,7 @@ LT_END_AUTO_TEST(same_key_different_value_plain_content)
 
 LT_BEGIN_AUTO_TEST(basic_suite, empty_arg)
     simple_resource resource;
-    ws->register_resource("base", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
     curl_global_init(CURL_GLOBAL_ALL);
     CURL *curl = curl_easy_init();
     CURLcode res;
@@ -886,7 +886,7 @@ LT_END_AUTO_TEST(empty_arg)
 
 LT_BEGIN_AUTO_TEST(basic_suite, no_response)
     no_response_resource resource;
-    ws->register_resource("base", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     CURL* curl = curl_easy_init();
@@ -902,7 +902,7 @@ LT_END_AUTO_TEST(no_response)
 
 LT_BEGIN_AUTO_TEST(basic_suite, empty_response)
     empty_response_resource resource;
-    ws->register_resource("base", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     CURL* curl = curl_easy_init();
@@ -918,7 +918,7 @@ LT_END_AUTO_TEST(empty_response)
 
 LT_BEGIN_AUTO_TEST(basic_suite, regex_matching)
     simple_resource resource;
-    ws->register_resource("regex/matching/number/[0-9]+", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("regex/matching/number/[0-9]+", &resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -936,7 +936,7 @@ LT_END_AUTO_TEST(regex_matching)
 
 LT_BEGIN_AUTO_TEST(basic_suite, regex_matching_arg)
     args_resource resource;
-    ws->register_resource("this/captures/{arg}/passed/in/input", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("this/captures/{arg}/passed/in/input", &resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -954,7 +954,7 @@ LT_END_AUTO_TEST(regex_matching_arg)
 
 LT_BEGIN_AUTO_TEST(basic_suite, regex_matching_arg_custom)
     args_resource resource;
-    ws->register_resource("this/captures/numeric/{arg|([0-9]+)}/passed/in/input", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("this/captures/numeric/{arg|([0-9]+)}/passed/in/input", &resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     {
@@ -991,7 +991,7 @@ LT_END_AUTO_TEST(regex_matching_arg_custom)
 
 LT_BEGIN_AUTO_TEST(basic_suite, querystring_processing)
     args_resource resource;
-    ws->register_resource("this/captures/args/passed/in/the/querystring", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("this/captures/args/passed/in/the/querystring", &resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1009,7 +1009,7 @@ LT_END_AUTO_TEST(querystring_processing)
 
 LT_BEGIN_AUTO_TEST(basic_suite, full_arguments_processing)
     full_args_resource resource;
-    ws->register_resource("this/captures/args/passed/in/the/querystring", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("this/captures/args/passed/in/the/querystring", &resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1027,7 +1027,7 @@ LT_END_AUTO_TEST(full_arguments_processing)
 
 LT_BEGIN_AUTO_TEST(basic_suite, querystring_query_processing)
     querystring_resource resource;
-    ws->register_resource("this/captures/args/passed/in/the/querystring", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("this/captures/args/passed/in/the/querystring", &resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1045,7 +1045,7 @@ LT_END_AUTO_TEST(querystring_query_processing)
 
 LT_BEGIN_AUTO_TEST(basic_suite, register_unregister)
     simple_resource resource;
-    ws->register_resource("base", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     {
@@ -1083,7 +1083,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, register_unregister)
     curl_easy_cleanup(curl);
     }
 
-    ws->register_resource("base", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
     {
     string s;
     CURL *curl = curl_easy_init();
@@ -1102,7 +1102,7 @@ LT_END_AUTO_TEST(register_unregister)
 #ifndef HTTPSERVER_NO_LOCAL_FS
 LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource)
     file_response_resource resource;
-    ws->register_resource("base", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1120,7 +1120,7 @@ LT_END_AUTO_TEST(file_serving_resource)
 
 LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource_empty)
     file_response_resource_empty resource;
-    ws->register_resource("base", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1138,7 +1138,7 @@ LT_END_AUTO_TEST(file_serving_resource_empty)
 
 LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource_default_content_type)
     file_response_resource_default_content_type resource;
-    ws->register_resource("base", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     map<string, string> ss;
@@ -1157,7 +1157,7 @@ LT_END_AUTO_TEST(file_serving_resource_default_content_type)
 
 LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource_missing)
     file_response_resource_missing resource;
-    ws->register_resource("base", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1181,7 +1181,7 @@ LT_END_AUTO_TEST(file_serving_resource_missing)
 #ifndef HTTPSERVER_NO_LOCAL_FS
 LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource_dir)
     file_response_resource_dir resource;
-    ws->register_resource("base", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1205,7 +1205,7 @@ LT_END_AUTO_TEST(file_serving_resource_dir)
 
 LT_BEGIN_AUTO_TEST(basic_suite, exception_forces_500)
     exception_resource resource;
-    ws->register_resource("base", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1228,7 +1228,7 @@ LT_END_AUTO_TEST(exception_forces_500)
 
 LT_BEGIN_AUTO_TEST(basic_suite, untyped_error_forces_500)
     error_resource resource;
-    ws->register_resource("base", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1252,7 +1252,7 @@ LT_END_AUTO_TEST(untyped_error_forces_500)
 LT_BEGIN_AUTO_TEST(basic_suite, request_is_printable)
     stringstream ss;
     print_request_resource resource(&ss);
-    ws->register_resource("base", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1287,7 +1287,7 @@ LT_END_AUTO_TEST(request_is_printable)
 LT_BEGIN_AUTO_TEST(basic_suite, response_is_printable)
     stringstream ss;
     print_response_resource resource(&ss);
-    ws->register_resource("base", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1319,7 +1319,7 @@ LT_END_AUTO_TEST(response_is_printable)
 
 LT_BEGIN_AUTO_TEST(basic_suite, long_path_pieces)
     path_pieces_resource resource;
-    ws->register_resource("/settings", &resource, true);
+    LT_ASSERT_EQ(true, ws->register_resource("/settings", &resource, true));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1337,7 +1337,7 @@ LT_END_AUTO_TEST(long_path_pieces)
 
 LT_BEGIN_AUTO_TEST(basic_suite, url_with_regex_like_pieces)
     path_pieces_resource resource;
-    ws->register_resource("/settings", &resource, true);
+    LT_ASSERT_EQ(true, ws->register_resource("/settings", &resource, true));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1355,7 +1355,7 @@ LT_END_AUTO_TEST(url_with_regex_like_pieces)
 
 LT_BEGIN_AUTO_TEST(basic_suite, non_family_url_with_regex_like_pieces)
     ok_resource resource;
-    ws->register_resource("/settings", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("/settings", &resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1377,7 +1377,7 @@ LT_END_AUTO_TEST(non_family_url_with_regex_like_pieces)
 
 LT_BEGIN_AUTO_TEST(basic_suite, regex_url_exact_match)
     ok_resource resource;
-    ws->register_resource("/foo/{v|[a-z]}/bar", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("/foo/{v|[a-z]}/bar", &resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     {
@@ -1426,7 +1426,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, method_not_allowed_header)
     resource.disallow_all();
     resource.set_allowing("POST", true);
     resource.set_allowing("HEAD", true);
-    ws->register_resource("base", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     map<string, string> ss;

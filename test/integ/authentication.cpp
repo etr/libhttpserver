@@ -99,7 +99,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, base_auth)
     webserver ws = create_webserver(PORT);
 
     user_pass_resource user_pass;
-    ws.register_resource("base", &user_pass);
+    LT_ASSERT_EQ(true, ws.register_resource("base", &user_pass));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -124,7 +124,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, base_auth_fail)
     webserver ws = create_webserver(PORT);
 
     user_pass_resource user_pass;
-    ws.register_resource("base", &user_pass);
+    LT_ASSERT_EQ(true, ws.register_resource("base", &user_pass));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -156,7 +156,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth)
         .nonce_nc_size(300);
 
     digest_resource digest;
-    ws.register_resource("base", &digest);
+    LT_ASSERT_EQ(true, ws.register_resource("base", &digest));
     ws.start(false);
 
 #if defined(_WINDOWS)
@@ -196,7 +196,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_wrong_pass)
         .nonce_nc_size(300);
 
     digest_resource digest;
-    ws.register_resource("base", &digest);
+    LT_ASSERT_EQ(true, ws.register_resource("base", &digest));
     ws.start(false);
 
 #if defined(_WINDOWS)
