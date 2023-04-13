@@ -26,6 +26,7 @@
 #include <random>
 #include <sstream>
 #include <string>
+#include <tuple>
 
 #include "./httpserver.hpp"
 #include "httpserver/string_utilities.hpp"
