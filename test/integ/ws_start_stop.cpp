@@ -49,6 +49,12 @@ using std::shared_ptr;
 #define STR(p) STR2(p)
 #define PORT_STRING STR(PORT)
 
+#ifdef HTTPSERVER_DATA_ROOT
+#define ROOT STR(HTTPSERVER_DATA_ROOT)
+#else
+#define ROOT "."
+#endif  // HTTPSERVER_DATA_ROOT
+
 size_t writefunc(void *ptr, size_t size, size_t nmemb, std::string *s) {
     s->append(reinterpret_cast<char*>(ptr), size*nmemb);
     return size*nmemb;
@@ -414,8 +420,8 @@ LT_END_AUTO_TEST(tuning_options)
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_base)
     httpserver::webserver ws = httpserver::create_webserver(PORT)
         .use_ssl()
-        .https_mem_key("key.pem")
-        .https_mem_cert("cert.pem");
+        .https_mem_key(ROOT "/key.pem")
+        .https_mem_cert(ROOT "/cert.pem");
 
     ok_resource ok;
     ws.register_resource("base", &ok);
@@ -443,8 +449,8 @@ LT_END_AUTO_TEST(ssl_base)
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_with_protocol_priorities)
     httpserver::webserver ws = httpserver::create_webserver(PORT)
         .use_ssl()
-        .https_mem_key("key.pem")
-        .https_mem_cert("cert.pem")
+        .https_mem_key(ROOT "/key.pem")
+        .https_mem_cert(ROOT "/cert.pem")
         .https_priorities("NORMAL:-MD5");
 
     ok_resource ok;
@@ -472,9 +478,9 @@ LT_END_AUTO_TEST(ssl_with_protocol_priorities)
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_with_trust)
     httpserver::webserver ws = httpserver::create_webserver(PORT)
         .use_ssl()
-        .https_mem_key("key.pem")
-        .https_mem_cert("cert.pem")
-        .https_mem_trust("test_root_ca.pem");
+        .https_mem_key(ROOT "/key.pem")
+        .https_mem_cert(ROOT "/cert.pem")
+        .https_mem_trust(ROOT "/test_root_ca.pem");
 
     ok_resource ok;
     ws.register_resource("base", &ok);
