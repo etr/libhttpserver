@@ -445,7 +445,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_with_protocol_priorities)
         .use_ssl()
         .https_mem_key("key.pem")
         .https_mem_cert("cert.pem")
-        .https_priorities("NONE:+VERS-TLS1.0:+AES-128-CBC:+SHA1:+RSA:+COMP-NULL");
+        .https_priorities("NONE:+AES-256-GCM:+SHA384");
 
     ok_resource ok;
     ws.register_resource("base", &ok);
