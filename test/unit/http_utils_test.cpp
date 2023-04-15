@@ -38,6 +38,15 @@
 using std::string;
 using std::vector;
 
+#define STR2(p) #p
+#define STR(p) STR2(p)
+
+#ifdef HTTPSERVER_DATA_ROOT
+#define ROOT STR(HTTPSERVER_DATA_ROOT)
+#else
+#define ROOT "."
+#endif  // HTTPSERVER_DATA_ROOT
+
 LT_BEGIN_SUITE(http_utils_suite)
     void set_up() {
     }
@@ -548,7 +557,7 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation6_sockaddr)
 LT_END_AUTO_TEST(ip_representation6_sockaddr)
 
 LT_BEGIN_AUTO_TEST(http_utils_suite, load_file)
-    LT_CHECK_EQ(httpserver::http::load_file("test_content"), "test content of file\n");
+    LT_CHECK_EQ(httpserver::http::load_file(ROOT "/test_content"), "test content of file\n");
 LT_END_AUTO_TEST(load_file)
 
 LT_BEGIN_AUTO_TEST(http_utils_suite, load_file_invalid)
