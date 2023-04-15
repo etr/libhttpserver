@@ -522,13 +522,13 @@ class test : public test_base
             }
             catch(std::exception& e)
             {
-                std::cout << "Exception during " << static_cast<test_impl* >(this)->__lt_name__ << " set up" << std::endl;
+                std::cout << "[FAILURE] Exception during " << static_cast<test_impl* >(this)->__lt_name__ << " set up" << std::endl;
                 std::cout << e.what() << std::endl;
                 tr->add_failure();
             }
             catch(...)
             {
-                std::cout << "Exception during " << static_cast<test_impl* >(this)->__lt_name__ << " set up" << std::endl;
+                std::cout << "[FAILURE] Exception during " << static_cast<test_impl* >(this)->__lt_name__ << " set up" << std::endl;
                 tr->add_failure();
             }
             try
@@ -542,7 +542,7 @@ class test : public test_base
             }
             catch(std::exception& e)
             {
-                std::cout << "Exception during " << static_cast<test_impl* >(this)->__lt_name__ << " run" << std::endl;
+                std::cout << "[FAILURE] Exception during " << static_cast<test_impl* >(this)->__lt_name__ << " run" << std::endl;
                 std::cout << e.what() << std::endl;
                 if(tr->last_checkpoint_line != -1)
                     std::cout << "Last checkpoint in " << tr->last_checkpoint_file << ":" << tr->last_checkpoint_line << std::endl;
@@ -550,7 +550,7 @@ class test : public test_base
             }
             catch(...)
             {
-                std::cout << "Exception during " << static_cast<test_impl* >(this)->__lt_name__ << " run" << std::endl;
+                std::cout << "[FAILURE] Exception during " << static_cast<test_impl* >(this)->__lt_name__ << " run" << std::endl;
                 if(tr->last_checkpoint_line != -1)
                     std::cout << "Last checkpoint in " << tr->last_checkpoint_file << ":" << tr->last_checkpoint_line << std::endl;
                 tr->add_failure();
@@ -573,13 +573,13 @@ class test : public test_base
             }
             catch(std::exception& e)
             {
-                std::cout << "Exception during " << static_cast<test_impl* >(this)->__lt_name__ << " tear down" << std::endl;
+                std::cout << "[FAILURE] Exception during " << static_cast<test_impl* >(this)->__lt_name__ << " tear down" << std::endl;
                 std::cout << e.what() << std::endl;
                 tr->add_failure();
             }
             catch(...)
             {
-                std::cout << "Exception during " << static_cast<test_impl* >(this)->__lt_name__ << " tear down" << std::endl;
+                std::cout << "[FAILURE] Exception during " << static_cast<test_impl* >(this)->__lt_name__ << " tear down" << std::endl;
                 tr->add_failure();
             }
             double total = set_up_duration + test_duration + tear_down_duration;
