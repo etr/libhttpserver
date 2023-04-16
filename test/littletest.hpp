@@ -125,6 +125,13 @@
     { \
         (__lt_operation__) ;\
     } \
+    catch(std::exception& e) \
+    { \
+        std::stringstream __lt_ss__; \
+        __lt_ss__ << "(" << __lt_file__ << ":" << __lt_line__ << ") - error in " << "\"" << __lt_name__ << "\": exceptions thown by " << #__lt_operation__; \
+        __lt_ss__ << " [ " << e.what() << " ]"; \
+        LT_SWITCH_MODE(__lt_mode__) \
+    } \
     catch(...) \
     { \
         std::stringstream __lt_ss__; \
