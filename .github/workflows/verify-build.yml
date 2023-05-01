@@ -371,7 +371,7 @@ jobs:
     - name: Setup coverage dependencies (only on linux)
       run: |
         sudo apt-get install info install-info ;
-        sudo pip install gcovr ;
+        sudo pip3 install gcovr ;
         sudo apt-get install cppcheck ;
       if: ${{ matrix.os-type == 'ubuntu' }}
 
