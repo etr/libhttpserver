@@ -56,6 +56,8 @@
 #include <string>
 #include <vector>
 
+#include "httpserver/http_arg_value.hpp"
+
 #define DEFAULT_MASK_VALUE 0xFFFF
 
 #if MHD_VERSION < 0x00097002
@@ -299,6 +301,7 @@ class header_comparator {
 **/
 class arg_comparator {
  public:
+     using is_transparent = std::true_type;
      /**
       * Operator used to compare strings.
       * @param first string
@@ -314,12 +317,19 @@ class arg_comparator {
      bool operator()(const std::string& x, const std::string& y) const {
         return operator()(std::string_view(x), std::string_view(y));
      }
+     bool operator()(std::string_view x, const std::string& y) const {
+        return operator()(x, std::string_view(y));
+     }
+     bool operator()(const std::string& x, std::string_view y) const {
+        return operator()(std::string_view(x), std::string(y));
+     }
 };
 
 using header_map = std::map<std::string, std::string, http::header_comparator>;
 using header_view_map = std::map<std::string_view, std::string_view, http::header_comparator>;
-using arg_map = std::map<std::string, std::string, http::arg_comparator>;
-using arg_view_map = std::map<std::string_view, std::string_view, http::arg_comparator>;
+using arg_map = std::map<std::string, http_arg_value, http::arg_comparator>;
+using arg_view_map = std::map<std::string_view, http_arg_value, http::arg_comparator>;
+
 
 struct ip_representation {
     http_utils::IP_version_T ip_version;

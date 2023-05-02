@@ -198,7 +198,7 @@ bool webserver::register_resource(const std::string& resource, http_resource* hr
 
     pair<map<details::http_endpoint, http_resource*>::iterator, bool> result = registered_resources.insert(map<details::http_endpoint, http_resource*>::value_type(idx, hrm));
 
-    if (result.second) {
+    if (!family && result.second) {
         registered_resources_str.insert(pair<string, http_resource*>(idx.get_url_complete(), result.first->second));
     }
 
@@ -429,11 +429,25 @@ void* uri_log(void* cls, const char* uri) {
 }
 
 void error_log(void* cls, const char* fmt, va_list ap) {
-    // Parameter needed to respect MHD interface, but not needed here.
-    std::ignore = ap;
-
     webserver* dws = static_cast<webserver*>(cls);
-    if (dws->log_error != nullptr) dws->log_error(fmt);
+
+    std::string msg;
+    msg.resize(80);  // Asssume one line will be enought most of the time.
+
+    va_list va;
+    va_copy(va, ap);  // Stash a copy in case we need to try again.
+
+    size_t r = vsnprintf(&*msg.begin(), msg.size(), fmt, ap);
+    va_end(ap);
+
+    if (msg.size() < r) {
+      msg.resize(r);
+      r = vsnprintf(&*msg.begin(), msg.size(), fmt, va);
+    }
+    va_end(va);
+    msg.resize(r);
+
+    if (dws->log_error != nullptr) dws->log_error(msg);
 }
 
 void access_log(webserver* dws, string uri) {
@@ -461,12 +475,18 @@ MHD_Result webserver::post_iterator(void *cls, enum MHD_ValueKind kind,
 
     struct details::modded_request* mr = (struct details::modded_request*) cls;
 
+    if (!filename) {
+        // There is no actual file, just set the arg key/value and return.
+        mr->dhr->set_arg(key, std::string(data, size));
+        return MHD_YES;
+    }
+
     try {
-        if (filename == nullptr || mr->ws->file_upload_target != FILE_UPLOAD_DISK_ONLY) {
-            mr->dhr->set_arg(key, std::string(mr->dhr->get_arg(key)) + std::string(data, size));
+        if (mr->ws->file_upload_target != FILE_UPLOAD_DISK_ONLY) {
+            mr->dhr->set_arg_flat(key, std::string(mr->dhr->get_arg(key)) + std::string(data, size));
         }
 
-        if (filename && *filename != '\0' && mr->ws->file_upload_target != FILE_UPLOAD_MEMORY_ONLY) {
+        if (*filename != '\0' && mr->ws->file_upload_target != FILE_UPLOAD_MEMORY_ONLY) {
             // either get the existing file info struct or create a new one in the file map
             http::file_info& file = mr->dhr->get_or_create_file_info(key, filename);
             // if the file_system_file_name is not filled yet, this is a new entry and the name has to be set

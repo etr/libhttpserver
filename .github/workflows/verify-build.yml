@@ -62,15 +62,17 @@ jobs:
             cc-compiler: clang++-13
             debug: debug
             coverage: nocoverage
-          - test-group: extra
-            os: ubuntu-18.04
-            os-type: ubuntu
-            build-type: msan
-            compiler-family: clang
-            c-compiler: clang-6.0
-            cc-compiler: clang++-6.0
-            debug: debug
-            coverage: nocoverage
+          # This test gives false positives on newer versions of clang
+          # and ubuntu-18.04 is not supported anymore on github
+          #- test-group: extra
+          #  os: ubuntu-18.04
+          #  os-type: ubuntu
+          #  build-type: msan
+          #  compiler-family: clang
+          #  c-compiler: clang-6.0
+          #  cc-compiler: clang++-6.0
+          #  debug: debug
+          #  coverage: nocoverage
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
@@ -132,15 +134,6 @@ jobs:
             compiler-family: gcc
             c-compiler: gcc-10
             cc-compiler: g++-10
-            debug: nodebug
-            coverage: nocoverage
-          - test-group: extra
-            os: ubuntu-18.04
-            os-type: ubuntu
-            build-type: none
-            compiler-family: clang
-            c-compiler: clang-5.0
-            cc-compiler: clang++-5.0
             debug: nodebug
             coverage: nocoverage
           - test-group: extra
@@ -378,9 +371,13 @@ jobs:
     - name: Setup coverage dependencies (only on linux)
       run: |
         sudo apt-get install info install-info ;
-        sudo pip install codecov ;
         sudo pip install gcovr ;
         sudo apt-get install cppcheck ;
+      if: ${{ matrix.os-type == 'ubuntu' }}
+
+    - name: Setup gnutls dependency (only on linux)
+      run: |
+        sudo apt-get install libgnutls28-dev ;
       if: ${{ matrix.os-type == 'ubuntu' }}
 
     - name: Fetch libmicrohttpd from cache
@@ -526,4 +523,4 @@ jobs:
       run: |
         cd build ;
         bash <(curl -s https://codecov.io/bash) ;
-      if: ${{ matrix.os-type == 'ubuntu' && matrix.c-compiler == 'gcc' && matrix.debug == 'debug' && matrix.coverage == 'coverage' && success() }}
+      if: ${{ matrix.os-type == 'discard' && matrix.c-compiler == 'gcc' && matrix.debug == 'debug' && matrix.coverage == 'coverage' && success() }}

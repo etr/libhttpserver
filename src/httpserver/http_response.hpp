@@ -28,6 +28,7 @@
 #include <iosfwd>
 #include <map>
 #include <string>
+#include "httpserver/http_arg_value.hpp"
 #include "httpserver/http_utils.hpp"
 
 struct MHD_Connection;

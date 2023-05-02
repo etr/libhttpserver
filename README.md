@@ -67,7 +67,7 @@ The mission of this library is to support all possible HTTP features directly an
 The library is supposed to work transparently for the client Implementing the business logic and using the library itself to realize an interface.
 If the user wants it must be able to change every behavior of the library itself through the registration of callbacks.
 
-libhttpserver is able to decode certain body format a and automatically format them in object oriented fashion. This is true for query arguments and for *POST* and *PUT* requests bodies if *application/x-www-form-urlencoded* or *multipart/form-data* header are passed.
+libhttpserver is able to decode certain body formats and automatically format them in object oriented fashion. This is true for query arguments and for *POST* and *PUT* requests bodies if *application/x-www-form-urlencoded* or *multipart/form-data* header are passed.
 
 All functions are guaranteed to be completely reentrant and thread-safe (unless differently specified).
 Additionally, clients can specify resource limits on the overall number of connections, number of connections per IP address and memory used per connection to avoid resource exhaustion.
@@ -79,6 +79,7 @@ libhttpserver can be used without any dependencies aside from libmicrohttpd.
 
 The minimum versions required are:
 * g++ >= 5.5.0 or clang-3.6
+* C++17 or newer
 * libmicrohttpd >= 0.9.64
 * [Optionally]: for TLS (HTTPS) support, you'll need [libgnutls](http://www.gnutls.org/).
 * [Optionally]: to compile the code-reference, you'll need [doxygen](http://www.doxygen.nl/).
@@ -564,11 +565,13 @@ The `http_request` class has a set of methods you will have access to when imple
 * _**std::string_view** get_header(**std::string_view** key) **const**:_ Returns the header with name equal to `key` if present in the HTTP request. Returns an `empty string` otherwise.
 * _**std::string_view** get_cookie(**std::string_view** key) **const**:_ Returns the cookie with name equal to `key` if present in the HTTP request. Returns an `empty string` otherwise.
 * _**std::string_view** get_footer(**std::string_view** key) **const**:_ Returns the footer with name equal to `key` if present in the HTTP request (only for http 1.1 chunked encodings). Returns an `empty string` otherwise.
-* _**std::string_view** get_arg(**std::string_view** key) **const**:_ Returns the argument with name equal to `key` if present in the HTTP request. Arguments can be (1) querystring parameters, (2) path argument (in case of parametric endpoint, (3) parameters parsed from the HTTP request body if the body is in `application/x-www-form-urlencoded` or `multipart/form-data` formats and the postprocessor is enabled in the webserver (enabled by default).
+* _**http_arg_value** get_arg(**std::string_view** key) **const**:_ Returns the argument with name equal to `key` if present in the HTTP request. Arguments can be (1) querystring parameters, (2) path argument (in case of parametric endpoint, (3) parameters parsed from the HTTP request body if the body is in `application/x-www-form-urlencoded` or `multipart/form-data` formats and the postprocessor is enabled in the webserver (enabled by default). Arguments are collected in a domain object that allows to collect multiple arguments with the same key while keeping the access transparent in the most common case of a single value provided per key.
+* _**std::string_view** get_arg_flat(**std::string_view** key) **const**_ Returns the argument in the same way as `get_arg` but as a string. If multiple values are provided with the same key, this method only returns the first value provided.
 * _**const std::map<std::string_view, std::string_view, http::header_comparator>** get_headers() **const**:_ Returns a map containing all the headers present in the HTTP request.
 * _**const std::map<std::string_view, std::string_view, http::header_comparator>** get_cookies() **const**:_ Returns a map containing all the cookies present in the HTTP request.
 * _**const std::map<std::string_view, std::string_view, http::header_comparator>** get_footers() **const**:_ Returns a map containing all the footers present in the HTTP request (only for http 1.1 chunked encodings).
-* _**const std::map<std::string, std::string, http::arg_comparator>** get_args() **const**:_ Returns all the arguments present in the HTTP request. Arguments can be (1) querystring parameters, (2) path argument (in case of parametric endpoint, (3) parameters parsed from the HTTP request body if the body is in `application/x-www-form-urlencoded` or `multipart/form-data` formats and the postprocessor is enabled in the webserver (enabled by default).
+* _**const std::map<http_arg_value, std::string, http::arg_comparator>** get_args() **const**:_ Returns all the arguments present in the HTTP request. Arguments can be (1) querystring parameters, (2) path argument (in case of parametric endpoint, (3) parameters parsed from the HTTP request body if the body is in `application/x-www-form-urlencoded` or `multipart/form-data` formats and the postprocessor is enabled in the webserver (enabled by default). For each key, arguments are collected in a domain object that allows to collect multiple arguments with the same key while keeping the access transparent in the most common case of a single value provided per key.
+* _**const std::map<std::string, std::string, http::arg_comparator>** get_args_flat() **const**:_ Returns all the arguments as the `get_args` method but as strings. If multiple values are provided with the same key, this method will only return the first value provided.
 * _**const std::map<std::string, std::map<std::string, http::file_info>>** get_files() **const**:_ Returns information about all the uploaded files (if the files are stored to disk). This information includes the key (as identifier of the outer map), the original file name (as identifier of the inner map) and a class `file_info`, which includes the size of the file and the path to the file in the file system.
 * _**const std::string&** get_content() **const**:_ Returns the body of the HTTP request.
 * _**bool**  content_too_large() **const**:_ Returns `true` if the body length of the HTTP request sent by the client is longer than the max allowed on the server.
@@ -580,7 +583,7 @@ The `http_request` class has a set of methods you will have access to when imple
 * _**const std::string** get_pass() **const**:_ Returns the `password` as self-identified through basic authentication. The content of the password header will be parsed only if basic authentication is enabled on the server (enabled by default).
 * _**const std::string** get_digested_user() **const**:_ Returns the `digested user` as self-identified through digest authentication. The content of the user header will be parsed only if digest authentication is enabled on the server (enabled by default).
 * _**bool** check_digest_auth(**const std::string&** realm, **const std::string&** password, **int** nonce_timeout, **bool*** reload_nonce) **const**:_ Allows to check the validity of the authentication token sent through digest authentication (if the provided values in the WWW-Authenticate header are valid and sound according to RFC2716). Takes in input the `realm` of validity of the authentication, the `password` as known to the server to compare against, the `nonce_timeout` to indicate how long the nonce is valid and `reload_nonce` a boolean that will be set by the method to indicate a nonce being reloaded. The method returns `true` if the authentication is valid, `false` otherwise.
-* _**gnutls_session_t** get_tls_session() **const**:_ Tests if there is am underlying TLS state of the current request.
+* _**bool** has_tls_session() **const**:_ Tests if there is am underlying TLS state of the current request.
 * _**gnutls_session_t** get_tls_session() **const**:_ Returns the underlying TLS state of the current request for inspection. (It is an error to call this if the state does not exist.)
 
 Details on the `http::file_info` structure.
@@ -589,6 +592,14 @@ Details on the `http::file_info` structure.
 * _**const std::string** get_file_system_file_name() **const**:_ Returns the name of the file uploaded through the HTTP request as stored on the filesystem.
 * _**const std::string** get_content_type() **const**:_ Returns the content type of the file uploaded through the HTTP request.
 * _**const std::string** get_transfer_encoding() **const**:_ Returns the transfer encoding of the file uploaded through the HTTP request.
+
+Details on the `http_arg_value` structure.
+
+* _**std::string_view** get_flat_value() **const**:_ Returns only the first value provided for the key.
+* _**std::vector\<std::string_view\>** get_all_values() **const**:_ Returns all the values provided for the key.
+* _**operator** std::string() **const**:_ Converts the http_arg_value to a string with the same logic as `get_flat_value`.
+* _**operator** std::string_view() **const**:_ Converts the http_arg_value to a string_view with the same logic as `get_flat_value`.
+* _**operator** std::vector\<std::string\>() **const**:_ Converts the http_arg_value to a std::vector<std::string> with the same logic as `get_value`.
 
 #### Example of handler reading arguments from a request
 ```cpp
