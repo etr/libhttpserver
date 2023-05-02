@@ -507,8 +507,8 @@ LT_END_AUTO_TEST(ssl_with_trust)
 void* start_ws_blocking(void* par) {
     httpserver::webserver* ws = (httpserver::webserver*) par;
     ok_resource ok;
-    ws->register_resource("base", &ok);
-    ws->start(true);
+    if (!ws->register_resource("base", &ok)) return PTHREAD_CANCELED;
+    try { ws->start(true); } catch (...) { return PTHREAD_CANCELED; }
 
     return nullptr;
 }
@@ -538,6 +538,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, blocking_server)
 
     char* b;
     pthread_join(tid, reinterpret_cast<void**>(&b));
+    LT_CHECK_EQ(b, nullptr);
     free(b);
 LT_END_AUTO_TEST(blocking_server)
 
