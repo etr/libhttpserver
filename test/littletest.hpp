@@ -159,7 +159,8 @@
     if((__lt_a__) __lt_op__ (__lt_b__)) \
     { \
         std::stringstream __lt_ss__; \
-        __lt_ss__ << "(" << __lt_file__ << ":" << __lt_line__ << ") - error in " << "\"" << __lt_name__ << "\": " << (__lt_a__) << #__lt_op__ << (__lt_b__); \
+        __lt_ss__ << "(" << __lt_file__ << ":" << __lt_line__ << ") - error in " << "\"" << __lt_name__ << "\": " \
+                  << ::littletest::make_streamable(__lt_a__) << #__lt_op__ << ::littletest::make_streamable(__lt_b__); \
         LT_SWITCH_MODE(__lt_mode__) \
     }
 
@@ -269,12 +270,16 @@
 #define LT_ASSERT_COLLECTIONS_NEQ(__lt_first_begin__, __lt_first_end__, __lt_second_begin__) LT_COLLNEQ_EV((__lt_first_begin__), (__lt_first_end__), (__lt_second_begin__), ASSERT)
 
 #define LT_FAIL(__lt_message__) \
-    std::cout << "[ASSERT FAILURE] (" << __FILE__ << ":" << __LINE__ << ") - error in " << "\"" << (__lt_name__) << "\": " << (__lt_message__) << std::endl; \
+    std::cout << "[ASSERT FAILURE] (" << __FILE__ << ":" << __LINE__ << ") - error in " << "\"" << (__lt_name__) << "\": " \
+              << ::littletest::make_streamable(__lt_message__) << std::endl; \
     __lt_tr__->add_failure(); \
     throw littletest::assert_unattended("");
 
 namespace littletest
 {
+// Special case logging of types that don't print well.
+template<class T> const T& make_streamable(const T& v) { return v; }
+const char* make_streamable(std::nullptr_t) { return "nullptr"; }
 
 struct check_unattended : public std::exception
 {
