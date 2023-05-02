@@ -55,7 +55,7 @@ class string_response : public http_response {
 
      MHD_Response* get_raw_response();
 
-     const std::string& get_content() const noexcept {
+     const std::string& get_content() const {
          return content;
      }
 
