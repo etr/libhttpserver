@@ -368,12 +368,16 @@ jobs:
       run: brew install autoconf automake libtool
       if: ${{ matrix.os == 'macos-latest' }}
 
-    - name: Setup coverage dependencies (only on linux)
+    - name: Setup dependencies (only on linux)
       run: |
         sudo apt-get install info install-info ;
-        sudo pip install gcovr ;
         sudo apt-get install cppcheck ;
       if: ${{ matrix.os-type == 'ubuntu' }}
+
+    - name: Setup coverage dependencies (only on linux)
+      run: |
+        sudo pip install gcovr ;
+      if: ${{ matrix.os-type == 'ubuntu' && matrix.c-compiler == 'gcc' && matrix.debug == 'debug' && matrix.coverage == 'coverage' }}
 
     - name: Setup gnutls dependency (only on linux)
       run: |
