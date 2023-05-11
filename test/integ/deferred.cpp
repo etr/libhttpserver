@@ -131,7 +131,7 @@ LT_END_SUITE(deferred_suite)
 
 LT_BEGIN_AUTO_TEST(deferred_suite, deferred_response_suite)
     deferred_resource resource;
-    ws->register_resource("base", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     std::string s;
@@ -149,7 +149,7 @@ LT_END_AUTO_TEST(deferred_response_suite)
 
 LT_BEGIN_AUTO_TEST(deferred_suite, deferred_response_with_data)
     deferred_resource_with_data resource;
-    ws->register_resource("base", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     std::string s;

@@ -49,6 +49,12 @@ using std::shared_ptr;
 #define STR(p) STR2(p)
 #define PORT_STRING STR(PORT)
 
+#ifdef HTTPSERVER_DATA_ROOT
+#define ROOT STR(HTTPSERVER_DATA_ROOT)
+#else
+#define ROOT "."
+#endif  // HTTPSERVER_DATA_ROOT
+
 size_t writefunc(void *ptr, size_t size, size_t nmemb, std::string *s) {
     s->append(reinterpret_cast<char*>(ptr), size*nmemb);
     return size*nmemb;
@@ -83,7 +89,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, start_stop)
     { // NOLINT (internal scope opening - not method start)
     httpserver::webserver ws = httpserver::create_webserver(PORT);
     ok_resource ok;
-    ws.register_resource("base", &ok);
+    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -105,7 +111,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, start_stop)
     {
     httpserver::webserver ws = httpserver::create_webserver(PORT).start_method(httpserver::http::http_utils::INTERNAL_SELECT);
     ok_resource ok;
-    ws.register_resource("base", &ok);
+    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -127,7 +133,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, start_stop)
     {
     httpserver::webserver ws = httpserver::create_webserver(PORT).start_method(httpserver::http::http_utils::THREAD_PER_CONNECTION);
     ok_resource ok;
-    ws.register_resource("base", &ok);
+    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -153,7 +159,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ipv6)
     { // NOLINT (internal scope opening - not method start)
     httpserver::webserver ws = httpserver::create_webserver(PORT).use_ipv6();
     ok_resource ok;
-    ws.register_resource("base", &ok);
+    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -178,7 +184,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, dual_stack)
     { // NOLINT (internal scope opening - not method start)
     httpserver::webserver ws = httpserver::create_webserver(PORT).use_dual_stack();
     ok_resource ok;
-    ws.register_resource("base", &ok);
+    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -204,7 +210,7 @@ LT_END_AUTO_TEST(dual_stack)
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, sweet_kill)
     httpserver::webserver ws = httpserver::create_webserver(PORT);
     ok_resource ok;
-    ws.register_resource("base", &ok);
+    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
     ws.start(false);
 
     {
@@ -252,7 +258,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, disable_options)
         .no_ban_system()
         .no_post_process();
     ok_resource ok;
-    ws.register_resource("base", &ok);
+    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -280,7 +286,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, enable_options)
         .ban_system()
         .post_process();
     ok_resource ok;
-    ws.register_resource("base", &ok);
+    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -306,20 +312,20 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_socket)
     struct sockaddr_in address;
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = inet_addr("127.0.0.1");
-    address.sin_port = htons(8181);
+    address.sin_port = htons(PORT);
     bind(fd, (struct sockaddr*) &address, sizeof(address));
     listen(fd, 10000);
 
     httpserver::webserver ws = httpserver::create_webserver(-1).bind_socket(fd);  // whatever port here doesn't matter
     ok_resource ok;
-    ws.register_resource("base", &ok);
+    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8181/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -335,7 +341,7 @@ LT_END_AUTO_TEST(custom_socket)
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, single_resource)
     httpserver::webserver ws = httpserver::create_webserver(PORT).single_resource();
     ok_resource ok;
-    ws.register_resource("/", &ok, true);
+    LT_ASSERT_EQ(true, ws.register_resource("/", &ok, true));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -392,7 +398,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, tuning_options)
         .nonce_nc_size(10);
 
     ok_resource ok;
-    ws.register_resource("base", &ok);
+    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
     LT_CHECK_NOTHROW(ws.start(false));
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -414,11 +420,11 @@ LT_END_AUTO_TEST(tuning_options)
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_base)
     httpserver::webserver ws = httpserver::create_webserver(PORT)
         .use_ssl()
-        .https_mem_key("key.pem")
-        .https_mem_cert("cert.pem");
+        .https_mem_key(ROOT "/key.pem")
+        .https_mem_cert(ROOT "/cert.pem");
 
     ok_resource ok;
-    ws.register_resource("base", &ok);
+    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -443,12 +449,12 @@ LT_END_AUTO_TEST(ssl_base)
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_with_protocol_priorities)
     httpserver::webserver ws = httpserver::create_webserver(PORT)
         .use_ssl()
-        .https_mem_key("key.pem")
-        .https_mem_cert("cert.pem")
+        .https_mem_key(ROOT "/key.pem")
+        .https_mem_cert(ROOT "/cert.pem")
         .https_priorities("NORMAL:-MD5");
 
     ok_resource ok;
-    ws.register_resource("base", &ok);
+    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -472,12 +478,12 @@ LT_END_AUTO_TEST(ssl_with_protocol_priorities)
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_with_trust)
     httpserver::webserver ws = httpserver::create_webserver(PORT)
         .use_ssl()
-        .https_mem_key("key.pem")
-        .https_mem_cert("cert.pem")
-        .https_mem_trust("test_root_ca.pem");
+        .https_mem_key(ROOT "/key.pem")
+        .https_mem_cert(ROOT "/cert.pem")
+        .https_mem_trust(ROOT "/test_root_ca.pem");
 
     ok_resource ok;
-    ws.register_resource("base", &ok);
+    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -501,8 +507,8 @@ LT_END_AUTO_TEST(ssl_with_trust)
 void* start_ws_blocking(void* par) {
     httpserver::webserver* ws = (httpserver::webserver*) par;
     ok_resource ok;
-    ws->register_resource("base", &ok);
-    ws->start(true);
+    if (!ws->register_resource("base", &ok)) return PTHREAD_CANCELED;
+    try { ws->start(true); } catch (...) { return PTHREAD_CANCELED; }
 
     return nullptr;
 }
@@ -532,6 +538,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, blocking_server)
 
     char* b;
     pthread_join(tid, reinterpret_cast<void**>(&b));
+    LT_CHECK_EQ(b, nullptr);
     free(b);
 LT_END_AUTO_TEST(blocking_server)
 
@@ -541,7 +548,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_error_resources)
         .method_not_allowed_resource(not_allowed_custom);
 
     ok_resource ok;
-    ws.register_resource("base", &ok);
+    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
     ws.start(false);
 
     {

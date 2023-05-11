@@ -21,11 +21,13 @@
 #include <curl/curl.h>
 #include <sys/stat.h>
 #include <cassert>
+#include <cstddef>
 #include <fstream>
 #include <map>
 #include <random>
 #include <sstream>
 #include <string>
+#include <tuple>
 
 #include "./httpserver.hpp"
 #include "httpserver/string_utilities.hpp"
@@ -47,15 +49,31 @@ using httpserver::webserver;
 using httpserver::create_webserver;
 using httpserver::http::arg_map;
 
+#ifdef HTTPSERVER_PORT
+#define PORT HTTPSERVER_PORT
+#else
+#define PORT 8080
+#endif  // PORT
+
+#define STR2(p) #p
+#define STR(p) STR2(p)
+#define PORT_STRING STR(PORT)
+
+#ifdef HTTPSERVER_DATA_ROOT
+#define ROOT STR(HTTPSERVER_DATA_ROOT)
+#else
+#define ROOT "."
+#endif  // HTTPSERVER_DATA_ROOT
+
 static const char* TEST_CONTENT_FILENAME = "test_content";
-static const char* TEST_CONTENT_FILEPATH = "./test_content";
+static const char* TEST_CONTENT_FILEPATH = ROOT "/test_content";
 static const char* FILENAME_IN_GET_CONTENT = "filename=\"test_content\"";
 static const char* TEST_CONTENT = "test content of file\n";
 static const char* TEST_KEY = "file";
 static size_t TEST_CONTENT_SIZE = 21;
 
 static const char* TEST_CONTENT_FILENAME_2 = "test_content_2";
-static const char* TEST_CONTENT_FILEPATH_2 = "./test_content_2";
+static const char* TEST_CONTENT_FILEPATH_2 = ROOT "/test_content_2";
 static const char* FILENAME_IN_GET_CONTENT_2 = "filename=\"test_content_2\"";
 static const char* TEST_CONTENT_2 = "test content of second file\n";
 static const char* TEST_KEY_2 = "file2";
@@ -67,7 +85,7 @@ static const char* TEST_PARAM_VALUE = "Value of test param";
 // The large file test_content_large is large enough to ensure
 // that MHD splits the underlying request into several chunks.
 static const char* LARGE_FILENAME_IN_GET_CONTENT = "filename=\"test_content_large\"";
-static const char* LARGE_CONTENT_FILEPATH = "./test_content_large";
+static const char* LARGE_CONTENT_FILEPATH = ROOT "/test_content_large";
 static const char* LARGE_KEY = "large_file";
 
 static bool file_exists(const string &path) {
@@ -76,7 +94,7 @@ static bool file_exists(const string &path) {
     return (stat(path.c_str(), &sb) == 0);
 }
 
-static CURLcode send_file_to_webserver(bool add_second_file, bool append_parameters) {
+static std::pair<CURLcode, int32_t> send_file_to_webserver(bool add_second_file, bool append_parameters) {
     curl_global_init(CURL_GLOBAL_ALL);
 
     CURL *curl = curl_easy_init();
@@ -98,17 +116,19 @@ static CURLcode send_file_to_webserver(bool add_second_file, bool append_paramet
     }
 
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/upload");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/upload");
     curl_easy_setopt(curl, CURLOPT_MIMEPOST, form);
 
     res = curl_easy_perform(curl);
+    long http_code = 0;   // NOLINT [runtime/int]
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
 
     curl_easy_cleanup(curl);
     curl_mime_free(form);
-    return res;
+    return {res, http_code};
 }
 
-static CURLcode send_large_file(string* content, std::string args = "") {
+static std::pair<CURLcode, int32_t> send_large_file(string* content, std::string args = "") {
     // Generate a large (100K) file of random bytes. Upload the file with
     // a curl request, then delete the file. The default chunk size of MHD
     // appears to be around 16K, so 100K should be enough to trigger the
@@ -130,7 +150,7 @@ static CURLcode send_large_file(string* content, std::string args = "") {
     curl_mime_name(field, LARGE_KEY);
     curl_mime_filedata(field, LARGE_CONTENT_FILEPATH);
 
-    std::string url = "localhost:8080/upload";
+    std::string url = "localhost:" PORT_STRING "/upload";
     if (!args.empty()) {
         url.append(args);
     }
@@ -139,14 +159,16 @@ static CURLcode send_large_file(string* content, std::string args = "") {
     curl_easy_setopt(curl, CURLOPT_MIMEPOST, form);
 
     res = curl_easy_perform(curl);
+    long http_code = 0;   // NOLINT [runtime/int]
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
 
     curl_easy_cleanup(curl);
     curl_mime_free(form);
 
-    return res;
+    return {res, http_code};
 }
 
-static bool send_file_via_put() {
+static std::tuple<bool, CURLcode, int32_t> send_file_via_put() {
     curl_global_init(CURL_GLOBAL_ALL);
 
     CURL *curl;
@@ -156,32 +178,33 @@ static bool send_file_via_put() {
 
     fd = fopen(TEST_CONTENT_FILEPATH, "rb");
     if (!fd) {
-        return false;
+        return {false, CURLcode{}, 0L};
     }
 
     if (fstat(fileno(fd), &file_info) != 0) {
-        return false;
+        return {false, CURLcode{}, 0L};
     }
 
     curl = curl_easy_init();
     if (!curl) {
         fclose(fd);
-        return false;
+        return {false, CURLcode{}, 0L};
     }
 
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/upload");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/upload");
     curl_easy_setopt(curl, CURLOPT_UPLOAD, 1L);
     curl_easy_setopt(curl, CURLOPT_READDATA, fd);
     curl_easy_setopt(curl, CURLOPT_INFILESIZE_LARGE, (curl_off_t) file_info.st_size);
 
     res = curl_easy_perform(curl);
+    long http_code = 0;   // NOLINT [runtime/int]
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+
     curl_easy_cleanup(curl);
 
     fclose(fd);
-    if (res == CURLE_OK) {
-        return true;
-    }
-    return false;
+
+    return {true, res, http_code};
 }
 
 class print_file_upload_resource : public http_resource {
@@ -240,11 +263,23 @@ LT_BEGIN_SUITE(file_upload_suite)
     }
 LT_END_SUITE(file_upload_suite)
 
+LT_BEGIN_AUTO_TEST(file_upload_suite, check_files)
+  std::ifstream it;
+  it.open(TEST_CONTENT_FILEPATH);
+  LT_CHECK_EQ(it.is_open(), true);
+
+  it.open(TEST_CONTENT_FILEPATH_2);
+  LT_CHECK_EQ(it.is_open(), true);
+
+  it.open(LARGE_CONTENT_FILEPATH);
+  LT_CHECK_EQ(it.is_open(), true);
+LT_END_AUTO_TEST(check_files)
+
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk)
     string upload_directory = ".";
     webserver* ws;
 
-    ws = new webserver(create_webserver(8080)
+    ws = new webserver(create_webserver(PORT)
                        .put_processed_data_to_content()
                        .file_upload_target(httpserver::FILE_UPLOAD_MEMORY_AND_DISK)
                        .file_upload_dir(upload_directory)
@@ -253,10 +288,11 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    ws->register_resource("upload", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
 
-    CURLcode res = send_file_to_webserver(false, false);
-    LT_ASSERT_EQ(res, 0);
+    auto res = send_file_to_webserver(false, false);
+    LT_ASSERT_EQ(res.first, 0);
+    LT_ASSERT_EQ(res.second, 201);
 
     ws->stop();
     delete ws;
@@ -293,7 +329,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_via_put)
     string upload_directory = ".";
     webserver* ws;
 
-    ws = new webserver(create_webserver(8080)
+    ws = new webserver(create_webserver(PORT)
                        .put_processed_data_to_content()
                        .file_upload_target(httpserver::FILE_UPLOAD_MEMORY_AND_DISK)
                        .file_upload_dir(upload_directory)
@@ -302,10 +338,12 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_via_put)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    ws->register_resource("upload", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
 
-    int ret = send_file_via_put();
-    LT_ASSERT_EQ(ret, true);
+    auto ret = send_file_via_put();
+    LT_CHECK_EQ(std::get<1>(ret), 0);
+    LT_CHECK_EQ(std::get<2>(ret), 200);
+    LT_ASSERT_EQ(std::get<0>(ret), true);
 
     string actual_content = resource.get_content();
     LT_CHECK_EQ(actual_content, TEST_CONTENT);
@@ -324,7 +362,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_additional_par
     string upload_directory = ".";
     webserver* ws;
 
-    ws = new webserver(create_webserver(8080)
+    ws = new webserver(create_webserver(PORT)
                        .put_processed_data_to_content()
                        .file_upload_target(httpserver::FILE_UPLOAD_MEMORY_AND_DISK)
                        .file_upload_dir(upload_directory)
@@ -333,10 +371,11 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_additional_par
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    ws->register_resource("upload", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
 
-    CURLcode res = send_file_to_webserver(false, true);
-    LT_ASSERT_EQ(res, 0);
+    auto res = send_file_to_webserver(false, true);
+    LT_ASSERT_EQ(res.first, 0);
+    LT_ASSERT_EQ(res.second, 201);
 
     ws->stop();
     delete ws;
@@ -378,7 +417,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_two_files)
     string upload_directory = ".";
     webserver* ws;
 
-    ws = new webserver(create_webserver(8080)
+    ws = new webserver(create_webserver(PORT)
                        .put_processed_data_to_content()
                        .file_upload_target(httpserver::FILE_UPLOAD_MEMORY_AND_DISK)
                        .file_upload_dir(upload_directory)
@@ -387,10 +426,11 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_two_files)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    ws->register_resource("upload", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
 
-    CURLcode res = send_file_to_webserver(true, false);
-    LT_ASSERT_EQ(res, 0);
+    auto res = send_file_to_webserver(true, false);
+    LT_ASSERT_EQ(res.first, 0);
+    LT_ASSERT_EQ(res.second, 201);
 
     ws->stop();
     delete ws;
@@ -447,7 +487,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_disk_only)
     string upload_directory = ".";
     webserver* ws;
 
-    ws = new webserver(create_webserver(8080)
+    ws = new webserver(create_webserver(PORT)
                        .no_put_processed_data_to_content()
                        .file_upload_target(httpserver::FILE_UPLOAD_DISK_ONLY)
                        .file_upload_dir(upload_directory)
@@ -456,10 +496,11 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_disk_only)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    ws->register_resource("upload", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
 
-    CURLcode res = send_file_to_webserver(false, false);
-    LT_ASSERT_EQ(res, 0);
+    auto res = send_file_to_webserver(false, false);
+    LT_ASSERT_EQ(res.first, 0);
+    LT_ASSERT_EQ(res.second, 201);
 
     ws->stop();
     delete ws;
@@ -489,20 +530,20 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_disk_only)
 LT_END_AUTO_TEST(file_upload_disk_only)
 
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_only_incl_content)
-    string upload_directory = ".";
     webserver* ws;
 
-    ws = new webserver(create_webserver(8080)
+    ws = new webserver(create_webserver(PORT)
                        .put_processed_data_to_content()
                        .file_upload_target(httpserver::FILE_UPLOAD_MEMORY_ONLY));
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    ws->register_resource("upload", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
 
-    CURLcode res = send_file_to_webserver(false, false);
-    LT_ASSERT_EQ(res, 0);
+    auto res = send_file_to_webserver(false, false);
+    LT_ASSERT_EQ(res.first, 0);
+    LT_ASSERT_EQ(res.second, 201);
 
     string actual_content = resource.get_content();
     LT_CHECK_EQ(actual_content.find(FILENAME_IN_GET_CONTENT) != string::npos, true);
@@ -522,22 +563,22 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_only_incl_content)
 LT_END_AUTO_TEST(file_upload_memory_only_incl_content)
 
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_large_content)
-    string upload_directory = ".";
     webserver* ws;
 
-    ws = new webserver(create_webserver(8080)
+    ws = new webserver(create_webserver(PORT)
                        .put_processed_data_to_content()
                        .file_upload_target(httpserver::FILE_UPLOAD_MEMORY_ONLY));
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    ws->register_resource("upload", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
 
     // Upload a large file to trigger the chunking behavior of MHD.
     std::string file_content;
-    CURLcode res = send_large_file(&file_content);
-    LT_ASSERT_EQ(res, 0);
+    auto res = send_large_file(&file_content);
+    LT_ASSERT_EQ(res.first, 0);
+    LT_ASSERT_EQ(res.second, 201);
 
     string actual_content = resource.get_content();
     LT_CHECK_EQ(actual_content.find(LARGE_FILENAME_IN_GET_CONTENT) != string::npos, true);
@@ -562,23 +603,23 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_large_content)
 LT_END_AUTO_TEST(file_upload_large_content)
 
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_large_content_with_args)
-    string upload_directory = ".";
     webserver* ws;
 
-    ws = new webserver(create_webserver(8080)
+    ws = new webserver(create_webserver(PORT)
                        .put_processed_data_to_content()
                        .file_upload_target(httpserver::FILE_UPLOAD_MEMORY_ONLY));
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    ws->register_resource("upload", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
 
     // Upload a large file to trigger the chunking behavior of MHD.
     // Include some additional args to make sure those are processed as well.
     std::string file_content;
-    CURLcode res = send_large_file(&file_content, "?arg1=hello&arg1=world");
-    LT_ASSERT_EQ(res, 0);
+    auto res = send_large_file(&file_content, "?arg1=hello&arg1=world");
+    LT_ASSERT_EQ(res.first, 0);
+    LT_ASSERT_EQ(res.second, 201);
 
     string actual_content = resource.get_content();
     LT_CHECK_EQ(actual_content.find(LARGE_FILENAME_IN_GET_CONTENT) != string::npos, true);
@@ -608,20 +649,20 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_large_content_with_args)
 LT_END_AUTO_TEST(file_upload_large_content_with_args)
 
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_only_excl_content)
-    string upload_directory = ".";
     webserver* ws;
 
-    ws = new webserver(create_webserver(8080)
+    ws = new webserver(create_webserver(PORT)
                        .no_put_processed_data_to_content()
                        .file_upload_target(httpserver::FILE_UPLOAD_MEMORY_ONLY));
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    ws->register_resource("upload", &resource);
+    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
 
-    CURLcode res = send_file_to_webserver(false, false);
-    LT_ASSERT_EQ(res, 0);
+    auto res = send_file_to_webserver(false, false);
+    LT_ASSERT_EQ(res.first, 0);
+    LT_ASSERT_EQ(res.second, 201);
 
     string actual_content = resource.get_content();
     LT_CHECK_EQ(actual_content.size(), 0);
