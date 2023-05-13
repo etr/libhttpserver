@@ -339,16 +339,16 @@ class http_request {
       * Method used to set the content of the request
       * @param content The content to set.
      **/
-     void set_content(const std::string& content) {
-         this->content = content.substr(0, content_size_limit);
+     void set_content(const std::string& content_) {
+         content = content_.substr(0, content_size_limit);
      }
 
      /**
       * Method used to set the maximum size of the content
       * @param content_size_limit The limit on the maximum size of the content and arg's.
      **/
-     void set_content_size_limit(size_t content_size_limit) {
-         this->content_size_limit = content_size_limit;
+     void set_content_size_limit(size_t content_size_limit_) {
+         content_size_limit = content_size_limit_;
      }
 
      /**
@@ -356,10 +356,10 @@ class http_request {
       * @param content The content to append.
       * @param size The size of the data to append.
      **/
-     void grow_content(const char* content, size_t size) {
-         this->content.append(content, size);
-         if (this->content.size() > content_size_limit) {
-             this->content.resize(content_size_limit);
+     void grow_content(const char* content_, size_t size) {
+         content.append(content_, size);
+         if (content.size() > content_size_limit) {
+             content.resize(content_size_limit);
          }
      }
 
@@ -367,8 +367,8 @@ class http_request {
       * Method used to set the path requested.
       * @param path The path searched by the request.
      **/
-     void set_path(const std::string& path) {
-         this->path = path;
+     void set_path(const std::string& path_) {
+         path = path_;
      }
 
      /**
@@ -381,8 +381,8 @@ class http_request {
       * Method used to set the request http version (ie http 1.1)
       * @param version The version to set in form of string
      **/
-     void set_version(const std::string& version) {
-         this->version = version;
+     void set_version(const std::string& version_) {
+         version = version_;
      }
 
      /**
@@ -391,7 +391,7 @@ class http_request {
      **/
      void set_args(const std::map<std::string, std::string>& args) {
          for (auto const& [key, value] : args) {
-             this->cache->unescaped_args[key].push_back(value.substr(0, content_size_limit));
+             cache->unescaped_args[key].push_back(value.substr(0, content_size_limit));
          }
      }
 

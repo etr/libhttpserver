@@ -284,9 +284,7 @@ class error_resource : public http_resource {
 
 class print_request_resource : public http_resource {
  public:
-     explicit print_request_resource(stringstream* ss) {
-         this->ss = ss;
-     }
+     explicit print_request_resource(stringstream* ss) : ss(ss) {}
 
      shared_ptr<http_response> render_GET(const http_request& req) {
          (*ss) << req;
@@ -299,9 +297,7 @@ class print_request_resource : public http_resource {
 
 class print_response_resource : public http_resource {
  public:
-     explicit print_response_resource(stringstream* ss) {
-         this->ss = ss;
-     }
+     explicit print_response_resource(stringstream* ss) : ss(ss) {}
 
      shared_ptr<http_response> render_GET(const http_request&) {
          shared_ptr<string_response> hresp(new string_response("OK", 200, "text/plain"));

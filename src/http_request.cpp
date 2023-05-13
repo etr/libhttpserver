@@ -35,8 +35,8 @@ struct arguments_accumulator {
     std::map<std::string, std::vector<std::string>, http::arg_comparator>* arguments;
 };
 
-void http_request::set_method(const std::string& method) {
-    this->method = string_utilities::to_upper_copy(method);
+void http_request::set_method(const std::string& method_) {
+    method = string_utilities::to_upper_copy(method_);
 }
 
 bool http_request::check_digest_auth(const std::string& realm, const std::string& password, int nonce_timeout, bool* reload_nonce) const {
@@ -301,7 +301,7 @@ std::ostream &operator<< (std::ostream &os, const http_request &r) {
 }
 
 http_request::~http_request() {
-    for ( const auto &file_key : this->get_files() ) {
+    for ( const auto &file_key : get_files() ) {
         for ( const auto &files : file_key.second ) {
             // C++17 has std::filesystem::remove()
             remove(files.second.get_file_system_file_name().c_str());
