@@ -99,7 +99,7 @@ class http_request {
      **/
      const std::string get_path_piece(int index) const {
          std::vector<std::string> post_path = get_path_pieces();
-         if ((static_cast<int>((post_path.size()))) > index) {
+         if (static_cast<int>(post_path.size()) > index) {
              return post_path[index];
          }
          return EMPTY;
