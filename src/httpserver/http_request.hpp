@@ -257,11 +257,11 @@ class http_request {
      /**
       * Default constructor of the class. It is a specific responsibility of apis to initialize this type of objects.
      **/
-     http_request() : cache(std::make_unique<http_request_data_cache>()) {}
+     http_request() = default;
 
      http_request(MHD_Connection* underlying_connection, unescaper_ptr unescaper):
          underlying_connection(underlying_connection),
-         unescaper(unescaper), cache(std::make_unique<http_request_data_cache>()) {}
+         unescaper(unescaper) {}
 
      /**
       * Copy constructor. Deleted to make class move-only. The class is move-only for several reasons:
@@ -411,7 +411,7 @@ class http_request {
         std::string digested_user;
         std::map<std::string, std::vector<std::string>, http::arg_comparator> unescaped_args;
      };
-     std::unique_ptr<http_request_data_cache> cache;
+     std::unique_ptr<http_request_data_cache> cache = std::make_unique<http_request_data_cache>();
      // Populate the data cache unescaped_args
      void populate_args() const;
 
