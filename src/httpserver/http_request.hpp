@@ -34,6 +34,7 @@
 #include <stddef.h>
 #include <algorithm>
 #include <iosfwd>
+#include <limits>
 #include <map>
 #include <memory>
 #include <string>
@@ -292,7 +293,7 @@ class http_request {
      std::string method;
      std::map<std::string, std::map<std::string, http::file_info>> files;
      std::string content = "";
-     size_t content_size_limit = static_cast<size_t>(-1);
+     size_t content_size_limit = std::numeric_limits<size_t>::max();
      std::string version;
 
      struct MHD_Connection* underlying_connection = nullptr;
