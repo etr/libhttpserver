@@ -757,7 +757,7 @@ MHD_Result webserver::answer_to_connection(void* cls, MHD_Connection* connection
     std::string t_url = url;
 
     base_unescaper(&t_url, static_cast<webserver*>(cls)->unescaper);
-    mr->standardized_url = new string(http_utils::standardize_url(t_url));
+    mr->standardized_url = std::make_unique<std::string>(http_utils::standardize_url(t_url));
 
     mr->has_body = false;
 
