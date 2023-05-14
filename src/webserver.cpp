@@ -182,11 +182,7 @@ void webserver::request_completed(void *cls, struct MHD_Connection *connection, 
     std::ignore = connection;
     std::ignore = toe;
 
-    details::modded_request* mr = static_cast<details::modded_request*>(*con_cls);
-    if (mr == nullptr) return;
-
-    delete mr;
-    mr = nullptr;
+    delete static_cast<details::modded_request*>(*con_cls);
 }
 
 bool webserver::register_resource(const std::string& resource, http_resource* hrm, bool family) {
@@ -422,10 +418,10 @@ void* uri_log(void* cls, const char* uri) {
     // Parameter needed to respect MHD interface, but not needed here.
     std::ignore = cls;
 
-    struct details::modded_request* mr = new details::modded_request();
+    auto mr = std::make_unique<details::modded_request>();
     mr->complete_uri = new string(uri);
     mr->second = false;
-    return reinterpret_cast<void*>(mr);
+    return reinterpret_cast<void*>(mr.release());
 }
 
 void error_log(void* cls, const char* fmt, va_list ap) {
