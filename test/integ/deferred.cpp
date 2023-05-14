@@ -31,11 +31,11 @@
 #endif
 
 #include <curl/curl.h>
-#include <memory>
 #include <signal.h>
 #include <unistd.h>
 
 #include <cstring>
+#include <memory>
 
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
