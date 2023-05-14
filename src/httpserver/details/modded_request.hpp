@@ -43,7 +43,7 @@ struct modded_request {
 
     std::shared_ptr<http_response> (httpserver::http_resource::*callback)(const httpserver::http_request&);
 
-    http_request* dhr = nullptr;
+    std::unique_ptr<http_request> dhr = nullptr;
     std::shared_ptr<http_response> dhrs;
     bool second = false;
     bool has_body = false;
@@ -63,9 +63,6 @@ struct modded_request {
     ~modded_request() {
         if (nullptr != pp) {
             MHD_destroy_post_processor(pp);
-        }
-        if (second) {
-            delete dhr;
         }
     }
 };

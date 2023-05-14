@@ -567,7 +567,7 @@ std::shared_ptr<http_response> webserver::internal_error_page(details::modded_re
 
 MHD_Result webserver::requests_answer_first_step(MHD_Connection* connection, struct details::modded_request* mr) {
     mr->second = true;
-    mr->dhr = new http_request(connection, unescaper);
+    mr->dhr.reset(new http_request(connection, unescaper));
 
     if (!mr->has_body) {
         return MHD_YES;
