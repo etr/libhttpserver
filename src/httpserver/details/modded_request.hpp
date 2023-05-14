@@ -45,7 +45,6 @@ struct modded_request {
 
     std::unique_ptr<http_request> dhr = nullptr;
     std::shared_ptr<http_response> dhrs;
-    bool second = false;
     bool has_body = false;
 
     std::string upload_key;

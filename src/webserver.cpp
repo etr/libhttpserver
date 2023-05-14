@@ -420,7 +420,6 @@ void* uri_log(void* cls, const char* uri) {
 
     auto mr = std::make_unique<details::modded_request>();
     mr->complete_uri = std::make_unique<string>(uri);
-    mr->second = false;
     return reinterpret_cast<void*>(mr.release());
 }
 
@@ -566,7 +565,6 @@ std::shared_ptr<http_response> webserver::internal_error_page(details::modded_re
 }
 
 MHD_Result webserver::requests_answer_first_step(MHD_Connection* connection, struct details::modded_request* mr) {
-    mr->second = true;
     mr->dhr.reset(new http_request(connection, unescaper));
 
     if (!mr->has_body) {
@@ -743,7 +741,7 @@ MHD_Result webserver::answer_to_connection(void* cls, MHD_Connection* connection
         const char* version, const char* upload_data, size_t* upload_data_size, void** con_cls) {
     struct details::modded_request* mr = static_cast<struct details::modded_request*>(*con_cls);
 
-    if (mr->second != false) {
+    if (mr->dhr) {
         return static_cast<webserver*>(cls)->requests_answer_second_step(connection, method, version, upload_data, upload_data_size, mr);
     }
 
