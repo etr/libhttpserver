@@ -54,10 +54,10 @@ struct modded_request {
 
     modded_request() = default;
 
-    modded_request(const modded_request& b) = default;
+    modded_request(const modded_request& b) = delete;
     modded_request(modded_request&& b) = default;
 
-    modded_request& operator=(const modded_request& b) = default;
+    modded_request& operator=(const modded_request& b) = delete;
     modded_request& operator=(modded_request&& b) = default;
 
     ~modded_request() {
