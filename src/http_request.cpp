@@ -35,8 +35,8 @@ struct arguments_accumulator {
     std::map<std::string, std::vector<std::string>, http::arg_comparator>* arguments;
 };
 
-void http_request::set_method(const std::string& method_) {
-    method = string_utilities::to_upper_copy(method_);
+void http_request::set_method(const std::string& method) {
+    this->method = string_utilities::to_upper_copy(method);
 }
 
 bool http_request::check_digest_auth(const std::string& realm, const std::string& password, int nonce_timeout, bool* reload_nonce) const {
