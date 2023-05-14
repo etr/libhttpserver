@@ -419,7 +419,7 @@ void* uri_log(void* cls, const char* uri) {
     std::ignore = cls;
 
     auto mr = std::make_unique<details::modded_request>();
-    mr->complete_uri = new string(uri);
+    mr->complete_uri = std::make_unique<string>(uri);
     mr->second = false;
     return reinterpret_cast<void*>(mr.release());
 }

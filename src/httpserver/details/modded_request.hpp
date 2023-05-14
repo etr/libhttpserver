@@ -37,7 +37,7 @@ namespace details {
 
 struct modded_request {
     struct MHD_PostProcessor *pp = nullptr;
-    std::string* complete_uri = nullptr;
+    std::unique_ptr<std::string> complete_uri;
     std::unique_ptr<std::string> standardized_url;
     webserver* ws = nullptr;
 
@@ -67,7 +67,6 @@ struct modded_request {
         if (second) {
             delete dhr;
         }
-        delete complete_uri;
     }
 };
 
