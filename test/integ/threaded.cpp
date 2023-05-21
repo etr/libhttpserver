@@ -24,6 +24,7 @@
 
 #include <curl/curl.h>
 #include <map>
+#include <memory>
 #include <string>
 
 #include "./httpserver.hpp"
@@ -51,19 +52,19 @@ using httpserver::create_webserver;
 class ok_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request&) {
-         return shared_ptr<string_response>(new string_response("OK", 200, "text/plain"));
+         return std::make_shared<string_response>("OK", 200, "text/plain");
      }
 };
 
 LT_BEGIN_SUITE(threaded_suite)
 
 #ifndef _WINDOWS
-    webserver* ws;
+    std::unique_ptr<webserver> ws;
 #endif
 
     void set_up() {
 #ifndef _WINDOWS
-        ws = new webserver(create_webserver(PORT).start_method(httpserver::http::http_utils::INTERNAL_SELECT).max_threads(5));
+        ws = std::make_unique<webserver>(create_webserver(PORT).start_method(httpserver::http::http_utils::INTERNAL_SELECT).max_threads(5));
         ws->start(false);
 #endif
     }
@@ -71,7 +72,6 @@ LT_BEGIN_SUITE(threaded_suite)
     void tear_down() {
 #ifndef _WINDOWS
         ws->stop();
-        delete ws;
 #endif
     }
 LT_END_SUITE(threaded_suite)

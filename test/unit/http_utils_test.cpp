@@ -56,59 +56,36 @@ LT_BEGIN_SUITE(http_utils_suite)
 LT_END_SUITE(http_utils_suite)
 
 LT_BEGIN_AUTO_TEST(http_utils_suite, unescape)
-    int with_plus_buff_len = 6;
-    char* with_plus = new char[with_plus_buff_len];
-    snprintf(with_plus, with_plus_buff_len, "%s", "A%20B");
-    std::string string_with_plus = with_plus;
+    std::string string_with_plus = "A%20B";
     int expected_size = httpserver::http::http_unescape(&string_with_plus);
 
-    int expected_buff_len = 4;
-    char* expected = new char[expected_buff_len];
-    snprintf(expected, expected_buff_len, "%s", "A B");
+    std::string expected = "A B";
 
     std::cout << "|||||" << string_with_plus << "||||" << std::endl;
     std::cout << expected << std::endl;
 
-    LT_CHECK_EQ(string_with_plus, string(expected));
+    LT_CHECK_EQ(string_with_plus, expected);
     LT_CHECK_EQ(expected_size, 3);
-
-    delete[] with_plus;
-    delete[] expected;
 LT_END_AUTO_TEST(unescape)
 
 LT_BEGIN_AUTO_TEST(http_utils_suite, unescape_plus)
-    int with_plus_buff_len = 4;
-    char* with_plus = new char[with_plus_buff_len];
-    snprintf(with_plus, with_plus_buff_len, "%s", "A+B");
-    std::string string_with_plus = with_plus;
+    std::string string_with_plus = "A+B";
     int expected_size = httpserver::http::http_unescape(&string_with_plus);
 
-    int expected_buff_len = 4;
-    char* expected = new char[expected_buff_len];
-    snprintf(expected, expected_buff_len, "%s", "A B");
+    std::string expected = "A B";
 
-    LT_CHECK_EQ(string_with_plus, string(expected));
+    LT_CHECK_EQ(string_with_plus, expected);
     LT_CHECK_EQ(expected_size, 3);
-
-    delete[] with_plus;
-    delete[] expected;
 LT_END_AUTO_TEST(unescape_plus)
 
 LT_BEGIN_AUTO_TEST(http_utils_suite, unescape_partial_marker)
-    int size = 6;
-    char* with_marker = new char[size];
-    snprintf(with_marker, size, "%s", "A+B%0");
-    std::string string_with_marker = with_marker;
+    std::string string_with_marker = "A+B%0";
     int expected_size = httpserver::http::http_unescape(&string_with_marker);
 
-    char* expected = new char[size];
-    snprintf(expected, size, "%s", "A B%0");
+    std::string expected = "A B%0";
 
-    LT_CHECK_EQ(string_with_marker, string(expected));
+    LT_CHECK_EQ(string_with_marker, expected);
     LT_CHECK_EQ(expected_size, 5);
-
-    delete[] with_marker;
-    delete[] expected;
 LT_END_AUTO_TEST(unescape_partial_marker)
 
 LT_BEGIN_AUTO_TEST(http_utils_suite, tokenize_url)

@@ -182,11 +182,7 @@ void webserver::request_completed(void *cls, struct MHD_Connection *connection, 
     std::ignore = connection;
     std::ignore = toe;
 
-    details::modded_request* mr = static_cast<details::modded_request*>(*con_cls);
-    if (mr == nullptr) return;
-
-    delete mr;
-    mr = nullptr;
+    delete static_cast<details::modded_request*>(*con_cls);
 }
 
 bool webserver::register_resource(const std::string& resource, http_resource* hrm, bool family) {
@@ -422,10 +418,9 @@ void* uri_log(void* cls, const char* uri) {
     // Parameter needed to respect MHD interface, but not needed here.
     std::ignore = cls;
 
-    struct details::modded_request* mr = new details::modded_request();
-    mr->complete_uri = new string(uri);
-    mr->second = false;
-    return reinterpret_cast<void*>(mr);
+    auto mr = std::make_unique<details::modded_request>();
+    mr->complete_uri = std::make_unique<string>(uri);
+    return reinterpret_cast<void*>(mr.release());
 }
 
 void error_log(void* cls, const char* fmt, va_list ap) {
@@ -521,8 +516,7 @@ MHD_Result webserver::post_iterator(void *cls, enum MHD_ValueKind kind,
             if (mr->upload_ostrm == nullptr || !mr->upload_ostrm->is_open()) {
                 mr->upload_key = key;
                 mr->upload_filename = filename;
-                delete mr->upload_ostrm;
-                mr->upload_ostrm = new std::ofstream();
+                mr->upload_ostrm = std::make_unique<std::ofstream>();
                 mr->upload_ostrm->open(file.get_file_system_file_name(), std::ios::binary | std::ios::app);
             }
 
@@ -550,7 +544,7 @@ std::shared_ptr<http_response> webserver::not_found_page(details::modded_request
     if (not_found_resource != nullptr) {
         return not_found_resource(*mr->dhr);
     } else {
-        return std::shared_ptr<http_response>(new string_response(NOT_FOUND_ERROR, http_utils::http_not_found));
+        return std::make_shared<string_response>(NOT_FOUND_ERROR, http_utils::http_not_found);
     }
 }
 
@@ -558,7 +552,7 @@ std::shared_ptr<http_response> webserver::method_not_allowed_page(details::modde
     if (method_not_allowed_resource != nullptr) {
         return method_not_allowed_resource(*mr->dhr);
     } else {
-        return std::shared_ptr<http_response>(new string_response(METHOD_ERROR, http_utils::http_method_not_allowed));
+        return std::make_shared<string_response>(METHOD_ERROR, http_utils::http_method_not_allowed);
     }
 }
 
@@ -566,13 +560,12 @@ std::shared_ptr<http_response> webserver::internal_error_page(details::modded_re
     if (internal_error_resource != nullptr && !force_our) {
         return internal_error_resource(*mr->dhr);
     } else {
-        return std::shared_ptr<http_response>(new string_response(GENERIC_ERROR, http_utils::http_internal_server_error, "text/plain"));
+        return std::make_shared<string_response>(GENERIC_ERROR, http_utils::http_internal_server_error);
     }
 }
 
 MHD_Result webserver::requests_answer_first_step(MHD_Connection* connection, struct details::modded_request* mr) {
-    mr->second = true;
-    mr->dhr = new http_request(connection, unescaper);
+    mr->dhr.reset(new http_request(connection, unescaper));
 
     if (!mr->has_body) {
         return MHD_YES;
@@ -748,7 +741,7 @@ MHD_Result webserver::answer_to_connection(void* cls, MHD_Connection* connection
         const char* version, const char* upload_data, size_t* upload_data_size, void** con_cls) {
     struct details::modded_request* mr = static_cast<struct details::modded_request*>(*con_cls);
 
-    if (mr->second != false) {
+    if (mr->dhr) {
         return static_cast<webserver*>(cls)->requests_answer_second_step(connection, method, version, upload_data, upload_data_size, mr);
     }
 
@@ -762,7 +755,7 @@ MHD_Result webserver::answer_to_connection(void* cls, MHD_Connection* connection
     std::string t_url = url;
 
     base_unescaper(&t_url, static_cast<webserver*>(cls)->unescaper);
-    mr->standardized_url = new string(http_utils::standardize_url(t_url));
+    mr->standardized_url = std::make_unique<std::string>(http_utils::standardize_url(t_url));
 
     mr->has_body = false;
 

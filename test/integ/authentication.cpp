@@ -31,6 +31,7 @@
 #endif
 
 #include <curl/curl.h>
+#include <memory>
 
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
@@ -66,9 +67,9 @@ class user_pass_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request& req) {
          if (req.get_user() != "myuser" || req.get_pass() != "mypass") {
-             return shared_ptr<basic_auth_fail_response>(new basic_auth_fail_response("FAIL", "examplerealm"));
+             return std::make_shared<basic_auth_fail_response>("FAIL", "examplerealm");
          }
-         return shared_ptr<string_response>(new string_response(std::string(req.get_user()) + " " + std::string(req.get_pass()), 200, "text/plain"));
+         return std::make_shared<string_response>(std::string(req.get_user()) + " " + std::string(req.get_pass()), 200, "text/plain");
      }
 };
 
@@ -76,14 +77,14 @@ class digest_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request& req) {
          if (req.get_digested_user() == "") {
-             return shared_ptr<digest_auth_fail_response>(new digest_auth_fail_response("FAIL", "examplerealm", MY_OPAQUE, true));
+             return std::make_shared<digest_auth_fail_response>("FAIL", "examplerealm", MY_OPAQUE, true);
          } else {
              bool reload_nonce = false;
              if (!req.check_digest_auth("examplerealm", "mypass", 300, &reload_nonce)) {
-                 return shared_ptr<digest_auth_fail_response>(new digest_auth_fail_response("FAIL", "examplerealm", MY_OPAQUE, reload_nonce));
+                 return std::make_shared<digest_auth_fail_response>("FAIL", "examplerealm", MY_OPAQUE, reload_nonce);
              }
          }
-         return shared_ptr<string_response>(new string_response("SUCCESS", 200, "text/plain"));
+         return std::make_shared<string_response>("SUCCESS", 200, "text/plain");
      }
 };
 

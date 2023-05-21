@@ -20,6 +20,7 @@
 
 #include <curl/curl.h>
 #include <map>
+#include <memory>
 #include <string>
 
 #include "./httpserver.hpp"
@@ -48,21 +49,20 @@ using httpserver::create_webserver;
 class ok_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request&) {
-         return shared_ptr<string_response>(new string_response("OK", 200, "text/plain"));
+         return std::make_shared<string_response>("OK", 200, "text/plain");
      }
 };
 
 LT_BEGIN_SUITE(threaded_suite)
-    webserver* ws;
+    std::unique_ptr<webserver> ws;
 
     void set_up() {
-        ws = new webserver(create_webserver(PORT).tcp_nodelay());
+        ws = std::make_unique<webserver>(create_webserver(PORT));
         ws->start(false);
     }
 
     void tear_down() {
         ws->stop();
-        delete ws;
     }
 LT_END_SUITE(threaded_suite)
 

@@ -20,6 +20,7 @@
 
 #include <curl/curl.h>
 #include <map>
+#include <memory>
 #include <string>
 
 #include "./httpserver.hpp"
@@ -54,7 +55,7 @@ size_t writefunc(void *ptr, size_t size, size_t nmemb, std::string *s) {
 class ok_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request&) {
-         return shared_ptr<string_response>(new string_response("OK", 200, "text/plain"));
+         return std::make_shared<string_response>("OK", 200, "text/plain");
      }
 };
 

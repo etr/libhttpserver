@@ -21,6 +21,7 @@
 #include "httpserver/http_resource.hpp"
 #include <microhttpd.h>
 #include <iosfwd>
+#include <memory>
 #include "httpserver/string_response.hpp"
 
 namespace httpserver { class http_response; }
@@ -43,7 +44,7 @@ void resource_init(std::map<std::string, bool>* method_state) {
 namespace details {
 
 std::shared_ptr<http_response> empty_render(const http_request&) {
-    return std::shared_ptr<http_response>(new string_response());
+    return std::make_shared<string_response>();
 }
 
 }  // namespace details

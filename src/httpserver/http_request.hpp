@@ -252,6 +252,8 @@ class http_request {
 
      friend std::ostream &operator<< (std::ostream &os, http_request &r);
 
+     ~http_request();
+
  private:
      /**
       * Default constructor of the class. It is a specific responsibility of apis to initialize this type of objects.
@@ -285,8 +287,6 @@ class http_request {
      **/
      http_request& operator=(const http_request& b) = delete;
      http_request& operator=(http_request&& b) = default;
-
-     ~http_request();
 
      std::string path;
      std::string method;

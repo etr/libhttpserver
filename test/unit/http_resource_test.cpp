@@ -41,7 +41,7 @@ using httpserver::string_response;
 class simple_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request&) {
-         return shared_ptr<string_response>(new string_response("OK"));
+         return std::make_shared<string_response>("OK");
      }
 };
 

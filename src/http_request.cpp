@@ -187,24 +187,22 @@ MHD_Result http_request::build_request_args(void *cls, enum MHD_ValueKind kind, 
     return MHD_YES;
 }
 
-MHD_Result http_request::build_request_querystring(void *cls, enum MHD_ValueKind kind, const char *key, const char *arg_value) {
+MHD_Result http_request::build_request_querystring(void *cls, enum MHD_ValueKind kind, const char *key_value, const char *arg_value) {
     // Parameters needed to respect MHD interface, but not used in the implementation.
     std::ignore = kind;
 
     std::string* querystring = static_cast<std::string*>(cls);
-    std::string value = ((arg_value == nullptr) ? "" : arg_value);
 
-    int buffer_size = std::string(key).size() + value.size() + 3;
-    char* buf = new char[buffer_size];
-    if (*querystring == "") {
-        snprintf(buf, buffer_size, "?%s=%s", key, value.c_str());
-        *querystring = std::string(buf);
-    } else {
-        snprintf(buf, buffer_size, "&%s=%s", key, value.c_str());
-        *querystring += std::string(buf);
-    }
+    std::string_view key = key_value;
+    std::string_view value = ((arg_value == nullptr) ? "" : arg_value);
 
-    delete[] buf;
+    // Limit to a single allocation.
+    querystring->reserve(querystring->size() + key.size() + value.size() + 3);
+
+    *querystring += ((*querystring == "") ? "?" : "&");
+    *querystring += key;
+    *querystring += "=";
+    *querystring += value;
 
     return MHD_YES;
 }
