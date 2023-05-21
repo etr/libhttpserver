@@ -82,7 +82,7 @@ struct generateFilenameException : public std::exception {
      }
 
      const char* what() const noexcept {
-          return this->error_message.c_str();
+          return error_message.c_str();
      }
 
  private:

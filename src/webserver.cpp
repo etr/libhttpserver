@@ -82,7 +82,7 @@ namespace httpserver {
 
 MHD_Result policy_callback(void *, const struct sockaddr*, socklen_t);
 void error_log(void*, const char*, va_list);
-void* uri_log(void*, const char*);
+void* uri_log(void*, const char*, struct MHD_Connection *con);
 void access_log(webserver*, string);
 size_t unescaper_func(void*, struct MHD_Connection*, char*);
 
@@ -414,9 +414,10 @@ MHD_Result policy_callback(void *cls, const struct sockaddr* addr, socklen_t add
     return MHD_YES;
 }
 
-void* uri_log(void* cls, const char* uri) {
+void* uri_log(void* cls, const char* uri, struct MHD_Connection *con) {
     // Parameter needed to respect MHD interface, but not needed here.
     std::ignore = cls;
+    std::ignore = con;
 
     auto mr = std::make_unique<details::modded_request>();
     mr->complete_uri = std::make_unique<string>(uri);

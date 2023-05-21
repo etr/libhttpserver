@@ -28,6 +28,7 @@
 #include <stdlib.h>
 #include <memory>
 #include <functional>
+#include <limits>
 #include <string>
 
 #include "httpserver/http_response.hpp"
@@ -363,7 +364,7 @@ class create_webserver {
      int _max_threads = 0;
      int _max_connections = 0;
      int _memory_limit = 0;
-     size_t _content_size_limit = static_cast<size_t>(-1);
+     size_t _content_size_limit = std::numeric_limits<size_t>::max();
      int _connection_timeout = DEFAULT_WS_TIMEOUT;
      int _per_IP_connection_limit = 0;
      log_access_ptr _log_access = nullptr;
