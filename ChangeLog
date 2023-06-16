@@ -1,3 +1,17 @@
+Thu Jun 15 8:55:04 2023 -0800
+	Considering family_url as part of the priority when selecting a URL to match.
+	More explicit selection of C++ version.
+	Ability to handle multiple parameters with the same name on the URL.
+	Enable error_log to handle params to interpolate in the string.
+	Reduced memory footprint of requests using of string_view.
+	Configurable management of upload files that allows to load files on disk only, memory only or both disk and memory.
+	Fixed error codes.
+	Method not allowed now returns 'allows' header.
+	Added method to access the gnutls_session struct.
+	Code cleanups.
+	Better use of RAII.
+	Improved test coverage.
+
 Sun Mar 07 20:02:10 2021 -0800
 	Cleaned code to support cpplint and extra warnings.
 	Use pointers in place of non-const references.

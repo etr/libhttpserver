@@ -52,5 +52,5 @@ Christian Grothoff <grothoff@gnu.org>
 - Fixes to the behavior of "Method Not Allowed" and other cleanups. Fixed the behavior of the server when receiving invalid responses from libmicrohttpd. Fixed the file_response to handle not existing files and directories.
 Alexander Dahl <post@lespocky.de>
 
-- General cleanup. Use of string_view.
+- General cleanup. Use of string_view. Support for handling of multiple arguments with the same name.
 stuart-byma (https://github.com/stuart-byma)
