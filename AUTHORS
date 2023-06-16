@@ -13,6 +13,9 @@ Felipe Zipitría <fzipi@fing.edu.uy>
 Steven 'Steve' Kendall <skendall@neverware.com>
 G. Mercat <guillaume.mercat@gmail.com>
 Thomas Schätzlein <schaetzleinT@minimax.de>
+Matt van Niekerk <mail@mattvanniekerk.com>
+Jim Phillips (https://github.com/jcphill)
+Ilya Brin (https://github.com/ilyabrin)
 
 - Support for building on MinGW/Cygwin systems
 Shane Peelar <lookatyouhacker@gmail.com>
@@ -36,7 +39,7 @@ martamoreton (Github: https://github.com/martamoreton)
 - Memory leaks
 rdiazmartin <rdiazmartin@gmail.com>
 
-- Cleanup of multiple parts of the code
+- Cleanup of multiple parts of the code. Improved testing. Fixed issues with family urls.
 bcsgh (Github: https://github.com/bcsgh)
 
 - Management of large uploads
@@ -46,7 +49,8 @@ Jagat <pellucide@yahoo.com>
 - Simplification of microhttpd dependency management
 Christian Grothoff <grothoff@gnu.org>
 
-- Fixes to the behavior of "Method Not Allowed" and other cleanups
-- Fixed the behavior of the server when receiving invalid responses from libmicrohttpd.
-- Fixed the file_response to handle not existing files and directories.
+- Fixes to the behavior of "Method Not Allowed" and other cleanups. Fixed the behavior of the server when receiving invalid responses from libmicrohttpd. Fixed the file_response to handle not existing files and directories.
 Alexander Dahl <post@lespocky.de>
+
+- General cleanup. Use of string_view.
+stuart-byma (https://github.com/stuart-byma)
