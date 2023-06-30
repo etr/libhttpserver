@@ -105,13 +105,15 @@ const http::header_view_map http_request::get_cookies() const {
 }
 
 void http_request::populate_args() const {
-    if (!cache->unescaped_args.empty()) {
+    if (cache->args_populated) {
         return;
     }
     arguments_accumulator aa;
     aa.unescaper = unescaper;
     aa.arguments = &cache->unescaped_args;
     MHD_get_connection_values(underlying_connection, MHD_GET_ARGUMENT_KIND, &build_request_args, reinterpret_cast<void*>(&aa));
+
+    cache->args_populated = true;
 }
 
 http_arg_value http_request::get_arg(std::string_view key) const {

@@ -948,6 +948,24 @@ LT_BEGIN_AUTO_TEST(basic_suite, regex_matching_arg)
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(regex_matching_arg)
 
+LT_BEGIN_AUTO_TEST(basic_suite, regex_matching_arg_with_url_pars)
+    args_resource resource;
+    LT_ASSERT_EQ(true, ws->register_resource("this/captures/{arg}/passed/in/input", &resource));
+    curl_global_init(CURL_GLOBAL_ALL);
+
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/this/captures/whatever/passed/in/input?arg2=second_argument");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "whateversecond_argument");
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(regex_matching_arg_with_url_pars)
+
 LT_BEGIN_AUTO_TEST(basic_suite, regex_matching_arg_custom)
     args_resource resource;
     LT_ASSERT_EQ(true, ws->register_resource("this/captures/numeric/{arg|([0-9]+)}/passed/in/input", &resource));

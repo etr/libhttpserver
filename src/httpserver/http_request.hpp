@@ -410,6 +410,8 @@ class http_request {
         std::string requestor_ip;
         std::string digested_user;
         std::map<std::string, std::vector<std::string>, http::arg_comparator> unescaped_args;
+
+        bool args_populated = false;
      };
      std::unique_ptr<http_request_data_cache> cache = std::make_unique<http_request_data_cache>();
      // Populate the data cache unescaped_args
