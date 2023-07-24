@@ -179,6 +179,7 @@ class webserver {
      std::map<details::http_endpoint, http_resource*> registered_resources;
      std::map<std::string, http_resource*> registered_resources_str;
 
+     std::shared_mutex bans_and_allowances_mutex;
      std::set<http::ip_representation> bans;
      std::set<http::ip_representation> allowances;
 
