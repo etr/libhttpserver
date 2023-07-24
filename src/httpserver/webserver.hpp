@@ -43,6 +43,7 @@
 #include <map>
 #include <memory>
 #include <set>
+#include <shared_mutex>
 #include <string>
 
 #include "httpserver/http_utils.hpp"
@@ -174,6 +175,7 @@ class webserver {
      const render_ptr not_found_resource;
      const render_ptr method_not_allowed_resource;
      const render_ptr internal_error_resource;
+     std::shared_mutex registered_resources_mutex;
      std::map<details::http_endpoint, http_resource*> registered_resources;
      std::map<std::string, http_resource*> registered_resources_str;
 
