@@ -44,6 +44,7 @@
 #include <iosfwd>
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -196,6 +197,7 @@ bool webserver::register_resource(const std::string& resource, http_resource* hr
 
     details::http_endpoint idx(resource, family, true, regex_checking);
 
+    std::unique_lock registered_resources_lock(registered_resources_mutex);
     pair<map<details::http_endpoint, http_resource*>::iterator, bool> result = registered_resources.insert(map<details::http_endpoint, http_resource*>::value_type(idx, hrm));
 
     if (!family && result.second) {
@@ -370,6 +372,7 @@ bool webserver::stop() {
 void webserver::unregister_resource(const string& resource) {
     // family does not matter - it just checks the url_normalized anyhow
     details::http_endpoint he(resource, false, true, regex_checking);
+    std::unique_lock registered_resources_lock(registered_resources_mutex);
     registered_resources.erase(he);
     registered_resources.erase(he.get_url_complete());
     registered_resources_str.erase(he.get_url_complete());
@@ -676,51 +679,54 @@ MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct details
 
     bool found = false;
     struct MHD_Response* raw_response;
-    if (!single_resource) {
-        const char* st_url = mr->standardized_url->c_str();
-        fe = registered_resources_str.find(st_url);
-        if (fe == registered_resources_str.end()) {
-            if (regex_checking) {
-                map<details::http_endpoint, http_resource*>::iterator found_endpoint;
+    {
+        std::shared_lock registered_resources_lock(registered_resources_mutex);
+        if (!single_resource) {
+            const char* st_url = mr->standardized_url->c_str();
+            fe = registered_resources_str.find(st_url);
+            if (fe == registered_resources_str.end()) {
+                if (regex_checking) {
+                    map<details::http_endpoint, http_resource*>::iterator found_endpoint;
 
-                details::http_endpoint endpoint(st_url, false, false, false);
+                    details::http_endpoint endpoint(st_url, false, false, false);
 
-                map<details::http_endpoint, http_resource*>::iterator it;
+                    map<details::http_endpoint, http_resource*>::iterator it;
 
-                size_t len = 0;
-                size_t tot_len = 0;
-                for (it = registered_resources.begin(); it != registered_resources.end(); ++it) {
-                    size_t endpoint_pieces_len = (*it).first.get_url_pieces().size();
-                    size_t endpoint_tot_len = (*it).first.get_url_complete().size();
-                    if (!found || endpoint_pieces_len > len || (endpoint_pieces_len == len && endpoint_tot_len > tot_len)) {
-                        if ((*it).first.match(endpoint)) {
-                            found = true;
-                            len = endpoint_pieces_len;
-                            tot_len = endpoint_tot_len;
-                            found_endpoint = it;
+                    size_t len = 0;
+                    size_t tot_len = 0;
+                    for (it = registered_resources.begin(); it != registered_resources.end(); ++it) {
+                        size_t endpoint_pieces_len = (*it).first.get_url_pieces().size();
+                        size_t endpoint_tot_len = (*it).first.get_url_complete().size();
+                        if (!found || endpoint_pieces_len > len || (endpoint_pieces_len == len && endpoint_tot_len > tot_len)) {
+                            if ((*it).first.match(endpoint)) {
+                                found = true;
+                                len = endpoint_pieces_len;
+                                tot_len = endpoint_tot_len;
+                                found_endpoint = it;
+                            }
                         }
                     }
-                }
 
-                if (found) {
-                    vector<string> url_pars = found_endpoint->first.get_url_pars();
+                    if (found) {
+                        vector<string> url_pars = found_endpoint->first.get_url_pars();
 
-                    vector<string> url_pieces = endpoint.get_url_pieces();
-                    vector<int> chunks = found_endpoint->first.get_chunk_positions();
-                    for (unsigned int i = 0; i < url_pars.size(); i++) {
-                        mr->dhr->set_arg(url_pars[i], url_pieces[chunks[i]]);
+                        vector<string> url_pieces = endpoint.get_url_pieces();
+                        vector<int> chunks = found_endpoint->first.get_chunk_positions();
+                        for (unsigned int i = 0; i < url_pars.size(); i++) {
+                            mr->dhr->set_arg(url_pars[i], url_pieces[chunks[i]]);
+                        }
+
+                        hrm = found_endpoint->second;
                     }
-
-                    hrm = found_endpoint->second;
                 }
+            } else {
+                hrm = fe->second;
+                found = true;
             }
         } else {
-            hrm = fe->second;
+            hrm = registered_resources.begin()->second;
             found = true;
         }
-    } else {
-        hrm = registered_resources.begin()->second;
-        found = true;
     }
 
     if (found) {
