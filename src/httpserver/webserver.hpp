@@ -167,13 +167,13 @@ class webserver {
      const std::string file_upload_dir;
      const bool generate_random_filename_on_upload;
      const bool deferred_enabled;
-     bool single_resource;
-     bool tcp_nodelay;
+     const bool single_resource;
+     const bool tcp_nodelay;
      pthread_mutex_t mutexwait;
      pthread_cond_t mutexcond;
-     render_ptr not_found_resource;
-     render_ptr method_not_allowed_resource;
-     render_ptr internal_error_resource;
+     const render_ptr not_found_resource;
+     const render_ptr method_not_allowed_resource;
+     const render_ptr internal_error_resource;
      std::map<details::http_endpoint, http_resource*> registered_resources;
      std::map<std::string, http_resource*> registered_resources_str;
 
