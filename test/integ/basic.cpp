@@ -19,11 +19,13 @@
 */
 
 #include <curl/curl.h>
+#include <atomic>
 #include <map>
 #include <memory>
 #include <numeric>
 #include <sstream>
 #include <string>
+#include <thread>
 
 #include "./httpserver.hpp"
 #include "httpserver/string_utilities.hpp"
@@ -1461,6 +1463,46 @@ LT_BEGIN_AUTO_TEST(basic_suite, method_not_allowed_header)
     LT_CHECK_EQ(ss["Allow"], "HEAD, POST");
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(method_not_allowed_header)
+
+LT_BEGIN_AUTO_TEST(basic_suite, thread_safety)
+    simple_resource resource;
+
+    std::atomic_bool done = false;
+    auto register_thread = std::thread([&]() {
+        int i = 0;
+        using namespace std::chrono;
+        while (!done) {
+            ws->register_resource(
+                    std::string("/route") + std::to_string(++i), &resource);
+        }
+    });
+
+    auto get_thread = std::thread([&](){
+        while (!done) {
+            CURL *curl = curl_easy_init();
+            std::string s;
+            std::string url = "localhost:" PORT_STRING "/route" + std::to_string(
+                                            (int)((rand() * 10000000.0) / RAND_MAX));
+            curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+            curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+            curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+            curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+            curl_easy_perform(curl);
+            curl_easy_cleanup(curl);
+        }
+    });
+
+    using namespace std::chrono_literals;
+    std::this_thread::sleep_for(10s);
+    done = true;
+    if (register_thread.joinable()) {
+        register_thread.join();
+    }
+    if (get_thread.joinable()) {
+        get_thread.join();
+    }
+    LT_CHECK_EQ(1, 1);
+LT_END_AUTO_TEST(thread_safety)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
