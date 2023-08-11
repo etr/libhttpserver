@@ -407,16 +407,18 @@ MHD_Result policy_callback(void *cls, const struct sockaddr* addr, socklen_t add
     // Parameter needed to respect MHD interface, but not needed here.
     std::ignore = addrlen;
 
-    if (!(static_cast<webserver*>(cls))->ban_system_enabled) return MHD_YES;
+    const auto ws = static_cast<webserver*>(cls);
 
-    std::shared_lock bans_lock(bans_mutex);
-    std::shared_lock allowances_lock(allowances_mutex);
-    if ((((static_cast<webserver*>(cls))->default_policy == http_utils::ACCEPT) &&
-                ((static_cast<webserver*>(cls))->bans.count(ip_representation(addr))) &&
-                (!(static_cast<webserver*>(cls))->allowances.count(ip_representation(addr)))) ||
-            (((static_cast<webserver*>(cls))->default_policy == http_utils::REJECT) &&
-             ((!(static_cast<webserver*>(cls))->allowances.count(ip_representation(addr))) ||
-              ((static_cast<webserver*>(cls))->bans.count(ip_representation(addr)))))) {
+    if (!ws->ban_system_enabled) return MHD_YES;
+
+    std::shared_lock bans_lock(ws->bans_mutex);
+    std::shared_lock allowances_lock(ws->allowances_mutex);
+    const bool is_banned = ws->bans.count(ip_representation(addr));
+    const bool is_allowed = ws->allowances.count(ip_representation(addr));
+
+    if ((ws->default_policy == http_utils::ACCEPT && is_banned && !is_allowed) ||
+        (ws->default_policy == http_utils::REJECT && (!is_allowed || is_banned)))
+    {
         return MHD_NO;
     }
 
