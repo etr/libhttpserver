@@ -370,7 +370,7 @@ void webserver::unregister_resource(const string& resource) {
 }
 
 void webserver::ban_ip(const string& ip) {
-    std::unique_lock bans_and_allowances_lock(bans_and_allowances_mutex);
+    std::unique_lock bans_lock(bans_mutex);
     ip_representation t_ip(ip);
     set<ip_representation>::iterator it = bans.find(t_ip);
     if (it != bans.end() && (t_ip.weight() < (*it).weight())) {
@@ -382,7 +382,7 @@ void webserver::ban_ip(const string& ip) {
 }
 
 void webserver::allow_ip(const string& ip) {
-    std::unique_lock bans_and_allowances_lock(bans_and_allowances_mutex);
+    std::unique_lock allowances_lock(allowances_mutex);
     ip_representation t_ip(ip);
     set<ip_representation>::iterator it = allowances.find(t_ip);
     if (it != allowances.end() && (t_ip.weight() < (*it).weight())) {
@@ -394,12 +394,12 @@ void webserver::allow_ip(const string& ip) {
 }
 
 void webserver::unban_ip(const string& ip) {
-    std::unique_lock bans_and_allowances_lock(bans_and_allowances_mutex);
+    std::unique_lock bans_lock(bans_mutex);
     bans.erase(ip_representation(ip));
 }
 
 void webserver::disallow_ip(const string& ip) {
-    std::unique_lock bans_and_allowances_lock(bans_and_allowances_mutex);
+    std::unique_lock allowances_lock(allowances_mutex);
     allowances.erase(ip_representation(ip));
 }
 
@@ -409,7 +409,8 @@ MHD_Result policy_callback(void *cls, const struct sockaddr* addr, socklen_t add
 
     if (!(static_cast<webserver*>(cls))->ban_system_enabled) return MHD_YES;
 
-    std::shared_lock bans_and_allowances_lock((static_cast<webserver*>(cls))->bans_and_allowances_mutex);
+    std::shared_lock bans_lock(bans_mutex);
+    std::shared_lock allowances_lock(allowances_mutex);
     if ((((static_cast<webserver*>(cls))->default_policy == http_utils::ACCEPT) &&
                 ((static_cast<webserver*>(cls))->bans.count(ip_representation(addr))) &&
                 (!(static_cast<webserver*>(cls))->allowances.count(ip_representation(addr)))) ||
