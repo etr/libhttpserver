@@ -153,15 +153,15 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
 
 ## Structures and classes type definition
 * _webserver:_ Represents the daemon listening on a socket for HTTP traffic.
-	* _create_webserver:_ Builder class to support the creation of a webserver.
+    * _create_webserver:_ Builder class to support the creation of a webserver.
 * _http_resource:_ Represents the resource associated with a specific http endpoint.
 * _http_request:_ Represents the request received by the resource that process it.
 * _http_response:_ Represents the response sent by the server once the resource finished its work.
-	* _string_response:_ A simple string response.
-	* _file_response:_ A response getting content from a file.
-	* _basic_auth_fail_response:_ A failure in basic authentication.
-	* _digest_auth_fail_response:_ A failure in digest authentication.
-	* _deferred_response:_ A response getting content from a callback.
+    * _string_response:_ A simple string response.
+    * _file_response:_ A response getting content from a file.
+    * _basic_auth_fail_response:_ A failure in basic authentication.
+    * _digest_auth_fail_response:_ A failure in digest authentication.
+    * _deferred_response:_ A response getting content from a callback.
 
 [Back to TOC](#table-of-contents)
 
@@ -193,9 +193,9 @@ For example, if your connection limit is “1”, a browser may open a first con
 * _.post_process() and .no_post_process():_ Enables/Disables the library to automatically parse the body of the http request as arguments if in querystring format. Read more [here](#parsing-requests). `on` by default.
 * _.put_processed_data_to_content() and .no_put_processed_data_to_content():_ Enables/Disables the library to copy parsed body data to the content or to only store it in the arguments map. `on` by default.
 * _.file_upload_target(**file_upload_target_T** file_upload_target):_ Controls, how the library stores uploaded files. Default value is `FILE_UPLOAD_MEMORY_ONLY`.
-	* `FILE_UPLOAD_MEMORY_ONLY`: The content of the file is only stored in memory. Depending on `put_processed_data_to_content` only as part of the arguments map or additionally in the content.
-	* `FILE_UPLOAD_DISK_ONLY`: The content of the file is stored only in the file system. The path is created from `file_upload_dir` and either a random name (if `generate_random_filename_on_upload` is true) or the actually uploaded file name.
-	* `FILE_UPLOAD_MEMORY_AND_DISK`: The content of the file is stored in memory and on the file system.
+    * `FILE_UPLOAD_MEMORY_ONLY`: The content of the file is only stored in memory. Depending on `put_processed_data_to_content` only as part of the arguments map or additionally in the content.
+    * `FILE_UPLOAD_DISK_ONLY`: The content of the file is stored only in the file system. The path is created from `file_upload_dir` and either a random name (if `generate_random_filename_on_upload` is true) or the actually uploaded file name.
+    * `FILE_UPLOAD_MEMORY_AND_DISK`: The content of the file is stored in memory and on the file system.
 * _.file_upload_dir(**const std::string&** file_upload_dir):_ Specifies the directory to store all uploaded files. Default value is `/tmp`.
 * _.generate_random_filename_on_upload() and .no_generate_random_filename_on_upload():_ Enables/Disables the library to generate a unique and unused filename to store the uploaded file to. Otherwise the actually uploaded file name is used. `off` by default.
 * _.deferred()_ and _.no_deferred():_ Enables/Disables the ability for the server to suspend and resume connections. Simply put, it enables/disables the ability to use `deferred_response`. Read more [here](#building-responses-to-requests). `on` by default.
@@ -203,8 +203,8 @@ For example, if your connection limit is “1”, a browser may open a first con
 
 ### Threading Models
 * _.start_method(**const http::http_utils::start_method_T&** start_method):_ libhttpserver can operate with two different threading models that can be selected through this method. Default value is `INTERNAL_SELECT`.
-	* `http::http_utils::INTERNAL_SELECT`: In this mode, libhttpserver uses only a single thread to handle listening on the port and processing of requests. This mode is preferable if spawning a thread for each connection would be costly. If the HTTP server is able to quickly produce responses without much computational overhead for each connection, this mode can be a great choice. Note that libhttpserver will still start a single thread for itself -- this way, the main program can continue with its operations after calling the start method. Naturally, if the HTTP server needs to interact with shared state in the main application, synchronization will be required. If such synchronization in code providing a response results in blocking, all HTTP server operations on all connections will stall. This mode is a bad choice if response data cannot always be provided instantly. The reason is that the code generating responses should not block (since that would block all other connections) and on the other hand, if response data is not available immediately, libhttpserver will start to busy wait on it. If you need to scale along the number of concurrent connection and scale on multiple thread you can specify a value for `max_threads` (see below) thus enabling a thread pool - this is different from `THREAD_PER_CONNECTION` below where a new thread is spawned for each connection. 
-	* `http::http_utils::THREAD_PER_CONNECTION`: In this mode, libhttpserver starts one thread to listen on the port for new connections and then spawns a new thread to handle each connection. This mode is great if the HTTP server has hardly any state that is shared between connections (no synchronization issues!) and may need to perform blocking operations (such as extensive IO or running of code) to handle an individual connection.
+    * `http::http_utils::INTERNAL_SELECT`: In this mode, libhttpserver uses only a single thread to handle listening on the port and processing of requests. This mode is preferable if spawning a thread for each connection would be costly. If the HTTP server is able to quickly produce responses without much computational overhead for each connection, this mode can be a great choice. Note that libhttpserver will still start a single thread for itself -- this way, the main program can continue with its operations after calling the start method. Naturally, if the HTTP server needs to interact with shared state in the main application, synchronization will be required. If such synchronization in code providing a response results in blocking, all HTTP server operations on all connections will stall. This mode is a bad choice if response data cannot always be provided instantly. The reason is that the code generating responses should not block (since that would block all other connections) and on the other hand, if response data is not available immediately, libhttpserver will start to busy wait on it. If you need to scale along the number of concurrent connection and scale on multiple thread you can specify a value for `max_threads` (see below) thus enabling a thread pool - this is different from `THREAD_PER_CONNECTION` below where a new thread is spawned for each connection. 
+    * `http::http_utils::THREAD_PER_CONNECTION`: In this mode, libhttpserver starts one thread to listen on the port for new connections and then spawns a new thread to handle each connection. This mode is great if the HTTP server has hardly any state that is shared between connections (no synchronization issues!) and may need to perform blocking operations (such as extensive IO or running of code) to handle an individual connection.
 * _.max_threads(**int** max_threads):_ A thread pool can be combined with the `INTERNAL_SELECT` mode to benefit implementations that require scalability. As said before, by default this mode only uses a single thread. When combined with the thread pool option, it is possible to handle multiple connections with multiple threads. Any value greater than one for this option will activate the use of the thread pool. In contrast to the `THREAD_PER_CONNECTION` mode (where each thread handles one and only one connection), threads in the pool can handle a large number of concurrent connections. Using `INTERNAL_SELECT` in combination with a thread pool is typically the most scalable (but also hardest to debug) mode of operation for libhttpserver. Default value is `1`. This option is incompatible with `THREAD_PER_CONNECTION`.
 
 ### Custom defaulted error messages
@@ -303,16 +303,17 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
 ### TLS/HTTPS
 * _.use_ssl() and .no_ssl():_ Determines whether to run in HTTPS-mode or not. If you set this as on and libhttpserver was compiled without SSL support, the library will throw an exception at start of the server. `off` by default.
 * _.cred_type(**const http::http_utils::cred_type_T&** cred_type):_ Daemon credentials type. Either certificate or anonymous. Acceptable values are:
-	* `NONE`: No credentials.
-	* `CERTIFICATE`: Certificate credential.
-	* `ANON`: Anonymous credential.
-	* `SRP`: SRP credential.
-	* `PSK`: PSK credential.
-	* `IA`: IA credential.
+    * `NONE`: No credentials.
+    * `CERTIFICATE`: Certificate credential.
+    * `ANON`: Anonymous credential.
+    * `SRP`: SRP credential.
+    * `PSK`: PSK credential.
+    * `IA`: IA credential.
 * _.https_mem_key(**const std::string&** filename):_ String representing the path to a file containing the private key to be used by the HTTPS daemon. This must be used in conjunction with `https_mem_cert`.
 * _.https_mem_cert(**const std::string&** filename):_ String representing the path to a file containing the certificate to be used by the HTTPS daemon. This must be used in conjunction with `https_mem_key`.
 * _.https_mem_trust(**const std::string&** filename):_ String representing the path to a file containing the CA certificate to be used by the HTTPS daemon to authenticate and trust clients certificates. The presence of this option activates the request of certificate to the client. The request to the client is marked optional, and it is the responsibility of the server to check the presence of the certificate if needed. Note that most browsers will only present a client certificate only if they have one matching the specified CA, not sending any certificate otherwise.
 * _.https_priorities(**const std::string&** priority_string):_ SSL/TLS protocol version and ciphers. Must be followed by a string specifying the SSL/TLS protocol versions and ciphers that are acceptable for the application. The string is passed unchanged to gnutls_priority_init. If this option is not specified, `"NORMAL"` is used.
+* _.psk_cred_handler(**std::function<std::string(const std::string&)>** callback): Assign callback function for handling TLS with pre-shared key (PSK) authentication. The function will be invoked with a identity name in the TLS handshake and returns the related pre-shared key as a hex-encoded string. This is the same as it is created, for example, by *psktool* from the GnuTLS suite.
 
 #### Minimal example using HTTPS
 ```cpp
@@ -345,6 +346,59 @@ To test the above example, you can run the following command from a terminal:
     curl -XGET -v -k 'https://localhost:8080/hello'
 
 You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/minimal_https.cpp).
+
+#### Minimal example using HTTPS with PSK
+```cpp
+    #include <httpserver.hpp>
+
+    using namespace http_server;
+
+    class hello_world_resource : public http_resource
+    {
+        public:
+        std::shared_ptr<http_response> render(const http_request&)
+        {
+            return std::shared_ptr<http_response>(
+                new string_response("Hello, World!"));
+        }
+    };
+
+    std::string psk_callback(const std::string& username)
+    {
+        // Known identity from the database.
+        auto identity = std::string {"oFWv9Cv3N9tUsm"};
+
+        // Pre-shared key in hex-encoded format.
+        auto key = std::string {
+            "467427f5a4696f8e0ac285f36840efcbf6fd8da88703d26ff68c1faac7f4e2ae"};
+
+        return (username == identity) ? key : std::string {};
+    }
+
+    int main()
+    {
+        webserver ws =
+            create_webserver(8080)
+                .use_ssl()
+                .https_priorities("NORMAL:+PSK:+ECDHE-PSK:+DHE-PSK")
+                .cred_type(http::http_utils::PSK)
+                .psk_cred_handler(psk_callback);
+
+        hello_world_resource hwr;
+        ws.register_resource("/hello", &hwr);
+        ws.start(true);
+
+        return 0;
+    }
+```
+
+To test the above example, you can run the following command from a terminal:
+
+    openssl s_client -msg -brief -psk_identity oFWv9Cv3N9tUsm -psk 467427f5a4696f8e0ac285f36840efcbf6fd8da88703d26ff68c1faac7f4e2ae -connect localhost:8080
+
+Once the connection is made, enter the HTTP request, i.e. "GET /hello HTTP/1.1" followed by an empty line and you will see the server response.
+
+You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/minimal_https_psk.cpp).
 
 ### IP Blacklisting/Whitelisting
 libhttpserver supports IP blacklisting and whitelisting as an internal feature. This section explains the startup options related with IP blacklisting/whitelisting. See the [specific section](#ip-blacklisting-and-whitelisting) to read more about the topic.
@@ -643,9 +697,9 @@ There are 5 types of response that you can create - we will describe them here t
 * _basic_auth_fail_response(**const std::string&** content, **const std::string&** realm = `""`, **int** response_code = `200`, **const std::string&** content_type = `"text/plain"`):_ A response in return to a failure during basic authentication. It allows to specify a `content` string as a message to send back to the client. The `realm` parameter should contain your realm of authentication (if any). The other two optional parameters are the `response_code` and the `content_type`. You can find constant definition for the various response codes within the [http_utils](https://github.com/etr/libhttpserver/blob/master/src/httpserver/http_utils.hpp) library file.
 * _digest_auth_fail_response(**const std::string&** content, **const std::string&** realm = `""`, **const std::string&** opaque = `""`, **bool** reload_nonce = `false`, **int** response_code = `200`, **const std::string&** content_type = `"text/plain"`):_ A response in return to a failure during digest authentication. It allows to specify a `content` string as a message to send back to the client. The `realm` parameter should contain your realm of authentication (if any). The `opaque` represents a value that gets passed to the client and expected to be passed again to the server as-is. This value can be a hexadecimal or base64 string. The `reload_nonce` parameter tells the server to reload the nonce (you should use the value returned by the `check_digest_auth` method on the `http_request`. The other two optional parameters are the `response_code` and the `content_type`. You can find constant definition for the various response codes within the [http_utils](https://github.com/etr/libhttpserver/blob/master/src/httpserver/http_utils.hpp) library file.
 * _deferred_response(**ssize_t(&ast;cycle_callback_ptr)(shared_ptr&lt;T&gt;, char&ast;, size_t)** cycle_callback, **const std::string&** content = `""`, **int** response_code = `200`, **const std::string&** content_type = `"text/plain"`):_ A response that obtains additional content from a callback executed in a deferred way. It leaves the client in pending state (returning a `100 CONTINUE` message) and suspends the connection. Besides the callback, optionally, you can provide a `content` parameter that sets the initial message sent immediately to the client. The other two optional parameters are the `response_code` and the `content_type`. You can find constant definition for the various response codes within the [http_utils](https://github.com/etr/libhttpserver/blob/master/src/httpserver/http_utils.hpp) library file. To use `deferred_response` you need to have the `deferred` option active on your webserver (enabled by default).
-	* The `cycle_callback_ptr` has this shape:
-		_**ssize_t** cycle_callback(**shared_ptr&lt;T&gt; closure_data, char&ast;** buf, **size_t** max_size)_.
-		You are supposed to implement a function in this shape and provide it to the `deferred_repsonse` method. The webserver will provide a `char*` to the function. It is responsibility of the function to allocate it and fill its content. The method is supposed to respect the `max_size` parameter passed in input. The function must return  a `ssize_t` value representing the actual size you filled the `buf` with. Any value different from `-1` will keep the resume the connection, deliver the content and suspend it again (with a `100 CONTINUE`). If the method returns `-1`, the webserver will complete the communication with the client and close the connection. You can also pass a `shared_ptr` pointing to a data object of your choice (this will be templetized with a class of your choice). The server will guarantee that this object is passed at each invocation of the method allowing the client code to use it as a memory buffer during computation.
+    * The `cycle_callback_ptr` has this shape:
+        _**ssize_t** cycle_callback(**shared_ptr&lt;T&gt; closure_data, char&ast;** buf, **size_t** max_size)_.
+        You are supposed to implement a function in this shape and provide it to the `deferred_repsonse` method. The webserver will provide a `char*` to the function. It is responsibility of the function to allocate it and fill its content. The method is supposed to respect the `max_size` parameter passed in input. The function must return  a `ssize_t` value representing the actual size you filled the `buf` with. Any value different from `-1` will keep the resume the connection, deliver the content and suspend it again (with a `100 CONTINUE`). If the method returns `-1`, the webserver will complete the communication with the client and close the connection. You can also pass a `shared_ptr` pointing to a data object of your choice (this will be templetized with a class of your choice). The server will guarantee that this object is passed at each invocation of the method allowing the client code to use it as a memory buffer during computation.
 
 ### Setting additional properties of the response
 The `http_response` class offers an additional set of methods to "decorate" your responses. This set of methods is:

@@ -141,6 +141,7 @@ webserver::webserver(const create_webserver& params):
     https_mem_cert(params._https_mem_cert),
     https_mem_trust(params._https_mem_trust),
     https_priorities(params._https_priorities),
+    psk_cred_handler(params._psk_cred_handler),
     cred_type(params._cred_type),
     digest_auth_random(params._digest_auth_random),
     nonce_nc_size(params._nonce_nc_size),
@@ -174,6 +175,18 @@ webserver::~webserver() {
 
 void webserver::sweet_kill() {
     stop();
+}
+
+void webserver::psk_cred_handler_func(void* cls, const struct MHD_Connection*, const char* username, void** psk, size_t* psk_size) {
+    std::string key = std::invoke(static_cast<const webserver*>(cls)->psk_cred_handler,username);
+
+#ifdef HAVE_GNUTLS
+    *psk_size = key.length();
+    *psk = malloc(*psk_size);
+
+    if (gnutls_hex2bin(key.data(),key.length(),*psk,psk_size) != GNUTLS_E_SUCCESS)
+        *psk_size = 0;
+#endif
 }
 
 void webserver::request_completed(void *cls, struct MHD_Connection *connection, void **con_cls, enum MHD_RequestTerminationCode toe) {
@@ -210,9 +223,11 @@ bool webserver::start(bool blocking) {
     } gen;
     vector<struct MHD_OptionItem> iov;
 
+    // Must be assigned first to options to ensure that all output is handled by external logger! 
+    iov.push_back(gen(MHD_OPTION_EXTERNAL_LOGGER, (intptr_t) &error_log, this));
+
     iov.push_back(gen(MHD_OPTION_NOTIFY_COMPLETED, (intptr_t) &request_completed, nullptr));
     iov.push_back(gen(MHD_OPTION_URI_LOG_CALLBACK, (intptr_t) &uri_log, this));
-    iov.push_back(gen(MHD_OPTION_EXTERNAL_LOGGER, (intptr_t) &error_log, this));
     iov.push_back(gen(MHD_OPTION_UNESCAPE_CALLBACK, (intptr_t) &unescaper_func, this));
     iov.push_back(gen(MHD_OPTION_CONNECTION_TIMEOUT, connection_timeout));
     if (bind_socket != 0) {
@@ -247,12 +262,12 @@ bool webserver::start(bool blocking) {
         iov.push_back(gen(MHD_OPTION_NONCE_NC_SIZE, nonce_nc_size));
     }
 
-    if (use_ssl) {
+    if (https_mem_key != "" && use_ssl) {
         // Need for const_cast to respect MHD interface that needs a void*
         iov.push_back(gen(MHD_OPTION_HTTPS_MEM_KEY, 0, reinterpret_cast<void*>(const_cast<char*>(https_mem_key.c_str()))));
     }
 
-    if (use_ssl) {
+    if (https_mem_cert != "" && use_ssl) {
         // Need for const_cast to respect MHD interface that needs a void*
         iov.push_back(gen(MHD_OPTION_HTTPS_MEM_CERT, 0, reinterpret_cast<void*>(const_cast<char*>(https_mem_cert.c_str()))));
     }
@@ -273,8 +288,12 @@ bool webserver::start(bool blocking) {
     }
 
 #ifdef HAVE_GNUTLS
-    if (cred_type != http_utils::NONE) {
+    if (cred_type != http_utils::NONE && use_ssl) {
         iov.push_back(gen(MHD_OPTION_HTTPS_CRED_TYPE, cred_type));
+    }
+   
+    if (psk_cred_handler && use_ssl) {
+       iov.push_back(gen(MHD_OPTION_GNUTLS_PSK_CRED_HANDLER,(intptr_t) psk_cred_handler_func, this));
     }
 #endif  // HAVE_GNUTLS
 

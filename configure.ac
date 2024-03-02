@@ -25,7 +25,7 @@ m4_define([libhttpserver_MINOR_VERSION],[19])dnl
 m4_define([libhttpserver_REVISION],[0])dnl
 m4_define([libhttpserver_PKG_VERSION],[libhttpserver_MAJOR_VERSION.libhttpserver_MINOR_VERSION.libhttpserver_REVISION])dnl
 m4_define([libhttpserver_LDF_VERSION],[libhttpserver_MAJOR_VERSION:libhttpserver_MINOR_VERSION:libhttpserver_REVISION])dnl
-AC_INIT([libhttpserver], libhttpserver_PKG_VERSION, [electrictwister2000@gmail.com])
+AC_INIT([libhttpserver], libhttpserver_PKG_VERSION, electrictwister2000@gmail.com)
 AM_INIT_AUTOMAKE([subdir-objects])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIR([m4])
@@ -83,7 +83,6 @@ case "$host" in
 esac
 
 # Checks for header files.
-AC_HEADER_STDC
 AC_CHECK_HEADER([stdint.h],[],[AC_MSG_ERROR("stdint.h not found")])
 AC_CHECK_HEADER([inttypes.h],[],[AC_MSG_ERROR("inttypes.h not found")])
 AC_CHECK_HEADER([errno.h],[],[AC_MSG_ERROR("errno.h not found")])
@@ -245,9 +244,10 @@ AM_CONDITIONAL([BUILD_EXAMPLES], [test "x$enable_examples" = "xyes"])
 AM_CONDITIONAL([COND_GCOV],[test x"$cond_gcov" = x"yes"])
 AC_SUBST(COND_GCOV)
 
-if test x"have_gnutls" = x"yes"; then
+if test "x$have_gnutls" = "xyes"; then
+    AC_DEFINE([HAVE_GNUTLS],[1],[Uses GNU TLS])
     AM_CXXFLAGS="$AM_CXXFLAGS -DHAVE_GNUTLS"
-    AM_CFLAGS="$AM_CXXFLAGS -DHAVE_GNUTLS"
+    AM_CFLAGS="$AM_CFLAGS -DHAVE_GNUTLS"
 fi
 
 DX_HTML_FEATURE(ON)
@@ -284,14 +284,14 @@ AC_CONFIG_FILES([examples/cert.pem:examples/cert.pem])
 AC_CONFIG_FILES([examples/key.pem:examples/key.pem])
 AC_CONFIG_FILES([examples/test_content:examples/test_content])
 
-AC_OUTPUT(
-      libhttpserver.pc
+AC_CONFIG_FILES([libhttpserver.pc
       Makefile
       doc/Makefile
       src/Makefile
       test/Makefile
       examples/Makefile
-)
+])
+AC_OUTPUT
 
 AC_MSG_NOTICE([Configuration Summary:
   Operating System:  ${host_os}
