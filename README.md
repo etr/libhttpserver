@@ -312,8 +312,8 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
 * _.https_mem_key(**const std::string&** filename):_ String representing the path to a file containing the private key to be used by the HTTPS daemon. This must be used in conjunction with `https_mem_cert`.
 * _.https_mem_cert(**const std::string&** filename):_ String representing the path to a file containing the certificate to be used by the HTTPS daemon. This must be used in conjunction with `https_mem_key`.
 * _.https_mem_trust(**const std::string&** filename):_ String representing the path to a file containing the CA certificate to be used by the HTTPS daemon to authenticate and trust clients certificates. The presence of this option activates the request of certificate to the client. The request to the client is marked optional, and it is the responsibility of the server to check the presence of the certificate if needed. Note that most browsers will only present a client certificate only if they have one matching the specified CA, not sending any certificate otherwise.
-* .https_priorities(**const std::string&** priority_string):_ SSL/TLS protocol version and ciphers. Must be followed by a string specifying the SSL/TLS protocol versions and ciphers that are acceptable for the application. The string is passed unchanged to gnutls_priority_init. If this option is not specified, `"NORMAL"` is used.
-* _.psk_cred_handler(**std::function<std::string(const std::string&)>** callback): Assign callback function for handling TLS with pre-shared key (PSK) authentication. The function will be invoked with a identity name in the TLS handshake and returns the related pre-shared key as a hex-encoded string. This is the same as it is created, for example, by *psktool* from the GnuTLS suite.
+* _.https_priorities(**const std::string&** priority_string):_ SSL/TLS protocol version and ciphers. Must be followed by a string specifying the SSL/TLS protocol versions and ciphers that are acceptable for the application. The string is passed unchanged to gnutls_priority_init. If this option is not specified, `"NORMAL"` is used.
+* _.psk_cred_handler(**std::function<std::string(const std::string&)>** callback):_ Assign a callback function for handling TLS with pre-shared key (PSK) authentication. The function is called in the TLS handshake with an identity name and returns the associated pre-shared key as a hexadecimal encoded string. This key is the same as it is created, for example, by *psktool* from the GnuTLS suite.
 
 #### Minimal example using HTTPS
 ```cpp
@@ -345,7 +345,7 @@ To test the above example, you can run the following command from a terminal:
     
     curl -XGET -v -k 'https://localhost:8080/hello'
 
-You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/minimal_https.cpp).
+You can also check this example on [github](https://github.com/oberdorc/libhttpserver/blob/master/examples/minimal_https.cpp).
 
 #### Minimal example using HTTPS with PSK
 ```cpp
@@ -398,7 +398,7 @@ To test the above example, you can run the following command from a terminal:
 
 Once the connection is made, enter the HTTP request, i.e. "GET /hello HTTP/1.1" followed by an empty line and you will see the server response.
 
-You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/minimal_https_psk.cpp).
+You can also check this example on [github](https://github.com/oberdorc/libhttpserver/blob/master/examples/minimal_https_psk.cpp).
 
 ### IP Blacklisting/Whitelisting
 libhttpserver supports IP blacklisting and whitelisting as an internal feature. This section explains the startup options related with IP blacklisting/whitelisting. See the [specific section](#ip-blacklisting-and-whitelisting) to read more about the topic.
