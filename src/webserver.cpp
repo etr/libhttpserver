@@ -48,7 +48,7 @@
 #include <vector>
 
 #ifdef HAVE_GNUTLS
-#include<gnutls.h>
+#include<gnutls/gnutls.h>
 #endif
 
 #include "httpserver/create_webserver.hpp"
