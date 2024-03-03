@@ -182,7 +182,7 @@ void webserver::sweet_kill() {
 }
 
 void webserver::psk_cred_handler_func(void* cls, const struct MHD_Connection*, const char* username, void** psk, size_t* psk_size) {
-    std::string key = std::invoke(static_cast<const webserver*>(cls)->psk_cred_handler,username);
+    [[maybe_unused]] std::string key = std::invoke(static_cast<const webserver*>(cls)->psk_cred_handler,username);
 
 #ifdef HAVE_GNUTLS
     *psk_size = key.length();
