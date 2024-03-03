@@ -47,6 +47,10 @@
 #include <utility>
 #include <vector>
 
+#ifdef HAVE_GNUTLS
+#include<gnutls.h>
+#endif
+
 #include "httpserver/create_webserver.hpp"
 #include "httpserver/details/http_endpoint.hpp"
 #include "httpserver/details/modded_request.hpp"
