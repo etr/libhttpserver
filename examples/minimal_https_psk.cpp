@@ -45,6 +45,7 @@ std::string psk_callback(const std::string& username)
 
 int main()
 {
+#ifdef HAVE_GNUTLS
     webserver ws =
         create_webserver(8080)
             .use_ssl()
@@ -57,4 +58,7 @@ int main()
     ws.start(true);
 
     return 0;
+ #else
+    return -1;
+ #endif
 }
