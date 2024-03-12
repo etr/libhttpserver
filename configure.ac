@@ -250,6 +250,8 @@ if test "x$have_gnutls" = "xyes"; then
     AM_CFLAGS="$AM_CFLAGS -DHAVE_GNUTLS"
 fi
 
+AM_CONDITIONAL([HAVE_GNUTLS], [test "x$have_gnutls" = "xyes"])
+
 DX_HTML_FEATURE(ON)
 DX_CHM_FEATURE(OFF)
 DX_CHI_FEATURE(OFF)
