@@ -19,20 +19,15 @@
 
 #include <httpserver.hpp>
 
-using namespace httpserver;
-
-class hello_world_resource : public http_resource
-{
-    public:
-    std::shared_ptr<http_response> render(const http_request&)
-    {
-        return std::shared_ptr<http_response>(
+class hello_world_resource : public httpserver::http_resource {
+     public:
+    std::shared_ptr<httpserver::http_response> render(const httpserver::http_request&) {
+        return std::shared_ptr<httpserver::http_response>(
             new string_response("Hello, World!"));
     }
 };
 
-std::string psk_callback(const std::string& username)
-{
+std::string psk_callback(const std::string& username) {
     // Known identity from the database.
     auto identity = std::string {"oFWv9Cv3N9tUsm"};
 
@@ -43,14 +38,13 @@ std::string psk_callback(const std::string& username)
     return (username == identity) ? key : std::string {};
 }
 
-int main()
-{
+int main() {
 #ifdef HAVE_GNUTLS
-    webserver ws =
-        create_webserver(8080)
+    httpserver::webserver ws =
+        httpserver::create_webserver(8080)
             .use_ssl()
             .https_priorities("NORMAL:+PSK:+ECDHE-PSK:+DHE-PSK")
-            .cred_type(http::http_utils::PSK)
+            .cred_type(httpserver::http::http_utils::PSK)
             .psk_cred_handler(psk_callback);
 
     hello_world_resource hwr;
@@ -58,7 +52,7 @@ int main()
     ws.start(true);
 
     return 0;
- #else
+#else
     return -1;
- #endif
+#endif
 }
