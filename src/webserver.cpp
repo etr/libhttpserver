@@ -182,13 +182,13 @@ void webserver::sweet_kill() {
 }
 
 void webserver::psk_cred_handler_func(void* cls, const struct MHD_Connection*, const char* username, void** psk, size_t* psk_size) {
-    [[maybe_unused]] std::string key = std::invoke(static_cast<const webserver*>(cls)->psk_cred_handler,username);
+    [[maybe_unused]] std::string key = std::invoke(static_cast<const webserver*>(cls)->psk_cred_handler, username);
 
 #ifdef HAVE_GNUTLS
     *psk_size = key.length();
     *psk = malloc(*psk_size);
 
-    if (gnutls_hex2bin(key.data(),key.length(),*psk,psk_size) != GNUTLS_E_SUCCESS)
+    if (gnutls_hex2bin(key.data(), key.length(), *psk,psk_size) != GNUTLS_E_SUCCESS)
         *psk_size = 0;
 #endif
 }
@@ -227,7 +227,7 @@ bool webserver::start(bool blocking) {
     } gen;
     vector<struct MHD_OptionItem> iov;
 
-    // Must be assigned first to options to ensure that all output is handled by external logger! 
+    // Must be assigned first to options to ensure that all output is handled by external logger!
     iov.push_back(gen(MHD_OPTION_EXTERNAL_LOGGER, (intptr_t) &error_log, this));
 
     iov.push_back(gen(MHD_OPTION_NOTIFY_COMPLETED, (intptr_t) &request_completed, nullptr));
@@ -295,9 +295,9 @@ bool webserver::start(bool blocking) {
     if (cred_type != http_utils::NONE && use_ssl) {
         iov.push_back(gen(MHD_OPTION_HTTPS_CRED_TYPE, cred_type));
     }
-   
+
     if (psk_cred_handler && use_ssl) {
-       iov.push_back(gen(MHD_OPTION_GNUTLS_PSK_CRED_HANDLER,(intptr_t) psk_cred_handler_func, this));
+       iov.push_back(gen(MHD_OPTION_GNUTLS_PSK_CRED_HANDLER, (intptr_t) psk_cred_handler_func, this));
     }
 #endif  // HAVE_GNUTLS
 
