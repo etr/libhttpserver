@@ -17,9 +17,14 @@
 #     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
 LDADD = $(top_builddir)/src/libhttpserver.la
+
+if HAVE_GNUTLS
+LDADD += -lgnutls
+endif
+
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/
 METASOURCES = AUTO
-noinst_PROGRAMS = hello_world service minimal_hello_world custom_error allowing_disallowing_methods handlers hello_with_get_arg setting_headers custom_access_log basic_authentication digest_authentication minimal_https minimal_file_response minimal_deferred url_registration minimal_ip_ban benchmark_select benchmark_threads benchmark_nodelay deferred_with_accumulator file_upload
+noinst_PROGRAMS = hello_world service minimal_hello_world custom_error allowing_disallowing_methods handlers hello_with_get_arg setting_headers custom_access_log basic_authentication digest_authentication minimal_https minimal_https_psk minimal_file_response minimal_deferred url_registration minimal_ip_ban benchmark_select benchmark_threads benchmark_nodelay deferred_with_accumulator file_upload
 
 hello_world_SOURCES = hello_world.cpp
 service_SOURCES = service.cpp
@@ -33,6 +38,7 @@ custom_access_log_SOURCES = custom_access_log.cpp
 basic_authentication_SOURCES = basic_authentication.cpp
 digest_authentication_SOURCES = digest_authentication.cpp
 minimal_https_SOURCES = minimal_https.cpp
+minimal_https_psk_SOURCES = minimal_https_psk.cpp
 minimal_file_response_SOURCES = minimal_file_response.cpp
 minimal_deferred_SOURCES = minimal_deferred.cpp
 deferred_with_accumulator_SOURCES = deferred_with_accumulator.cpp
