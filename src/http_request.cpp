@@ -116,6 +116,21 @@ void http_request::populate_args() const {
     cache->args_populated = true;
 }
 
+
+void http_request::grow_last_arg(const std::string& key, const std::string& value) {
+    auto it = cache->unescaped_args.find(key);
+
+    if (it != cache->unescaped_args.end()) {
+        if (!it->second.empty()) {
+            it->second.back() += value;
+        } else {
+            it->second.push_back(value);
+        }
+    } else {
+        cache->unescaped_args[key] = {value};
+    }
+}
+
 http_arg_value http_request::get_arg(std::string_view key) const {
     populate_args();
 

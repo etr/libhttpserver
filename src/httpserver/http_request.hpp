@@ -335,6 +335,9 @@ class http_request {
      void set_arg_flat(const std::string& key, const std::string& value) {
          cache->unescaped_args[key] = { (value.substr(0, content_size_limit)) };
      }
+
+     void grow_last_arg(const std::string& key, const std::string& value);
+
      /**
       * Method used to set the content of the request
       * @param content The content to set.
