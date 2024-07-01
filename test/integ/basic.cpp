@@ -19,6 +19,7 @@
 */
 
 #include <curl/curl.h>
+#include <cstring>
 #include <map>
 #include <memory>
 #include <numeric>
