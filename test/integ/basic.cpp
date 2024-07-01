@@ -854,26 +854,25 @@ LT_BEGIN_AUTO_TEST(basic_suite, postprocessor_large_field_last_field)
     CURLcode res;
 
     const int size = 20000;
-    const char* value = "A";
+    const char value = 'A';
     const char* prefix = "arg1=BB&arg1=";
-    const char* suffix = "";
 
     // Calculate the total length of the string
-    int totalLength = std::strlen(prefix) + std::strlen(suffix) + size * std::strlen(value);
+    int totalLength = std::strlen(prefix) + size;
 
     // Allocate memory for the char array
-    char* cString = new char[totalLength + 1]; // +1 for the null terminator
+    char* cString = new char[totalLength + 1];  // +1 for the null terminator
 
     // Copy the prefix
-    std::strcpy(cString, prefix);
+    int offset = std::snprintf(cString, totalLength + 1, "%s", prefix);
 
     // Append 20,000 times the character 'A' to the string
     for (int i = 0; i < size; ++i) {
-        std::strcat(cString, value);
+        cString[offset++] = value;
     }
 
     // Append the suffix
-    std::strcat(cString, suffix);
+    cString[offset] = '\0';
 
     curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, cString);
@@ -896,30 +895,30 @@ LT_BEGIN_AUTO_TEST(basic_suite, postprocessor_large_field_first_field)
     CURLcode res;
 
     const int size = 20000;
-    const char* value = "A";
+    const char value = 'A';
     const char* prefix = "arg1=";
     const char* middle = "&arg1=";
     const char* suffix = "BB";
 
     // Calculate the total length of the string
-    int totalLength = std::strlen(prefix) + size * std::strlen(value) + std::strlen(middle) + std::strlen(suffix);
+    int totalLength = std::strlen(prefix) + size + std::strlen(middle) + std::strlen(suffix);
 
     // Allocate memory for the char array
-    char* cString = new char[totalLength + 1]; // +1 for the null terminator
+    char* cString = new char[totalLength + 1];  // +1 for the null terminator
 
     // Copy the prefix
-    std::strcpy(cString, prefix);
+    int offset = std::snprintf(cString, totalLength + 1, "%s", prefix);
 
     // Append 20,000 times the character 'A' to the string
     for (int i = 0; i < size; ++i) {
-        std::strcat(cString, value);
+        cString[offset++] = value;
     }
 
     // Append the middle part
-    std::strcat(cString, middle);
+    offset += std::snprintf(cString + offset, totalLength + 1 - offset, "%s", middle);
 
     // Append the suffix
-    std::strcat(cString, suffix);
+    std::snprintf(cString + offset, totalLength + 1 - offset, "%s", suffix);
 
     curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, cString);
