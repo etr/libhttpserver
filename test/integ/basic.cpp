@@ -69,6 +69,26 @@ class simple_resource : public http_resource {
      }
 };
 
+class large_post_resource_last_value : public http_resource {
+ public:
+     shared_ptr<http_response> render_GET(const http_request&) {
+         return std::make_shared<string_response>("OK", 200, "text/plain");
+     }
+     shared_ptr<http_response> render_POST(const http_request& req) {
+         return std::make_shared<string_response>(std::string(req.get_arg("arg1").get_all_values().back()), 200, "text/plain");
+     }
+};
+
+class large_post_resource_first_value : public http_resource {
+ public:
+     shared_ptr<http_response> render_GET(const http_request&) {
+         return std::make_shared<string_response>("OK", 200, "text/plain");
+     }
+     shared_ptr<http_response> render_POST(const http_request& req) {
+         return std::make_shared<string_response>(std::string(req.get_arg("arg1").get_all_values().front()), 200, "text/plain");
+     }
+};
+
 class arg_value_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request&) {
@@ -824,6 +844,94 @@ LT_BEGIN_AUTO_TEST(basic_suite, postprocessor)
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(postprocessor)
 
+LT_BEGIN_AUTO_TEST(basic_suite, postprocessor_large_field_last_field)
+    large_post_resource_last_value resource;
+    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+
+    const int size = 20000;
+    const char* value = "A";
+    const char* prefix = "arg1=BB&arg1=";
+    const char* suffix = "";
+
+    // Calculate the total length of the string
+    int totalLength = std::strlen(prefix) + std::strlen(suffix) + size * std::strlen(value);
+
+    // Allocate memory for the char array
+    char* cString = new char[totalLength + 1]; // +1 for the null terminator
+
+    // Copy the prefix
+    std::strcpy(cString, prefix);
+
+    // Append 20,000 times the character 'A' to the string
+    for (int i = 0; i < size; ++i) {
+        std::strcat(cString, value);
+    }
+
+    // Append the suffix
+    std::strcat(cString, suffix);
+
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, cString);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, std::string(20000, 'A'));
+
+    curl_easy_cleanup(curl);
+    delete[] cString;
+LT_END_AUTO_TEST(postprocessor_large_field_last_field)
+
+LT_BEGIN_AUTO_TEST(basic_suite, postprocessor_large_field_first_field)
+    large_post_resource_first_value resource;
+    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+
+    const int size = 20000;
+    const char* value = "A";
+    const char* prefix = "arg1=";
+    const char* middle = "&arg1=";
+    const char* suffix = "BB";
+
+    // Calculate the total length of the string
+    int totalLength = std::strlen(prefix) + size * std::strlen(value) + std::strlen(middle) + std::strlen(suffix);
+
+    // Allocate memory for the char array
+    char* cString = new char[totalLength + 1]; // +1 for the null terminator
+
+    // Copy the prefix
+    std::strcpy(cString, prefix);
+
+    // Append 20,000 times the character 'A' to the string
+    for (int i = 0; i < size; ++i) {
+        std::strcat(cString, value);
+    }
+
+    // Append the middle part
+    std::strcat(cString, middle);
+
+    // Append the suffix
+    std::strcat(cString, suffix);
+
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, cString);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, std::string(20000, 'A'));
+
+    curl_easy_cleanup(curl);
+    delete[] cString;
+LT_END_AUTO_TEST(postprocessor_large_field_first_field)
+
 LT_BEGIN_AUTO_TEST(basic_suite, same_key_different_value)
     arg_value_resource resource;
     LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
@@ -843,7 +951,6 @@ LT_BEGIN_AUTO_TEST(basic_suite, same_key_different_value)
     LT_CHECK_EQ(s, "inertiaisapropertyofmatter");
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(same_key_different_value)
-
 
 LT_BEGIN_AUTO_TEST(basic_suite, same_key_different_value_plain_content)
     arg_value_resource resource;

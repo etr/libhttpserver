@@ -467,12 +467,16 @@ MHD_Result webserver::post_iterator(void *cls, enum MHD_ValueKind kind,
         const char *transfer_encoding, const char *data, uint64_t off, size_t size) {
     // Parameter needed to respect MHD interface, but not needed here.
     std::ignore = kind;
-    std::ignore = off;
 
     struct details::modded_request* mr = (struct details::modded_request*) cls;
 
     if (!filename) {
         // There is no actual file, just set the arg key/value and return.
+        if (off > 0) {
+            mr->dhr->grow_last_arg(key, std::string(data, size));
+            return MHD_YES;
+        }
+
         mr->dhr->set_arg(key, std::string(data, size));
         return MHD_YES;
     }
