@@ -30,6 +30,7 @@
 #include <functional>
 #include <limits>
 #include <string>
+#include <utility>
 
 #include "httpserver/http_response.hpp"
 #include "httpserver/http_utils.hpp"
@@ -41,6 +42,8 @@ namespace httpserver {
 
 class webserver;
 class http_request;
+
+typedef std::function<std::string(const std::string&)> psk_cred_handler_callback;
 
 typedef std::function<std::shared_ptr<http_response>(const http_request&)> render_ptr;
 typedef std::function<bool(const std::string&)> validator_ptr;
@@ -210,6 +213,11 @@ class create_webserver {
 
      create_webserver& raw_https_mem_trust(const std::string& https_mem_trust) {
          _https_mem_trust = https_mem_trust;
+         return *this;
+     }
+
+     create_webserver& psk_cred_handler(psk_cred_handler_callback handler) {
+         _psk_cred_handler = std::move(handler);
          return *this;
      }
 
@@ -383,6 +391,7 @@ class create_webserver {
      std::string _https_mem_cert = "";
      std::string _https_mem_trust = "";
      std::string _https_priorities = "";
+     psk_cred_handler_callback _psk_cred_handler;
      http::http_utils::cred_type_T _cred_type = http::http_utils::NONE;
      std::string _digest_auth_random = "";
      int _nonce_nc_size = 0;

@@ -152,6 +152,7 @@ class webserver {
      const std::string https_mem_cert;
      const std::string https_mem_trust;
      const std::string https_priorities;
+     const psk_cred_handler_callback psk_cred_handler;
      const http::http_utils::cred_type_T cred_type;
      const std::string digest_auth_random;
      const int nonce_nc_size;
@@ -185,6 +186,8 @@ class webserver {
      std::shared_ptr<http_response> method_not_allowed_page(details::modded_request* mr) const;
      std::shared_ptr<http_response> internal_error_page(details::modded_request* mr, bool force_our = false) const;
      std::shared_ptr<http_response> not_found_page(details::modded_request* mr) const;
+
+     static void psk_cred_handler_func(void* cls, const struct MHD_Connection* connection, const char* username, void** psk, size_t* psk_size);
 
      static void request_completed(void *cls,
              struct MHD_Connection *connection, void **con_cls,
