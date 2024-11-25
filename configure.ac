@@ -245,7 +245,7 @@ AM_CONDITIONAL([BUILD_EXAMPLES], [test "x$enable_examples" = "xyes"])
 AM_CONDITIONAL([COND_GCOV],[test x"$cond_gcov" = x"yes"])
 AC_SUBST(COND_GCOV)
 
-if test x"have_gnutls" = x"yes"; then
+if test x"$have_gnutls" = x"yes"; then
     AM_CXXFLAGS="$AM_CXXFLAGS -DHAVE_GNUTLS"
     AM_CFLAGS="$AM_CXXFLAGS -DHAVE_GNUTLS"
 fi
