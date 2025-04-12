@@ -181,7 +181,7 @@ class http_request {
 
      /**
       * Method used to get a specific argument passed with the request.
-      * @param ket the specific argument to get the value from
+      * @param key the specific argument to get the value from
       * @return the value(s) of the arg.
      **/
      http_arg_value get_arg(std::string_view key) const;
@@ -189,7 +189,7 @@ class http_request {
      /**
       * Method used to get a specific argument passed with the request.
       * If the arg key has more than one value, only one is returned.
-      * @param ket the specific argument to get the value from
+      * @param key the specific argument to get the value from
       * @return the value of the arg.
      **/
      std::string_view get_arg_flat(std::string_view key) const;
