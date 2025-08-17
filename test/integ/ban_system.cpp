@@ -80,7 +80,7 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, accept_default_ban_blocks)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "127.0.0.1:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -95,7 +95,7 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, accept_default_ban_blocks)
 
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "127.0.0.1:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     res = curl_easy_perform(curl);
     LT_ASSERT_NEQ(res, 0);
@@ -108,7 +108,7 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, accept_default_ban_blocks)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "127.0.0.1:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -134,7 +134,7 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, reject_default_allow_passes)
     {
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "127.0.0.1:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     res = curl_easy_perform(curl);
     LT_ASSERT_NEQ(res, 0);
@@ -147,7 +147,7 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, reject_default_allow_passes)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "127.0.0.1:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -162,7 +162,7 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, reject_default_allow_passes)
 
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "127.0.0.1:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     res = curl_easy_perform(curl);
     LT_ASSERT_NEQ(res, 0);

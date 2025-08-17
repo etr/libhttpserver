@@ -56,11 +56,7 @@ class create_webserver {
      create_webserver& operator=(create_webserver&& b) = default;
 
      explicit create_webserver(uint16_t port):
-         _port(port) {
-         #if defined(__APPLE__)
-         use_dual_stack();
-         #endif
-     }
+         _port(port) { }
 
      create_webserver& port(uint16_t port) {
          _port = port;

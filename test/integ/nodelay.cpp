@@ -75,7 +75,7 @@ LT_BEGIN_AUTO_TEST(threaded_suite, base)
     CURLcode res;
 
     curl = curl_easy_init();
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "127.0.0.1:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
