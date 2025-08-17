@@ -32,9 +32,16 @@
 
 #include <sys/stat.h>
 #include <cstdio>
+#include <iostream>
+#include <map>
+#include <string>
+#include <vector>
 
 #include "./littletest.hpp"
 
+using std::cout;
+using std::endl;
+using std::map;
 using std::string;
 using std::vector;
 

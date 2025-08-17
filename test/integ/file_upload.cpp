@@ -21,6 +21,7 @@
 #include <curl/curl.h>
 #include <sys/stat.h>
 #include <cassert>
+#include <cstdio>
 #include <cstddef>
 #include <fstream>
 #include <memory>
@@ -29,6 +30,8 @@
 #include <sstream>
 #include <string>
 #include <tuple>
+#include <utility>
+#include <vector>
 
 #include "./httpserver.hpp"
 #include "httpserver/string_utilities.hpp"

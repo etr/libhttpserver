@@ -19,6 +19,9 @@
 */
 
 #include <iostream>
+#include <memory>
+#include <string>
+
 #include <httpserver.hpp>
 
 class file_upload_resource : public httpserver::http_resource {

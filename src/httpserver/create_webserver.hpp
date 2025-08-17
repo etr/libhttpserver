@@ -56,7 +56,11 @@ class create_webserver {
      create_webserver& operator=(create_webserver&& b) = default;
 
      explicit create_webserver(uint16_t port):
-         _port(port) { }
+         _port(port) {
+         #if defined(__APPLE__)
+         use_ipv6();
+         #endif
+     }
 
      create_webserver& port(uint16_t port) {
          _port = port;
