@@ -58,7 +58,7 @@ class create_webserver {
      explicit create_webserver(uint16_t port):
          _port(port) {
          #if defined(__APPLE__)
-         use_ipv6();
+         use_dual_stack();
          #endif
      }
 
