@@ -42,7 +42,7 @@ using httpserver::create_webserver;
 #ifdef HTTPSERVER_PORT
 #define PORT HTTPSERVER_PORT
 #else
-#define PORT 8080
+#define PORT littletest::get_random_port()
 #endif  // PORT
 
 #define STR2(p) #p
@@ -86,7 +86,7 @@ LT_BEGIN_AUTO_TEST(threaded_suite, base)
     CURLcode res;
 
     curl = curl_easy_init();
-    curl_easy_setopt(curl, CURLOPT_URL, "127.0.0.1:" PORT_STRING "/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);

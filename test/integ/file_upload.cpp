@@ -21,7 +21,6 @@
 #include <curl/curl.h>
 #include <sys/stat.h>
 #include <cassert>
-#include <cstdio>
 #include <cstddef>
 #include <fstream>
 #include <memory>
@@ -30,8 +29,6 @@
 #include <sstream>
 #include <string>
 #include <tuple>
-#include <utility>
-#include <vector>
 
 #include "./httpserver.hpp"
 #include "httpserver/string_utilities.hpp"
@@ -56,7 +53,7 @@ using httpserver::http::arg_map;
 #ifdef HTTPSERVER_PORT
 #define PORT HTTPSERVER_PORT
 #else
-#define PORT 8080
+#define PORT littletest::get_random_port()
 #endif  // PORT
 
 #define STR2(p) #p
@@ -120,7 +117,7 @@ static std::pair<CURLcode, int32_t> send_file_to_webserver(bool add_second_file,
     }
 
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "127.0.0.1:" PORT_STRING "/upload");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/upload");
     curl_easy_setopt(curl, CURLOPT_MIMEPOST, form);
 
     res = curl_easy_perform(curl);
@@ -154,7 +151,7 @@ static std::pair<CURLcode, int32_t> send_large_file(string* content, std::string
     curl_mime_name(field, LARGE_KEY);
     curl_mime_filedata(field, LARGE_CONTENT_FILEPATH);
 
-    std::string url = "127.0.0.1:" PORT_STRING "/upload";
+    std::string url = "localhost:" PORT_STRING "/upload";
     if (!args.empty()) {
         url.append(args);
     }
@@ -195,7 +192,7 @@ static std::tuple<bool, CURLcode, int32_t> send_file_via_put() {
         return {false, CURLcode{}, 0L};
     }
 
-    curl_easy_setopt(curl, CURLOPT_URL, "127.0.0.1:" PORT_STRING "/upload");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/upload");
     curl_easy_setopt(curl, CURLOPT_UPLOAD, 1L);
     curl_easy_setopt(curl, CURLOPT_READDATA, fd);
     curl_easy_setopt(curl, CURLOPT_INFILESIZE_LARGE, (curl_off_t) file_info.st_size);
