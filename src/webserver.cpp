@@ -312,10 +312,6 @@ bool webserver::start(bool blocking) {
     start_conf |= MHD_USE_TCP_FASTOPEN;
 #endif
 
-#if defined(__APPLE__)
-    start_conf |= MHD_USE_REUSE_PORT;
-#endif
-
     daemon = nullptr;
     if (bind_address == nullptr) {
         daemon = MHD_start_daemon(start_conf, port, &policy_callback, this,

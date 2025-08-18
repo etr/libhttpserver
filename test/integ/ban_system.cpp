@@ -23,6 +23,13 @@
 #include <memory>
 #include <string>
 
+#if defined(__APPLE__)
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#endif
+
 #include "./httpserver.hpp"
 #include "httpserver/http_utils.hpp"
 #include "./littletest.hpp"
@@ -68,7 +75,20 @@ LT_BEGIN_SUITE(ban_system_suite)
 LT_END_SUITE(ban_system_suite)
 
 LT_BEGIN_AUTO_TEST(ban_system_suite, accept_default_ban_blocks)
+#if defined(__APPLE__)
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    int yes = 1;
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+    struct sockaddr_in addr;
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(PORT);
+    addr.sin_addr.s_addr = INADDR_ANY;
+    bind(fd, (struct sockaddr*)&addr, sizeof(addr));
+    listen(fd, 10);
+    webserver ws = create_webserver(PORT).default_policy(http_utils::ACCEPT).bind_socket(fd);
+#else
     webserver ws = create_webserver(PORT).default_policy(http_utils::ACCEPT);
+#endif
     ws.start(false);
 
     ok_resource resource;
@@ -120,10 +140,28 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, accept_default_ban_blocks)
 
     curl_global_cleanup();
     ws.stop();
+#if defined(__APPLE__)
+    if (fd != -1) {
+        close(fd);
+    }
+#endif
 LT_END_AUTO_TEST(accept_default_ban_blocks)
 
 LT_BEGIN_AUTO_TEST(ban_system_suite, reject_default_allow_passes)
+#if defined(__APPLE__)
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    int yes = 1;
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+    struct sockaddr_in addr;
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(PORT);
+    addr.sin_addr.s_addr = INADDR_ANY;
+    bind(fd, (struct sockaddr*)&addr, sizeof(addr));
+    listen(fd, 10);
+    webserver ws = create_webserver(PORT).default_policy(http_utils::REJECT).bind_socket(fd);
+#else
     webserver ws = create_webserver(PORT).default_policy(http_utils::REJECT);
+#endif
     ws.start(false);
 
     ok_resource resource;
@@ -171,6 +209,11 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, reject_default_allow_passes)
 
     curl_global_cleanup();
     ws.stop();
+#if defined(__APPLE__)
+    if (fd != -1) {
+        close(fd);
+    }
+#endif
 LT_END_AUTO_TEST(reject_default_allow_passes)
 
 LT_BEGIN_AUTO_TEST_ENV()

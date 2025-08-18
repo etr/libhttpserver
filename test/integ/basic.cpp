@@ -30,6 +30,13 @@
 #include <utility>
 #include <vector>
 
+#if defined(__APPLE__)
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#endif
+
 #include "./httpserver.hpp"
 #include "httpserver/string_utilities.hpp"
 #include "./littletest.hpp"
@@ -353,14 +360,33 @@ class print_response_resource : public http_resource {
 
 LT_BEGIN_SUITE(basic_suite)
     std::unique_ptr<webserver> ws;
+    int fd = -1;
 
     void set_up() {
+#if defined(__APPLE__)
+        fd = socket(AF_INET, SOCK_STREAM, 0);
+        int yes = 1;
+        setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+        struct sockaddr_in addr;
+        addr.sin_family = AF_INET;
+        addr.sin_port = htons(PORT);
+        addr.sin_addr.s_addr = INADDR_ANY;
+        bind(fd, (struct sockaddr*)&addr, sizeof(addr));
+        listen(fd, 10);
+        ws = std::make_unique<webserver>(create_webserver(PORT).bind_socket(fd));
+#else
         ws = std::make_unique<webserver>(create_webserver(PORT));
+#endif
         ws->start(false);
     }
 
     void tear_down() {
         ws->stop();
+#if defined(__APPLE__)
+        if (fd != -1) {
+            close(fd);
+        }
+#endif
     }
 LT_END_SUITE(basic_suite)
 

@@ -30,9 +30,16 @@
 #include <sys/socket.h>
 #endif
 
-#include <curl/curl.h>
+#include <curl/curl.hh>
 #include <memory>
 #include <string>
+
+#if defined(__APPLE__)
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#endif
 
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
@@ -98,7 +105,20 @@ LT_BEGIN_SUITE(authentication_suite)
 LT_END_SUITE(authentication_suite)
 
 LT_BEGIN_AUTO_TEST(authentication_suite, base_auth)
+#if defined(__APPLE__)
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    int yes = 1;
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+    struct sockaddr_in addr;
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(PORT);
+    addr.sin_addr.s_addr = INADDR_ANY;
+    bind(fd, (struct sockaddr*)&addr, sizeof(addr));
+    listen(fd, 10);
+    webserver ws = create_webserver(PORT).bind_socket(fd);
+#else
     webserver ws = create_webserver(PORT);
+#endif
 
     user_pass_resource user_pass;
     LT_ASSERT_EQ(true, ws.register_resource("base", &user_pass));
@@ -120,10 +140,28 @@ LT_BEGIN_AUTO_TEST(authentication_suite, base_auth)
     curl_easy_cleanup(curl);
 
     ws.stop();
+#if defined(__APPLE__)
+    if (fd != -1) {
+        close(fd);
+    }
+#endif
 LT_END_AUTO_TEST(base_auth)
 
 LT_BEGIN_AUTO_TEST(authentication_suite, base_auth_fail)
+#if defined(__APPLE__)
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    int yes = 1;
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+    struct sockaddr_in addr;
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(PORT);
+    addr.sin_addr.s_addr = INADDR_ANY;
+    bind(fd, (struct sockaddr*)&addr, sizeof(addr));
+    listen(fd, 10);
+    webserver ws = create_webserver(PORT).bind_socket(fd);
+#else
     webserver ws = create_webserver(PORT);
+#endif
 
     user_pass_resource user_pass;
     LT_ASSERT_EQ(true, ws.register_resource("base", &user_pass));
@@ -145,6 +183,11 @@ LT_BEGIN_AUTO_TEST(authentication_suite, base_auth_fail)
     curl_easy_cleanup(curl);
 
     ws.stop();
+#if defined(__APPLE__)
+    if (fd != -1) {
+        close(fd);
+    }
+#endif
 LT_END_AUTO_TEST(base_auth_fail)
 
 //  do not run the digest auth tests on windows as curl
@@ -153,9 +196,25 @@ LT_END_AUTO_TEST(base_auth_fail)
 #ifndef _WINDOWS
 
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth)
+#if defined(__APPLE__)
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    int yes = 1;
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+    struct sockaddr_in addr;
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(PORT);
+    addr.sin_addr.s_addr = INADDR_ANY;
+    bind(fd, (struct sockaddr*)&addr, sizeof(addr));
+    listen(fd, 10);
+    webserver ws = create_webserver(PORT)
+        .digest_auth_random("myrandom")
+        .nonce_nc_size(300)
+        .bind_socket(fd);
+#else
     webserver ws = create_webserver(PORT)
         .digest_auth_random("myrandom")
         .nonce_nc_size(300);
+#endif
 
     digest_resource digest;
     LT_ASSERT_EQ(true, ws.register_resource("base", &digest));
@@ -190,12 +249,33 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth)
     curl_easy_cleanup(curl);
 
     ws.stop();
+#if defined(__APPLE__)
+    if (fd != -1) {
+        close(fd);
+    }
+#endif
 LT_END_AUTO_TEST(digest_auth)
 
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_wrong_pass)
+#if defined(__APPLE__)
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    int yes = 1;
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+    struct sockaddr_in addr;
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(PORT);
+    addr.sin_addr.s_addr = INADDR_ANY;
+    bind(fd, (struct sockaddr*)&addr, sizeof(addr));
+    listen(fd, 10);
+    webserver ws = create_webserver(PORT)
+        .digest_auth_random("myrandom")
+        .nonce_nc_size(300)
+        .bind_socket(fd);
+#else
     webserver ws = create_webserver(PORT)
         .digest_auth_random("myrandom")
         .nonce_nc_size(300);
+#endif
 
     digest_resource digest;
     LT_ASSERT_EQ(true, ws.register_resource("base", &digest));
@@ -230,6 +310,11 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_wrong_pass)
     curl_easy_cleanup(curl);
 
     ws.stop();
+#if defined(__APPLE__)
+    if (fd != -1) {
+        close(fd);
+    }
+#endif
 LT_END_AUTO_TEST(digest_auth_wrong_pass)
 
 #endif
