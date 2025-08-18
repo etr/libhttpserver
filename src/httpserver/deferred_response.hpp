@@ -43,36 +43,36 @@ namespace details {
 
 template <class T>
 class deferred_response : public string_response {
-public:
-    explicit deferred_response(
-            ssize_t(*cycle_callback)(std::shared_ptr<T>, char*, size_t),
-            std::shared_ptr<T> closure_data,
-            const std::string& content = "",
-            int response_code = http::http_utils::http_ok,
-            const std::string& content_type = http::http_utils::text_plain):
-        string_response(content, response_code, content_type),
-        cycle_callback(cycle_callback),
-        closure_data(closure_data) { }
+ public:
+  explicit deferred_response(
+      ssize_t(*cycle_callback)(std::shared_ptr<T>, char*, size_t),
+      std::shared_ptr<T> closure_data,
+      const std::string& content = "",
+      int response_code = http::http_utils::http_ok,
+      const std::string& content_type = http::http_utils::text_plain):
+    string_response(content, response_code, content_type),
+    cycle_callback(cycle_callback),
+    closure_data(closure_data) { }
 
-    deferred_response(const deferred_response& other) = default;
-    deferred_response(deferred_response&& other) noexcept = default;
-    deferred_response& operator=(const deferred_response& b) = default;
-    deferred_response& operator=(deferred_response&& b) = default;
+  deferred_response(const deferred_response& other) = default;
+  deferred_response(deferred_response&& other) noexcept = default;
+  deferred_response& operator=(const deferred_response& b) = default;
+  deferred_response& operator=(deferred_response&& b) = default;
 
-    ~deferred_response() = default;
+  ~deferred_response() = default;
 
-    MHD_Response* get_raw_response() {
-        return details::get_raw_response_helper(reinterpret_cast<void*>(this), &cb);
-    }
+  MHD_Response* get_raw_response() {
+    return details::get_raw_response_helper(reinterpret_cast<void*>(this), &cb);
+  }
 
-private:
-    ssize_t (*cycle_callback)(std::shared_ptr<T>, char*, size_t);
-    std::shared_ptr<T> closure_data;
+ private:
+  ssize_t (*cycle_callback)(std::shared_ptr<T>, char*, size_t);
+  std::shared_ptr<T> closure_data;
 
-    static ssize_t cb(void* cls, uint64_t, char* buf, size_t max) {
-        deferred_response<T>* dfr = static_cast<deferred_response<T>*>(cls);
-        return dfr->cycle_callback(dfr->closure_data, buf, max);
-    }
+  static ssize_t cb(void* cls, uint64_t, char* buf, size_t max) {
+    deferred_response<T>* dfr = static_cast<deferred_response<T>*>(cls);
+    return dfr->cycle_callback(dfr->closure_data, buf, max);
+  }
 };
 
 }  // namespace httpserver

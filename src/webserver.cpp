@@ -324,6 +324,7 @@ bool webserver::start(bool blocking) {
     }
 
     if (daemon == nullptr) {
+        perror("MHD_start_daemon");
         throw std::invalid_argument("Unable to connect daemon to port: " + std::to_string(port));
     }
 
