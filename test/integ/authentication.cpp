@@ -30,7 +30,7 @@
 #include <sys/socket.h>
 #endif
 
-#include <curl/curl.hh>
+#include <curl/curl.h>
 #include <memory>
 #include <string>
 
