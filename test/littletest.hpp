@@ -35,14 +35,6 @@
 #define LT_VERSION 1.0
 
 namespace littletest {
-int get_random_port() {
-    static int port = 0;
-    if (port == 0) {
-        srand(time(NULL));
-        port = rand() % (65535 - 1024) + 1024;
-    }
-    return port;
-}
 } // namespace littletest
 
 #define WARN 0
