@@ -19,6 +19,8 @@
 */
 
 #include <httpserver.hpp>
+#include <memory>
+#include <string>
 
 class user_pass_resource : public httpserver::http_resource {
  public:

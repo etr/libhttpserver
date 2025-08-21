@@ -19,6 +19,7 @@
 */
 
 #include <httpserver.hpp>
+#include <memory>
 
 class file_response_resource : public httpserver::http_resource {
  public:

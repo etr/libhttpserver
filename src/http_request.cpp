@@ -25,6 +25,9 @@
 #include <iostream>
 #include "httpserver/http_utils.hpp"
 #include "httpserver/string_utilities.hpp"
+#include <map>
+#include <string>
+#include <vector>
 
 namespace httpserver {
 

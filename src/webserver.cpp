@@ -19,6 +19,9 @@
 */
 
 #include "httpserver/webserver.hpp"
+#include <iostream>
+#include <set>
+#include <string>
 
 #if defined(_WIN32) && !defined(__CYGWIN__)
 #include <winsock2.h>

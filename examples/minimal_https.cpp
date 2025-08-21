@@ -19,6 +19,7 @@
 */
 
 #include <httpserver.hpp>
+#include <memory>
 
 class hello_world_resource : public httpserver::http_resource {
  public:

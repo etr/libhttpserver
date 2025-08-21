@@ -45,6 +45,8 @@
 #include <sstream>
 #include <stdexcept>
 #include <utility>
+#include <string>
+#include <vector>
 
 #include "httpserver/string_utilities.hpp"
 
@@ -206,9 +208,9 @@ const char* http_utils::text_plain = "text/plain";
 const char* http_utils::upload_filename_template = "libhttpserver.XXXXXX";
 
 #if defined(_WIN32)
-    const char http_utils::path_separator = '\\';
+const char http_utils::path_separator = '\\';
 #else  // _WIN32
-    const char http_utils::path_separator = '/';
+const char http_utils::path_separator = '/';
 #endif  // _WIN32
 
 std::vector<std::string> http_utils::tokenize_url(const std::string& str, const char separator) {

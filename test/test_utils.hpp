@@ -1,13 +1,17 @@
-#ifndef _TEST_UTILS_HPP_
-#define _TEST_UTILS_HPP_
+/*
+ * Copyright (C) 2024 Jules
+ *
+ * This file is part of libhttpserver.
+ */
+#ifndef TEST_TEST_UTILS_HPP_
+#define TEST_TEST_UTILS_HPP_
 
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <unistd.h>
 
-namespace test_utils
-{
+namespace test_utils {
 
 int get_random_port() {
     int sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -18,7 +22,7 @@ int get_random_port() {
     sockaddr_in addr;
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = INADDR_ANY;
-    addr.sin_port = 0; // bind to a random port
+    addr.sin_port = 0;  // bind to a random port
 
     if (bind(sock, (struct sockaddr *)&addr, sizeof(addr)) == -1) {
         close(sock);
@@ -35,6 +39,6 @@ int get_random_port() {
     return ntohs(addr.sin_port);
 }
 
-}
+}  // namespace test_utils
 
-#endif //_TEST_UTILS_HPP_
+#endif  // TEST_TEST_UTILS_HPP_
