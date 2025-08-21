@@ -25,6 +25,9 @@
 
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
+#include "test_utils.hpp"
+
+int test_port;
 
 using std::shared_ptr;
 
@@ -39,7 +42,7 @@ using httpserver::create_webserver;
 #ifdef HTTPSERVER_PORT
 #define PORT HTTPSERVER_PORT
 #else
-#define PORT littletest::get_random_port()
+#define PORT test_port
 #endif  // PORT
 
 #define STR2(p) #p
@@ -57,7 +60,7 @@ LT_BEGIN_SUITE(threaded_suite)
     std::unique_ptr<webserver> ws;
 
     void set_up() {
-        ws = std::make_unique<webserver>(create_webserver(PORT));
+        ws = std::make_unique<webserver>(create_webserver(test_port));
         ws->start(false);
     }
 
@@ -75,7 +78,7 @@ LT_BEGIN_AUTO_TEST(threaded_suite, base)
     CURLcode res;
 
     curl = curl_easy_init();
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl, CURLOPT_URL, ("http://localhost:" + std::to_string(test_port) + "/base").c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
@@ -83,5 +86,6 @@ LT_BEGIN_AUTO_TEST(threaded_suite, base)
 LT_END_AUTO_TEST(base)
 
 LT_BEGIN_AUTO_TEST_ENV()
+    test_port = test_utils::get_random_port();
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

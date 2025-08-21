@@ -35,6 +35,7 @@
 
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
+#include "test_utils.hpp"
 
 #define MY_OPAQUE "11733b200778ce33060f31c9af70a870ba96ddd4"
 
@@ -51,7 +52,7 @@ using httpserver::http_request;
 #ifdef HTTPSERVER_PORT
 #define PORT HTTPSERVER_PORT
 #else
-#define PORT littletest::get_random_port()
+#define PORT 8080
 #endif  // PORT
 
 #define STR2(p) #p
@@ -97,7 +98,8 @@ LT_BEGIN_SUITE(authentication_suite)
 LT_END_SUITE(authentication_suite)
 
 LT_BEGIN_AUTO_TEST(authentication_suite, base_auth)
-    webserver ws = create_webserver(PORT);
+    int test_port = test_utils::get_random_port();
+    webserver ws = create_webserver(test_port);
 
     user_pass_resource user_pass;
     LT_ASSERT_EQ(true, ws.register_resource("base", &user_pass));
@@ -109,7 +111,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, base_auth)
     CURLcode res;
     curl_easy_setopt(curl, CURLOPT_USERNAME, "myuser");
     curl_easy_setopt(curl, CURLOPT_PASSWORD, "mypass");
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl, CURLOPT_URL, ("http://localhost:" + std::to_string(test_port) + "/base").c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -122,7 +124,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, base_auth)
 LT_END_AUTO_TEST(base_auth)
 
 LT_BEGIN_AUTO_TEST(authentication_suite, base_auth_fail)
-    webserver ws = create_webserver(PORT);
+    int test_port = test_utils::get_random_port();
+    webserver ws = create_webserver(test_port);
 
     user_pass_resource user_pass;
     LT_ASSERT_EQ(true, ws.register_resource("base", &user_pass));
@@ -134,7 +137,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, base_auth_fail)
     CURLcode res;
     curl_easy_setopt(curl, CURLOPT_USERNAME, "myuser");
     curl_easy_setopt(curl, CURLOPT_PASSWORD, "wrongpass");
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl, CURLOPT_URL, ("http://localhost:" + std::to_string(test_port) + "/base").c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -152,7 +155,8 @@ LT_END_AUTO_TEST(base_auth_fail)
 #ifndef _WINDOWS
 
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth)
-    webserver ws = create_webserver(PORT)
+    int test_port = test_utils::get_random_port();
+    webserver ws = create_webserver(test_port)
         .digest_auth_random("myrandom")
         .nonce_nc_size(300);
 
@@ -175,7 +179,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth)
 #else
     curl_easy_setopt(curl, CURLOPT_USERPWD, "myuser:mypass");
 #endif
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl, CURLOPT_URL, ("http://localhost:" + std::to_string(test_port) + "/base").c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -192,7 +196,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth)
 LT_END_AUTO_TEST(digest_auth)
 
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_wrong_pass)
-    webserver ws = create_webserver(PORT)
+    int test_port = test_utils::get_random_port();
+    webserver ws = create_webserver(test_port)
         .digest_auth_random("myrandom")
         .nonce_nc_size(300);
 
@@ -215,7 +220,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_wrong_pass)
 #else
     curl_easy_setopt(curl, CURLOPT_USERPWD, "myuser:wrongpass");
 #endif
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl, CURLOPT_URL, ("http://localhost:" + std::to_string(test_port) + "/base").c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);

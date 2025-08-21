@@ -18,9 +18,6 @@
      USA
 */
 
-#include <memory>
-#include <string>
-
 #include <httpserver.hpp>
 
 class user_pass_resource : public httpserver::http_resource {

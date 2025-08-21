@@ -26,16 +26,11 @@
 #include <sys/time.h>
 #include <algorithm>
 #include <iostream>
-#include <cstdlib>
-#include <ctime>
 #include <sstream>
 #include <string>
 #include <vector>
 
 #define LT_VERSION 1.0
-
-namespace littletest {
-} // namespace littletest
 
 #define WARN 0
 #define CHECK 1
@@ -75,7 +70,6 @@ namespace littletest {
 #define LT_BEGIN_TEST(__lt_suite_name__, __lt_test_name__) \
     struct __lt_test_name__ ## _class: public __lt_suite_name__, littletest::test<__lt_test_name__ ## _class> \
     { \
-            using littletest::test_base::operator(); \
             __lt_test_name__ ## _class() \
             { \
                 __lt_name__ = #__lt_test_name__; \

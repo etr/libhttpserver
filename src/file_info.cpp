@@ -19,8 +19,6 @@
 */
 
 #include <string.h>
-#include <string>
-
 #include "httpserver/file_info.hpp"
 
 namespace httpserver {

@@ -33,6 +33,9 @@
 #include "./httpserver.hpp"
 #include "httpserver/string_utilities.hpp"
 #include "./littletest.hpp"
+#include "test_utils.hpp"
+
+int test_port;
 
 using std::string;
 using std::string_view;
@@ -53,7 +56,7 @@ using httpserver::http::arg_map;
 #ifdef HTTPSERVER_PORT
 #define PORT HTTPSERVER_PORT
 #else
-#define PORT littletest::get_random_port()
+#define PORT test_port
 #endif  // PORT
 
 #define STR2(p) #p
@@ -117,7 +120,7 @@ static std::pair<CURLcode, int32_t> send_file_to_webserver(bool add_second_file,
     }
 
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/upload");
+    curl_easy_setopt(curl, CURLOPT_URL, ("http://localhost:" + std::to_string(test_port) + "/upload").c_str());
     curl_easy_setopt(curl, CURLOPT_MIMEPOST, form);
 
     res = curl_easy_perform(curl);
@@ -151,7 +154,7 @@ static std::pair<CURLcode, int32_t> send_large_file(string* content, std::string
     curl_mime_name(field, LARGE_KEY);
     curl_mime_filedata(field, LARGE_CONTENT_FILEPATH);
 
-    std::string url = "localhost:" PORT_STRING "/upload";
+    std::string url = "http://localhost:" + std::to_string(test_port) + "/upload";
     if (!args.empty()) {
         url.append(args);
     }
@@ -192,7 +195,7 @@ static std::tuple<bool, CURLcode, int32_t> send_file_via_put() {
         return {false, CURLcode{}, 0L};
     }
 
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/upload");
+    curl_easy_setopt(curl, CURLOPT_URL, ("http://localhost:" + std::to_string(test_port) + "/upload").c_str());
     curl_easy_setopt(curl, CURLOPT_UPLOAD, 1L);
     curl_easy_setopt(curl, CURLOPT_READDATA, fd);
     curl_easy_setopt(curl, CURLOPT_INFILESIZE_LARGE, (curl_off_t) file_info.st_size);
@@ -277,7 +280,7 @@ LT_END_AUTO_TEST(check_files)
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk)
     string upload_directory = ".";
 
-    auto ws = std::make_unique<webserver>(create_webserver(PORT)
+    auto ws = std::make_unique<webserver>(create_webserver(test_port)
                        .put_processed_data_to_content()
                        .file_upload_target(httpserver::FILE_UPLOAD_MEMORY_AND_DISK)
                        .file_upload_dir(upload_directory)
@@ -325,7 +328,7 @@ LT_END_AUTO_TEST(file_upload_memory_and_disk)
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_via_put)
     string upload_directory = ".";
 
-    auto ws = std::make_unique<webserver>(create_webserver(PORT)
+    auto ws = std::make_unique<webserver>(create_webserver(test_port)
                        .put_processed_data_to_content()
                        .file_upload_target(httpserver::FILE_UPLOAD_MEMORY_AND_DISK)
                        .file_upload_dir(upload_directory)
@@ -356,7 +359,7 @@ LT_END_AUTO_TEST(file_upload_memory_and_disk_via_put)
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_additional_params)
     string upload_directory = ".";
 
-    auto ws = std::make_unique<webserver>(create_webserver(PORT)
+    auto ws = std::make_unique<webserver>(create_webserver(test_port)
                        .put_processed_data_to_content()
                        .file_upload_target(httpserver::FILE_UPLOAD_MEMORY_AND_DISK)
                        .file_upload_dir(upload_directory)
@@ -409,7 +412,7 @@ LT_END_AUTO_TEST(file_upload_memory_and_disk_additional_params)
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_two_files)
     string upload_directory = ".";
 
-    auto ws = std::make_unique<webserver>(create_webserver(PORT)
+    auto ws = std::make_unique<webserver>(create_webserver(test_port)
                        .put_processed_data_to_content()
                        .file_upload_target(httpserver::FILE_UPLOAD_MEMORY_AND_DISK)
                        .file_upload_dir(upload_directory)
@@ -477,7 +480,7 @@ LT_END_AUTO_TEST(file_upload_memory_and_disk_two_files)
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_disk_only)
     string upload_directory = ".";
 
-    auto ws = std::make_unique<webserver>(create_webserver(PORT)
+    auto ws = std::make_unique<webserver>(create_webserver(test_port)
                        .no_put_processed_data_to_content()
                        .file_upload_target(httpserver::FILE_UPLOAD_DISK_ONLY)
                        .file_upload_dir(upload_directory)
@@ -519,7 +522,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_disk_only)
 LT_END_AUTO_TEST(file_upload_disk_only)
 
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_only_incl_content)
-    auto ws = std::make_unique<webserver>(create_webserver(PORT)
+    auto ws = std::make_unique<webserver>(create_webserver(test_port)
                        .put_processed_data_to_content()
                        .file_upload_target(httpserver::FILE_UPLOAD_MEMORY_ONLY));
     ws->start(false);
@@ -549,7 +552,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_only_incl_content)
 LT_END_AUTO_TEST(file_upload_memory_only_incl_content)
 
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_large_content)
-    auto ws = std::make_unique<webserver>(create_webserver(PORT)
+    auto ws = std::make_unique<webserver>(create_webserver(test_port)
                        .put_processed_data_to_content()
                        .file_upload_target(httpserver::FILE_UPLOAD_MEMORY_ONLY));
     ws->start(false);
@@ -586,7 +589,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_large_content)
 LT_END_AUTO_TEST(file_upload_large_content)
 
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_large_content_with_args)
-    auto ws = std::make_unique<webserver>(create_webserver(PORT)
+    auto ws = std::make_unique<webserver>(create_webserver(test_port)
                        .put_processed_data_to_content()
                        .file_upload_target(httpserver::FILE_UPLOAD_MEMORY_ONLY));
     ws->start(false);
@@ -629,7 +632,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_large_content_with_args)
 LT_END_AUTO_TEST(file_upload_large_content_with_args)
 
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_only_excl_content)
-    auto ws = std::make_unique<webserver>(create_webserver(PORT)
+    auto ws = std::make_unique<webserver>(create_webserver(test_port)
                        .no_put_processed_data_to_content()
                        .file_upload_target(httpserver::FILE_UPLOAD_MEMORY_ONLY));
     ws->start(false);
@@ -658,5 +661,6 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_only_excl_content)
 LT_END_AUTO_TEST(file_upload_memory_only_excl_content)
 
 LT_BEGIN_AUTO_TEST_ENV()
+    test_port = test_utils::get_random_port();
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

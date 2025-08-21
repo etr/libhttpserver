@@ -18,8 +18,6 @@
      USA
 */
 
-#include <memory>
-
 #include <httpserver.hpp>
 
 class file_response_resource : public httpserver::http_resource {

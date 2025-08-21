@@ -26,6 +26,7 @@
 #include "./httpserver.hpp"
 #include "httpserver/http_utils.hpp"
 #include "./littletest.hpp"
+#include "test_utils.hpp"
 
 using std::shared_ptr;
 
@@ -40,7 +41,7 @@ using httpserver::http::http_utils;
 #ifdef HTTPSERVER_PORT
 #define PORT HTTPSERVER_PORT
 #else
-#define PORT littletest::get_random_port()
+#define PORT 8080
 #endif  // PORT
 
 #define STR2(p) #p
@@ -68,7 +69,8 @@ LT_BEGIN_SUITE(ban_system_suite)
 LT_END_SUITE(ban_system_suite)
 
 LT_BEGIN_AUTO_TEST(ban_system_suite, accept_default_ban_blocks)
-    webserver ws = create_webserver(PORT).default_policy(http_utils::ACCEPT);
+    int test_port = test_utils::get_random_port();
+    webserver ws = create_webserver(test_port).default_policy(http_utils::ACCEPT);
     ws.start(false);
 
     ok_resource resource;
@@ -80,7 +82,7 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, accept_default_ban_blocks)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl, CURLOPT_URL, ("http://localhost:" + std::to_string(test_port) + "/base").c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -95,7 +97,7 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, accept_default_ban_blocks)
 
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl, CURLOPT_URL, ("http://localhost:" + std::to_string(test_port) + "/base").c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     res = curl_easy_perform(curl);
     LT_ASSERT_NEQ(res, 0);
@@ -108,7 +110,7 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, accept_default_ban_blocks)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl, CURLOPT_URL, ("http://localhost:" + std::to_string(test_port) + "/base").c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -123,7 +125,8 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, accept_default_ban_blocks)
 LT_END_AUTO_TEST(accept_default_ban_blocks)
 
 LT_BEGIN_AUTO_TEST(ban_system_suite, reject_default_allow_passes)
-    webserver ws = create_webserver(PORT).default_policy(http_utils::REJECT);
+    int test_port = test_utils::get_random_port();
+    webserver ws = create_webserver(test_port).default_policy(http_utils::REJECT);
     ws.start(false);
 
     ok_resource resource;
@@ -134,7 +137,7 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, reject_default_allow_passes)
     {
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl, CURLOPT_URL, ("http://localhost:" + std::to_string(test_port) + "/base").c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     res = curl_easy_perform(curl);
     LT_ASSERT_NEQ(res, 0);
@@ -147,7 +150,7 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, reject_default_allow_passes)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl, CURLOPT_URL, ("http://localhost:" + std::to_string(test_port) + "/base").c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -162,7 +165,7 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, reject_default_allow_passes)
 
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl, CURLOPT_URL, ("http://localhost:" + std::to_string(test_port) + "/base").c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     res = curl_easy_perform(curl);
     LT_ASSERT_NEQ(res, 0);

@@ -22,7 +22,6 @@
 
 #include <cstdio>
 #include <iostream>
-#include <memory>
 
 #include <httpserver.hpp>
 

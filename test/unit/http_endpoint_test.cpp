@@ -18,17 +18,11 @@
      USA
 */
 
-#include <iostream>
-#include <string>
-#include <vector>
-
 #include "httpserver/details/http_endpoint.hpp"
 
 #include "./littletest.hpp"
 
 using httpserver::details::http_endpoint;
-using std::cout;
-using std::endl;
 using std::string;
 using std::vector;
 

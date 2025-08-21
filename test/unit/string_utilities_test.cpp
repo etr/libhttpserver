@@ -21,8 +21,6 @@
 #include "httpserver/string_utilities.hpp"
 
 #include <cstdio>
-#include <string>
-#include <vector>
 
 #include "./littletest.hpp"
 
