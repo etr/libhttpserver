@@ -341,7 +341,7 @@ jobs:
 
     - name: CURL from cache (for testing)
       id: cache-CURL
-      uses: actions/cache@v2
+      uses: actions/cache@v4
       with:
         path: curl-7.75.0
         key: ${{ matrix.os }}-CURL-pre-built
@@ -386,7 +386,7 @@ jobs:
 
     - name: Fetch libmicrohttpd from cache
       id: cache-libmicrohttpd
-      uses: actions/cache@v2
+      uses: actions/cache@v4
       with:
         path: libmicrohttpd-0.9.64
         key: ${{ matrix.os }}-${{ matrix.c-compiler }}-libmicrohttpd-pre-built
