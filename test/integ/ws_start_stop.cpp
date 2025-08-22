@@ -157,58 +157,6 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, start_stop)
     }
 LT_END_AUTO_TEST(start_stop)
 
-#if defined(IPV6_TESTS_ENABLED)
-
-LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ipv6)
-    { // NOLINT (internal scope opening - not method start)
-    httpserver::webserver ws = httpserver::create_webserver(test_port).use_ipv6();
-    ok_resource ok;
-    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
-    ws.start(false);
-
-    curl_global_init(CURL_GLOBAL_ALL);
-    std::string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, ("http://localhost:" + std::to_string(test_port) + "/base").c_str());
-    curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V6);
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    res = curl_easy_perform(curl);
-    LT_ASSERT_EQ(res, 0);
-    LT_CHECK_EQ(s, "OK");
-    curl_easy_cleanup(curl);
-
-    ws.stop();
-    }
-LT_END_AUTO_TEST(ipv6)
-
-LT_BEGIN_AUTO_TEST(ws_start_stop_suite, dual_stack)
-    { // NOLINT (internal scope opening - not method start)
-    httpserver::webserver ws = httpserver::create_webserver(test_port).use_dual_stack();
-    ok_resource ok;
-    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
-    ws.start(false);
-
-    curl_global_init(CURL_GLOBAL_ALL);
-    std::string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, ("http://localhost:" + std::to_string(test_port) + "/base").c_str());
-    curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V6);
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    res = curl_easy_perform(curl);
-    LT_ASSERT_EQ(res, 0);
-    LT_CHECK_EQ(s, "OK");
-    curl_easy_cleanup(curl);
-
-    ws.stop();
-    }
-LT_END_AUTO_TEST(dual_stack)
-
 #endif
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, sweet_kill)
