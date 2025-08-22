@@ -293,6 +293,10 @@ bool webserver::start(bool blocking) {
         start_conf |= MHD_USE_IPv6;
     }
 
+#if defined(__APPLE__)
+    start_conf |= MHD_USE_IPv4;
+#endif
+
     if (use_dual_stack) {
         start_conf |= MHD_USE_DUAL_STACK;
     }
