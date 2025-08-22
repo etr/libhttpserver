@@ -157,8 +157,6 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, start_stop)
     }
 LT_END_AUTO_TEST(start_stop)
 
-#endif
-
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, sweet_kill)
     httpserver::webserver ws = httpserver::create_webserver(test_port);
     ok_resource ok;
