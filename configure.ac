@@ -149,14 +149,12 @@ AC_ARG_ENABLE([fastopen],
 AC_MSG_RESULT([$fastopen])
 
 is_fastopen_supported=no;
-if test x"$fastopen" = x"yes"; then
-    if test x"$is_windows" = x"no"; then
-        if test `uname -r |cut -d. -f1` -ge 3; then
-            if test `uname -r |cut -d. -f2` -ge 7; then
-                CXXFLAGS="-DUSE_FASTOPEN $CXXFLAGS";
-                is_fastopen_supported=yes;
-            fi
-        fi
+if test x"$fastopen" = x"yes" && test x"$is_windows" = x"no"; then
+    major=`uname -r | cut -d. -f1`
+    minor=`uname -r | cut -d. -f2`
+    if test "$major" -ge 4 || { test "$major" -eq 3 && test "$minor" -ge 7; }; then
+            CXXFLAGS="-DUSE_FASTOPEN $CXXFLAGS";
+            is_fastopen_supported=yes;
     fi
 fi
 
