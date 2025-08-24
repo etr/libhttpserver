@@ -22,6 +22,8 @@
 #include <microhttpd.h>
 #include <iostream>
 #include <utility>
+#include <map>
+#include <string>
 #include "httpserver/http_utils.hpp"
 
 namespace httpserver {

@@ -20,6 +20,9 @@
 
 #include <cstring>
 #include <httpserver.hpp>
+#include <cstdio>
+#include <memory>
+#include <string>
 
 static int counter = 0;
 

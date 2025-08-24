@@ -38,7 +38,7 @@ struct MHD_Response;
 namespace httpserver {
 
 namespace details {
-    MHD_Response* get_raw_response_helper(void* cls, ssize_t (*cb)(void*, uint64_t, char*, size_t));
+MHD_Response* get_raw_response_helper(void* cls, ssize_t (*cb)(void*, uint64_t, char*, size_t));
 }
 
 template <class T>

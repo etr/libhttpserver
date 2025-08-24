@@ -19,6 +19,9 @@
 */
 
 #include "httpserver/webserver.hpp"
+#include <iostream>
+#include <set>
+#include <string>
 
 #if defined(_WIN32) && !defined(__CYGWIN__)
 #include <winsock2.h>
@@ -290,6 +293,7 @@ bool webserver::start(bool blocking) {
         start_conf |= MHD_USE_IPv6;
     }
 
+
     if (use_dual_stack) {
         start_conf |= MHD_USE_DUAL_STACK;
     }
@@ -321,6 +325,7 @@ bool webserver::start(bool blocking) {
     }
 
     if (daemon == nullptr) {
+        perror("MHD_start_daemon");
         throw std::invalid_argument("Unable to connect daemon to port: " + std::to_string(port));
     }
 

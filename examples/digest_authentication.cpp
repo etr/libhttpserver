@@ -19,6 +19,7 @@
 */
 
 #include <httpserver.hpp>
+#include <memory>
 
 #define MY_OPAQUE "11733b200778ce33060f31c9af70a870ba96ddd4"
 

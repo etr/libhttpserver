@@ -70,12 +70,13 @@
 #define LT_BEGIN_TEST(__lt_suite_name__, __lt_test_name__) \
     struct __lt_test_name__ ## _class: public __lt_suite_name__, littletest::test<__lt_test_name__ ## _class> \
     { \
+            using littletest::test_base::operator(); \
             __lt_test_name__ ## _class() \
             { \
                 __lt_name__ = #__lt_test_name__; \
                 littletest::auto_test_vector.push_back(this); \
             } \
-            void operator()(littletest::test_runner* __lt_tr__) \
+            virtual void operator()(littletest::test_runner* __lt_tr__) \
             {
 
 #define LT_END_TEST(__lt_test_name__) \

@@ -22,6 +22,8 @@
 #include <microhttpd.h>
 #include <iosfwd>
 #include <memory>
+#include <map>
+#include <string>
 #include "httpserver/string_response.hpp"
 
 namespace httpserver { class http_response; }

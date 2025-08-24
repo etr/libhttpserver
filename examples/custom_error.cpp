@@ -19,6 +19,7 @@
 */
 
 #include <httpserver.hpp>
+#include <memory>
 
 std::shared_ptr<httpserver::http_response> not_found_custom(const httpserver::http_request&) {
     return std::shared_ptr<httpserver::string_response>(new httpserver::string_response("Not found custom", 404, "text/plain"));
