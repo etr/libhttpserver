@@ -39,6 +39,10 @@ http_resource_SOURCES = unit/http_resource_test.cpp
 noinst_HEADERS = littletest.hpp
 AM_CXXFLAGS += -lcurl -Wall -fPIC
 
+if HAVE_GNUTLS
+AM_CXXFLAGS += -lgnutls
+endif
+
 if COND_GCOV
 AM_CFLAGS += -O0 --coverage --no-inline
 AM_CXXFLAGS += -O0 --coverage --no-inline

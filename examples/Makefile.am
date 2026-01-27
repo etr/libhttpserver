@@ -42,3 +42,9 @@ benchmark_select_SOURCES = benchmark_select.cpp
 benchmark_threads_SOURCES = benchmark_threads.cpp
 benchmark_nodelay_SOURCES = benchmark_nodelay.cpp
 file_upload_SOURCES = file_upload.cpp
+
+if HAVE_GNUTLS
+noinst_PROGRAMS += minimal_https_psk
+minimal_https_psk_SOURCES = minimal_https_psk.cpp
+minimal_https_psk_LDADD = $(LDADD) -lgnutls
+endif

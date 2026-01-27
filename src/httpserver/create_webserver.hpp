@@ -46,6 +46,7 @@ typedef std::function<std::shared_ptr<http_response>(const http_request&)> rende
 typedef std::function<bool(const std::string&)> validator_ptr;
 typedef std::function<void(const std::string&)> log_access_ptr;
 typedef std::function<void(const std::string&)> log_error_ptr;
+typedef std::function<std::string(const std::string&)> psk_cred_handler_callback;
 
 class create_webserver {
  public:
@@ -223,6 +224,11 @@ class create_webserver {
          return *this;
      }
 
+     create_webserver& psk_cred_handler(psk_cred_handler_callback handler) {
+         _psk_cred_handler = handler;
+         return *this;
+     }
+
      create_webserver& digest_auth_random(const std::string& digest_auth_random) {
          _digest_auth_random = digest_auth_random;
          return *this;
@@ -384,6 +390,7 @@ class create_webserver {
      std::string _https_mem_trust = "";
      std::string _https_priorities = "";
      http::http_utils::cred_type_T _cred_type = http::http_utils::NONE;
+     psk_cred_handler_callback _psk_cred_handler = nullptr;
      std::string _digest_auth_random = "";
      int _nonce_nc_size = 0;
      http::http_utils::policy_T _default_policy = http::http_utils::ACCEPT;

@@ -83,7 +83,6 @@ case "$host" in
 esac
 
 # Checks for header files.
-AC_HEADER_STDC
 AC_CHECK_HEADER([stdint.h],[],[AC_MSG_ERROR("stdint.h not found")])
 AC_CHECK_HEADER([inttypes.h],[],[AC_MSG_ERROR("inttypes.h not found")])
 AC_CHECK_HEADER([errno.h],[],[AC_MSG_ERROR("errno.h not found")])
@@ -249,6 +248,8 @@ if test x"$have_gnutls" = x"yes"; then
     AM_CXXFLAGS="$AM_CXXFLAGS -DHAVE_GNUTLS"
     AM_CFLAGS="$AM_CXXFLAGS -DHAVE_GNUTLS"
 fi
+
+AM_CONDITIONAL([HAVE_GNUTLS],[test x"$have_gnutls" = x"yes"])
 
 DX_HTML_FEATURE(ON)
 DX_CHM_FEATURE(OFF)
