@@ -357,7 +357,7 @@ jobs:
         curl https://libhttpserver.s3.amazonaws.com/travis_stuff/curl-7.75.0.tar.gz -o curl-7.75.0.tar.gz ;
         tar -xzf curl-7.75.0.tar.gz ;
         cd curl-7.75.0 ;
-        if [ "$matrix.os-type" = "ubuntu" ]; then ./configure ; else ./configure --with-darwinssl ; fi
+        ./configure --with-darwinssl ;
         make ;
       if: ${{ matrix.os == 'macos-latest' && steps.cache-CURL.outputs.cache-hit != 'true' }}
       
@@ -393,20 +393,20 @@ jobs:
       id: cache-libmicrohttpd
       uses: actions/cache@v4
       with:
-        path: libmicrohttpd-0.9.64
-        key: ${{ matrix.os }}-${{ matrix.c-compiler }}-libmicrohttpd-pre-built
+        path: libmicrohttpd-0.9.77
+        key: ${{ matrix.os }}-${{ matrix.c-compiler }}-libmicrohttpd-0.9.77-pre-built
 
     - name: Build libmicrohttpd dependency (if not cached)
       run: |
-        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.64.tar.gz -o libmicrohttpd-0.9.64.tar.gz ;
-        tar -xzf libmicrohttpd-0.9.64.tar.gz ;
-        cd libmicrohttpd-0.9.64 ;
+        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.77.tar.gz -o libmicrohttpd-0.9.77.tar.gz ;
+        tar -xzf libmicrohttpd-0.9.77.tar.gz ;
+        cd libmicrohttpd-0.9.77 ;
         ./configure --disable-examples ;
         make ;
       if: steps.cache-libmicrohttpd.outputs.cache-hit != 'true'
-      
+
     - name: Install libmicrohttpd
-      run: cd libmicrohttpd-0.9.64 ; sudo make install ;
+      run: cd libmicrohttpd-0.9.77 ; sudo make install ;
       
     - name: Refresh links to shared libs
       run: sudo ldconfig ;
@@ -426,7 +426,7 @@ jobs:
         if [ "$BUILD_TYPE" = "ubsan" ]; then export export CFLAGS='-fsanitize=undefined'; export CXXLAGS='-fsanitize=undefined'; export LDFLAGS='-fsanitize=undefined'; fi
 
         # Additional flags on mac. They need to stay in step as env variables don't propagate across steps.
-        if [ "$matrix.os" = "macos-latest" ]; then
+        if [ "${{ matrix.os }}" = "macos-latest" ]; then
           export CFLAGS='-mtune=generic' ;
           export IPV6_TESTS_ENABLED="true" ;
         fi

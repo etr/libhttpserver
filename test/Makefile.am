@@ -37,7 +37,7 @@ nodelay_SOURCES = integ/nodelay.cpp
 http_resource_SOURCES = unit/http_resource_test.cpp
 
 noinst_HEADERS = littletest.hpp
-AM_CXXFLAGS += -lcurl -Wall -fPIC
+AM_CXXFLAGS += -lcurl -Wall -fPIC -Wno-overloaded-virtual
 
 if HAVE_GNUTLS
 AM_CXXFLAGS += -lgnutls
