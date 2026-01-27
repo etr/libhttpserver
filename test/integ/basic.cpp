@@ -1581,7 +1581,6 @@ LT_BEGIN_AUTO_TEST(basic_suite, thread_safety)
     std::atomic_bool done = false;
     auto register_thread = std::thread([&]() {
         int i = 0;
-        using namespace std::chrono;
         while (!done) {
             ws->register_resource(
                     std::string("/route") + std::to_string(++i), &resource);
@@ -1589,11 +1588,12 @@ LT_BEGIN_AUTO_TEST(basic_suite, thread_safety)
     });
 
     auto get_thread = std::thread([&](){
+        unsigned int seed = 42;
         while (!done) {
             CURL *curl = curl_easy_init();
             std::string s;
             std::string url = "localhost:" PORT_STRING "/route" + std::to_string(
-                                            (int)((rand() * 10000000.0) / RAND_MAX));
+                                            static_cast<int>((rand_r(&seed) * 10000000.0) / RAND_MAX));
             curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
             curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
             curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
@@ -1603,7 +1603,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, thread_safety)
         }
     });
 
-    using namespace std::chrono_literals;
+    using std::chrono_literals::operator""s;
     std::this_thread::sleep_for(10s);
     done = true;
     if (register_thread.joinable()) {

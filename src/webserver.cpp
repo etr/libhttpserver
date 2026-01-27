@@ -463,8 +463,7 @@ MHD_Result policy_callback(void *cls, const struct sockaddr* addr, socklen_t add
     const bool is_allowed = ws->allowances.count(ip_representation(addr));
 
     if ((ws->default_policy == http_utils::ACCEPT && is_banned && !is_allowed) ||
-        (ws->default_policy == http_utils::REJECT && (!is_allowed || is_banned)))
-    {
+        (ws->default_policy == http_utils::REJECT && (!is_allowed || is_banned))) {
         return MHD_NO;
     }
 
