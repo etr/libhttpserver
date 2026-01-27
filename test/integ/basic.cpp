@@ -1644,12 +1644,10 @@ LT_BEGIN_AUTO_TEST(basic_suite, thread_safety)
     });
 
     auto get_thread = std::thread([&](){
-        unsigned int seed = 42;
         while (!done) {
             CURL *curl = curl_easy_init();
             std::string s;
-            std::string url = "localhost:" PORT_STRING "/route" + std::to_string(
-                                            static_cast<int>((rand_r(&seed) * 10000000.0) / RAND_MAX));
+            std::string url = "localhost:" PORT_STRING "/route" + std::to_string(rand() % 10000000);  // NOLINT(runtime/threadsafe_fn)
             curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
             curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
             curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
