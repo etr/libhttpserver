@@ -222,8 +222,8 @@ jobs:
             os-type: ubuntu
             build-type: valgrind
             compiler-family: gcc
-            c-compiler: gcc-10
-            cc-compiler: g++-10
+            c-compiler: gcc-14
+            cc-compiler: g++-14
             debug: nodebug
             coverage: nocoverage
           - test-group: extra
@@ -303,7 +303,7 @@ jobs:
       if: ${{ matrix.compiler-family == 'gcc' && matrix.os-type == 'ubuntu' }}
 
     - name: Install valgrind if needed
-      run: sudo apt-get install valgrind valgrind-dbg
+      run: sudo apt-get install valgrind
       if: ${{ matrix.build-type == 'valgrind' && matrix.os-type == 'ubuntu' }}
 
     - name: Install cpplint if needed
