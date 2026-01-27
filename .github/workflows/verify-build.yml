@@ -264,7 +264,7 @@ jobs:
             coverage: nocoverage
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
       with:
         # We must fetch at least the immediate parents so that if this is
         # a pull request then we can checkout the head.
@@ -312,7 +312,7 @@ jobs:
 
     - name: IWYU from cache (for testing)
       id: cache-IWYU
-      uses: actions/cache@v2
+      uses: actions/cache@v4
       with:
         path: include-what-you-use
         key: ${{ matrix.os }}-${{ matrix.c-compiler }}-include-what-you-use-pre-built
@@ -341,7 +341,7 @@ jobs:
 
     - name: CURL from cache (for testing)
       id: cache-CURL
-      uses: actions/cache@v2
+      uses: actions/cache@v4
       with:
         path: curl-7.75.0
         key: ${{ matrix.os }}-CURL-pre-built
@@ -386,7 +386,7 @@ jobs:
 
     - name: Fetch libmicrohttpd from cache
       id: cache-libmicrohttpd
-      uses: actions/cache@v2
+      uses: actions/cache@v4
       with:
         path: libmicrohttpd-0.9.64
         key: ${{ matrix.os }}-${{ matrix.c-compiler }}-libmicrohttpd-pre-built
