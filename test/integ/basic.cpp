@@ -993,6 +993,62 @@ LT_BEGIN_AUTO_TEST(basic_suite, empty_arg)
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(empty_arg)
 
+LT_BEGIN_AUTO_TEST(basic_suite, empty_arg_value_at_end)
+    // Test for issue #268: POST body keys without values at the end
+    // are not processed when using application/x-www-form-urlencoded
+    simple_resource resource;
+    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    curl_global_init(CURL_GLOBAL_ALL);
+
+    // Test case 1: arg2 has empty value at end (the bug case)
+    {
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, "arg1=val1&arg2=");
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    // arg1="val1", arg2="" -> response should be "val1"
+    LT_CHECK_EQ(s, "val1");
+    curl_easy_cleanup(curl);
+    }
+
+    // Test case 2: only arg1 with empty value
+    {
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, "arg1=");
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    // arg1="" -> response should be ""
+    LT_CHECK_EQ(s, "");
+    curl_easy_cleanup(curl);
+    }
+
+    // Test case 3: both args with empty values
+    {
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, "arg1=&arg2=");
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    // arg1="", arg2="" -> response should be ""
+    LT_CHECK_EQ(s, "");
+    curl_easy_cleanup(curl);
+    }
+LT_END_AUTO_TEST(empty_arg_value_at_end)
+
 LT_BEGIN_AUTO_TEST(basic_suite, no_response)
     no_response_resource resource;
     LT_ASSERT_EQ(true, ws->register_resource("base", &resource));

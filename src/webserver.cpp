@@ -738,6 +738,10 @@ MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct details
 
     if (found) {
         try {
+            if (mr->pp != nullptr) {
+                MHD_destroy_post_processor(mr->pp);
+                mr->pp = nullptr;
+            }
             if (hrm->is_allowed(method)) {
                 mr->dhrs = ((hrm)->*(mr->callback))(*mr->dhr);  // copy in memory (move in case)
                 if (mr->dhrs.get() == nullptr || mr->dhrs->get_response_code() == -1) {
