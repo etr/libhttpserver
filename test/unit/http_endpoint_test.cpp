@@ -20,6 +20,10 @@
 
 #include "httpserver/details/http_endpoint.hpp"
 
+#include <iostream>
+#include <string>
+#include <vector>
+
 #include "./littletest.hpp"
 
 using httpserver::details::http_endpoint;

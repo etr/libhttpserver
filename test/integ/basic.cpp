@@ -19,12 +19,16 @@
 */
 
 #include <curl/curl.h>
+#include <cstdio>
 #include <cstring>
+#include <iostream>
 #include <map>
 #include <memory>
 #include <numeric>
 #include <sstream>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "./httpserver.hpp"
 #include "httpserver/string_utilities.hpp"
