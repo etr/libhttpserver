@@ -40,10 +40,13 @@
 #include <stdlib.h>
 #include <strings.h>
 #include <algorithm>
-#include <iosfwd>
 #include <cstring>
+#include <iosfwd>
+#include <iostream>
 #include <memory>
+#include <set>
 #include <stdexcept>
+#include <string>
 #include <utility>
 #include <vector>
 

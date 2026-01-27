@@ -18,6 +18,8 @@
      USA
 */
 
+#include <memory>
+
 #include <httpserver.hpp>
 
 class hello_world_resource : public httpserver::http_resource {

@@ -18,6 +18,8 @@
      USA
 */
 
+#include <memory>
+
 #include <httpserver.hpp>
 
 std::shared_ptr<httpserver::http_response> not_found_custom(const httpserver::http_request&) {
