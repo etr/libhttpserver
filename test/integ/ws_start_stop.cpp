@@ -34,6 +34,7 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <memory>
+#include <string>
 
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
@@ -509,7 +510,11 @@ void* start_ws_blocking(void* par) {
     httpserver::webserver* ws = (httpserver::webserver*) par;
     ok_resource ok;
     if (!ws->register_resource("base", &ok)) return PTHREAD_CANCELED;
-    try { ws->start(true); } catch (...) { return PTHREAD_CANCELED; }
+    try {
+        ws->start(true);
+    } catch (...) {
+        return PTHREAD_CANCELED;
+    }
 
     return nullptr;
 }

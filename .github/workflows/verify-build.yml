@@ -58,8 +58,8 @@ jobs:
             os-type: ubuntu
             build-type: asan
             compiler-family: clang
-            c-compiler: clang-13
-            cc-compiler: clang++-13
+            c-compiler: clang-18
+            cc-compiler: clang++-18
             debug: debug
             coverage: nocoverage
           # This test gives false positives on newer versions of clang
@@ -78,8 +78,8 @@ jobs:
             os-type: ubuntu
             build-type: lsan
             compiler-family: clang
-            c-compiler: clang-13
-            cc-compiler: clang++-13
+            c-compiler: clang-18
+            cc-compiler: clang++-18
             debug: debug
             coverage: nocoverage
           - test-group: extra
@@ -87,8 +87,8 @@ jobs:
             os-type: ubuntu
             build-type: tsan
             compiler-family: clang
-            c-compiler: clang-13
-            cc-compiler: clang++-13
+            c-compiler: clang-18
+            cc-compiler: clang++-18
             debug: debug
             coverage: nocoverage
           - test-group: extra
@@ -96,27 +96,9 @@ jobs:
             os-type: ubuntu
             build-type: ubsan
             compiler-family: clang
-            c-compiler: clang-13
-            cc-compiler: clang++-13
+            c-compiler: clang-18
+            cc-compiler: clang++-18
             debug: debug
-            coverage: nocoverage
-          - test-group: extra
-            os: ubuntu-20.04
-            os-type: ubuntu
-            build-type: none
-            compiler-family: gcc
-            c-compiler: gcc-7
-            cc-compiler: g++-7
-            debug: nodebug
-            coverage: nocoverage
-          - test-group: extra
-            os: ubuntu-20.04
-            os-type: ubuntu
-            build-type: none
-            compiler-family: gcc
-            c-compiler: gcc-8
-            cc-compiler: g++-8
-            debug: nodebug
             coverage: nocoverage
           - test-group: extra
             os: ubuntu-latest
@@ -137,52 +119,43 @@ jobs:
             debug: nodebug
             coverage: nocoverage
           - test-group: extra
-            os: ubuntu-20.04
+            os: ubuntu-latest
             os-type: ubuntu
             build-type: none
-            compiler-family: clang
-            c-compiler: clang-6.0
-            cc-compiler: clang++-6.0
-            debug: nodebug
-            coverage: nocoverage
-          - test-group: extra
-            os: ubuntu-20.04
-            os-type: ubuntu
-            build-type: none
-            compiler-family: clang
-            c-compiler: clang-7
-            cc-compiler: clang++-7
-            debug: nodebug
-            coverage: nocoverage
-          - test-group: extra
-            os: ubuntu-20.04
-            os-type: ubuntu
-            build-type: none
-            compiler-family: clang
-            c-compiler: clang-8
-            cc-compiler: clang++-8
-            debug: nodebug
-            coverage: nocoverage
-          - test-group: extra
-            os: ubuntu-20.04
-            os-type: ubuntu
-            build-type: none
-            compiler-family: clang
-            c-compiler: clang-9
-            cc-compiler: clang++-9
-            debug: nodebug
-            coverage: nocoverage
-          - test-group: extra
-            os: ubuntu-20.04
-            os-type: ubuntu
-            build-type: none
-            compiler-family: clang
-            c-compiler: clang-10
-            cc-compiler: clang++-10
+            compiler-family: gcc
+            c-compiler: gcc-11
+            cc-compiler: g++-11
             debug: nodebug
             coverage: nocoverage
           - test-group: extra
             os: ubuntu-latest
+            os-type: ubuntu
+            build-type: none
+            compiler-family: gcc
+            c-compiler: gcc-12
+            cc-compiler: g++-12
+            debug: nodebug
+            coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-latest
+            os-type: ubuntu
+            build-type: none
+            compiler-family: gcc
+            c-compiler: gcc-13
+            cc-compiler: g++-13
+            debug: nodebug
+            coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-latest
+            os-type: ubuntu
+            build-type: none
+            compiler-family: gcc
+            c-compiler: gcc-14
+            cc-compiler: g++-14
+            debug: nodebug
+            coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-22.04
             os-type: ubuntu
             build-type: none
             compiler-family: clang
@@ -191,7 +164,7 @@ jobs:
             debug: nodebug
             coverage: nocoverage
           - test-group: extra
-            os: ubuntu-latest
+            os: ubuntu-22.04
             os-type: ubuntu
             build-type: none
             compiler-family: clang
@@ -200,7 +173,7 @@ jobs:
             debug: nodebug
             coverage: nocoverage
           - test-group: extra
-            os: ubuntu-latest
+            os: ubuntu-22.04
             os-type: ubuntu
             build-type: none
             compiler-family: clang
@@ -211,19 +184,55 @@ jobs:
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
-            build-type: valgrind
-            compiler-family: gcc
-            c-compiler: gcc-10
-            cc-compiler: g++-10
+            build-type: none
+            compiler-family: clang
+            c-compiler: clang-14
+            cc-compiler: clang++-14
             debug: nodebug
             coverage: nocoverage
           - test-group: extra
-            os: ubuntu-20.04
+            os: ubuntu-latest
+            os-type: ubuntu
+            build-type: none
+            compiler-family: clang
+            c-compiler: clang-15
+            cc-compiler: clang++-15
+            debug: nodebug
+            coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-latest
+            os-type: ubuntu
+            build-type: none
+            compiler-family: clang
+            c-compiler: clang-16
+            cc-compiler: clang++-16
+            debug: nodebug
+            coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-latest
+            os-type: ubuntu
+            build-type: none
+            compiler-family: clang
+            c-compiler: clang-17
+            cc-compiler: clang++-17
+            debug: nodebug
+            coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-latest
+            os-type: ubuntu
+            build-type: valgrind
+            compiler-family: gcc
+            c-compiler: gcc-14
+            cc-compiler: g++-14
+            debug: nodebug
+            coverage: nocoverage
+          - test-group: extra
+            os: ubuntu-latest
             os-type: ubuntu
             build-type: iwyu
             compiler-family: clang
-            c-compiler: clang-9
-            cc-compiler: clang++-9
+            c-compiler: clang-18
+            cc-compiler: clang++-18
             debug: nodebug
             coverage: nocoverage
           - test-group: performance
@@ -264,7 +273,7 @@ jobs:
             coverage: nocoverage
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
       with:
         # We must fetch at least the immediate parents so that if this is
         # a pull request then we can checkout the head.
@@ -294,7 +303,7 @@ jobs:
       if: ${{ matrix.compiler-family == 'gcc' && matrix.os-type == 'ubuntu' }}
 
     - name: Install valgrind if needed
-      run: sudo apt-get install valgrind valgrind-dbg
+      run: sudo apt-get install valgrind
       if: ${{ matrix.build-type == 'valgrind' && matrix.os-type == 'ubuntu' }}
 
     - name: Install cpplint if needed
@@ -303,16 +312,12 @@ jobs:
     
     - name: Install IWYU dependencies if needed
       run: |
-        # Use same deps used by iwyu in their setup for travis
-        sudo apt-get install llvm-9-dev llvm-9-tools libclang-9-dev ;
-        # Use same CMAKE used by iwyu in their setup for travis
-        wget -O cmake.sh https://cmake.org/files/v3.10/cmake-3.10.0-Linux-x86_64.sh ;
-        sudo sh cmake.sh --skip-license --exclude-subdir --prefix=/usr/local ;
+        sudo apt-get install llvm-18-dev libclang-18-dev clang-18 ;
       if: ${{ matrix.build-type == 'iwyu' && matrix.os-type == 'ubuntu' }}
 
     - name: IWYU from cache (for testing)
       id: cache-IWYU
-      uses: actions/cache@v2
+      uses: actions/cache@v4
       with:
         path: include-what-you-use
         key: ${{ matrix.os }}-${{ matrix.c-compiler }}-include-what-you-use-pre-built
@@ -321,11 +326,11 @@ jobs:
     # Installing iwyu manually because clang and iwyu paths won't match on Ubuntu otherwise.
     - name: Build IWYU if requested
       run: |
-        CLANG_ROOT_PATH=`llvm-config-9 --prefix` ;
-        CLANG_BIN_PATH=`llvm-config-9 --bindir` ;
-        curl "https://libhttpserver.s3.amazonaws.com/travis_stuff/include-what-you-use-clang-9.tgz" -o "include-what-you-use-clang-9.tgz" ;
-        tar -xzf "include-what-you-use-clang-9.tgz" ;
+        CLANG_ROOT_PATH=`llvm-config-18 --prefix` ;
+        CLANG_BIN_PATH=`llvm-config-18 --bindir` ;
+        git clone https://github.com/include-what-you-use/include-what-you-use.git ;
         cd include-what-you-use ;
+        git checkout clang_18 ;
         mkdir build_iwyu ;
         cd build_iwyu ;
         cmake -G "Unix Makefiles" -DCMAKE_PREFIX_PATH=$CLANG_ROOT_PATH -DCMAKE_C_COMPILER=$CLANG_BIN_PATH/clang -DCMAKE_CXX_COMPILER=$CLANG_BIN_PATH/clang++ ../ ;
@@ -341,7 +346,7 @@ jobs:
 
     - name: CURL from cache (for testing)
       id: cache-CURL
-      uses: actions/cache@v2
+      uses: actions/cache@v4
       with:
         path: curl-7.75.0
         key: ${{ matrix.os }}-CURL-pre-built
@@ -352,7 +357,7 @@ jobs:
         curl https://libhttpserver.s3.amazonaws.com/travis_stuff/curl-7.75.0.tar.gz -o curl-7.75.0.tar.gz ;
         tar -xzf curl-7.75.0.tar.gz ;
         cd curl-7.75.0 ;
-        if [ "$matrix.os-type" = "ubuntu" ]; then ./configure ; else ./configure --with-darwinssl ; fi
+        ./configure --with-darwinssl ;
         make ;
       if: ${{ matrix.os == 'macos-latest' && steps.cache-CURL.outputs.cache-hit != 'true' }}
       
@@ -386,22 +391,22 @@ jobs:
 
     - name: Fetch libmicrohttpd from cache
       id: cache-libmicrohttpd
-      uses: actions/cache@v2
+      uses: actions/cache@v4
       with:
-        path: libmicrohttpd-0.9.64
-        key: ${{ matrix.os }}-${{ matrix.c-compiler }}-libmicrohttpd-pre-built
+        path: libmicrohttpd-0.9.77
+        key: ${{ matrix.os }}-${{ matrix.c-compiler }}-libmicrohttpd-0.9.77-pre-built
 
     - name: Build libmicrohttpd dependency (if not cached)
       run: |
-        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.64.tar.gz -o libmicrohttpd-0.9.64.tar.gz ;
-        tar -xzf libmicrohttpd-0.9.64.tar.gz ;
-        cd libmicrohttpd-0.9.64 ;
+        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.77.tar.gz -o libmicrohttpd-0.9.77.tar.gz ;
+        tar -xzf libmicrohttpd-0.9.77.tar.gz ;
+        cd libmicrohttpd-0.9.77 ;
         ./configure --disable-examples ;
         make ;
       if: steps.cache-libmicrohttpd.outputs.cache-hit != 'true'
-      
+
     - name: Install libmicrohttpd
-      run: cd libmicrohttpd-0.9.64 ; sudo make install ;
+      run: cd libmicrohttpd-0.9.77 ; sudo make install ;
       
     - name: Refresh links to shared libs
       run: sudo ldconfig ;
@@ -421,7 +426,7 @@ jobs:
         if [ "$BUILD_TYPE" = "ubsan" ]; then export export CFLAGS='-fsanitize=undefined'; export CXXLAGS='-fsanitize=undefined'; export LDFLAGS='-fsanitize=undefined'; fi
 
         # Additional flags on mac. They need to stay in step as env variables don't propagate across steps.
-        if [ "$matrix.os" = "macos-latest" ]; then
+        if [ "${{ matrix.os }}" = "macos-latest" ]; then
           export CFLAGS='-mtune=generic' ;
           export IPV6_TESTS_ENABLED="true" ;
         fi

@@ -45,6 +45,10 @@
 #include <set>
 #include <string>
 
+#ifdef HAVE_GNUTLS
+#include <gnutls/gnutls.h>
+#endif  // HAVE_GNUTLS
+
 #include "httpserver/http_utils.hpp"
 #include "httpserver/create_webserver.hpp"
 #include "httpserver/details/http_endpoint.hpp"
@@ -153,6 +157,7 @@ class webserver {
      const std::string https_mem_trust;
      const std::string https_priorities;
      const http::http_utils::cred_type_T cred_type;
+     const psk_cred_handler_callback psk_cred_handler;
      const std::string digest_auth_random;
      const int nonce_nc_size;
      bool running;
@@ -209,6 +214,12 @@ class webserver {
      MHD_Result finalize_answer(MHD_Connection* connection, struct details::modded_request* mr, const char* method);
 
      MHD_Result complete_request(MHD_Connection* connection, struct details::modded_request* mr, const char* version, const char* method);
+
+#ifdef HAVE_GNUTLS
+     static int psk_cred_handler_func(gnutls_session_t session,
+                                       const char* username,
+                                       gnutls_datum_t* key);
+#endif  // HAVE_GNUTLS
 
      friend MHD_Result policy_callback(void *cls, const struct sockaddr* addr, socklen_t addrlen);
      friend void error_log(void* cls, const char* fmt, va_list ap);

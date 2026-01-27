@@ -313,6 +313,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
 * _.https_mem_cert(**const std::string&** filename):_ String representing the path to a file containing the certificate to be used by the HTTPS daemon. This must be used in conjunction with `https_mem_key`.
 * _.https_mem_trust(**const std::string&** filename):_ String representing the path to a file containing the CA certificate to be used by the HTTPS daemon to authenticate and trust clients certificates. The presence of this option activates the request of certificate to the client. The request to the client is marked optional, and it is the responsibility of the server to check the presence of the certificate if needed. Note that most browsers will only present a client certificate only if they have one matching the specified CA, not sending any certificate otherwise.
 * _.https_priorities(**const std::string&** priority_string):_ SSL/TLS protocol version and ciphers. Must be followed by a string specifying the SSL/TLS protocol versions and ciphers that are acceptable for the application. The string is passed unchanged to gnutls_priority_init. If this option is not specified, `"NORMAL"` is used.
+* _.psk_cred_handler(**psk_cred_handler_callback** handler):_ Sets a callback function for TLS-PSK (Pre-Shared Key) authentication. The callback receives a username and should return the corresponding hex-encoded PSK, or an empty string if the user is unknown. This option requires `use_ssl()`, `cred_type(http::http_utils::PSK)`, and an appropriate `https_priorities()` string that enables PSK cipher suites. PSK authentication allows TLS without certificates by using a shared secret key.
 
 #### Minimal example using HTTPS
 ```cpp
@@ -345,6 +346,59 @@ To test the above example, you can run the following command from a terminal:
     curl -XGET -v -k 'https://localhost:8080/hello'
 
 You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/minimal_https.cpp).
+
+#### Minimal example using TLS-PSK
+```cpp
+    #include <httpserver.hpp>
+    #include <map>
+    #include <string>
+
+    using namespace httpserver;
+
+    // Simple PSK database - in production, use secure storage
+    std::map<std::string, std::string> psk_database = {
+        {"client1", "0123456789abcdef0123456789abcdef"},
+        {"client2", "fedcba9876543210fedcba9876543210"}
+    };
+
+    // PSK credential handler callback
+    std::string psk_handler(const std::string& username) {
+        auto it = psk_database.find(username);
+        if (it != psk_database.end()) {
+            return it->second;
+        }
+        return "";  // Return empty string for unknown users
+    }
+
+    class hello_world_resource : public http_resource {
+    public:
+        std::shared_ptr<http_response> render(const http_request&) {
+            return std::shared_ptr<http_response>(
+                new string_response("Hello, World (via TLS-PSK)!"));
+        }
+    };
+
+    int main(int argc, char** argv) {
+        webserver ws = create_webserver(8080)
+            .use_ssl()
+            .cred_type(http::http_utils::PSK)
+            .psk_cred_handler(psk_handler)
+            .https_priorities("NORMAL:-VERS-TLS-ALL:+VERS-TLS1.2:+PSK:+DHE-PSK");
+
+        hello_world_resource hwr;
+        ws.register_resource("/hello", &hwr);
+        ws.start(true);
+
+        return 0;
+    }
+```
+To test the above example, you can run the following command from a terminal using gnutls-cli:
+
+    gnutls-cli --pskusername=client1 --pskkey=0123456789abcdef0123456789abcdef -p 8080 localhost
+
+Then type `GET /hello HTTP/1.1` followed by `Host: localhost` and two newlines.
+
+You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/minimal_https_psk.cpp).
 
 ### IP Blacklisting/Whitelisting
 libhttpserver supports IP blacklisting and whitelisting as an internal feature. This section explains the startup options related with IP blacklisting/whitelisting. See the [specific section](#ip-blacklisting-and-whitelisting) to read more about the topic.

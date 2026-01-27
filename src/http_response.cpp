@@ -21,6 +21,8 @@
 #include "httpserver/http_response.hpp"
 #include <microhttpd.h>
 #include <iostream>
+#include <map>
+#include <string>
 #include <utility>
 #include "httpserver/http_utils.hpp"
 

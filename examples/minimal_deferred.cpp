@@ -18,7 +18,11 @@
      USA
 */
 
+#include <cstdio>
 #include <cstring>
+#include <memory>
+#include <string>
+
 #include <httpserver.hpp>
 
 static int counter = 0;

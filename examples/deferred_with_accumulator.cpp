@@ -18,11 +18,14 @@
      USA
 */
 
+#include <algorithm>
 #include <atomic>
 #include <cstring>
 // cpplint errors on chrono and thread because they are replaced (in Chromium) by other google libraries.
 // This is not an issue here.
 #include <chrono> // NOLINT [build/c++11]
+#include <memory>
+#include <string>
 #include <thread> // NOLINT [build/c++11]
 
 #include <httpserver.hpp>

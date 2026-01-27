@@ -17,6 +17,13 @@
 #     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
 LDADD = $(top_builddir)/src/libhttpserver.la
+
+if HAVE_GNUTLS
+LDADD += -lgnutls
+endif
+
+LDADD += -lcurl
+
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/
 METASOURCES = AUTO
 check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource
@@ -37,7 +44,7 @@ nodelay_SOURCES = integ/nodelay.cpp
 http_resource_SOURCES = unit/http_resource_test.cpp
 
 noinst_HEADERS = littletest.hpp
-AM_CXXFLAGS += -lcurl -Wall -fPIC
+AM_CXXFLAGS += -Wall -fPIC -Wno-overloaded-virtual
 
 if COND_GCOV
 AM_CFLAGS += -O0 --coverage --no-inline

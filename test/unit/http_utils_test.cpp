@@ -32,6 +32,10 @@
 
 #include <sys/stat.h>
 #include <cstdio>
+#include <iostream>
+#include <map>
+#include <string>
+#include <vector>
 
 #include "./littletest.hpp"
 

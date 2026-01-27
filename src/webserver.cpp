@@ -40,10 +40,13 @@
 #include <stdlib.h>
 #include <strings.h>
 #include <algorithm>
-#include <iosfwd>
 #include <cstring>
+#include <iosfwd>
+#include <iostream>
 #include <memory>
+#include <set>
 #include <stdexcept>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -142,6 +145,7 @@ webserver::webserver(const create_webserver& params):
     https_mem_trust(params._https_mem_trust),
     https_priorities(params._https_priorities),
     cred_type(params._cred_type),
+    psk_cred_handler(params._psk_cred_handler),
     digest_auth_random(params._digest_auth_random),
     nonce_nc_size(params._nonce_nc_size),
     running(false),
@@ -276,6 +280,11 @@ bool webserver::start(bool blocking) {
     if (cred_type != http_utils::NONE) {
         iov.push_back(gen(MHD_OPTION_HTTPS_CRED_TYPE, cred_type));
     }
+
+    if (psk_cred_handler != nullptr && use_ssl) {
+        iov.push_back(gen(MHD_OPTION_GNUTLS_PSK_CRED_HANDLER,
+                          (intptr_t)&psk_cred_handler_func, this));
+    }
 #endif  // HAVE_GNUTLS
 
     iov.push_back(gen(MHD_OPTION_END, 0, nullptr));
@@ -395,6 +404,43 @@ void webserver::unban_ip(const string& ip) {
 void webserver::disallow_ip(const string& ip) {
     allowances.erase(ip_representation(ip));
 }
+
+#ifdef HAVE_GNUTLS
+int webserver::psk_cred_handler_func(gnutls_session_t session,
+                                      const char* username,
+                                      gnutls_datum_t* key) {
+    webserver* ws = static_cast<webserver*>(
+        gnutls_session_get_ptr(session));
+
+    if (ws == nullptr || ws->psk_cred_handler == nullptr) {
+        return -1;
+    }
+
+    std::string psk_hex = ws->psk_cred_handler(std::string(username));
+    if (psk_hex.empty()) {
+        return -1;
+    }
+
+    // Convert hex string to binary
+    size_t psk_len = psk_hex.size() / 2;
+    key->data = static_cast<unsigned char*>(gnutls_malloc(psk_len));
+    if (key->data == nullptr) {
+        return -1;
+    }
+
+    size_t output_size = psk_len;
+    int ret = gnutls_hex2bin(psk_hex.c_str(), psk_hex.size(),
+                             key->data, &output_size);
+    if (ret < 0) {
+        gnutls_free(key->data);
+        key->data = nullptr;
+        return -1;
+    }
+
+    key->size = static_cast<unsigned int>(output_size);
+    return 0;
+}
+#endif  // HAVE_GNUTLS
 
 MHD_Result policy_callback(void *cls, const struct sockaddr* addr, socklen_t addrlen) {
     // Parameter needed to respect MHD interface, but not needed here.
