@@ -1,0 +1,6 @@
+---
+engines:
+  cppcheck:
+    options:
+      suppress:
+        - missingIncludeSystem
