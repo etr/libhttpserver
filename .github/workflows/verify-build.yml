@@ -222,8 +222,8 @@ jobs:
             os-type: ubuntu
             build-type: valgrind
             compiler-family: gcc
-            c-compiler: gcc-14
-            cc-compiler: g++-14
+            c-compiler: gcc-13
+            cc-compiler: g++-13
             debug: nodebug
             coverage: nocoverage
           - test-group: extra
