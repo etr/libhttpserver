@@ -153,8 +153,8 @@ if test x"$fastopen" = x"yes" && test x"$is_windows" = x"no"; then
     major=`uname -r | cut -d. -f1`
     minor=`uname -r | cut -d. -f2`
     if test "$major" -ge 4 || { test "$major" -eq 3 && test "$minor" -ge 7; }; then
-            CXXFLAGS="-DUSE_FASTOPEN $CXXFLAGS";
-            is_fastopen_supported=yes;
+        CXXFLAGS="-DUSE_FASTOPEN $CXXFLAGS";
+        is_fastopen_supported=yes;
     fi
 fi
 
