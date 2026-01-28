@@ -372,6 +372,11 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, single_resource_not_default_resource)
     ws.stop();
 LT_END_AUTO_TEST(single_resource_not_default_resource)
 
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, register_resource_nullptr_throws)
+    httpserver::webserver ws = httpserver::create_webserver(PORT);
+    LT_CHECK_THROW(ws.register_resource("/test", nullptr));
+LT_END_AUTO_TEST(register_resource_nullptr_throws)
+
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, thread_per_connection_fails_with_max_threads)
     { // NOLINT (internal scope opening - not method start)
     httpserver::webserver ws = httpserver::create_webserver(PORT)

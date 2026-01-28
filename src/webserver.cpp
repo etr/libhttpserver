@@ -191,6 +191,10 @@ void webserver::request_completed(void *cls, struct MHD_Connection *connection, 
 }
 
 bool webserver::register_resource(const std::string& resource, http_resource* hrm, bool family) {
+    if (hrm == nullptr) {
+        throw std::invalid_argument("The http_resource pointer cannot be null");
+    }
+
     if (single_resource && ((resource != "" && resource != "/") || !family)) {
         throw std::invalid_argument("The resource should be '' or '/' and be marked as family when using a single_resource server");
     }
