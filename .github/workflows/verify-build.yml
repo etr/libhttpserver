@@ -333,6 +333,7 @@ jobs:
     # If this run was triggered by a pull request event, then checkout
     # the head of the pull request instead of the merge commit.
     - run: git checkout HEAD^2
+      shell: bash
       if: ${{ github.event_name == 'pull_request' }}
 
     - name: Setup MSYS2
@@ -532,6 +533,7 @@ jobs:
         fi
 
     - name: Print config.log
+      shell: bash
       run: |
         cd build ;
         cat config.log ;
@@ -569,6 +571,7 @@ jobs:
       if: ${{ matrix.build-type != 'iwyu' }}
       
     - name: Print tests results
+      shell: bash
       run: |
         cd build ;
         cat test/test-suite.log ;
