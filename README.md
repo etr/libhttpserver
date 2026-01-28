@@ -163,6 +163,31 @@ configure: WARNING: Building from MSYS environment. Binaries will depend on msys
 
 Consider switching to the MinGW64 shell for native Windows binaries.
 
+#### Library files on Windows
+
+When building with GCC-based toolchains (MSYS2/MinGW, Cygwin), the following library files are generated:
+
+| File | Purpose |
+|------|---------|
+| `libhttpserver.a` | Static library archive |
+| `libhttpserver.dll` | Shared library (DLL) |
+| `libhttpserver.dll.a` | Import library for linking against the DLL |
+| `libhttpserver.la` | Libtool archive (used by libtool during linking) |
+
+**Note about `.lib` files:** The `.dll.a` format is the import library format used by GCC toolchains. If you're looking for `.lib` files, those are the MSVC (Microsoft Visual C++) import library format and are only generated when building with the MSVC toolchain. The `.dll.a` file serves the same purpose as `.lib` but for GCC-based compilers.
+
+**Linking against libhttpserver:**
+
+Using pkg-config (recommended):
+```bash
+g++ myapp.cpp $(pkg-config --cflags --libs libhttpserver) -o myapp
+```
+
+Manual linking:
+```bash
+g++ myapp.cpp -I/mingw64/include -L/mingw64/lib -lhttpserver -lmicrohttpd -o myapp
+```
+
 [Back to TOC](#table-of-contents)
 
 ## Getting Started
