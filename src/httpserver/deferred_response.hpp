@@ -28,6 +28,8 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <sys/types.h>
+#include <algorithm>
+#include <cstring>
 #include <memory>
 #include <string>
 #include "httpserver/http_utils.hpp"
@@ -50,9 +52,11 @@ class deferred_response : public string_response {
              const std::string& content = "",
              int response_code = http::http_utils::http_ok,
              const std::string& content_type = http::http_utils::text_plain):
-         string_response(content, response_code, content_type),
+         string_response("", response_code, content_type),
          cycle_callback(cycle_callback),
-         closure_data(closure_data) { }
+         closure_data(closure_data),
+         initial_content(content),
+         content_offset(0) { }
 
      deferred_response(const deferred_response& other) = default;
      deferred_response(deferred_response&& other) noexcept = default;
@@ -68,9 +72,22 @@ class deferred_response : public string_response {
  private:
      ssize_t (*cycle_callback)(std::shared_ptr<T>, char*, size_t);
      std::shared_ptr<T> closure_data;
+     std::string initial_content;
+     size_t content_offset;
 
      static ssize_t cb(void* cls, uint64_t, char* buf, size_t max) {
          deferred_response<T>* dfr = static_cast<deferred_response<T>*>(cls);
+
+         // First, send any remaining initial content
+         if (dfr->content_offset < dfr->initial_content.size()) {
+             size_t remaining = dfr->initial_content.size() - dfr->content_offset;
+             size_t to_copy = std::min(remaining, max);
+             std::memcpy(buf, dfr->initial_content.data() + dfr->content_offset, to_copy);
+             dfr->content_offset += to_copy;
+             return static_cast<ssize_t>(to_copy);
+         }
+
+         // Then call user's callback
          return dfr->cycle_callback(dfr->closure_data, buf, max);
      }
 };

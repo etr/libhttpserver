@@ -106,6 +106,13 @@ class deferred_resource_with_data : public http_resource {
      }
 };
 
+class deferred_resource_empty_content : public http_resource {
+ public:
+     shared_ptr<http_response> render_GET(const http_request&) {
+         return std::make_shared<deferred_response<void>>(test_callback, nullptr);
+     }
+};
+
 #ifdef HTTPSERVER_PORT
 #define PORT HTTPSERVER_PORT
 #else
@@ -145,7 +152,7 @@ LT_BEGIN_AUTO_TEST(deferred_suite, deferred_response_suite)
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
-    LT_CHECK_EQ(s, "testtest");
+    LT_CHECK_EQ(s, "cycle callback responsetesttest");
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(deferred_response_suite)
 
@@ -163,9 +170,27 @@ LT_BEGIN_AUTO_TEST(deferred_suite, deferred_response_with_data)
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
-    LT_CHECK_EQ(s, "test42test84");
+    LT_CHECK_EQ(s, "cycle callback responsetest42test84");
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(deferred_response_with_data)
+
+LT_BEGIN_AUTO_TEST(deferred_suite, deferred_response_empty_content)
+    deferred_resource_empty_content resource;
+    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    curl_global_init(CURL_GLOBAL_ALL);
+
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "testtest");
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(deferred_response_empty_content)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
