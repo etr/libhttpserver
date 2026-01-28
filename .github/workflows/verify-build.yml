@@ -20,6 +20,9 @@ jobs:
       BUILD_TYPE: ${{ matrix.build-type }}
       CC: ${{ matrix.c-compiler }}
       CXX: ${{ matrix.cc-compiler }}
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
     strategy:
       fail-fast: false
       matrix:
@@ -33,6 +36,7 @@ jobs:
         coverage: [coverage, nocoverage]
         linking: [dynamic, static]
         build-type: [classic]
+        shell: [bash]
         exclude:
           - os: ubuntu-latest
             os-type: mac
@@ -62,6 +66,7 @@ jobs:
             cc-compiler: clang++-18
             debug: debug
             coverage: nocoverage
+            shell: bash
           # This test gives false positives on newer versions of clang
           # and ubuntu-18.04 is not supported anymore on github
           #- test-group: extra
@@ -82,6 +87,7 @@ jobs:
             cc-compiler: clang++-18
             debug: debug
             coverage: nocoverage
+            shell: bash
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
@@ -91,6 +97,7 @@ jobs:
             cc-compiler: clang++-18
             debug: debug
             coverage: nocoverage
+            shell: bash
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
@@ -100,6 +107,7 @@ jobs:
             cc-compiler: clang++-18
             debug: debug
             coverage: nocoverage
+            shell: bash
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
@@ -109,6 +117,7 @@ jobs:
             cc-compiler: g++-9
             debug: nodebug
             coverage: nocoverage
+            shell: bash
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
@@ -118,6 +127,7 @@ jobs:
             cc-compiler: g++-10
             debug: nodebug
             coverage: nocoverage
+            shell: bash
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
@@ -127,6 +137,7 @@ jobs:
             cc-compiler: g++-11
             debug: nodebug
             coverage: nocoverage
+            shell: bash
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
@@ -136,6 +147,7 @@ jobs:
             cc-compiler: g++-12
             debug: nodebug
             coverage: nocoverage
+            shell: bash
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
@@ -145,6 +157,7 @@ jobs:
             cc-compiler: g++-13
             debug: nodebug
             coverage: nocoverage
+            shell: bash
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
@@ -154,6 +167,7 @@ jobs:
             cc-compiler: g++-14
             debug: nodebug
             coverage: nocoverage
+            shell: bash
           - test-group: extra
             os: ubuntu-22.04
             os-type: ubuntu
@@ -163,6 +177,7 @@ jobs:
             cc-compiler: clang++-11
             debug: nodebug
             coverage: nocoverage
+            shell: bash
           - test-group: extra
             os: ubuntu-22.04
             os-type: ubuntu
@@ -172,6 +187,7 @@ jobs:
             cc-compiler: clang++-12
             debug: nodebug
             coverage: nocoverage
+            shell: bash
           - test-group: extra
             os: ubuntu-22.04
             os-type: ubuntu
@@ -181,6 +197,7 @@ jobs:
             cc-compiler: clang++-13
             debug: nodebug
             coverage: nocoverage
+            shell: bash
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
@@ -190,6 +207,7 @@ jobs:
             cc-compiler: clang++-14
             debug: nodebug
             coverage: nocoverage
+            shell: bash
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
@@ -199,6 +217,7 @@ jobs:
             cc-compiler: clang++-15
             debug: nodebug
             coverage: nocoverage
+            shell: bash
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
@@ -208,6 +227,7 @@ jobs:
             cc-compiler: clang++-16
             debug: nodebug
             coverage: nocoverage
+            shell: bash
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
@@ -217,6 +237,7 @@ jobs:
             cc-compiler: clang++-17
             debug: nodebug
             coverage: nocoverage
+            shell: bash
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
@@ -226,6 +247,7 @@ jobs:
             cc-compiler: g++-14
             debug: nodebug
             coverage: nocoverage
+            shell: bash
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
@@ -235,6 +257,7 @@ jobs:
             cc-compiler: clang++-18
             debug: nodebug
             coverage: nocoverage
+            shell: bash
           - test-group: performance
             os: ubuntu-latest
             os-type: ubuntu
@@ -244,6 +267,7 @@ jobs:
             cc-compiler: g++-10
             debug: nodebug
             coverage: nocoverage
+            shell: bash
           - test-group: performance
             os: ubuntu-latest
             os-type: ubuntu
@@ -253,6 +277,7 @@ jobs:
             cc-compiler: g++-10
             debug: nodebug
             coverage: nocoverage
+            shell: bash
           - test-group: performance
             os: ubuntu-latest
             os-type: ubuntu
@@ -262,6 +287,7 @@ jobs:
             cc-compiler: g++-10
             debug: nodebug
             coverage: nocoverage
+            shell: bash
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
@@ -271,6 +297,31 @@ jobs:
             cc-compiler: g++-10
             debug: debug
             coverage: nocoverage
+            shell: bash
+          - test-group: basic
+            os: windows-latest
+            os-type: windows
+            msys-env: MINGW64
+            shell: 'msys2 {0}'
+            build-type: classic
+            compiler-family: none
+            c-compiler: gcc
+            cc-compiler: g++
+            debug: nodebug
+            coverage: nocoverage
+            linking: dynamic
+          - test-group: basic
+            os: windows-latest
+            os-type: windows
+            msys-env: MSYS
+            shell: 'msys2 {0}'
+            build-type: classic
+            compiler-family: none
+            c-compiler: gcc
+            cc-compiler: g++
+            debug: nodebug
+            coverage: nocoverage
+            linking: dynamic
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -282,8 +333,29 @@ jobs:
     # If this run was triggered by a pull request event, then checkout
     # the head of the pull request instead of the merge commit.
     - run: git checkout HEAD^2
+      shell: bash
       if: ${{ github.event_name == 'pull_request' }}
-        
+
+    - name: Setup MSYS2
+      if: ${{ matrix.os-type == 'windows' }}
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: ${{ matrix.msys-env }}
+        update: true
+        install: >-
+          autotools
+          base-devel
+
+    - name: Install MinGW64 packages
+      if: ${{ matrix.os-type == 'windows' && matrix.msys-env == 'MINGW64' }}
+      run: |
+        pacman --noconfirm -S --needed mingw-w64-x86_64-{toolchain,libtool,make,pkg-config,libsystre,doxygen,gnutls,graphviz,curl}
+
+    - name: Install MSYS packages
+      if: ${{ matrix.os-type == 'windows' && matrix.msys-env == 'MSYS' }}
+      run: |
+        pacman --noconfirm -S --needed msys2-devel gcc make libcurl-devel libgnutls-devel
+
     - name: Install Ubuntu test sources
       run: |
         sudo add-apt-repository ppa:ubuntu-toolchain-r/test ;
@@ -395,6 +467,7 @@ jobs:
       with:
         path: libmicrohttpd-0.9.77
         key: ${{ matrix.os }}-${{ matrix.c-compiler }}-libmicrohttpd-0.9.77-pre-built
+      if: ${{ matrix.os-type != 'windows' }}
 
     - name: Build libmicrohttpd dependency (if not cached)
       run: |
@@ -403,10 +476,21 @@ jobs:
         cd libmicrohttpd-0.9.77 ;
         ./configure --disable-examples ;
         make ;
-      if: steps.cache-libmicrohttpd.outputs.cache-hit != 'true'
+      if: ${{ matrix.os-type != 'windows' && steps.cache-libmicrohttpd.outputs.cache-hit != 'true' }}
 
     - name: Install libmicrohttpd
       run: cd libmicrohttpd-0.9.77 ; sudo make install ;
+      if: ${{ matrix.os-type != 'windows' }}
+
+    - name: Build and install libmicrohttpd (Windows)
+      if: ${{ matrix.os-type == 'windows' }}
+      run: |
+        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.77.tar.gz -o libmicrohttpd-0.9.77.tar.gz
+        tar -xzf libmicrohttpd-0.9.77.tar.gz
+        cd libmicrohttpd-0.9.77
+        ./configure --disable-examples --enable-poll=no
+        make
+        make install
       
     - name: Refresh links to shared libs
       run: sudo ldconfig ;
@@ -449,6 +533,7 @@ jobs:
         fi
 
     - name: Print config.log
+      shell: bash
       run: |
         cd build ;
         cat config.log ;
@@ -486,6 +571,7 @@ jobs:
       if: ${{ matrix.build-type != 'iwyu' }}
       
     - name: Print tests results
+      shell: bash
       run: |
         cd build ;
         cat test/test-suite.log ;

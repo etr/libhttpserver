@@ -71,6 +71,16 @@ case "$host" in
         NETWORK_LIBS="-lws2_32"
         native_srcdir=$(cd $srcdir; pwd -W)
         ;;
+    *-msys*)
+        AC_MSG_WARN([
+Building from MSYS environment. Binaries will depend on msys-2.0.dll.
+For native Windows binaries, use the MinGW64 shell instead.
+])
+        NETWORK_HEADER="winsock2.h"
+        ADDITIONAL_LIBS="-lpthread -no-undefined"
+        NETWORK_LIBS="-lws2_32"
+        native_srcdir=$(cd $srcdir; pwd -W)
+        ;;
     *-cygwin*)
         NETWORK_HEADER="arpa/inet.h"
         ADDITIONAL_LIBS="-lpthread -no-undefined"
@@ -294,11 +304,13 @@ AC_OUTPUT(
 
 AC_MSG_NOTICE([Configuration Summary:
   Operating System:  ${host_os}
+  Host triplet    :  ${host}
   Target directory:  ${prefix}
   License         :  LGPL only
   Debug	          :  ${debugit}
   TLS Enabled     :  ${have_gnutls}
   TCP_FASTOPEN    :  ${is_fastopen_supported}
   Static          :  ${static}
+  Windows build   :  ${is_windows}
   Build examples  :  ${enable_examples}
 ])

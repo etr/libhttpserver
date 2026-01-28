@@ -10,7 +10,6 @@ Copyright (C)  2011-2019  Sebastiano Merlino.
 
 # The libhttpserver reference manual
 ![GA: Build Status](https://github.com/etr/libhttpserver/actions/workflows/verify-build.yml/badge.svg)
-[![Build status](https://ci.appveyor.com/api/projects/status/ktoy6ewkrf0q1hw6/branch/master?svg=true)](https://ci.appveyor.com/project/etr/libhttpserver/branch/master)
 [![codecov](https://codecov.io/gh/etr/libhttpserver/branch/master/graph/badge.svg)](https://codecov.io/gh/etr/libhttpserver)
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/1bd1e8c21f66400fb70e5a5ce357b525)](https://www.codacy.com/gh/etr/libhttpserver/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=etr/libhttpserver&amp;utm_campaign=Badge_Grade)
 [![Gitter chat](https://badges.gitter.im/etr/libhttpserver.png)](https://gitter.im/libhttpserver/community)
@@ -116,6 +115,53 @@ Here are listed the libhttpserver specific options (the canonical configure opti
 * _\-\-disable-doxygen-doc:_ don't generate any doxygen documentation. Doxygen is automatically invoked if present on the system. Automatically disabled otherwise.
 * _\-\-enable-fastopen:_ enable use of TCP_FASTOPEN (def=yes)
 * _\-\-enable-static:_ enable use static linking (def=yes)
+
+[Back to TOC](#table-of-contents)
+
+### Building on Windows (MSYS2)
+
+MSYS2 provides multiple shell environments with different purposes. Understanding which shell to use is important:
+
+| Shell | Host Triplet | Runtime Dependency | Use Case |
+|-------|--------------|-------------------|----------|
+| **MinGW64** | `x86_64-w64-mingw32` | Native Windows | **Recommended** for native Windows apps |
+| **MSYS** | `x86_64-pc-msys` | msys-2.0.dll | POSIX-style apps, build tools |
+
+**Recommended: Use the MinGW64 shell** for building libhttpserver to produce native Windows binaries without additional runtime dependencies.
+
+#### Step-by-step build instructions
+
+1. Install [MSYS2](https://www.msys2.org/)
+
+2. Open the **MINGW64** shell (not the MSYS shell) from the Start Menu
+
+3. Install dependencies:
+```bash
+pacman -S --needed mingw-w64-x86_64-{gcc,libtool,make,pkg-config,doxygen,gnutls,curl} autotools
+```
+
+4. Build and install [libmicrohttpd](https://www.gnu.org/software/libmicrohttpd/) (>= 0.9.64)
+
+5. Build libhttpserver:
+```bash
+./bootstrap
+mkdir build && cd build
+../configure --disable-fastopen
+make
+make check  # run tests
+```
+
+**Important:** The `--disable-fastopen` flag is required on Windows as TCP_FASTOPEN is not supported.
+
+#### If you use the MSYS shell
+
+Building from the MSYS shell also works but the resulting binaries will depend on `msys-2.0.dll`. The configure script will display a warning when building in this environment. If you see:
+
+```
+configure: WARNING: Building from MSYS environment. Binaries will depend on msys-2.0.dll.
+```
+
+Consider switching to the MinGW64 shell for native Windows binaries.
 
 [Back to TOC](#table-of-contents)
 
