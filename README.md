@@ -119,6 +119,53 @@ Here are listed the libhttpserver specific options (the canonical configure opti
 
 [Back to TOC](#table-of-contents)
 
+### Building on Windows (MSYS2)
+
+MSYS2 provides multiple shell environments with different purposes. Understanding which shell to use is important:
+
+| Shell | Host Triplet | Runtime Dependency | Use Case |
+|-------|--------------|-------------------|----------|
+| **MinGW64** | `x86_64-w64-mingw32` | Native Windows | **Recommended** for native Windows apps |
+| **MSYS** | `x86_64-pc-msys` | msys-2.0.dll | POSIX-style apps, build tools |
+
+**Recommended: Use the MinGW64 shell** for building libhttpserver to produce native Windows binaries without additional runtime dependencies.
+
+#### Step-by-step build instructions
+
+1. Install [MSYS2](https://www.msys2.org/)
+
+2. Open the **MINGW64** shell (not the MSYS shell) from the Start Menu
+
+3. Install dependencies:
+```bash
+pacman -S --needed mingw-w64-x86_64-{gcc,libtool,make,pkg-config,doxygen,gnutls,curl} autotools
+```
+
+4. Build and install [libmicrohttpd](https://www.gnu.org/software/libmicrohttpd/) (>= 0.9.64)
+
+5. Build libhttpserver:
+```bash
+./bootstrap
+mkdir build && cd build
+../configure --disable-fastopen
+make
+make check  # run tests
+```
+
+**Important:** The `--disable-fastopen` flag is required on Windows as TCP_FASTOPEN is not supported.
+
+#### If you use the MSYS shell
+
+Building from the MSYS shell also works but the resulting binaries will depend on `msys-2.0.dll`. The configure script will display a warning when building in this environment. If you see:
+
+```
+configure: WARNING: Building from MSYS environment. Binaries will depend on msys-2.0.dll.
+```
+
+Consider switching to the MinGW64 shell for native Windows binaries.
+
+[Back to TOC](#table-of-contents)
+
 ## Getting Started
 The most basic example of creating a server and handling a requests for the path `/hello`:
 ```cpp
