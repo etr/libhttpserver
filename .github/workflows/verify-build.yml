@@ -354,7 +354,7 @@ jobs:
     - name: Install MSYS packages
       if: ${{ matrix.os-type == 'windows' && matrix.msys-env == 'MSYS' }}
       run: |
-        pacman --noconfirm -S --needed msys2-devel gcc make curl
+        pacman --noconfirm -S --needed msys2-devel gcc make libcurl-devel
 
     - name: Install Ubuntu test sources
       run: |
