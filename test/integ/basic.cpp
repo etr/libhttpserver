@@ -1595,11 +1595,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, regex_url_exact_match)
 
     int64_t http_code = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE , &http_code);
-#if 0    //  https://github.com/etr/libhttpserver/issues/308
     LT_ASSERT_EQ(http_code, 404);
-#else
-    LT_ASSERT_EQ(http_code, 200);
-#endif
     curl_easy_cleanup(curl);
     }
 LT_END_AUTO_TEST(regex_url_exact_match)
