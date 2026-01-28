@@ -66,6 +66,7 @@ jobs:
             cc-compiler: clang++-18
             debug: debug
             coverage: nocoverage
+            shell: bash
           # This test gives false positives on newer versions of clang
           # and ubuntu-18.04 is not supported anymore on github
           #- test-group: extra
@@ -86,6 +87,7 @@ jobs:
             cc-compiler: clang++-18
             debug: debug
             coverage: nocoverage
+            shell: bash
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
@@ -95,6 +97,7 @@ jobs:
             cc-compiler: clang++-18
             debug: debug
             coverage: nocoverage
+            shell: bash
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
@@ -104,6 +107,7 @@ jobs:
             cc-compiler: clang++-18
             debug: debug
             coverage: nocoverage
+            shell: bash
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
@@ -113,6 +117,7 @@ jobs:
             cc-compiler: g++-9
             debug: nodebug
             coverage: nocoverage
+            shell: bash
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
@@ -122,6 +127,7 @@ jobs:
             cc-compiler: g++-10
             debug: nodebug
             coverage: nocoverage
+            shell: bash
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
@@ -131,6 +137,7 @@ jobs:
             cc-compiler: g++-11
             debug: nodebug
             coverage: nocoverage
+            shell: bash
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
@@ -140,6 +147,7 @@ jobs:
             cc-compiler: g++-12
             debug: nodebug
             coverage: nocoverage
+            shell: bash
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
@@ -149,6 +157,7 @@ jobs:
             cc-compiler: g++-13
             debug: nodebug
             coverage: nocoverage
+            shell: bash
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
@@ -158,6 +167,7 @@ jobs:
             cc-compiler: g++-14
             debug: nodebug
             coverage: nocoverage
+            shell: bash
           - test-group: extra
             os: ubuntu-22.04
             os-type: ubuntu
@@ -167,6 +177,7 @@ jobs:
             cc-compiler: clang++-11
             debug: nodebug
             coverage: nocoverage
+            shell: bash
           - test-group: extra
             os: ubuntu-22.04
             os-type: ubuntu
@@ -176,6 +187,7 @@ jobs:
             cc-compiler: clang++-12
             debug: nodebug
             coverage: nocoverage
+            shell: bash
           - test-group: extra
             os: ubuntu-22.04
             os-type: ubuntu
@@ -185,6 +197,7 @@ jobs:
             cc-compiler: clang++-13
             debug: nodebug
             coverage: nocoverage
+            shell: bash
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
@@ -194,6 +207,7 @@ jobs:
             cc-compiler: clang++-14
             debug: nodebug
             coverage: nocoverage
+            shell: bash
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
@@ -203,6 +217,7 @@ jobs:
             cc-compiler: clang++-15
             debug: nodebug
             coverage: nocoverage
+            shell: bash
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
@@ -212,6 +227,7 @@ jobs:
             cc-compiler: clang++-16
             debug: nodebug
             coverage: nocoverage
+            shell: bash
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
@@ -221,6 +237,7 @@ jobs:
             cc-compiler: clang++-17
             debug: nodebug
             coverage: nocoverage
+            shell: bash
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
@@ -230,6 +247,7 @@ jobs:
             cc-compiler: g++-14
             debug: nodebug
             coverage: nocoverage
+            shell: bash
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
@@ -239,6 +257,7 @@ jobs:
             cc-compiler: clang++-18
             debug: nodebug
             coverage: nocoverage
+            shell: bash
           - test-group: performance
             os: ubuntu-latest
             os-type: ubuntu
@@ -248,6 +267,7 @@ jobs:
             cc-compiler: g++-10
             debug: nodebug
             coverage: nocoverage
+            shell: bash
           - test-group: performance
             os: ubuntu-latest
             os-type: ubuntu
@@ -257,6 +277,7 @@ jobs:
             cc-compiler: g++-10
             debug: nodebug
             coverage: nocoverage
+            shell: bash
           - test-group: performance
             os: ubuntu-latest
             os-type: ubuntu
@@ -266,6 +287,7 @@ jobs:
             cc-compiler: g++-10
             debug: nodebug
             coverage: nocoverage
+            shell: bash
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
@@ -275,6 +297,7 @@ jobs:
             cc-compiler: g++-10
             debug: debug
             coverage: nocoverage
+            shell: bash
           - test-group: basic
             os: windows-latest
             os-type: windows
