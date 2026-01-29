@@ -19,7 +19,7 @@
 LDADD = $(top_builddir)/src/libhttpserver.la
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/
 METASOURCES = AUTO
-noinst_PROGRAMS = hello_world service minimal_hello_world custom_error allowing_disallowing_methods handlers hello_with_get_arg setting_headers custom_access_log basic_authentication digest_authentication minimal_https minimal_file_response minimal_deferred url_registration minimal_ip_ban benchmark_select benchmark_threads benchmark_nodelay deferred_with_accumulator file_upload file_upload_with_callback
+noinst_PROGRAMS = hello_world service minimal_hello_world custom_error allowing_disallowing_methods handlers hello_with_get_arg setting_headers custom_access_log basic_authentication minimal_https minimal_file_response minimal_deferred url_registration minimal_ip_ban benchmark_select benchmark_threads benchmark_nodelay deferred_with_accumulator file_upload file_upload_with_callback
 
 hello_world_SOURCES = hello_world.cpp
 service_SOURCES = service.cpp
@@ -31,7 +31,6 @@ hello_with_get_arg_SOURCES = hello_with_get_arg.cpp
 setting_headers_SOURCES = setting_headers.cpp
 custom_access_log_SOURCES = custom_access_log.cpp
 basic_authentication_SOURCES = basic_authentication.cpp
-digest_authentication_SOURCES = digest_authentication.cpp
 minimal_https_SOURCES = minimal_https.cpp
 minimal_file_response_SOURCES = minimal_file_response.cpp
 minimal_deferred_SOURCES = minimal_deferred.cpp
@@ -48,4 +47,9 @@ if HAVE_GNUTLS
 LDADD += -lgnutls
 noinst_PROGRAMS += minimal_https_psk
 minimal_https_psk_SOURCES = minimal_https_psk.cpp
+endif
+
+if HAVE_DAUTH
+noinst_PROGRAMS += digest_authentication
+digest_authentication_SOURCES = digest_authentication.cpp
 endif

@@ -25,6 +25,8 @@
 #ifndef SRC_HTTPSERVER_DIGEST_AUTH_FAIL_RESPONSE_HPP_
 #define SRC_HTTPSERVER_DIGEST_AUTH_FAIL_RESPONSE_HPP_
 
+#ifdef HAVE_DAUTH
+
 #include <string>
 #include "httpserver/http_utils.hpp"
 #include "httpserver/string_response.hpp"
@@ -65,5 +67,7 @@ class digest_auth_fail_response : public string_response {
 };
 
 }  // namespace httpserver
+
+#endif  // HAVE_DAUTH
 
 #endif  // SRC_HTTPSERVER_DIGEST_AUTH_FAIL_RESPONSE_HPP_

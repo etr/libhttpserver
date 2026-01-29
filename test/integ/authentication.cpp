@@ -44,7 +44,9 @@ using httpserver::webserver;
 using httpserver::create_webserver;
 using httpserver::http_response;
 using httpserver::basic_auth_fail_response;
+#ifdef HAVE_DAUTH
 using httpserver::digest_auth_fail_response;
+#endif  // HAVE_DAUTH
 using httpserver::string_response;
 using httpserver::http_resource;
 using httpserver::http_request;
@@ -74,6 +76,7 @@ class user_pass_resource : public http_resource {
      }
 };
 
+#ifdef HAVE_DAUTH
 class digest_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request& req) {
@@ -88,6 +91,7 @@ class digest_resource : public http_resource {
          return std::make_shared<string_response>("SUCCESS", 200, "text/plain");
      }
 };
+#endif  // HAVE_DAUTH
 
 LT_BEGIN_SUITE(authentication_suite)
     void set_up() {
@@ -150,7 +154,8 @@ LT_END_AUTO_TEST(base_auth_fail)
 //  do not run the digest auth tests on windows as curl
 //  appears to have problems with it.
 //  Will fix this separately
-#ifndef _WINDOWS
+//  Also skip if libmicrohttpd was built without digest auth support
+#if !defined(_WINDOWS) && defined(HAVE_DAUTH)
 
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth)
     webserver ws = create_webserver(PORT)

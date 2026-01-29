@@ -42,6 +42,7 @@ void http_request::set_method(const std::string& method) {
     this->method = string_utilities::to_upper_copy(method);
 }
 
+#ifdef HAVE_DAUTH
 bool http_request::check_digest_auth(const std::string& realm, const std::string& password, int nonce_timeout, bool* reload_nonce) const {
     std::string_view digested_user = get_digested_user();
 
@@ -57,6 +58,7 @@ bool http_request::check_digest_auth(const std::string& realm, const std::string
     *reload_nonce = false;
     return true;
 }
+#endif  // HAVE_DAUTH
 
 std::string_view http_request::get_connection_value(std::string_view key, enum MHD_ValueKind kind) const {
     const char* header_c = MHD_lookup_connection_value(underlying_connection, kind, key.data());
@@ -257,6 +259,7 @@ std::string_view http_request::get_pass() const {
     return cache->password;
 }
 
+#ifdef HAVE_DAUTH
 std::string_view http_request::get_digested_user() const {
     if (!cache->digested_user.empty()) {
         return cache->digested_user;
@@ -272,6 +275,7 @@ std::string_view http_request::get_digested_user() const {
 
     return cache->digested_user;
 }
+#endif  // HAVE_DAUTH
 
 #ifdef HAVE_GNUTLS
 bool http_request::has_tls_session() const {

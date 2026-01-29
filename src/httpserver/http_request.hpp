@@ -65,11 +65,13 @@ class http_request {
      **/
      std::string_view get_user() const;
 
+#ifdef HAVE_DAUTH
      /**
       * Method used to get the username extracted from a digest authentication
       * @return the username
      **/
      std::string_view get_digested_user() const;
+#endif  // HAVE_DAUTH
 
      /**
       * Method used to get the password eventually passed through basic authentication.
@@ -250,7 +252,9 @@ class http_request {
      **/
      uint16_t get_requestor_port() const;
 
+#ifdef HAVE_DAUTH
      bool check_digest_auth(const std::string& realm, const std::string& password, int nonce_timeout, bool* reload_nonce) const;
+#endif  // HAVE_DAUTH
 
      friend std::ostream &operator<< (std::ostream &os, http_request &r);
 
@@ -412,7 +416,9 @@ class http_request {
         std::string password;
         std::string querystring;
         std::string requestor_ip;
+#ifdef HAVE_DAUTH
         std::string digested_user;
+#endif  // HAVE_DAUTH
         std::map<std::string, std::vector<std::string>, http::arg_comparator> unescaped_args;
 
         bool args_populated = false;
