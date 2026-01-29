@@ -18,8 +18,6 @@
     USA
 */
 
-#define HTTPSERVER_COMPILATION
-
 #if defined(_WIN32) && !defined(__CYGWIN__)
 #define _WINDOWS
 #undef _WIN32_WINNT
