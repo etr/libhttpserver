@@ -44,6 +44,7 @@
 #include "httpserver/http_arg_value.hpp"
 #include "httpserver/http_utils.hpp"
 #include "httpserver/file_info.hpp"
+#include "httpserver/create_webserver.hpp"
 
 struct MHD_Connection;
 
@@ -419,6 +420,12 @@ class http_request {
      std::unique_ptr<http_request_data_cache> cache = std::make_unique<http_request_data_cache>();
      // Populate the data cache unescaped_args
      void populate_args() const;
+
+     file_cleanup_callback_ptr file_cleanup_callback = nullptr;
+
+     void set_file_cleanup_callback(file_cleanup_callback_ptr callback) {
+         file_cleanup_callback = callback;
+     }
 
      friend class webserver;
      friend struct details::modded_request;

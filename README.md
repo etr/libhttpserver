@@ -269,6 +269,7 @@ For example, if your connection limit is “1”, a browser may open a first con
 	* `FILE_UPLOAD_MEMORY_AND_DISK`: The content of the file is stored in memory and on the file system.
 * _.file_upload_dir(**const std::string&** file_upload_dir):_ Specifies the directory to store all uploaded files. Default value is `/tmp`.
 * _.generate_random_filename_on_upload() and .no_generate_random_filename_on_upload():_ Enables/Disables the library to generate a unique and unused filename to store the uploaded file to. Otherwise the actually uploaded file name is used. `off` by default.
+* _.file_cleanup_callback(**file_cleanup_callback_ptr** callback):_ Sets a callback function to control what happens to uploaded files when the request completes. By default (when no callback is set), all uploaded files are automatically deleted. The callback signature is `bool(const std::string& key, const std::string& filename, const http::file_info& info)` where `key` is the form field name, `filename` is the original uploaded filename, and `info` contains file metadata including the filesystem path. Return `true` to delete the file (default behavior) or `false` to keep it (e.g., after moving it to permanent storage). If the callback throws an exception, the file will be deleted as a safety measure.
 * _.deferred()_ and _.no_deferred():_ Enables/Disables the ability for the server to suspend and resume connections. Simply put, it enables/disables the ability to use `deferred_response`. Read more [here](#building-responses-to-requests). `on` by default.
 * _.single_resource() and .no_single_resource:_ Sets or unsets the server in single resource mode. This limits all endpoints to be served from a single resource. The resultant is that the webserver will process the request matching to the endpoint skipping any complex semantic. Because of this, the option is incompatible with `regex_checking` and requires the resource to be registered against an empty endpoint or the root endpoint (`"/"`). The resource will also have to be registered as family. (For more information on resource registration, read more [here](#registering-resources)). `off` by default.
 
@@ -717,6 +718,37 @@ Details on the `http::file_info` structure.
 * _**const std::string** get_file_system_file_name() **const**:_ Returns the name of the file uploaded through the HTTP request as stored on the filesystem.
 * _**const std::string** get_content_type() **const**:_ Returns the content type of the file uploaded through the HTTP request.
 * _**const std::string** get_transfer_encoding() **const**:_ Returns the transfer encoding of the file uploaded through the HTTP request.
+
+#### Example of keeping uploaded files
+By default, uploaded files are automatically deleted when the request completes. To keep files (e.g., move them to permanent storage), use the `file_cleanup_callback`:
+
+```cpp
+#include <httpserver.hpp>
+#include <cstdio>
+
+using namespace httpserver;
+
+int main() {
+    webserver ws = create_webserver(8080)
+        .file_upload_target(FILE_UPLOAD_DISK_ONLY)
+        .file_upload_dir("/tmp/uploads")
+        .file_cleanup_callback([](const std::string& key,
+                                  const std::string& filename,
+                                  const http::file_info& info) {
+            // Move file to permanent storage
+            std::string dest = "/var/uploads/" + filename;
+            std::rename(info.get_file_system_file_name().c_str(), dest.c_str());
+            return false;  // Don't delete - we moved it
+        });
+
+    // ... register resources and start server
+}
+```
+To test file uploads, you can run the following command from a terminal:
+
+    curl -XPOST -F "file=@/path/to/your/file.txt" 'http://localhost:8080/upload'
+
+You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/file_upload_with_callback.cpp).
 
 Details on the `http_arg_value` structure.
 

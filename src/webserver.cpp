@@ -165,7 +165,8 @@ webserver::webserver(const create_webserver& params):
     tcp_nodelay(params._tcp_nodelay),
     not_found_resource(params._not_found_resource),
     method_not_allowed_resource(params._method_not_allowed_resource),
-    internal_error_resource(params._internal_error_resource) {
+    internal_error_resource(params._internal_error_resource),
+    file_cleanup_callback(params._file_cleanup_callback) {
         ignore_sigpipe();
         pthread_mutex_init(&mutexwait, nullptr);
         pthread_cond_init(&mutexcond, nullptr);
@@ -631,6 +632,7 @@ std::shared_ptr<http_response> webserver::internal_error_page(details::modded_re
 
 MHD_Result webserver::requests_answer_first_step(MHD_Connection* connection, struct details::modded_request* mr) {
     mr->dhr.reset(new http_request(connection, unescaper));
+    mr->dhr->set_file_cleanup_callback(file_cleanup_callback);
 
     if (!mr->has_body) {
         return MHD_YES;

@@ -28,6 +28,7 @@
 #include <memory>
 #include <random>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <tuple>
 #include <utility>
@@ -659,6 +660,201 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_only_excl_content)
 
     ws->stop();
 LT_END_AUTO_TEST(file_upload_memory_only_excl_content)
+
+// Test that file cleanup callback returning true causes file deletion (default behavior)
+LT_BEGIN_AUTO_TEST(file_upload_suite, file_cleanup_callback_returns_true)
+    string upload_directory = ".";
+
+    // Track callback invocations
+    std::vector<std::tuple<string, string, size_t>> callback_invocations;
+
+    auto ws = std::make_unique<webserver>(create_webserver(PORT)
+                       .file_upload_target(httpserver::FILE_UPLOAD_DISK_ONLY)
+                       .file_upload_dir(upload_directory)
+                       .generate_random_filename_on_upload()
+                       .file_cleanup_callback([&callback_invocations](
+                           const std::string& key,
+                           const std::string& filename,
+                           const httpserver::http::file_info& info) {
+                           callback_invocations.push_back({key, filename, info.get_file_size()});
+                           return true;  // Delete the file
+                       }));
+    ws->start(false);
+    LT_CHECK_EQ(ws->is_running(), true);
+
+    print_file_upload_resource resource;
+    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+
+    auto res = send_file_to_webserver(false, false);
+    LT_ASSERT_EQ(res.first, 0);
+    LT_ASSERT_EQ(res.second, 201);
+
+    ws->stop();
+
+    // Verify callback was called with correct parameters
+    LT_CHECK_EQ(callback_invocations.size(), 1);
+    LT_CHECK_EQ(std::get<0>(callback_invocations[0]), TEST_KEY);
+    LT_CHECK_EQ(std::get<1>(callback_invocations[0]), TEST_CONTENT_FILENAME);
+    LT_CHECK_EQ(std::get<2>(callback_invocations[0]), TEST_CONTENT_SIZE);
+
+    // Verify file was deleted (callback returned true)
+    map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
+    LT_CHECK_EQ(files.size(), 1);
+    map<string, httpserver::http::file_info>::iterator file = files.begin()->second.begin();
+    LT_CHECK_EQ(file_exists(file->second.get_file_system_file_name()), false);
+LT_END_AUTO_TEST(file_cleanup_callback_returns_true)
+
+// Test that file cleanup callback returning false keeps the file
+LT_BEGIN_AUTO_TEST(file_upload_suite, file_cleanup_callback_returns_false)
+    string upload_directory = ".";
+    string kept_file_path;
+
+    auto ws = std::make_unique<webserver>(create_webserver(PORT)
+                       .file_upload_target(httpserver::FILE_UPLOAD_DISK_ONLY)
+                       .file_upload_dir(upload_directory)
+                       .generate_random_filename_on_upload()
+                       .file_cleanup_callback([&kept_file_path](
+                           const std::string& key,
+                           const std::string& filename,
+                           const httpserver::http::file_info& info) {
+                           (void)key;
+                           (void)filename;
+                           kept_file_path = info.get_file_system_file_name();
+                           return false;  // Keep the file
+                       }));
+    ws->start(false);
+    LT_CHECK_EQ(ws->is_running(), true);
+
+    print_file_upload_resource resource;
+    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+
+    auto res = send_file_to_webserver(false, false);
+    LT_ASSERT_EQ(res.first, 0);
+    LT_ASSERT_EQ(res.second, 201);
+
+    ws->stop();
+
+    // Verify file still exists (callback returned false)
+    LT_CHECK_EQ(file_exists(kept_file_path), true);
+
+    // Cleanup: manually delete the file
+    remove(kept_file_path.c_str());
+    LT_CHECK_EQ(file_exists(kept_file_path), false);
+LT_END_AUTO_TEST(file_cleanup_callback_returns_false)
+
+// Test selective cleanup: callback can keep some files and delete others
+LT_BEGIN_AUTO_TEST(file_upload_suite, file_cleanup_callback_selective)
+    string upload_directory = ".";
+    string kept_file_path;
+
+    auto ws = std::make_unique<webserver>(create_webserver(PORT)
+                       .file_upload_target(httpserver::FILE_UPLOAD_DISK_ONLY)
+                       .file_upload_dir(upload_directory)
+                       .generate_random_filename_on_upload()
+                       .file_cleanup_callback([&kept_file_path](
+                           const std::string& key,
+                           const std::string& filename,
+                           const httpserver::http::file_info& info) {
+                           (void)filename;
+                           // Keep first file, delete second
+                           if (key == TEST_KEY) {
+                               kept_file_path = info.get_file_system_file_name();
+                               return false;  // Keep
+                           }
+                           return true;  // Delete
+                       }));
+    ws->start(false);
+    LT_CHECK_EQ(ws->is_running(), true);
+
+    print_file_upload_resource resource;
+    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+
+    // Upload two files
+    auto res = send_file_to_webserver(true, false);
+    LT_ASSERT_EQ(res.first, 0);
+    LT_ASSERT_EQ(res.second, 201);
+
+    ws->stop();
+
+    map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
+    LT_CHECK_EQ(files.size(), 2);
+
+    // First file should exist (callback returned false)
+    LT_CHECK_EQ(file_exists(kept_file_path), true);
+
+    // Second file should be deleted (callback returned true)
+    auto file_key_2 = files.find(TEST_KEY_2);
+    LT_ASSERT_EQ(file_key_2 != files.end(), true);
+    string deleted_file_path = file_key_2->second.begin()->second.get_file_system_file_name();
+    LT_CHECK_EQ(file_exists(deleted_file_path), false);
+
+    // Cleanup: manually delete the kept file
+    remove(kept_file_path.c_str());
+LT_END_AUTO_TEST(file_cleanup_callback_selective)
+
+// Test that exception in callback defaults to deleting the file
+LT_BEGIN_AUTO_TEST(file_upload_suite, file_cleanup_callback_throws)
+    string upload_directory = ".";
+
+    auto ws = std::make_unique<webserver>(create_webserver(PORT)
+                       .file_upload_target(httpserver::FILE_UPLOAD_DISK_ONLY)
+                       .file_upload_dir(upload_directory)
+                       .generate_random_filename_on_upload()
+                       .file_cleanup_callback([](
+                           const std::string& key,
+                           const std::string& filename,
+                           const httpserver::http::file_info& info) -> bool {
+                           (void)key;
+                           (void)filename;
+                           (void)info;
+                           throw std::runtime_error("Test exception");
+                       }));
+    ws->start(false);
+    LT_CHECK_EQ(ws->is_running(), true);
+
+    print_file_upload_resource resource;
+    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+
+    auto res = send_file_to_webserver(false, false);
+    LT_ASSERT_EQ(res.first, 0);
+    LT_ASSERT_EQ(res.second, 201);
+
+    ws->stop();
+
+    // Verify file was deleted (exception causes default delete behavior)
+    map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
+    LT_CHECK_EQ(files.size(), 1);
+    map<string, httpserver::http::file_info>::iterator file = files.begin()->second.begin();
+    LT_CHECK_EQ(file_exists(file->second.get_file_system_file_name()), false);
+LT_END_AUTO_TEST(file_cleanup_callback_throws)
+
+// Test that no callback defaults to deleting files (backward compatibility)
+LT_BEGIN_AUTO_TEST(file_upload_suite, file_cleanup_no_callback_deletes)
+    string upload_directory = ".";
+
+    auto ws = std::make_unique<webserver>(create_webserver(PORT)
+                       .file_upload_target(httpserver::FILE_UPLOAD_DISK_ONLY)
+                       .file_upload_dir(upload_directory)
+                       .generate_random_filename_on_upload());
+    // No file_cleanup_callback set
+    ws->start(false);
+    LT_CHECK_EQ(ws->is_running(), true);
+
+    print_file_upload_resource resource;
+    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+
+    auto res = send_file_to_webserver(false, false);
+    LT_ASSERT_EQ(res.first, 0);
+    LT_ASSERT_EQ(res.second, 201);
+
+    ws->stop();
+
+    // Verify file was deleted (default behavior)
+    map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
+    LT_CHECK_EQ(files.size(), 1);
+    map<string, httpserver::http::file_info>::iterator file = files.begin()->second.begin();
+    LT_CHECK_EQ(file_exists(file->second.get_file_system_file_name()), false);
+LT_END_AUTO_TEST(file_cleanup_no_callback_deletes)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

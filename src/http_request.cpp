@@ -319,10 +319,21 @@ std::ostream &operator<< (std::ostream &os, const http_request &r) {
 }
 
 http_request::~http_request() {
-    for ( const auto &file_key : get_files() ) {
-        for ( const auto &files : file_key.second ) {
-            // C++17 has std::filesystem::remove()
-            remove(files.second.get_file_system_file_name().c_str());
+    for (const auto& file_key : get_files()) {
+        for (const auto& files : file_key.second) {
+            bool should_delete = true;
+            if (file_cleanup_callback != nullptr) {
+                try {
+                    should_delete = file_cleanup_callback(file_key.first, files.first, files.second);
+                } catch (...) {
+                    // If callback throws, default to deleting the file
+                    should_delete = true;
+                }
+            }
+            if (should_delete) {
+                // C++17 has std::filesystem::remove()
+                remove(files.second.get_file_system_file_name().c_str());
+            }
         }
     }
 }

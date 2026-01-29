@@ -48,6 +48,10 @@ typedef std::function<void(const std::string&)> log_access_ptr;
 typedef std::function<void(const std::string&)> log_error_ptr;
 typedef std::function<std::string(const std::string&)> psk_cred_handler_callback;
 
+namespace http { class file_info; }
+
+typedef std::function<bool(const std::string&, const std::string&, const http::file_info&)> file_cleanup_callback_ptr;
+
 class create_webserver {
  public:
      create_webserver() = default;
@@ -364,6 +368,11 @@ class create_webserver {
          return *this;
      }
 
+     create_webserver& file_cleanup_callback(file_cleanup_callback_ptr callback) {
+         _file_cleanup_callback = callback;
+         return *this;
+     }
+
  private:
      uint16_t _port = DEFAULT_WS_PORT;
      http::http_utils::start_method_T _start_method = http::http_utils::INTERNAL_SELECT;
@@ -409,6 +418,7 @@ class create_webserver {
      render_ptr _not_found_resource = nullptr;
      render_ptr _method_not_allowed_resource = nullptr;
      render_ptr _internal_error_resource = nullptr;
+     file_cleanup_callback_ptr _file_cleanup_callback = nullptr;
 
      friend class webserver;
 };
