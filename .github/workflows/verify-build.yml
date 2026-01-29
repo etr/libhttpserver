@@ -248,6 +248,18 @@ jobs:
             debug: nodebug
             coverage: nocoverage
             shell: bash
+          # Test build without digest auth support (issue #232)
+          - test-group: extra
+            os: ubuntu-latest
+            os-type: ubuntu
+            build-type: no-dauth
+            compiler-family: gcc
+            c-compiler: gcc
+            cc-compiler: g++
+            debug: nodebug
+            coverage: nocoverage
+            linking: dynamic
+            shell: bash
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
@@ -467,7 +479,7 @@ jobs:
       with:
         path: libmicrohttpd-0.9.77
         key: ${{ matrix.os }}-${{ matrix.c-compiler }}-libmicrohttpd-0.9.77-pre-built
-      if: ${{ matrix.os-type != 'windows' }}
+      if: ${{ matrix.os-type != 'windows' && matrix.build-type != 'no-dauth' }}
 
     - name: Build libmicrohttpd dependency (if not cached)
       run: |
@@ -476,11 +488,30 @@ jobs:
         cd libmicrohttpd-0.9.77 ;
         ./configure --disable-examples ;
         make ;
-      if: ${{ matrix.os-type != 'windows' && steps.cache-libmicrohttpd.outputs.cache-hit != 'true' }}
+      if: ${{ matrix.os-type != 'windows' && matrix.build-type != 'no-dauth' && steps.cache-libmicrohttpd.outputs.cache-hit != 'true' }}
+
+    - name: Build libmicrohttpd without digest auth (no-dauth test)
+      run: |
+        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.77.tar.gz -o libmicrohttpd-0.9.77.tar.gz ;
+        tar -xzf libmicrohttpd-0.9.77.tar.gz ;
+        cd libmicrohttpd-0.9.77 ;
+        ./configure --disable-examples --disable-dauth ;
+        make ;
+      if: ${{ matrix.build-type == 'no-dauth' }}
 
     - name: Install libmicrohttpd
       run: cd libmicrohttpd-0.9.77 ; sudo make install ;
       if: ${{ matrix.os-type != 'windows' }}
+
+    - name: Verify digest auth is disabled (no-dauth test)
+      run: |
+        # Verify that MHD_queue_auth_fail_response is NOT present in libmicrohttpd
+        if nm /usr/local/lib/libmicrohttpd.so 2>/dev/null | grep -q MHD_queue_auth_fail_response; then
+          echo "ERROR: libmicrohttpd was built WITH digest auth support" ;
+          exit 1 ;
+        fi
+        echo "Verified: libmicrohttpd built without digest auth support" ;
+      if: ${{ matrix.build-type == 'no-dauth' }}
 
     - name: Build and install libmicrohttpd (Windows)
       if: ${{ matrix.os-type == 'windows' }}
@@ -531,6 +562,18 @@ jobs:
         else
           ../configure --disable-fastopen;
         fi
+
+    - name: Verify libhttpserver detected no digest auth (no-dauth test)
+      run: |
+        cd build ;
+        if grep -q "Digest Auth.*:.*no" config.log; then
+          echo "Verified: libhttpserver correctly detected digest auth is disabled" ;
+        else
+          echo "ERROR: libhttpserver did not detect that digest auth is disabled" ;
+          grep "Digest Auth" config.log || echo "Digest Auth line not found" ;
+          exit 1 ;
+        fi
+      if: ${{ matrix.build-type == 'no-dauth' }}
 
     - name: Print config.log
       shell: bash

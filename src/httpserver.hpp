@@ -29,7 +29,9 @@
 
 #include "httpserver/basic_auth_fail_response.hpp"
 #include "httpserver/deferred_response.hpp"
+#ifdef HAVE_DAUTH
 #include "httpserver/digest_auth_fail_response.hpp"
+#endif  // HAVE_DAUTH
 #include "httpserver/file_response.hpp"
 #include "httpserver/http_arg_value.hpp"
 #include "httpserver/http_request.hpp"

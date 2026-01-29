@@ -18,6 +18,8 @@
      USA
 */
 
+#ifdef HAVE_DAUTH
+
 #include "httpserver/digest_auth_fail_response.hpp"
 #include <microhttpd.h>
 #include <iosfwd>
@@ -32,3 +34,5 @@ int digest_auth_fail_response::enqueue_response(MHD_Connection* connection, MHD_
 }
 
 }  // namespace httpserver
+
+#endif  // HAVE_DAUTH

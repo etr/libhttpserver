@@ -149,6 +149,11 @@ fi
 AM_CONDITIONAL([COND_CROSS_COMPILE],[test x"$cond_cross_compile" = x"yes"])
 AC_SUBST(COND_CROSS_COMPILE)
 
+# Check for digest auth support in libmicrohttpd
+AC_CHECK_LIB([microhttpd], [MHD_queue_auth_fail_response],
+    [have_dauth="yes"],
+    [have_dauth="no"; AC_MSG_WARN("libmicrohttpd digest auth support not found. Digest auth will be disabled")])
+
 AC_MSG_CHECKING([whether to build with TCP_FASTOPEN support])
 AC_ARG_ENABLE([fastopen],
     [AS_HELP_STRING([--enable-fastopen],
@@ -259,6 +264,13 @@ fi
 
 AM_CONDITIONAL([HAVE_GNUTLS],[test x"$have_gnutls" = x"yes"])
 
+if test x"$have_dauth" = x"yes"; then
+    AM_CXXFLAGS="$AM_CXXFLAGS -DHAVE_DAUTH"
+    AM_CFLAGS="$AM_CXXFLAGS -DHAVE_DAUTH"
+fi
+
+AM_CONDITIONAL([HAVE_DAUTH],[test x"$have_dauth" = x"yes"])
+
 DX_HTML_FEATURE(ON)
 DX_CHM_FEATURE(OFF)
 DX_CHI_FEATURE(OFF)
@@ -309,6 +321,7 @@ AC_MSG_NOTICE([Configuration Summary:
   License         :  LGPL only
   Debug	          :  ${debugit}
   TLS Enabled     :  ${have_gnutls}
+  Digest Auth     :  ${have_dauth}
   TCP_FASTOPEN    :  ${is_fastopen_supported}
   Static          :  ${static}
   Windows build   :  ${is_windows}
