@@ -338,6 +338,32 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_socket)
 
     ws.stop();
 LT_END_AUTO_TEST(custom_socket)
+
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, bind_address_string)
+    httpserver::webserver ws = httpserver::create_webserver(PORT).bind_address("127.0.0.1");
+    ok_resource ok;
+    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "127.0.0.1:" PORT_STRING "/base");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "OK");
+    curl_easy_cleanup(curl);
+
+    ws.stop();
+LT_END_AUTO_TEST(bind_address_string)
+
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, bind_address_string_invalid)
+    LT_CHECK_THROW(httpserver::create_webserver(PORT).bind_address("not_an_ip"));
+LT_END_AUTO_TEST(bind_address_string_invalid)
 #endif
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, single_resource)
