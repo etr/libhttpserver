@@ -254,9 +254,11 @@ bool webserver::start(bool blocking) {
         iov.push_back(gen(MHD_OPTION_THREAD_STACK_SIZE, max_thread_stack_size));
     }
 
+#ifdef HAVE_DAUTH
     if (nonce_nc_size != 0) {
         iov.push_back(gen(MHD_OPTION_NONCE_NC_SIZE, nonce_nc_size));
     }
+#endif  // HAVE_DAUTH
 
     if (use_ssl) {
         // Need for const_cast to respect MHD interface that needs a void*
@@ -278,10 +280,12 @@ bool webserver::start(bool blocking) {
         iov.push_back(gen(MHD_OPTION_HTTPS_PRIORITIES, 0, reinterpret_cast<void*>(const_cast<char*>(https_priorities.c_str()))));
     }
 
+#ifdef HAVE_DAUTH
     if (digest_auth_random != "") {
         // Need for const_cast to respect MHD interface that needs a char*
         iov.push_back(gen(MHD_OPTION_DIGEST_AUTH_RANDOM, digest_auth_random.size(), const_cast<char*>(digest_auth_random.c_str())));
     }
+#endif  // HAVE_DAUTH
 
 #ifdef HAVE_GNUTLS
     if (cred_type != http_utils::NONE) {
