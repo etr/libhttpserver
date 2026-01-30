@@ -58,6 +58,35 @@ bool http_request::check_digest_auth(const std::string& realm, const std::string
     *reload_nonce = false;
     return true;
 }
+
+bool http_request::check_digest_auth_ha1(
+    const std::string& realm,
+    const unsigned char* digest,
+    size_t digest_size,
+    int nonce_timeout,
+    bool* reload_nonce,
+    http::http_utils::digest_algorithm algo) const {
+    std::string_view digested_user = get_digested_user();
+
+    int val = MHD_digest_auth_check_digest2(
+        underlying_connection,
+        realm.c_str(),
+        digested_user.data(),
+        digest,
+        digest_size,
+        nonce_timeout,
+        static_cast<MHD_DigestAuthAlgorithm>(algo));
+
+    if (val == MHD_INVALID_NONCE) {
+        *reload_nonce = true;
+        return false;
+    } else if (val == MHD_NO) {
+        *reload_nonce = false;
+        return false;
+    }
+    *reload_nonce = false;
+    return true;
+}
 #endif  // HAVE_DAUTH
 
 std::string_view http_request::get_connection_value(std::string_view key, enum MHD_ValueKind kind) const {

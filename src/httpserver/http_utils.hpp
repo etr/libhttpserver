@@ -117,6 +117,16 @@ class http_utils {
          IPV6 = 16
      };
 
+#ifdef HAVE_DAUTH
+     enum class digest_algorithm {
+         MD5 = MHD_DIGEST_ALG_MD5,
+         SHA256 = MHD_DIGEST_ALG_SHA256
+     };
+
+     static constexpr size_t md5_digest_size = 16;
+     static constexpr size_t sha256_digest_size = 32;
+#endif  // HAVE_DAUTH
+
      static const uint16_t http_method_connect_code;
      static const uint16_t http_method_delete_code;
      static const uint16_t http_method_get_code;
