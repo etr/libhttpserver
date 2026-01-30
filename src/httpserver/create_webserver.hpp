@@ -31,6 +31,7 @@
 #include <limits>
 #include <string>
 #include <variant>
+#include <vector>
 
 #include "httpserver/http_response.hpp"
 #include "httpserver/http_utils.hpp"
@@ -52,6 +53,7 @@ typedef std::function<std::string(const std::string&)> psk_cred_handler_callback
 namespace http { class file_info; }
 
 typedef std::function<bool(const std::string&, const std::string&, const http::file_info&)> file_cleanup_callback_ptr;
+typedef std::function<std::shared_ptr<http_response>(const http_request&)> auth_handler_ptr;
 
 class create_webserver {
  public:
@@ -376,6 +378,16 @@ class create_webserver {
          return *this;
      }
 
+     create_webserver& auth_handler(auth_handler_ptr handler) {
+         _auth_handler = handler;
+         return *this;
+     }
+
+     create_webserver& auth_skip_paths(const std::vector<std::string>& paths) {
+         _auth_skip_paths = paths;
+         return *this;
+     }
+
  private:
      uint16_t _port = DEFAULT_WS_PORT;
      http::http_utils::start_method_T _start_method = http::http_utils::INTERNAL_SELECT;
@@ -423,6 +435,8 @@ class create_webserver {
      render_ptr _method_not_allowed_resource = nullptr;
      render_ptr _internal_error_resource = nullptr;
      file_cleanup_callback_ptr _file_cleanup_callback = nullptr;
+     auth_handler_ptr _auth_handler = nullptr;
+     std::vector<std::string> _auth_skip_paths;
 
      friend class webserver;
 };

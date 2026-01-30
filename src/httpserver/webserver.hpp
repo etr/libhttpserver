@@ -45,6 +45,7 @@
 #include <set>
 #include <shared_mutex>
 #include <string>
+#include <vector>
 
 #ifdef HAVE_GNUTLS
 #include <gnutls/gnutls.h>
@@ -182,6 +183,8 @@ class webserver {
      const render_ptr method_not_allowed_resource;
      const render_ptr internal_error_resource;
      const file_cleanup_callback_ptr file_cleanup_callback;
+     const auth_handler_ptr auth_handler;
+     const std::vector<std::string> auth_skip_paths;
      std::shared_mutex registered_resources_mutex;
      std::map<details::http_endpoint, http_resource*> registered_resources;
      std::map<std::string, http_resource*> registered_resources_str;
@@ -197,6 +200,7 @@ class webserver {
      std::shared_ptr<http_response> method_not_allowed_page(details::modded_request* mr) const;
      std::shared_ptr<http_response> internal_error_page(details::modded_request* mr, bool force_our = false) const;
      std::shared_ptr<http_response> not_found_page(details::modded_request* mr) const;
+     bool should_skip_auth(const std::string& path) const;
 
      static void request_completed(void *cls,
              struct MHD_Connection *connection, void **con_cls,

@@ -31,6 +31,7 @@ libhttpserver is built upon  [libmicrohttpd](https://www.gnu.org/software/libmic
 - Support for SHOUTcast
 - Support for incremental processing of POST data (optional)
 - Support for basic and digest authentication (optional)
+- Support for centralized authentication with path-based skip rules
 - Support for TLS (requires libgnutls, optional)
 
 ## Table of Contents
@@ -989,6 +990,80 @@ To test the above example, you can run the following command from a terminal:
 You will receive a `SUCCESS` in response (observe the response message from the server in detail and you'll see the full interaction). Try to pass the wrong credentials or send a request without `digest` active to see the failure.
 
 You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/digest_authentication.cpp).
+
+### Using Centralized Authentication
+The examples above show authentication handled within each resource's `render_*` method. This approach requires duplicating authentication logic in every resource, which is error-prone and violates DRY (Don't Repeat Yourself) principles.
+
+libhttpserver provides a centralized authentication mechanism that runs a single authentication handler before any resource's render method is called. This allows you to:
+- Define authentication logic once for all resources
+- Automatically protect all endpoints by default
+- Specify paths that should bypass authentication (e.g., health checks, public APIs)
+
+```cpp
+    #include <httpserver.hpp>
+
+    using namespace httpserver;
+
+    // Resources no longer need authentication logic
+    class hello_resource : public http_resource {
+    public:
+        std::shared_ptr<http_response> render_GET(const http_request&) {
+            return std::make_shared<string_response>("Hello, authenticated user!", 200, "text/plain");
+        }
+    };
+
+    class health_resource : public http_resource {
+    public:
+        std::shared_ptr<http_response> render_GET(const http_request&) {
+            return std::make_shared<string_response>("OK", 200, "text/plain");
+        }
+    };
+
+    // Centralized authentication handler
+    // Return nullptr to allow the request, or an http_response to reject it
+    std::shared_ptr<http_response> my_auth_handler(const http_request& req) {
+        if (req.get_user() != "admin" || req.get_pass() != "secret") {
+            return std::make_shared<basic_auth_fail_response>("Unauthorized", "MyRealm");
+        }
+        return nullptr;  // Allow request to proceed to resource
+    }
+
+    int main() {
+        webserver ws = create_webserver(8080)
+            .auth_handler(my_auth_handler)
+            .auth_skip_paths({"/health", "/public/*"});
+
+        hello_resource hello;
+        health_resource health;
+
+        ws.register_resource("/api", &hello);
+        ws.register_resource("/health", &health);
+
+        ws.start(true);
+        return 0;
+    }
+```
+
+The `auth_handler` callback is called for every request before the resource's render method. It receives the `http_request` and can:
+- Return `nullptr` to allow the request to proceed normally
+- Return an `http_response` (e.g., `basic_auth_fail_response` or `digest_auth_fail_response`) to reject the request
+
+The `auth_skip_paths` method accepts a vector of paths that should bypass authentication:
+- Exact matches: `"/health"` matches only `/health`
+- Wildcard suffixes: `"/public/*"` matches `/public/`, `/public/info`, `/public/docs/api`, etc.
+
+To test the above example:
+
+    # Without auth - returns 401 Unauthorized
+    curl -v http://localhost:8080/api
+
+    # With valid auth - returns 200 OK
+    curl -u admin:secret http://localhost:8080/api
+
+    # Health endpoint (skip path) - works without auth
+    curl http://localhost:8080/health
+
+You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/centralized_authentication.cpp).
 
 [Back to TOC](#table-of-contents)
 
