@@ -30,7 +30,13 @@ struct MHD_Response;
 namespace httpserver {
 
 int digest_auth_fail_response::enqueue_response(MHD_Connection* connection, MHD_Response* response) {
-    return MHD_queue_auth_fail_response(connection, realm.c_str(), opaque.c_str(), response, reload_nonce ? MHD_YES : MHD_NO);
+    return MHD_queue_auth_fail_response2(
+        connection,
+        realm.c_str(),
+        opaque.c_str(),
+        response,
+        reload_nonce ? MHD_YES : MHD_NO,
+        static_cast<MHD_DigestAuthAlgorithm>(algorithm));
 }
 
 }  // namespace httpserver

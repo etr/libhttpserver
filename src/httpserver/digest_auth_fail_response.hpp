@@ -45,11 +45,14 @@ class digest_auth_fail_response : public string_response {
              const std::string& opaque = "",
              bool reload_nonce = false,
              int response_code = http::http_utils::http_ok,
-             const std::string& content_type = http::http_utils::text_plain):
+             const std::string& content_type = http::http_utils::text_plain,
+             http::http_utils::digest_algorithm algorithm =
+                 http::http_utils::digest_algorithm::MD5):
          string_response(content, response_code, content_type),
          realm(realm),
          opaque(opaque),
-         reload_nonce(reload_nonce) { }
+         reload_nonce(reload_nonce),
+         algorithm(algorithm) { }
 
      digest_auth_fail_response(const digest_auth_fail_response& other) = default;
      digest_auth_fail_response(digest_auth_fail_response&& other) noexcept = default;
@@ -64,6 +67,8 @@ class digest_auth_fail_response : public string_response {
      std::string realm = "";
      std::string opaque = "";
      bool reload_nonce = false;
+     http::http_utils::digest_algorithm algorithm =
+         http::http_utils::digest_algorithm::MD5;
 };
 
 }  // namespace httpserver
