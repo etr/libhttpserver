@@ -167,7 +167,9 @@ webserver::webserver(const create_webserver& params):
     not_found_resource(params._not_found_resource),
     method_not_allowed_resource(params._method_not_allowed_resource),
     internal_error_resource(params._internal_error_resource),
-    file_cleanup_callback(params._file_cleanup_callback) {
+    file_cleanup_callback(params._file_cleanup_callback),
+    auth_handler(params._auth_handler),
+    auth_skip_paths(params._auth_skip_paths) {
         ignore_sigpipe();
         pthread_mutex_init(&mutexwait, nullptr);
         pthread_cond_init(&mutexcond, nullptr);
@@ -635,6 +637,19 @@ std::shared_ptr<http_response> webserver::internal_error_page(details::modded_re
     }
 }
 
+bool webserver::should_skip_auth(const std::string& path) const {
+    for (const auto& skip_path : auth_skip_paths) {
+        if (skip_path == path) return true;
+        // Support wildcard suffix (e.g., "/public/*")
+        if (skip_path.size() > 2 && skip_path.back() == '*' &&
+            skip_path[skip_path.size() - 2] == '/') {
+            std::string prefix = skip_path.substr(0, skip_path.size() - 1);
+            if (path.compare(0, prefix.size(), prefix) == 0) return true;
+        }
+    }
+    return false;
+}
+
 MHD_Result webserver::requests_answer_first_step(MHD_Connection* connection, struct details::modded_request* mr) {
     mr->dhr.reset(new http_request(connection, unescaper));
     mr->dhr->set_file_cleanup_callback(file_cleanup_callback);
@@ -747,6 +762,18 @@ MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct details
         }
     }
 
+    // Check centralized authentication if handler is configured
+    if (found && auth_handler != nullptr) {
+        std::string path(mr->dhr->get_path());
+        if (!should_skip_auth(path)) {
+            std::shared_ptr<http_response> auth_response = auth_handler(*mr->dhr);
+            if (auth_response != nullptr) {
+                mr->dhrs = auth_response;
+                found = false;  // Skip resource rendering, go directly to response
+            }
+        }
+    }
+
     if (found) {
         try {
             if (mr->pp != nullptr) {
@@ -775,7 +802,7 @@ MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct details
         } catch(...) {
             mr->dhrs = internal_error_page(mr);
         }
-    } else {
+    } else if (mr->dhrs == nullptr) {
         mr->dhrs = not_found_page(mr);
     }
 
