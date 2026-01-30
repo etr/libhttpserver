@@ -669,4 +669,4 @@ jobs:
       run: |
         cd build ;
         bash <(curl -s https://codecov.io/bash) ;
-      if: ${{ matrix.os-type == 'discard' && matrix.c-compiler == 'gcc' && matrix.debug == 'debug' && matrix.coverage == 'coverage' && success() }}
+      if: ${{ matrix.os-type == 'ubuntu' && matrix.c-compiler == 'gcc' && matrix.debug == 'debug' && matrix.coverage == 'coverage' && success() }}
