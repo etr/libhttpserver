@@ -144,6 +144,7 @@ class webserver {
      validator_ptr validator;
      unescaper_ptr unescaper;
      const struct sockaddr* bind_address;
+     std::shared_ptr<struct sockaddr_storage> bind_address_storage;
      /* Changed type to MHD_socket because this type will always reflect the
      platform's actual socket type (e.g. SOCKET on windows, int on unixes)*/
      MHD_socket bind_socket;
