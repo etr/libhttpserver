@@ -624,8 +624,16 @@ jobs:
       run: |
         cd build ;
         make check-valgrind ;
-        cat test/test-suite-memcheck.log ;
       if: ${{ matrix.build-type == 'valgrind' }}
+
+    - name: Print Valgrind memcheck results
+      shell: bash
+      run: |
+        cd build ;
+        if [ -f test/test-suite-memcheck.log ]; then
+          cat test/test-suite-memcheck.log ;
+        fi
+      if: ${{ always() && matrix.build-type == 'valgrind' }}
 
     - name: Run cppcheck
       run: |

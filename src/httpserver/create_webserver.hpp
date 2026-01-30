@@ -30,6 +30,7 @@
 #include <functional>
 #include <limits>
 #include <string>
+#include <variant>
 
 #include "httpserver/http_response.hpp"
 #include "httpserver/http_utils.hpp"
@@ -127,6 +128,8 @@ class create_webserver {
          _bind_address = bind_address;
          return *this;
      }
+
+     create_webserver& bind_address(const std::string& ip);
 
      create_webserver& bind_socket(int bind_socket) {
          _bind_socket = bind_socket;
@@ -387,6 +390,7 @@ class create_webserver {
      validator_ptr _validator = nullptr;
      unescaper_ptr _unescaper = nullptr;
      const struct sockaddr* _bind_address = nullptr;
+     std::shared_ptr<struct sockaddr_storage> _bind_address_storage;
      int _bind_socket = 0;
      int _max_thread_stack_size = 0;
      bool _use_ssl = false;
