@@ -157,6 +157,72 @@ LT_END_AUTO_TEST(base_auth_fail)
 //  Also skip if libmicrohttpd was built without digest auth support
 #if !defined(_WINDOWS) && defined(HAVE_DAUTH)
 
+// Pre-computed MD5 hash of "myuser:examplerealm:mypass"
+// printf "myuser:examplerealm:mypass" | md5sum
+// 6ceef750e0130d6528b938c3abd94110
+static const unsigned char PRECOMPUTED_HA1_MD5[16] = {
+    0x6c, 0xee, 0xf7, 0x50, 0xe0, 0x13, 0x0d, 0x65,
+    0x28, 0xb9, 0x38, 0xc3, 0xab, 0xd9, 0x41, 0x10
+};
+
+// Pre-computed SHA-256 hash of "myuser:examplerealm:mypass"
+// printf "myuser:examplerealm:mypass" | sha256sum
+// d4ff5b1795b23b4c625975959f3276526f3f4f4ef7d22083207e02d7c4bd8a05
+static const unsigned char PRECOMPUTED_HA1_SHA256[32] = {
+    0xd4, 0xff, 0x5b, 0x17, 0x95, 0xb2, 0x3b, 0x4c,
+    0x62, 0x59, 0x75, 0x95, 0x9f, 0x32, 0x76, 0x52,
+    0x6f, 0x3f, 0x4f, 0x4e, 0xf7, 0xd2, 0x20, 0x83,
+    0x20, 0x7e, 0x02, 0xd7, 0xc4, 0xbd, 0x8a, 0x05
+};
+
+class digest_ha1_md5_resource : public http_resource {
+ public:
+     shared_ptr<http_response> render_GET(const http_request& req) {
+         if (req.get_digested_user() == "") {
+             return std::make_shared<digest_auth_fail_response>(
+                 "FAIL", "examplerealm", MY_OPAQUE, true,
+                 httpserver::http::http_utils::http_ok,
+                 httpserver::http::http_utils::text_plain,
+                 httpserver::http::http_utils::digest_algorithm::MD5);
+         }
+         bool reload_nonce = false;
+         if (!req.check_digest_auth_ha1("examplerealm", PRECOMPUTED_HA1_MD5,
+                 httpserver::http::http_utils::md5_digest_size, 300, &reload_nonce,
+                 httpserver::http::http_utils::digest_algorithm::MD5)) {
+             return std::make_shared<digest_auth_fail_response>(
+                 "FAIL", "examplerealm", MY_OPAQUE, reload_nonce,
+                 httpserver::http::http_utils::http_ok,
+                 httpserver::http::http_utils::text_plain,
+                 httpserver::http::http_utils::digest_algorithm::MD5);
+         }
+         return std::make_shared<string_response>("SUCCESS", 200, "text/plain");
+     }
+};
+
+class digest_ha1_sha256_resource : public http_resource {
+ public:
+     shared_ptr<http_response> render_GET(const http_request& req) {
+         if (req.get_digested_user() == "") {
+             return std::make_shared<digest_auth_fail_response>(
+                 "FAIL", "examplerealm", MY_OPAQUE, true,
+                 httpserver::http::http_utils::http_ok,
+                 httpserver::http::http_utils::text_plain,
+                 httpserver::http::http_utils::digest_algorithm::SHA256);
+         }
+         bool reload_nonce = false;
+         if (!req.check_digest_auth_ha1("examplerealm", PRECOMPUTED_HA1_SHA256,
+                 httpserver::http::http_utils::sha256_digest_size, 300, &reload_nonce,
+                 httpserver::http::http_utils::digest_algorithm::SHA256)) {
+             return std::make_shared<digest_auth_fail_response>(
+                 "FAIL", "examplerealm", MY_OPAQUE, reload_nonce,
+                 httpserver::http::http_utils::http_ok,
+                 httpserver::http::http_utils::text_plain,
+                 httpserver::http::http_utils::digest_algorithm::SHA256);
+         }
+         return std::make_shared<string_response>("SUCCESS", 200, "text/plain");
+     }
+};
+
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth)
     webserver ws = create_webserver(PORT)
         .digest_auth_random("myrandom")
@@ -236,6 +302,166 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_wrong_pass)
 
     ws.stop();
 LT_END_AUTO_TEST(digest_auth_wrong_pass)
+
+LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5)
+    webserver ws = create_webserver(PORT)
+        .digest_auth_random("myrandom")
+        .nonce_nc_size(300);
+
+    digest_ha1_md5_resource digest_ha1;
+    LT_ASSERT_EQ(true, ws.register_resource("base", &digest_ha1));
+    ws.start(false);
+
+#if defined(_WINDOWS)
+    curl_global_init(CURL_GLOBAL_WIN32);
+#else
+    curl_global_init(CURL_GLOBAL_ALL);
+#endif
+
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_DIGEST);
+#if defined(_WINDOWS)
+    curl_easy_setopt(curl, CURLOPT_USERPWD, "examplerealm/myuser:mypass");
+#else
+    curl_easy_setopt(curl, CURLOPT_USERPWD, "myuser:mypass");
+#endif
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 150L);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 150L);
+    curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
+    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "SUCCESS");
+    curl_easy_cleanup(curl);
+
+    ws.stop();
+LT_END_AUTO_TEST(digest_auth_with_ha1_md5)
+
+LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5_wrong_pass)
+    webserver ws = create_webserver(PORT)
+        .digest_auth_random("myrandom")
+        .nonce_nc_size(300);
+
+    digest_ha1_md5_resource digest_ha1;
+    LT_ASSERT_EQ(true, ws.register_resource("base", &digest_ha1));
+    ws.start(false);
+
+#if defined(_WINDOWS)
+    curl_global_init(CURL_GLOBAL_WIN32);
+#else
+    curl_global_init(CURL_GLOBAL_ALL);
+#endif
+
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_DIGEST);
+#if defined(_WINDOWS)
+    curl_easy_setopt(curl, CURLOPT_USERPWD, "examplerealm/myuser:wrongpass");
+#else
+    curl_easy_setopt(curl, CURLOPT_USERPWD, "myuser:wrongpass");
+#endif
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 150L);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 150L);
+    curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
+    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "FAIL");
+    curl_easy_cleanup(curl);
+
+    ws.stop();
+LT_END_AUTO_TEST(digest_auth_with_ha1_md5_wrong_pass)
+
+LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256)
+    webserver ws = create_webserver(PORT)
+        .digest_auth_random("myrandom")
+        .nonce_nc_size(300);
+
+    digest_ha1_sha256_resource digest_ha1;
+    LT_ASSERT_EQ(true, ws.register_resource("base", &digest_ha1));
+    ws.start(false);
+
+#if defined(_WINDOWS)
+    curl_global_init(CURL_GLOBAL_WIN32);
+#else
+    curl_global_init(CURL_GLOBAL_ALL);
+#endif
+
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_DIGEST);
+#if defined(_WINDOWS)
+    curl_easy_setopt(curl, CURLOPT_USERPWD, "examplerealm/myuser:mypass");
+#else
+    curl_easy_setopt(curl, CURLOPT_USERPWD, "myuser:mypass");
+#endif
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 150L);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 150L);
+    curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
+    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "SUCCESS");
+    curl_easy_cleanup(curl);
+
+    ws.stop();
+LT_END_AUTO_TEST(digest_auth_with_ha1_sha256)
+
+LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256_wrong_pass)
+    webserver ws = create_webserver(PORT)
+        .digest_auth_random("myrandom")
+        .nonce_nc_size(300);
+
+    digest_ha1_sha256_resource digest_ha1;
+    LT_ASSERT_EQ(true, ws.register_resource("base", &digest_ha1));
+    ws.start(false);
+
+#if defined(_WINDOWS)
+    curl_global_init(CURL_GLOBAL_WIN32);
+#else
+    curl_global_init(CURL_GLOBAL_ALL);
+#endif
+
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_DIGEST);
+#if defined(_WINDOWS)
+    curl_easy_setopt(curl, CURLOPT_USERPWD, "examplerealm/myuser:wrongpass");
+#else
+    curl_easy_setopt(curl, CURLOPT_USERPWD, "myuser:wrongpass");
+#endif
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 150L);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 150L);
+    curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
+    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "FAIL");
+    curl_easy_cleanup(curl);
+
+    ws.stop();
+LT_END_AUTO_TEST(digest_auth_with_ha1_sha256_wrong_pass)
 
 #endif
 
