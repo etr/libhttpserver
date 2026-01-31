@@ -209,6 +209,20 @@ class complete_test_resource : public http_resource {
      shared_ptr<http_response> render_PATCH(const http_request&) {
          return std::make_shared<string_response>("OK", 200, "text/plain");
      }
+
+     shared_ptr<http_response> render_HEAD(const http_request&) {
+         return std::make_shared<string_response>("", 200, "text/plain");
+     }
+
+     shared_ptr<http_response> render_OPTIONS(const http_request&) {
+         auto resp = std::make_shared<string_response>("", 200, "text/plain");
+         resp->with_header("Allow", "GET, POST, PUT, DELETE, HEAD, OPTIONS");
+         return resp;
+     }
+
+     shared_ptr<http_response> render_TRACE(const http_request&) {
+         return std::make_shared<string_response>("TRACE OK", 200, "message/http");
+     }
 };
 
 class only_render_resource : public http_resource {
@@ -343,6 +357,25 @@ class print_response_resource : public http_resource {
      stringstream* ss;
 };
 
+class request_info_resource : public http_resource {
+ public:
+     shared_ptr<http_response> render_GET(const http_request& req) {
+         stringstream ss;
+         ss << "requestor=" << req.get_requestor()
+            << "&port=" << req.get_requestor_port()
+            << "&version=" << req.get_version();
+         return std::make_shared<string_response>(ss.str(), 200, "text/plain");
+     }
+};
+
+class content_limit_resource : public http_resource {
+ public:
+     shared_ptr<http_response> render_POST(const http_request& req) {
+         return std::make_shared<string_response>(
+             req.content_too_large() ? "TOO_LARGE" : "OK", 200, "text/plain");
+     }
+};
+
 #ifdef HTTPSERVER_PORT
 #define PORT HTTPSERVER_PORT
 #else
@@ -352,6 +385,7 @@ class print_response_resource : public http_resource {
 #define STR2(p) #p
 #define STR(p) STR2(p)
 #define PORT_STRING STR(PORT)
+
 
 LT_BEGIN_SUITE(basic_suite)
     std::unique_ptr<webserver> ws;
@@ -1627,6 +1661,66 @@ LT_BEGIN_AUTO_TEST(basic_suite, method_not_allowed_header)
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(method_not_allowed_header)
 
+LT_BEGIN_AUTO_TEST(basic_suite, request_info_getters)
+    request_info_resource resource;
+    LT_ASSERT_EQ(true, ws->register_resource("request_info", &resource));
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/request_info");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_NEQ(s.find("127.0.0.1"), string::npos);
+    LT_CHECK_NEQ(s.find("HTTP/1.1"), string::npos);
+    LT_CHECK_NEQ(s.find("port="), string::npos);
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(request_info_getters)
+
+LT_BEGIN_AUTO_TEST(basic_suite, unregister_then_404)
+    simple_resource res;
+    LT_ASSERT_EQ(true, ws->register_resource("temp", &res));
+    curl_global_init(CURL_GLOBAL_ALL);
+
+    {
+        string s;
+        CURL *curl = curl_easy_init();
+        CURLcode result;
+        curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/temp");
+        curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+        result = curl_easy_perform(curl);
+        LT_ASSERT_EQ(result, 0);
+        int64_t http_code = 0;
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+        LT_CHECK_EQ(http_code, 200);
+        LT_CHECK_EQ(s, "OK");
+        curl_easy_cleanup(curl);
+    }
+
+    ws->unregister_resource("temp");
+
+    {
+        string s;
+        CURL *curl = curl_easy_init();
+        CURLcode result;
+        curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/temp");
+        curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+        result = curl_easy_perform(curl);
+        LT_ASSERT_EQ(result, 0);
+        int64_t http_code = 0;
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+        LT_CHECK_EQ(http_code, 404);
+        curl_easy_cleanup(curl);
+    }
+LT_END_AUTO_TEST(unregister_then_404)
+
 LT_BEGIN_AUTO_TEST(basic_suite, thread_safety)
     simple_resource resource;
 
@@ -1664,6 +1758,130 @@ LT_BEGIN_AUTO_TEST(basic_suite, thread_safety)
     }
     LT_CHECK_EQ(1, 1);
 LT_END_AUTO_TEST(thread_safety)
+
+LT_BEGIN_AUTO_TEST(basic_suite, head_request)
+    complete_test_resource resource;
+    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    int64_t http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    LT_CHECK_EQ(http_code, 200);
+    LT_CHECK_EQ(s, "");
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(head_request)
+
+LT_BEGIN_AUTO_TEST(basic_suite, options_request)
+    complete_test_resource resource;
+    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    map<string, string> ss;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "OPTIONS");
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, headerfunc);
+    curl_easy_setopt(curl, CURLOPT_HEADERDATA, &ss);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    int64_t http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    LT_CHECK_EQ(http_code, 200);
+    LT_CHECK_EQ(ss["Allow"], "GET, POST, PUT, DELETE, HEAD, OPTIONS");
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(options_request)
+
+LT_BEGIN_AUTO_TEST(basic_suite, trace_request)
+    complete_test_resource resource;
+    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "TRACE");
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    int64_t http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    LT_CHECK_EQ(http_code, 200);
+    LT_CHECK_EQ(s, "TRACE OK");
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(trace_request)
+
+LT_BEGIN_SUITE(content_limit_suite)
+    std::unique_ptr<webserver> ws;
+    int content_limit_port;
+    string content_limit_url;
+
+    void set_up() {
+        content_limit_port = PORT + 10;
+        content_limit_url = "localhost:" + std::to_string(content_limit_port) + "/limit";
+        ws = std::make_unique<webserver>(create_webserver(content_limit_port).content_size_limit(100));
+        ws->start(false);
+    }
+
+    void tear_down() {
+        ws->stop();
+    }
+LT_END_SUITE(content_limit_suite)
+
+LT_BEGIN_AUTO_TEST(content_limit_suite, content_exceeds_limit)
+    content_limit_resource resource;
+    LT_ASSERT_EQ(true, ws->register_resource("limit", &resource));
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+
+    std::string large_data(200, 'X');
+
+    curl_easy_setopt(curl, CURLOPT_URL, content_limit_url.c_str());
+    curl_easy_setopt(curl, CURLOPT_POST, 1L);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, large_data.c_str());
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, large_data.size());
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "TOO_LARGE");
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(content_exceeds_limit)
+
+LT_BEGIN_AUTO_TEST(content_limit_suite, content_within_limit)
+    content_limit_resource resource;
+    LT_ASSERT_EQ(true, ws->register_resource("limit", &resource));
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+
+    std::string small_data(50, 'X');
+
+    curl_easy_setopt(curl, CURLOPT_URL, content_limit_url.c_str());
+    curl_easy_setopt(curl, CURLOPT_POST, 1L);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, small_data.c_str());
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, small_data.size());
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "OK");
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(content_within_limit)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
