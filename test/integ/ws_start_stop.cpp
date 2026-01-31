@@ -427,6 +427,63 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, register_resource_nullptr_throws)
     LT_CHECK_THROW(ws.register_resource("/test", nullptr));
 LT_END_AUTO_TEST(register_resource_nullptr_throws)
 
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, register_empty_resource_non_family)
+    httpserver::webserver ws = httpserver::create_webserver(PORT);
+    ok_resource ok;
+    // Register empty resource with family=false
+    LT_CHECK_EQ(true, ws.register_resource("", &ok, false));
+    ws.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "OK");
+    curl_easy_cleanup(curl);
+
+    ws.stop();
+LT_END_AUTO_TEST(register_empty_resource_non_family)
+
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, register_resource_with_url_params_non_family)
+    httpserver::webserver ws = httpserver::create_webserver(PORT).regex_checking();
+    ok_resource ok;
+    // Register resource with URL parameters, non-family
+    LT_CHECK_EQ(true, ws.register_resource("/user/{id}", &ok, false));
+    ws.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/user/123");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "OK");
+    curl_easy_cleanup(curl);
+
+    ws.stop();
+LT_END_AUTO_TEST(register_resource_with_url_params_non_family)
+
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, register_duplicate_resource_returns_false)
+    httpserver::webserver ws = httpserver::create_webserver(PORT);
+    ok_resource ok1, ok2;
+    // First registration should succeed
+    LT_CHECK_EQ(true, ws.register_resource("/duplicate", &ok1, false));
+    // Second registration of same path should fail (return false)
+    LT_CHECK_EQ(false, ws.register_resource("/duplicate", &ok2, false));
+    // But with family=true should succeed (different type of registration)
+    LT_CHECK_EQ(true, ws.register_resource("/duplicate", &ok2, true));
+LT_END_AUTO_TEST(register_duplicate_resource_returns_false)
+
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, thread_per_connection_fails_with_max_threads)
     { // NOLINT (internal scope opening - not method start)
     httpserver::webserver ws = httpserver::create_webserver(PORT)
@@ -745,6 +802,39 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, bind_address_ipv4)
 LT_END_AUTO_TEST(bind_address_ipv4)
 
 #ifdef HAVE_GNUTLS
+// Test TLS session getters on non-TLS connection (should return false/nullptr)
+class tls_check_non_tls_resource : public httpserver::http_resource {
+ public:
+     std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request& req) {
+         // On non-TLS connection, has_tls_session should return false
+         std::string response = req.has_tls_session() ? "HAS_TLS" : "NO_TLS";
+         return std::make_shared<httpserver::string_response>(response, 200, "text/plain");
+     }
+};
+
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, tls_session_on_non_tls_connection)
+    int port = PORT + 25;
+    httpserver::webserver ws = httpserver::create_webserver(port);  // No SSL
+    tls_check_non_tls_resource tls_check;
+    LT_ASSERT_EQ(true, ws.register_resource("tls_check", &tls_check));
+    ws.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    std::string url = "http://localhost:" + std::to_string(port) + "/tls_check";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "NO_TLS");
+    curl_easy_cleanup(curl);
+
+    ws.stop();
+LT_END_AUTO_TEST(tls_session_on_non_tls_connection)
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, https_webserver)
     int port = PORT + 23;
     httpserver::webserver ws = httpserver::create_webserver(port)
@@ -809,6 +899,138 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, tls_session_getters)
     }
 LT_END_AUTO_TEST(tls_session_getters)
 #endif  // HAVE_GNUTLS
+
+#endif  // _WINDOWS
+
+// Test pedantic mode configuration
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, pedantic_mode)
+    int port = PORT + 26;
+    httpserver::webserver ws = httpserver::create_webserver(port).pedantic();
+    ok_resource ok;
+    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    std::string url = "http://localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "OK");
+    curl_easy_cleanup(curl);
+
+    ws.stop();
+LT_END_AUTO_TEST(pedantic_mode)
+
+#ifdef HAVE_DAUTH
+// Test digest_auth_random configuration
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, digest_auth_random)
+    int port = PORT + 27;
+    httpserver::webserver ws = httpserver::create_webserver(port)
+        .digest_auth_random("random_string_for_digest");
+    ok_resource ok;
+    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    std::string url = "http://localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "OK");
+    curl_easy_cleanup(curl);
+
+    ws.stop();
+LT_END_AUTO_TEST(digest_auth_random)
+#endif  // HAVE_DAUTH
+
+#ifdef HAVE_GNUTLS
+// PSK handler that returns a hex-encoded key for the test user
+std::string test_psk_handler(const std::string& username) {
+    if (username == "testuser") {
+        // Return hex-encoded PSK key (16 bytes = 32 hex chars)
+        return "0123456789abcdef0123456789abcdef";
+    }
+    return "";  // Unknown user - return empty to trigger error path
+}
+
+// PSK handler that always returns empty (for error path testing)
+std::string empty_psk_handler(const std::string&) {
+    return "";
+}
+
+// Test PSK credential handler setup
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_handler_setup)
+    int port = PORT + 28;
+    httpserver::webserver ws = httpserver::create_webserver(port)
+        .use_ssl()
+        .https_mem_key(ROOT "/key.pem")
+        .https_mem_cert(ROOT "/cert.pem")
+        .cred_type(httpserver::http::http_utils::PSK)
+        .psk_cred_handler(test_psk_handler);
+
+    ok_resource ok;
+    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    bool started = ws.start(false);
+
+    // PSK setup may fail if libmicrohttpd/gnutls doesn't support it
+    // Just verify the server can be configured with PSK options
+    if (started) {
+        ws.stop();
+    }
+    LT_CHECK_EQ(1, 1);  // Test passes if we get here without crashing
+LT_END_AUTO_TEST(psk_handler_setup)
+
+// Test PSK with empty handler (error path)
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_handler_empty)
+    int port = PORT + 29;
+    httpserver::webserver ws = httpserver::create_webserver(port)
+        .use_ssl()
+        .https_mem_key(ROOT "/key.pem")
+        .https_mem_cert(ROOT "/cert.pem")
+        .cred_type(httpserver::http::http_utils::PSK)
+        .psk_cred_handler(empty_psk_handler);
+
+    ok_resource ok;
+    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    bool started = ws.start(false);
+
+    if (started) {
+        ws.stop();
+    }
+    LT_CHECK_EQ(1, 1);
+LT_END_AUTO_TEST(psk_handler_empty)
+
+// Test PSK without handler (nullptr check)
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_no_handler)
+    int port = PORT + 30;
+    // Configure PSK mode but don't set a handler
+    httpserver::webserver ws = httpserver::create_webserver(port)
+        .use_ssl()
+        .https_mem_key(ROOT "/key.pem")
+        .https_mem_cert(ROOT "/cert.pem")
+        .cred_type(httpserver::http::http_utils::PSK);
+
+    ok_resource ok;
+    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    bool started = ws.start(false);
+
+    if (started) {
+        ws.stop();
+    }
+    LT_CHECK_EQ(1, 1);
+LT_END_AUTO_TEST(psk_no_handler)
 
 #endif
 

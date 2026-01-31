@@ -1962,6 +1962,547 @@ LT_BEGIN_AUTO_TEST(basic_suite, only_render_trace)
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(only_render_trace)
 
+// Test for long error log message (triggers resize branch)
+class long_error_message_resource : public http_resource {
+ public:
+    shared_ptr<http_response> render_GET(const http_request&) {
+        // Generate an error with a message longer than 80 characters
+        throw std::runtime_error(
+            "This is a very long error message that exceeds the default buffer "
+            "size of 80 characters to trigger the resize branch in error_log");
+    }
+};
+
+LT_BEGIN_AUTO_TEST(basic_suite, long_error_message)
+    long_error_message_resource resource;
+    LT_ASSERT_EQ(true, ws->register_resource("longerror", &resource));
+    curl_global_init(CURL_GLOBAL_ALL);
+
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/longerror");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+
+    int64_t http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    LT_ASSERT_EQ(http_code, 500);
+
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(long_error_message)
+
+// Test PATCH request on a resource that only implements render()
+LT_BEGIN_AUTO_TEST(basic_suite, only_render_patch)
+    only_render_resource resource;
+    LT_ASSERT_EQ(true, ws->register_resource("only_render_patch", &resource));
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/only_render_patch");
+    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "PATCH");
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "OK");
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(only_render_patch)
+
+// Custom response class that throws std::invalid_argument in get_raw_response
+class invalid_argument_response : public http_response {
+ public:
+    invalid_argument_response() : http_response(200, "text/plain") {}
+    MHD_Response* get_raw_response() override {
+        throw std::invalid_argument("Resource not found");
+    }
+};
+
+// Resource that returns invalid_argument_response
+class invalid_arg_resource : public http_resource {
+ public:
+    shared_ptr<http_response> render_GET(const http_request&) {
+        return std::make_shared<invalid_argument_response>();
+    }
+};
+
+// Custom response class that throws std::runtime_error in get_raw_response
+class runtime_error_response : public http_response {
+ public:
+    runtime_error_response() : http_response(200, "text/plain") {}
+    MHD_Response* get_raw_response() override {
+        throw std::runtime_error("Internal error in response");
+    }
+};
+
+// Resource that returns runtime_error_response
+class runtime_error_resource : public http_resource {
+ public:
+    shared_ptr<http_response> render_GET(const http_request&) {
+        return std::make_shared<runtime_error_response>();
+    }
+};
+
+// Custom response class that throws non-std exception in get_raw_response
+class non_std_exception_response : public http_response {
+ public:
+    non_std_exception_response() : http_response(200, "text/plain") {}
+    MHD_Response* get_raw_response() override {
+        throw 42;  // Throws an int, not a std::exception
+    }
+};
+
+// Resource that returns non_std_exception_response
+class non_std_exception_resource : public http_resource {
+ public:
+    shared_ptr<http_response> render_GET(const http_request&) {
+        return std::make_shared<non_std_exception_response>();
+    }
+};
+
+// Test response throwing std::invalid_argument -> should get 404
+LT_BEGIN_AUTO_TEST(basic_suite, response_throws_invalid_argument)
+    invalid_arg_resource resource;
+    LT_ASSERT_EQ(true, ws->register_resource("invalid_arg", &resource));
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/invalid_arg");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+
+    int64_t http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    LT_ASSERT_EQ(http_code, 404);  // invalid_argument -> not found
+
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(response_throws_invalid_argument)
+
+// Test response throwing std::runtime_error -> should get 500
+LT_BEGIN_AUTO_TEST(basic_suite, response_throws_runtime_error)
+    runtime_error_resource resource;
+    LT_ASSERT_EQ(true, ws->register_resource("runtime_err", &resource));
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/runtime_err");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+
+    int64_t http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    LT_ASSERT_EQ(http_code, 500);  // runtime_error -> internal server error
+
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(response_throws_runtime_error)
+
+// Test response throwing non-std exception -> should get 500
+LT_BEGIN_AUTO_TEST(basic_suite, response_throws_non_std_exception)
+    non_std_exception_resource resource;
+    LT_ASSERT_EQ(true, ws->register_resource("non_std_exc", &resource));
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/non_std_exc");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+
+    int64_t http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    LT_ASSERT_EQ(http_code, 500);  // non-std exception -> internal server error
+
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(response_throws_non_std_exception)
+
+// Custom internal error handler that also throws an exception
+// This tests the outer catch block (lines 826-829 in webserver.cpp)
+shared_ptr<http_response> throwing_internal_error_handler(const http_request&) {
+    throw std::runtime_error("Internal error handler also throws");
+}
+
+// Test case: resource throws exception AND internal error handler throws
+// This triggers the outer catch block which uses force_our=true
+LT_BEGIN_AUTO_TEST(basic_suite, internal_error_handler_also_throws)
+    // Create a separate webserver with throwing internal error handler
+    webserver ws2 = create_webserver(PORT + 50)
+        .internal_error_resource(throwing_internal_error_handler);
+    runtime_error_resource resource;  // Resource that throws in get_raw_response
+    LT_ASSERT_EQ(true, ws2.register_resource("error_cascade", &resource));
+    ws2.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    std::string url = "http://localhost:" + std::to_string(PORT + 50) + "/error_cascade";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+
+    int64_t http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    // When internal error handler throws, we fall back to the built-in error page
+    LT_ASSERT_EQ(http_code, 500);
+
+    curl_easy_cleanup(curl);
+    ws2.stop();
+LT_END_AUTO_TEST(internal_error_handler_also_throws)
+
+// Test tcp_nodelay option
+LT_BEGIN_AUTO_TEST(basic_suite, tcp_nodelay_option)
+    webserver ws2 = create_webserver(PORT + 51).tcp_nodelay();
+    ok_resource resource;
+    LT_ASSERT_EQ(true, ws2.register_resource("nodelay_test", &resource));
+    ws2.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    std::string url = "http://localhost:" + std::to_string(PORT + 51) + "/nodelay_test";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "OK");
+
+    curl_easy_cleanup(curl);
+    ws2.stop();
+LT_END_AUTO_TEST(tcp_nodelay_option)
+
+// Custom unescaper function to test the unescaper branch
+void my_custom_unescaper(std::string& s) {
+    // Simple unescaper that just converts '+' to space
+    for (size_t i = 0; i < s.size(); ++i) {
+        if (s[i] == '+') s[i] = ' ';
+    }
+}
+
+// Resource that returns the query string argument
+class arg_echo_resource : public http_resource {
+ public:
+    shared_ptr<http_response> render_GET(const http_request& req) {
+        std::string arg = std::string(req.get_arg_flat("key"));
+        return std::make_shared<string_response>(arg, 200, "text/plain");
+    }
+};
+
+LT_BEGIN_AUTO_TEST(basic_suite, custom_unescaper)
+    webserver ws2 = create_webserver(PORT + 52).unescaper(my_custom_unescaper);
+    arg_echo_resource resource;
+    LT_ASSERT_EQ(true, ws2.register_resource("echo", &resource));
+    ws2.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    std::string url = "http://localhost:" + std::to_string(PORT + 52) + "/echo?key=hello+world";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "hello world");
+
+    curl_easy_cleanup(curl);
+    ws2.stop();
+LT_END_AUTO_TEST(custom_unescaper)
+
+// Custom not_found handler
+shared_ptr<http_response> my_custom_not_found(const http_request&) {
+    return std::make_shared<string_response>("CUSTOM_404", 404, "text/plain");
+}
+
+LT_BEGIN_AUTO_TEST(basic_suite, custom_not_found_handler)
+    webserver ws2 = create_webserver(PORT + 53).not_found_resource(my_custom_not_found);
+    ws2.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    std::string url = "http://localhost:" + std::to_string(PORT + 53) + "/nonexistent";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "CUSTOM_404");
+
+    curl_easy_cleanup(curl);
+    ws2.stop();
+LT_END_AUTO_TEST(custom_not_found_handler)
+
+// Custom method_not_allowed handler
+shared_ptr<http_response> my_custom_method_not_allowed(const http_request&) {
+    return std::make_shared<string_response>("CUSTOM_405", 405, "text/plain");
+}
+
+// Resource that only allows POST
+class post_only_resource : public http_resource {
+ public:
+    post_only_resource() {
+        disallow_all();
+        set_allowing("POST", true);
+    }
+    shared_ptr<http_response> render_POST(const http_request&) {
+        return std::make_shared<string_response>("POST_OK", 200, "text/plain");
+    }
+};
+
+LT_BEGIN_AUTO_TEST(basic_suite, custom_method_not_allowed_handler)
+    webserver ws2 = create_webserver(PORT + 54).method_not_allowed_resource(my_custom_method_not_allowed);
+    post_only_resource resource;
+    LT_ASSERT_EQ(true, ws2.register_resource("postonly", &resource));
+    ws2.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    std::string url = "http://localhost:" + std::to_string(PORT + 54) + "/postonly";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);  // GET on a POST-only resource
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "CUSTOM_405");
+
+    curl_easy_cleanup(curl);
+    ws2.stop();
+LT_END_AUTO_TEST(custom_method_not_allowed_handler)
+
+// Resource that tests requestor info caching
+class requestor_cache_resource : public http_resource {
+ public:
+    shared_ptr<http_response> render_GET(const http_request& req) {
+        // Test requestor IP and port
+        std::string ip = std::string(req.get_requestor());
+        uint16_t port = req.get_requestor_port();
+
+        // Call them again to test caching (should hit cache on second call)
+        std::string ip2 = std::string(req.get_requestor());
+
+        std::string response = "IP:" + ip + ",PORT:" + std::to_string(port);
+        return std::make_shared<string_response>(response, 200, "text/plain");
+    }
+};
+
+LT_BEGIN_AUTO_TEST(basic_suite, requestor_info)
+    webserver ws2 = create_webserver(PORT + 55);
+    requestor_cache_resource resource;
+    LT_ASSERT_EQ(true, ws2.register_resource("reqinfo", &resource));
+    ws2.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    std::string url = "http://localhost:" + std::to_string(PORT + 55) + "/reqinfo";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    // Response should contain IP and PORT
+    LT_CHECK_EQ(s.find("IP:127.0.0.1") != string::npos, true);
+    LT_CHECK_EQ(s.find("PORT:") != string::npos, true);
+
+    curl_easy_cleanup(curl);
+    ws2.stop();
+LT_END_AUTO_TEST(requestor_info)
+
+// Resource that tests querystring caching
+class querystring_cache_resource : public http_resource {
+ public:
+    shared_ptr<http_response> render_GET(const http_request& req) {
+        // Call get_querystring twice to test caching
+        std::string qs1 = std::string(req.get_querystring());
+        std::string qs2 = std::string(req.get_querystring());  // Should hit cache
+
+        return std::make_shared<string_response>(qs1, 200, "text/plain");
+    }
+};
+
+LT_BEGIN_AUTO_TEST(basic_suite, querystring_caching)
+    webserver ws2 = create_webserver(PORT + 56);
+    querystring_cache_resource resource;
+    LT_ASSERT_EQ(true, ws2.register_resource("qscache", &resource));
+    ws2.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    std::string url = "http://localhost:" + std::to_string(PORT + 56) + "/qscache?foo=bar&baz=qux";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    // Check querystring contains the parameters
+    LT_CHECK_EQ(s.find("foo") != string::npos, true);
+    LT_CHECK_EQ(s.find("bar") != string::npos, true);
+
+    curl_easy_cleanup(curl);
+    ws2.stop();
+LT_END_AUTO_TEST(querystring_caching)
+
+// Resource that tests args caching
+class args_cache_resource : public http_resource {
+ public:
+    shared_ptr<http_response> render_GET(const http_request& req) {
+        // Call get_args twice to test caching
+        auto args1 = req.get_args();
+        auto args2 = req.get_args();  // Should hit cache
+
+        // Also test get_args_flat
+        auto flat = req.get_args_flat();
+
+        std::string response;
+        for (const auto& [key, val] : flat) {
+            response += std::string(key) + "=" + std::string(val) + ";";
+        }
+        return std::make_shared<string_response>(response, 200, "text/plain");
+    }
+};
+
+LT_BEGIN_AUTO_TEST(basic_suite, args_caching)
+    webserver ws2 = create_webserver(PORT + 57);
+    args_cache_resource resource;
+    LT_ASSERT_EQ(true, ws2.register_resource("argscache", &resource));
+    ws2.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    std::string url = "http://localhost:" + std::to_string(PORT + 57) + "/argscache?key1=val1&key2=val2";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s.find("key1=val1") != string::npos, true);
+    LT_CHECK_EQ(s.find("key2=val2") != string::npos, true);
+
+    curl_easy_cleanup(curl);
+    ws2.stop();
+LT_END_AUTO_TEST(args_caching)
+
+// Resource that tests footer/trailer access
+class footer_test_resource : public http_resource {
+ public:
+    shared_ptr<http_response> render_POST(const http_request& req) {
+        // Test get_footers() - returns empty map for non-chunked requests
+        auto footers = req.get_footers();
+
+        // Test get_footer() with a key that doesn't exist
+        auto footer_val = req.get_footer("X-Test-Trailer");
+
+        // Build response showing footer count and specific footer value
+        std::string response = "footers=" + std::to_string(footers.size());
+        if (!footer_val.empty()) {
+            response += ",X-Test-Trailer=" + std::string(footer_val);
+        }
+
+        return std::make_shared<string_response>(response, 200, "text/plain");
+    }
+};
+
+LT_BEGIN_AUTO_TEST(basic_suite, footer_access_no_trailers)
+    webserver ws2 = create_webserver(PORT + 58);
+    footer_test_resource resource;
+    LT_ASSERT_EQ(true, ws2.register_resource("footers", &resource));
+    ws2.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    std::string url = "http://localhost:" + std::to_string(PORT + 58) + "/footers";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_POST, 1L);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, "test=data");
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    // Without trailers, footers should be empty
+    LT_CHECK_EQ(s, "footers=0");
+
+    curl_easy_cleanup(curl);
+    ws2.stop();
+LT_END_AUTO_TEST(footer_access_no_trailers)
+
+// Resource that returns a response with footers (trailers)
+class response_footer_resource : public http_resource {
+ public:
+    shared_ptr<http_response> render_GET(const http_request&) {
+        auto response = std::make_shared<string_response>("body content", 200, "text/plain");
+        // Add a footer to the response
+        response->with_footer("X-Checksum", "abc123");
+        response->with_footer("X-Processing-Time", "42ms");
+
+        // Test get_footer and get_footers on response
+        auto checksum = response->get_footer("X-Checksum");
+        auto all_footers = response->get_footers();
+
+        return response;
+    }
+};
+
+LT_BEGIN_AUTO_TEST(basic_suite, response_with_footers)
+    webserver ws2 = create_webserver(PORT + 59);
+    response_footer_resource resource;
+    LT_ASSERT_EQ(true, ws2.register_resource("resp_footers", &resource));
+    ws2.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    std::string url = "http://localhost:" + std::to_string(PORT + 59) + "/resp_footers";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "body content");
+
+    curl_easy_cleanup(curl);
+    ws2.stop();
+LT_END_AUTO_TEST(response_with_footers)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

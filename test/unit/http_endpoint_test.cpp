@@ -350,6 +350,12 @@ LT_BEGIN_AUTO_TEST(http_endpoint_suite, comparator)
     LT_CHECK_EQ(http_endpoint("/a/b/c") < http_endpoint("/a/b"), false);
 LT_END_AUTO_TEST(comparator)
 
+// Test that invalid regex pattern throws exception (covers lines 114-116)
+LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_invalid_regex_pattern)
+    // Using unbalanced parentheses which is invalid regex
+    LT_CHECK_THROW(http_endpoint("/path/(unclosed", false, true, true));
+LT_END_AUTO_TEST(http_endpoint_invalid_regex_pattern)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()
