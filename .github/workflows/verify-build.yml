@@ -668,7 +668,7 @@ jobs:
     - name: Generate coverage report
       run: |
         cd build
-        gcovr --xml coverage.xml --xml-pretty
+        gcovr --root .. --xml coverage.xml --xml-pretty
       if: ${{ matrix.os-type == 'ubuntu' && matrix.c-compiler == 'gcc' && matrix.debug == 'debug' && matrix.coverage == 'coverage' && success() }}
 
     - name: Upload coverage to Codecov
