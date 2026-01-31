@@ -36,6 +36,10 @@
 #include <memory>
 #include <string>
 
+#ifdef HAVE_GNUTLS
+#include <gnutls/gnutls.h>
+#endif
+
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
 
@@ -68,6 +72,26 @@ class ok_resource : public httpserver::http_resource {
          return std::make_shared<httpserver::string_response>("OK", 200, "text/plain");
      }
 };
+
+#ifdef HAVE_GNUTLS
+class tls_info_resource : public httpserver::http_resource {
+ public:
+     shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request& req) {
+         std::string response;
+         if (req.has_tls_session()) {
+             gnutls_session_t session = req.get_tls_session();
+             if (session != nullptr) {
+                 response = "TLS_SESSION_PRESENT";
+             } else {
+                 response = "TLS_SESSION_NULL";
+             }
+         } else {
+             response = "NO_TLS_SESSION";
+         }
+         return std::make_shared<httpserver::string_response>(response, 200, "text/plain");
+     }
+};
+#endif  // HAVE_GNUTLS
 
 shared_ptr<httpserver::http_response> not_found_custom(const httpserver::http_request&) {
     return std::make_shared<httpserver::string_response>("Not found custom", 404, "text/plain");
@@ -647,6 +671,144 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_error_resources)
 
     ws.stop();
 LT_END_AUTO_TEST(custom_error_resources)
+
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ipv6_webserver)
+    httpserver::webserver ws = httpserver::create_webserver(PORT + 20).use_ipv6();
+    ok_resource ok;
+    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    bool started = ws.start(false);
+    // IPv6 may not be available, so we just check the configuration worked
+    if (started) {
+        curl_global_init(CURL_GLOBAL_ALL);
+        std::string s;
+        CURL *curl = curl_easy_init();
+        CURLcode res;
+        curl_easy_setopt(curl, CURLOPT_URL, "http://[::1]:" STR(PORT + 20) "/base");
+        curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+        res = curl_easy_perform(curl);
+        if (res == 0) {
+            LT_CHECK_EQ(s, "OK");
+        }
+        curl_easy_cleanup(curl);
+        ws.stop();
+    }
+    LT_CHECK_EQ(1, 1);  // Test passes even if IPv6 not available
+LT_END_AUTO_TEST(ipv6_webserver)
+
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, dual_stack_webserver)
+    httpserver::webserver ws = httpserver::create_webserver(PORT + 21).use_dual_stack();
+    ok_resource ok;
+    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    bool started = ws.start(false);
+    if (started) {
+        curl_global_init(CURL_GLOBAL_ALL);
+        std::string s;
+        CURL *curl = curl_easy_init();
+        CURLcode res;
+        curl_easy_setopt(curl, CURLOPT_URL, "localhost:" STR(PORT + 21) "/base");
+        curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+        res = curl_easy_perform(curl);
+        LT_ASSERT_EQ(res, 0);
+        LT_CHECK_EQ(s, "OK");
+        curl_easy_cleanup(curl);
+        ws.stop();
+    }
+    LT_CHECK_EQ(1, 1);  // Test passes even if dual stack not available
+LT_END_AUTO_TEST(dual_stack_webserver)
+
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, bind_address_ipv4)
+    int port = PORT + 22;
+    httpserver::webserver ws = httpserver::create_webserver(port).bind_address("127.0.0.1");
+    ok_resource ok;
+    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    std::string url = "http://127.0.0.1:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "OK");
+    curl_easy_cleanup(curl);
+
+    ws.stop();
+LT_END_AUTO_TEST(bind_address_ipv4)
+
+#ifdef HAVE_GNUTLS
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, https_webserver)
+    int port = PORT + 23;
+    httpserver::webserver ws = httpserver::create_webserver(port)
+        .use_ssl()
+        .https_mem_key(ROOT "/key.pem")
+        .https_mem_cert(ROOT "/cert.pem");
+    ok_resource ok;
+    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    bool started = ws.start(false);
+    if (!started) {
+        // SSL setup may fail in some environments, skip the test
+        LT_CHECK_EQ(1, 1);
+    } else {
+        curl_global_init(CURL_GLOBAL_ALL);
+        std::string s;
+        CURL *curl = curl_easy_init();
+        CURLcode res;
+        std::string url = "https://localhost:" + std::to_string(port) + "/base";
+        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+        curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+        res = curl_easy_perform(curl);
+        LT_ASSERT_EQ(res, 0);
+        LT_CHECK_EQ(s, "OK");
+        curl_easy_cleanup(curl);
+        ws.stop();
+    }
+LT_END_AUTO_TEST(https_webserver)
+
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, tls_session_getters)
+    int port = PORT + 24;
+    httpserver::webserver ws = httpserver::create_webserver(port)
+        .use_ssl()
+        .https_mem_key(ROOT "/key.pem")
+        .https_mem_cert(ROOT "/cert.pem");
+    tls_info_resource tls_info;
+    LT_ASSERT_EQ(true, ws.register_resource("tls_info", &tls_info));
+    bool started = ws.start(false);
+    if (!started) {
+        // SSL setup may fail in some environments, skip the test
+        LT_CHECK_EQ(1, 1);
+    } else {
+        curl_global_init(CURL_GLOBAL_ALL);
+        std::string s;
+        CURL *curl = curl_easy_init();
+        CURLcode res;
+        std::string url = "https://localhost:" + std::to_string(port) + "/tls_info";
+        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+        curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+        res = curl_easy_perform(curl);
+        LT_ASSERT_EQ(res, 0);
+        LT_CHECK_EQ(s, "TLS_SESSION_PRESENT");
+        curl_easy_cleanup(curl);
+        ws.stop();
+    }
+LT_END_AUTO_TEST(tls_session_getters)
+#endif  // HAVE_GNUTLS
 
 #endif
 

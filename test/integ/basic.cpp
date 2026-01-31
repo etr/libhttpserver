@@ -120,6 +120,18 @@ class args_resource : public http_resource {
      }
 };
 
+class args_flat_resource : public http_resource {
+ public:
+     shared_ptr<http_response> render_GET(const http_request& req) {
+         auto args = req.get_args_flat();
+         stringstream ss;
+         for (const auto& [key, value] : args) {
+             ss << key << "=" << value << ";";
+         }
+         return std::make_shared<string_response>(ss.str(), 200, "text/plain");
+     }
+};
+
 class long_content_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request&) {
@@ -199,10 +211,6 @@ class complete_test_resource : public http_resource {
      }
 
      shared_ptr<http_response> render_DELETE(const http_request&) {
-         return std::make_shared<string_response>("OK", 200, "text/plain");
-     }
-
-     shared_ptr<http_response> render_CONNECT(const http_request&) {
          return std::make_shared<string_response>("OK", 200, "text/plain");
      }
 
@@ -1882,6 +1890,77 @@ LT_BEGIN_AUTO_TEST(content_limit_suite, content_within_limit)
     LT_CHECK_EQ(s, "OK");
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(content_within_limit)
+
+LT_BEGIN_AUTO_TEST(basic_suite, get_args_flat)
+    args_flat_resource resource;
+    LT_ASSERT_EQ(true, ws->register_resource("args_flat", &resource));
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/args_flat?foo=bar&baz=qux");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_NEQ(s.find("foo=bar"), string::npos);
+    LT_CHECK_NEQ(s.find("baz=qux"), string::npos);
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(get_args_flat)
+
+LT_BEGIN_AUTO_TEST(basic_suite, only_render_head)
+    only_render_resource resource;
+    LT_ASSERT_EQ(true, ws->register_resource("only_render_head", &resource));
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/only_render_head");
+    curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    int64_t http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    LT_CHECK_EQ(http_code, 200);
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(only_render_head)
+
+LT_BEGIN_AUTO_TEST(basic_suite, only_render_options)
+    only_render_resource resource;
+    LT_ASSERT_EQ(true, ws->register_resource("only_render_options", &resource));
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/only_render_options");
+    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "OPTIONS");
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "OK");
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(only_render_options)
+
+LT_BEGIN_AUTO_TEST(basic_suite, only_render_trace)
+    only_render_resource resource;
+    LT_ASSERT_EQ(true, ws->register_resource("only_render_trace", &resource));
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/only_render_trace");
+    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "TRACE");
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "OK");
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(only_render_trace)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

@@ -95,6 +95,29 @@ LT_BEGIN_AUTO_TEST(http_response_suite, get_cookies)
     LT_CHECK_EQ(cookies.at("Cookie2"), "Value2");
 LT_END_AUTO_TEST(get_cookies)
 
+LT_BEGIN_AUTO_TEST(http_response_suite, shoutcast_response)
+    string_response resp("OK", 200, "audio/mpeg");
+    int original_code = resp.get_response_code();
+    resp.shoutCAST();
+    // shoutCAST sets the MHD_ICY_FLAG (1 << 31) on response_code
+    // Verify the flag bit is set (use unsigned comparison)
+    LT_CHECK_EQ(static_cast<unsigned int>(resp.get_response_code()) & 0x80000000u, 0x80000000u);
+    // Also verify the original code bits are preserved
+    LT_CHECK_EQ(resp.get_response_code() & 0x7FFFFFFF, original_code);
+LT_END_AUTO_TEST(shoutcast_response)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, string_response_default_constructor)
+    string_response resp;
+    // Default constructor should create response with default values
+    LT_CHECK_EQ(resp.get_response_code(), -1);
+LT_END_AUTO_TEST(string_response_default_constructor)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, string_response_content_only)
+    string_response resp("Hello World");
+    // Should use default response code (200) and content type (text/plain)
+    LT_CHECK_EQ(resp.get_response_code(), 200);
+LT_END_AUTO_TEST(string_response_content_only)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()
