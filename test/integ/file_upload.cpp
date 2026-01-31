@@ -856,6 +856,38 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_cleanup_no_callback_deletes)
     LT_CHECK_EQ(file_exists(file->second.get_file_system_file_name()), false);
 LT_END_AUTO_TEST(file_cleanup_no_callback_deletes)
 
+// Test file upload keeping original filename (without random generation)
+LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_original_filename)
+    string upload_directory = "/tmp";  // Use temp directory to avoid conflicts
+
+    auto ws = std::make_unique<webserver>(create_webserver(PORT)
+                       .file_upload_target(httpserver::FILE_UPLOAD_DISK_ONLY)
+                       .file_upload_dir(upload_directory));
+    // Note: NOT using generate_random_filename_on_upload()
+    ws->start(false);
+    LT_CHECK_EQ(ws->is_running(), true);
+
+    print_file_upload_resource resource;
+    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+
+    auto res = send_file_to_webserver(false, false);
+    LT_ASSERT_EQ(res.first, 0);
+    LT_ASSERT_EQ(res.second, 201);
+
+    // Verify file was created with original name
+    map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
+    LT_CHECK_EQ(files.size(), 1);
+    map<string, httpserver::http::file_info>::iterator file = files.begin()->second.begin();
+    // The filename should be upload_directory/test_content (the original name)
+    string expected_path = upload_directory + "/" + TEST_CONTENT_FILENAME;
+    LT_CHECK_EQ(file->second.get_file_system_file_name(), expected_path);
+
+    ws->stop();
+
+    // Clean up the file
+    unlink(expected_path.c_str());
+LT_END_AUTO_TEST(file_upload_original_filename)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()
