@@ -665,8 +665,9 @@ jobs:
          sleep 5 && ab -n 1000000 -c 100 127.0.0.1:8080/plaintext
       if: ${{ matrix.build-type == 'threads' }}
 
-    - name: Push code coverage data
-      run: |
-        cd build ;
-        bash <(curl -s https://codecov.io/bash) ;
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v5
+      with:
+        directory: build
+        fail_ci_if_error: false
       if: ${{ matrix.os-type == 'ubuntu' && matrix.c-compiler == 'gcc' && matrix.debug == 'debug' && matrix.coverage == 'coverage' && success() }}
