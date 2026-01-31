@@ -665,8 +665,16 @@ jobs:
          sleep 5 && ab -n 1000000 -c 100 127.0.0.1:8080/plaintext
       if: ${{ matrix.build-type == 'threads' }}
 
-    - name: Push code coverage data
+    - name: Generate coverage report
       run: |
-        cd build ;
-        bash <(curl -s https://codecov.io/bash) ;
-      if: ${{ matrix.os-type == 'discard' && matrix.c-compiler == 'gcc' && matrix.debug == 'debug' && matrix.coverage == 'coverage' && success() }}
+        cd build
+        gcovr --root .. --exclude test/ --xml coverage.xml --xml-pretty
+      if: ${{ matrix.os-type == 'ubuntu' && matrix.c-compiler == 'gcc' && matrix.debug == 'debug' && matrix.coverage == 'coverage' && success() }}
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v5
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        files: build/coverage.xml
+        fail_ci_if_error: false
+      if: ${{ matrix.os-type == 'ubuntu' && matrix.c-compiler == 'gcc' && matrix.debug == 'debug' && matrix.coverage == 'coverage' && success() }}
