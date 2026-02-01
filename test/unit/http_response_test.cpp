@@ -18,6 +18,7 @@
      USA
 */
 
+#include <sstream>
 #include <string>
 
 #include "./littletest.hpp"
@@ -117,6 +118,41 @@ LT_BEGIN_AUTO_TEST(http_response_suite, string_response_content_only)
     // Should use default response code (200) and content type (text/plain)
     LT_CHECK_EQ(resp.get_response_code(), 200);
 LT_END_AUTO_TEST(string_response_content_only)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, ostream_operator_empty)
+    // Test ostream operator with default response (no headers/footers/cookies)
+    http_response resp;  // Default constructor - no content type header added
+    std::ostringstream oss;
+    oss << resp;
+    string output = oss.str();
+    // With empty headers/footers/cookies, only the response code line is output
+    LT_CHECK_EQ(output.find("Response [response_code:-1]") != string::npos, true);
+    // Empty maps don't produce any output in dump_header_map
+    LT_CHECK_EQ(output.find("Headers [") == string::npos, true);
+    LT_CHECK_EQ(output.find("Footers [") == string::npos, true);
+    LT_CHECK_EQ(output.find("Cookies [") == string::npos, true);
+LT_END_AUTO_TEST(ostream_operator_empty)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, ostream_operator_full)
+    // Test ostream operator with headers, footers, and cookies
+    http_response resp(201, "application/json");
+    resp.with_header("X-Header1", "Value1");
+    resp.with_header("X-Header2", "Value2");
+    resp.with_footer("X-Footer", "FooterVal");
+    resp.with_cookie("SessionId", "abc123");
+    resp.with_cookie("UserId", "user42");
+
+    std::ostringstream oss;
+    oss << resp;
+    string output = oss.str();
+
+    LT_CHECK_EQ(output.find("Response [response_code:201]") != string::npos, true);
+    LT_CHECK_EQ(output.find("X-Header1") != string::npos, true);
+    LT_CHECK_EQ(output.find("X-Header2") != string::npos, true);
+    LT_CHECK_EQ(output.find("X-Footer") != string::npos, true);
+    LT_CHECK_EQ(output.find("SessionId") != string::npos, true);
+    LT_CHECK_EQ(output.find("UserId") != string::npos, true);
+LT_END_AUTO_TEST(ostream_operator_full)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

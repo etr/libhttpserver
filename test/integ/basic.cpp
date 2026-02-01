@@ -2503,6 +2503,199 @@ LT_BEGIN_AUTO_TEST(basic_suite, response_with_footers)
     ws2.stop();
 LT_END_AUTO_TEST(response_with_footers)
 
+// Resource that tests get_arg with non-existent key
+class arg_not_found_resource : public http_resource {
+ public:
+    shared_ptr<http_response> render_GET(const http_request& req) {
+        // Get an arg that doesn't exist - should return empty http_arg_value
+        auto missing_arg = req.get_arg("nonexistent_key");
+        // http_arg_value.get_all_values() should return empty vector
+        std::string result = missing_arg.get_all_values().empty() ? "EMPTY" : "HAS_VALUES";
+        return std::make_shared<string_response>(result, 200, "text/plain");
+    }
+};
+
+LT_BEGIN_AUTO_TEST(basic_suite, arg_not_found)
+    arg_not_found_resource resource;
+    LT_ASSERT_EQ(true, ws->register_resource("arg_not_found", &resource));
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/arg_not_found?existing=value");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "EMPTY");
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(arg_not_found)
+
+// Resource that tests get_arg_flat fallback to connection value
+class arg_flat_fallback_resource : public http_resource {
+ public:
+    shared_ptr<http_response> render_GET(const http_request& req) {
+        // Test get_arg_flat with a key that exists in GET args but not in unescaped_args
+        // This tests the fallback branch in get_arg_flat
+        std::string val = std::string(req.get_arg_flat("qparam"));
+        return std::make_shared<string_response>(val, 200, "text/plain");
+    }
+};
+
+LT_BEGIN_AUTO_TEST(basic_suite, arg_flat_fallback)
+    arg_flat_fallback_resource resource;
+    LT_ASSERT_EQ(true, ws->register_resource("arg_flat_fb", &resource));
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/arg_flat_fb?qparam=myvalue");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "myvalue");
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(arg_flat_fallback)
+
+// Resource that tests get_path_piece with out of bounds index
+class path_piece_oob_resource : public http_resource {
+ public:
+    shared_ptr<http_response> render_GET(const http_request& req) {
+        // Get path piece at an index that's out of bounds
+        std::string piece = req.get_path_piece(100);  // Way beyond the path pieces
+        // Should return empty string
+        std::string result = piece.empty() ? "OOB_EMPTY" : piece;
+        return std::make_shared<string_response>(result, 200, "text/plain");
+    }
+};
+
+LT_BEGIN_AUTO_TEST(basic_suite, path_piece_out_of_bounds)
+    path_piece_oob_resource resource;
+    LT_ASSERT_EQ(true, ws->register_resource("path/piece/test", &resource));
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/path/piece/test");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "OOB_EMPTY");
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(path_piece_out_of_bounds)
+
+// Resource that tests empty querystring
+class empty_querystring_resource : public http_resource {
+ public:
+    shared_ptr<http_response> render_GET(const http_request& req) {
+        std::string qs = std::string(req.get_querystring());
+        std::string result = qs.empty() ? "NO_QS" : qs;
+        return std::make_shared<string_response>(result, 200, "text/plain");
+    }
+};
+
+LT_BEGIN_AUTO_TEST(basic_suite, empty_querystring)
+    empty_querystring_resource resource;
+    LT_ASSERT_EQ(true, ws->register_resource("empty_qs", &resource));
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    // URL without any query string
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/empty_qs");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "NO_QS");
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(empty_querystring)
+
+// Resource that tests query parameters with null/empty values
+// Covers http_request.cpp lines 234 and 248 (arg_value == nullptr branches)
+class null_value_query_resource : public http_resource {
+ public:
+    shared_ptr<http_response> render_GET(const http_request& req) {
+        // Test getting an argument that was passed without a value (e.g., ?keyonly)
+        auto keyonly_arg = req.get_arg("keyonly");
+        auto normal_arg = req.get_arg("normal");
+
+        // Also test querystring which exercises build_request_querystring
+        std::string qs = std::string(req.get_querystring());
+
+        stringstream ss;
+        ss << "keyonly=" << (keyonly_arg.get_all_values().empty() ? "MISSING" :
+                            (keyonly_arg.get_all_values()[0].empty() ? "EMPTY" : "VALUE"));
+        ss << ",normal=" << (normal_arg.get_all_values().empty() ? "MISSING" :
+                            std::string(normal_arg.get_all_values()[0]));
+        ss << ",qs=" << (qs.find("keyonly") != string::npos ? "HAS_KEYONLY" : "NO_KEYONLY");
+
+        return std::make_shared<string_response>(ss.str(), 200, "text/plain");
+    }
+};
+
+// Resource that tests auth caching (get_user/get_pass called multiple times)
+class auth_cache_resource : public http_resource {
+ public:
+    shared_ptr<http_response> render_GET(const http_request& req) {
+        // Call get_user and get_pass multiple times to test caching
+        std::string user1 = std::string(req.get_user());
+        std::string pass1 = std::string(req.get_pass());
+        std::string user2 = std::string(req.get_user());  // Should hit cache
+        std::string pass2 = std::string(req.get_pass());  // Should hit cache
+
+        std::string result = user1.empty() ? "NO_AUTH" : ("USER:" + user1);
+        return std::make_shared<string_response>(result, 200, "text/plain");
+    }
+};
+
+LT_BEGIN_AUTO_TEST(basic_suite, auth_caching)
+    auth_cache_resource resource;
+    LT_ASSERT_EQ(true, ws->register_resource("auth_cache", &resource));
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/auth_cache");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    // No authentication provided
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "NO_AUTH");
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(auth_caching)
+
+// Test query parameters with null/empty values (e.g., ?keyonly&normal=value)
+// This covers http_request.cpp lines 234 and 248 (arg_value == nullptr branches)
+LT_BEGIN_AUTO_TEST(basic_suite, null_value_query_param)
+    null_value_query_resource resource;
+    LT_ASSERT_EQ(true, ws->register_resource("null_val_query", &resource));
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    // Query string with a key that has no value (keyonly) and one with value (normal=test)
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/null_val_query?keyonly&normal=test");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    // keyonly should have an empty value (not missing)
+    LT_CHECK_EQ(s.find("keyonly=EMPTY") != string::npos, true);
+    LT_CHECK_EQ(s.find("normal=test") != string::npos, true);
+    LT_CHECK_EQ(s.find("qs=HAS_KEYONLY") != string::npos, true);
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(null_value_query_param)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

@@ -88,6 +88,36 @@ LT_BEGIN_AUTO_TEST(http_resource_suite, allow_all_methods)
             all_methods.cbegin())
 LT_END_AUTO_TEST(allow_all_methods)
 
+LT_BEGIN_AUTO_TEST(http_resource_suite, set_allowing_nonexistent_method)
+    simple_resource sr;
+    // Try to set allowing for a method not in method_state
+    // This should be silently ignored (no effect)
+    sr.set_allowing("NONEXISTENT", true);
+    auto allowed_methods = sr.get_allowed_methods();
+    // Verify that NONEXISTENT is not in the list
+    LT_CHECK_EQ(std::find(allowed_methods.begin(), allowed_methods.end(),
+                          "NONEXISTENT") == allowed_methods.end(), true);
+LT_END_AUTO_TEST(set_allowing_nonexistent_method)
+
+LT_BEGIN_AUTO_TEST(http_resource_suite, is_allowed_nonexistent_method)
+    simple_resource sr;
+    // Check that is_allowed returns false for unknown methods
+    LT_CHECK_EQ(sr.is_allowed("UNKNOWN_METHOD"), false);
+    LT_CHECK_EQ(sr.is_allowed("CUSTOM"), false);
+LT_END_AUTO_TEST(is_allowed_nonexistent_method)
+
+LT_BEGIN_AUTO_TEST(http_resource_suite, set_allowing_disable)
+    simple_resource sr;
+    // By default, GET is allowed
+    LT_CHECK_EQ(sr.is_allowed(MHD_HTTP_METHOD_GET), true);
+    // Disable GET
+    sr.set_allowing(MHD_HTTP_METHOD_GET, false);
+    LT_CHECK_EQ(sr.is_allowed(MHD_HTTP_METHOD_GET), false);
+    // Re-enable GET
+    sr.set_allowing(MHD_HTTP_METHOD_GET, true);
+    LT_CHECK_EQ(sr.is_allowed(MHD_HTTP_METHOD_GET), true);
+LT_END_AUTO_TEST(set_allowing_disable)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()
