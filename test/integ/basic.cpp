@@ -2827,19 +2827,27 @@ LT_BEGIN_AUTO_TEST(basic_suite, get_arg_flat_first_value)
 LT_END_AUTO_TEST(get_arg_flat_first_value)
 
 // Test access and error log callbacks
-static std::string access_log_msg;
-static std::string error_log_msg;
+struct LogCapture {
+    static std::string& access_log_msg() {
+        static std::string msg;
+        return msg;
+    }
+    static std::string& error_log_msg() {
+        static std::string msg;
+        return msg;
+    }
+};
 
 void test_access_logger(const std::string& msg) {
-    access_log_msg = msg;
+    LogCapture::access_log_msg() = msg;
 }
 
 void test_error_logger(const std::string& msg) {
-    error_log_msg = msg;
+    LogCapture::error_log_msg() = msg;
 }
 
 LT_BEGIN_AUTO_TEST(basic_suite, log_access_callback)
-    access_log_msg.clear();
+    LogCapture::access_log_msg().clear();
 
     webserver ws2 = create_webserver(PORT + 70)
         .log_access(test_access_logger);
@@ -2861,8 +2869,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, log_access_callback)
     LT_CHECK_EQ(s, "OK");
 
     // The access log should have been called with the request info
-    LT_CHECK_EQ(access_log_msg.find("/logtest") != std::string::npos, true);
-    LT_CHECK_EQ(access_log_msg.find("METHOD") != std::string::npos, true);
+    LT_CHECK_EQ(LogCapture::access_log_msg().find("/logtest") != std::string::npos, true);
+    LT_CHECK_EQ(LogCapture::access_log_msg().find("METHOD") != std::string::npos, true);
 
     curl_easy_cleanup(curl);
     ws2.stop();
@@ -2964,7 +2972,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, default_render_method)
     {
         curl_global_init(CURL_GLOBAL_ALL);
         string s;
-        long http_code = 0;
+        int64_t http_code = 0;
         CURL *curl = curl_easy_init();
         CURLcode res;
         std::string url = "http://localhost:" + std::to_string(PORT + 73) + "/empty";
@@ -3144,7 +3152,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, custom_internal_error_resource)
 
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
-    long http_code = 0;
+    int64_t http_code = 0;
     CURL *curl = curl_easy_init();
     CURLcode res;
     std::string url = "http://localhost:" + std::to_string(PORT + 76) + "/throw";
