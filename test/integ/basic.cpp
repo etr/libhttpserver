@@ -2696,6 +2696,553 @@ LT_BEGIN_AUTO_TEST(basic_suite, null_value_query_param)
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(null_value_query_param)
 
+// Test PUT method on a resource that only implements render()
+LT_BEGIN_AUTO_TEST(basic_suite, only_render_put)
+    only_render_resource resource;
+    LT_ASSERT_EQ(true, ws->register_resource("only_render_put", &resource));
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/only_render_put");
+    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "PUT");
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "OK");
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(only_render_put)
+
+// Test DELETE method on a resource that only implements render()
+LT_BEGIN_AUTO_TEST(basic_suite, only_render_delete)
+    only_render_resource resource;
+    LT_ASSERT_EQ(true, ws->register_resource("only_render_delete", &resource));
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/only_render_delete");
+    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "DELETE");
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "OK");
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(only_render_delete)
+
+// Test POST method on a resource that only implements render()
+LT_BEGIN_AUTO_TEST(basic_suite, only_render_post)
+    only_render_resource resource;
+    LT_ASSERT_EQ(true, ws->register_resource("only_render_post", &resource));
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/only_render_post");
+    curl_easy_setopt(curl, CURLOPT_POST, 1L);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, "test=data");
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "OK");
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(only_render_post)
+
+// Test unregister_resource functionality
+LT_BEGIN_AUTO_TEST(basic_suite, unregister_resource)
+    webserver ws2 = create_webserver(PORT + 67);
+    ok_resource resource;
+    LT_ASSERT_EQ(true, ws2.register_resource("test_unreg", &resource));
+    ws2.start(false);
+
+    // First verify resource works
+    {
+        curl_global_init(CURL_GLOBAL_ALL);
+        string s;
+        CURL *curl = curl_easy_init();
+        CURLcode res;
+        std::string url = "http://localhost:" + std::to_string(PORT + 67) + "/test_unreg";
+        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+        curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+        res = curl_easy_perform(curl);
+        LT_ASSERT_EQ(res, 0);
+        LT_CHECK_EQ(s, "OK");
+        curl_easy_cleanup(curl);
+    }
+
+    // Now unregister
+    ws2.unregister_resource("test_unreg");
+
+    // Resource should no longer be accessible (404)
+    {
+        string s;
+        CURL *curl = curl_easy_init();
+        CURLcode res;
+        std::string url = "http://localhost:" + std::to_string(PORT + 67) + "/test_unreg";
+        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+        curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+        res = curl_easy_perform(curl);
+        LT_ASSERT_EQ(res, 0);
+        int64_t http_code = 0;
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+        LT_CHECK_EQ(http_code, 404);
+        curl_easy_cleanup(curl);
+    }
+
+    ws2.stop();
+LT_END_AUTO_TEST(unregister_resource)
+
+// Resource that tests get_arg_flat() returning first value for multi-value arg
+class arg_flat_multi_resource : public http_resource {
+ public:
+    shared_ptr<http_response> render_GET(const http_request& req) {
+        // get_arg_flat should return the first value even for multi-value args
+        std::string flat_val = std::string(req.get_arg_flat("key"));
+        return std::make_shared<string_response>("flat=" + flat_val, 200, "text/plain");
+    }
+};
+
+LT_BEGIN_AUTO_TEST(basic_suite, get_arg_flat_first_value)
+    arg_flat_multi_resource resource;
+    LT_ASSERT_EQ(true, ws->register_resource("arg_flat_first", &resource));
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/arg_flat_first?key=value1&key=value2");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "flat=value1");
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(get_arg_flat_first_value)
+
+// Test access and error log callbacks
+static std::string access_log_msg;
+static std::string error_log_msg;
+
+void test_access_logger(const std::string& msg) {
+    access_log_msg = msg;
+}
+
+void test_error_logger(const std::string& msg) {
+    error_log_msg = msg;
+}
+
+LT_BEGIN_AUTO_TEST(basic_suite, log_access_callback)
+    access_log_msg.clear();
+
+    webserver ws2 = create_webserver(PORT + 70)
+        .log_access(test_access_logger);
+    ok_resource resource;
+    LT_ASSERT_EQ(true, ws2.register_resource("logtest", &resource));
+    ws2.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    std::string url = "http://localhost:" + std::to_string(PORT + 70) + "/logtest";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "OK");
+
+    // The access log should have been called with the request info
+    LT_CHECK_EQ(access_log_msg.find("/logtest") != std::string::npos, true);
+    LT_CHECK_EQ(access_log_msg.find("METHOD") != std::string::npos, true);
+
+    curl_easy_cleanup(curl);
+    ws2.stop();
+LT_END_AUTO_TEST(log_access_callback)
+
+// Test single_resource mode
+LT_BEGIN_AUTO_TEST(basic_suite, single_resource_mode)
+    webserver ws2 = create_webserver(PORT + 71)
+        .single_resource();
+    ok_resource resource;
+    // In single_resource mode, must register at "/" with family=true
+    LT_ASSERT_EQ(true, ws2.register_resource("/", &resource, true));
+    ws2.start(false);
+
+    // All paths should route to the single resource
+    {
+        curl_global_init(CURL_GLOBAL_ALL);
+        string s;
+        CURL *curl = curl_easy_init();
+        CURLcode res;
+        std::string url = "http://localhost:" + std::to_string(PORT + 71) + "/any/path/here";
+        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+        curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+        res = curl_easy_perform(curl);
+        LT_ASSERT_EQ(res, 0);
+        LT_CHECK_EQ(s, "OK");
+        curl_easy_cleanup(curl);
+    }
+
+    // Even root should work
+    {
+        string s;
+        CURL *curl = curl_easy_init();
+        CURLcode res;
+        std::string url = "http://localhost:" + std::to_string(PORT + 71) + "/";
+        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+        curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+        res = curl_easy_perform(curl);
+        LT_ASSERT_EQ(res, 0);
+        LT_CHECK_EQ(s, "OK");
+        curl_easy_cleanup(curl);
+    }
+
+    ws2.stop();
+LT_END_AUTO_TEST(single_resource_mode)
+
+// Test validator builder method (validator is stored but not currently called in webserver)
+bool test_validator_func(const std::string& url) {
+    return url.find("valid") != std::string::npos;
+}
+
+LT_BEGIN_AUTO_TEST(basic_suite, validator_builder)
+    // Test that the validator builder method works (for coverage of create_webserver.hpp)
+    webserver ws2 = create_webserver(PORT + 72)
+        .validator(test_validator_func);
+    ok_resource resource;
+    LT_ASSERT_EQ(true, ws2.register_resource("test", &resource));
+    ws2.start(false);
+
+    // Just verify the server works with a validator set
+    {
+        curl_global_init(CURL_GLOBAL_ALL);
+        string s;
+        CURL *curl = curl_easy_init();
+        CURLcode res;
+        std::string url = "http://localhost:" + std::to_string(PORT + 72) + "/test";
+        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+        curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+        res = curl_easy_perform(curl);
+        LT_ASSERT_EQ(res, 0);
+        LT_CHECK_EQ(s, "OK");
+        curl_easy_cleanup(curl);
+    }
+
+    ws2.stop();
+LT_END_AUTO_TEST(validator_builder)
+
+// Test resource with no render methods overridden (exercises empty_render path)
+// Note: empty_render returns string_response with code -1, which triggers internal error
+class empty_render_resource : public http_resource {
+ public:
+    // No render methods overridden - uses default empty_render() path
+};
+
+LT_BEGIN_AUTO_TEST(basic_suite, default_render_method)
+    // Test that a resource with no render overrides triggers internal error
+    // (because empty_render returns response code -1)
+    webserver ws2 = create_webserver(PORT + 73);
+    empty_render_resource resource;
+    LT_ASSERT_EQ(true, ws2.register_resource("empty", &resource));
+    ws2.start(false);
+
+    {
+        curl_global_init(CURL_GLOBAL_ALL);
+        string s;
+        long http_code = 0;
+        CURL *curl = curl_easy_init();
+        CURLcode res;
+        std::string url = "http://localhost:" + std::to_string(PORT + 73) + "/empty";
+        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+        curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+        res = curl_easy_perform(curl);
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+        LT_ASSERT_EQ(res, 0);
+        // Default empty_render returns code -1, which causes internal error (500)
+        LT_CHECK_EQ(http_code, 500);
+        curl_easy_cleanup(curl);
+    }
+
+    ws2.stop();
+LT_END_AUTO_TEST(default_render_method)
+
+// Test resource that overrides only render() (not render_GET)
+class render_override_resource : public http_resource {
+ public:
+    shared_ptr<http_response> render(const http_request&) {
+        return std::make_shared<string_response>("base_render", 200, "text/plain");
+    }
+};
+
+LT_BEGIN_AUTO_TEST(basic_suite, render_fallthrough_to_base)
+    // Test that render_GET calls render() when not overridden
+    webserver ws2 = create_webserver(PORT + 74);
+    render_override_resource resource;
+    LT_ASSERT_EQ(true, ws2.register_resource("base", &resource));
+    ws2.start(false);
+
+    {
+        curl_global_init(CURL_GLOBAL_ALL);
+        string s;
+        CURL *curl = curl_easy_init();
+        CURLcode res;
+        std::string url = "http://localhost:" + std::to_string(PORT + 74) + "/base";
+        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+        curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+        res = curl_easy_perform(curl);
+        LT_ASSERT_EQ(res, 0);
+        LT_CHECK_EQ(s, "base_render");
+        curl_easy_cleanup(curl);
+    }
+
+    ws2.stop();
+LT_END_AUTO_TEST(render_fallthrough_to_base)
+
+// Note: CONNECT method is a special HTTP method for tunneling that
+// behaves differently than standard HTTP methods, so we don't test
+// it the same way as other methods.
+
+// Test all HTTP methods falling through to base render()
+LT_BEGIN_AUTO_TEST(basic_suite, all_methods_fallthrough_to_render)
+    // render_override_resource only defines render(), not render_GET/POST/etc.
+    // So all method-specific calls should fall through to render()
+    webserver ws2 = create_webserver(PORT + 75);
+    render_override_resource resource;
+    LT_ASSERT_EQ(true, ws2.register_resource("fallthrough", &resource));
+    ws2.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    CURL* curl;
+    CURLcode res;
+    string s;
+
+    // Test POST fallthrough
+    s = "";
+    curl = curl_easy_init();
+    curl_easy_setopt(curl, CURLOPT_URL, ("localhost:" + std::to_string(PORT + 75) + "/fallthrough").c_str());
+    curl_easy_setopt(curl, CURLOPT_POST, 1L);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, "");
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "base_render");
+    curl_easy_cleanup(curl);
+
+    // Test PUT fallthrough
+    s = "";
+    curl = curl_easy_init();
+    curl_easy_setopt(curl, CURLOPT_URL, ("localhost:" + std::to_string(PORT + 75) + "/fallthrough").c_str());
+    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "PUT");
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "base_render");
+    curl_easy_cleanup(curl);
+
+    // Test DELETE fallthrough
+    s = "";
+    curl = curl_easy_init();
+    curl_easy_setopt(curl, CURLOPT_URL, ("localhost:" + std::to_string(PORT + 75) + "/fallthrough").c_str());
+    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "DELETE");
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "base_render");
+    curl_easy_cleanup(curl);
+
+    // Test PATCH fallthrough
+    s = "";
+    curl = curl_easy_init();
+    curl_easy_setopt(curl, CURLOPT_URL, ("localhost:" + std::to_string(PORT + 75) + "/fallthrough").c_str());
+    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "PATCH");
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "base_render");
+    curl_easy_cleanup(curl);
+
+    // Test HEAD fallthrough (body is empty for HEAD)
+    s = "";
+    curl = curl_easy_init();
+    curl_easy_setopt(curl, CURLOPT_URL, ("localhost:" + std::to_string(PORT + 75) + "/fallthrough").c_str());
+    curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    // HEAD response has no body
+    curl_easy_cleanup(curl);
+
+    // Test OPTIONS fallthrough
+    s = "";
+    curl = curl_easy_init();
+    curl_easy_setopt(curl, CURLOPT_URL, ("localhost:" + std::to_string(PORT + 75) + "/fallthrough").c_str());
+    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "OPTIONS");
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "base_render");
+    curl_easy_cleanup(curl);
+
+    // Test TRACE fallthrough
+    s = "";
+    curl = curl_easy_init();
+    curl_easy_setopt(curl, CURLOPT_URL, ("localhost:" + std::to_string(PORT + 75) + "/fallthrough").c_str());
+    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "TRACE");
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "base_render");
+    curl_easy_cleanup(curl);
+
+    ws2.stop();
+LT_END_AUTO_TEST(all_methods_fallthrough_to_render)
+
+// Test internal_error_resource custom handler
+shared_ptr<http_response> custom_internal_error_handler(const http_request&) {
+    return std::make_shared<string_response>("Custom Internal Error", 500, "text/plain");
+}
+
+class throwing_resource : public http_resource {
+ public:
+    shared_ptr<http_response> render_GET(const http_request&) {
+        throw std::runtime_error("Intentional test exception");
+    }
+};
+
+LT_BEGIN_AUTO_TEST(basic_suite, custom_internal_error_resource)
+    webserver ws2 = create_webserver(PORT + 76)
+        .internal_error_resource(custom_internal_error_handler);
+    throwing_resource resource;
+    LT_ASSERT_EQ(true, ws2.register_resource("throw", &resource));
+    ws2.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    long http_code = 0;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    std::string url = "http://localhost:" + std::to_string(PORT + 76) + "/throw";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(http_code, 500);
+    LT_CHECK_EQ(s, "Custom Internal Error");
+    curl_easy_cleanup(curl);
+
+    ws2.stop();
+LT_END_AUTO_TEST(custom_internal_error_resource)
+
+// Test get_arg_flat fallback to MHD connection value
+class arg_flat_resource : public http_resource {
+ public:
+    shared_ptr<http_response> render_GET(const http_request& req) {
+        // get_arg_flat should fall back to MHD connection value for query params
+        std::string result = std::string(req.get_arg_flat("q"));
+        return std::make_shared<string_response>(result, 200, "text/plain");
+    }
+};
+
+LT_BEGIN_AUTO_TEST(basic_suite, get_arg_flat_fallback)
+    webserver ws2 = create_webserver(PORT + 77);
+    arg_flat_resource resource;
+    LT_ASSERT_EQ(true, ws2.register_resource("argflat", &resource));
+    ws2.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    std::string url = "http://localhost:" + std::to_string(PORT + 77) + "/argflat?q=test_value";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "test_value");
+    curl_easy_cleanup(curl);
+
+    ws2.stop();
+LT_END_AUTO_TEST(get_arg_flat_fallback)
+
+// Test large multipart form field that triggers grow_last_arg path
+class large_multipart_resource : public http_resource {
+ public:
+    shared_ptr<http_response> render_POST(const http_request& req) {
+        std::string result = std::string(req.get_arg("large_field"));
+        return std::make_shared<string_response>(std::to_string(result.size()), 200, "text/plain");
+    }
+};
+
+LT_BEGIN_AUTO_TEST(basic_suite, large_multipart_form_field)
+    // This test sends a large text field via multipart form-data
+    // to trigger the grow_last_arg path in http_request.cpp (line 544)
+    webserver ws2 = create_webserver(PORT + 78);
+    large_multipart_resource resource;
+    LT_ASSERT_EQ(true, ws2.register_resource("largemp", &resource));
+    ws2.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+
+    // Create a large string (100KB) to ensure MHD chunks it
+    const size_t large_size = 100 * 1024;
+    std::string large_data(large_size, 'X');
+
+    // Use curl_mime for multipart/form-data
+    curl_mime *form = curl_mime_init(curl);
+    curl_mimepart *field = curl_mime_addpart(form);
+    curl_mime_name(field, "large_field");
+    curl_mime_data(field, large_data.c_str(), CURL_ZERO_TERMINATED);
+
+    std::string url = "http://localhost:" + std::to_string(PORT + 78) + "/largemp";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_MIMEPOST, form);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    // The response should be the size of the large field
+    LT_CHECK_EQ(s, std::to_string(large_size));
+
+    curl_mime_free(form);
+    curl_easy_cleanup(curl);
+
+    ws2.stop();
+LT_END_AUTO_TEST(large_multipart_form_field)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

@@ -857,6 +857,92 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, standardize_url_multiple_slashes)
     LT_CHECK_EQ(httpserver::http::http_utils::standardize_url("//"), "/");
 LT_END_AUTO_TEST(standardize_url_multiple_slashes)
 
+// Test http_unescape with empty string
+LT_BEGIN_AUTO_TEST(http_utils_suite, http_unescape_empty)
+    std::string val = "";
+    httpserver::http::http_unescape(&val);
+    LT_CHECK_EQ(val, "");
+LT_END_AUTO_TEST(http_unescape_empty)
+
+// Test http_unescape with no escape sequences
+LT_BEGIN_AUTO_TEST(http_utils_suite, http_unescape_no_escapes)
+    std::string val = "hello world";
+    httpserver::http::http_unescape(&val);
+    LT_CHECK_EQ(val, "hello world");
+LT_END_AUTO_TEST(http_unescape_no_escapes)
+
+// Test http_unescape with multiple escape sequences
+LT_BEGIN_AUTO_TEST(http_utils_suite, http_unescape_multiple)
+    std::string val = "%20%2B%3D";
+    httpserver::http::http_unescape(&val);
+    LT_CHECK_EQ(val, " +=");
+LT_END_AUTO_TEST(http_unescape_multiple)
+
+// Test tokenize_url with empty string
+LT_BEGIN_AUTO_TEST(http_utils_suite, tokenize_url_empty)
+    std::vector<std::string> result = httpserver::http::http_utils::tokenize_url("");
+    LT_CHECK_EQ(result.size(), 0);
+LT_END_AUTO_TEST(tokenize_url_empty)
+
+// Test tokenize_url with root only
+LT_BEGIN_AUTO_TEST(http_utils_suite, tokenize_url_root)
+    std::vector<std::string> result = httpserver::http::http_utils::tokenize_url("/");
+    LT_CHECK_EQ(result.size(), 0);
+LT_END_AUTO_TEST(tokenize_url_root)
+
+// Test tokenize_url with multiple segments
+LT_BEGIN_AUTO_TEST(http_utils_suite, tokenize_url_multiple_segments)
+    std::vector<std::string> result = httpserver::http::http_utils::tokenize_url("/api/v1/users/123");
+    LT_CHECK_EQ(result.size(), 4);
+    LT_CHECK_EQ(result[0], "api");
+    LT_CHECK_EQ(result[1], "v1");
+    LT_CHECK_EQ(result[2], "users");
+    LT_CHECK_EQ(result[3], "123");
+LT_END_AUTO_TEST(tokenize_url_multiple_segments)
+
+// Test standardize_url with empty string
+LT_BEGIN_AUTO_TEST(http_utils_suite, standardize_url_empty)
+    // Empty string returns empty string (not "/")
+    LT_CHECK_EQ(httpserver::http::http_utils::standardize_url(""), "");
+LT_END_AUTO_TEST(standardize_url_empty)
+
+// Test dump_header_map with empty prefix
+LT_BEGIN_AUTO_TEST(http_utils_suite, dump_header_map_empty_prefix)
+    httpserver::http::header_view_map headers;
+    headers["Content-Type"] = "application/json";
+    headers["Accept"] = "text/html";
+
+    std::stringstream ss;
+    httpserver::http::dump_header_map(ss, "", headers);
+    std::string output = ss.str();
+    LT_CHECK_EQ(output.find("Content-Type") != std::string::npos, true);
+    LT_CHECK_EQ(output.find("Accept") != std::string::npos, true);
+LT_END_AUTO_TEST(dump_header_map_empty_prefix)
+
+// Test get_ip_str with nullptr (edge case)
+LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation_comparison_equal)
+    httpserver::http::ip_representation ip1("192.168.1.1");
+    httpserver::http::ip_representation ip2("192.168.1.1");
+
+    // Same addresses should not be less than each other
+    LT_CHECK_EQ(ip1 < ip2, false);
+    LT_CHECK_EQ(ip2 < ip1, false);
+LT_END_AUTO_TEST(ip_representation_comparison_equal)
+
+// Test ip_representation with max weight comparison
+LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation_wildcard_weight)
+    // weight() returns count of non-wildcard bytes in IPv6 representation (16 bytes total)
+    // For IPv4 addresses stored as IPv6 (::ffff:x.x.x.x), specific octets add to weight
+    httpserver::http::ip_representation ip1("192.168.*.*");
+    LT_CHECK_EQ(ip1.weight(), 14);  // 16 - 2 wildcard bytes
+
+    httpserver::http::ip_representation ip2("192.*.*.*");
+    LT_CHECK_EQ(ip2.weight(), 13);  // 16 - 3 wildcard bytes
+
+    // More specific (higher weight) should be "greater than" less specific
+    LT_CHECK_EQ(ip1.weight() > ip2.weight(), true);
+LT_END_AUTO_TEST(ip_representation_wildcard_weight)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

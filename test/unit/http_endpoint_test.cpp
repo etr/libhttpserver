@@ -474,6 +474,143 @@ LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_caret_only_part)
     LT_CHECK_EQ(test_endpoint.get_url_complete(), "/api/^/data");
 LT_END_AUTO_TEST(http_endpoint_caret_only_part)
 
+// Test match with family URL where incoming has more pieces (should match)
+LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_match_family_more_pieces)
+    // Family URL with 3 pieces
+    http_endpoint family_ep("/api/v1", true, true, true);
+
+    // Incoming URL with more pieces
+    http_endpoint long_url("/api/v1/users/123/details");
+
+    // Family URL should match URLs that extend the pattern
+    LT_CHECK_EQ(family_ep.match(long_url), true);
+LT_END_AUTO_TEST(http_endpoint_match_family_more_pieces)
+
+// Test match with equal pieces but mismatched content
+LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_match_mismatch_content)
+    http_endpoint registered("/api/users", false, true, true);
+    http_endpoint incoming("/api/items");
+
+    LT_CHECK_EQ(registered.match(incoming), false);
+LT_END_AUTO_TEST(http_endpoint_match_mismatch_content)
+
+// Test multiple URL parameters in sequence
+LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_multiple_params)
+    http_endpoint test_endpoint("/{type}/{id}/{action}", false, true, true);
+
+    LT_CHECK_EQ(test_endpoint.get_url_pars().size(), 3);
+
+    // Verify parameter names
+    auto pars = test_endpoint.get_url_pars();
+    LT_CHECK_EQ(pars[0], "type");
+    LT_CHECK_EQ(pars[1], "id");
+    LT_CHECK_EQ(pars[2], "action");
+
+    // Should match a URL with three values
+    LT_CHECK_EQ(test_endpoint.match(http_endpoint("/user/123/edit")), true);
+LT_END_AUTO_TEST(http_endpoint_multiple_params)
+
+// Test URL parameter with custom regex that includes special characters
+LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_custom_regex_special)
+    http_endpoint test_endpoint("/files/{filename|([a-zA-Z0-9._-]+)}", false, true, true);
+
+    LT_CHECK_EQ(test_endpoint.match(http_endpoint("/files/test.txt")), true);
+    LT_CHECK_EQ(test_endpoint.match(http_endpoint("/files/my-file_123.json")), true);
+LT_END_AUTO_TEST(http_endpoint_custom_regex_special)
+
+// Test comparator with same URL but different family status
+LT_BEGIN_AUTO_TEST(http_endpoint_suite, comparator_same_url_family_diff)
+    http_endpoint ep1("/path", true, true, true);
+    http_endpoint ep2("/path", false, true, true);
+
+    // Family endpoints should sort before non-family
+    bool result1 = ep1 < ep2;
+    bool result2 = ep2 < ep1;
+
+    // At least one should be true (they should be different)
+    LT_CHECK_EQ(result1 != result2, true);
+LT_END_AUTO_TEST(comparator_same_url_family_diff)
+
+// Test URL that's just a slash
+LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_root_only)
+    http_endpoint test_endpoint("/", false, true, true);
+
+    LT_CHECK_EQ(test_endpoint.get_url_complete(), "/");
+    LT_CHECK_EQ(test_endpoint.match(http_endpoint("/")), true);
+LT_END_AUTO_TEST(http_endpoint_root_only)
+
+// Test URL with trailing and leading slashes
+LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_multiple_trailing_slashes)
+    http_endpoint test_endpoint("/api/", false, true, true);
+
+    // Should normalize and match
+    LT_CHECK_EQ(test_endpoint.match(http_endpoint("/api")), true);
+    LT_CHECK_EQ(test_endpoint.match(http_endpoint("/api/")), true);
+LT_END_AUTO_TEST(http_endpoint_multiple_trailing_slashes)
+
+// Test complex regex pattern with alternation
+LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_regex_alternation)
+    http_endpoint test_endpoint("/{resource|(users|posts|comments)}", false, true, true);
+
+    LT_CHECK_EQ(test_endpoint.match(http_endpoint("/users")), true);
+    LT_CHECK_EQ(test_endpoint.match(http_endpoint("/posts")), true);
+    LT_CHECK_EQ(test_endpoint.match(http_endpoint("/comments")), true);
+    LT_CHECK_EQ(test_endpoint.match(http_endpoint("/other")), false);
+LT_END_AUTO_TEST(http_endpoint_regex_alternation)
+
+// Test that use_regex without registration throws
+LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_regex_no_registration_throws)
+    // use_regex=true but registration=false should throw
+    LT_CHECK_THROW(http_endpoint("/path", false, false, true));
+LT_END_AUTO_TEST(http_endpoint_regex_no_registration_throws)
+
+// Test non-registration path (use_regex=false, registration=false)
+LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_non_registration)
+    http_endpoint test_endpoint("/path/to/resource", false, false, false);
+
+    // Non-registration endpoints should still parse correctly
+    LT_CHECK_EQ(test_endpoint.get_url_complete(), "/path/to/resource");
+    LT_CHECK_EQ(test_endpoint.get_url_normalized(), "/path/to/resource");
+    LT_CHECK_EQ(test_endpoint.is_regex_compiled(), false);
+LT_END_AUTO_TEST(http_endpoint_non_registration)
+
+// Test with trailing slash (should be removed)
+LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_trailing_slash_removed)
+    http_endpoint test_endpoint("/path/resource/", false, true, false);
+
+    // Trailing slash should be removed from url_complete
+    LT_CHECK_EQ(test_endpoint.get_url_complete(), "/path/resource");
+LT_END_AUTO_TEST(http_endpoint_trailing_slash_removed)
+
+// Test invalid URL parameter format (too short)
+LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_invalid_param_too_short)
+    // Parameter {} is too short (less than 3 chars including braces)
+    LT_CHECK_THROW(http_endpoint("/path/{}", false, true, true));
+LT_END_AUTO_TEST(http_endpoint_invalid_param_too_short)
+
+// Test invalid URL parameter format (only one brace)
+LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_invalid_param_one_brace)
+    // Parameter {x is missing closing brace
+    LT_CHECK_THROW(http_endpoint("/path/{x", false, true, true));
+LT_END_AUTO_TEST(http_endpoint_invalid_param_one_brace)
+
+// Test URL parameter with bar separator but short
+LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_param_with_regex)
+    http_endpoint test_endpoint("/path/{id|[0-9]+}", false, true, true);
+
+    LT_CHECK_EQ(test_endpoint.get_url_pars().size(), 1);
+    LT_CHECK_EQ(test_endpoint.get_url_pars()[0], "id");
+    // Should match numbers only
+    LT_CHECK_EQ(test_endpoint.match(http_endpoint("/path/123")), true);
+    LT_CHECK_EQ(test_endpoint.match(http_endpoint("/path/abc")), false);
+LT_END_AUTO_TEST(http_endpoint_param_with_regex)
+
+// Test invalid regex pattern throws
+LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_invalid_regex_throws)
+    // Invalid regex pattern should throw
+    LT_CHECK_THROW(http_endpoint("/path/{id|[invalid}", false, true, true));
+LT_END_AUTO_TEST(http_endpoint_invalid_regex_throws)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

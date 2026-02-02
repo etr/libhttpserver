@@ -1067,6 +1067,195 @@ LT_END_AUTO_TEST(psk_no_handler)
 
 #endif
 
+// Test max_threads configuration with a running server
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, max_threads_running)
+    int port = PORT + 34;
+    httpserver::webserver ws = httpserver::create_webserver(port)
+        .max_threads(4);
+
+    ok_resource ok;
+    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    std::string url = "http://localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "OK");
+    curl_easy_cleanup(curl);
+
+    ws.stop();
+LT_END_AUTO_TEST(max_threads_running)
+
+// Test max_connections configuration
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, max_connections_running)
+    int port = PORT + 35;
+    httpserver::webserver ws = httpserver::create_webserver(port)
+        .max_connections(100);
+
+    ok_resource ok;
+    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    std::string url = "http://localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "OK");
+    curl_easy_cleanup(curl);
+
+    ws.stop();
+LT_END_AUTO_TEST(max_connections_running)
+
+// Test memory_limit configuration
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, memory_limit_running)
+    int port = PORT + 36;
+    httpserver::webserver ws = httpserver::create_webserver(port)
+        .memory_limit(32 * 1024);  // 32KB memory limit
+
+    ok_resource ok;
+    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    std::string url = "http://localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "OK");
+    curl_easy_cleanup(curl);
+
+    ws.stop();
+LT_END_AUTO_TEST(memory_limit_running)
+
+// Test per_IP_connection_limit configuration
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, per_ip_limit_running)
+    int port = PORT + 37;
+    httpserver::webserver ws = httpserver::create_webserver(port)
+        .per_IP_connection_limit(5);
+
+    ok_resource ok;
+    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    std::string url = "http://localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "OK");
+    curl_easy_cleanup(curl);
+
+    ws.stop();
+LT_END_AUTO_TEST(per_ip_limit_running)
+
+// Test max_thread_stack_size configuration (covers line 257 branch)
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, thread_stack_size_running)
+    int port = PORT + 38;
+    httpserver::webserver ws = httpserver::create_webserver(port)
+        .max_thread_stack_size(4 * 1024 * 1024);  // 4MB stack size
+
+    ok_resource ok;
+    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    std::string url = "http://localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "OK");
+    curl_easy_cleanup(curl);
+
+    ws.stop();
+LT_END_AUTO_TEST(thread_stack_size_running)
+
+// Test deferred mode
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, deferred_mode_running)
+    int port = PORT + 39;
+    httpserver::webserver ws = httpserver::create_webserver(port)
+        .deferred();
+
+    ok_resource ok;
+    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    std::string url = "http://localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "OK");
+    curl_easy_cleanup(curl);
+
+    ws.stop();
+LT_END_AUTO_TEST(deferred_mode_running)
+
+// Test debug mode with actual request
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, debug_mode_running)
+    int port = PORT + 40;
+    httpserver::webserver ws = httpserver::create_webserver(port)
+        .debug();
+
+    ok_resource ok;
+    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    std::string url = "http://localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "OK");
+    curl_easy_cleanup(curl);
+
+    ws.stop();
+LT_END_AUTO_TEST(debug_mode_running)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()
