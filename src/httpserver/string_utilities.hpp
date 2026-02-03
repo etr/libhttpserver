@@ -42,6 +42,20 @@ const std::string to_upper_copy(const std::string& str);
 const std::string to_lower_copy(const std::string& str);
 const std::vector<std::string> string_split(const std::string& s, char sep = ' ', bool collapse = true);
 
+/**
+ * Validate that a string contains only valid hexadecimal characters (0-9, a-f, A-F)
+ * @param s The string to validate
+ * @return true if string contains only valid hex characters, false otherwise
+ */
+bool is_valid_hex(const std::string& s);
+
+/**
+ * Convert a hex character to its numeric value (0-15)
+ * @param c The hex character to convert
+ * @return numeric value (0-15), or 0 for invalid characters
+ */
+unsigned char hex_char_to_val(char c);
+
 }  // namespace string_utilities
 
 }  // namespace httpserver

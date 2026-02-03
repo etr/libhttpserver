@@ -55,5 +55,22 @@ const std::vector<std::string> string_split(const std::string& s, char sep, bool
     return result;
 }
 
+bool is_valid_hex(const std::string& s) {
+    for (char c : s) {
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') ||
+              (c >= 'A' && c <= 'F'))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+unsigned char hex_char_to_val(char c) {
+    if (c >= '0' && c <= '9') return static_cast<unsigned char>(c - '0');
+    if (c >= 'a' && c <= 'f') return static_cast<unsigned char>(c - 'a' + 10);
+    if (c >= 'A' && c <= 'F') return static_cast<unsigned char>(c - 'A' + 10);
+    return 0;
+}
+
 }  // namespace string_utilities
 }  // namespace httpserver

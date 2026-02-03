@@ -58,6 +58,7 @@
 #include "httpserver/http_resource.hpp"
 #include "httpserver/http_response.hpp"
 #include "httpserver/http_utils.hpp"
+#include "httpserver/string_utilities.hpp"
 #include "httpserver/string_response.hpp"
 
 struct MHD_Connection;
@@ -429,25 +430,6 @@ void webserver::disallow_ip(const string& ip) {
 }
 
 #ifdef HAVE_GNUTLS
-// Validate that a string contains only valid hexadecimal characters
-static bool is_valid_hex(const std::string& s) {
-    for (char c : s) {
-        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') ||
-              (c >= 'A' && c <= 'F'))) {
-            return false;
-        }
-    }
-    return true;
-}
-
-// Convert a hex character to its numeric value
-static unsigned char hex_char_to_val(char c) {
-    if (c >= '0' && c <= '9') return static_cast<unsigned char>(c - '0');
-    if (c >= 'a' && c <= 'f') return static_cast<unsigned char>(c - 'a' + 10);
-    if (c >= 'A' && c <= 'F') return static_cast<unsigned char>(c - 'A' + 10);
-    return 0;
-}
-
 // MHD_PskServerCredentialsCallback signature:
 // The 'cls' parameter is our webserver pointer (passed via MHD_OPTION)
 // Returns 0 on success, -1 on error
@@ -476,7 +458,8 @@ int webserver::psk_cred_handler_func(void* cls,
 
     // Validate hex string before allocating memory
     size_t psk_len = psk_hex.size() / 2;
-    if (psk_len == 0 || (psk_hex.size() % 2 != 0) || !is_valid_hex(psk_hex)) {
+    if (psk_len == 0 || (psk_hex.size() % 2 != 0) ||
+        !string_utilities::is_valid_hex(psk_hex)) {
         return -1;
     }
 
@@ -489,8 +472,8 @@ int webserver::psk_cred_handler_func(void* cls,
     // Convert hex string to binary
     for (size_t i = 0; i < psk_len; i++) {
         psk_data[i] = static_cast<unsigned char>(
-            (hex_char_to_val(psk_hex[i * 2]) << 4) |
-             hex_char_to_val(psk_hex[i * 2 + 1]));
+            (string_utilities::hex_char_to_val(psk_hex[i * 2]) << 4) |
+             string_utilities::hex_char_to_val(psk_hex[i * 2 + 1]));
     }
 
     *psk = psk_data;

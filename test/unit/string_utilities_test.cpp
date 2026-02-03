@@ -173,6 +173,38 @@ LT_BEGIN_AUTO_TEST(string_utilities_suite, split_string_single_element)
     LT_CHECK_EQ(actual[0], "hello");
 LT_END_AUTO_TEST(split_string_single_element)
 
+// Test is_valid_hex with valid strings
+LT_BEGIN_AUTO_TEST(string_utilities_suite, is_valid_hex_valid)
+    LT_CHECK_EQ(httpserver::string_utilities::is_valid_hex("0123456789"), true);
+    LT_CHECK_EQ(httpserver::string_utilities::is_valid_hex("abcdef"), true);
+    LT_CHECK_EQ(httpserver::string_utilities::is_valid_hex("ABCDEF"), true);
+    LT_CHECK_EQ(httpserver::string_utilities::is_valid_hex("0123456789abcdefABCDEF"), true);
+LT_END_AUTO_TEST(is_valid_hex_valid)
+
+// Test is_valid_hex with invalid strings
+LT_BEGIN_AUTO_TEST(string_utilities_suite, is_valid_hex_invalid)
+    LT_CHECK_EQ(httpserver::string_utilities::is_valid_hex("ZZZZ"), false);
+    LT_CHECK_EQ(httpserver::string_utilities::is_valid_hex("hello"), false);
+    LT_CHECK_EQ(httpserver::string_utilities::is_valid_hex("12g4"), false);
+    LT_CHECK_EQ(httpserver::string_utilities::is_valid_hex("12 34"), false);
+LT_END_AUTO_TEST(is_valid_hex_invalid)
+
+// Test is_valid_hex with empty string
+LT_BEGIN_AUTO_TEST(string_utilities_suite, is_valid_hex_empty)
+    LT_CHECK_EQ(httpserver::string_utilities::is_valid_hex(""), true);
+LT_END_AUTO_TEST(is_valid_hex_empty)
+
+// Test hex_char_to_val with digits
+LT_BEGIN_AUTO_TEST(string_utilities_suite, hex_char_to_val_digits)
+    LT_CHECK_EQ(httpserver::string_utilities::hex_char_to_val('0'), 0);
+    LT_CHECK_EQ(httpserver::string_utilities::hex_char_to_val('9'), 9);
+    LT_CHECK_EQ(httpserver::string_utilities::hex_char_to_val('a'), 10);
+    LT_CHECK_EQ(httpserver::string_utilities::hex_char_to_val('f'), 15);
+    LT_CHECK_EQ(httpserver::string_utilities::hex_char_to_val('A'), 10);
+    LT_CHECK_EQ(httpserver::string_utilities::hex_char_to_val('F'), 15);
+    LT_CHECK_EQ(httpserver::string_utilities::hex_char_to_val('z'), 0);
+LT_END_AUTO_TEST(hex_char_to_val_digits)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

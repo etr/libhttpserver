@@ -889,7 +889,9 @@ LT_END_AUTO_TEST(file_cleanup_no_callback_deletes)
 
 // Test file upload keeping original filename (without random generation)
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_original_filename)
-    string upload_directory = "/tmp";  // Use temp directory to avoid conflicts
+    // Use a subdirectory to avoid overwriting the test input file
+    string upload_directory = "upload_test_dir";
+    mkdir(upload_directory.c_str(), 0755);
 
     auto ws = std::make_unique<webserver>(create_webserver(PORT)
                        .file_upload_target(httpserver::FILE_UPLOAD_DISK_ONLY)
@@ -915,15 +917,16 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_original_filename)
 
     ws->stop();
 
-    // Clean up the file
+    // Clean up the file and directory
     unlink(expected_path.c_str());
+    rmdir(upload_directory.c_str());
 LT_END_AUTO_TEST(file_upload_original_filename)
 
 // Test file upload with explicit content-type header
 // This exercises the content_type != nullptr branch in webserver.cpp post_iterator
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_with_content_type)
     int port = PORT + 1;
-    string upload_directory = "/tmp";
+    string upload_directory = ".";
 
     auto ws = std::make_unique<webserver>(create_webserver(port)
                        .file_upload_target(httpserver::FILE_UPLOAD_DISK_ONLY)
