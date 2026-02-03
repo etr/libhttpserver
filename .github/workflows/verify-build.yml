@@ -470,7 +470,7 @@ jobs:
 
     - name: Setup gnutls dependency (only on linux)
       run: |
-        sudo apt-get install libgnutls28-dev ;
+        sudo apt-get install libgnutls28-dev gnutls-bin ;
       if: ${{ matrix.os-type == 'ubuntu' }}
 
     - name: Fetch libmicrohttpd from cache
@@ -668,7 +668,7 @@ jobs:
     - name: Generate coverage report
       run: |
         cd build
-        gcovr --root .. --exclude test/ --xml coverage.xml --xml-pretty
+        gcovr --root .. --filter '../src/' --xml coverage.xml --xml-pretty --print-summary
       if: ${{ matrix.os-type == 'ubuntu' && matrix.c-compiler == 'gcc' && matrix.debug == 'debug' && matrix.coverage == 'coverage' && success() }}
 
     - name: Upload coverage to Codecov

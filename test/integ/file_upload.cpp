@@ -20,6 +20,12 @@
 
 #include <curl/curl.h>
 #include <sys/stat.h>
+#ifdef _WIN32
+#include <direct.h>
+#define MKDIR(path) _mkdir(path)
+#else
+#define MKDIR(path) mkdir(path, 0755)
+#endif
 #include <cassert>
 #include <cstddef>
 #include <cstdio>
@@ -122,6 +128,37 @@ static std::pair<CURLcode, int32_t> send_file_to_webserver(bool add_second_file,
 
     CURLcode res;
     curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/upload");
+    curl_easy_setopt(curl, CURLOPT_MIMEPOST, form);
+
+    res = curl_easy_perform(curl);
+    long http_code = 0;   // NOLINT [runtime/int]
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+
+    curl_easy_cleanup(curl);
+    curl_mime_free(form);
+    return {res, http_code};
+}
+
+// Send file with explicit content-type and transfer-encoding headers
+static std::pair<CURLcode, int32_t> send_file_with_content_type(int port, const char* content_type) {
+    curl_global_init(CURL_GLOBAL_ALL);
+
+    CURL *curl = curl_easy_init();
+
+    curl_mime *form = curl_mime_init(curl);
+    curl_mimepart *field = curl_mime_addpart(form);
+    curl_mime_name(field, TEST_KEY);
+    curl_mime_filedata(field, TEST_CONTENT_FILEPATH);
+    // Set explicit content-type for the file part
+    curl_mime_type(field, content_type);
+    // Add transfer-encoding header
+    struct curl_slist *headers = nullptr;
+    headers = curl_slist_append(headers, "Content-Transfer-Encoding: binary");
+    curl_mime_headers(field, headers, 1);  // 1 means take ownership
+
+    CURLcode res;
+    std::string url = "localhost:" + std::to_string(port) + "/upload";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_MIMEPOST, form);
 
     res = curl_easy_perform(curl);
@@ -855,6 +892,77 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_cleanup_no_callback_deletes)
     map<string, httpserver::http::file_info>::iterator file = files.begin()->second.begin();
     LT_CHECK_EQ(file_exists(file->second.get_file_system_file_name()), false);
 LT_END_AUTO_TEST(file_cleanup_no_callback_deletes)
+
+// Test file upload keeping original filename (without random generation)
+LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_original_filename)
+    // Use a subdirectory to avoid overwriting the test input file
+    string upload_directory = "upload_test_dir";
+    MKDIR(upload_directory.c_str());
+
+    auto ws = std::make_unique<webserver>(create_webserver(PORT)
+                       .file_upload_target(httpserver::FILE_UPLOAD_DISK_ONLY)
+                       .file_upload_dir(upload_directory));
+    // Note: NOT using generate_random_filename_on_upload()
+    ws->start(false);
+    LT_CHECK_EQ(ws->is_running(), true);
+
+    print_file_upload_resource resource;
+    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+
+    auto res = send_file_to_webserver(false, false);
+    LT_ASSERT_EQ(res.first, 0);
+    LT_ASSERT_EQ(res.second, 201);
+
+    // Verify file was created with original name
+    map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
+    LT_CHECK_EQ(files.size(), 1);
+    map<string, httpserver::http::file_info>::iterator file = files.begin()->second.begin();
+    // The filename should be upload_directory/test_content (the original name)
+    string expected_path = upload_directory + "/" + TEST_CONTENT_FILENAME;
+    LT_CHECK_EQ(file->second.get_file_system_file_name(), expected_path);
+
+    ws->stop();
+
+    // Clean up the file and directory
+    unlink(expected_path.c_str());
+    rmdir(upload_directory.c_str());
+LT_END_AUTO_TEST(file_upload_original_filename)
+
+// Test file upload with explicit content-type header
+// This exercises the content_type != nullptr branch in webserver.cpp post_iterator
+LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_with_content_type)
+    int port = PORT + 1;
+    string upload_directory = ".";
+
+    auto ws = std::make_unique<webserver>(create_webserver(port)
+                       .file_upload_target(httpserver::FILE_UPLOAD_DISK_ONLY)
+                       .file_upload_dir(upload_directory)
+                       .generate_random_filename_on_upload());
+    ws->start(false);
+    LT_CHECK_EQ(ws->is_running(), true);
+
+    print_file_upload_resource resource;
+    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+
+    // Send file with explicit content-type "text/plain"
+    auto res = send_file_with_content_type(port, "text/plain");
+    LT_ASSERT_EQ(res.first, 0);
+    LT_ASSERT_EQ(res.second, 201);
+
+    // Verify file_info has the correct content-type
+    map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
+    LT_CHECK_EQ(files.size(), 1);
+    auto file_key = files.find(TEST_KEY);
+    LT_CHECK_EQ(file_key != files.end(), true);
+    auto file = file_key->second.begin();
+    // The content-type should be what we set
+    LT_CHECK_EQ(file->second.get_content_type(), "text/plain");
+
+    // Clean up the uploaded file
+    unlink(file->second.get_file_system_file_name().c_str());
+
+    ws->stop();
+LT_END_AUTO_TEST(file_upload_with_content_type)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

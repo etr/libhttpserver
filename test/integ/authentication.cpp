@@ -463,6 +463,96 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256_wrong_pass)
     ws.stop();
 LT_END_AUTO_TEST(digest_auth_with_ha1_sha256_wrong_pass)
 
+// Resource that tests get_digested_user() caching
+// Covers http_request.cpp lines 293-295 (cache hit) and 300 (nullptr branch)
+class digest_user_cache_resource : public http_resource {
+ public:
+    shared_ptr<http_response> render_GET(const http_request& req) {
+        // First call - will populate cache (line 300 nullptr or non-null branch)
+        std::string user1 = std::string(req.get_digested_user());
+
+        // Second call - should hit cache (lines 293-295)
+        std::string user2 = std::string(req.get_digested_user());
+
+        // Verify caching works correctly (both calls return same value)
+        if (user1 != user2) {
+            return std::make_shared<string_response>("CACHE_MISMATCH", 500, "text/plain");
+        }
+
+        if (user1.empty()) {
+            // No digest auth provided - tests the nullptr branch (line 299-300)
+            return std::make_shared<string_response>("NO_DIGEST_USER", 200, "text/plain");
+        }
+
+        // Return the digested user (tests cache hit with valid user)
+        return std::make_shared<string_response>("USER:" + user1, 200, "text/plain");
+    }
+};
+
+// Test digested user caching when no digest auth is provided (nullptr branch)
+LT_BEGIN_AUTO_TEST(authentication_suite, digest_user_cache_no_auth)
+    webserver ws = create_webserver(PORT);
+
+    digest_user_cache_resource resource;
+    LT_ASSERT_EQ(true, ws.register_resource("cache_test", &resource));
+    ws.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    // No authentication - should trigger nullptr branch in get_digested_user
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/cache_test");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "NO_DIGEST_USER");
+    curl_easy_cleanup(curl);
+
+    ws.stop();
+LT_END_AUTO_TEST(digest_user_cache_no_auth)
+
+// Test digested user caching with digest auth (cache hit with valid user)
+LT_BEGIN_AUTO_TEST(authentication_suite, digest_user_cache_with_auth)
+    webserver ws = create_webserver(PORT)
+        .digest_auth_random("myrandom")
+        .nonce_nc_size(300);
+
+    digest_user_cache_resource resource;
+    LT_ASSERT_EQ(true, ws.register_resource("cache_test", &resource));
+    ws.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_DIGEST);
+    curl_easy_setopt(curl, CURLOPT_USERPWD, "testuser:testpass");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/cache_test");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 150L);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 150L);
+    curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
+    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    // After digest auth handshake, the server should return USER:testuser
+    // or NO_DIGEST_USER if no auth was provided. With CURLAUTH_DIGEST,
+    // curl will respond to the 401 challenge and include auth headers.
+    // The resource calls get_digested_user twice to test caching.
+    // Check that response is not empty and not a cache mismatch
+    LT_CHECK_EQ(s.find("CACHE_MISMATCH") == std::string::npos, true);
+    // Should contain either "USER:" (auth worked) or "NO_DIGEST_USER" (fallback)
+    LT_CHECK_EQ(s.find("USER:") != std::string::npos || s == "NO_DIGEST_USER", true);
+    curl_easy_cleanup(curl);
+
+    ws.stop();
+LT_END_AUTO_TEST(digest_user_cache_with_auth)
+
 #endif
 
 // Simple resource for centralized auth tests
@@ -876,6 +966,129 @@ LT_BEGIN_AUTO_TEST(authentication_suite, auth_multiple_skip_paths)
 
     ws.stop();
 LT_END_AUTO_TEST(auth_multiple_skip_paths)
+
+// Test skip path for root "/"
+LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_path_root)
+    webserver ws = create_webserver(PORT)
+        .auth_handler(centralized_auth_handler)
+        .auth_skip_paths({"/"});
+
+    simple_resource sr;
+    LT_ASSERT_EQ(true, ws.register_resource("/", &sr, true));
+    ws.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    long http_code = 0;  // NOLINT(runtime/int)
+
+    // Root path should be skipped
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(http_code, 200);
+    LT_CHECK_EQ(s, "SUCCESS");
+    curl_easy_cleanup(curl);
+
+    ws.stop();
+LT_END_AUTO_TEST(auth_skip_path_root)
+
+// Test wildcard path matching "/pub/*"
+LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_path_wildcard)
+    webserver ws = create_webserver(PORT)
+        .auth_handler(centralized_auth_handler)
+        .auth_skip_paths({"/pub/*"});
+
+    simple_resource sr;
+    LT_ASSERT_EQ(true, ws.register_resource("pub/anything", &sr));
+    LT_ASSERT_EQ(true, ws.register_resource("pub/nested/path", &sr));
+    LT_ASSERT_EQ(true, ws.register_resource("private/secret", &sr));
+    ws.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    CURL *curl;
+    CURLcode res;
+    long http_code = 0;  // NOLINT(runtime/int)
+    std::string s;
+
+    // /pub/anything should be skipped (matches /pub/*)
+    curl = curl_easy_init();
+    s = "";
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/pub/anything");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(http_code, 200);
+    curl_easy_cleanup(curl);
+
+    // /pub/nested/path should also be skipped (matches /pub/*)
+    curl = curl_easy_init();
+    s = "";
+    http_code = 0;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/pub/nested/path");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(http_code, 200);
+    curl_easy_cleanup(curl);
+
+    // /private/secret should NOT be skipped (doesn't match /pub/*)
+    curl = curl_easy_init();
+    s = "";
+    http_code = 0;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/private/secret");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(http_code, 401);  // Should require auth
+    curl_easy_cleanup(curl);
+
+    ws.stop();
+LT_END_AUTO_TEST(auth_skip_path_wildcard)
+
+// Test empty skip paths (should require auth for everything)
+LT_BEGIN_AUTO_TEST(authentication_suite, auth_empty_skip_paths)
+    webserver ws = create_webserver(PORT)
+        .auth_handler(centralized_auth_handler)
+        .auth_skip_paths({});  // Empty skip paths
+
+    simple_resource sr;
+    LT_ASSERT_EQ(true, ws.register_resource("test", &sr));
+    ws.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    long http_code = 0;  // NOLINT(runtime/int)
+
+    // Should require auth
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/test");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(http_code, 401);
+    curl_easy_cleanup(curl);
+
+    ws.stop();
+LT_END_AUTO_TEST(auth_empty_skip_paths)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

@@ -58,11 +58,16 @@
 #include "httpserver/http_resource.hpp"
 #include "httpserver/http_response.hpp"
 #include "httpserver/http_utils.hpp"
+#include "httpserver/string_utilities.hpp"
 #include "httpserver/string_response.hpp"
 
 struct MHD_Connection;
 
 #define _REENTRANT 1
+
+#ifdef HAVE_GNUTLS
+#include <gnutls/gnutls.h>
+#endif  // HAVE_GNUTLS
 
 #ifndef SOCK_CLOEXEC
 #define SOCK_CLOEXEC 02000000
@@ -425,11 +430,22 @@ void webserver::disallow_ip(const string& ip) {
 }
 
 #ifdef HAVE_GNUTLS
-int webserver::psk_cred_handler_func(gnutls_session_t session,
+// MHD_PskServerCredentialsCallback signature:
+// The 'cls' parameter is our webserver pointer (passed via MHD_OPTION)
+// Returns 0 on success, -1 on error
+// The psk output should be allocated with malloc() - MHD will free it
+int webserver::psk_cred_handler_func(void* cls,
+                                      struct MHD_Connection* connection,
                                       const char* username,
-                                      gnutls_datum_t* key) {
-    webserver* ws = static_cast<webserver*>(
-        gnutls_session_get_ptr(session));
+                                      void** psk,
+                                      size_t* psk_size) {
+    std::ignore = connection;  // Not needed - we get context from cls
+
+    webserver* ws = static_cast<webserver*>(cls);
+
+    // Initialize output to safe values
+    *psk = nullptr;
+    *psk_size = 0;
 
     if (ws == nullptr || ws->psk_cred_handler == nullptr) {
         return -1;
@@ -440,23 +456,28 @@ int webserver::psk_cred_handler_func(gnutls_session_t session,
         return -1;
     }
 
-    // Convert hex string to binary
+    // Validate hex string before allocating memory
     size_t psk_len = psk_hex.size() / 2;
-    key->data = static_cast<unsigned char*>(gnutls_malloc(psk_len));
-    if (key->data == nullptr) {
+    if (psk_len == 0 || (psk_hex.size() % 2 != 0) ||
+        !string_utilities::is_valid_hex(psk_hex)) {
         return -1;
     }
 
-    size_t output_size = psk_len;
-    int ret = gnutls_hex2bin(psk_hex.c_str(), psk_hex.size(),
-                             key->data, &output_size);
-    if (ret < 0) {
-        gnutls_free(key->data);
-        key->data = nullptr;
+    // Allocate with malloc - MHD will free this
+    unsigned char* psk_data = static_cast<unsigned char*>(malloc(psk_len));
+    if (psk_data == nullptr) {
         return -1;
     }
 
-    key->size = static_cast<unsigned int>(output_size);
+    // Convert hex string to binary
+    for (size_t i = 0; i < psk_len; i++) {
+        psk_data[i] = static_cast<unsigned char>(
+            (string_utilities::hex_char_to_val(psk_hex[i * 2]) << 4) |
+             string_utilities::hex_char_to_val(psk_hex[i * 2 + 1]));
+    }
+
+    *psk = psk_data;
+    *psk_size = psk_len;
     return 0;
 }
 #endif  // HAVE_GNUTLS

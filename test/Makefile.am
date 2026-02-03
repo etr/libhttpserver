@@ -26,7 +26,7 @@ LDADD += -lcurl
 
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/
 METASOURCES = AUTO
-check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource
+check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver
 
 MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
 
@@ -42,6 +42,8 @@ string_utilities_SOURCES = unit/string_utilities_test.cpp
 http_endpoint_SOURCES = unit/http_endpoint_test.cpp
 nodelay_SOURCES = integ/nodelay.cpp
 http_resource_SOURCES = unit/http_resource_test.cpp
+http_response_SOURCES = unit/http_response_test.cpp
+create_webserver_SOURCES = unit/create_webserver_test.cpp
 
 noinst_HEADERS = littletest.hpp
 AM_CXXFLAGS += -Wall -fPIC -Wno-overloaded-virtual
