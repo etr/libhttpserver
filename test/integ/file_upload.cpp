@@ -20,6 +20,12 @@
 
 #include <curl/curl.h>
 #include <sys/stat.h>
+#ifdef _WIN32
+#include <direct.h>
+#define MKDIR(path) _mkdir(path)
+#else
+#define MKDIR(path) mkdir(path, 0755)
+#endif
 #include <cassert>
 #include <cstddef>
 #include <cstdio>
@@ -891,7 +897,7 @@ LT_END_AUTO_TEST(file_cleanup_no_callback_deletes)
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_original_filename)
     // Use a subdirectory to avoid overwriting the test input file
     string upload_directory = "upload_test_dir";
-    mkdir(upload_directory.c_str(), 0755);
+    MKDIR(upload_directory.c_str());
 
     auto ws = std::make_unique<webserver>(create_webserver(PORT)
                        .file_upload_target(httpserver::FILE_UPLOAD_DISK_ONLY)
