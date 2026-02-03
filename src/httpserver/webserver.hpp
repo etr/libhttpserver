@@ -227,9 +227,12 @@ class webserver {
      MHD_Result complete_request(MHD_Connection* connection, struct details::modded_request* mr, const char* version, const char* method);
 
 #ifdef HAVE_GNUTLS
-     static int psk_cred_handler_func(gnutls_session_t session,
+     // MHD_PskServerCredentialsCallback signature
+     static int psk_cred_handler_func(void* cls,
+                                       struct MHD_Connection* connection,
                                        const char* username,
-                                       gnutls_datum_t* key);
+                                       void** psk,
+                                       size_t* psk_size);
 #endif  // HAVE_GNUTLS
 
      friend MHD_Result policy_callback(void *cls, const struct sockaddr* addr, socklen_t addrlen);
