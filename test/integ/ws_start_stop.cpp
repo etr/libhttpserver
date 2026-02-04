@@ -878,11 +878,14 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, https_webserver)
         .https_mem_cert(ROOT "/cert.pem");
     ok_resource ok;
     LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
-    bool started = ws.start(false);
-    if (!started) {
+    try {
+        ws.start(false);
+    } catch (const std::exception& e) {
         // SSL setup may fail in some environments, skip the test
         LT_CHECK_EQ(1, 1);
-    } else {
+        return;
+    }
+    {
         curl_global_init(CURL_GLOBAL_ALL);
         std::string s;
         CURL *curl = curl_easy_init();
@@ -910,28 +913,29 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, tls_session_getters)
         .https_mem_cert(ROOT "/cert.pem");
     tls_info_resource tls_info;
     LT_ASSERT_EQ(true, ws.register_resource("tls_info", &tls_info));
-    bool started = ws.start(false);
-    if (!started) {
+    try {
+        ws.start(false);
+    } catch (const std::exception& e) {
         // SSL setup may fail in some environments, skip the test
         LT_CHECK_EQ(1, 1);
-    } else {
-        curl_global_init(CURL_GLOBAL_ALL);
-        std::string s;
-        CURL *curl = curl_easy_init();
-        CURLcode res;
-        std::string url = "https://localhost:" + std::to_string(port) + "/tls_info";
-        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-        curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
-        res = curl_easy_perform(curl);
-        LT_ASSERT_EQ(res, 0);
-        LT_CHECK_EQ(s, "TLS_SESSION_PRESENT");
-        curl_easy_cleanup(curl);
-        ws.stop();
+        return;
     }
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    std::string url = "https://localhost:" + std::to_string(port) + "/tls_info";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "TLS_SESSION_PRESENT");
+    curl_easy_cleanup(curl);
+    ws.stop();
 LT_END_AUTO_TEST(tls_session_getters)
 
 // Resource that extracts client certificate info
@@ -972,27 +976,29 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_no_certificate)
         .https_mem_cert(ROOT "/cert.pem");
     client_cert_info_resource cert_info;
     LT_ASSERT_EQ(true, ws.register_resource("cert_info", &cert_info));
-    bool started = ws.start(false);
-    if (!started) {
+    try {
+        ws.start(false);
+    } catch (const std::exception& e) {
+        // SSL setup may fail in some environments, skip the test
         LT_CHECK_EQ(1, 1);
-    } else {
-        curl_global_init(CURL_GLOBAL_ALL);
-        std::string s;
-        CURL *curl = curl_easy_init();
-        CURLcode res;
-        std::string url = "https://localhost:" + std::to_string(port) + "/cert_info";
-        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-        curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
-        res = curl_easy_perform(curl);
-        LT_ASSERT_EQ(res, 0);
-        LT_CHECK_EQ(s, "NO_CLIENT_CERT");
-        curl_easy_cleanup(curl);
-        ws.stop();
+        return;
     }
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    std::string url = "https://localhost:" + std::to_string(port) + "/cert_info";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "NO_CLIENT_CERT");
+    curl_easy_cleanup(curl);
+    ws.stop();
 LT_END_AUTO_TEST(client_cert_no_certificate)
 
 // Test client certificate methods with mTLS (client sends certificate)
@@ -1005,33 +1011,34 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_with_certificate)
         .https_mem_trust(ROOT "/client_cert.pem");  // Trust the client cert as CA
     client_cert_info_resource cert_info;
     LT_ASSERT_EQ(true, ws.register_resource("cert_info", &cert_info));
-    bool started = ws.start(false);
-    if (!started) {
+    try {
+        ws.start(false);
+    } catch (const std::exception& e) {
+        // SSL setup may fail in some environments, skip the test
         LT_CHECK_EQ(1, 1);
-    } else {
-        curl_global_init(CURL_GLOBAL_ALL);
-        std::string s;
-        CURL *curl = curl_easy_init();
-        CURLcode res;
-        std::string url = "https://localhost:" + std::to_string(port) + "/cert_info";
-        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-        curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
-        curl_easy_setopt(curl, CURLOPT_SSLCERT, ROOT "/client_cert.pem");
-        curl_easy_setopt(curl, CURLOPT_SSLKEY, ROOT "/client_key.pem");
-        res = curl_easy_perform(curl);
-        if (res == 0) {
-            // Check that we got client cert info
-            LT_CHECK_NEQ(s.find("HAS_CLIENT_CERT"), std::string::npos);
-            LT_CHECK_NEQ(s.find("CN:Test Client"), std::string::npos);
-            LT_CHECK_NEQ(s.find("FP:"), std::string::npos);
-        }
-        curl_easy_cleanup(curl);
-        ws.stop();
+        return;
     }
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    std::string url = "https://localhost:" + std::to_string(port) + "/cert_info";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+    curl_easy_setopt(curl, CURLOPT_SSLCERT, ROOT "/client_cert.pem");
+    curl_easy_setopt(curl, CURLOPT_SSLKEY, ROOT "/client_key.pem");
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    // Check that we got client cert info
+    LT_CHECK_NEQ(s.find("HAS_CLIENT_CERT"), std::string::npos);
+    LT_CHECK_NEQ(s.find("CN:Test Client"), std::string::npos);
+    LT_CHECK_NEQ(s.find("FP:"), std::string::npos);
+    curl_easy_cleanup(curl);
+    ws.stop();
 LT_END_AUTO_TEST(client_cert_with_certificate)
 
 // Test client certificate DN extraction
@@ -1044,31 +1051,32 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_dn_extraction)
         .https_mem_trust(ROOT "/client_cert.pem");
     client_cert_info_resource cert_info;
     LT_ASSERT_EQ(true, ws.register_resource("cert_info", &cert_info));
-    bool started = ws.start(false);
-    if (!started) {
+    try {
+        ws.start(false);
+    } catch (const std::exception& e) {
+        // SSL setup may fail in some environments, skip the test
         LT_CHECK_EQ(1, 1);
-    } else {
-        curl_global_init(CURL_GLOBAL_ALL);
-        std::string s;
-        CURL *curl = curl_easy_init();
-        CURLcode res;
-        std::string url = "https://localhost:" + std::to_string(port) + "/cert_info";
-        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-        curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
-        curl_easy_setopt(curl, CURLOPT_SSLCERT, ROOT "/client_cert.pem");
-        curl_easy_setopt(curl, CURLOPT_SSLKEY, ROOT "/client_key.pem");
-        res = curl_easy_perform(curl);
-        if (res == 0) {
-            // Check DN contains expected organization
-            LT_CHECK_NEQ(s.find("O=Test Org"), std::string::npos);
-        }
-        curl_easy_cleanup(curl);
-        ws.stop();
+        return;
     }
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    std::string url = "https://localhost:" + std::to_string(port) + "/cert_info";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+    curl_easy_setopt(curl, CURLOPT_SSLCERT, ROOT "/client_cert.pem");
+    curl_easy_setopt(curl, CURLOPT_SSLKEY, ROOT "/client_key.pem");
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    // Check DN contains expected organization
+    LT_CHECK_NEQ(s.find("O=Test Org"), std::string::npos);
+    curl_easy_cleanup(curl);
+    ws.stop();
 LT_END_AUTO_TEST(client_cert_dn_extraction)
 
 // Test client certificate fingerprint generation
@@ -1081,38 +1089,37 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_fingerprint)
         .https_mem_trust(ROOT "/client_cert.pem");
     client_cert_info_resource cert_info;
     LT_ASSERT_EQ(true, ws.register_resource("cert_info", &cert_info));
-    bool started = ws.start(false);
-    if (!started) {
+    try {
+        ws.start(false);
+    } catch (const std::exception& e) {
+        // SSL setup may fail in some environments, skip the test
         LT_CHECK_EQ(1, 1);
-    } else {
-        curl_global_init(CURL_GLOBAL_ALL);
-        std::string s;
-        CURL *curl = curl_easy_init();
-        CURLcode res;
-        std::string url = "https://localhost:" + std::to_string(port) + "/cert_info";
-        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-        curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
-        curl_easy_setopt(curl, CURLOPT_SSLCERT, ROOT "/client_cert.pem");
-        curl_easy_setopt(curl, CURLOPT_SSLKEY, ROOT "/client_key.pem");
-        res = curl_easy_perform(curl);
-        if (res == 0) {
-            // Fingerprint should be 64 hex characters (32 bytes SHA-256)
-            size_t fp_pos = s.find("FP:");
-            if (fp_pos != std::string::npos) {
-                size_t fp_end = s.find("|", fp_pos);
-                if (fp_end != std::string::npos) {
-                    std::string fp = s.substr(fp_pos + 3, fp_end - fp_pos - 3);
-                    LT_CHECK_EQ(fp.length(), 64u);
-                }
-            }
-        }
-        curl_easy_cleanup(curl);
-        ws.stop();
+        return;
     }
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    std::string url = "https://localhost:" + std::to_string(port) + "/cert_info";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+    curl_easy_setopt(curl, CURLOPT_SSLCERT, ROOT "/client_cert.pem");
+    curl_easy_setopt(curl, CURLOPT_SSLKEY, ROOT "/client_key.pem");
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    // Fingerprint should be 64 hex characters (32 bytes SHA-256)
+    size_t fp_pos = s.find("FP:");
+    LT_ASSERT_NEQ(fp_pos, std::string::npos);
+    size_t fp_end = s.find("|", fp_pos);
+    LT_ASSERT_NEQ(fp_end, std::string::npos);
+    std::string fp = s.substr(fp_pos + 3, fp_end - fp_pos - 3);
+    LT_CHECK_EQ(fp.length(), 64u);
+    curl_easy_cleanup(curl);
+    ws.stop();
 LT_END_AUTO_TEST(client_cert_fingerprint)
 
 // Test SNI callback configuration
