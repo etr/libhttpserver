@@ -3251,6 +3251,61 @@ LT_BEGIN_AUTO_TEST(basic_suite, large_multipart_form_field)
     ws2.stop();
 LT_END_AUTO_TEST(large_multipart_form_field)
 
+#ifdef HAVE_GNUTLS
+// Resource that tests client certificate methods on non-TLS requests
+class client_cert_non_tls_resource : public http_resource {
+ public:
+    shared_ptr<http_response> render_GET(const http_request& req) {
+        std::string result;
+        // All these should return false/empty since this is not a TLS connection
+        result += "has_tls_session:" + std::string(req.has_tls_session() ? "yes" : "no") + ";";
+        result += "has_client_cert:" + std::string(req.has_client_certificate() ? "yes" : "no") + ";";
+        result += "dn:" + req.get_client_cert_dn() + ";";
+        result += "issuer:" + req.get_client_cert_issuer_dn() + ";";
+        result += "cn:" + req.get_client_cert_cn() + ";";
+        result += "verified:" + std::string(req.is_client_cert_verified() ? "yes" : "no") + ";";
+        result += "fingerprint:" + req.get_client_cert_fingerprint_sha256() + ";";
+        result += "not_before:" + std::to_string(req.get_client_cert_not_before()) + ";";
+        result += "not_after:" + std::to_string(req.get_client_cert_not_after());
+        return std::make_shared<string_response>(result, 200, "text/plain");
+    }
+};
+
+// Test that client certificate methods return appropriate values for non-TLS requests
+LT_BEGIN_AUTO_TEST(basic_suite, client_cert_methods_non_tls)
+    webserver ws = create_webserver(PORT + 79);
+    client_cert_non_tls_resource ccnr;
+    ws.register_resource("/cert_test", &ccnr);
+    ws.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    std::string url = "http://localhost:" + std::to_string(PORT + 79) + "/cert_test";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+
+    // Verify all methods return false/empty for non-TLS
+    LT_CHECK_NEQ(s.find("has_tls_session:no"), std::string::npos);
+    LT_CHECK_NEQ(s.find("has_client_cert:no"), std::string::npos);
+    LT_CHECK_NEQ(s.find("dn:;"), std::string::npos);
+    LT_CHECK_NEQ(s.find("issuer:;"), std::string::npos);
+    LT_CHECK_NEQ(s.find("cn:;"), std::string::npos);
+    LT_CHECK_NEQ(s.find("verified:no"), std::string::npos);
+    LT_CHECK_NEQ(s.find("fingerprint:;"), std::string::npos);
+    LT_CHECK_NEQ(s.find("not_before:-1"), std::string::npos);
+    LT_CHECK_NEQ(s.find("not_after:-1"), std::string::npos);
+
+    curl_easy_cleanup(curl);
+    ws.stop();
+LT_END_AUTO_TEST(client_cert_methods_non_tls)
+#endif  // HAVE_GNUTLS
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()
