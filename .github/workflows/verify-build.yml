@@ -571,19 +571,22 @@ jobs:
         tar -xzf libmicrohttpd-0.9.77.tar.gz
         mv libmicrohttpd-0.9.77 libmicrohttpd-0.9.77-${{ matrix.build-type }}
         cd libmicrohttpd-0.9.77-${{ matrix.build-type }}
+        mkdir -p ${{ github.workspace }}/arm-sysroot
         if [ "${{ matrix.build-type }}" = "arm32" ]; then
-          ./configure --host=arm-linux-gnueabihf --disable-examples --disable-doc
+          ./configure --host=arm-linux-gnueabihf --prefix=${{ github.workspace }}/arm-sysroot --disable-examples --disable-doc
         else
-          ./configure --host=aarch64-linux-gnu --disable-examples --disable-doc
+          ./configure --host=aarch64-linux-gnu --prefix=${{ github.workspace }}/arm-sysroot --disable-examples --disable-doc
         fi
         make
+        make install
       if: ${{ matrix.compiler-family == 'arm-cross' && steps.cache-libmicrohttpd-arm.outputs.cache-hit != 'true' }}
 
-    - name: Install cross-compiled libmicrohttpd
+    - name: Install cross-compiled libmicrohttpd from cache
       run: |
         cd libmicrohttpd-0.9.77-${{ matrix.build-type }}
-        sudo make install
-      if: ${{ matrix.compiler-family == 'arm-cross' }}
+        mkdir -p ${{ github.workspace }}/arm-sysroot
+        make install
+      if: ${{ matrix.compiler-family == 'arm-cross' && steps.cache-libmicrohttpd-arm.outputs.cache-hit == 'true' }}
 
     - name: Refresh links to shared libs
       run: sudo ldconfig ;
@@ -612,6 +615,9 @@ jobs:
         mkdir build ;
         cd build ;
         if [ "${{ matrix.compiler-family }}" = "arm-cross" ]; then
+          export CPPFLAGS="-I${{ github.workspace }}/arm-sysroot/include"
+          export LDFLAGS="-L${{ github.workspace }}/arm-sysroot/lib"
+          export PKG_CONFIG_PATH="${{ github.workspace }}/arm-sysroot/lib/pkgconfig"
           if [ "${{ matrix.build-type }}" = "arm32" ]; then
             ../configure --host=arm-linux-gnueabihf --disable-fastopen;
           else
