@@ -1065,6 +1065,124 @@ To test the above example:
 
 You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/centralized_authentication.cpp).
 
+### Using Client Certificate Authentication (mTLS)
+Client certificate authentication (also known as mutual TLS or mTLS) provides strong authentication by requiring clients to present X.509 certificates during the TLS handshake. This is the most secure authentication method as it verifies client identity cryptographically.
+
+To enable client certificate authentication, configure your webserver with:
+1. `use_ssl()` - Enable TLS
+2. `https_mem_key()` and `https_mem_cert()` - Server certificate
+3. `https_mem_trust()` - CA certificate(s) to verify client certificates
+
+```cpp
+    #include <httpserver.hpp>
+
+    using namespace httpserver;
+
+    class secure_resource : public http_resource {
+    public:
+        std::shared_ptr<http_response> render_GET(const http_request& req) {
+            // Check if client provided a certificate
+            if (!req.has_client_certificate()) {
+                return std::make_shared<string_response>(
+                    "Client certificate required", 401, "text/plain");
+            }
+
+            // Check if certificate is verified by our CA
+            if (!req.is_client_cert_verified()) {
+                return std::make_shared<string_response>(
+                    "Certificate not verified", 403, "text/plain");
+            }
+
+            // Extract certificate information
+            std::string cn = req.get_client_cert_cn();           // Common Name
+            std::string dn = req.get_client_cert_dn();           // Subject DN
+            std::string issuer = req.get_client_cert_issuer_dn(); // Issuer DN
+            std::string fingerprint = req.get_client_cert_fingerprint_sha256();
+            time_t not_before = req.get_client_cert_not_before();
+            time_t not_after = req.get_client_cert_not_after();
+
+            return std::make_shared<string_response>(
+                "Welcome, " + cn + "!", 200, "text/plain");
+        }
+    };
+
+    int main() {
+        webserver ws = create_webserver(8443)
+            .use_ssl()
+            .https_mem_key("server_key.pem")
+            .https_mem_cert("server_cert.pem")
+            .https_mem_trust("ca_cert.pem");  // CA for client certs
+
+        secure_resource sr;
+        ws.register_resource("/secure", &sr);
+        ws.start(true);
+
+        return 0;
+    }
+```
+
+Available client certificate methods (require GnuTLS support):
+- `has_client_certificate()` - Check if client presented a certificate
+- `get_client_cert_dn()` - Get the subject Distinguished Name
+- `get_client_cert_issuer_dn()` - Get the issuer Distinguished Name
+- `get_client_cert_cn()` - Get the Common Name from the subject
+- `is_client_cert_verified()` - Check if the certificate chain is verified
+- `get_client_cert_fingerprint_sha256()` - Get hex-encoded SHA-256 fingerprint
+- `get_client_cert_not_before()` - Get certificate validity start time
+- `get_client_cert_not_after()` - Get certificate validity end time
+
+To test with curl:
+
+    # With client certificate
+    curl -k --cert client_cert.pem --key client_key.pem https://localhost:8443/secure
+
+    # Without client certificate (will be rejected)
+    curl -k https://localhost:8443/secure
+
+You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/client_cert_auth.cpp).
+
+### Server Name Indication (SNI) Callback
+SNI allows a server to host multiple TLS certificates on a single IP address. The client indicates which hostname it's connecting to during the TLS handshake, and the server can select the appropriate certificate.
+
+To use SNI with libhttpserver, configure an SNI callback that returns the certificate/key pair for each server name:
+
+```cpp
+    #include <httpserver.hpp>
+    #include <map>
+
+    using namespace httpserver;
+
+    // Map of server names to cert/key pairs
+    std::map<std::string, std::pair<std::string, std::string>> certs;
+
+    // SNI callback - returns (cert_pem, key_pem) for the requested server name
+    std::pair<std::string, std::string> sni_callback(const std::string& server_name) {
+        auto it = certs.find(server_name);
+        if (it != certs.end()) {
+            return it->second;
+        }
+        return {"", ""};  // Use default certificate
+    }
+
+    int main() {
+        // Load certificates for different hostnames
+        certs["www.example.com"] = {load_file("www_cert.pem"), load_file("www_key.pem")};
+        certs["api.example.com"] = {load_file("api_cert.pem"), load_file("api_key.pem")};
+
+        webserver ws = create_webserver(443)
+            .use_ssl()
+            .https_mem_key("default_key.pem")    // Default certificate
+            .https_mem_cert("default_cert.pem")
+            .sni_callback(sni_callback);         // SNI callback
+
+        // ... register resources and start
+        ws.start(true);
+        return 0;
+    }
+```
+
+Note: SNI support requires libmicrohttpd 0.9.71 or later compiled with GnuTLS.
+
 [Back to TOC](#table-of-contents)
 
 ## HTTP Utils

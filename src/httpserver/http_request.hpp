@@ -239,6 +239,54 @@ class http_request {
       * @return the TLS session
       **/
       gnutls_session_t get_tls_session() const;
+
+     /**
+      * Check if a client certificate is present in the TLS session.
+      * @return true if client certificate is present
+      **/
+      bool has_client_certificate() const;
+
+     /**
+      * Get the Subject Distinguished Name from the client certificate.
+      * @return the subject DN as a string, empty if not available
+      **/
+      std::string get_client_cert_dn() const;
+
+     /**
+      * Get the Issuer Distinguished Name from the client certificate.
+      * @return the issuer DN as a string, empty if not available
+      **/
+      std::string get_client_cert_issuer_dn() const;
+
+     /**
+      * Get the Common Name (CN) from the client certificate subject.
+      * @return the CN as a string, empty if not available
+      **/
+      std::string get_client_cert_cn() const;
+
+     /**
+      * Check if the client certificate chain has been verified.
+      * @return true if certificate verification passed
+      **/
+      bool is_client_cert_verified() const;
+
+     /**
+      * Get the SHA-256 fingerprint of the client certificate.
+      * @return hex-encoded SHA-256 fingerprint, empty if not available
+      **/
+      std::string get_client_cert_fingerprint_sha256() const;
+
+     /**
+      * Get the not-before (validity start) time of the client certificate.
+      * @return validity start time as time_t, -1 if not available
+      **/
+      time_t get_client_cert_not_before() const;
+
+     /**
+      * Get the not-after (validity end) time of the client certificate.
+      * @return validity end time as time_t, -1 if not available
+      **/
+      time_t get_client_cert_not_after() const;
 #endif  // HAVE_GNUTLS
 
      /**
