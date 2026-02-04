@@ -334,6 +334,30 @@ jobs:
             debug: nodebug
             coverage: nocoverage
             linking: dynamic
+          # ARM 32-bit cross-compilation (ARMv7 hard-float)
+          - test-group: cross-compile
+            os: ubuntu-latest
+            os-type: ubuntu
+            build-type: arm32
+            compiler-family: arm-cross
+            c-compiler: arm-linux-gnueabihf-gcc
+            cc-compiler: arm-linux-gnueabihf-g++
+            debug: nodebug
+            coverage: nocoverage
+            linking: dynamic
+            shell: bash
+          # ARM 64-bit cross-compilation (AArch64)
+          - test-group: cross-compile
+            os: ubuntu-latest
+            os-type: ubuntu
+            build-type: arm64
+            compiler-family: arm-cross
+            c-compiler: aarch64-linux-gnu-gcc
+            cc-compiler: aarch64-linux-gnu-g++
+            debug: nodebug
+            coverage: nocoverage
+            linking: dynamic
+            shell: bash
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -385,6 +409,16 @@ jobs:
     - name: Install optional gcc if needed
       run: sudo apt-get install ${{ matrix.cc-compiler }}
       if: ${{ matrix.compiler-family == 'gcc' && matrix.os-type == 'ubuntu' }}
+
+    - name: Install ARM cross-compilation toolchain
+      run: |
+        sudo apt-get update
+        if [ "${{ matrix.build-type }}" = "arm32" ]; then
+          sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
+        elif [ "${{ matrix.build-type }}" = "arm64" ]; then
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+        fi
+      if: ${{ matrix.compiler-family == 'arm-cross' }}
 
     - name: Install valgrind if needed
       run: sudo apt-get install valgrind
@@ -479,7 +513,7 @@ jobs:
       with:
         path: libmicrohttpd-0.9.77
         key: ${{ matrix.os }}-${{ matrix.c-compiler }}-libmicrohttpd-0.9.77-pre-built
-      if: ${{ matrix.os-type != 'windows' && matrix.build-type != 'no-dauth' }}
+      if: ${{ matrix.os-type != 'windows' && matrix.build-type != 'no-dauth' && matrix.compiler-family != 'arm-cross' }}
 
     - name: Build libmicrohttpd dependency (if not cached)
       run: |
@@ -488,7 +522,7 @@ jobs:
         cd libmicrohttpd-0.9.77 ;
         ./configure --disable-examples ;
         make ;
-      if: ${{ matrix.os-type != 'windows' && matrix.build-type != 'no-dauth' && steps.cache-libmicrohttpd.outputs.cache-hit != 'true' }}
+      if: ${{ matrix.os-type != 'windows' && matrix.build-type != 'no-dauth' && matrix.compiler-family != 'arm-cross' && steps.cache-libmicrohttpd.outputs.cache-hit != 'true' }}
 
     - name: Build libmicrohttpd without digest auth (no-dauth test)
       run: |
@@ -501,7 +535,7 @@ jobs:
 
     - name: Install libmicrohttpd
       run: cd libmicrohttpd-0.9.77 ; sudo make install ;
-      if: ${{ matrix.os-type != 'windows' }}
+      if: ${{ matrix.os-type != 'windows' && matrix.compiler-family != 'arm-cross' }}
 
     - name: Verify digest auth is disabled (no-dauth test)
       run: |
@@ -522,7 +556,35 @@ jobs:
         ./configure --disable-examples --enable-poll=no
         make
         make install
-      
+
+    - name: Fetch libmicrohttpd from cache (ARM cross-compile)
+      id: cache-libmicrohttpd-arm
+      uses: actions/cache@v4
+      with:
+        path: libmicrohttpd-0.9.77-${{ matrix.build-type }}
+        key: ${{ matrix.os }}-${{ matrix.build-type }}-libmicrohttpd-0.9.77-cross-compiled
+      if: ${{ matrix.compiler-family == 'arm-cross' }}
+
+    - name: Cross-compile libmicrohttpd for ARM
+      run: |
+        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.77.tar.gz -o libmicrohttpd-0.9.77.tar.gz
+        tar -xzf libmicrohttpd-0.9.77.tar.gz
+        mv libmicrohttpd-0.9.77 libmicrohttpd-0.9.77-${{ matrix.build-type }}
+        cd libmicrohttpd-0.9.77-${{ matrix.build-type }}
+        if [ "${{ matrix.build-type }}" = "arm32" ]; then
+          ./configure --host=arm-linux-gnueabihf --disable-examples --disable-doc
+        else
+          ./configure --host=aarch64-linux-gnu --disable-examples --disable-doc
+        fi
+        make
+      if: ${{ matrix.compiler-family == 'arm-cross' && steps.cache-libmicrohttpd-arm.outputs.cache-hit != 'true' }}
+
+    - name: Install cross-compiled libmicrohttpd
+      run: |
+        cd libmicrohttpd-0.9.77-${{ matrix.build-type }}
+        sudo make install
+      if: ${{ matrix.compiler-family == 'arm-cross' }}
+
     - name: Refresh links to shared libs
       run: sudo ldconfig ;
       if: ${{ matrix.os-type == 'ubuntu' }}
@@ -549,7 +611,13 @@ jobs:
         ./bootstrap ;
         mkdir build ;
         cd build ;
-        if [ "$LINKING" = "static" ]; then
+        if [ "${{ matrix.compiler-family }}" = "arm-cross" ]; then
+          if [ "${{ matrix.build-type }}" = "arm32" ]; then
+            ../configure --host=arm-linux-gnueabihf --disable-fastopen;
+          else
+            ../configure --host=aarch64-linux-gnu --disable-fastopen;
+          fi
+        elif [ "$LINKING" = "static" ]; then
           ../configure --enable-static --disable-fastopen;
         elif [ "$DEBUG" = "debug" ] && [ "$COVERAGE" = "coverage" ]; then
           ../configure --enable-debug --enable-coverage --disable-shared --disable-fastopen;
@@ -611,14 +679,14 @@ jobs:
       run: |
         cd build ;
         make check;
-      if: ${{ matrix.build-type != 'iwyu' }}
-      
+      if: ${{ matrix.build-type != 'iwyu' && matrix.compiler-family != 'arm-cross' }}
+
     - name: Print tests results
       shell: bash
       run: |
         cd build ;
         cat test/test-suite.log ;
-      if: ${{ failure() && matrix.build-type != 'iwyu' }}
+      if: ${{ failure() && matrix.build-type != 'iwyu' && matrix.compiler-family != 'arm-cross' }}
 
     - name: Run Valgrind checks
       run: |
@@ -639,7 +707,7 @@ jobs:
       run: |
         cd src/ ;
         cppcheck --error-exitcode=1 . ;
-      if: ${{ matrix.os-type == 'ubuntu' }}
+      if: ${{ matrix.os-type == 'ubuntu' && matrix.compiler-family != 'arm-cross' }}
 
     - name: Run performance tests (select)
       run: |
