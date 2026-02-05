@@ -389,6 +389,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
 * _.https_mem_trust(**const std::string&** filename):_ String representing the path to a file containing the CA certificate to be used by the HTTPS daemon to authenticate and trust clients certificates. The presence of this option activates the request of certificate to the client. The request to the client is marked optional, and it is the responsibility of the server to check the presence of the certificate if needed. Note that most browsers will only present a client certificate only if they have one matching the specified CA, not sending any certificate otherwise.
 * _.https_priorities(**const std::string&** priority_string):_ SSL/TLS protocol version and ciphers. Must be followed by a string specifying the SSL/TLS protocol versions and ciphers that are acceptable for the application. The string is passed unchanged to gnutls_priority_init. If this option is not specified, `"NORMAL"` is used.
 * _.psk_cred_handler(**psk_cred_handler_callback** handler):_ Sets a callback function for TLS-PSK (Pre-Shared Key) authentication. The callback receives a username and should return the corresponding hex-encoded PSK, or an empty string if the user is unknown. This option requires `use_ssl()`, `cred_type(http::http_utils::PSK)`, and an appropriate `https_priorities()` string that enables PSK cipher suites. PSK authentication allows TLS without certificates by using a shared secret key.
+* _.sni_callback(**sni_callback_t** callback):_ Sets a callback function for SNI (Server Name Indication) support. The callback receives the server name requested by the client and should return a `std::pair<std::string, std::string>` containing the PEM-encoded certificate and key for that server name. Return empty strings to use the default certificate. Requires libmicrohttpd 0.9.71+ with GnuTLS.
 
 #### Minimal example using HTTPS
 ```cpp
@@ -712,8 +713,16 @@ The `http_request` class has a set of methods you will have access to when imple
 * _**const std::string** get_pass() **const**:_ Returns the `password` as self-identified through basic authentication. The content of the password header will be parsed only if basic authentication is enabled on the server (enabled by default).
 * _**const std::string** get_digested_user() **const**:_ Returns the `digested user` as self-identified through digest authentication. The content of the user header will be parsed only if digest authentication is enabled on the server (enabled by default).
 * _**bool** check_digest_auth(**const std::string&** realm, **const std::string&** password, **int** nonce_timeout, **bool*** reload_nonce) **const**:_ Allows to check the validity of the authentication token sent through digest authentication (if the provided values in the WWW-Authenticate header are valid and sound according to RFC2716). Takes in input the `realm` of validity of the authentication, the `password` as known to the server to compare against, the `nonce_timeout` to indicate how long the nonce is valid and `reload_nonce` a boolean that will be set by the method to indicate a nonce being reloaded. The method returns `true` if the authentication is valid, `false` otherwise.
-* _**bool** has_tls_session() **const**:_ Tests if there is am underlying TLS state of the current request.
+* _**bool** has_tls_session() **const**:_ Tests if there is an underlying TLS state of the current request.
 * _**gnutls_session_t** get_tls_session() **const**:_ Returns the underlying TLS state of the current request for inspection. (It is an error to call this if the state does not exist.)
+* _**bool** has_client_certificate() **const**:_ Returns `true` if the client presented a certificate during the TLS handshake. Requires GnuTLS support.
+* _**std::string** get_client_cert_dn() **const**:_ Returns the Distinguished Name (DN) from the client certificate's subject field (e.g., "CN=John Doe,O=Example Corp"). Returns empty string if no client certificate.
+* _**std::string** get_client_cert_issuer_dn() **const**:_ Returns the Distinguished Name of the certificate issuer. Returns empty string if no client certificate.
+* _**std::string** get_client_cert_cn() **const**:_ Returns the Common Name (CN) from the client certificate's subject. Returns empty string if no client certificate or no CN field.
+* _**bool** is_client_cert_verified() **const**:_ Returns `true` if the client certificate was verified against the trust store configured via `https_mem_trust()`. Returns `false` if verification failed or no TLS session.
+* _**std::string** get_client_cert_fingerprint_sha256() **const**:_ Returns the SHA-256 fingerprint of the client certificate as a lowercase hex string (64 characters). Returns empty string if no client certificate.
+* _**time_t** get_client_cert_not_before() **const**:_ Returns the start of the certificate validity period. Returns -1 if no client certificate.
+* _**time_t** get_client_cert_not_after() **const**:_ Returns the end of the certificate validity period. Returns -1 if no client certificate.
 
 Details on the `http::file_info` structure.
 
