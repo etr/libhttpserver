@@ -31,6 +31,54 @@
 
 #ifdef HAVE_GNUTLS
 #include <gnutls/x509.h>
+
+// RAII wrapper for gnutls_x509_crt_t to ensure proper cleanup
+class scoped_x509_cert {
+ public:
+    scoped_x509_cert() : cert_(nullptr), valid_(false) {}
+
+    ~scoped_x509_cert() {
+        if (cert_ != nullptr) {
+            gnutls_x509_crt_deinit(cert_);
+        }
+    }
+
+    // Initialize from a TLS session's peer certificate
+    // Returns true if certificate was successfully loaded
+    bool init_from_session(gnutls_session_t session) {
+        unsigned int list_size = 0;
+        const gnutls_datum_t* cert_list = gnutls_certificate_get_peers(session, &list_size);
+
+        if (cert_list == nullptr || list_size == 0) {
+            return false;
+        }
+
+        if (gnutls_x509_crt_init(&cert_) != GNUTLS_E_SUCCESS) {
+            cert_ = nullptr;
+            return false;
+        }
+
+        if (gnutls_x509_crt_import(cert_, &cert_list[0], GNUTLS_X509_FMT_DER) != GNUTLS_E_SUCCESS) {
+            gnutls_x509_crt_deinit(cert_);
+            cert_ = nullptr;
+            return false;
+        }
+
+        valid_ = true;
+        return true;
+    }
+
+    bool is_valid() const { return valid_; }
+    gnutls_x509_crt_t get() const { return cert_; }
+
+    // Non-copyable
+    scoped_x509_cert(const scoped_x509_cert&) = delete;
+    scoped_x509_cert& operator=(const scoped_x509_cert&) = delete;
+
+ private:
+    gnutls_x509_crt_t cert_;
+    bool valid_;
+};
 #endif  // HAVE_GNUTLS
 
 namespace httpserver {
@@ -319,6 +367,10 @@ bool http_request::has_tls_session() const {
 gnutls_session_t http_request::get_tls_session() const {
     const MHD_ConnectionInfo * conninfo = MHD_get_connection_info(underlying_connection, MHD_CONNECTION_INFO_GNUTLS_SESSION);
 
+    if (conninfo == nullptr) {
+        return nullptr;
+    }
+
     return static_cast<gnutls_session_t>(conninfo->tls_session);
 }
 
@@ -335,34 +387,22 @@ bool http_request::has_client_certificate() const {
 }
 
 std::string http_request::get_client_cert_dn() const {
-    if (!has_client_certificate()) {
+    if (!has_tls_session()) {
         return "";
     }
 
-    gnutls_session_t session = get_tls_session();
-    unsigned int list_size = 0;
-    const gnutls_datum_t* cert_list = gnutls_certificate_get_peers(session, &list_size);
-
-    gnutls_x509_crt_t cert;
-    if (gnutls_x509_crt_init(&cert) != GNUTLS_E_SUCCESS) {
-        return "";
-    }
-
-    if (gnutls_x509_crt_import(cert, &cert_list[0], GNUTLS_X509_FMT_DER) != GNUTLS_E_SUCCESS) {
-        gnutls_x509_crt_deinit(cert);
+    scoped_x509_cert cert;
+    if (!cert.init_from_session(get_tls_session())) {
         return "";
     }
 
     size_t dn_size = 0;
-    gnutls_x509_crt_get_dn(cert, nullptr, &dn_size);
+    gnutls_x509_crt_get_dn(cert.get(), nullptr, &dn_size);
 
     std::string dn(dn_size, '\0');
-    if (gnutls_x509_crt_get_dn(cert, &dn[0], &dn_size) != GNUTLS_E_SUCCESS) {
-        gnutls_x509_crt_deinit(cert);
+    if (gnutls_x509_crt_get_dn(cert.get(), &dn[0], &dn_size) != GNUTLS_E_SUCCESS) {
         return "";
     }
-
-    gnutls_x509_crt_deinit(cert);
 
     // Remove trailing null if present
     if (!dn.empty() && dn.back() == '\0') {
@@ -373,34 +413,22 @@ std::string http_request::get_client_cert_dn() const {
 }
 
 std::string http_request::get_client_cert_issuer_dn() const {
-    if (!has_client_certificate()) {
+    if (!has_tls_session()) {
         return "";
     }
 
-    gnutls_session_t session = get_tls_session();
-    unsigned int list_size = 0;
-    const gnutls_datum_t* cert_list = gnutls_certificate_get_peers(session, &list_size);
-
-    gnutls_x509_crt_t cert;
-    if (gnutls_x509_crt_init(&cert) != GNUTLS_E_SUCCESS) {
-        return "";
-    }
-
-    if (gnutls_x509_crt_import(cert, &cert_list[0], GNUTLS_X509_FMT_DER) != GNUTLS_E_SUCCESS) {
-        gnutls_x509_crt_deinit(cert);
+    scoped_x509_cert cert;
+    if (!cert.init_from_session(get_tls_session())) {
         return "";
     }
 
     size_t dn_size = 0;
-    gnutls_x509_crt_get_issuer_dn(cert, nullptr, &dn_size);
+    gnutls_x509_crt_get_issuer_dn(cert.get(), nullptr, &dn_size);
 
     std::string dn(dn_size, '\0');
-    if (gnutls_x509_crt_get_issuer_dn(cert, &dn[0], &dn_size) != GNUTLS_E_SUCCESS) {
-        gnutls_x509_crt_deinit(cert);
+    if (gnutls_x509_crt_get_issuer_dn(cert.get(), &dn[0], &dn_size) != GNUTLS_E_SUCCESS) {
         return "";
     }
-
-    gnutls_x509_crt_deinit(cert);
 
     // Remove trailing null if present
     if (!dn.empty() && dn.back() == '\0') {
@@ -411,39 +439,26 @@ std::string http_request::get_client_cert_issuer_dn() const {
 }
 
 std::string http_request::get_client_cert_cn() const {
-    if (!has_client_certificate()) {
+    if (!has_tls_session()) {
         return "";
     }
 
-    gnutls_session_t session = get_tls_session();
-    unsigned int list_size = 0;
-    const gnutls_datum_t* cert_list = gnutls_certificate_get_peers(session, &list_size);
-
-    gnutls_x509_crt_t cert;
-    if (gnutls_x509_crt_init(&cert) != GNUTLS_E_SUCCESS) {
-        return "";
-    }
-
-    if (gnutls_x509_crt_import(cert, &cert_list[0], GNUTLS_X509_FMT_DER) != GNUTLS_E_SUCCESS) {
-        gnutls_x509_crt_deinit(cert);
+    scoped_x509_cert cert;
+    if (!cert.init_from_session(get_tls_session())) {
         return "";
     }
 
     size_t cn_size = 0;
-    gnutls_x509_crt_get_dn_by_oid(cert, GNUTLS_OID_X520_COMMON_NAME, 0, 0, nullptr, &cn_size);
+    gnutls_x509_crt_get_dn_by_oid(cert.get(), GNUTLS_OID_X520_COMMON_NAME, 0, 0, nullptr, &cn_size);
 
     if (cn_size == 0) {
-        gnutls_x509_crt_deinit(cert);
         return "";
     }
 
     std::string cn(cn_size, '\0');
-    if (gnutls_x509_crt_get_dn_by_oid(cert, GNUTLS_OID_X520_COMMON_NAME, 0, 0, &cn[0], &cn_size) != GNUTLS_E_SUCCESS) {
-        gnutls_x509_crt_deinit(cert);
+    if (gnutls_x509_crt_get_dn_by_oid(cert.get(), GNUTLS_OID_X520_COMMON_NAME, 0, 0, &cn[0], &cn_size) != GNUTLS_E_SUCCESS) {
         return "";
     }
-
-    gnutls_x509_crt_deinit(cert);
 
     // Remove trailing null if present
     if (!cn.empty() && cn.back() == '\0') {
@@ -469,33 +484,21 @@ bool http_request::is_client_cert_verified() const {
 }
 
 std::string http_request::get_client_cert_fingerprint_sha256() const {
-    if (!has_client_certificate()) {
+    if (!has_tls_session()) {
         return "";
     }
 
-    gnutls_session_t session = get_tls_session();
-    unsigned int list_size = 0;
-    const gnutls_datum_t* cert_list = gnutls_certificate_get_peers(session, &list_size);
-
-    gnutls_x509_crt_t cert;
-    if (gnutls_x509_crt_init(&cert) != GNUTLS_E_SUCCESS) {
-        return "";
-    }
-
-    if (gnutls_x509_crt_import(cert, &cert_list[0], GNUTLS_X509_FMT_DER) != GNUTLS_E_SUCCESS) {
-        gnutls_x509_crt_deinit(cert);
+    scoped_x509_cert cert;
+    if (!cert.init_from_session(get_tls_session())) {
         return "";
     }
 
     unsigned char fingerprint[32];  // SHA-256 is 32 bytes
     size_t fingerprint_size = sizeof(fingerprint);
 
-    if (gnutls_x509_crt_get_fingerprint(cert, GNUTLS_DIG_SHA256, fingerprint, &fingerprint_size) != GNUTLS_E_SUCCESS) {
-        gnutls_x509_crt_deinit(cert);
+    if (gnutls_x509_crt_get_fingerprint(cert.get(), GNUTLS_DIG_SHA256, fingerprint, &fingerprint_size) != GNUTLS_E_SUCCESS) {
         return "";
     }
-
-    gnutls_x509_crt_deinit(cert);
 
     // Convert to hex string
     std::string hex_fingerprint;
@@ -510,53 +513,29 @@ std::string http_request::get_client_cert_fingerprint_sha256() const {
 }
 
 time_t http_request::get_client_cert_not_before() const {
-    if (!has_client_certificate()) {
+    if (!has_tls_session()) {
         return -1;
     }
 
-    gnutls_session_t session = get_tls_session();
-    unsigned int list_size = 0;
-    const gnutls_datum_t* cert_list = gnutls_certificate_get_peers(session, &list_size);
-
-    gnutls_x509_crt_t cert;
-    if (gnutls_x509_crt_init(&cert) != GNUTLS_E_SUCCESS) {
+    scoped_x509_cert cert;
+    if (!cert.init_from_session(get_tls_session())) {
         return -1;
     }
 
-    if (gnutls_x509_crt_import(cert, &cert_list[0], GNUTLS_X509_FMT_DER) != GNUTLS_E_SUCCESS) {
-        gnutls_x509_crt_deinit(cert);
-        return -1;
-    }
-
-    time_t not_before = gnutls_x509_crt_get_activation_time(cert);
-    gnutls_x509_crt_deinit(cert);
-
-    return not_before;
+    return gnutls_x509_crt_get_activation_time(cert.get());
 }
 
 time_t http_request::get_client_cert_not_after() const {
-    if (!has_client_certificate()) {
+    if (!has_tls_session()) {
         return -1;
     }
 
-    gnutls_session_t session = get_tls_session();
-    unsigned int list_size = 0;
-    const gnutls_datum_t* cert_list = gnutls_certificate_get_peers(session, &list_size);
-
-    gnutls_x509_crt_t cert;
-    if (gnutls_x509_crt_init(&cert) != GNUTLS_E_SUCCESS) {
+    scoped_x509_cert cert;
+    if (!cert.init_from_session(get_tls_session())) {
         return -1;
     }
 
-    if (gnutls_x509_crt_import(cert, &cert_list[0], GNUTLS_X509_FMT_DER) != GNUTLS_E_SUCCESS) {
-        gnutls_x509_crt_deinit(cert);
-        return -1;
-    }
-
-    time_t not_after = gnutls_x509_crt_get_expiration_time(cert);
-    gnutls_x509_crt_deinit(cert);
-
-    return not_after;
+    return gnutls_x509_crt_get_expiration_time(cert.get());
 }
 #endif  // HAVE_GNUTLS
 

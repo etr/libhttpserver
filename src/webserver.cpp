@@ -551,9 +551,17 @@ int webserver::sni_cert_callback_func(void* cls,
         return -1;
     }
 
-    // Cache the credentials
+    // Cache the credentials with double-check to avoid race condition
     {
         std::unique_lock lock(ws->sni_credentials_mutex);
+        // Re-check after acquiring exclusive lock - another thread may have inserted
+        auto it = ws->sni_credentials_cache.find(name);
+        if (it != ws->sni_credentials_cache.end()) {
+            // Another thread already cached credentials, use theirs and free ours
+            gnutls_certificate_free_credentials(new_creds);
+            *creds = it->second;
+            return 0;
+        }
         ws->sni_credentials_cache[name] = new_creds;
     }
 
