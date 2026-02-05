@@ -1134,6 +1134,86 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_fingerprint)
     ws.stop();
 LT_END_AUTO_TEST(client_cert_fingerprint)
 
+// Test client certificate without CN field (covers cn_size == 0 branch)
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_no_cn)
+    int port = PORT + 51;
+    httpserver::webserver ws = httpserver::create_webserver(port)
+        .use_ssl()
+        .https_mem_key(ROOT "/key.pem")
+        .https_mem_cert(ROOT "/cert.pem")
+        .https_mem_trust(ROOT "/client_cert_no_cn.pem");
+    client_cert_info_resource cert_info;
+    LT_ASSERT_EQ(true, ws.register_resource("cert_info", &cert_info));
+    try {
+        ws.start(false);
+    } catch (const std::exception& e) {
+        LT_CHECK_EQ(1, 1);
+        return;
+    }
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    std::string url = "https://localhost:" + std::to_string(port) + "/cert_info";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+    curl_easy_setopt(curl, CURLOPT_SSLCERT, ROOT "/client_cert_no_cn.pem");
+    curl_easy_setopt(curl, CURLOPT_SSLKEY, ROOT "/client_key_no_cn.pem");
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    // Certificate has no CN, so CN should be empty but other fields should work
+    LT_CHECK_NEQ(s.find("HAS_CLIENT_CERT"), std::string::npos);
+    LT_CHECK_NEQ(s.find("CN:"), std::string::npos);  // CN field present but empty
+    // DN should contain "O=Test Org Without CN"
+    LT_CHECK_NEQ(s.find("Test Org Without CN"), std::string::npos);
+    curl_easy_cleanup(curl);
+    ws.stop();
+LT_END_AUTO_TEST(client_cert_no_cn)
+
+// Test client certificate that fails verification (covers status != 0 branch)
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_untrusted)
+    int port = PORT + 52;
+    // Don't add untrusted cert to trust store - verification should fail
+    httpserver::webserver ws = httpserver::create_webserver(port)
+        .use_ssl()
+        .https_mem_key(ROOT "/key.pem")
+        .https_mem_cert(ROOT "/cert.pem")
+        .https_mem_trust(ROOT "/client_cert.pem");  // Only trust the original client cert
+    client_cert_info_resource cert_info;
+    LT_ASSERT_EQ(true, ws.register_resource("cert_info", &cert_info));
+    try {
+        ws.start(false);
+    } catch (const std::exception& e) {
+        LT_CHECK_EQ(1, 1);
+        return;
+    }
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    std::string url = "https://localhost:" + std::to_string(port) + "/cert_info";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+    // Use the untrusted certificate
+    curl_easy_setopt(curl, CURLOPT_SSLCERT, ROOT "/client_cert_untrusted.pem");
+    curl_easy_setopt(curl, CURLOPT_SSLKEY, ROOT "/client_key_untrusted.pem");
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    // Certificate is present but should NOT be verified (untrusted)
+    LT_CHECK_NEQ(s.find("HAS_CLIENT_CERT"), std::string::npos);
+    LT_CHECK_NEQ(s.find("VERIFIED:no"), std::string::npos);
+    curl_easy_cleanup(curl);
+    ws.stop();
+LT_END_AUTO_TEST(client_cert_untrusted)
+
 // Test SNI callback configuration
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, sni_callback_setup)
     int port = PORT + 50;
