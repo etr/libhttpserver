@@ -50,6 +50,14 @@ typedef std::function<void(const std::string&)> log_access_ptr;
 typedef std::function<void(const std::string&)> log_error_ptr;
 typedef std::function<std::string(const std::string&)> psk_cred_handler_callback;
 
+/**
+ * SNI (Server Name Indication) callback type.
+ * The callback receives the server name from the TLS ClientHello.
+ * It should return a pair of (certificate_pem, key_pem) for the requested server name,
+ * or empty strings to use the default certificate.
+ */
+typedef std::function<std::pair<std::string, std::string>(const std::string& server_name)> sni_callback_t;
+
 namespace http { class file_info; }
 
 typedef std::function<bool(const std::string&, const std::string&, const http::file_info&)> file_cleanup_callback_ptr;
@@ -388,6 +396,17 @@ class create_webserver {
          return *this;
      }
 
+    /**
+     * Set the SNI (Server Name Indication) callback.
+     * The callback is invoked during TLS handshake with the server name from ClientHello.
+     * @param callback The SNI callback function
+     * @return reference to this for method chaining
+     */
+    create_webserver& sni_callback(sni_callback_t callback) {
+        _sni_callback = callback;
+        return *this;
+    }
+
  private:
      uint16_t _port = DEFAULT_WS_PORT;
      http::http_utils::start_method_T _start_method = http::http_utils::INTERNAL_SELECT;
@@ -437,6 +456,7 @@ class create_webserver {
      file_cleanup_callback_ptr _file_cleanup_callback = nullptr;
      auth_handler_ptr _auth_handler = nullptr;
      std::vector<std::string> _auth_skip_paths;
+     sni_callback_t _sni_callback = nullptr;
 
      friend class webserver;
 };

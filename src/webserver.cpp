@@ -67,6 +67,7 @@ struct MHD_Connection;
 
 #ifdef HAVE_GNUTLS
 #include <gnutls/gnutls.h>
+#include <gnutls/x509.h>
 #endif  // HAVE_GNUTLS
 
 #ifndef SOCK_CLOEXEC
@@ -174,7 +175,8 @@ webserver::webserver(const create_webserver& params):
     internal_error_resource(params._internal_error_resource),
     file_cleanup_callback(params._file_cleanup_callback),
     auth_handler(params._auth_handler),
-    auth_skip_paths(params._auth_skip_paths) {
+    auth_skip_paths(params._auth_skip_paths),
+    sni_callback(params._sni_callback) {
         ignore_sigpipe();
         pthread_mutex_init(&mutexwait, nullptr);
         pthread_cond_init(&mutexcond, nullptr);
@@ -184,6 +186,14 @@ webserver::~webserver() {
     stop();
     pthread_mutex_destroy(&mutexwait);
     pthread_cond_destroy(&mutexcond);
+
+#if defined(HAVE_GNUTLS) && defined(MHD_OPTION_HTTPS_CERT_CALLBACK)
+    // Clean up cached SNI credentials
+    for (auto& [name, creds] : sni_credentials_cache) {
+        gnutls_certificate_free_credentials(creds);
+    }
+    sni_credentials_cache.clear();
+#endif  // HAVE_GNUTLS && MHD_OPTION_HTTPS_CERT_CALLBACK
 }
 
 void webserver::sweet_kill() {
@@ -304,6 +314,13 @@ bool webserver::start(bool blocking) {
         iov.push_back(gen(MHD_OPTION_GNUTLS_PSK_CRED_HANDLER,
                           (intptr_t)&psk_cred_handler_func, this));
     }
+
+#ifdef MHD_OPTION_HTTPS_CERT_CALLBACK
+    if (sni_callback != nullptr && use_ssl) {
+        iov.push_back(gen(MHD_OPTION_HTTPS_CERT_CALLBACK,
+                          (intptr_t)&sni_cert_callback_func, this));
+    }
+#endif  // MHD_OPTION_HTTPS_CERT_CALLBACK
 #endif  // HAVE_GNUTLS
 
     iov.push_back(gen(MHD_OPTION_END, 0, nullptr));
@@ -480,6 +497,78 @@ int webserver::psk_cred_handler_func(void* cls,
     *psk_size = psk_len;
     return 0;
 }
+
+#ifdef MHD_OPTION_HTTPS_CERT_CALLBACK
+// SNI callback for selecting certificates based on server name
+// Returns 0 on success, -1 on failure
+int webserver::sni_cert_callback_func(void* cls,
+                                       struct MHD_Connection* connection,
+                                       const char* server_name,
+                                       gnutls_certificate_credentials_t* creds) {
+    std::ignore = connection;
+
+    webserver* ws = static_cast<webserver*>(cls);
+    if (ws == nullptr || ws->sni_callback == nullptr || server_name == nullptr) {
+        return -1;
+    }
+
+    std::string name(server_name);
+
+    // Check if we have cached credentials for this server name
+    {
+        std::shared_lock lock(ws->sni_credentials_mutex);
+        auto it = ws->sni_credentials_cache.find(name);
+        if (it != ws->sni_credentials_cache.end()) {
+            *creds = it->second;
+            return 0;
+        }
+    }
+
+    // Call user's callback to get cert/key pair
+    auto [cert_pem, key_pem] = ws->sni_callback(name);
+    if (cert_pem.empty() || key_pem.empty()) {
+        return -1;  // Use default certificate
+    }
+
+    // Create new credentials for this server name
+    gnutls_certificate_credentials_t new_creds;
+    if (gnutls_certificate_allocate_credentials(&new_creds) != GNUTLS_E_SUCCESS) {
+        return -1;
+    }
+
+    gnutls_datum_t cert_data = {
+        reinterpret_cast<unsigned char*>(const_cast<char*>(cert_pem.data())),
+        static_cast<unsigned int>(cert_pem.size())
+    };
+    gnutls_datum_t key_data = {
+        reinterpret_cast<unsigned char*>(const_cast<char*>(key_pem.data())),
+        static_cast<unsigned int>(key_pem.size())
+    };
+
+    int ret = gnutls_certificate_set_x509_key_mem(new_creds, &cert_data, &key_data, GNUTLS_X509_FMT_PEM);
+    if (ret != GNUTLS_E_SUCCESS) {
+        gnutls_certificate_free_credentials(new_creds);
+        return -1;
+    }
+
+    // Cache the credentials with double-check to avoid race condition
+    {
+        std::unique_lock lock(ws->sni_credentials_mutex);
+        // Re-check after acquiring exclusive lock - another thread may have inserted
+        auto it = ws->sni_credentials_cache.find(name);
+        if (it != ws->sni_credentials_cache.end()) {
+            // Another thread already cached credentials, use theirs and free ours
+            gnutls_certificate_free_credentials(new_creds);
+            *creds = it->second;
+            return 0;
+        }
+        ws->sni_credentials_cache[name] = new_creds;
+    }
+
+    *creds = new_creds;
+    return 0;
+}
+#endif  // MHD_OPTION_HTTPS_CERT_CALLBACK
 #endif  // HAVE_GNUTLS
 
 MHD_Result policy_callback(void *cls, const struct sockaddr* addr, socklen_t addrlen) {

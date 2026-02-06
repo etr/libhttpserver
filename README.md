@@ -389,6 +389,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
 * _.https_mem_trust(**const std::string&** filename):_ String representing the path to a file containing the CA certificate to be used by the HTTPS daemon to authenticate and trust clients certificates. The presence of this option activates the request of certificate to the client. The request to the client is marked optional, and it is the responsibility of the server to check the presence of the certificate if needed. Note that most browsers will only present a client certificate only if they have one matching the specified CA, not sending any certificate otherwise.
 * _.https_priorities(**const std::string&** priority_string):_ SSL/TLS protocol version and ciphers. Must be followed by a string specifying the SSL/TLS protocol versions and ciphers that are acceptable for the application. The string is passed unchanged to gnutls_priority_init. If this option is not specified, `"NORMAL"` is used.
 * _.psk_cred_handler(**psk_cred_handler_callback** handler):_ Sets a callback function for TLS-PSK (Pre-Shared Key) authentication. The callback receives a username and should return the corresponding hex-encoded PSK, or an empty string if the user is unknown. This option requires `use_ssl()`, `cred_type(http::http_utils::PSK)`, and an appropriate `https_priorities()` string that enables PSK cipher suites. PSK authentication allows TLS without certificates by using a shared secret key.
+* _.sni_callback(**sni_callback_t** callback):_ Sets a callback function for SNI (Server Name Indication) support. The callback receives the server name requested by the client and should return a `std::pair<std::string, std::string>` containing the PEM-encoded certificate and key for that server name. Return empty strings to use the default certificate. Requires libmicrohttpd 0.9.71+ with GnuTLS.
 
 #### Minimal example using HTTPS
 ```cpp
@@ -712,8 +713,16 @@ The `http_request` class has a set of methods you will have access to when imple
 * _**const std::string** get_pass() **const**:_ Returns the `password` as self-identified through basic authentication. The content of the password header will be parsed only if basic authentication is enabled on the server (enabled by default).
 * _**const std::string** get_digested_user() **const**:_ Returns the `digested user` as self-identified through digest authentication. The content of the user header will be parsed only if digest authentication is enabled on the server (enabled by default).
 * _**bool** check_digest_auth(**const std::string&** realm, **const std::string&** password, **int** nonce_timeout, **bool*** reload_nonce) **const**:_ Allows to check the validity of the authentication token sent through digest authentication (if the provided values in the WWW-Authenticate header are valid and sound according to RFC2716). Takes in input the `realm` of validity of the authentication, the `password` as known to the server to compare against, the `nonce_timeout` to indicate how long the nonce is valid and `reload_nonce` a boolean that will be set by the method to indicate a nonce being reloaded. The method returns `true` if the authentication is valid, `false` otherwise.
-* _**bool** has_tls_session() **const**:_ Tests if there is am underlying TLS state of the current request.
+* _**bool** has_tls_session() **const**:_ Tests if there is an underlying TLS state of the current request.
 * _**gnutls_session_t** get_tls_session() **const**:_ Returns the underlying TLS state of the current request for inspection. (It is an error to call this if the state does not exist.)
+* _**bool** has_client_certificate() **const**:_ Returns `true` if the client presented a certificate during the TLS handshake. Requires GnuTLS support.
+* _**std::string** get_client_cert_dn() **const**:_ Returns the Distinguished Name (DN) from the client certificate's subject field (e.g., "CN=John Doe,O=Example Corp"). Returns empty string if no client certificate.
+* _**std::string** get_client_cert_issuer_dn() **const**:_ Returns the Distinguished Name of the certificate issuer. Returns empty string if no client certificate.
+* _**std::string** get_client_cert_cn() **const**:_ Returns the Common Name (CN) from the client certificate's subject. Returns empty string if no client certificate or no CN field.
+* _**bool** is_client_cert_verified() **const**:_ Returns `true` if the client certificate was verified against the trust store configured via `https_mem_trust()`. Returns `false` if verification failed or no TLS session.
+* _**std::string** get_client_cert_fingerprint_sha256() **const**:_ Returns the SHA-256 fingerprint of the client certificate as a lowercase hex string (64 characters). Returns empty string if no client certificate.
+* _**time_t** get_client_cert_not_before() **const**:_ Returns the start of the certificate validity period. Returns -1 if no client certificate.
+* _**time_t** get_client_cert_not_after() **const**:_ Returns the end of the certificate validity period. Returns -1 if no client certificate.
 
 Details on the `http::file_info` structure.
 
@@ -1064,6 +1073,124 @@ To test the above example:
     curl http://localhost:8080/health
 
 You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/centralized_authentication.cpp).
+
+### Using Client Certificate Authentication (mTLS)
+Client certificate authentication (also known as mutual TLS or mTLS) provides strong authentication by requiring clients to present X.509 certificates during the TLS handshake. This is the most secure authentication method as it verifies client identity cryptographically.
+
+To enable client certificate authentication, configure your webserver with:
+1. `use_ssl()` - Enable TLS
+2. `https_mem_key()` and `https_mem_cert()` - Server certificate
+3. `https_mem_trust()` - CA certificate(s) to verify client certificates
+
+```cpp
+    #include <httpserver.hpp>
+
+    using namespace httpserver;
+
+    class secure_resource : public http_resource {
+    public:
+        std::shared_ptr<http_response> render_GET(const http_request& req) {
+            // Check if client provided a certificate
+            if (!req.has_client_certificate()) {
+                return std::make_shared<string_response>(
+                    "Client certificate required", 401, "text/plain");
+            }
+
+            // Check if certificate is verified by our CA
+            if (!req.is_client_cert_verified()) {
+                return std::make_shared<string_response>(
+                    "Certificate not verified", 403, "text/plain");
+            }
+
+            // Extract certificate information
+            std::string cn = req.get_client_cert_cn();           // Common Name
+            std::string dn = req.get_client_cert_dn();           // Subject DN
+            std::string issuer = req.get_client_cert_issuer_dn(); // Issuer DN
+            std::string fingerprint = req.get_client_cert_fingerprint_sha256();
+            time_t not_before = req.get_client_cert_not_before();
+            time_t not_after = req.get_client_cert_not_after();
+
+            return std::make_shared<string_response>(
+                "Welcome, " + cn + "!", 200, "text/plain");
+        }
+    };
+
+    int main() {
+        webserver ws = create_webserver(8443)
+            .use_ssl()
+            .https_mem_key("server_key.pem")
+            .https_mem_cert("server_cert.pem")
+            .https_mem_trust("ca_cert.pem");  // CA for client certs
+
+        secure_resource sr;
+        ws.register_resource("/secure", &sr);
+        ws.start(true);
+
+        return 0;
+    }
+```
+
+Available client certificate methods (require GnuTLS support):
+- `has_client_certificate()` - Check if client presented a certificate
+- `get_client_cert_dn()` - Get the subject Distinguished Name
+- `get_client_cert_issuer_dn()` - Get the issuer Distinguished Name
+- `get_client_cert_cn()` - Get the Common Name from the subject
+- `is_client_cert_verified()` - Check if the certificate chain is verified
+- `get_client_cert_fingerprint_sha256()` - Get hex-encoded SHA-256 fingerprint
+- `get_client_cert_not_before()` - Get certificate validity start time
+- `get_client_cert_not_after()` - Get certificate validity end time
+
+To test with curl:
+
+    # With client certificate
+    curl -k --cert client_cert.pem --key client_key.pem https://localhost:8443/secure
+
+    # Without client certificate (will be rejected)
+    curl -k https://localhost:8443/secure
+
+You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/client_cert_auth.cpp).
+
+### Server Name Indication (SNI) Callback
+SNI allows a server to host multiple TLS certificates on a single IP address. The client indicates which hostname it's connecting to during the TLS handshake, and the server can select the appropriate certificate.
+
+To use SNI with libhttpserver, configure an SNI callback that returns the certificate/key pair for each server name:
+
+```cpp
+    #include <httpserver.hpp>
+    #include <map>
+
+    using namespace httpserver;
+
+    // Map of server names to cert/key pairs
+    std::map<std::string, std::pair<std::string, std::string>> certs;
+
+    // SNI callback - returns (cert_pem, key_pem) for the requested server name
+    std::pair<std::string, std::string> sni_callback(const std::string& server_name) {
+        auto it = certs.find(server_name);
+        if (it != certs.end()) {
+            return it->second;
+        }
+        return {"", ""};  // Use default certificate
+    }
+
+    int main() {
+        // Load certificates for different hostnames
+        certs["www.example.com"] = {load_file("www_cert.pem"), load_file("www_key.pem")};
+        certs["api.example.com"] = {load_file("api_cert.pem"), load_file("api_key.pem")};
+
+        webserver ws = create_webserver(443)
+            .use_ssl()
+            .https_mem_key("default_key.pem")    // Default certificate
+            .https_mem_cert("default_cert.pem")
+            .sni_callback(sni_callback);         // SNI callback
+
+        // ... register resources and start
+        ws.start(true);
+        return 0;
+    }
+```
+
+Note: SNI support requires libmicrohttpd 0.9.71 or later compiled with GnuTLS.
 
 [Back to TOC](#table-of-contents)
 

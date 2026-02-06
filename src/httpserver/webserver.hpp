@@ -185,6 +185,7 @@ class webserver {
      const file_cleanup_callback_ptr file_cleanup_callback;
      const auth_handler_ptr auth_handler;
      const std::vector<std::string> auth_skip_paths;
+     const sni_callback_t sni_callback;
      std::shared_mutex registered_resources_mutex;
      std::map<details::http_endpoint, http_resource*> registered_resources;
      std::map<std::string, http_resource*> registered_resources_str;
@@ -233,6 +234,18 @@ class webserver {
                                        const char* username,
                                        void** psk,
                                        size_t* psk_size);
+
+#ifdef MHD_OPTION_HTTPS_CERT_CALLBACK
+     // SNI certificate callback function (libmicrohttpd 0.9.71+)
+     static int sni_cert_callback_func(void* cls,
+                                        struct MHD_Connection* connection,
+                                        const char* server_name,
+                                        gnutls_certificate_credentials_t* creds);
+
+     // Cache for loaded credentials per server name
+     mutable std::map<std::string, gnutls_certificate_credentials_t> sni_credentials_cache;
+     mutable std::shared_mutex sni_credentials_mutex;
+#endif  // MHD_OPTION_HTTPS_CERT_CALLBACK
 #endif  // HAVE_GNUTLS
 
      friend MHD_Result policy_callback(void *cls, const struct sockaddr* addr, socklen_t addrlen);
