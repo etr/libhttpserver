@@ -757,8 +757,13 @@ MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct details
                 if (regex_checking) {
                     details::http_endpoint endpoint(st_url, false, false, false);
 
+                    // Data needed for parameter extraction after match.
+                    // On cache hit, we copy these while holding the cache lock
+                    // to avoid use-after-free if another thread invalidates cache.
+                    vector<string> matched_url_pars;
+                    vector<int> matched_chunks;
+
                     // Check the LRU route cache first
-                    const details::http_endpoint* matched_ep = nullptr;
                     {
                         std::lock_guard<std::mutex> cache_lock(route_cache_mutex);
                         auto cache_it = route_cache_map.find(mr->standardized_url);
@@ -766,7 +771,8 @@ MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct details
                             // Cache hit — move to front of LRU list
                             route_cache_list.splice(route_cache_list.begin(), route_cache_list, cache_it->second);
                             const route_cache_entry& cached = cache_it->second->second;
-                            matched_ep = &cached.matched_endpoint;
+                            matched_url_pars = cached.matched_endpoint.get_url_pars();
+                            matched_chunks = cached.matched_endpoint.get_chunk_positions();
                             hrm = cached.resource;
                             found = true;
                         }
@@ -792,7 +798,9 @@ MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct details
                         }
 
                         if (found) {
-                            matched_ep = &found_endpoint->first;
+                            // Safe to reference: registered_resources_mutex (shared) is still held
+                            matched_url_pars = found_endpoint->first.get_url_pars();
+                            matched_chunks = found_endpoint->first.get_chunk_positions();
                             hrm = found_endpoint->second;
 
                             // Store in LRU cache
@@ -810,13 +818,11 @@ MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct details
                     }
 
                     // Extract URL parameters from matched endpoint
-                    if (found && matched_ep != nullptr) {
-                        const auto& url_pars = matched_ep->get_url_pars();
+                    if (found) {
                         const auto& url_pieces = endpoint.get_url_pieces();
-                        const auto& chunks = matched_ep->get_chunk_positions();
-                        for (unsigned int i = 0; i < url_pars.size(); i++) {
-                            if (chunks[i] >= 0 && static_cast<size_t>(chunks[i]) < url_pieces.size()) {
-                                mr->dhr->set_arg(url_pars[i], url_pieces[chunks[i]]);
+                        for (unsigned int i = 0; i < matched_url_pars.size(); i++) {
+                            if (matched_chunks[i] >= 0 && static_cast<size_t>(matched_chunks[i]) < url_pieces.size()) {
+                                mr->dhr->set_arg(matched_url_pars[i], url_pieces[matched_chunks[i]]);
                             }
                         }
                     }
