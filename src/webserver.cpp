@@ -758,6 +758,7 @@ MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct details
                     details::http_endpoint endpoint(st_url, false, false, false);
 
                     // Check the LRU route cache first
+                    const details::http_endpoint* matched_ep = nullptr;
                     {
                         std::lock_guard<std::mutex> cache_lock(route_cache_mutex);
                         auto cache_it = route_cache_map.find(mr->standardized_url);
@@ -765,14 +766,7 @@ MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct details
                             // Cache hit — move to front of LRU list
                             route_cache_list.splice(route_cache_list.begin(), route_cache_list, cache_it->second);
                             const route_cache_entry& cached = cache_it->second->second;
-
-                            vector<string> url_pars = cached.matched_endpoint.get_url_pars();
-                            vector<string> url_pieces = endpoint.get_url_pieces();
-                            vector<int> chunks = cached.matched_endpoint.get_chunk_positions();
-                            for (unsigned int i = 0; i < url_pars.size(); i++) {
-                                mr->dhr->set_arg(url_pars[i], url_pieces[chunks[i]]);
-                            }
-
+                            matched_ep = &cached.matched_endpoint;
                             hrm = cached.resource;
                             found = true;
                         }
@@ -782,15 +776,13 @@ MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct details
                         // Cache miss — perform regex scan
                         map<details::http_endpoint, http_resource*>::iterator found_endpoint;
 
-                        map<details::http_endpoint, http_resource*>::iterator it;
-
                         size_t len = 0;
                         size_t tot_len = 0;
-                        for (it = registered_resources_regex.begin(); it != registered_resources_regex.end(); ++it) {
-                            size_t endpoint_pieces_len = (*it).first.get_url_pieces().size();
-                            size_t endpoint_tot_len = (*it).first.get_url_complete().size();
+                        for (auto it = registered_resources_regex.begin(); it != registered_resources_regex.end(); ++it) {
+                            size_t endpoint_pieces_len = it->first.get_url_pieces().size();
+                            size_t endpoint_tot_len = it->first.get_url_complete().size();
                             if (!found || endpoint_pieces_len > len || (endpoint_pieces_len == len && endpoint_tot_len > tot_len)) {
-                                if ((*it).first.match(endpoint)) {
+                                if (it->first.match(endpoint)) {
                                     found = true;
                                     len = endpoint_pieces_len;
                                     tot_len = endpoint_tot_len;
@@ -800,14 +792,7 @@ MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct details
                         }
 
                         if (found) {
-                            vector<string> url_pars = found_endpoint->first.get_url_pars();
-
-                            vector<string> url_pieces = endpoint.get_url_pieces();
-                            vector<int> chunks = found_endpoint->first.get_chunk_positions();
-                            for (unsigned int i = 0; i < url_pars.size(); i++) {
-                                mr->dhr->set_arg(url_pars[i], url_pieces[chunks[i]]);
-                            }
-
+                            matched_ep = &found_endpoint->first;
                             hrm = found_endpoint->second;
 
                             // Store in LRU cache
@@ -820,6 +805,18 @@ MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct details
                                     route_cache_map.erase(route_cache_list.back().first);
                                     route_cache_list.pop_back();
                                 }
+                            }
+                        }
+                    }
+
+                    // Extract URL parameters from matched endpoint
+                    if (found && matched_ep != nullptr) {
+                        const auto& url_pars = matched_ep->get_url_pars();
+                        const auto& url_pieces = endpoint.get_url_pieces();
+                        const auto& chunks = matched_ep->get_chunk_positions();
+                        for (unsigned int i = 0; i < url_pars.size(); i++) {
+                            if (chunks[i] >= 0 && static_cast<size_t>(chunks[i]) < url_pieces.size()) {
+                                mr->dhr->set_arg(url_pars[i], url_pieces[chunks[i]]);
                             }
                         }
                     }
@@ -939,6 +936,7 @@ MHD_Result webserver::answer_to_connection(void* cls, MHD_Connection* connection
 
     access_log(static_cast<webserver*>(cls), mr->complete_uri + " METHOD: " + method);
 
+    // Case-sensitive per RFC 7230 §3.1.1: HTTP method is case-sensitive.
     if (0 == strcmp(method, http_utils::http_method_get)) {
         mr->callback = &http_resource::render_GET;
     } else if (0 == strcmp(method, http_utils::http_method_post)) {

@@ -93,10 +93,7 @@ class http_request {
       * @return a vector of strings containing all pieces
      **/
      const std::vector<std::string> get_path_pieces() const {
-         if (!cache->path_pieces_cached) {
-             cache->path_pieces = http::http_utils::tokenize_url(path);
-             cache->path_pieces_cached = true;
-         }
+         ensure_path_pieces_cached();
          return cache->path_pieces;
      }
 
@@ -106,10 +103,7 @@ class http_request {
       * @return the selected piece in form of string
      **/
      const std::string get_path_piece(int index) const {
-         if (!cache->path_pieces_cached) {
-             cache->path_pieces = http::http_utils::tokenize_url(path);
-             cache->path_pieces_cached = true;
-         }
+         ensure_path_pieces_cached();
          if (static_cast<int>(cache->path_pieces.size()) > index) {
              return cache->path_pieces[index];
          }
@@ -453,6 +447,13 @@ class http_request {
         bool path_pieces_cached = false;
      };
      std::unique_ptr<http_request_data_cache> cache = std::make_unique<http_request_data_cache>();
+     void ensure_path_pieces_cached() const {
+         if (!cache->path_pieces_cached) {
+             cache->path_pieces = http::http_utils::tokenize_url(path);
+             cache->path_pieces_cached = true;
+         }
+     }
+
      // Populate the data cache unescaped_args
      void populate_args() const;
 

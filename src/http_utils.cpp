@@ -218,6 +218,8 @@ std::vector<std::string> http_utils::tokenize_url(const std::string& str, const 
 }
 
 std::string http_utils::standardize_url(const std::string& url) {
+    if (url.empty()) return url;
+
     std::string result = url;
 
     auto new_end = std::unique(result.begin(), result.end(), [](char a, char b) { return (a == b) && (a == '/'); });
