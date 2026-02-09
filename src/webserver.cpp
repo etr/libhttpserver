@@ -221,9 +221,12 @@ bool webserver::register_resource(const std::string& resource, http_resource* hr
         if (idx.is_regex_compiled()) {
             registered_resources_regex.insert(map<details::http_endpoint, http_resource*>::value_type(idx, hrm));
         }
+        registered_resources_lock.unlock();
+        invalidate_route_cache();
+        return true;
     }
 
-    return result.second;
+    return false;
 }
 
 bool webserver::start(bool blocking) {
@@ -402,12 +405,20 @@ void webserver::unregister_resource(const string& resource) {
     // family does not matter - it just checks the url_normalized anyhow
     details::http_endpoint he(resource, false, true, regex_checking);
     std::unique_lock registered_resources_lock(registered_resources_mutex);
+
+    // Invalidate cache while holding registered_resources_mutex to prevent
+    // any thread from retrieving dangling resource pointers from the cache
+    // after we erase from the resource maps.
+    {
+        std::lock_guard<std::mutex> cache_lock(route_cache_mutex);
+        route_cache_list.clear();
+        route_cache_map.clear();
+    }
+
     registered_resources.erase(he);
     registered_resources.erase(he.get_url_complete());
     registered_resources_str.erase(he.get_url_complete());
     registered_resources_regex.erase(he);
-    registered_resources_lock.unlock();
-    invalidate_route_cache();
 }
 
 void webserver::ban_ip(const string& ip) {

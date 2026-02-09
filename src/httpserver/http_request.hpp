@@ -427,7 +427,11 @@ class http_request {
      std::string_view get_connection_value(std::string_view key, enum MHD_ValueKind kind) const;
      const http::header_view_map get_headerlike_values(enum MHD_ValueKind kind) const;
 
-     // Cache certain data items on demand so we can consistently return views
+     // http_request objects are owned by a single connection and are not
+    // shared across threads. Lazy caching (path_pieces, args, etc.) is
+    // safe without synchronization under this invariant.
+
+    // Cache certain data items on demand so we can consistently return views
      // over the data. Some things we transform before returning to the user for
      // simplicity (e.g. query_str, requestor), others out of necessity (arg unescaping).
      // Others (username, password, digested_user) MHD returns as char* that we need
