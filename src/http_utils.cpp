@@ -218,19 +218,13 @@ std::vector<std::string> http_utils::tokenize_url(const std::string& str, const 
 }
 
 std::string http_utils::standardize_url(const std::string& url) {
-    std::string n_url = url;
+    std::string result = url;
 
-    std::string::iterator new_end = std::unique(n_url.begin(), n_url.end(), [](char a, char b) { return (a == b) && (a == '/'); });
-    n_url.erase(new_end, n_url.end());
+    auto new_end = std::unique(result.begin(), result.end(), [](char a, char b) { return (a == b) && (a == '/'); });
+    result.erase(new_end, result.end());
 
-    std::string::size_type n_url_length = n_url.length();
-
-    std::string result;
-
-    if (n_url_length > 1 && n_url[n_url_length - 1] == '/') {
-        result = n_url.substr(0, n_url_length - 1);
-    } else {
-        result = n_url;
+    if (result.length() > 1 && result.back() == '/') {
+        result.pop_back();
     }
 
     return result;
@@ -302,13 +296,19 @@ uint16_t get_port(const struct sockaddr* sa) {
     }
 }
 
+static inline int hex_digit_value(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
 size_t http_unescape(std::string* val) {
     if (val->empty()) return 0;
 
     unsigned int rpos = 0;
     unsigned int wpos = 0;
 
-    unsigned int num;
     unsigned int size = val->size();
 
     while (rpos < size && (*val)[rpos] != '\0') {
@@ -319,11 +319,15 @@ size_t http_unescape(std::string* val) {
                 rpos++;
                 break;
             case '%':
-                if (size > rpos + 2 && ((1 == sscanf(val->substr(rpos + 1, 2).c_str(), "%2x", &num)) || (1 == sscanf(val->substr(rpos + 1, 2).c_str(), "%2X", &num)))) {
-                    (*val)[wpos] = (unsigned char) num;
-                    wpos++;
-                    rpos += 3;
-                    break;
+                if (size > rpos + 2) {
+                    int hi = hex_digit_value((*val)[rpos + 1]);
+                    int lo = hex_digit_value((*val)[rpos + 2]);
+                    if (hi >= 0 && lo >= 0) {
+                        (*val)[wpos] = static_cast<unsigned char>((hi << 4) | lo);
+                        wpos++;
+                        rpos += 3;
+                        break;
+                    }
                 }
             // intentional fall through!
             default:

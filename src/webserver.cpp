@@ -213,8 +213,14 @@ bool webserver::register_resource(const std::string& resource, http_resource* hr
     std::unique_lock registered_resources_lock(registered_resources_mutex);
     pair<map<details::http_endpoint, http_resource*>::iterator, bool> result = registered_resources.insert(map<details::http_endpoint, http_resource*>::value_type(idx, hrm));
 
-    if (!family && result.second && idx.get_url_pars().empty()) {
-        registered_resources_str.insert(pair<string, http_resource*>(idx.get_url_complete(), result.first->second));
+    if (result.second) {
+        bool is_exact = !family && idx.get_url_pars().empty();
+        if (is_exact) {
+            registered_resources_str.insert(pair<string, http_resource*>(idx.get_url_complete(), result.first->second));
+        }
+        if (idx.is_regex_compiled()) {
+            registered_resources_regex.insert(map<details::http_endpoint, http_resource*>::value_type(idx, hrm));
+        }
     }
 
     return result.second;
@@ -386,6 +392,12 @@ bool webserver::stop() {
     return true;
 }
 
+void webserver::invalidate_route_cache() {
+    std::lock_guard<std::mutex> lock(route_cache_mutex);
+    route_cache_list.clear();
+    route_cache_map.clear();
+}
+
 void webserver::unregister_resource(const string& resource) {
     // family does not matter - it just checks the url_normalized anyhow
     details::http_endpoint he(resource, false, true, regex_checking);
@@ -393,6 +405,9 @@ void webserver::unregister_resource(const string& resource) {
     registered_resources.erase(he);
     registered_resources.erase(he.get_url_complete());
     registered_resources_str.erase(he.get_url_complete());
+    registered_resources_regex.erase(he);
+    registered_resources_lock.unlock();
+    invalidate_route_cache();
 }
 
 void webserver::ban_ip(const string& ip) {
@@ -509,7 +524,7 @@ void* uri_log(void* cls, const char* uri, struct MHD_Connection *con) {
     std::ignore = con;
 
     auto mr = std::make_unique<details::modded_request>();
-    mr->complete_uri = std::make_unique<string>(uri);
+    mr->complete_uri = uri;
     return reinterpret_cast<void*>(mr.release());
 }
 
@@ -736,41 +751,77 @@ MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct details
     {
         std::shared_lock registered_resources_lock(registered_resources_mutex);
         if (!single_resource) {
-            const char* st_url = mr->standardized_url->c_str();
+            const char* st_url = mr->standardized_url.c_str();
             fe = registered_resources_str.find(st_url);
             if (fe == registered_resources_str.end()) {
                 if (regex_checking) {
-                    map<details::http_endpoint, http_resource*>::iterator found_endpoint;
-
                     details::http_endpoint endpoint(st_url, false, false, false);
 
-                    map<details::http_endpoint, http_resource*>::iterator it;
+                    // Check the LRU route cache first
+                    {
+                        std::lock_guard<std::mutex> cache_lock(route_cache_mutex);
+                        auto cache_it = route_cache_map.find(mr->standardized_url);
+                        if (cache_it != route_cache_map.end()) {
+                            // Cache hit — move to front of LRU list
+                            route_cache_list.splice(route_cache_list.begin(), route_cache_list, cache_it->second);
+                            const route_cache_entry& cached = cache_it->second->second;
 
-                    size_t len = 0;
-                    size_t tot_len = 0;
-                    for (it = registered_resources.begin(); it != registered_resources.end(); ++it) {
-                        size_t endpoint_pieces_len = (*it).first.get_url_pieces().size();
-                        size_t endpoint_tot_len = (*it).first.get_url_complete().size();
-                        if (!found || endpoint_pieces_len > len || (endpoint_pieces_len == len && endpoint_tot_len > tot_len)) {
-                            if ((*it).first.match(endpoint)) {
-                                found = true;
-                                len = endpoint_pieces_len;
-                                tot_len = endpoint_tot_len;
-                                found_endpoint = it;
+                            vector<string> url_pars = cached.matched_endpoint.get_url_pars();
+                            vector<string> url_pieces = endpoint.get_url_pieces();
+                            vector<int> chunks = cached.matched_endpoint.get_chunk_positions();
+                            for (unsigned int i = 0; i < url_pars.size(); i++) {
+                                mr->dhr->set_arg(url_pars[i], url_pieces[chunks[i]]);
                             }
+
+                            hrm = cached.resource;
+                            found = true;
                         }
                     }
 
-                    if (found) {
-                        vector<string> url_pars = found_endpoint->first.get_url_pars();
+                    if (!found) {
+                        // Cache miss — perform regex scan
+                        map<details::http_endpoint, http_resource*>::iterator found_endpoint;
 
-                        vector<string> url_pieces = endpoint.get_url_pieces();
-                        vector<int> chunks = found_endpoint->first.get_chunk_positions();
-                        for (unsigned int i = 0; i < url_pars.size(); i++) {
-                            mr->dhr->set_arg(url_pars[i], url_pieces[chunks[i]]);
+                        map<details::http_endpoint, http_resource*>::iterator it;
+
+                        size_t len = 0;
+                        size_t tot_len = 0;
+                        for (it = registered_resources_regex.begin(); it != registered_resources_regex.end(); ++it) {
+                            size_t endpoint_pieces_len = (*it).first.get_url_pieces().size();
+                            size_t endpoint_tot_len = (*it).first.get_url_complete().size();
+                            if (!found || endpoint_pieces_len > len || (endpoint_pieces_len == len && endpoint_tot_len > tot_len)) {
+                                if ((*it).first.match(endpoint)) {
+                                    found = true;
+                                    len = endpoint_pieces_len;
+                                    tot_len = endpoint_tot_len;
+                                    found_endpoint = it;
+                                }
+                            }
                         }
 
-                        hrm = found_endpoint->second;
+                        if (found) {
+                            vector<string> url_pars = found_endpoint->first.get_url_pars();
+
+                            vector<string> url_pieces = endpoint.get_url_pieces();
+                            vector<int> chunks = found_endpoint->first.get_chunk_positions();
+                            for (unsigned int i = 0; i < url_pars.size(); i++) {
+                                mr->dhr->set_arg(url_pars[i], url_pieces[chunks[i]]);
+                            }
+
+                            hrm = found_endpoint->second;
+
+                            // Store in LRU cache
+                            {
+                                std::lock_guard<std::mutex> cache_lock(route_cache_mutex);
+                                route_cache_list.emplace_front(mr->standardized_url, route_cache_entry{found_endpoint->first, hrm});
+                                route_cache_map[mr->standardized_url] = route_cache_list.begin();
+
+                                if (route_cache_map.size() > ROUTE_CACHE_MAX_SIZE) {
+                                    route_cache_map.erase(route_cache_list.back().first);
+                                    route_cache_list.pop_back();
+                                }
+                            }
+                        }
                     }
                 }
             } else {
@@ -857,7 +908,7 @@ MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct details
 MHD_Result webserver::complete_request(MHD_Connection* connection, struct details::modded_request* mr, const char* version, const char* method) {
     mr->ws = this;
 
-    mr->dhr->set_path(mr->standardized_url->c_str());
+    mr->dhr->set_path(mr->standardized_url.c_str());
     mr->dhr->set_method(method);
     mr->dhr->set_version(version);
 
@@ -882,33 +933,33 @@ MHD_Result webserver::answer_to_connection(void* cls, MHD_Connection* connection
     std::string t_url = url;
 
     base_unescaper(&t_url, static_cast<webserver*>(cls)->unescaper);
-    mr->standardized_url = std::make_unique<std::string>(http_utils::standardize_url(t_url));
+    mr->standardized_url = http_utils::standardize_url(t_url);
 
     mr->has_body = false;
 
-    access_log(static_cast<webserver*>(cls), *(mr->complete_uri) + " METHOD: " + method);
+    access_log(static_cast<webserver*>(cls), mr->complete_uri + " METHOD: " + method);
 
-    if (0 == strcasecmp(method, http_utils::http_method_get)) {
+    if (0 == strcmp(method, http_utils::http_method_get)) {
         mr->callback = &http_resource::render_GET;
     } else if (0 == strcmp(method, http_utils::http_method_post)) {
         mr->callback = &http_resource::render_POST;
         mr->has_body = true;
-    } else if (0 == strcasecmp(method, http_utils::http_method_put)) {
+    } else if (0 == strcmp(method, http_utils::http_method_put)) {
         mr->callback = &http_resource::render_PUT;
         mr->has_body = true;
-    } else if (0 == strcasecmp(method, http_utils::http_method_delete)) {
+    } else if (0 == strcmp(method, http_utils::http_method_delete)) {
         mr->callback = &http_resource::render_DELETE;
         mr->has_body = true;
-    } else if (0 == strcasecmp(method, http_utils::http_method_patch)) {
+    } else if (0 == strcmp(method, http_utils::http_method_patch)) {
         mr->callback = &http_resource::render_PATCH;
         mr->has_body = true;
-    } else if (0 == strcasecmp(method, http_utils::http_method_head)) {
+    } else if (0 == strcmp(method, http_utils::http_method_head)) {
         mr->callback = &http_resource::render_HEAD;
-    } else if (0 ==strcasecmp(method, http_utils::http_method_connect)) {
+    } else if (0 == strcmp(method, http_utils::http_method_connect)) {
         mr->callback = &http_resource::render_CONNECT;
-    } else if (0 == strcasecmp(method, http_utils::http_method_trace)) {
+    } else if (0 == strcmp(method, http_utils::http_method_trace)) {
         mr->callback = &http_resource::render_TRACE;
-    } else if (0 ==strcasecmp(method, http_utils::http_method_options)) {
+    } else if (0 == strcmp(method, http_utils::http_method_options)) {
         mr->callback = &http_resource::render_OPTIONS;
     }
 
