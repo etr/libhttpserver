@@ -93,7 +93,8 @@ class http_request {
       * @return a vector of strings containing all pieces
      **/
      const std::vector<std::string> get_path_pieces() const {
-         return http::http_utils::tokenize_url(path);
+         ensure_path_pieces_cached();
+         return cache->path_pieces;
      }
 
      /**
@@ -102,9 +103,9 @@ class http_request {
       * @return the selected piece in form of string
      **/
      const std::string get_path_piece(int index) const {
-         std::vector<std::string> post_path = get_path_pieces();
-         if (static_cast<int>(post_path.size()) > index) {
-             return post_path[index];
+         ensure_path_pieces_cached();
+         if (static_cast<int>(cache->path_pieces.size()) > index) {
+             return cache->path_pieces[index];
          }
          return EMPTY;
      }
@@ -426,7 +427,11 @@ class http_request {
      std::string_view get_connection_value(std::string_view key, enum MHD_ValueKind kind) const;
      const http::header_view_map get_headerlike_values(enum MHD_ValueKind kind) const;
 
-     // Cache certain data items on demand so we can consistently return views
+     // http_request objects are owned by a single connection and are not
+    // shared across threads. Lazy caching (path_pieces, args, etc.) is
+    // safe without synchronization under this invariant.
+
+    // Cache certain data items on demand so we can consistently return views
      // over the data. Some things we transform before returning to the user for
      // simplicity (e.g. query_str, requestor), others out of necessity (arg unescaping).
      // Others (username, password, digested_user) MHD returns as char* that we need
@@ -440,10 +445,19 @@ class http_request {
         std::string digested_user;
 #endif  // HAVE_DAUTH
         std::map<std::string, std::vector<std::string>, http::arg_comparator> unescaped_args;
+        std::vector<std::string> path_pieces;
 
         bool args_populated = false;
+        bool path_pieces_cached = false;
      };
      std::unique_ptr<http_request_data_cache> cache = std::make_unique<http_request_data_cache>();
+     void ensure_path_pieces_cached() const {
+         if (!cache->path_pieces_cached) {
+             cache->path_pieces = http::http_utils::tokenize_url(path);
+             cache->path_pieces_cached = true;
+         }
+     }
+
      // Populate the data cache unescaped_args
      void populate_args() const;
 

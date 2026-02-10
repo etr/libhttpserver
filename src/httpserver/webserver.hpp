@@ -40,11 +40,14 @@
 #include <sys/socket.h>
 #endif
 
+#include <list>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <set>
 #include <shared_mutex>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #ifdef HAVE_GNUTLS
@@ -188,6 +191,16 @@ class webserver {
      std::shared_mutex registered_resources_mutex;
      std::map<details::http_endpoint, http_resource*> registered_resources;
      std::map<std::string, http_resource*> registered_resources_str;
+     std::map<details::http_endpoint, http_resource*> registered_resources_regex;
+
+     struct route_cache_entry {
+         details::http_endpoint matched_endpoint;
+         http_resource* resource;
+     };
+     static constexpr size_t ROUTE_CACHE_MAX_SIZE = 256;
+     std::mutex route_cache_mutex;
+     std::list<std::pair<std::string, route_cache_entry>> route_cache_list;
+     std::unordered_map<std::string, std::list<std::pair<std::string, route_cache_entry>>::iterator> route_cache_map;
 
      std::shared_mutex bans_mutex;
      std::set<http::ip_representation> bans;
@@ -225,6 +238,8 @@ class webserver {
      MHD_Result finalize_answer(MHD_Connection* connection, struct details::modded_request* mr, const char* method);
 
      MHD_Result complete_request(MHD_Connection* connection, struct details::modded_request* mr, const char* version, const char* method);
+
+     void invalidate_route_cache();
 
 #ifdef HAVE_GNUTLS
      // MHD_PskServerCredentialsCallback signature
