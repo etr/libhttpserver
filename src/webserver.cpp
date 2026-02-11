@@ -922,7 +922,7 @@ MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct details
 MHD_Result webserver::complete_request(MHD_Connection* connection, struct details::modded_request* mr, const char* version, const char* method) {
     mr->ws = this;
 
-    mr->dhr->set_path(mr->standardized_url.c_str());
+    mr->dhr->set_path(mr->standardized_url);
     mr->dhr->set_method(method);
     mr->dhr->set_version(version);
 
