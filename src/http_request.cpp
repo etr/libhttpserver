@@ -91,7 +91,7 @@ struct arguments_accumulator {
 };
 
 void http_request::set_method(const std::string& method) {
-    this->method = string_utilities::to_upper_copy(method);
+    this->method = method;
 }
 
 #ifdef HAVE_DAUTH

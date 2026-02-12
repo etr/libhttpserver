@@ -22,8 +22,8 @@
 
 #include <algorithm>
 #include <cctype>
-#include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace httpserver {
@@ -45,13 +45,29 @@ const std::string to_lower_copy(const std::string& str) {
 
 const std::vector<std::string> string_split(const std::string& s, char sep, bool collapse) {
     std::vector<std::string> result;
+    if (s.empty()) return result;
 
-    std::istringstream buf(s);
-    for (std::string token; getline(buf, token, sep); ) {
-        if ((collapse && token != "") || !collapse) {
-            result.push_back(token);
+    std::string::size_type start = 0;
+    std::string::size_type end;
+
+    while ((end = s.find(sep, start)) != std::string::npos) {
+        std::string token = s.substr(start, end - start);
+        if (!collapse || !token.empty()) {
+            result.push_back(std::move(token));
+        }
+        start = end + 1;
+    }
+
+    // Handle the last token (after the final separator)
+    // Only add if there's content or if not collapsing
+    // Note: match istringstream behavior which does not emit trailing empty token
+    if (start < s.size()) {
+        std::string token = s.substr(start);
+        if (!collapse || !token.empty()) {
+            result.push_back(std::move(token));
         }
     }
+
     return result;
 }
 
