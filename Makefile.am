@@ -38,7 +38,7 @@ endif
 
 endif
 
-EXTRA_DIST = libhttpserver.pc.in $(DX_CONFIG)
+EXTRA_DIST = libhttpserver.pc.in $(DX_CONFIG) scripts/extract-release-notes.sh scripts/validate-version.sh
 
 MOSTLYCLEANFILES = $(DX_CLEANFILES) *.gcda *.gcno *.gcov
 DISTCLEANFILES = DIST_REVISION

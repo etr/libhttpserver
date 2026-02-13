@@ -1,4 +1,5 @@
-Thu Jun 15 8:55:04 2023 -0800
+Version 0.19.0 - 2023-06-15
+
 	Considering family_url as part of the priority when selecting a URL to match.
 	More explicit selection of C++ version.
 	Ability to handle multiple parameters with the same name on the URL.
@@ -11,17 +12,11 @@ Thu Jun 15 8:55:04 2023 -0800
 	Code cleanups.
 	Better use of RAII.
 	Improved test coverage.
-
-Sun Mar 07 20:02:10 2021 -0800
 	Cleaned code to support cpplint and extra warnings.
 	Use pointers in place of non-const references.
-
-Thu Feb 25 20:27:12 2021 -0800
-	Simplified dependency management for libmicrohttpd
-
-Sat Nov 21 07:20:00 2020 -0800
+	Simplified dependency management for libmicrohttpd.
 	Added support on build for CodeQL security checks.
-	Moved builds to travis.com
+	Moved builds to travis.com.
 	Added IWYU checks as part of build and cleaned-up accordingly.
 	Introduced dual-stack support.
 	Added OS specific tips, and cleaned up some compiler warnings.
@@ -31,37 +26,34 @@ Sat Nov 21 07:20:00 2020 -0800
 	Moved windows builds to AppVeyor.
 	Made the library compatible with libmicrohttpd v0.9.71 and above.
 
-Sat Jun 6 10:21:05 2020 -0800
+Version 0.18.1 - 2020-06-06
+
 	Prevent use of regex in http_endpoint outside of registration which could
 		allow DOS attacks.
 
-Sat May 16 07:20:00 2020 -0800
+Version 0.18.0 - 2020-05-16
+
 	General performance improvements (reduced use of regex, lazy-building of
-	post-processor)
-	General code cleanup
-	General fixes to the documentation
-	Fixed support on FreeBSD (added missing headers)
-	Fixed support for Cygwin
-	Removed depedency on C regex - now using C++11 regex
-
-Sat Aug 10 18:34:07 2019 -0800
-	Added support for TCP-NODELAY
-	Changed set_path on http_request to have lazy behavior
-
-Tue Aug 06 22:22:14 2019 -0800
+	post-processor).
+	General code cleanup.
+	General fixes to the documentation.
+	Fixed support on FreeBSD (added missing headers).
+	Fixed support for Cygwin.
+	Removed depedency on C regex - now using C++11 regex.
+	Added support for TCP-NODELAY.
+	Changed set_path on http_request to have lazy behavior.
 	Added support for body parsing in DELETE requests.
-	Added support for PATCH method
+	Added support for PATCH method.
 
-Sat Jan 27 21:59:11 2019 -0800
-	libhttpserver now includes set of examples to demonstrate the main capabilities of the library
+Version 0.17.5 - 2019-01-28
+
+	libhttpserver now includes set of examples to demonstrate the main capabilities of the library.
 	"examples" are now optionally disabled.
-	Adds valgrind memcheck to the build system on travis
-	Travis now tests performance with apache benchmark
+	Adds valgrind memcheck to the build system on travis.
+	Travis now tests performance with apache benchmark.
 	Reduced the CPU time spent in normalizing URLs (thus saving ~15% on average per request).
-	All classes now implement move constructor and move assignment operator
+	All classes now implement move constructor and move assignment operator.
 	The library now avoids collecting connection properties (headers, arguments, footers, cookies, etc...) unless explicitly asked by the client code.
-
-Sat Jan 12 00:51:00 2019 -0800
 	Removed the support for integrated COMET logic.
 	Removed the support for caching logic.
 	Added integ tests.
@@ -69,255 +61,129 @@ Sat Jan 12 00:51:00 2019 -0800
 	Improved interface of the http_response object.
 	Deprecated http_response_builder object.
 
-Thu Dec 26 10:00:30 2018 -0800
+Version 0.16.0 - 2018-12-26
+
 	Fixed IPV6 parsing logic.
-	Added tests to support IP parsing, URL parsing and utilities
+	Added tests to support IP parsing, URL parsing and utilities.
 
-Thu Nov 22 20:58:00 2018 -0800
-	Solved problem with the server not being able to start on mac os
+Version 0.15.0 - 2018-11-23
 
-Sun Nov 04 19:28:00 2018 -0800
+	Solved problem with the server not being able to start on mac os.
+
+Version 0.14.0 - 2018-11-05
+
 	Moved http_endpoint as a sub-class of webserver. This avoids usage of friends.
 
-Wed Feb 26 21:31:00 2017 +0000
-	Fixed problem with segfault when copying http_response object
+Version 0.13.0 - 2017-02-26
 
-Wed Feb 12 13:14:01 2017 +0000
-	Updated to libmicrohttpd 0.9.52
+	Fixed problem with segfault when copying http_response object.
 
-Wed Jul 13 02:23:11 2016 +0100
-	Fixed problems with large payloads
-	Fixed memory leak in http_response_ptr
+Version 0.12.0 - 2017-02-12
 
-Tue Dec 29 18:56:31 2015 +0100
-	Removed support for event supplier (badly defined, complicated and almost useless)
-	Eliminated custom selection logic (simplified overall code in webserver.cpp)
-	Changed comet to use a lock-free implementation
+	Updated to libmicrohttpd 0.9.52.
 
-Sun Dec 27 19:39:01 2015 +0100
-	Removed POLL start configuration (THREAD now defaults to POLL or EPOLL on Linux)
-	Use TCP_FASTOPEN on linux >= 3.6
+Version 0.11.1 - 2016-07-13
 
-Sat Dec 26 15:08:22 2015 +0100
-	Changed http_resource to use classic C++ polymorphism using virtual instead of CRTP
+	Fixed problems with large payloads.
+	Fixed memory leak in http_response_ptr.
 
-Fri Jul 17 21:38:54 2015 +0000
-	Removed build dependency on pkg-config
+Version 0.11.0 - 2015-12-26
 
-Wed Apr 15 01:40:11 2015 +0000
-	Support build on MacOsX
-	Improved support for CI on travis
-	Solved bug on event_supplier registering
-	Solved bug on standardize_url to avoid removing root
-	Change cycle_callback_ptr so that buffer can be modified
-	Moved to version 0.9.0
+	Removed support for event supplier (badly defined, complicated and almost useless).
+	Eliminated custom selection logic (simplified overall code in webserver.cpp).
+	Changed comet to use a lock-free implementation.
+	Removed POLL start configuration (THREAD now defaults to POLL or EPOLL on Linux).
+	Use TCP_FASTOPEN on linux >= 3.6.
+	Changed http_resource to use classic C++ polymorphism using virtual instead of CRTP.
+	Removed build dependency on pkg-config.
 
-Sun Jul 23 02:46:20 2014 +0100
-	Support for building on MinGW/Cygwin systems
-	min libmicrohttpd version moved to 0.9.37
-	Moved to version 0.8.0
+Version 0.9.0 - 2015-04-15
 
-Sat Mar 23 15:22:40 2014 +0100
-	Continue the cleanup reducing webserver.cpp responsibilities
-	Deep work on documentation
-	Moved to version 0.7.2
+	Support build on MacOsX.
+	Improved support for CI on travis.
+	Solved bug on event_supplier registering.
+	Solved bug on standardize_url to avoid removing root.
+	Change cycle_callback_ptr so that buffer can be modified.
 
-Sat Jan 25 16:31:03 2014 +0100
-	Cleaned-up webserver.cpp code to extract secondary classes
-	Enforced immutability of webserver class
-	Enabled library to compile on g++ 4.1.2
+Version 0.8.0 - 2014-07-23
 
-Wed Oct 31 17:59:40 2012 +0100
-	Added parameter in http_response to specify if it needs to be deleted by
-	WS - Sebastiano Merlino
+	Support for building on MinGW/Cygwin systems.
+	min libmicrohttpd version moved to 0.9.37.
 
-Wed Oct 31 14:23:57 2012 +0100
-	Changed dependency download method - Sebastiano Merlino
+Version 0.7.2 - 2014-03-23
 
-Wed Oct 31 14:13:49 2012 +0100
-	Added dependency to travis - Sebastiano Merlino
+	Continue the cleanup reducing webserver.cpp responsibilities.
+	Deep work on documentation.
 
-Wed Oct 31 14:07:30 2012 +0100
-	Changed travis build path - Sebastiano Merlino
+Version 0.7.0 - 2014-01-25
 
-Wed Oct 31 14:02:59 2012 +0100
-	Added travis conf to repo - Sebastiano Merlino
+	Cleaned-up webserver.cpp code to extract secondary classes.
+	Enforced immutability of webserver class.
+	Enabled library to compile on g++ 4.1.2.
 
-Tue Oct 30 16:13:10 2012 +0100
-	Changed the buggy debian changelog - Sebastiano Merlino
+Version 0.5.4 - 2012-10-30
 
-Tue Oct 30 16:06:26 2012 +0100
-	Changed version to v0.5.4 - Sebastiano Merlino
+	Added parameter in http_response to specify if it needs to be deleted by WS.
+	Changed dependency download method.
+	Added travis CI configuration.
+	Changed the buggy debian changelog.
 
-Tue Oct 30 15:59:45 2012 +0100
-	Adjusted debian build rules - Sebastiano Merlino
+Version 0.5.3 - 2012-10-30
 
-Tue Oct 30 12:52:04 2012 +0100
-	Changed version to 0.5.3
-	Added grow method to http_request - Sebastiano Merlino
+	Added grow method to http_request.
 
-Tue Oct 23 12:46:48 2012 +0200
-	Changed version from 0.5.1 to 0.5.2 - Sebastiano Merlino
+Version 0.5.2 - 2012-10-23
 
-Tue Oct 23 12:46:07 2012 +0200
-	Changed default log behaviour to print nothing
-	Added getters and setters for dynamic components of WS - Sebastiano Merlino
+	Changed default log behaviour to print nothing.
+	Added getters and setters for dynamic components of WS.
 
-Mon Oct 22 12:13:11 2012 +0200
-	Modified version number and changelog in order to prepare tag - Sebastiano Merlino
+Version 0.5.1 - 2012-10-10
 
-Fri Oct 19 17:11:21 2012 +0200
-	Added response constructor with byte - Sebastiano Merlino
+	Added querystring to request attributes.
+	Added response constructor with byte.
+	Removed unuseful dependency from libuuid.
+	Solved a bug that made impossible to parse post data.
 
-Mon Oct 15 11:16:22 2012 +0200
-	Removed unuseful dependency from libuuid - Sebastiano Merlino
+Version 0.5.0 - 2012-10-05
 
-Fri Oct 12 15:42:21 2012 +0200
-	Solved a bug that made impossible to parse post data - Sebastiano Merlino
-
-Wed Oct 10 17:19:25 2012 +0200
-	Moved to version 0.5.1 - Sebastiano Merlino
-
-Wed Oct 10 17:16:26 2012 +0200
-	Added querystring to request attributes - Sebastiano Merlino
-
-Fri Oct 5 18:00:38 2012 +0200
-	Merge branch 'master' of https://github.com/etr/libhttpserver
-	Conflicts:
-	src/webserver.cpp - Sebastiano Merlino
-
-Fri Oct 5 17:55:42 2012 +0200
 	Added -D_REENTRANT to configuration.
 	Aligned debian changelog.
-	Added comet capabilities to the server. - Sebastiano Merlino
+	Added comet capabilities to the server.
+	Solved a bug with print in debug mode.
+	Modified webserver in order to accept comet calls.
+	Partially solved undefined symbol in wrappers.
+	Avoided the usage of the sole option MHD_USE_POLL.
+	Added forgotten modded_request.hpp file.
+	Added .gitignore file.
+	Moved http_endpoint to details namespace.
 
-Tue Sep 25 00:50:45 2012 +0200
-	Solved a bug with print in debug mode - Sebastiano Merlino
+Version 0.4.0 - 2012-08-26
 
-Mon Sep 24 15:29:28 2012 +0200
-	Modified webserver in order to accept comet calls
-	Added ignored patters in gitignore - Sebastiano Merlino
-
-Sun Sep 23 19:10:28 2012 +0200
-	Partially solved undefined symbol in wrappers - Sebastiano Merlino
-
-Sun Sep 23 19:09:54 2012 +0200
-	Avoided the usage of the sole option MHD_USE_POLL - Sebastiano Merlino
-
-Thu Sep 20 08:47:24 2012 +0200
-	Added forgotten modded_request.hpp file - Sebastiano Merlino
-
-Thu Sep 20 08:46:33 2012 +0200
-	Added .gitignore file - Sebastiano Merlino
-
-Sat Sep 15 13:02:52 2012 +0200
-	Moved http_endpoint to details namespace - Sebastiano Merlino
-
-Sat Sep 15 02:39:47 2012 -0700
-	Merge pull request #35 from etr/cflags_for_swig_in_pcfile
-	add -I${includedir}/httpserver to CFLAGS - Sebastiano Merlino
-
-Tue Aug 28 16:33:45 2012 +0200
-	add -I${includedir}/httpserver to CFLAGS
-	This make swig file generation easier because HTTPSERVER_CFLAGS can be
-	directly used in swig file generation.
-	This fix affect only clients that use swing on their code. - Dario Mazza
-
-Sun Aug 26 19:03:44 2012 +0200
-	Changed version.
-	Aligned version and dependencies in pc and debian files
-	Updated debian changelog. - Sebastiano Merlino
-
-Sun Aug 26 18:55:05 2012 +0200
 	Changed visibility of http_endpoint methods to avoid them to be called
-	by external applications.
+		by external applications.
 	Avoided explicit usage of MHD constants in classes interface.
 	Changed http_resource interface in order to avoid copy-constructor calls
-	and improve performances.
+		and improve performances.
 	Changed answer_to_connection method in order to avoid multiple checking
-	on methods and thus improve performances.
-	Added a way to register personalized error pages. - Sebastiano Merlino
-
-Wed Aug 8 17:33:39 2012 +0200
-	Removed code repetition in handle_request method - Sebastiano Merlino
-
-Wed Aug 8 12:31:44 2012 +0200
-	Added capability to compile with gcov
-	Changed infinite loop in ws to use wait conditions
-	Removed a bug from GET-like method handling - Sebastiano Merlino
-
-Sun Aug 5 18:26:25 2012 +0200
-	Modified in order to parse qs in POST/PUT cases - Sebastiano Merlino
-
-Fri Aug 3 23:36:14 2012 +0200
-	Avoid inclusion of internal headers - Sebastiano Merlino
-
-Thu Aug 2 00:43:02 2012 +0200
-	Changed in order to find libmicrohttpd in system - Sebastiano Merlino
-
-Thu Jul 26 14:08:47 2012 +0200
-	Solved some performance and style issues - Sebastiano Merlino
-
-Wed Jul 25 18:42:48 2012 +0200
-	Merge branch 'master' of github.com:etr/libhttpserver - Sebastiano Merlino
-
-Wed Jul 25 18:41:45 2012 +0200
-	Added some comments to http_endpoint and http_request - Sebastiano Merlino
-
-Wed Jul 25 08:58:04 2012 -0700
-	Merge pull request #29 from etr/libtool_version_number
-	using m4 to define major,minor and revision number in configure.ac - Sebastiano Merlino
-
-Wed Jul 25 17:50:05 2012 +0200
-	using m4 to define major,minor and revision number in configure.ac and send version number to libtool and AC_INIT - Dario Mazza
-
-Wed Jul 25 17:10:49 2012 +0200
-	Changed in order to solve some problems with deb package and rpm package - Sebastiano Merlino
-
-Tue Jul 24 16:55:51 2012 -0700
-	Merge pull request #28 from etr/debpkg_patch_deps
-	added parameter used to ignore dependecies during debpkg creation - Sebastiano Merlino
-
-Wed Jul 25 01:51:52 2012 +0200
-	added parameter used to ignore dependecies during debpkg creation - Dario Mazza
-
-Wed Jul 25 00:42:25 2012 +0200
-	Adjusted errors in debian rules - Sebastiano Merlino
-
-Tue Jul 24 16:37:07 2012 +0200
-	Modified rpm build in order to compile it
-	Lowered required version of libmicrohttpd to 0.9.7 - Sebastiano Merlino
-
-Tue Jul 24 13:28:38 2012 +0200
-	Changed also build default directory for debs - Sebastiano Merlino
-
-Tue Jul 24 13:22:59 2012 +0200
-	Changed rules.in in order to avoid relative paths in deb compile - Sebastiano Merlino
-
-Mon Jul 23 15:42:33 2012 +0200
-	Solved a logical error in http_resource route
-	Added some debug prints - Sebastiano Merlino
-
-Sun Jul 22 00:24:04 2012 +0200
-	Changed in order to add optional optimizations on ws - Sebastiano Merlino
-
-Sat Jul 21 17:46:03 2012 +0200
-	Changed in order to enhance deb packages generation
-	Added rpm packages generation - Sebastiano Merlino
-
-Sat Jul 21 00:43:39 2012 +0200
-	adjusted error in changelog - Sebastiano Merlino
-
-Sat Jul 21 00:41:43 2012 +0200
-	Changed in order to include debian package creation to makefile - Sebastiano Merlino
-
-Fri Jul 20 12:11:30 2012 -0700
-	Merge pull request #26 from etr/debpackage
-	project debianized - Sebastiano Merlino
-
-Fri Jul 20 21:03:43 2012 +0200
-	Merge branch 'master' of github.com:etr/libhttpserver - Sebastiano Merlino
-
-Fri Jul 20 21:03:24 2012 +0200
-	Changed version - Sebastiano Merlino
-
+		on methods and thus improve performances.
+	Added a way to register personalized error pages.
+	Removed code repetition in handle_request method.
+	Added capability to compile with gcov.
+	Changed infinite loop in ws to use wait conditions.
+	Removed a bug from GET-like method handling.
+	Modified in order to parse qs in POST/PUT cases.
+	Avoid inclusion of internal headers.
+	Changed in order to find libmicrohttpd in system.
+	Solved some performance and style issues.
+	Added some comments to http_endpoint and http_request.
+	using m4 to define major, minor and revision number in configure.ac.
+	Changed in order to solve some problems with deb package and rpm package.
+	Added parameter used to ignore dependecies during debpkg creation.
+	Adjusted errors in debian rules.
+	Modified rpm build in order to compile it.
+	Lowered required version of libmicrohttpd to 0.9.7.
+	Solved a logical error in http_resource route.
+	Changed in order to add optional optimizations on ws.
+	Changed in order to enhance deb packages generation.
+	Added rpm packages generation.
+	Changed in order to include debian package creation to makefile.

@@ -127,6 +127,22 @@ Please follow these steps to have your contribution considered by the maintainer
 
 While the prerequisites above must be satisfied prior to having your pull request reviewed, the reviewer(s) may ask you to complete additional design work, tests, or other changes before your pull request can be ultimately accepted.
 
+### ChangeLog
+
+All pull requests that include user-facing changes must update the `ChangeLog` file. CI enforces this requirement (with exemptions for documentation-only and CI-only changes).
+
+* Add your entry under the **first** `Version X.Y.Z` header at the top of `ChangeLog`.
+* Use a tab-indented, one-line summary of each change:
+  ```
+  	Added support for new feature X.
+  ```
+* If your change spans multiple lines, indent continuation lines with two tabs:
+  ```
+  	Fixed a bug where long descriptions would cause the parser to
+  		fail on multi-line input.
+  ```
+* Changes that only touch files in `.github/`, `*.md` in the repository root, `.gitignore`, or `CPPLINT.cfg` are exempt from the ChangeLog requirement.
+
 ## Styleguides
 
 ### Git Commit Messages

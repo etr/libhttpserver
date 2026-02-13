@@ -1,0 +1,84 @@
+name: "ChangeLog Check"
+
+on:
+  pull_request:
+    branches: [master]
+
+jobs:
+  changelog:
+    name: Verify ChangeLog updated
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Check for ChangeLog update
+      run: |
+        # Get list of changed files
+        changed_files=$(git diff --name-only origin/master...HEAD)
+
+        if [ -z "$changed_files" ]; then
+          echo "No files changed."
+          exit 0
+        fi
+
+        # Check if only exempt files were changed
+        # Exempt: .github/*, CLAUDE.md, README*, CONTRIBUTING*, CODE_OF_CONDUCT*,
+        #         .gitignore, CPPLINT.cfg, *.md in root
+        has_non_exempt=false
+        changelog_modified=false
+
+        while IFS= read -r file; do
+          # Check if ChangeLog itself was modified
+          if [ "$file" = "ChangeLog" ]; then
+            changelog_modified=true
+            continue
+          fi
+
+          # Check exempt patterns
+          case "$file" in
+            .github/*)          continue ;;
+            CLAUDE.md)          continue ;;
+            README*)            continue ;;
+            CONTRIBUTING*)      continue ;;
+            CODE_OF_CONDUCT*)   continue ;;
+            .gitignore)         continue ;;
+            CPPLINT.cfg)        continue ;;
+          esac
+
+          # Check for *.md files in repo root (no slashes in path)
+          if echo "$file" | grep -qE '^[^/]+\.md$'; then
+            continue
+          fi
+
+          has_non_exempt=true
+        done <<< "$changed_files"
+
+        if [ "$has_non_exempt" = "false" ]; then
+          echo "Only exempt files changed — ChangeLog update not required."
+          exit 0
+        fi
+
+        if [ "$changelog_modified" = "false" ]; then
+          echo "::error::ChangeLog was not updated. All pull requests with code changes must include a ChangeLog entry."
+          echo ""
+          echo "Please add a tab-indented entry under the first 'Version X.Y.Z' header in ChangeLog."
+          echo "See CONTRIBUTING.md for format details."
+          echo ""
+          echo "If this PR only changes documentation or CI files, add the [skip changelog] label or ensure"
+          echo "only exempt paths are modified (.github/*, *.md in root, .gitignore, CPPLINT.cfg)."
+          exit 1
+        fi
+
+        echo "ChangeLog was modified — checking format."
+
+        # Validate first line matches Version header format
+        first_line=$(head -n 1 ChangeLog)
+        if ! echo "$first_line" | grep -qE '^Version [0-9]+\.[0-9]+\.[0-9]+'; then
+          echo "::error::First line of ChangeLog must match 'Version X.Y.Z' format (got: '$first_line')."
+          exit 1
+        fi
+
+        echo "ChangeLog format looks good."

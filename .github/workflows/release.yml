@@ -1,0 +1,326 @@
+name: "Release"
+
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g., 0.20.0 or 0.20.0-rc1)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    name: Validate release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      is_prerelease: ${{ steps.version.outputs.is_prerelease }}
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Determine version
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          VERSION="${{ github.event.inputs.tag }}"
+        else
+          VERSION="${GITHUB_REF#refs/tags/}"
+        fi
+        VERSION="${VERSION#v}"
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+        if echo "$VERSION" | grep -qE '-(rc|alpha|beta)'; then
+          echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+        fi
+
+        echo "Version: $VERSION"
+
+    - name: Validate version consistency
+      run: |
+        chmod +x scripts/validate-version.sh
+        scripts/validate-version.sh "${{ steps.version.outputs.version }}"
+
+    - name: Extract release notes
+      run: |
+        chmod +x scripts/extract-release-notes.sh
+        scripts/extract-release-notes.sh "${{ steps.version.outputs.version }}" > release-notes.md
+        echo "--- Release notes ---"
+        cat release-notes.md
+
+    - name: Upload release notes
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-notes
+        path: release-notes.md
+
+  build-dist:
+    name: Build distribution tarball
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y autoconf automake libtool libgnutls28-dev libcurl4-openssl-dev
+
+    - name: Fetch libmicrohttpd from cache
+      id: cache-libmicrohttpd
+      uses: actions/cache@v4
+      with:
+        path: libmicrohttpd-0.9.77
+        key: ubuntu-latest-gcc-libmicrohttpd-0.9.77-pre-built-v2
+
+    - name: Build libmicrohttpd (if not cached)
+      if: steps.cache-libmicrohttpd.outputs.cache-hit != 'true'
+      run: |
+        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.77.tar.gz -o libmicrohttpd-0.9.77.tar.gz
+        tar -xzf libmicrohttpd-0.9.77.tar.gz
+        cd libmicrohttpd-0.9.77
+        ./configure --disable-examples
+        make
+
+    - name: Install libmicrohttpd
+      run: |
+        cd libmicrohttpd-0.9.77
+        sudo make install
+        sudo ldconfig
+
+    - name: Build libhttpserver
+      run: |
+        ./bootstrap
+        mkdir build
+        cd build
+        ../configure
+        make
+        make check
+
+    - name: Create distribution tarball
+      run: |
+        cd build
+        make dist
+
+    - name: Upload tarball
+      uses: actions/upload-artifact@v4
+      with:
+        name: dist-tarball
+        path: build/libhttpserver-*.tar.gz
+
+  verify-dist-linux:
+    name: Verify tarball (Linux)
+    runs-on: ubuntu-latest
+    needs: build-dist
+    steps:
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libgnutls28-dev libcurl4-openssl-dev
+
+    - name: Fetch libmicrohttpd from cache
+      id: cache-libmicrohttpd
+      uses: actions/cache@v4
+      with:
+        path: libmicrohttpd-0.9.77
+        key: ubuntu-latest-gcc-libmicrohttpd-0.9.77-pre-built-v2
+
+    - name: Build libmicrohttpd (if not cached)
+      if: steps.cache-libmicrohttpd.outputs.cache-hit != 'true'
+      run: |
+        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.77.tar.gz -o libmicrohttpd-0.9.77.tar.gz
+        tar -xzf libmicrohttpd-0.9.77.tar.gz
+        cd libmicrohttpd-0.9.77
+        ./configure --disable-examples
+        make
+
+    - name: Install libmicrohttpd
+      run: |
+        cd libmicrohttpd-0.9.77
+        sudo make install
+        sudo ldconfig
+
+    - name: Download tarball
+      uses: actions/download-artifact@v4
+      with:
+        name: dist-tarball
+
+    - name: Build and test from tarball
+      run: |
+        tar -xzf libhttpserver-*.tar.gz
+        cd libhttpserver-*/
+        mkdir build
+        cd build
+        ../configure
+        make
+        make check
+
+    - name: Print test results on failure
+      if: failure()
+      run: |
+        cd libhttpserver-*/build
+        cat test/test-suite.log || true
+
+  verify-dist-macos:
+    name: Verify tarball (macOS)
+    runs-on: macos-latest
+    needs: build-dist
+    steps:
+    - name: Install build tools
+      run: brew install autoconf automake libtool
+
+    - name: Fetch libmicrohttpd from cache
+      id: cache-libmicrohttpd
+      uses: actions/cache@v4
+      with:
+        path: libmicrohttpd-0.9.77
+        key: macos-latest-gcc-libmicrohttpd-0.9.77-pre-built-v2
+
+    - name: Build libmicrohttpd (if not cached)
+      if: steps.cache-libmicrohttpd.outputs.cache-hit != 'true'
+      run: |
+        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.77.tar.gz -o libmicrohttpd-0.9.77.tar.gz
+        tar -xzf libmicrohttpd-0.9.77.tar.gz
+        cd libmicrohttpd-0.9.77
+        ./configure --disable-examples
+        make
+
+    - name: Install libmicrohttpd
+      run: |
+        cd libmicrohttpd-0.9.77
+        sudo make install
+
+    - name: Fetch curl from cache
+      id: cache-curl
+      uses: actions/cache@v4
+      with:
+        path: curl-7.75.0
+        key: macos-latest-CURL-pre-built-v2
+
+    - name: Build curl (if not cached)
+      if: steps.cache-curl.outputs.cache-hit != 'true'
+      run: |
+        curl https://libhttpserver.s3.amazonaws.com/travis_stuff/curl-7.75.0.tar.gz -o curl-7.75.0.tar.gz
+        tar -xzf curl-7.75.0.tar.gz
+        cd curl-7.75.0
+        ./configure --with-darwinssl --without-ssl
+        make
+
+    - name: Install curl
+      run: |
+        cd curl-7.75.0
+        sudo make install
+
+    - name: Download tarball
+      uses: actions/download-artifact@v4
+      with:
+        name: dist-tarball
+
+    - name: Build and test from tarball
+      run: |
+        tar -xzf libhttpserver-*.tar.gz
+        cd libhttpserver-*/
+        mkdir build
+        cd build
+        CFLAGS='-mtune=generic' ../configure --disable-fastopen
+        make
+        make check
+
+    - name: Print test results on failure
+      if: failure()
+      run: |
+        cd libhttpserver-*/build
+        cat test/test-suite.log || true
+
+  verify-dist-windows:
+    name: Verify tarball (Windows)
+    runs-on: windows-latest
+    needs: build-dist
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+    - name: Setup MSYS2
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: MINGW64
+        update: true
+        install: >-
+          autotools
+          base-devel
+
+    - name: Install MinGW64 packages
+      run: |
+        pacman --noconfirm -S --needed mingw-w64-x86_64-{toolchain,libtool,make,pkg-config,libsystre,doxygen,gnutls,graphviz,curl}
+
+    - name: Build and install libmicrohttpd
+      run: |
+        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.77.tar.gz -o libmicrohttpd-0.9.77.tar.gz
+        tar -xzf libmicrohttpd-0.9.77.tar.gz
+        cd libmicrohttpd-0.9.77
+        ./configure --disable-examples --enable-poll=no
+        make
+        make install
+
+    - name: Download tarball
+      uses: actions/download-artifact@v4
+      with:
+        name: dist-tarball
+
+    - name: Build and test from tarball
+      run: |
+        tar -xzf libhttpserver-*.tar.gz
+        cd libhttpserver-*/
+        mkdir build
+        cd build
+        ../configure --disable-fastopen
+        make
+        make check
+
+    - name: Print test results on failure
+      if: failure()
+      run: |
+        cd libhttpserver-*/build
+        cat test/test-suite.log || true
+
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [validate, verify-dist-linux, verify-dist-macos, verify-dist-windows]
+    steps:
+    - name: Download tarball
+      uses: actions/download-artifact@v4
+      with:
+        name: dist-tarball
+
+    - name: Download release notes
+      uses: actions/download-artifact@v4
+      with:
+        name: release-notes
+
+    - name: Create release
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GH_REPO: ${{ github.repository }}
+      run: |
+        VERSION="${{ needs.validate.outputs.version }}"
+        IS_PRERELEASE="${{ needs.validate.outputs.is_prerelease }}"
+
+        PRERELEASE_FLAG=""
+        if [ "$IS_PRERELEASE" = "true" ]; then
+          PRERELEASE_FLAG="--prerelease"
+        fi
+
+        gh release create "$VERSION" \
+          --title "libhttpserver $VERSION" \
+          --notes-file release-notes.md \
+          $PRERELEASE_FLAG \
+          libhttpserver-*.tar.gz
