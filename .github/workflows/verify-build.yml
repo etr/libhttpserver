@@ -512,7 +512,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: libmicrohttpd-0.9.77
-        key: ${{ matrix.os }}-${{ matrix.c-compiler }}-libmicrohttpd-0.9.77-pre-built
+        key: ${{ matrix.os }}-${{ matrix.c-compiler }}-libmicrohttpd-0.9.77-pre-built-v2
       if: ${{ matrix.os-type != 'windows' && matrix.build-type != 'no-dauth' && matrix.compiler-family != 'arm-cross' }}
 
     - name: Build libmicrohttpd dependency (if not cached)
