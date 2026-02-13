@@ -337,6 +337,9 @@ LT_END_AUTO_TEST(enable_options)
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_socket)
     int fd = socket(AF_INET, SOCK_STREAM, 0);
 
+    int one = 1;
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+
     struct sockaddr_in address;
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = inet_addr("127.0.0.1");
@@ -353,7 +356,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_socket)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl, CURLOPT_URL, "127.0.0.1:" PORT_STRING "/base");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
