@@ -42,7 +42,7 @@ class file_info {
      file_info() = default;
 
  private:
-     size_t _file_size;
+     size_t _file_size = 0;
      std::string _file_system_file_name;
      std::string _content_type;
      std::string _transfer_encoding;

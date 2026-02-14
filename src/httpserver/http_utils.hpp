@@ -272,6 +272,8 @@ class http_utils {
      static std::string standardize_url(const std::string&);
 
      static const std::string generate_random_upload_filename(const std::string& directory);
+
+     static std::string sanitize_upload_filename(const std::string& filename);
 };
 
 #define COMPARATOR(x, y, op) { \

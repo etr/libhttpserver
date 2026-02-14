@@ -351,7 +351,7 @@ std::string_view http_request::get_digested_user() const {
     cache->digested_user = EMPTY;
     if (digested_user_c != nullptr) {
         cache->digested_user = digested_user_c;
-        free(digested_user_c);
+        MHD_free(digested_user_c);
     }
 
     return cache->digested_user;

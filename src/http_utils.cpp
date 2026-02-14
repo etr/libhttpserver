@@ -271,6 +271,21 @@ const std::string http_utils::generate_random_upload_filename(const std::string&
     return ret_filename;
 }
 
+std::string http_utils::sanitize_upload_filename(const std::string& filename) {
+    if (filename.empty()) return "";
+
+    // Find the basename: take everything after the last '/' or '\'
+    std::string::size_type pos = filename.find_last_of("/\\");
+    std::string basename = (pos != std::string::npos) ? filename.substr(pos + 1) : filename;
+
+    // Reject empty basename, ".", and ".."
+    if (basename.empty() || basename == "." || basename == "..") {
+        return "";
+    }
+
+    return basename;
+}
+
 std::string get_ip_str(const struct sockaddr *sa) {
     if (!sa) throw std::invalid_argument("socket pointer is null");
 

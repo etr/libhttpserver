@@ -699,7 +699,11 @@ MHD_Result webserver::post_iterator(void *cls, enum MHD_ValueKind kind,
                 if (mr->ws->generate_random_filename_on_upload) {
                     file.set_file_system_file_name(http_utils::generate_random_upload_filename(mr->ws->file_upload_dir));
                 } else {
-                    file.set_file_system_file_name(mr->ws->file_upload_dir + "/" + std::string(filename));
+                    std::string safe_name = http_utils::sanitize_upload_filename(filename);
+                    if (safe_name.empty()) {
+                        return MHD_NO;
+                    }
+                    file.set_file_system_file_name(mr->ws->file_upload_dir + "/" + safe_name);
                 }
                 // to not append to an already existing file, delete an already existing file
                 unlink(file.get_file_system_file_name().c_str());
@@ -731,6 +735,9 @@ MHD_Result webserver::post_iterator(void *cls, enum MHD_ValueKind kind,
 
             if (size > 0) {
                 mr->upload_ostrm->write(data, size);
+                if (!mr->upload_ostrm->good()) {
+                    return MHD_NO;
+                }
             }
 
             // update the file size in the map
@@ -774,13 +781,40 @@ std::shared_ptr<http_response> webserver::internal_error_page(details::modded_re
 }
 
 bool webserver::should_skip_auth(const std::string& path) const {
+    // Normalize path: resolve ".." and "." segments to prevent bypass
+    std::string normalized;
+    {
+        std::vector<std::string> segments;
+        std::string::size_type start = 0;
+        // Skip leading slash
+        if (!path.empty() && path[0] == '/') {
+            start = 1;
+        }
+        while (start < path.size()) {
+            auto end = path.find('/', start);
+            if (end == std::string::npos) end = path.size();
+            std::string seg = path.substr(start, end - start);
+            if (seg == "..") {
+                if (!segments.empty()) segments.pop_back();
+            } else if (!seg.empty() && seg != ".") {
+                segments.push_back(seg);
+            }
+            start = end + 1;
+        }
+        normalized = "/";
+        for (size_t i = 0; i < segments.size(); i++) {
+            if (i > 0) normalized += "/";
+            normalized += segments[i];
+        }
+    }
+
     for (const auto& skip_path : auth_skip_paths) {
-        if (skip_path == path) return true;
+        if (skip_path == normalized) return true;
         // Support wildcard suffix (e.g., "/public/*")
         if (skip_path.size() > 2 && skip_path.back() == '*' &&
             skip_path[skip_path.size() - 2] == '/') {
             std::string prefix = skip_path.substr(0, skip_path.size() - 1);
-            if (path.compare(0, prefix.size(), prefix) == 0) return true;
+            if (normalized.compare(0, prefix.size(), prefix) == 0) return true;
         }
     }
     return false;
@@ -1028,7 +1062,7 @@ MHD_Result webserver::answer_to_connection(void* cls, MHD_Connection* connection
 
     const MHD_ConnectionInfo * conninfo = MHD_get_connection_info(connection, MHD_CONNECTION_INFO_CONNECTION_FD);
 
-    if (static_cast<webserver*>(cls)->tcp_nodelay) {
+    if (conninfo != nullptr && static_cast<webserver*>(cls)->tcp_nodelay) {
         int yes = 1;
         setsockopt(conninfo->connect_fd, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<char*>(&yes), sizeof(int));
     }
