@@ -964,6 +964,96 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_with_content_type)
     ws->stop();
 LT_END_AUTO_TEST(file_upload_with_content_type)
 
+// Send file with a crafted filename for path traversal testing
+static std::pair<CURLcode, int32_t> send_file_with_traversal_name(int port, const char* crafted_filename) {
+    curl_global_init(CURL_GLOBAL_ALL);
+
+    CURL *curl = curl_easy_init();
+
+    curl_mime *form = curl_mime_init(curl);
+    curl_mimepart *field = curl_mime_addpart(form);
+    curl_mime_name(field, TEST_KEY);
+    // Use the real file for data, but override the filename
+    curl_mime_filedata(field, TEST_CONTENT_FILEPATH);
+    curl_mime_filename(field, crafted_filename);
+
+    CURLcode res;
+    std::string url = "localhost:" + std::to_string(port) + "/upload";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_MIMEPOST, form);
+
+    res = curl_easy_perform(curl);
+    long http_code = 0;   // NOLINT [runtime/int]
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+
+    curl_easy_cleanup(curl);
+    curl_mime_free(form);
+    return {res, http_code};
+}
+
+// Test that path traversal filenames are rejected
+LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_path_traversal_rejected)
+    string upload_directory = "upload_test_dir";
+    MKDIR(upload_directory.c_str());
+
+    int port = PORT + 2;
+    auto ws = std::make_unique<webserver>(create_webserver(port)
+                       .file_upload_target(httpserver::FILE_UPLOAD_DISK_ONLY)
+                       .file_upload_dir(upload_directory));
+    // NOT using generate_random_filename_on_upload - this is the vulnerable path
+    ws->start(false);
+    LT_CHECK_EQ(ws->is_running(), true);
+
+    print_file_upload_resource resource;
+    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+
+    // Attempt path traversal with "../escape"
+    send_file_with_traversal_name(port, "../escape");
+    // The server should reject the upload (MHD_NO causes connection close)
+    // The key check is that no file was created outside the upload dir
+    LT_CHECK_EQ(file_exists("escape"), false);
+    LT_CHECK_EQ(file_exists("./escape"), false);
+
+    ws->stop();
+
+    // Clean up
+    rmdir(upload_directory.c_str());
+LT_END_AUTO_TEST(file_upload_path_traversal_rejected)
+
+// Test that sanitize keeps the basename for normal filenames
+LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_sanitize_keeps_basename)
+    string upload_directory = "upload_test_dir";
+    MKDIR(upload_directory.c_str());
+
+    int port = PORT + 3;
+    auto ws = std::make_unique<webserver>(create_webserver(port)
+                       .file_upload_target(httpserver::FILE_UPLOAD_DISK_ONLY)
+                       .file_upload_dir(upload_directory));
+    ws->start(false);
+    LT_CHECK_EQ(ws->is_running(), true);
+
+    print_file_upload_resource resource;
+    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+
+    // Upload with a path-like filename — should strip to just "myfile.txt"
+    auto res = send_file_with_traversal_name(port, "some/path/myfile.txt");
+    LT_ASSERT_EQ(res.first, 0);
+    LT_ASSERT_EQ(res.second, 201);
+
+    // The file should be created with only the basename
+    map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
+    LT_CHECK_EQ(files.size(), 1);
+    auto file = files.begin()->second.begin();
+    string expected_path = upload_directory + "/myfile.txt";
+    LT_CHECK_EQ(file->second.get_file_system_file_name(), expected_path);
+
+    ws->stop();
+
+    // Clean up
+    unlink(expected_path.c_str());
+    rmdir(upload_directory.c_str());
+LT_END_AUTO_TEST(file_upload_sanitize_keeps_basename)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

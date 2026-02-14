@@ -1090,6 +1090,39 @@ LT_BEGIN_AUTO_TEST(authentication_suite, auth_empty_skip_paths)
     ws.stop();
 LT_END_AUTO_TEST(auth_empty_skip_paths)
 
+// Test that path traversal cannot bypass auth skip paths
+// Requesting /public/../protected should NOT skip auth
+LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_path_traversal_bypass)
+    webserver ws = create_webserver(PORT)
+        .auth_handler(centralized_auth_handler)
+        .auth_skip_paths({"/public/*"});
+
+    simple_resource sr;
+    LT_ASSERT_EQ(true, ws.register_resource("protected", &sr));
+    LT_ASSERT_EQ(true, ws.register_resource("public/info", &sr));
+    ws.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL *curl;
+    CURLcode res;
+    long http_code = 0;  // NOLINT(runtime/int)
+
+    // /public/../protected should normalize to /protected, which requires auth
+    curl = curl_easy_init();
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/public/../protected");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(http_code, 401);  // Should require auth, not be skipped
+    curl_easy_cleanup(curl);
+
+    ws.stop();
+LT_END_AUTO_TEST(auth_skip_path_traversal_bypass)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()
