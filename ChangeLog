@@ -1,5 +1,17 @@
 Version 0.19.0 - 2023-06-15
 
+	Fixed path traversal vulnerability in file uploads when
+		generate_random_filename_on_upload is disabled.
+	Fixed TOCTOU race in file_response by replacing stat-then-open with
+		open-then-fstat; added O_NOFOLLOW on non-Windows.
+	Fixed file descriptor leaks in file_response on lseek failure and
+		zero-size file paths.
+	Fixed NULL pointer dereference when MHD_get_connection_info returns
+		nullptr for TCP_NODELAY.
+	Fixed uninitialized _file_size in file_info.
+	Fixed auth skip path bypass via path traversal (e.g. /public/../protected).
+	Fixed use of free() instead of MHD_free() for digest auth username.
+	Fixed unchecked write error during file upload.
 	Considering family_url as part of the priority when selecting a URL to match.
 	More explicit selection of C++ version.
 	Ability to handle multiple parameters with the same name on the URL.
