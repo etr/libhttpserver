@@ -261,6 +261,7 @@ class create_webserver {
          return *this;
      }
 
+#ifdef HAVE_BAUTH
      create_webserver& basic_auth() {
          _basic_auth_enabled = true;
          return *this;
@@ -270,6 +271,7 @@ class create_webserver {
          _basic_auth_enabled = false;
          return *this;
      }
+#endif  // HAVE_BAUTH
 
      create_webserver& digest_auth() {
          _digest_auth_enabled = true;
@@ -438,7 +440,9 @@ class create_webserver {
      std::string _digest_auth_random = "";
      int _nonce_nc_size = 0;
      http::http_utils::policy_T _default_policy = http::http_utils::ACCEPT;
+#ifdef HAVE_BAUTH
      bool _basic_auth_enabled = true;
+#endif  // HAVE_BAUTH
      bool _digest_auth_enabled = true;
      bool _regex_checking = true;
      bool _ban_system_enabled = true;

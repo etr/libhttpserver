@@ -168,7 +168,9 @@ class webserver {
      const int nonce_nc_size;
      bool running;
      const http::http_utils::policy_T default_policy;
+#ifdef HAVE_BAUTH
      const bool basic_auth_enabled;
+#endif  // HAVE_BAUTH
      const bool digest_auth_enabled;
      const bool regex_checking;
      const bool ban_system_enabled;

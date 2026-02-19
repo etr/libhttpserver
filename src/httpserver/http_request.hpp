@@ -60,11 +60,13 @@ class http_request {
  public:
      static const char EMPTY[];
 
+#ifdef HAVE_BAUTH
      /**
       * Method used to get the username eventually passed through basic authentication.
       * @return string representation of the username.
      **/
      std::string_view get_user() const;
+#endif  // HAVE_BAUTH
 
 #ifdef HAVE_DAUTH
      /**
@@ -74,11 +76,13 @@ class http_request {
      std::string_view get_digested_user() const;
 #endif  // HAVE_DAUTH
 
+#ifdef HAVE_BAUTH
      /**
       * Method used to get the password eventually passed through basic authentication.
       * @return string representation of the password.
      **/
      std::string_view get_pass() const;
+#endif  // HAVE_BAUTH
 
      /**
       * Method used to get the path requested
@@ -380,7 +384,9 @@ class http_request {
 
      static MHD_Result build_request_querystring(void *cls, enum MHD_ValueKind kind, const char *key, const char *value);
 
+#ifdef HAVE_BAUTH
      void fetch_user_pass() const;
+#endif  // HAVE_BAUTH
 
      /**
       * Method used to set an argument value by key.
@@ -485,8 +491,10 @@ class http_request {
      // Others (username, password, digested_user) MHD returns as char* that we need
      // to make a copy of and free anyway.
      struct http_request_data_cache {
+#ifdef HAVE_BAUTH
         std::string username;
         std::string password;
+#endif  // HAVE_BAUTH
         std::string querystring;
         std::string requestor_ip;
 #ifdef HAVE_DAUTH

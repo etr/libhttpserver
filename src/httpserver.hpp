@@ -27,7 +27,9 @@
 
 #define _HTTPSERVER_HPP_INSIDE_
 
+#ifdef HAVE_BAUTH
 #include "httpserver/basic_auth_fail_response.hpp"
+#endif  // HAVE_BAUTH
 #include "httpserver/deferred_response.hpp"
 #ifdef HAVE_DAUTH
 #include "httpserver/digest_auth_fail_response.hpp"

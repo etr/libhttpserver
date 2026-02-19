@@ -18,6 +18,8 @@
      USA
 */
 
+#ifdef HAVE_BAUTH
+
 #include "httpserver/basic_auth_fail_response.hpp"
 #include <microhttpd.h>
 #include <iosfwd>
@@ -32,3 +34,5 @@ int basic_auth_fail_response::enqueue_response(MHD_Connection* connection, MHD_R
 }
 
 }  // namespace httpserver
+
+#endif  // HAVE_BAUTH
