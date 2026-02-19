@@ -158,7 +158,9 @@ webserver::webserver(const create_webserver& params):
     nonce_nc_size(params._nonce_nc_size),
     running(false),
     default_policy(params._default_policy),
+#ifdef HAVE_BAUTH
     basic_auth_enabled(params._basic_auth_enabled),
+#endif  // HAVE_BAUTH
     digest_auth_enabled(params._digest_auth_enabled),
     regex_checking(params._regex_checking),
     ban_system_enabled(params._ban_system_enabled),

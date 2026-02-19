@@ -1,5 +1,8 @@
-Version 0.19.0 - 2023-06-15
+Version 0.20.0
 
+	Added conditional compilation for basic auth (HAVE_BAUTH), mirroring
+		existing HAVE_DAUTH pattern for digest auth. Basic auth support
+		is auto-detected via AC_CHECK_LIB and can be disabled at build time.
 	Fixed path traversal vulnerability in file uploads when
 		generate_random_filename_on_upload is disabled.
 	Fixed TOCTOU race in file_response by replacing stat-then-open with
@@ -12,6 +15,9 @@ Version 0.19.0 - 2023-06-15
 	Fixed auth skip path bypass via path traversal (e.g. /public/../protected).
 	Fixed use of free() instead of MHD_free() for digest auth username.
 	Fixed unchecked write error during file upload.
+
+Version 0.19.0 - 2023-06-15
+
 	Considering family_url as part of the priority when selecting a URL to match.
 	More explicit selection of C++ version.
 	Ability to handle multiple parameters with the same name on the URL.

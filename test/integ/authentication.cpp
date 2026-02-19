@@ -43,7 +43,9 @@ using std::shared_ptr;
 using httpserver::webserver;
 using httpserver::create_webserver;
 using httpserver::http_response;
+#ifdef HAVE_BAUTH
 using httpserver::basic_auth_fail_response;
+#endif  // HAVE_BAUTH
 #ifdef HAVE_DAUTH
 using httpserver::digest_auth_fail_response;
 #endif  // HAVE_DAUTH
@@ -66,6 +68,7 @@ size_t writefunc(void *ptr, size_t size, size_t nmemb, std::string *s) {
     return size*nmemb;
 }
 
+#ifdef HAVE_BAUTH
 class user_pass_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request& req) {
@@ -75,6 +78,7 @@ class user_pass_resource : public http_resource {
          return std::make_shared<string_response>(std::string(req.get_user()) + " " + std::string(req.get_pass()), 200, "text/plain");
      }
 };
+#endif  // HAVE_BAUTH
 
 #ifdef HAVE_DAUTH
 class digest_resource : public http_resource {
@@ -101,6 +105,7 @@ LT_BEGIN_SUITE(authentication_suite)
     }
 LT_END_SUITE(authentication_suite)
 
+#ifdef HAVE_BAUTH
 LT_BEGIN_AUTO_TEST(authentication_suite, base_auth)
     webserver ws = create_webserver(PORT);
 
@@ -150,6 +155,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, base_auth_fail)
 
     ws.stop();
 LT_END_AUTO_TEST(base_auth_fail)
+#endif  // HAVE_BAUTH
 
 //  do not run the digest auth tests on windows as curl
 //  appears to have problems with it.
@@ -555,6 +561,7 @@ LT_END_AUTO_TEST(digest_user_cache_with_auth)
 
 #endif
 
+#ifdef HAVE_BAUTH
 // Simple resource for centralized auth tests
 class simple_resource : public http_resource {
  public:
@@ -1122,6 +1129,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_path_traversal_bypass)
 
     ws.stop();
 LT_END_AUTO_TEST(auth_skip_path_traversal_bypass)
+#endif  // HAVE_BAUTH
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

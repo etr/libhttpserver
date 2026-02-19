@@ -310,6 +310,7 @@ MHD_Result http_request::build_request_querystring(void *cls, enum MHD_ValueKind
     return MHD_YES;
 }
 
+#ifdef HAVE_BAUTH
 void http_request::fetch_user_pass() const {
     char* password = nullptr;
     auto* username = MHD_basic_auth_get_username_password(underlying_connection, &password);
@@ -339,6 +340,7 @@ std::string_view http_request::get_pass() const {
     fetch_user_pass();
     return cache->password;
 }
+#endif  // HAVE_BAUTH
 
 #ifdef HAVE_DAUTH
 std::string_view http_request::get_digested_user() const {
@@ -557,8 +559,11 @@ uint16_t http_request::get_requestor_port() const {
 }
 
 std::ostream &operator<< (std::ostream &os, const http_request &r) {
-    os << r.get_method() << " Request [user:\"" << r.get_user() << "\" pass:\"" << r.get_pass() << "\"] path:\""
-       << r.get_path() << "\"" << std::endl;
+    os << r.get_method() << " Request [";
+#ifdef HAVE_BAUTH
+    os << "user:\"" << r.get_user() << "\" pass:\"" << r.get_pass() << "\"";
+#endif  // HAVE_BAUTH
+    os << "] path:\"" << r.get_path() << "\"" << std::endl;
 
     http::dump_header_map(os, "Headers", r.get_headers());
     http::dump_header_map(os, "Footers", r.get_footers());

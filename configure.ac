@@ -21,7 +21,7 @@
 
 AC_PREREQ(2.57)
 m4_define([libhttpserver_MAJOR_VERSION],[0])dnl
-m4_define([libhttpserver_MINOR_VERSION],[19])dnl
+m4_define([libhttpserver_MINOR_VERSION],[20])dnl
 m4_define([libhttpserver_REVISION],[0])dnl
 m4_define([libhttpserver_PKG_VERSION],[libhttpserver_MAJOR_VERSION.libhttpserver_MINOR_VERSION.libhttpserver_REVISION])dnl
 m4_define([libhttpserver_LDF_VERSION],[libhttpserver_MAJOR_VERSION:libhttpserver_MINOR_VERSION:libhttpserver_REVISION])dnl
@@ -149,6 +149,11 @@ fi
 AM_CONDITIONAL([COND_CROSS_COMPILE],[test x"$cond_cross_compile" = x"yes"])
 AC_SUBST(COND_CROSS_COMPILE)
 
+# Check for basic auth support in libmicrohttpd
+AC_CHECK_LIB([microhttpd], [MHD_queue_basic_auth_fail_response],
+    [have_bauth="yes"],
+    [have_bauth="no"; AC_MSG_WARN("libmicrohttpd basic auth support not found. Basic auth will be disabled")])
+
 # Check for digest auth support in libmicrohttpd
 AC_CHECK_LIB([microhttpd], [MHD_queue_auth_fail_response],
     [have_dauth="yes"],
@@ -264,6 +269,13 @@ fi
 
 AM_CONDITIONAL([HAVE_GNUTLS],[test x"$have_gnutls" = x"yes"])
 
+if test x"$have_bauth" = x"yes"; then
+    AM_CXXFLAGS="$AM_CXXFLAGS -DHAVE_BAUTH"
+    AM_CFLAGS="$AM_CXXFLAGS -DHAVE_BAUTH"
+fi
+
+AM_CONDITIONAL([HAVE_BAUTH],[test x"$have_bauth" = x"yes"])
+
 if test x"$have_dauth" = x"yes"; then
     AM_CXXFLAGS="$AM_CXXFLAGS -DHAVE_DAUTH"
     AM_CFLAGS="$AM_CXXFLAGS -DHAVE_DAUTH"
@@ -327,6 +339,7 @@ AC_MSG_NOTICE([Configuration Summary:
   License         :  LGPL only
   Debug	          :  ${debugit}
   TLS Enabled     :  ${have_gnutls}
+  Basic Auth      :  ${have_bauth}
   Digest Auth     :  ${have_dauth}
   TCP_FASTOPEN    :  ${is_fastopen_supported}
   Static          :  ${static}

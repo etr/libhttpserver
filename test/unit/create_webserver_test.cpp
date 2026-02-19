@@ -120,12 +120,14 @@ LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_pedantic_toggle)
     LT_CHECK_EQ(true, true);
 LT_END_AUTO_TEST(builder_pedantic_toggle)
 
+#ifdef HAVE_BAUTH
 // Test basic_auth / no_basic_auth toggle
 LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_basic_auth_toggle)
     create_webserver cw1 = create_webserver(8080).basic_auth();
     create_webserver cw2 = create_webserver(8080).no_basic_auth();
     LT_CHECK_EQ(true, true);
 LT_END_AUTO_TEST(builder_basic_auth_toggle)
+#endif  // HAVE_BAUTH
 
 // Test digest_auth / no_digest_auth toggle
 LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_digest_auth_toggle)

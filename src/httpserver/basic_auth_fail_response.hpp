@@ -25,6 +25,8 @@
 #ifndef SRC_HTTPSERVER_BASIC_AUTH_FAIL_RESPONSE_HPP_
 #define SRC_HTTPSERVER_BASIC_AUTH_FAIL_RESPONSE_HPP_
 
+#ifdef HAVE_BAUTH
+
 #include <string>
 #include "httpserver/http_utils.hpp"
 #include "httpserver/string_response.hpp"
@@ -60,4 +62,7 @@ class basic_auth_fail_response : public string_response {
 };
 
 }  // namespace httpserver
+
+#endif  // HAVE_BAUTH
+
 #endif  // SRC_HTTPSERVER_BASIC_AUTH_FAIL_RESPONSE_HPP_
