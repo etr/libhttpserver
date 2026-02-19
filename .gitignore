@@ -57,3 +57,4 @@ debian/rules
 redhat/libhttpserver.SPEC
 libhttpserver.pc
 libtool
+.worktrees/
