@@ -83,6 +83,7 @@ class create_test_request {
         return *this;
     }
 
+#ifdef HAVE_BAUTH
     create_test_request& user(const std::string& user) {
         _user = user;
         return *this;
@@ -92,6 +93,7 @@ class create_test_request {
         _pass = pass;
         return *this;
     }
+#endif  // HAVE_BAUTH
 
 #ifdef HAVE_DAUTH
     create_test_request& digested_user(const std::string& digested_user) {
@@ -129,8 +131,10 @@ class create_test_request {
     http::header_map _cookies;
     std::map<std::string, std::vector<std::string>, http::arg_comparator> _args;
     std::string _querystring;
+#ifdef HAVE_BAUTH
     std::string _user;
     std::string _pass;
+#endif  // HAVE_BAUTH
 #ifdef HAVE_DAUTH
     std::string _digested_user;
 #endif  // HAVE_DAUTH

@@ -126,6 +126,7 @@ LT_BEGIN_AUTO_TEST(create_test_request_suite, build_content)
     LT_CHECK_EQ(std::string(req.get_content()), std::string("{\"key\":\"value\"}"));
 LT_END_AUTO_TEST(build_content)
 
+#ifdef HAVE_BAUTH
 // Test basic auth
 LT_BEGIN_AUTO_TEST(create_test_request_suite, build_basic_auth)
     auto req = create_test_request()
@@ -135,6 +136,7 @@ LT_BEGIN_AUTO_TEST(create_test_request_suite, build_basic_auth)
     LT_CHECK_EQ(std::string(req.get_user()), std::string("admin"));
     LT_CHECK_EQ(std::string(req.get_pass()), std::string("secret"));
 LT_END_AUTO_TEST(build_basic_auth)
+#endif  // HAVE_BAUTH
 
 // Test requestor
 LT_BEGIN_AUTO_TEST(create_test_request_suite, build_requestor)

@@ -279,7 +279,9 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, disable_options)
         .no_ipv6()
         .no_debug()
         .no_pedantic()
+#ifdef HAVE_BAUTH
         .no_basic_auth()
+#endif  // HAVE_BAUTH
         .no_digest_auth()
         .no_deferred()
         .no_regex_checking()

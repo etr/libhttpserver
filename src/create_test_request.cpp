@@ -49,8 +49,10 @@ http_request create_test_request::build() {
         req.cache->querystring = std::move(_querystring);
     }
 
+#ifdef HAVE_BAUTH
     req.cache->username = std::move(_user);
     req.cache->password = std::move(_pass);
+#endif  // HAVE_BAUTH
 
 #ifdef HAVE_DAUTH
     req.cache->digested_user = std::move(_digested_user);

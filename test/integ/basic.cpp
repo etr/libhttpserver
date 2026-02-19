@@ -2640,6 +2640,7 @@ class null_value_query_resource : public http_resource {
     }
 };
 
+#ifdef HAVE_BAUTH
 // Resource that tests auth caching (get_user/get_pass called multiple times)
 class auth_cache_resource : public http_resource {
  public:
@@ -2654,7 +2655,9 @@ class auth_cache_resource : public http_resource {
         return std::make_shared<string_response>(result, 200, "text/plain");
     }
 };
+#endif  // HAVE_BAUTH
 
+#ifdef HAVE_BAUTH
 LT_BEGIN_AUTO_TEST(basic_suite, auth_caching)
     auth_cache_resource resource;
     LT_ASSERT_EQ(true, ws->register_resource("auth_cache", &resource));
@@ -2672,6 +2675,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, auth_caching)
     LT_CHECK_EQ(s, "NO_AUTH");
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(auth_caching)
+#endif  // HAVE_BAUTH
 
 // Test query parameters with null/empty values (e.g., ?keyonly&normal=value)
 // This covers http_request.cpp lines 234 and 248 (arg_value == nullptr branches)
