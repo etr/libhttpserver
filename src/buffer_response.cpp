@@ -18,27 +18,18 @@
      USA
 */
 
-#ifndef SRC_HTTPSERVER_HPP_
-#define SRC_HTTPSERVER_HPP_
-
-#if __cplusplus < 201703L
-#  error("libhttpserver requires C++17 or later.")
-#endif
-
-#define _HTTPSERVER_HPP_INSIDE_
-
-#include "httpserver/basic_auth_fail_response.hpp"
-#include "httpserver/deferred_response.hpp"
-#include "httpserver/digest_auth_fail_response.hpp"
-#include "httpserver/file_response.hpp"
-#include "httpserver/http_arg_value.hpp"
-#include "httpserver/http_request.hpp"
-#include "httpserver/http_resource.hpp"
-#include "httpserver/http_response.hpp"
-#include "httpserver/http_utils.hpp"
-#include "httpserver/file_info.hpp"
-#include "httpserver/string_response.hpp"
 #include "httpserver/buffer_response.hpp"
-#include "httpserver/webserver.hpp"
+#include <microhttpd.h>
+#include <stddef.h>
+#include <iosfwd>
 
-#endif  // SRC_HTTPSERVER_HPP_
+struct MHD_Response;
+
+namespace httpserver {
+
+MHD_Response* buffer_response::get_raw_response() {
+    // Need to use a const cast here to satisfy MHD interface that requires a void*
+    return MHD_create_response_from_buffer(dataSize, reinterpret_cast<void*>(dataPtr.get()), MHD_RESPMEM_PERSISTENT);
+}
+
+}  // namespace httpserver
