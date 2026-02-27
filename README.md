@@ -844,7 +844,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
 As seen in the documentation of [http_resource](#the-resource-object), every extensible method returns in output a `http_response` object. The webserver takes the responsibility to convert the `http_response` object you create into a response on the network.
 
 There are 8 types of response that you can create - we will describe them here through their constructors:
-* _string_response(**const std::string&** content, **int** response_code = `200`, **const std::string&** content_type = `"text/plain"`):_ The most basic type of response. It uses the `content` string passed in construction as body of the HTTP response. The other two optional parameters are the `response_code` and the `content_type`. You can find constant definition for the various response codes within the [http_utils](https://github.com/etr/libhttpserver/blob/master/src/httpserver/http_utils.hpp) library file.
+* _string_response(**const std::string&** content, **int** response_code = `200`, **const std::string&** content_type = `"text/plain"`):_ The most basic type of response. It uses the `content` string passed in construction as body of the HTTP response. The other two optional parameters are the `response_code` and the `content_type`. You can find constant definition for the various response codes within the [http_utils](https://github.com/etr/libhttpserver/blob/master/src/httpserver/http_utils.hpp) library file. Note that `std::string` can hold arbitrary binary data (including null bytes), so `string_response` is also the right choice for serving binary content such as images directly from memory — simply set an appropriate `content_type` (e.g., `"image/png"`).
 * _file_response(**const std::string&** filename, **int** response_code = `200`, **const std::string&** content_type = `"text/plain"`):_ Uses the `filename` passed in construction as pointer to a file on disk. The body of the HTTP response will be set using the content of the file. The file must be a regular file and exist on disk. Otherwise libhttpserver will return an error 500 (Internal Server Error). The other two optional parameters are the `response_code` and the `content_type`. You can find constant definition for the various response codes within the [http_utils](https://github.com/etr/libhttpserver/blob/master/src/httpserver/http_utils.hpp) library file.
 * _basic_auth_fail_response(**const std::string&** content, **const std::string&** realm = `""`, **bool** prefer_utf8 = `true`, **int** response_code = `200`, **const std::string&** content_type = `"text/plain"`):_ A response in return to a failure during basic authentication. It allows to specify a `content` string as a message to send back to the client. The `realm` parameter should contain your realm of authentication (if any). The `prefer_utf8` parameter controls whether UTF-8 encoding is preferred in the `WWW-Authenticate` header. The other two optional parameters are the `response_code` and the `content_type`. You can find constant definition for the various response codes within the [http_utils](https://github.com/etr/libhttpserver/blob/master/src/httpserver/http_utils.hpp) library file.
 * _digest_auth_fail_response(**const std::string&** content, **const std::string&** realm = `""`, **const std::string&** opaque = `""`, **bool** signal_stale = `false`, **int** response_code = `200`, **const std::string&** content_type = `"text/plain"`, **http::http_utils::digest_algorithm** algorithm = `SHA256`, **const std::string&** domain = `""`, **bool** userhash_support = `false`, **bool** prefer_utf8 = `true`):_ A response in return to a failure during digest authentication. It allows to specify a `content` string as a message to send back to the client. The `realm` parameter should contain your realm of authentication (if any). The `opaque` represents a value that gets passed to the client and expected to be passed again to the server as-is. The `signal_stale` parameter indicates whether to signal the client that its nonce is stale and should be refreshed (set to `true` when `check_digest_auth` returns `NONCE_STALE`). The `algorithm` selects the digest algorithm (`MD5`, `SHA256`, or `SHA512_256` — default is `SHA256`). The `domain` specifies the protection domain for digest authentication. The `userhash_support` enables RFC 7616 userhash support. The `prefer_utf8` controls whether UTF-8 encoding is preferred.
@@ -900,6 +900,41 @@ To test the above example, you could run the following command from a terminal:
 You will receive the message custom header in reply.
 
 You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/setting_headers.cpp).
+
+### Serving binary data from memory
+`string_response` is not limited to text — it can serve arbitrary binary content directly from memory. This is useful when you have data in a buffer at runtime (e.g., from a camera, an image processing library, or a database) and want to serve it without writing to disk.
+
+```cpp
+    #include <httpserver.hpp>
+
+    using namespace httpserver;
+
+    class image_resource : public http_resource {
+    public:
+        std::shared_ptr<http_response> render_GET(const http_request&) {
+            // binary_data could come from a camera capture, image library, etc.
+            std::string binary_data = get_image_bytes_from_camera();
+
+            return std::make_shared<string_response>(
+                    std::move(binary_data), 200, "image/jpeg");
+        }
+    };
+
+    int main() {
+        webserver ws = create_webserver(8080);
+
+        image_resource ir;
+        ws.register_resource("/image", &ir);
+        ws.start(true);
+
+        return 0;
+    }
+```
+To test the above example, you could run the following command from a terminal:
+
+    curl -o image.jpg http://localhost:8080/image
+
+You can also check the complete example on [github](https://github.com/etr/libhttpserver/blob/master/examples/binary_buffer_response.cpp).
 
 [Back to TOC](#table-of-contents)
 
