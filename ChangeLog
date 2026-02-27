@@ -1,5 +1,7 @@
 Version 0.20.0
 
+	Added example and documentation for serving binary data from memory
+		using string_response (addresses PR #368).
 	Added conditional compilation for basic auth (HAVE_BAUTH), mirroring
 		existing HAVE_DAUTH pattern for digest auth. Basic auth support
 		is auto-detected via AC_CHECK_LIB and can be disabled at build time.
