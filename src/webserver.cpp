@@ -451,6 +451,7 @@ bool webserver::start(bool blocking) {
     }
 #endif  // HAVE_WEBSOCKET
 
+
     daemon = nullptr;
     if (bind_address == nullptr) {
         daemon = MHD_start_daemon(start_conf, port, &policy_callback, this,
