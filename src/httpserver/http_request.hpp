@@ -307,25 +307,19 @@ class http_request {
      uint16_t get_requestor_port() const;
 
 #ifdef HAVE_DAUTH
-     bool check_digest_auth(const std::string& realm, const std::string& password, int nonce_timeout, bool* reload_nonce) const;
-
-     /**
-      * Check digest authentication using a pre-computed HA1 hash.
-      * The HA1 hash is computed as: hash(username:realm:password) using the specified algorithm.
-      * @param realm The authentication realm.
-      * @param digest Pointer to the pre-computed HA1 hash bytes.
-      * @param digest_size Size of the digest (16 for MD5, 32 for SHA-256).
-      * @param nonce_timeout Nonce validity timeout in seconds.
-      * @param reload_nonce Output: set to true if nonce should be regenerated.
-      * @param algo The digest algorithm (defaults to MD5).
-      * @return true if authenticated, false otherwise.
-      */
-     bool check_digest_auth_ha1(
+     http::http_utils::digest_auth_result check_digest_auth(
          const std::string& realm,
-         const unsigned char* digest,
-         size_t digest_size,
-         int nonce_timeout,
-         bool* reload_nonce,
+         const std::string& password,
+         unsigned int nonce_timeout = 0,
+         uint32_t max_nc = 0,
+         http::http_utils::digest_algorithm algo = http::http_utils::digest_algorithm::SHA256) const;
+
+     http::http_utils::digest_auth_result check_digest_auth_digest(
+         const std::string& realm,
+         const void* userdigest,
+         size_t userdigest_size,
+         unsigned int nonce_timeout = 0,
+         uint32_t max_nc = 0,
          http::http_utils::digest_algorithm algo = http::http_utils::digest_algorithm::MD5) const;
 #endif  // HAVE_DAUTH
 

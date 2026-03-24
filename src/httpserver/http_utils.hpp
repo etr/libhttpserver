@@ -60,9 +60,6 @@
 
 #define DEFAULT_MASK_VALUE 0xFFFF
 
-#if MHD_VERSION < 0x00097002
-typedef int MHD_Result;
-#endif
 
 namespace httpserver {
 
@@ -119,12 +116,30 @@ class http_utils {
 
 #ifdef HAVE_DAUTH
      enum class digest_algorithm {
-         MD5 = MHD_DIGEST_ALG_MD5,
-         SHA256 = MHD_DIGEST_ALG_SHA256
+         MD5 = MHD_DIGEST_AUTH_ALGO3_MD5,
+         SHA256 = MHD_DIGEST_AUTH_ALGO3_SHA256,
+         SHA512_256 = MHD_DIGEST_AUTH_ALGO3_SHA512_256
+     };
+
+     enum class digest_auth_result {
+         OK = MHD_DAUTH_OK,
+         ERROR = MHD_DAUTH_ERROR,
+         WRONG_HEADER = MHD_DAUTH_WRONG_HEADER,
+         WRONG_USERNAME = MHD_DAUTH_WRONG_USERNAME,
+         WRONG_REALM = MHD_DAUTH_WRONG_REALM,
+         WRONG_URI = MHD_DAUTH_WRONG_URI,
+         WRONG_QOP = MHD_DAUTH_WRONG_QOP,
+         WRONG_ALGO = MHD_DAUTH_WRONG_ALGO,
+         TOO_LARGE = MHD_DAUTH_TOO_LARGE,
+         NONCE_STALE = MHD_DAUTH_NONCE_STALE,
+         NONCE_OTHER_COND = MHD_DAUTH_NONCE_OTHER_COND,
+         NONCE_WRONG = MHD_DAUTH_NONCE_WRONG,
+         RESPONSE_WRONG = MHD_DAUTH_RESPONSE_WRONG
      };
 
      static constexpr size_t md5_digest_size = 16;
      static constexpr size_t sha256_digest_size = 32;
+     static constexpr size_t sha512_256_digest_size = 32;
 #endif  // HAVE_DAUTH
 
      static const uint16_t http_method_connect_code;
@@ -274,6 +289,10 @@ class http_utils {
      static const std::string generate_random_upload_filename(const std::string& directory);
 
      static std::string sanitize_upload_filename(const std::string& filename);
+
+     static const char* reason_phrase(unsigned int status_code);
+     static bool is_feature_supported(int feature);
+     static const char* get_mhd_version();
 };
 
 #define COMPARATOR(x, y, op) { \

@@ -95,49 +95,48 @@ void http_request::set_method(const std::string& method) {
 }
 
 #ifdef HAVE_DAUTH
-bool http_request::check_digest_auth(const std::string& realm, const std::string& password, int nonce_timeout, bool* reload_nonce) const {
-    std::string_view digested_user = get_digested_user();
-
-    int val = MHD_digest_auth_check(underlying_connection, realm.c_str(), digested_user.data(), password.c_str(), nonce_timeout);
-
-    if (val == MHD_INVALID_NONCE) {
-        *reload_nonce = true;
-        return false;
-    } else if (val == MHD_NO) {
-        *reload_nonce = false;
-        return false;
-    }
-    *reload_nonce = false;
-    return true;
-}
-
-bool http_request::check_digest_auth_ha1(
+http::http_utils::digest_auth_result http_request::check_digest_auth(
     const std::string& realm,
-    const unsigned char* digest,
-    size_t digest_size,
-    int nonce_timeout,
-    bool* reload_nonce,
+    const std::string& password,
+    unsigned int nonce_timeout,
+    uint32_t max_nc,
     http::http_utils::digest_algorithm algo) const {
     std::string_view digested_user = get_digested_user();
 
-    int val = MHD_digest_auth_check_digest2(
+    enum MHD_DigestAuthResult result = MHD_digest_auth_check3(
         underlying_connection,
         realm.c_str(),
         digested_user.data(),
-        digest,
-        digest_size,
+        password.c_str(),
         nonce_timeout,
-        static_cast<MHD_DigestAuthAlgorithm>(algo));
+        max_nc,
+        MHD_DIGEST_AUTH_MULT_QOP_ANY_NON_INT,
+        static_cast<MHD_DigestAuthMultiAlgo3>(algo));
 
-    if (val == MHD_INVALID_NONCE) {
-        *reload_nonce = true;
-        return false;
-    } else if (val == MHD_NO) {
-        *reload_nonce = false;
-        return false;
-    }
-    *reload_nonce = false;
-    return true;
+    return static_cast<http::http_utils::digest_auth_result>(result);
+}
+
+http::http_utils::digest_auth_result http_request::check_digest_auth_digest(
+    const std::string& realm,
+    const void* userdigest,
+    size_t userdigest_size,
+    unsigned int nonce_timeout,
+    uint32_t max_nc,
+    http::http_utils::digest_algorithm algo) const {
+    std::string_view digested_user = get_digested_user();
+
+    enum MHD_DigestAuthResult result = MHD_digest_auth_check_digest3(
+        underlying_connection,
+        realm.c_str(),
+        digested_user.data(),
+        userdigest,
+        userdigest_size,
+        nonce_timeout,
+        max_nc,
+        MHD_DIGEST_AUTH_MULT_QOP_ANY_NON_INT,
+        static_cast<MHD_DigestAuthMultiAlgo3>(algo));
+
+    return static_cast<http::http_utils::digest_auth_result>(result);
 }
 #endif  // HAVE_DAUTH
 
@@ -312,16 +311,14 @@ MHD_Result http_request::build_request_querystring(void *cls, enum MHD_ValueKind
 
 #ifdef HAVE_BAUTH
 void http_request::fetch_user_pass() const {
-    char* password = nullptr;
-    auto* username = MHD_basic_auth_get_username_password(underlying_connection, &password);
+    struct MHD_BasicAuthInfo* info = MHD_basic_auth_get_username_password3(underlying_connection);
 
-    if (username != nullptr) {
-        cache->username = username;
-        MHD_free(username);
-    }
-    if (password != nullptr) {
-        cache->password = password;
-        MHD_free(password);
+    if (info != nullptr) {
+        cache->username.assign(info->username, info->username_len);
+        if (info->password != nullptr) {
+            cache->password.assign(info->password, info->password_len);
+        }
+        MHD_free(info);
     }
 }
 
@@ -348,12 +345,14 @@ std::string_view http_request::get_digested_user() const {
         return cache->digested_user;
     }
 
-    char* digested_user_c = MHD_digest_auth_get_username(underlying_connection);
+    struct MHD_DigestAuthUsernameInfo* info = MHD_digest_auth_get_username3(underlying_connection);
 
     cache->digested_user = EMPTY;
-    if (digested_user_c != nullptr) {
-        cache->digested_user = digested_user_c;
-        MHD_free(digested_user_c);
+    if (info != nullptr) {
+        if (info->username != nullptr) {
+            cache->digested_user.assign(info->username, info->username_len);
+        }
+        MHD_free(info);
     }
 
     return cache->digested_user;

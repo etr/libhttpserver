@@ -108,18 +108,18 @@ AC_CHECK_HEADER([gnutls/gnutls.h],[have_gnutls="yes"],[AC_MSG_WARN("gnutls/gnutl
 # Checks for libmicrohttpd
 if test x"$host" = x"$build"; then
     AC_CHECK_HEADER([microhttpd.h],
-        AC_CHECK_LIB([microhttpd], [MHD_get_fdset2],
-            [AC_MSG_CHECKING([for libmicrohttpd >= 0.9.64])
+        AC_CHECK_LIB([microhttpd], [MHD_start_daemon],
+            [AC_MSG_CHECKING([for libmicrohttpd >= 1.0.0])
                 AC_COMPILE_IFELSE(
                     [AC_LANG_SOURCE([
                         #include <microhttpd.h>
-                        #if (MHD_VERSION < 0x00096400)
-                        #error needs at least version 0.9.64
+                        #if (MHD_VERSION < 0x01000000)
+                        #error needs at least version 1.0.0
                         #endif
                         int main () { return 0; }
                     ])],
                 [],
-                [AC_MSG_ERROR("libmicrohttpd is too old - install libmicrohttpd >= 0.9.64")]
+                [AC_MSG_ERROR("libmicrohttpd is too old - install libmicrohttpd >= 1.0.0")]
                 )
             ],
             [AC_MSG_ERROR(["libmicrohttpd not found"])]
@@ -133,7 +133,7 @@ if test x"$host" = x"$build"; then
     cond_cross_compile="no"
 else
     AC_CHECK_HEADER([microhttpd.h],
-        AC_CHECK_LIB([microhttpd], [MHD_get_fdset2],
+        AC_CHECK_LIB([microhttpd], [MHD_start_daemon],
             [],
             [AC_MSG_ERROR(["libmicrohttpd not found"])]
         ),
@@ -149,15 +149,22 @@ fi
 AM_CONDITIONAL([COND_CROSS_COMPILE],[test x"$cond_cross_compile" = x"yes"])
 AC_SUBST(COND_CROSS_COMPILE)
 
-# Check for basic auth support in libmicrohttpd
-AC_CHECK_LIB([microhttpd], [MHD_queue_basic_auth_fail_response],
+# Check for basic auth v3 support in libmicrohttpd
+AC_CHECK_LIB([microhttpd], [MHD_basic_auth_get_username_password3],
     [have_bauth="yes"],
-    [have_bauth="no"; AC_MSG_WARN("libmicrohttpd basic auth support not found. Basic auth will be disabled")])
+    [have_bauth="no"; AC_MSG_WARN("libmicrohttpd basic auth v3 support not found. Basic auth will be disabled")])
 
-# Check for digest auth support in libmicrohttpd
-AC_CHECK_LIB([microhttpd], [MHD_queue_auth_fail_response],
+# Check for digest auth v3 support in libmicrohttpd
+AC_CHECK_LIB([microhttpd], [MHD_digest_auth_check3],
     [have_dauth="yes"],
-    [have_dauth="no"; AC_MSG_WARN("libmicrohttpd digest auth support not found. Digest auth will be disabled")])
+    [have_dauth="no"; AC_MSG_WARN("libmicrohttpd digest auth v3 support not found. Digest auth will be disabled")])
+
+# Check for WebSocket support in libmicrohttpd_ws
+AC_CHECK_HEADER([microhttpd_ws.h],
+    [AC_CHECK_LIB([microhttpd_ws], [MHD_websocket_stream_init],
+        [have_websocket="yes"],
+        [have_websocket="no"; AC_MSG_WARN("libmicrohttpd_ws not found. WebSocket support will be disabled")])],
+    [have_websocket="no"; AC_MSG_WARN("microhttpd_ws.h not found. WebSocket support will be disabled")])
 
 AC_MSG_CHECKING([whether to build with TCP_FASTOPEN support])
 AC_ARG_ENABLE([fastopen],
@@ -283,6 +290,14 @@ fi
 
 AM_CONDITIONAL([HAVE_DAUTH],[test x"$have_dauth" = x"yes"])
 
+if test x"$have_websocket" = x"yes"; then
+    AM_CXXFLAGS="$AM_CXXFLAGS -DHAVE_WEBSOCKET"
+    AM_CFLAGS="$AM_CXXFLAGS -DHAVE_WEBSOCKET"
+    LHT_LIBDEPS="$LHT_LIBDEPS -lmicrohttpd_ws"
+fi
+
+AM_CONDITIONAL([HAVE_WEBSOCKET],[test x"$have_websocket" = x"yes"])
+
 DX_HTML_FEATURE(ON)
 DX_CHM_FEATURE(OFF)
 DX_CHI_FEATURE(OFF)
@@ -341,6 +356,7 @@ AC_MSG_NOTICE([Configuration Summary:
   TLS Enabled     :  ${have_gnutls}
   Basic Auth      :  ${have_bauth}
   Digest Auth     :  ${have_dauth}
+  WebSocket       :  ${have_websocket}
   TCP_FASTOPEN    :  ${is_fastopen_supported}
   Static          :  ${static}
   Windows build   :  ${is_windows}

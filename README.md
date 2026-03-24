@@ -80,7 +80,7 @@ libhttpserver can be used without any dependencies aside from libmicrohttpd.
 The minimum versions required are:
 * g++ >= 5.5.0 or clang-3.6
 * C++17 or newer
-* libmicrohttpd >= 0.9.64
+* libmicrohttpd >= 1.0.0
 * [Optionally]: for TLS (HTTPS) support, you'll need [libgnutls](http://www.gnutls.org/).
 * [Optionally]: to compile the code-reference, you'll need [doxygen](http://www.doxygen.nl/).
 
@@ -141,7 +141,7 @@ MSYS2 provides multiple shell environments with different purposes. Understandin
 pacman -S --needed mingw-w64-x86_64-{gcc,libtool,make,pkg-config,doxygen,gnutls,curl} autotools
 ```
 
-4. Build and install [libmicrohttpd](https://www.gnu.org/software/libmicrohttpd/) (>= 0.9.64)
+4. Build and install [libmicrohttpd](https://www.gnu.org/software/libmicrohttpd/) (>= 1.0.0)
 
 5. Build libhttpserver:
 ```bash
@@ -389,7 +389,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
 * _.https_mem_trust(**const std::string&** filename):_ String representing the path to a file containing the CA certificate to be used by the HTTPS daemon to authenticate and trust clients certificates. The presence of this option activates the request of certificate to the client. The request to the client is marked optional, and it is the responsibility of the server to check the presence of the certificate if needed. Note that most browsers will only present a client certificate only if they have one matching the specified CA, not sending any certificate otherwise.
 * _.https_priorities(**const std::string&** priority_string):_ SSL/TLS protocol version and ciphers. Must be followed by a string specifying the SSL/TLS protocol versions and ciphers that are acceptable for the application. The string is passed unchanged to gnutls_priority_init. If this option is not specified, `"NORMAL"` is used.
 * _.psk_cred_handler(**psk_cred_handler_callback** handler):_ Sets a callback function for TLS-PSK (Pre-Shared Key) authentication. The callback receives a username and should return the corresponding hex-encoded PSK, or an empty string if the user is unknown. This option requires `use_ssl()`, `cred_type(http::http_utils::PSK)`, and an appropriate `https_priorities()` string that enables PSK cipher suites. PSK authentication allows TLS without certificates by using a shared secret key.
-* _.sni_callback(**sni_callback_t** callback):_ Sets a callback function for SNI (Server Name Indication) support. The callback receives the server name requested by the client and should return a `std::pair<std::string, std::string>` containing the PEM-encoded certificate and key for that server name. Return empty strings to use the default certificate. Requires libmicrohttpd 0.9.71+ with GnuTLS.
+* _.sni_callback(**sni_callback_t** callback):_ Sets a callback function for SNI (Server Name Indication) support. The callback receives the server name requested by the client and should return a `std::pair<std::string, std::string>` containing the PEM-encoded certificate and key for that server name. Return empty strings to use the default certificate. Requires libmicrohttpd 1.0.0+ with GnuTLS.
 
 #### Minimal example using HTTPS
 ```cpp
@@ -1190,7 +1190,7 @@ To use SNI with libhttpserver, configure an SNI callback that returns the certif
     }
 ```
 
-Note: SNI support requires libmicrohttpd 0.9.71 or later compiled with GnuTLS.
+Note: SNI support requires libmicrohttpd 1.0.0 or later compiled with GnuTLS.
 
 [Back to TOC](#table-of-contents)
 

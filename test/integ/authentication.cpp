@@ -84,12 +84,18 @@ class user_pass_resource : public http_resource {
 class digest_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request& req) {
+         using httpserver::http::http_utils;
          if (req.get_digested_user() == "") {
-             return std::make_shared<digest_auth_fail_response>("FAIL", "examplerealm", MY_OPAQUE, true);
+             return std::make_shared<digest_auth_fail_response>("FAIL", "examplerealm", MY_OPAQUE, true,
+                 http_utils::http_ok, http_utils::text_plain, http_utils::digest_algorithm::MD5);
          } else {
-             bool reload_nonce = false;
-             if (!req.check_digest_auth("examplerealm", "mypass", 300, &reload_nonce)) {
-                 return std::make_shared<digest_auth_fail_response>("FAIL", "examplerealm", MY_OPAQUE, reload_nonce);
+             auto result = req.check_digest_auth("examplerealm", "mypass", 300, 0, http_utils::digest_algorithm::MD5);
+             if (result == http_utils::digest_auth_result::NONCE_STALE) {
+                 return std::make_shared<digest_auth_fail_response>("FAIL", "examplerealm", MY_OPAQUE, true,
+                     http_utils::http_ok, http_utils::text_plain, http_utils::digest_algorithm::MD5);
+             } else if (result != http_utils::digest_auth_result::OK) {
+                 return std::make_shared<digest_auth_fail_response>("FAIL", "examplerealm", MY_OPAQUE, false,
+                     http_utils::http_ok, http_utils::text_plain, http_utils::digest_algorithm::MD5);
              }
          }
          return std::make_shared<string_response>("SUCCESS", 200, "text/plain");
@@ -184,22 +190,26 @@ static const unsigned char PRECOMPUTED_HA1_SHA256[32] = {
 class digest_ha1_md5_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request& req) {
+         using httpserver::http::http_utils;
          if (req.get_digested_user() == "") {
              return std::make_shared<digest_auth_fail_response>(
                  "FAIL", "examplerealm", MY_OPAQUE, true,
-                 httpserver::http::http_utils::http_ok,
-                 httpserver::http::http_utils::text_plain,
-                 httpserver::http::http_utils::digest_algorithm::MD5);
+                 http_utils::http_ok, http_utils::text_plain,
+                 http_utils::digest_algorithm::MD5);
          }
-         bool reload_nonce = false;
-         if (!req.check_digest_auth_ha1("examplerealm", PRECOMPUTED_HA1_MD5,
-                 httpserver::http::http_utils::md5_digest_size, 300, &reload_nonce,
-                 httpserver::http::http_utils::digest_algorithm::MD5)) {
+         auto result = req.check_digest_auth_digest("examplerealm", PRECOMPUTED_HA1_MD5,
+                 http_utils::md5_digest_size, 300, 0,
+                 http_utils::digest_algorithm::MD5);
+         if (result == http_utils::digest_auth_result::NONCE_STALE) {
              return std::make_shared<digest_auth_fail_response>(
-                 "FAIL", "examplerealm", MY_OPAQUE, reload_nonce,
-                 httpserver::http::http_utils::http_ok,
-                 httpserver::http::http_utils::text_plain,
-                 httpserver::http::http_utils::digest_algorithm::MD5);
+                 "FAIL", "examplerealm", MY_OPAQUE, true,
+                 http_utils::http_ok, http_utils::text_plain,
+                 http_utils::digest_algorithm::MD5);
+         } else if (result != http_utils::digest_auth_result::OK) {
+             return std::make_shared<digest_auth_fail_response>(
+                 "FAIL", "examplerealm", MY_OPAQUE, false,
+                 http_utils::http_ok, http_utils::text_plain,
+                 http_utils::digest_algorithm::MD5);
          }
          return std::make_shared<string_response>("SUCCESS", 200, "text/plain");
      }
@@ -208,22 +218,26 @@ class digest_ha1_md5_resource : public http_resource {
 class digest_ha1_sha256_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request& req) {
+         using httpserver::http::http_utils;
          if (req.get_digested_user() == "") {
              return std::make_shared<digest_auth_fail_response>(
                  "FAIL", "examplerealm", MY_OPAQUE, true,
-                 httpserver::http::http_utils::http_ok,
-                 httpserver::http::http_utils::text_plain,
-                 httpserver::http::http_utils::digest_algorithm::SHA256);
+                 http_utils::http_ok, http_utils::text_plain,
+                 http_utils::digest_algorithm::SHA256);
          }
-         bool reload_nonce = false;
-         if (!req.check_digest_auth_ha1("examplerealm", PRECOMPUTED_HA1_SHA256,
-                 httpserver::http::http_utils::sha256_digest_size, 300, &reload_nonce,
-                 httpserver::http::http_utils::digest_algorithm::SHA256)) {
+         auto result = req.check_digest_auth_digest("examplerealm", PRECOMPUTED_HA1_SHA256,
+                 http_utils::sha256_digest_size, 300, 0,
+                 http_utils::digest_algorithm::SHA256);
+         if (result == http_utils::digest_auth_result::NONCE_STALE) {
              return std::make_shared<digest_auth_fail_response>(
-                 "FAIL", "examplerealm", MY_OPAQUE, reload_nonce,
-                 httpserver::http::http_utils::http_ok,
-                 httpserver::http::http_utils::text_plain,
-                 httpserver::http::http_utils::digest_algorithm::SHA256);
+                 "FAIL", "examplerealm", MY_OPAQUE, true,
+                 http_utils::http_ok, http_utils::text_plain,
+                 http_utils::digest_algorithm::SHA256);
+         } else if (result != http_utils::digest_auth_result::OK) {
+             return std::make_shared<digest_auth_fail_response>(
+                 "FAIL", "examplerealm", MY_OPAQUE, false,
+                 http_utils::http_ok, http_utils::text_plain,
+                 http_utils::digest_algorithm::SHA256);
          }
          return std::make_shared<string_response>("SUCCESS", 200, "text/plain");
      }

@@ -1,5 +1,27 @@
 Version 0.20.0
 
+	Raised minimum libmicrohttpd requirement to 1.0.0.
+	Migrated Basic Auth to v3 API (MHD_basic_auth_get_username_password3,
+		MHD_queue_basic_auth_required_response3) with UTF-8 support.
+	Migrated Digest Auth to v3 API (MHD_digest_auth_check3,
+		MHD_digest_auth_check_digest3, MHD_queue_auth_required_response3)
+		with SHA-512/256 support, userhash, nonce binding, and structured
+		digest_auth_result enum. Default algorithm changed to SHA-256.
+	Added new response types: empty_response, pipe_response, iovec_response.
+	Added external event loop integration: webserver::run(), run_wait(),
+		get_fdset(), get_timeout(), add_connection().
+	Added daemon management: quiesce(), get_listen_fd(),
+		get_active_connections(), get_bound_port().
+	Added daemon options: listen_backlog, address_reuse,
+		connection_memory_increment, tcp_fastopen_queue_size,
+		sigpipe_handled_by_app, https_mem_dhparams, https_key_password,
+		https_priorities_append, no_alpn, client_discipline_level.
+	Added startup flags: no_listen_socket, no_thread_safety, turbo,
+		suppress_date_header.
+	Added WebSocket support (conditional on HAVE_WEBSOCKET):
+		websocket_handler, websocket_session, register_ws_resource().
+	Added utility functions: reason_phrase(), is_feature_supported(),
+		get_mhd_version().
 	Added conditional compilation for basic auth (HAVE_BAUTH), mirroring
 		existing HAVE_DAUTH pattern for digest auth. Basic auth support
 		is auto-detected via AC_CHECK_LIB and can be disabled at build time.

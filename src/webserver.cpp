@@ -19,6 +19,9 @@
 */
 
 #include "httpserver/webserver.hpp"
+#ifdef HAVE_WEBSOCKET
+#include "httpserver/websocket_handler.hpp"
+#endif  // HAVE_WEBSOCKET
 
 #if defined(_WIN32) && !defined(__CYGWIN__)
 #include <winsock2.h>
@@ -178,7 +181,21 @@ webserver::webserver(const create_webserver& params):
     file_cleanup_callback(params._file_cleanup_callback),
     auth_handler(params._auth_handler),
     auth_skip_paths(params._auth_skip_paths),
-    sni_callback(params._sni_callback) {
+    sni_callback(params._sni_callback),
+    no_listen_socket(params._no_listen_socket),
+    no_thread_safety(params._no_thread_safety),
+    turbo(params._turbo),
+    suppress_date_header(params._suppress_date_header),
+    listen_backlog(params._listen_backlog),
+    address_reuse(params._address_reuse),
+    connection_memory_increment(params._connection_memory_increment),
+    tcp_fastopen_queue_size(params._tcp_fastopen_queue_size),
+    sigpipe_handled_by_app(params._sigpipe_handled_by_app),
+    https_mem_dhparams(params._https_mem_dhparams),
+    https_key_password(params._https_key_password),
+    https_priorities_append(params._https_priorities_append),
+    no_alpn(params._no_alpn),
+    client_discipline_level(params._client_discipline_level) {
         ignore_sigpipe();
         pthread_mutex_init(&mutexwait, nullptr);
         pthread_cond_init(&mutexcond, nullptr);
@@ -240,6 +257,16 @@ bool webserver::register_resource(const std::string& resource, http_resource* hr
 
     return false;
 }
+
+#ifdef HAVE_WEBSOCKET
+bool webserver::register_ws_resource(const std::string& resource, websocket_handler* handler) {
+    if (handler == nullptr) {
+        throw std::invalid_argument("The websocket_handler pointer cannot be null");
+    }
+    registered_ws_handlers[resource] = handler;
+    return true;
+}
+#endif  // HAVE_WEBSOCKET
 
 bool webserver::start(bool blocking) {
     struct {
@@ -334,6 +361,46 @@ bool webserver::start(bool blocking) {
 #endif  // MHD_OPTION_HTTPS_CERT_CALLBACK
 #endif  // HAVE_GNUTLS
 
+    if (listen_backlog > 0) {
+        iov.push_back(gen(MHD_OPTION_LISTEN_BACKLOG_SIZE, listen_backlog));
+    }
+
+    if (address_reuse != 0) {
+        iov.push_back(gen(MHD_OPTION_LISTENING_ADDRESS_REUSE, address_reuse));
+    }
+
+    if (connection_memory_increment > 0) {
+        iov.push_back(gen(MHD_OPTION_CONNECTION_MEMORY_INCREMENT, connection_memory_increment));
+    }
+
+    if (tcp_fastopen_queue_size > 0) {
+        iov.push_back(gen(MHD_OPTION_TCP_FASTOPEN_QUEUE_SIZE, tcp_fastopen_queue_size));
+    }
+
+    if (sigpipe_handled_by_app) {
+        iov.push_back(gen(MHD_OPTION_SIGPIPE_HANDLED_BY_APP, 1));
+    }
+
+    if (!https_mem_dhparams.empty()) {
+        iov.push_back(gen(MHD_OPTION_HTTPS_MEM_DHPARAMS, 0, const_cast<char*>(https_mem_dhparams.c_str())));
+    }
+
+    if (!https_key_password.empty()) {
+        iov.push_back(gen(MHD_OPTION_HTTPS_KEY_PASSWORD, 0, const_cast<char*>(https_key_password.c_str())));
+    }
+
+    if (!https_priorities_append.empty()) {
+        iov.push_back(gen(MHD_OPTION_HTTPS_PRIORITIES_APPEND, 0, const_cast<char*>(https_priorities_append.c_str())));
+    }
+
+    if (no_alpn) {
+        iov.push_back(gen(MHD_OPTION_TLS_NO_ALPN, 1));
+    }
+
+    if (client_discipline_level >= 0) {
+        iov.push_back(gen(MHD_OPTION_CLIENT_DISCIPLINE_LVL, client_discipline_level));
+    }
+
     iov.push_back(gen(MHD_OPTION_END, 0, nullptr));
 
     int start_conf = start_method;
@@ -364,6 +431,22 @@ bool webserver::start(bool blocking) {
 #ifdef USE_FASTOPEN
     start_conf |= MHD_USE_TCP_FASTOPEN;
 #endif
+
+    if (no_listen_socket) {
+        start_conf |= MHD_USE_NO_LISTEN_SOCKET;
+    }
+
+    if (no_thread_safety) {
+        start_conf |= MHD_USE_NO_THREAD_SAFETY;
+    }
+
+    if (turbo) {
+        start_conf |= MHD_USE_TURBO;
+    }
+
+    if (suppress_date_header) {
+        start_conf |= MHD_USE_SUPPRESS_DATE_NO_CLOCK;
+    }
 
     daemon = nullptr;
     if (bind_address == nullptr) {
@@ -412,6 +495,68 @@ bool webserver::stop() {
     shutdown(bind_socket, 2);
 
     return true;
+}
+
+int webserver::quiesce() {
+    if (daemon == nullptr) return -1;
+    MHD_socket fd = MHD_quiesce_daemon(daemon);
+    return static_cast<int>(fd);
+}
+
+int webserver::get_listen_fd() const {
+    if (daemon == nullptr) return -1;
+    const union MHD_DaemonInfo* info = MHD_get_daemon_info(daemon, MHD_DAEMON_INFO_LISTEN_FD);
+    if (info == nullptr) return -1;
+    return static_cast<int>(info->listen_fd);
+}
+
+unsigned int webserver::get_active_connections() const {
+    if (daemon == nullptr) return 0;
+    const union MHD_DaemonInfo* info = MHD_get_daemon_info(daemon, MHD_DAEMON_INFO_CURRENT_CONNECTIONS);
+    if (info == nullptr) return 0;
+    return info->num_connections;
+}
+
+uint16_t webserver::get_bound_port() const {
+    if (daemon == nullptr) return 0;
+    const union MHD_DaemonInfo* info = MHD_get_daemon_info(daemon, MHD_DAEMON_INFO_BIND_PORT);
+    if (info == nullptr) return 0;
+    return info->port;
+}
+
+bool webserver::run() {
+    if (daemon == nullptr) return false;
+    return MHD_run(daemon) == MHD_YES;
+}
+
+bool webserver::run_wait(int32_t millisec) {
+    if (daemon == nullptr) return false;
+    return MHD_run_wait(daemon, millisec) == MHD_YES;
+}
+
+bool webserver::get_fdset(fd_set* read_fd_set, fd_set* write_fd_set, fd_set* except_fd_set, int* max_fd) {
+    if (daemon == nullptr) return false;
+    MHD_socket mhd_max_fd = 0;
+    if (MHD_get_fdset(daemon, read_fd_set, write_fd_set, except_fd_set, &mhd_max_fd) != MHD_YES) {
+        return false;
+    }
+    *max_fd = static_cast<int>(mhd_max_fd);
+    return true;
+}
+
+bool webserver::get_timeout(uint64_t* timeout) {
+    if (daemon == nullptr) return false;
+    MHD_UNSIGNED_LONG_LONG mhd_timeout = 0;
+    if (MHD_get_timeout(daemon, &mhd_timeout) != MHD_YES) {
+        return false;
+    }
+    *timeout = static_cast<uint64_t>(mhd_timeout);
+    return true;
+}
+
+bool webserver::add_connection(int client_socket, const struct sockaddr* addr, socklen_t addrlen) {
+    if (daemon == nullptr) return false;
+    return MHD_add_connection(daemon, client_socket, addr, addrlen) == MHD_YES;
 }
 
 void webserver::invalidate_route_cache() {
