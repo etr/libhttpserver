@@ -1494,6 +1494,297 @@ To test the above example, you can run the following command from a terminal:
 
 You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/deferred_with_accumulator.cpp).
 
+#### Example of an empty response (204 No Content)
+```cpp
+    #include <httpserver.hpp>
+
+    using namespace httpserver;
+
+    class no_content_resource : public http_resource {
+    public:
+        std::shared_ptr<http_response> render_DELETE(const http_request&) {
+            // Return a 204 No Content response with no body
+            return std::make_shared<empty_response>(
+                    http::http_utils::http_no_content);
+        }
+
+        std::shared_ptr<http_response> render_HEAD(const http_request&) {
+            // Return a HEAD-only response with headers but no body
+            auto response = std::make_shared<empty_response>(
+                    http::http_utils::http_ok,
+                    empty_response::HEAD_ONLY);
+            response->with_header("X-Total-Count", "42");
+            return response;
+        }
+    };
+
+    int main() {
+        webserver ws = create_webserver(8080);
+
+        no_content_resource ncr;
+        ws.register_resource("/items", &ncr);
+        ws.start(true);
+
+        return 0;
+    }
+```
+To test the above example, you can run the following commands from a terminal:
+
+    curl -XDELETE -v localhost:8080/items
+    curl -I -v localhost:8080/items
+
+You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/empty_response_example.cpp).
+
+#### Example of a scatter-gather (iovec) response
+```cpp
+    #include <httpserver.hpp>
+
+    using namespace httpserver;
+
+    class iovec_resource : public http_resource {
+    public:
+        std::shared_ptr<http_response> render_GET(const http_request&) {
+            // Build a response from multiple separate buffers without copying
+            std::vector<std::string> parts;
+            parts.push_back("{\"header\": \"value\", ");
+            parts.push_back("\"items\": [1, 2, 3], ");
+            parts.push_back("\"footer\": \"end\"}");
+
+            return std::make_shared<iovec_response>(
+                    std::move(parts), 200, "application/json");
+        }
+    };
+
+    int main() {
+        webserver ws = create_webserver(8080);
+
+        iovec_resource ir;
+        ws.register_resource("/data", &ir);
+        ws.start(true);
+
+        return 0;
+    }
+```
+To test the above example, you can run the following command from a terminal:
+
+    curl -XGET -v localhost:8080/data
+
+You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/iovec_response_example.cpp).
+
+#### Example of a pipe-based streaming response
+```cpp
+    #include <cstring>
+    #include <thread>
+    #include <unistd.h>
+    #include <httpserver.hpp>
+
+    using namespace httpserver;
+
+    class pipe_resource : public http_resource {
+    public:
+        std::shared_ptr<http_response> render_GET(const http_request&) {
+            int pipefd[2];
+            if (pipe(pipefd) == -1) {
+                return std::make_shared<string_response>("pipe failed", 500);
+            }
+
+            // Spawn a thread to write data into the pipe
+            std::thread writer([fd = pipefd[1]]() {
+                const char* messages[] = {"Hello ", "from ", "a pipe!\n"};
+                for (const char* msg : messages) {
+                    ssize_t ret = write(fd, msg, strlen(msg));
+                    (void)ret;
+                }
+                close(fd);
+            });
+            writer.detach();
+
+            // Return the read end of the pipe as the response
+            return std::make_shared<pipe_response>(pipefd[0], 200, "text/plain");
+        }
+    };
+
+    int main() {
+        webserver ws = create_webserver(8080);
+
+        pipe_resource pr;
+        ws.register_resource("/stream", &pr);
+        ws.start(true);
+
+        return 0;
+    }
+```
+To test the above example, you can run the following command from a terminal:
+
+    curl -XGET -v localhost:8080/stream
+
+You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/pipe_response_example.cpp).
+
+#### Example of a WebSocket echo server
+```cpp
+    #include <iostream>
+    #include <httpserver.hpp>
+
+    using namespace httpserver;
+
+    class echo_handler : public websocket_handler {
+    public:
+        void on_open(websocket_session& session) override {
+            std::cout << "WebSocket connection opened" << std::endl;
+            session.send_text("Welcome to the echo server!");
+        }
+
+        void on_message(websocket_session& session, const std::string& msg) override {
+            std::cout << "Received: " << msg << std::endl;
+            session.send_text("Echo: " + msg);
+        }
+
+        void on_close(websocket_session& session, uint16_t code, const std::string& reason) override {
+            std::cout << "WebSocket closed (code=" << code << ", reason=" << reason << ")" << std::endl;
+        }
+    };
+
+    int main() {
+        webserver ws = create_webserver(8080);
+
+        echo_handler handler;
+        ws.register_ws_resource("/ws", &handler);
+        ws.start(true);
+
+        return 0;
+    }
+```
+Note: WebSocket support requires libmicrohttpd 1.0.0 built with WebSocket support. You can test this with any WebSocket client library or browser JavaScript: `new WebSocket("ws://localhost:8080/ws")`.
+
+You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/websocket_echo.cpp).
+
+#### Example of daemon introspection
+```cpp
+    #include <iostream>
+    #include <httpserver.hpp>
+
+    using namespace httpserver;
+
+    class hello_resource : public http_resource {
+    public:
+        std::shared_ptr<http_response> render_GET(const http_request&) {
+            return std::make_shared<string_response>("Hello, World!");
+        }
+    };
+
+    int main() {
+        // Use port 0 to let the OS assign an ephemeral port
+        webserver ws = create_webserver(0);
+
+        hello_resource hr;
+        ws.register_resource("/hello", &hr);
+        ws.start(false);
+
+        // Query daemon information
+        std::cout << "libmicrohttpd version: "
+                  << http::http_utils::get_mhd_version() << std::endl;
+        std::cout << "Bound port: " << ws.get_bound_port() << std::endl;
+        std::cout << "Listen FD: " << ws.get_listen_fd() << std::endl;
+        std::cout << "Active connections: " << ws.get_active_connections() << std::endl;
+        std::cout << "HTTP 200 reason: "
+                  << http::http_utils::reason_phrase(200) << std::endl;
+        std::cout << "HTTP 404 reason: "
+                  << http::http_utils::reason_phrase(404) << std::endl;
+
+        ws.sweet_kill();
+        return 0;
+    }
+```
+You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/daemon_info.cpp).
+
+#### Example of an external event loop
+```cpp
+    #include <csignal>
+    #include <iostream>
+    #include <httpserver.hpp>
+
+    using namespace httpserver;
+
+    static volatile bool running = true;
+
+    void signal_handler(int) { running = false; }
+
+    class hello_resource : public http_resource {
+    public:
+        std::shared_ptr<http_response> render_GET(const http_request&) {
+            return std::make_shared<string_response>("Hello from external event loop!");
+        }
+    };
+
+    int main() {
+        signal(SIGINT, signal_handler);
+
+        webserver ws = create_webserver(8080);
+
+        hello_resource hr;
+        ws.register_resource("/hello", &hr);
+        ws.start(false);
+
+        std::cout << "Server running on port " << ws.get_bound_port() << std::endl;
+
+        // Drive the event loop externally using run_wait
+        while (running) {
+            // Block for up to 1000ms waiting for HTTP activity
+            ws.run_wait(1000);
+
+            // You can do other work here between iterations
+        }
+
+        // Graceful shutdown: stop accepting new connections first
+        ws.quiesce();
+        ws.stop();
+
+        return 0;
+    }
+```
+To test the above example, you can run the following command from a terminal:
+
+    curl -XGET -v localhost:8080/hello
+
+You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/external_event_loop.cpp).
+
+#### Example of turbo mode with performance options
+```cpp
+    #include <httpserver.hpp>
+
+    using namespace httpserver;
+
+    class hello_resource : public http_resource {
+    public:
+        std::shared_ptr<http_response> render_GET(const http_request&) {
+            return std::make_shared<string_response>("Hello, turbo world!");
+        }
+    };
+
+    int main() {
+        // Create a high-performance server with turbo mode,
+        // suppressed date headers, and a thread pool.
+        webserver ws = create_webserver(8080)
+            .start_method(http::http_utils::INTERNAL_SELECT)
+            .max_threads(4)
+            .turbo()
+            .suppress_date_header()
+            .tcp_fastopen_queue_size(16)
+            .listen_backlog(128);
+
+        hello_resource hr;
+        ws.register_resource("/hello", &hr);
+        ws.start(true);
+
+        return 0;
+    }
+```
+To test the above example, you can run the following command from a terminal:
+
+    curl -XGET -v localhost:8080/hello
+
+You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/turbo_mode.cpp).
+
 [Back to TOC](#table-of-contents)
 
 ## Copying
