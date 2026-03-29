@@ -21,6 +21,7 @@
 #include "httpserver/webserver.hpp"
 #ifdef HAVE_WEBSOCKET
 #include "httpserver/websocket_handler.hpp"
+#include <microhttpd_ws.h>
 #endif  // HAVE_WEBSOCKET
 
 #if defined(_WIN32) && !defined(__CYGWIN__)
@@ -51,6 +52,7 @@
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -263,7 +265,8 @@ bool webserver::register_ws_resource(const std::string& resource, websocket_hand
     if (handler == nullptr) {
         throw std::invalid_argument("The websocket_handler pointer cannot be null");
     }
-    registered_ws_handlers[resource] = handler;
+    std::unique_lock lock(registered_resources_mutex);
+    registered_ws_handlers[http_utils::standardize_url(resource)] = handler;
     return true;
 }
 #endif  // HAVE_WEBSOCKET
@@ -319,21 +322,15 @@ bool webserver::start(bool blocking) {
     if (use_ssl) {
         // Need for const_cast to respect MHD interface that needs a void*
         iov.push_back(gen(MHD_OPTION_HTTPS_MEM_KEY, 0, reinterpret_cast<void*>(const_cast<char*>(https_mem_key.c_str()))));
-    }
-
-    if (use_ssl) {
-        // Need for const_cast to respect MHD interface that needs a void*
         iov.push_back(gen(MHD_OPTION_HTTPS_MEM_CERT, 0, reinterpret_cast<void*>(const_cast<char*>(https_mem_cert.c_str()))));
-    }
 
-    if (https_mem_trust != "" && use_ssl) {
-        // Need for const_cast to respect MHD interface that needs a void*
-        iov.push_back(gen(MHD_OPTION_HTTPS_MEM_TRUST, 0, reinterpret_cast<void*>(const_cast<char*>(https_mem_trust.c_str()))));
-    }
+        if (!https_mem_trust.empty()) {
+            iov.push_back(gen(MHD_OPTION_HTTPS_MEM_TRUST, 0, reinterpret_cast<void*>(const_cast<char*>(https_mem_trust.c_str()))));
+        }
 
-    if (https_priorities != "" && use_ssl) {
-        // Need for const_cast to respect MHD interface that needs a void*
-        iov.push_back(gen(MHD_OPTION_HTTPS_PRIORITIES, 0, reinterpret_cast<void*>(const_cast<char*>(https_priorities.c_str()))));
+        if (!https_priorities.empty()) {
+            iov.push_back(gen(MHD_OPTION_HTTPS_PRIORITIES, 0, reinterpret_cast<void*>(const_cast<char*>(https_priorities.c_str()))));
+        }
     }
 
 #ifdef HAVE_DAUTH
@@ -447,6 +444,12 @@ bool webserver::start(bool blocking) {
     if (suppress_date_header) {
         start_conf |= MHD_USE_SUPPRESS_DATE_NO_CLOCK;
     }
+
+#ifdef HAVE_WEBSOCKET
+    if (!registered_ws_handlers.empty()) {
+        start_conf |= MHD_ALLOW_UPGRADE;
+    }
+#endif  // HAVE_WEBSOCKET
 
     daemon = nullptr;
     if (bind_address == nullptr) {
@@ -810,7 +813,7 @@ size_t unescaper_func(void * cls, struct MHD_Connection *c, char *s) {
     // IT IS DUE TO A BOGUS ON libmicrohttpd (V0.99) THAT PRODUCING A
     // STRING CONTAINING '\0' AFTER AN UNESCAPING, IS UNABLE TO PARSE
     // ARGS WITH get_connection_values FUNC OR lookup FUNC.
-    return std::string(s).size();
+    return strlen(s);
 }
 
 MHD_Result webserver::post_iterator(void *cls, enum MHD_ValueKind kind,
@@ -896,12 +899,114 @@ MHD_Result webserver::post_iterator(void *cls, enum MHD_ValueKind kind,
     }
 }
 
-void webserver::upgrade_handler(void *cls, struct MHD_Connection* connection, void **con_cls, int upgrade_socket) {
-    std::ignore = cls;
-    std::ignore = connection;
-    std::ignore = con_cls;
-    std::ignore = upgrade_socket;
+#ifdef HAVE_WEBSOCKET
+static void decode_websocket_buffer(struct MHD_WebSocketStream* ws_stream,
+                                    websocket_handler* handler,
+                                    websocket_session& session,
+                                    const char* buf, size_t buf_len) {
+    size_t offset = 0;
+    while (offset < buf_len && session.is_valid()) {
+        char* frame_data = nullptr;
+        size_t frame_len = 0;
+        size_t step = 0;
+        int status = MHD_websocket_decode(ws_stream,
+                                           buf + offset,
+                                           buf_len - offset,
+                                           &step,
+                                           &frame_data,
+                                           &frame_len);
+        offset += step;
+        switch (status) {
+            case MHD_WEBSOCKET_STATUS_TEXT_FRAME:
+                handler->on_message(session, std::string_view(frame_data, frame_len));
+                MHD_websocket_free(ws_stream, frame_data);
+                break;
+            case MHD_WEBSOCKET_STATUS_BINARY_FRAME:
+                handler->on_binary(session, frame_data, frame_len);
+                MHD_websocket_free(ws_stream, frame_data);
+                break;
+            case MHD_WEBSOCKET_STATUS_PING_FRAME:
+                handler->on_ping(session, std::string_view(frame_data, frame_len));
+                MHD_websocket_free(ws_stream, frame_data);
+                break;
+            case MHD_WEBSOCKET_STATUS_CLOSE_FRAME: {
+                uint16_t close_code = 1000;
+                std::string close_reason;
+                if (frame_len >= 2) {
+                    close_code = static_cast<uint16_t>(
+                        (static_cast<unsigned char>(frame_data[0]) << 8) |
+                         static_cast<unsigned char>(frame_data[1]));
+                    if (frame_len > 2) {
+                        close_reason.assign(frame_data + 2, frame_len - 2);
+                    }
+                }
+                handler->on_close(session, close_code, close_reason);
+                MHD_websocket_free(ws_stream, frame_data);
+                // Send close response and end the loop
+                session.close(close_code, close_reason);
+                break;
+            }
+            case MHD_WEBSOCKET_STATUS_OK:
+                // Need more data - go back to recv
+                if (frame_data != nullptr) {
+                    MHD_websocket_free(ws_stream, frame_data);
+                }
+                break;
+            default:
+                // Protocol error or unknown frame
+                if (frame_data != nullptr) {
+                    MHD_websocket_free(ws_stream, frame_data);
+                }
+                session.close(1002, "Protocol error");
+                break;
+        }
+        // If decode consumed no bytes, we need more data
+        if (step == 0) break;
+    }
 }
+
+void webserver::upgrade_handler(void *cls, struct MHD_Connection* connection,
+                                void *req_cls, const char *extra_in,
+                                size_t extra_in_size, MHD_socket sock,
+                                struct MHD_UpgradeResponseHandle *urh) {
+    std::ignore = connection;
+    std::ignore = req_cls;
+
+    ws_upgrade_data* data = static_cast<ws_upgrade_data*>(cls);
+    websocket_handler* handler = data->handler;
+    delete data;
+
+    // Create a WebSocket stream for this connection
+    struct MHD_WebSocketStream* ws_stream = nullptr;
+    int ws_result = MHD_websocket_stream_init(&ws_stream,
+                                               MHD_WEBSOCKET_FLAG_SERVER | MHD_WEBSOCKET_FLAG_NO_FRAGMENTS,
+                                               0);
+    if (ws_result != MHD_WEBSOCKET_STATUS_OK || ws_stream == nullptr) {
+        MHD_upgrade_action(urh, MHD_UPGRADE_ACTION_CLOSE);
+        return;
+    }
+
+    websocket_session session(sock, urh, ws_stream);
+    handler->on_open(session);
+
+    // Process any initial data that MHD may have buffered
+    if (extra_in != nullptr && extra_in_size > 0) {
+        decode_websocket_buffer(ws_stream, handler, session, extra_in, extra_in_size);
+    }
+
+    // Receive loop
+    char buf[4096];
+    while (session.is_valid()) {
+        ssize_t got = recv(sock, buf, sizeof(buf), 0);
+        if (got <= 0) break;
+
+        decode_websocket_buffer(ws_stream, handler, session,
+                                buf, static_cast<size_t>(got));
+    }
+
+    // Session destructor will free ws_stream and close urh
+}
+#endif  // HAVE_WEBSOCKET
 
 std::shared_ptr<http_response> webserver::not_found_page(details::modded_request* mr) const {
     if (not_found_resource != nullptr) {
@@ -927,33 +1032,34 @@ std::shared_ptr<http_response> webserver::internal_error_page(details::modded_re
     }
 }
 
-bool webserver::should_skip_auth(const std::string& path) const {
-    // Normalize path: resolve ".." and "." segments to prevent bypass
-    std::string normalized;
-    {
-        std::vector<std::string> segments;
-        std::string::size_type start = 0;
-        // Skip leading slash
-        if (!path.empty() && path[0] == '/') {
-            start = 1;
-        }
-        while (start < path.size()) {
-            auto end = path.find('/', start);
-            if (end == std::string::npos) end = path.size();
-            std::string seg = path.substr(start, end - start);
-            if (seg == "..") {
-                if (!segments.empty()) segments.pop_back();
-            } else if (!seg.empty() && seg != ".") {
-                segments.push_back(seg);
-            }
-            start = end + 1;
-        }
-        normalized = "/";
-        for (size_t i = 0; i < segments.size(); i++) {
-            if (i > 0) normalized += "/";
-            normalized += segments[i];
-        }
+static std::string normalize_path(const std::string& path) {
+    std::vector<std::string> segments;
+    std::string::size_type start = 0;
+    // Skip leading slash
+    if (!path.empty() && path[0] == '/') {
+        start = 1;
     }
+    while (start < path.size()) {
+        auto end = path.find('/', start);
+        if (end == std::string::npos) end = path.size();
+        std::string seg = path.substr(start, end - start);
+        if (seg == "..") {
+            if (!segments.empty()) segments.pop_back();
+        } else if (!seg.empty() && seg != ".") {
+            segments.push_back(seg);
+        }
+        start = end + 1;
+    }
+    std::string normalized = "/";
+    for (size_t i = 0; i < segments.size(); i++) {
+        if (i > 0) normalized += "/";
+        normalized += segments[i];
+    }
+    return normalized;
+}
+
+bool webserver::should_skip_auth(const std::string& path) const {
+    std::string normalized = normalize_path(path);
 
     for (const auto& skip_path : auth_skip_paths) {
         if (skip_path == normalized) return true;
@@ -1020,8 +1126,89 @@ MHD_Result webserver::requests_answer_second_step(MHD_Connection* connection, co
     return MHD_YES;
 }
 
+struct MHD_Response* webserver::get_raw_response_with_fallback(details::modded_request* mr) {
+    try {
+        struct MHD_Response* raw = mr->dhrs->get_raw_response();
+        if (raw == nullptr) {
+            mr->dhrs = internal_error_page(mr);
+            raw = mr->dhrs->get_raw_response();
+        }
+        return raw;
+    } catch(const std::invalid_argument&) {
+        try {
+            mr->dhrs = not_found_page(mr);
+            return mr->dhrs->get_raw_response();
+        } catch(...) {
+            return nullptr;
+        }
+    } catch(...) {
+        try {
+            mr->dhrs = internal_error_page(mr);
+            return mr->dhrs->get_raw_response();
+        } catch(...) {
+            return nullptr;
+        }
+    }
+}
+
 MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct details::modded_request* mr, const char* method) {
     int to_ret = MHD_NO;
+
+#ifdef HAVE_WEBSOCKET
+    // Check for WebSocket upgrade request before normal resource dispatch
+    {
+        const char* upgrade_header = MHD_lookup_connection_value(connection, MHD_HEADER_KIND, MHD_HTTP_HEADER_UPGRADE);
+        if (upgrade_header != nullptr && 0 == strcasecmp(upgrade_header, "websocket")) {
+            // RFC 6455 handshake validation
+            const char* connection_header = MHD_lookup_connection_value(connection, MHD_HEADER_KIND, MHD_HTTP_HEADER_CONNECTION);
+            const char* ws_version = MHD_lookup_connection_value(connection, MHD_HEADER_KIND, "Sec-WebSocket-Version");
+            const char* ws_key = MHD_lookup_connection_value(connection, MHD_HEADER_KIND, "Sec-WebSocket-Key");
+
+            // Validate required headers per RFC 6455 Section 4.2.1
+            auto send_bad_request = [&]() -> MHD_Result {
+                struct MHD_Response* bad_response = MHD_create_response_from_buffer(0, nullptr, MHD_RESPMEM_PERSISTENT);
+                MHD_Result ret = (MHD_Result) MHD_queue_response(connection, MHD_HTTP_BAD_REQUEST, bad_response);
+                MHD_destroy_response(bad_response);
+                return ret;
+            };
+
+            if (connection_header == nullptr || strcasestr(connection_header, "Upgrade") == nullptr) {
+                return send_bad_request();
+            }
+            if (ws_version == nullptr || strcmp(ws_version, "13") != 0) {
+                return send_bad_request();
+            }
+            if (ws_key == nullptr || strlen(ws_key) == 0) {
+                return send_bad_request();
+            }
+
+            std::shared_lock lock(registered_resources_mutex);
+            auto ws_it = registered_ws_handlers.find(mr->standardized_url);
+            if (ws_it != registered_ws_handlers.end()) {
+                websocket_handler* handler = ws_it->second;
+                lock.unlock();
+
+                ws_upgrade_data* data = new ws_upgrade_data{this, handler};
+                struct MHD_Response* response = MHD_create_response_for_upgrade(&upgrade_handler, data);
+                if (response != nullptr) {
+                    // Add required WebSocket response headers
+                    MHD_add_response_header(response, MHD_HTTP_HEADER_UPGRADE, "websocket");
+
+                    // Compute Sec-WebSocket-Accept from client's key (RFC 6455 Section 4.2.2)
+                    char accept_header[29];  // Base64 of SHA-1 = 28 chars + null
+                    if (MHD_websocket_create_accept_header(ws_key, accept_header) == MHD_WEBSOCKET_STATUS_OK) {
+                        MHD_add_response_header(response, "Sec-WebSocket-Accept", accept_header);
+                    }
+
+                    to_ret = MHD_queue_response(connection, MHD_HTTP_SWITCHING_PROTOCOLS, response);
+                    MHD_destroy_response(response);
+                    return (MHD_Result) to_ret;
+                }
+                delete data;
+            }
+        }
+    }
+#endif  // HAVE_WEBSOCKET
 
     map<string, http_resource*>::iterator fe;
 
@@ -1162,24 +1349,8 @@ MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct details
         mr->dhrs = not_found_page(mr);
     }
 
-    try {
-        try {
-            raw_response = mr->dhrs->get_raw_response();
-            if (raw_response == nullptr) {
-                mr->dhrs = internal_error_page(mr);
-                raw_response = mr->dhrs->get_raw_response();
-            }
-        } catch(const std::invalid_argument& iae) {
-            mr->dhrs = not_found_page(mr);
-            raw_response = mr->dhrs->get_raw_response();
-        } catch(const std::exception& e) {
-            mr->dhrs = internal_error_page(mr);
-            raw_response = mr->dhrs->get_raw_response();
-        } catch(...) {
-            mr->dhrs = internal_error_page(mr);
-            raw_response = mr->dhrs->get_raw_response();
-        }
-    } catch(...) {  // catches errors in internal error page
+    raw_response = get_raw_response_with_fallback(mr);
+    if (raw_response == nullptr) {
         mr->dhrs = internal_error_page(mr, true);
         raw_response = mr->dhrs->get_raw_response();
     }

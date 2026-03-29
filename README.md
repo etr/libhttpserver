@@ -1260,9 +1260,9 @@ libhttpserver provides WebSocket support when libmicrohttpd is built with WebSoc
 ### The websocket_handler class
 The `websocket_handler` class provides the following virtual methods:
 * _**void** on_open(**websocket_session&** session):_ Called when a new WebSocket connection is established. Default implementation does nothing.
-* _**void** on_message(**websocket_session&** session, **const std::string&** msg):_ Called when a text message is received. **This is the only pure virtual method and must be implemented.**
+* _**void** on_message(**websocket_session&** session, **std::string_view** msg):_ Called when a text message is received. **This is the only pure virtual method and must be implemented.**
 * _**void** on_binary(**websocket_session&** session, **const void&ast;** data, **size_t** len):_ Called when a binary message is received. Default implementation does nothing.
-* _**void** on_ping(**websocket_session&** session, **const std::string&** payload):_ Called when a ping frame is received. Default implementation sends a pong.
+* _**void** on_ping(**websocket_session&** session, **std::string_view** payload):_ Called when a ping frame is received. Default implementation sends a pong.
 * _**void** on_close(**websocket_session&** session, **uint16_t** code, **const std::string&** reason):_ Called when the WebSocket connection is closed. Default implementation does nothing.
 
 ### The websocket_session class
@@ -1283,8 +1283,8 @@ Register a WebSocket handler using `register_ws_resource`:
 
     class echo_handler : public websocket_handler {
     public:
-        void on_message(websocket_session& session, const std::string& msg) override {
-            session.send_text("Echo: " + msg);
+        void on_message(websocket_session& session, std::string_view msg) override {
+            session.send_text("Echo: " + std::string(msg));
         }
     };
 
@@ -1634,9 +1634,9 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
             session.send_text("Welcome to the echo server!");
         }
 
-        void on_message(websocket_session& session, const std::string& msg) override {
+        void on_message(websocket_session& session, std::string_view msg) override {
             std::cout << "Received: " << msg << std::endl;
-            session.send_text("Echo: " + msg);
+            session.send_text("Echo: " + std::string(msg));
         }
 
         void on_close(websocket_session& session, uint16_t code, const std::string& reason) override {

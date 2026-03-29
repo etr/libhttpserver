@@ -291,7 +291,7 @@ class http_utils {
      static std::string sanitize_upload_filename(const std::string& filename);
 
      static const char* reason_phrase(unsigned int status_code);
-     static bool is_feature_supported(int feature);
+     static bool is_feature_supported(enum MHD_FEATURE feature);
      static const char* get_mhd_version();
 };
 

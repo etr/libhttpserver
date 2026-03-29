@@ -123,8 +123,8 @@ void websocket_handler::on_open(websocket_session&) {
 void websocket_handler::on_binary(websocket_session&, const void*, size_t) {
 }
 
-void websocket_handler::on_ping(websocket_session& session, const std::string& payload) {
-    session.send_pong(payload);
+void websocket_handler::on_ping(websocket_session& session, std::string_view payload) {
+    session.send_pong(std::string(payload));
 }
 
 void websocket_handler::on_close(websocket_session&, uint16_t, const std::string&) {

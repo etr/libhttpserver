@@ -38,6 +38,7 @@
 #include <limits>
 #include <map>
 #include <memory>
+
 #include <string>
 #include <utility>
 #include <vector>
@@ -320,7 +321,7 @@ class http_request {
          size_t userdigest_size,
          unsigned int nonce_timeout = 0,
          uint32_t max_nc = 0,
-         http::http_utils::digest_algorithm algo = http::http_utils::digest_algorithm::MD5) const;
+         http::http_utils::digest_algorithm algo = http::http_utils::digest_algorithm::SHA256) const;
 #endif  // HAVE_DAUTH
 
      friend std::ostream &operator<< (std::ostream &os, http_request &r);
@@ -381,6 +382,10 @@ class http_request {
 #ifdef HAVE_BAUTH
      void fetch_user_pass() const;
 #endif  // HAVE_BAUTH
+
+#ifdef HAVE_GNUTLS
+     void populate_all_cert_fields() const;
+#endif  // HAVE_GNUTLS
 
      /**
       * Method used to set an argument value by key.
@@ -499,6 +504,17 @@ class http_request {
 
         bool args_populated = false;
         bool path_pieces_cached = false;
+
+#ifdef HAVE_GNUTLS
+        bool client_cert_fields_cached = false;
+        std::string client_cert_dn;
+        std::string client_cert_issuer_dn;
+        std::string client_cert_cn;
+        std::string client_cert_fingerprint_sha256;
+        time_t client_cert_not_before = static_cast<time_t>(-1);
+        time_t client_cert_not_after = static_cast<time_t>(-1);
+        bool client_cert_verified = false;
+#endif  // HAVE_GNUTLS
      };
      std::unique_ptr<http_request_data_cache> cache = std::make_unique<http_request_data_cache>();
      void ensure_path_pieces_cached() const {

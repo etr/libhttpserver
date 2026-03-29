@@ -20,6 +20,7 @@
 
 #include <iostream>
 #include <string>
+#include <string_view>
 
 #include <httpserver.hpp>
 
@@ -30,9 +31,9 @@ class echo_handler : public httpserver::websocket_handler {
          session.send_text("Welcome to the echo server!");
      }
 
-     void on_message(httpserver::websocket_session& session, const std::string& msg) override {
+     void on_message(httpserver::websocket_session& session, std::string_view msg) override {
          std::cout << "Received: " << msg << std::endl;
-         session.send_text("Echo: " + msg);
+         session.send_text("Echo: " + std::string(msg));
      }
 
      void on_close(httpserver::websocket_session& session, uint16_t code, const std::string& reason) override {

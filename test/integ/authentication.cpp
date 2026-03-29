@@ -488,8 +488,15 @@ LT_END_AUTO_TEST(digest_auth_with_ha1_sha256_wrong_pass)
 class digest_user_cache_resource : public http_resource {
  public:
     shared_ptr<http_response> render_GET(const http_request& req) {
+        using httpserver::http::http_utils;
         // First call - will populate cache (line 300 nullptr or non-null branch)
         std::string user1 = std::string(req.get_digested_user());
+
+        if (user1.empty()) {
+            // No digest auth provided - send a 401 challenge so curl can retry
+            return std::make_shared<digest_auth_fail_response>("FAIL", "testrealm", MY_OPAQUE, true,
+                http_utils::http_ok, http_utils::text_plain, http_utils::digest_algorithm::SHA256);
+        }
 
         // Second call - should hit cache (lines 293-295)
         std::string user2 = std::string(req.get_digested_user());
@@ -499,11 +506,6 @@ class digest_user_cache_resource : public http_resource {
             return std::make_shared<string_response>("CACHE_MISMATCH", 500, "text/plain");
         }
 
-        if (user1.empty()) {
-            // No digest auth provided - tests the nullptr branch (line 299-300)
-            return std::make_shared<string_response>("NO_DIGEST_USER", 200, "text/plain");
-        }
-
         // Return the digested user (tests cache hit with valid user)
         return std::make_shared<string_response>("USER:" + user1, 200, "text/plain");
     }
@@ -511,7 +513,9 @@ class digest_user_cache_resource : public http_resource {
 
 // Test digested user caching when no digest auth is provided (nullptr branch)
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_user_cache_no_auth)
-    webserver ws = create_webserver(PORT);
+    webserver ws = create_webserver(PORT)
+        .digest_auth_random("myrandom")
+        .nonce_nc_size(300);
 
     digest_user_cache_resource resource;
     LT_ASSERT_EQ(true, ws.register_resource("cache_test", &resource));
@@ -521,14 +525,16 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_user_cache_no_auth)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    // No authentication - should trigger nullptr branch in get_digested_user
+    long http_code = 0;
+    // No authentication - should trigger 401 challenge
     curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/cache_test");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
-    LT_CHECK_EQ(s, "NO_DIGEST_USER");
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    LT_CHECK_EQ(http_code, 401);
     curl_easy_cleanup(curl);
 
     ws.stop();
@@ -564,10 +570,9 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_user_cache_with_auth)
     // or NO_DIGEST_USER if no auth was provided. With CURLAUTH_DIGEST,
     // curl will respond to the 401 challenge and include auth headers.
     // The resource calls get_digested_user twice to test caching.
-    // Check that response is not empty and not a cache mismatch
-    LT_CHECK_EQ(s.find("CACHE_MISMATCH") == std::string::npos, true);
-    // Should contain either "USER:" (auth worked) or "NO_DIGEST_USER" (fallback)
-    LT_CHECK_EQ(s.find("USER:") != std::string::npos || s == "NO_DIGEST_USER", true);
+    // With CURLAUTH_DIGEST, curl responds to the 401 challenge.
+    // The server should return "USER:testuser".
+    LT_CHECK_EQ(s, "USER:testuser");
     curl_easy_cleanup(curl);
 
     ws.stop();
@@ -953,23 +958,47 @@ LT_BEGIN_AUTO_TEST(authentication_suite, auth_multiple_skip_paths)
     long http_code = 0;  // NOLINT(runtime/int)
     std::string s;
 
-    // All skip paths should work without auth
-    const char* skip_urls[] = {"/health", "/metrics", "/status"};
-    for (const char* url : skip_urls) {
-        curl = curl_easy_init();
-        s = "";
-        http_code = 0;
-        std::string full_url = std::string("localhost:" PORT_STRING) + url;
-        curl_easy_setopt(curl, CURLOPT_URL, full_url.c_str());
-        curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-        res = curl_easy_perform(curl);
-        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-        LT_ASSERT_EQ(res, 0);
-        LT_CHECK_EQ(http_code, 200);
-        curl_easy_cleanup(curl);
-    }
+    // /health should work without auth
+    curl = curl_easy_init();
+    s = "";
+    http_code = 0;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/health");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(http_code, 200);
+    curl_easy_cleanup(curl);
+
+    // /metrics should work without auth
+    curl = curl_easy_init();
+    s = "";
+    http_code = 0;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/metrics");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(http_code, 200);
+    curl_easy_cleanup(curl);
+
+    // /status should work without auth
+    curl = curl_easy_init();
+    s = "";
+    http_code = 0;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/status");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(http_code, 200);
+    curl_easy_cleanup(curl);
 
     // Protected should still require auth
     curl = curl_easy_init();

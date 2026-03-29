@@ -323,7 +323,17 @@ class webserver {
              const char *filename, const char *content_type, const char *transfer_encoding,
              const char *data, uint64_t off, size_t size);
 
-     static void upgrade_handler(void *cls, struct MHD_Connection* connection, void **con_cls, int upgrade_socket);
+#ifdef HAVE_WEBSOCKET
+     struct ws_upgrade_data {
+         webserver* ws;
+         websocket_handler* handler;
+     };
+
+     static void upgrade_handler(void *cls, struct MHD_Connection* connection,
+                                 void *req_cls, const char *extra_in,
+                                 size_t extra_in_size, MHD_socket sock,
+                                 struct MHD_UpgradeResponseHandle *urh);
+#endif  // HAVE_WEBSOCKET
 
      MHD_Result requests_answer_first_step(MHD_Connection* connection, struct details::modded_request* mr);
 
@@ -332,6 +342,8 @@ class webserver {
              size_t* upload_data_size, struct details::modded_request* mr);
 
      MHD_Result finalize_answer(MHD_Connection* connection, struct details::modded_request* mr, const char* method);
+
+     struct MHD_Response* get_raw_response_with_fallback(details::modded_request* mr);
 
      MHD_Result complete_request(MHD_Connection* connection, struct details::modded_request* mr, const char* version, const char* method);
 

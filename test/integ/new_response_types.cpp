@@ -84,20 +84,27 @@ class iovec_resource : public http_resource {
      }
 };
 
+static webserver* ws_ptr = nullptr;
+static empty_resource er;
+static pipe_resource pr;
+static iovec_resource ir;
+
 LT_BEGIN_SUITE(response_types_suite)
     void set_up() {
+        ws_ptr = new webserver(create_webserver(PORT));
+        ws_ptr->register_resource("empty", &er);
+        ws_ptr->register_resource("pipe", &pr);
+        ws_ptr->register_resource("iovec", &ir);
+        ws_ptr->start(false);
     }
     void tear_down() {
+        ws_ptr->stop();
+        delete ws_ptr;
+        ws_ptr = nullptr;
     }
 LT_END_SUITE(response_types_suite)
 
 LT_BEGIN_AUTO_TEST(response_types_suite, empty_response_test)
-    webserver ws = create_webserver(PORT);
-
-    empty_resource er;
-    LT_ASSERT_EQ(true, ws.register_resource("empty", &er));
-    ws.start(false);
-
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -114,17 +121,9 @@ LT_BEGIN_AUTO_TEST(response_types_suite, empty_response_test)
     LT_CHECK_EQ(s, "");
     curl_easy_cleanup(curl);
     curl_global_cleanup();
-
-    ws.stop();
 LT_END_AUTO_TEST(empty_response_test)
 
 LT_BEGIN_AUTO_TEST(response_types_suite, pipe_response_test)
-    webserver ws = create_webserver(PORT);
-
-    pipe_resource pr;
-    LT_ASSERT_EQ(true, ws.register_resource("pipe", &pr));
-    ws.start(false);
-
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -141,17 +140,9 @@ LT_BEGIN_AUTO_TEST(response_types_suite, pipe_response_test)
     LT_CHECK_EQ(s, "hello from pipe");
     curl_easy_cleanup(curl);
     curl_global_cleanup();
-
-    ws.stop();
 LT_END_AUTO_TEST(pipe_response_test)
 
 LT_BEGIN_AUTO_TEST(response_types_suite, iovec_response_test)
-    webserver ws = create_webserver(PORT);
-
-    iovec_resource ir;
-    LT_ASSERT_EQ(true, ws.register_resource("iovec", &ir));
-    ws.start(false);
-
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -168,8 +159,6 @@ LT_BEGIN_AUTO_TEST(response_types_suite, iovec_response_test)
     LT_CHECK_EQ(s, "Hello World");
     curl_easy_cleanup(curl);
     curl_global_cleanup();
-
-    ws.stop();
 LT_END_AUTO_TEST(iovec_response_test)
 
 LT_BEGIN_AUTO_TEST_ENV()

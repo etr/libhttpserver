@@ -43,10 +43,10 @@ class pipe_response : public http_response {
          http_response(response_code, content_type),
          pipe_fd(pipe_fd) { }
 
-     pipe_response(const pipe_response& other) = default;
+     pipe_response(const pipe_response& other) = delete;
      pipe_response(pipe_response&& other) noexcept = default;
 
-     pipe_response& operator=(const pipe_response& b) = default;
+     pipe_response& operator=(const pipe_response& b) = delete;
      pipe_response& operator=(pipe_response&& b) = default;
 
      ~pipe_response() = default;

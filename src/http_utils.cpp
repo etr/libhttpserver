@@ -580,8 +580,8 @@ const char* http_utils::reason_phrase(unsigned int status_code) {
     return MHD_get_reason_phrase_for(status_code);
 }
 
-bool http_utils::is_feature_supported(int feature) {
-    return MHD_is_feature_supported(static_cast<MHD_FEATURE>(feature)) == MHD_YES;
+bool http_utils::is_feature_supported(enum MHD_FEATURE feature) {
+    return MHD_is_feature_supported(feature) == MHD_YES;
 }
 
 const char* http_utils::get_mhd_version() {
