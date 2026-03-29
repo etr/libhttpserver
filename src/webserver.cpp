@@ -815,7 +815,7 @@ size_t unescaper_func(void * cls, struct MHD_Connection *c, char *s) {
     // STRING CONTAINING '\0' AFTER AN UNESCAPING, IS UNABLE TO PARSE
     // ARGS WITH get_connection_values FUNC OR lookup FUNC.
     if (s == nullptr) return 0;
-    return strlen(s);
+    return std::char_traits<char>::length(s);
 }
 
 MHD_Result webserver::post_iterator(void *cls, enum MHD_ValueKind kind,
