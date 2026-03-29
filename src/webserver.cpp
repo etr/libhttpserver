@@ -813,6 +813,7 @@ size_t unescaper_func(void * cls, struct MHD_Connection *c, char *s) {
     // IT IS DUE TO A BOGUS ON libmicrohttpd (V0.99) THAT PRODUCING A
     // STRING CONTAINING '\0' AFTER AN UNESCAPING, IS UNABLE TO PARSE
     // ARGS WITH get_connection_values FUNC OR lookup FUNC.
+    if (s == nullptr) return 0;
     return strlen(s);
 }
 
@@ -1178,7 +1179,7 @@ MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct details
             if (ws_version == nullptr || strcmp(ws_version, "13") != 0) {
                 return send_bad_request();
             }
-            if (ws_key == nullptr || strlen(ws_key) == 0) {
+            if (ws_key == nullptr || ws_key[0] == '\0') {
                 return send_bad_request();
             }
 
