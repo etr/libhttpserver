@@ -511,30 +511,30 @@ jobs:
       id: cache-libmicrohttpd
       uses: actions/cache@v4
       with:
-        path: libmicrohttpd-0.9.77
-        key: ${{ matrix.os }}-${{ matrix.c-compiler }}-libmicrohttpd-0.9.77-pre-built-v2
+        path: libmicrohttpd-1.0.3
+        key: ${{ matrix.os }}-${{ matrix.c-compiler }}-libmicrohttpd-1.0.3-pre-built-v2
       if: ${{ matrix.os-type != 'windows' && matrix.build-type != 'no-dauth' && matrix.compiler-family != 'arm-cross' }}
 
     - name: Build libmicrohttpd dependency (if not cached)
       run: |
-        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.77.tar.gz -o libmicrohttpd-0.9.77.tar.gz ;
-        tar -xzf libmicrohttpd-0.9.77.tar.gz ;
-        cd libmicrohttpd-0.9.77 ;
+        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-1.0.3.tar.gz -o libmicrohttpd-1.0.3.tar.gz ;
+        tar -xzf libmicrohttpd-1.0.3.tar.gz ;
+        cd libmicrohttpd-1.0.3 ;
         ./configure --disable-examples ;
         make ;
       if: ${{ matrix.os-type != 'windows' && matrix.build-type != 'no-dauth' && matrix.compiler-family != 'arm-cross' && steps.cache-libmicrohttpd.outputs.cache-hit != 'true' }}
 
     - name: Build libmicrohttpd without digest auth (no-dauth test)
       run: |
-        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.77.tar.gz -o libmicrohttpd-0.9.77.tar.gz ;
-        tar -xzf libmicrohttpd-0.9.77.tar.gz ;
-        cd libmicrohttpd-0.9.77 ;
+        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-1.0.3.tar.gz -o libmicrohttpd-1.0.3.tar.gz ;
+        tar -xzf libmicrohttpd-1.0.3.tar.gz ;
+        cd libmicrohttpd-1.0.3 ;
         ./configure --disable-examples --disable-dauth ;
         make ;
       if: ${{ matrix.build-type == 'no-dauth' }}
 
     - name: Install libmicrohttpd
-      run: cd libmicrohttpd-0.9.77 ; sudo make install ;
+      run: cd libmicrohttpd-1.0.3 ; sudo make install ;
       if: ${{ matrix.os-type != 'windows' && matrix.compiler-family != 'arm-cross' }}
 
     - name: Verify digest auth is disabled (no-dauth test)
@@ -550,9 +550,9 @@ jobs:
     - name: Build and install libmicrohttpd (Windows)
       if: ${{ matrix.os-type == 'windows' }}
       run: |
-        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.77.tar.gz -o libmicrohttpd-0.9.77.tar.gz
-        tar -xzf libmicrohttpd-0.9.77.tar.gz
-        cd libmicrohttpd-0.9.77
+        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-1.0.3.tar.gz -o libmicrohttpd-1.0.3.tar.gz
+        tar -xzf libmicrohttpd-1.0.3.tar.gz
+        cd libmicrohttpd-1.0.3
         ./configure --disable-examples --enable-poll=no
         make
         make install
@@ -561,16 +561,16 @@ jobs:
       id: cache-libmicrohttpd-arm
       uses: actions/cache@v4
       with:
-        path: libmicrohttpd-0.9.77-${{ matrix.build-type }}
-        key: ${{ matrix.os }}-${{ matrix.build-type }}-libmicrohttpd-0.9.77-cross-compiled
+        path: libmicrohttpd-1.0.3-${{ matrix.build-type }}
+        key: ${{ matrix.os }}-${{ matrix.build-type }}-libmicrohttpd-1.0.3-cross-compiled
       if: ${{ matrix.compiler-family == 'arm-cross' }}
 
     - name: Cross-compile libmicrohttpd for ARM
       run: |
-        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.77.tar.gz -o libmicrohttpd-0.9.77.tar.gz
-        tar -xzf libmicrohttpd-0.9.77.tar.gz
-        mv libmicrohttpd-0.9.77 libmicrohttpd-0.9.77-${{ matrix.build-type }}
-        cd libmicrohttpd-0.9.77-${{ matrix.build-type }}
+        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-1.0.3.tar.gz -o libmicrohttpd-1.0.3.tar.gz
+        tar -xzf libmicrohttpd-1.0.3.tar.gz
+        mv libmicrohttpd-1.0.3 libmicrohttpd-1.0.3-${{ matrix.build-type }}
+        cd libmicrohttpd-1.0.3-${{ matrix.build-type }}
         mkdir -p ${{ github.workspace }}/arm-sysroot
         if [ "${{ matrix.build-type }}" = "arm32" ]; then
           ./configure --host=arm-linux-gnueabihf --prefix=${{ github.workspace }}/arm-sysroot --disable-examples --disable-doc
@@ -583,7 +583,7 @@ jobs:
 
     - name: Install cross-compiled libmicrohttpd from cache
       run: |
-        cd libmicrohttpd-0.9.77-${{ matrix.build-type }}
+        cd libmicrohttpd-1.0.3-${{ matrix.build-type }}
         mkdir -p ${{ github.workspace }}/arm-sysroot
         make install
       if: ${{ matrix.compiler-family == 'arm-cross' && steps.cache-libmicrohttpd-arm.outputs.cache-hit == 'true' }}

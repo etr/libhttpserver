@@ -18,31 +18,31 @@
      USA
 */
 
-#ifdef HAVE_DAUTH
+#include <memory>
 
-#include "httpserver/digest_auth_fail_response.hpp"
-#include <microhttpd.h>
-#include <iosfwd>
+#include <httpserver.hpp>
 
-struct MHD_Connection;
-struct MHD_Response;
+class hello_resource : public httpserver::http_resource {
+ public:
+     std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request&) {
+         return std::make_shared<httpserver::string_response>("Hello, turbo world!");
+     }
+};
 
-namespace httpserver {
+int main() {
+    // Create a high-performance server with turbo mode,
+    // suppressed date headers, and a thread pool.
+    httpserver::webserver ws = httpserver::create_webserver(8080)
+        .start_method(httpserver::http::http_utils::INTERNAL_SELECT)
+        .max_threads(4)
+        .turbo()
+        .suppress_date_header()
+        .tcp_fastopen_queue_size(16)
+        .listen_backlog(128);
 
-int digest_auth_fail_response::enqueue_response(MHD_Connection* connection, MHD_Response* response) {
-    return MHD_queue_auth_required_response3(
-        connection,
-        realm.c_str(),
-        opaque.c_str(),
-        domain.empty() ? nullptr : domain.c_str(),
-        response,
-        signal_stale ? MHD_YES : MHD_NO,
-        MHD_DIGEST_AUTH_MULT_QOP_ANY_NON_INT,
-        static_cast<MHD_DigestAuthMultiAlgo3>(algorithm),
-        userhash_support ? MHD_YES : MHD_NO,
-        prefer_utf8 ? MHD_YES : MHD_NO);
+    hello_resource hr;
+    ws.register_resource("/hello", &hr);
+    ws.start(true);
+
+    return 0;
 }
-
-}  // namespace httpserver
-
-#endif  // HAVE_DAUTH

@@ -43,16 +43,22 @@ class digest_auth_fail_response : public string_response {
      digest_auth_fail_response(const std::string& content,
              const std::string& realm = "",
              const std::string& opaque = "",
-             bool reload_nonce = false,
+             bool signal_stale = false,
              int response_code = http::http_utils::http_ok,
              const std::string& content_type = http::http_utils::text_plain,
              http::http_utils::digest_algorithm algorithm =
-                 http::http_utils::digest_algorithm::MD5):
+                 http::http_utils::digest_algorithm::SHA256,
+             const std::string& domain = "",
+             bool userhash_support = false,
+             bool prefer_utf8 = true):
          string_response(content, response_code, content_type),
          realm(realm),
          opaque(opaque),
-         reload_nonce(reload_nonce),
-         algorithm(algorithm) { }
+         domain(domain),
+         signal_stale(signal_stale),
+         algorithm(algorithm),
+         userhash_support(userhash_support),
+         prefer_utf8(prefer_utf8) { }
 
      digest_auth_fail_response(const digest_auth_fail_response& other) = default;
      digest_auth_fail_response(digest_auth_fail_response&& other) noexcept = default;
@@ -66,9 +72,12 @@ class digest_auth_fail_response : public string_response {
  private:
      std::string realm = "";
      std::string opaque = "";
-     bool reload_nonce = false;
+     std::string domain = "";
+     bool signal_stale = false;
      http::http_utils::digest_algorithm algorithm =
-         http::http_utils::digest_algorithm::MD5;
+         http::http_utils::digest_algorithm::SHA256;
+     bool userhash_support = false;
+     bool prefer_utf8 = true;
 };
 
 }  // namespace httpserver

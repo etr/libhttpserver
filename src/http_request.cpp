@@ -71,6 +71,23 @@ class scoped_x509_cert {
     bool is_valid() const { return valid_; }
     gnutls_x509_crt_t get() const { return cert_; }
 
+    // Movable
+    scoped_x509_cert(scoped_x509_cert&& other) noexcept
+        : cert_(other.cert_), valid_(other.valid_) {
+        other.cert_ = nullptr;
+        other.valid_ = false;
+    }
+    scoped_x509_cert& operator=(scoped_x509_cert&& other) noexcept {
+        if (this != &other) {
+            if (cert_ != nullptr) gnutls_x509_crt_deinit(cert_);
+            cert_ = other.cert_;
+            valid_ = other.valid_;
+            other.cert_ = nullptr;
+            other.valid_ = false;
+        }
+        return *this;
+    }
+
     // Non-copyable
     scoped_x509_cert(const scoped_x509_cert&) = delete;
     scoped_x509_cert& operator=(const scoped_x509_cert&) = delete;
@@ -95,49 +112,48 @@ void http_request::set_method(const std::string& method) {
 }
 
 #ifdef HAVE_DAUTH
-bool http_request::check_digest_auth(const std::string& realm, const std::string& password, int nonce_timeout, bool* reload_nonce) const {
-    std::string_view digested_user = get_digested_user();
-
-    int val = MHD_digest_auth_check(underlying_connection, realm.c_str(), digested_user.data(), password.c_str(), nonce_timeout);
-
-    if (val == MHD_INVALID_NONCE) {
-        *reload_nonce = true;
-        return false;
-    } else if (val == MHD_NO) {
-        *reload_nonce = false;
-        return false;
-    }
-    *reload_nonce = false;
-    return true;
-}
-
-bool http_request::check_digest_auth_ha1(
+http::http_utils::digest_auth_result http_request::check_digest_auth(
     const std::string& realm,
-    const unsigned char* digest,
-    size_t digest_size,
-    int nonce_timeout,
-    bool* reload_nonce,
+    const std::string& password,
+    unsigned int nonce_timeout,
+    uint32_t max_nc,
     http::http_utils::digest_algorithm algo) const {
     std::string_view digested_user = get_digested_user();
 
-    int val = MHD_digest_auth_check_digest2(
+    enum MHD_DigestAuthResult result = MHD_digest_auth_check3(
         underlying_connection,
         realm.c_str(),
         digested_user.data(),
-        digest,
-        digest_size,
+        password.c_str(),
         nonce_timeout,
-        static_cast<MHD_DigestAuthAlgorithm>(algo));
+        max_nc,
+        MHD_DIGEST_AUTH_MULT_QOP_ANY_NON_INT,
+        static_cast<MHD_DigestAuthMultiAlgo3>(algo));
 
-    if (val == MHD_INVALID_NONCE) {
-        *reload_nonce = true;
-        return false;
-    } else if (val == MHD_NO) {
-        *reload_nonce = false;
-        return false;
-    }
-    *reload_nonce = false;
-    return true;
+    return static_cast<http::http_utils::digest_auth_result>(result);
+}
+
+http::http_utils::digest_auth_result http_request::check_digest_auth_digest(
+    const std::string& realm,
+    const void* userdigest,
+    size_t userdigest_size,
+    unsigned int nonce_timeout,
+    uint32_t max_nc,
+    http::http_utils::digest_algorithm algo) const {
+    std::string_view digested_user = get_digested_user();
+
+    enum MHD_DigestAuthResult result = MHD_digest_auth_check_digest3(
+        underlying_connection,
+        realm.c_str(),
+        digested_user.data(),
+        userdigest,
+        userdigest_size,
+        nonce_timeout,
+        max_nc,
+        MHD_DIGEST_AUTH_MULT_QOP_ANY_NON_INT,
+        static_cast<MHD_DigestAuthMultiAlgo3>(algo));
+
+    return static_cast<http::http_utils::digest_auth_result>(result);
 }
 #endif  // HAVE_DAUTH
 
@@ -312,16 +328,14 @@ MHD_Result http_request::build_request_querystring(void *cls, enum MHD_ValueKind
 
 #ifdef HAVE_BAUTH
 void http_request::fetch_user_pass() const {
-    char* password = nullptr;
-    auto* username = MHD_basic_auth_get_username_password(underlying_connection, &password);
+    struct MHD_BasicAuthInfo* info = MHD_basic_auth_get_username_password3(underlying_connection);
 
-    if (username != nullptr) {
-        cache->username = username;
-        MHD_free(username);
-    }
-    if (password != nullptr) {
-        cache->password = password;
-        MHD_free(password);
+    if (info != nullptr) {
+        cache->username.assign(info->username, info->username_len);
+        if (info->password != nullptr) {
+            cache->password.assign(info->password, info->password_len);
+        }
+        MHD_free(info);
     }
 }
 
@@ -348,12 +362,14 @@ std::string_view http_request::get_digested_user() const {
         return cache->digested_user;
     }
 
-    char* digested_user_c = MHD_digest_auth_get_username(underlying_connection);
+    struct MHD_DigestAuthUsernameInfo* info = MHD_digest_auth_get_username3(underlying_connection);
 
     cache->digested_user = EMPTY;
-    if (digested_user_c != nullptr) {
-        cache->digested_user = digested_user_c;
-        MHD_free(digested_user_c);
+    if (info != nullptr) {
+        if (info->username != nullptr) {
+            cache->digested_user.assign(info->username, info->username_len);
+        }
+        MHD_free(info);
     }
 
     return cache->digested_user;
@@ -388,156 +404,126 @@ bool http_request::has_client_certificate() const {
     return (cert_list != nullptr && list_size > 0);
 }
 
-std::string http_request::get_client_cert_dn() const {
-    if (!has_tls_session()) {
-        return "";
+void http_request::populate_all_cert_fields() const {
+    if (cache->client_cert_fields_cached) {
+        return;
+    }
+
+    cache->client_cert_fields_cached = true;
+
+    gnutls_session_t session = nullptr;
+    if (has_tls_session()) {
+        session = get_tls_session();
     }
 
     scoped_x509_cert cert;
-    if (!cert.init_from_session(get_tls_session())) {
-        return "";
+    if (session != nullptr) {
+        cert.init_from_session(session);
     }
 
-    size_t dn_size = 0;
-    gnutls_x509_crt_get_dn(cert.get(), nullptr, &dn_size);
-
-    std::string dn(dn_size, '\0');
-    if (gnutls_x509_crt_get_dn(cert.get(), &dn[0], &dn_size) != GNUTLS_E_SUCCESS) {
-        return "";
+    if (!cert.is_valid()) {
+        // Default values (empty strings and -1) are already set by the
+        // cache struct initializers; client_cert_verified defaults to false.
+        return;
     }
 
-    // Remove trailing null if present
-    if (!dn.empty() && dn.back() == '\0') {
-        dn.pop_back();
+    // Client certificate verification
+    {
+        unsigned int status = 0;
+        if (gnutls_certificate_verify_peers2(session, &status) == GNUTLS_E_SUCCESS) {
+            cache->client_cert_verified = (status == 0);
+        }
     }
 
-    return dn;
+    // Subject DN
+    {
+        size_t dn_size = 0;
+        gnutls_x509_crt_get_dn(cert.get(), nullptr, &dn_size);
+        std::string dn(dn_size, '\0');
+        if (gnutls_x509_crt_get_dn(cert.get(), &dn[0], &dn_size) == GNUTLS_E_SUCCESS) {
+            if (!dn.empty() && dn.back() == '\0') dn.pop_back();
+            cache->client_cert_dn = dn;
+        }
+    }
+
+    // Issuer DN
+    {
+        size_t dn_size = 0;
+        gnutls_x509_crt_get_issuer_dn(cert.get(), nullptr, &dn_size);
+        std::string dn(dn_size, '\0');
+        if (gnutls_x509_crt_get_issuer_dn(cert.get(), &dn[0], &dn_size) == GNUTLS_E_SUCCESS) {
+            if (!dn.empty() && dn.back() == '\0') dn.pop_back();
+            cache->client_cert_issuer_dn = dn;
+        }
+    }
+
+    // Common Name
+    {
+        size_t cn_size = 0;
+        gnutls_x509_crt_get_dn_by_oid(cert.get(), GNUTLS_OID_X520_COMMON_NAME, 0, 0, nullptr, &cn_size);
+        if (cn_size > 0) {
+            std::string cn(cn_size, '\0');
+            if (gnutls_x509_crt_get_dn_by_oid(cert.get(), GNUTLS_OID_X520_COMMON_NAME, 0, 0, &cn[0], &cn_size) == GNUTLS_E_SUCCESS) {
+                if (!cn.empty() && cn.back() == '\0') cn.pop_back();
+                cache->client_cert_cn = cn;
+            }
+        }
+    }
+
+    // SHA-256 fingerprint
+    {
+        unsigned char fingerprint[32];
+        size_t fingerprint_size = sizeof(fingerprint);
+        if (gnutls_x509_crt_get_fingerprint(cert.get(), GNUTLS_DIG_SHA256, fingerprint, &fingerprint_size) == GNUTLS_E_SUCCESS) {
+            std::string hex_fingerprint;
+            hex_fingerprint.reserve(fingerprint_size * 2);
+            for (size_t i = 0; i < fingerprint_size; ++i) {
+                char hex[3];
+                snprintf(hex, sizeof(hex), "%02x", fingerprint[i]);
+                hex_fingerprint += hex;
+            }
+            cache->client_cert_fingerprint_sha256 = hex_fingerprint;
+        }
+    }
+
+    // Validity times
+    cache->client_cert_not_before = gnutls_x509_crt_get_activation_time(cert.get());
+    cache->client_cert_not_after = gnutls_x509_crt_get_expiration_time(cert.get());
+}
+
+std::string http_request::get_client_cert_dn() const {
+    populate_all_cert_fields();
+    return cache->client_cert_dn;
 }
 
 std::string http_request::get_client_cert_issuer_dn() const {
-    if (!has_tls_session()) {
-        return "";
-    }
-
-    scoped_x509_cert cert;
-    if (!cert.init_from_session(get_tls_session())) {
-        return "";
-    }
-
-    size_t dn_size = 0;
-    gnutls_x509_crt_get_issuer_dn(cert.get(), nullptr, &dn_size);
-
-    std::string dn(dn_size, '\0');
-    if (gnutls_x509_crt_get_issuer_dn(cert.get(), &dn[0], &dn_size) != GNUTLS_E_SUCCESS) {
-        return "";
-    }
-
-    // Remove trailing null if present
-    if (!dn.empty() && dn.back() == '\0') {
-        dn.pop_back();
-    }
-
-    return dn;
+    populate_all_cert_fields();
+    return cache->client_cert_issuer_dn;
 }
 
 std::string http_request::get_client_cert_cn() const {
-    if (!has_tls_session()) {
-        return "";
-    }
-
-    scoped_x509_cert cert;
-    if (!cert.init_from_session(get_tls_session())) {
-        return "";
-    }
-
-    size_t cn_size = 0;
-    gnutls_x509_crt_get_dn_by_oid(cert.get(), GNUTLS_OID_X520_COMMON_NAME, 0, 0, nullptr, &cn_size);
-
-    if (cn_size == 0) {
-        return "";
-    }
-
-    std::string cn(cn_size, '\0');
-    if (gnutls_x509_crt_get_dn_by_oid(cert.get(), GNUTLS_OID_X520_COMMON_NAME, 0, 0, &cn[0], &cn_size) != GNUTLS_E_SUCCESS) {
-        return "";
-    }
-
-    // Remove trailing null if present
-    if (!cn.empty() && cn.back() == '\0') {
-        cn.pop_back();
-    }
-
-    return cn;
+    populate_all_cert_fields();
+    return cache->client_cert_cn;
 }
 
 bool http_request::is_client_cert_verified() const {
-    if (!has_tls_session()) {
-        return false;
-    }
-
-    gnutls_session_t session = get_tls_session();
-    unsigned int status = 0;
-
-    if (gnutls_certificate_verify_peers2(session, &status) != GNUTLS_E_SUCCESS) {
-        return false;
-    }
-
-    return (status == 0);
+    populate_all_cert_fields();
+    return cache->client_cert_verified;
 }
 
 std::string http_request::get_client_cert_fingerprint_sha256() const {
-    if (!has_tls_session()) {
-        return "";
-    }
-
-    scoped_x509_cert cert;
-    if (!cert.init_from_session(get_tls_session())) {
-        return "";
-    }
-
-    unsigned char fingerprint[32];  // SHA-256 is 32 bytes
-    size_t fingerprint_size = sizeof(fingerprint);
-
-    if (gnutls_x509_crt_get_fingerprint(cert.get(), GNUTLS_DIG_SHA256, fingerprint, &fingerprint_size) != GNUTLS_E_SUCCESS) {
-        return "";
-    }
-
-    // Convert to hex string
-    std::string hex_fingerprint;
-    hex_fingerprint.reserve(fingerprint_size * 2);
-    for (size_t i = 0; i < fingerprint_size; ++i) {
-        char hex[3];
-        snprintf(hex, sizeof(hex), "%02x", fingerprint[i]);
-        hex_fingerprint += hex;
-    }
-
-    return hex_fingerprint;
+    populate_all_cert_fields();
+    return cache->client_cert_fingerprint_sha256;
 }
 
 time_t http_request::get_client_cert_not_before() const {
-    if (!has_tls_session()) {
-        return -1;
-    }
-
-    scoped_x509_cert cert;
-    if (!cert.init_from_session(get_tls_session())) {
-        return -1;
-    }
-
-    return gnutls_x509_crt_get_activation_time(cert.get());
+    populate_all_cert_fields();
+    return cache->client_cert_not_before;
 }
 
 time_t http_request::get_client_cert_not_after() const {
-    if (!has_tls_session()) {
-        return -1;
-    }
-
-    scoped_x509_cert cert;
-    if (!cert.init_from_session(get_tls_session())) {
-        return -1;
-    }
-
-    return gnutls_x509_crt_get_expiration_time(cert.get());
+    populate_all_cert_fields();
+    return cache->client_cert_not_after;
 }
 #endif  // HAVE_GNUTLS
 

@@ -33,6 +33,13 @@ libhttpserver is built upon  [libmicrohttpd](https://www.gnu.org/software/libmic
 - Support for basic and digest authentication (optional)
 - Support for centralized authentication with path-based skip rules
 - Support for TLS (requires libgnutls, optional)
+- WebSocket support (requires libmicrohttpd built with WebSocket support, optional)
+- New response types: empty, iovec (scatter-gather), and pipe-based responses
+- External event loop integration (run/run_wait, fd sets, add_connection)
+- Daemon introspection (bound port, active connections, listen FD)
+- Turbo mode for high-performance scenarios
+- TCP Fast Open support
+- Enhanced digest authentication with SHA-256 and SHA-512/256 algorithms
 
 ## Table of Contents
 * [Introduction](#introduction)
@@ -47,6 +54,8 @@ libhttpserver is built upon  [libmicrohttpd](https://www.gnu.org/software/libmic
 * [Building responses to requests](#building-responses-to-requests)
 * [IP Blacklisting and Whitelisting](#ip-blacklisting-and-whitelisting)
 * [Authentication](#authentication)
+* [WebSocket Support](#websocket-support)
+* [Daemon Introspection and External Event Loops](#daemon-introspection-and-external-event-loops)
 * [HTTP Utils](#http-utils)
 * [Other Examples](#other-examples)
 
@@ -80,7 +89,7 @@ libhttpserver can be used without any dependencies aside from libmicrohttpd.
 The minimum versions required are:
 * g++ >= 5.5.0 or clang-3.6
 * C++17 or newer
-* libmicrohttpd >= 0.9.64
+* libmicrohttpd >= 1.0.0
 * [Optionally]: for TLS (HTTPS) support, you'll need [libgnutls](http://www.gnutls.org/).
 * [Optionally]: to compile the code-reference, you'll need [doxygen](http://www.doxygen.nl/).
 
@@ -141,7 +150,7 @@ MSYS2 provides multiple shell environments with different purposes. Understandin
 pacman -S --needed mingw-w64-x86_64-{gcc,libtool,make,pkg-config,doxygen,gnutls,curl} autotools
 ```
 
-4. Build and install [libmicrohttpd](https://www.gnu.org/software/libmicrohttpd/) (>= 0.9.64)
+4. Build and install [libmicrohttpd](https://www.gnu.org/software/libmicrohttpd/) (>= 1.0.0)
 
 5. Build libhttpserver:
 ```bash
@@ -234,6 +243,11 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
 	* _basic_auth_fail_response:_ A failure in basic authentication.
 	* _digest_auth_fail_response:_ A failure in digest authentication.
 	* _deferred_response:_ A response getting content from a callback.
+	* _empty_response:_ A response with no body (e.g., for 204 No Content).
+	* _iovec_response:_ A scatter-gather response from multiple buffers.
+	* _pipe_response:_ A response that streams content from a pipe file descriptor.
+* _websocket_handler:_ Base class for handling WebSocket connections. Derive and implement `on_message()`.
+	* _websocket_session:_ Represents an active WebSocket connection with methods to send text, binary, ping/pong, and close frames.
 
 [Back to TOC](#table-of-contents)
 
@@ -275,6 +289,16 @@ For example, if your connection limit is “1”, a browser may open a first con
 * _.file_cleanup_callback(**file_cleanup_callback_ptr** callback):_ Sets a callback function to control what happens to uploaded files when the request completes. By default (when no callback is set), all uploaded files are automatically deleted. The callback signature is `bool(const std::string& key, const std::string& filename, const http::file_info& info)` where `key` is the form field name, `filename` is the original uploaded filename, and `info` contains file metadata including the filesystem path. Return `true` to delete the file (default behavior) or `false` to keep it (e.g., after moving it to permanent storage). If the callback throws an exception, the file will be deleted as a safety measure.
 * _.deferred()_ and _.no_deferred():_ Enables/Disables the ability for the server to suspend and resume connections. Simply put, it enables/disables the ability to use `deferred_response`. Read more [here](#building-responses-to-requests). `on` by default.
 * _.single_resource() and .no_single_resource:_ Sets or unsets the server in single resource mode. This limits all endpoints to be served from a single resource. The resultant is that the webserver will process the request matching to the endpoint skipping any complex semantic. Because of this, the option is incompatible with `regex_checking` and requires the resource to be registered against an empty endpoint or the root endpoint (`"/"`). The resource will also have to be registered as family. (For more information on resource registration, read more [here](#registering-resources)). `off` by default.
+* _.no_listen_socket():_ Run the daemon without a listening socket. The server will not bind to any port on its own; instead, you must provide connections externally via `add_connection()`. Useful for integrating with an external accept loop or passing sockets from systemd or another process. `off` by default.
+* _.no_thread_safety():_ Disable internal thread-safety mechanisms. This can improve performance when you guarantee that only a single thread will access the daemon at a time. **Only use this if you are sure you do not need concurrent access.** `off` by default.
+* _.turbo():_ Enable turbo mode. This is a performance optimization that allows the daemon to skip certain internal operations. Requires the application to meet specific threading and response constraints — consult the libmicrohttpd documentation for details. `off` by default.
+* _.suppress_date_header():_ Suppress the automatic addition of a `Date:` header in responses. Useful for reproducible tests or when the application manages its own date headers. `off` by default.
+* _.listen_backlog(**int** backlog):_ Set the TCP listen backlog size. Higher values allow more pending connections in the kernel queue. Default is `0` (system default).
+* _.address_reuse(**int** reuse):_ Control address reuse (`SO_REUSEADDR`/`SO_REUSEPORT`). Pass `1` to enable, `-1` to disable. Default is `0` (system default).
+* _.connection_memory_increment(**size_t** increment):_ Increment size for per-connection memory allocation when the initial pool is exhausted. Default is `0` (system default, typically 1024 bytes).
+* _.tcp_fastopen_queue_size(**int** queue_size):_ Set the size of the TCP Fast Open queue. When set, enables TCP Fast Open with the specified queue depth. Default is `0` (disabled).
+* _.sigpipe_handled_by_app():_ Inform the daemon that the application is handling `SIGPIPE` on its own, so libmicrohttpd should not install a handler. `off` by default.
+* _.client_discipline_level(**int** level):_ Controls how strictly the server enforces HTTP protocol compliance. Higher values make the server stricter with misbehaving clients. Default is `-1` (use libmicrohttpd default).
 
 ### Threading Models
 * _.start_method(**const http::http_utils::start_method_T&** start_method):_ libhttpserver can operate with two different threading models that can be selected through this method. Default value is `INTERNAL_SELECT`.
@@ -389,7 +413,11 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
 * _.https_mem_trust(**const std::string&** filename):_ String representing the path to a file containing the CA certificate to be used by the HTTPS daemon to authenticate and trust clients certificates. The presence of this option activates the request of certificate to the client. The request to the client is marked optional, and it is the responsibility of the server to check the presence of the certificate if needed. Note that most browsers will only present a client certificate only if they have one matching the specified CA, not sending any certificate otherwise.
 * _.https_priorities(**const std::string&** priority_string):_ SSL/TLS protocol version and ciphers. Must be followed by a string specifying the SSL/TLS protocol versions and ciphers that are acceptable for the application. The string is passed unchanged to gnutls_priority_init. If this option is not specified, `"NORMAL"` is used.
 * _.psk_cred_handler(**psk_cred_handler_callback** handler):_ Sets a callback function for TLS-PSK (Pre-Shared Key) authentication. The callback receives a username and should return the corresponding hex-encoded PSK, or an empty string if the user is unknown. This option requires `use_ssl()`, `cred_type(http::http_utils::PSK)`, and an appropriate `https_priorities()` string that enables PSK cipher suites. PSK authentication allows TLS without certificates by using a shared secret key.
-* _.sni_callback(**sni_callback_t** callback):_ Sets a callback function for SNI (Server Name Indication) support. The callback receives the server name requested by the client and should return a `std::pair<std::string, std::string>` containing the PEM-encoded certificate and key for that server name. Return empty strings to use the default certificate. Requires libmicrohttpd 0.9.71+ with GnuTLS.
+* _.sni_callback(**sni_callback_t** callback):_ Sets a callback function for SNI (Server Name Indication) support. The callback receives the server name requested by the client and should return a `std::pair<std::string, std::string>` containing the PEM-encoded certificate and key for that server name. Return empty strings to use the default certificate. Requires libmicrohttpd 1.0.0+ with GnuTLS.
+* _.https_mem_dhparams(**const std::string&** dhparams):_ String containing the Diffie-Hellman (DH) parameters in PEM format. This is used for DHE key exchange in TLS. If not specified, default DH parameters may be used.
+* _.https_key_password(**const std::string&** password):_ Password for the private key specified by `https_mem_key`, if the key file is encrypted.
+* _.https_priorities_append(**const std::string&** priorities):_ Additional GnuTLS priorities to append to the base priority string. Unlike `https_priorities()` which replaces the entire string, this appends to the default, making it easier to adjust specific cipher suites or algorithms.
+* _.no_alpn():_ Disable Application-Layer Protocol Negotiation (ALPN) for TLS connections. `off` by default.
 
 #### Minimal example using HTTPS
 ```cpp
@@ -511,10 +539,19 @@ You should calculate the value of NC_SIZE based on the number of connections per
 ```
 ### Starting and stopping a webserver
 Once a webserver is created, you can manage its execution through the following methods on the `webserver` class:
-* _**void** webserver::start(**bool** blocking):_ Allows to start a server. If the `blocking` flag is passed as `true`, it will block the execution of the current thread until a call to stop on the same webserver object is performed. 
+* _**void** webserver::start(**bool** blocking):_ Allows to start a server. If the `blocking` flag is passed as `true`, it will block the execution of the current thread until a call to stop on the same webserver object is performed.
 * _**void** webserver::stop():_ Allows to stop a server. It immediately stops it.
 * _**bool** webserver::is_running():_ Checks if a server is running
 * _**void** webserver::sweet_kill():_ Allows to stop a server. It doesn't guarantee an immediate halt to allow for thread termination and connection closure.
+* _**int** webserver::quiesce():_ Quiesce the daemon: stop accepting new connections while letting in-flight requests complete. Returns the listen socket file descriptor (the caller can close it), or `-1` on error.
+* _**bool** webserver::run():_ Run the webserver's event loop once (non-blocking). For use with external event loops when the server is started without internal threading. Returns `true` on success.
+* _**bool** webserver::run_wait(**int32_t** millisec):_ Run the webserver's event loop, blocking until there is activity or the timeout expires. Pass `-1` for indefinite wait. Returns `true` on success.
+* _**bool** webserver::get_fdset(**fd_set&ast;** read_fd_set, **fd_set&ast;** write_fd_set, **fd_set&ast;** except_fd_set, **int&ast;** max_fd):_ Get the file descriptor sets for `select()`-based external event loop integration. Returns `true` on success.
+* _**bool** webserver::get_timeout(**uint64_t&ast;** timeout):_ Get the timeout (in milliseconds) until the next daemon action is needed. Returns `true` if a timeout was set, `false` if no timeout is needed.
+* _**bool** webserver::add_connection(**int** client_socket, **const struct sockaddr&ast;** addr, **socklen_t** addrlen):_ Add an externally-accepted socket connection to the daemon. Useful with `no_listen_socket()`. Returns `true` on success.
+* _**int** webserver::get_listen_fd():_ Get the listen socket file descriptor, or `-1` if not available.
+* _**unsigned int** webserver::get_active_connections():_ Get the number of currently active connections.
+* _**uint16_t** webserver::get_bound_port():_ Get the actual port the daemon is bound to. Particularly useful when port `0` was specified to let the OS choose an ephemeral port.
 
 [Back to TOC](#table-of-contents)
 
@@ -806,15 +843,23 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
 ## Building responses to requests
 As seen in the documentation of [http_resource](#the-resource-object), every extensible method returns in output a `http_response` object. The webserver takes the responsibility to convert the `http_response` object you create into a response on the network.
 
-There are 5 types of response that you can create - we will describe them here through their constructors:
+There are 8 types of response that you can create - we will describe them here through their constructors:
 * _string_response(**const std::string&** content, **int** response_code = `200`, **const std::string&** content_type = `"text/plain"`):_ The most basic type of response. It uses the `content` string passed in construction as body of the HTTP response. The other two optional parameters are the `response_code` and the `content_type`. You can find constant definition for the various response codes within the [http_utils](https://github.com/etr/libhttpserver/blob/master/src/httpserver/http_utils.hpp) library file. Note that `std::string` can hold arbitrary binary data (including null bytes), so `string_response` is also the right choice for serving binary content such as images directly from memory — simply set an appropriate `content_type` (e.g., `"image/png"`).
 * _file_response(**const std::string&** filename, **int** response_code = `200`, **const std::string&** content_type = `"text/plain"`):_ Uses the `filename` passed in construction as pointer to a file on disk. The body of the HTTP response will be set using the content of the file. The file must be a regular file and exist on disk. Otherwise libhttpserver will return an error 500 (Internal Server Error). The other two optional parameters are the `response_code` and the `content_type`. You can find constant definition for the various response codes within the [http_utils](https://github.com/etr/libhttpserver/blob/master/src/httpserver/http_utils.hpp) library file.
-* _basic_auth_fail_response(**const std::string&** content, **const std::string&** realm = `""`, **int** response_code = `200`, **const std::string&** content_type = `"text/plain"`):_ A response in return to a failure during basic authentication. It allows to specify a `content` string as a message to send back to the client. The `realm` parameter should contain your realm of authentication (if any). The other two optional parameters are the `response_code` and the `content_type`. You can find constant definition for the various response codes within the [http_utils](https://github.com/etr/libhttpserver/blob/master/src/httpserver/http_utils.hpp) library file.
-* _digest_auth_fail_response(**const std::string&** content, **const std::string&** realm = `""`, **const std::string&** opaque = `""`, **bool** reload_nonce = `false`, **int** response_code = `200`, **const std::string&** content_type = `"text/plain"`):_ A response in return to a failure during digest authentication. It allows to specify a `content` string as a message to send back to the client. The `realm` parameter should contain your realm of authentication (if any). The `opaque` represents a value that gets passed to the client and expected to be passed again to the server as-is. This value can be a hexadecimal or base64 string. The `reload_nonce` parameter tells the server to reload the nonce (you should use the value returned by the `check_digest_auth` method on the `http_request`. The other two optional parameters are the `response_code` and the `content_type`. You can find constant definition for the various response codes within the [http_utils](https://github.com/etr/libhttpserver/blob/master/src/httpserver/http_utils.hpp) library file.
+* _basic_auth_fail_response(**const std::string&** content, **const std::string&** realm = `""`, **bool** prefer_utf8 = `true`, **int** response_code = `200`, **const std::string&** content_type = `"text/plain"`):_ A response in return to a failure during basic authentication. It allows to specify a `content` string as a message to send back to the client. The `realm` parameter should contain your realm of authentication (if any). The `prefer_utf8` parameter controls whether UTF-8 encoding is preferred in the `WWW-Authenticate` header. The other two optional parameters are the `response_code` and the `content_type`. You can find constant definition for the various response codes within the [http_utils](https://github.com/etr/libhttpserver/blob/master/src/httpserver/http_utils.hpp) library file.
+* _digest_auth_fail_response(**const std::string&** content, **const std::string&** realm = `""`, **const std::string&** opaque = `""`, **bool** signal_stale = `false`, **int** response_code = `200`, **const std::string&** content_type = `"text/plain"`, **http::http_utils::digest_algorithm** algorithm = `SHA256`, **const std::string&** domain = `""`, **bool** userhash_support = `false`, **bool** prefer_utf8 = `true`):_ A response in return to a failure during digest authentication. It allows to specify a `content` string as a message to send back to the client. The `realm` parameter should contain your realm of authentication (if any). The `opaque` represents a value that gets passed to the client and expected to be passed again to the server as-is. The `signal_stale` parameter indicates whether to signal the client that its nonce is stale and should be refreshed (set to `true` when `check_digest_auth` returns `NONCE_STALE`). The `algorithm` selects the digest algorithm (`MD5`, `SHA256`, or `SHA512_256` — default is `SHA256`). The `domain` specifies the protection domain for digest authentication. The `userhash_support` enables RFC 7616 userhash support. The `prefer_utf8` controls whether UTF-8 encoding is preferred.
 * _deferred_response(**ssize_t(&ast;cycle_callback_ptr)(shared_ptr&lt;T&gt;, char&ast;, size_t)** cycle_callback, **const std::string&** content = `""`, **int** response_code = `200`, **const std::string&** content_type = `"text/plain"`):_ A response that obtains additional content from a callback executed in a deferred way. It leaves the client in pending state (returning a `100 CONTINUE` message) and suspends the connection. Besides the callback, optionally, you can provide a `content` parameter that sets the initial message sent immediately to the client. The other two optional parameters are the `response_code` and the `content_type`. You can find constant definition for the various response codes within the [http_utils](https://github.com/etr/libhttpserver/blob/master/src/httpserver/http_utils.hpp) library file. To use `deferred_response` you need to have the `deferred` option active on your webserver (enabled by default).
 	* The `cycle_callback_ptr` has this shape:
 		_**ssize_t** cycle_callback(**shared_ptr&lt;T&gt; closure_data, char&ast;** buf, **size_t** max_size)_.
 		You are supposed to implement a function in this shape and provide it to the `deferred_repsonse` method. The webserver will provide a `char*` to the function. It is responsibility of the function to allocate it and fill its content. The method is supposed to respect the `max_size` parameter passed in input. The function must return  a `ssize_t` value representing the actual size you filled the `buf` with. Any value different from `-1` will keep the resume the connection, deliver the content and suspend it again (with a `100 CONTINUE`). If the method returns `-1`, the webserver will complete the communication with the client and close the connection. You can also pass a `shared_ptr` pointing to a data object of your choice (this will be templetized with a class of your choice). The server will guarantee that this object is passed at each invocation of the method allowing the client code to use it as a memory buffer during computation.
+* _empty_response(**int** response_code = `204`, **int** flags = `NONE`):_ A response with no body. Ideal for `204 No Content` or `304 Not Modified` responses. The `flags` parameter supports the following values:
+	* `NONE`: No special flags (default).
+	* `HTTP_1_0_COMPATIBLE_STRICT`: Ensure strict HTTP 1.0 compatibility.
+	* `HTTP_1_0_SERVER`: Behave like an HTTP 1.0 server.
+	* `SEND_KEEP_ALIVE_HEADER`: Include a `Keep-Alive` header.
+	* `HEAD_ONLY`: Produce a response suitable for a HEAD request (headers only).
+* _iovec_response(**std::vector<std::string>** buffers, **int** response_code = `200`, **const std::string&** content_type = `"text/plain"`):_ A scatter-gather response that assembles its body from multiple string buffers. This allows you to efficiently compose a response from separate data segments without concatenating them first. The `buffers` are sent in order.
+* _pipe_response(**int** pipe_fd, **int** response_code = `200`, **const std::string&** content_type = `"application/octet-stream"`):_ A response that streams content from a pipe file descriptor. The daemon reads data from the pipe until EOF and sends it to the client. The pipe should be the read end of a `pipe()` call. This is useful for streaming output from subprocesses or other producers.
 
 ### Setting additional properties of the response
 The `http_response` class offers an additional set of methods to "decorate" your responses. This set of methods is:
@@ -955,7 +1000,7 @@ libhttpserver support three types of client authentication.
 
 Basic authentication uses a simple authentication method based on BASE64 algorithm. Username and password are exchanged in clear between the client and the server, so this method must only be used for non-sensitive content or when the session is protected with https. When using basic authentication libhttpserver will have access to the clear password, possibly allowing to create a chained authentication toward an external authentication server. You can enable/disable support for Basic authentication through the `basic_auth` and `no_basic_auth` methods of the `create_webserver` class.
 
-Digest authentication uses a one-way authentication method based on MD5 hash algorithm. Only the hash will transit over the network, hence protecting the user password. The nonce will prevent replay attacks. This method is appropriate for general use, especially when https is not used to encrypt the session. You can enable/disable support for Digest authentication through the `digest_auth` and `no_digest_auth` methods of the `create_webserver` class.
+Digest authentication uses a one-way authentication method based on hash algorithms (MD5, SHA-256, or SHA-512/256). Only the hash will transit over the network, hence protecting the user password. The nonce will prevent replay attacks. This method is appropriate for general use, especially when https is not used to encrypt the session. SHA-256 is the default algorithm; SHA-512/256 is also available for stronger security. You can enable/disable support for Digest authentication through the `digest_auth` and `no_digest_auth` methods of the `create_webserver` class.
 
 Client certificate authentication uses a X.509 certificate from the client. This is the strongest authentication mechanism but it requires the use of HTTPS. Client certificate authentication can be used simultaneously with Basic or Digest Authentication in order to provide a two levels authentication (like for instance separate machine and user authentication). You can enable/disable support for Certificate authentication through the `use_ssl` and `no_ssl` methods of the `create_webserver` class.
 
@@ -994,26 +1039,40 @@ You will receive back the user and password you passed in input. Try to pass the
 You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/basic_authentication.cpp).
 
 ### Using Digest Authentication
+
+The `check_digest_auth` method returns a `digest_auth_result` enum with fine-grained status codes:
+* `OK` — authentication succeeded.
+* `NONCE_STALE` — the nonce is stale; signal the client to retry with a fresh nonce by setting `signal_stale` to `true` in the response.
+* `WRONG_USERNAME`, `WRONG_REALM`, `WRONG_URI`, `WRONG_QOP`, `WRONG_ALGO`, `RESPONSE_WRONG` — specific reasons for authentication failure.
+* `WRONG_HEADER`, `TOO_LARGE`, `NONCE_WRONG`, `NONCE_OTHER_COND`, `ERROR` — other failure conditions.
+
+You can also use `check_digest_auth_digest` to verify against a pre-computed HA1 digest instead of a plaintext password.
+
 ```cpp
     #include <httpserver.hpp>
 
     #define MY_OPAQUE "11733b200778ce33060f31c9af70a870ba96ddd4"
 
     using namespace httpserver;
+    using http::http_utils;
 
     class digest_resource : public httpserver::http_resource {
     public:
         std::shared_ptr<http_response> render_GET(const http_request& req) {
             if (req.get_digested_user() == "") {
-                return std::shared_ptr<digest_auth_fail_response>(new digest_auth_fail_response("FAIL", "test@example.com", MY_OPAQUE, true));
-            }
-            else {
-                bool reload_nonce = false;
-                if(!req.check_digest_auth("test@example.com", "mypass", 300, reload_nonce)) {
-                    return std::shared_ptr<digest_auth_fail_response>(new digest_auth_fail_response("FAIL", "test@example.com", MY_OPAQUE, reload_nonce));
+                return std::make_shared<digest_auth_fail_response>("FAIL", "test@example.com", MY_OPAQUE, true,
+                    http_utils::http_ok, http_utils::text_plain, http_utils::digest_algorithm::MD5);
+            } else {
+                auto result = req.check_digest_auth("test@example.com", "mypass", 300, 0, http_utils::digest_algorithm::MD5);
+                if (result == http_utils::digest_auth_result::NONCE_STALE) {
+                    return std::make_shared<digest_auth_fail_response>("FAIL", "test@example.com", MY_OPAQUE, true,
+                        http_utils::http_ok, http_utils::text_plain, http_utils::digest_algorithm::MD5);
+                } else if (result != http_utils::digest_auth_result::OK) {
+                    return std::make_shared<digest_auth_fail_response>("FAIL", "test@example.com", MY_OPAQUE, false,
+                        http_utils::http_ok, http_utils::text_plain, http_utils::digest_algorithm::MD5);
                 }
             }
-            return std::shared_ptr<string_response>(new string_response("SUCCESS", 200, "text/plain"));
+            return std::make_shared<string_response>("SUCCESS", 200, "text/plain");
         }
     };
 
@@ -1225,12 +1284,116 @@ To use SNI with libhttpserver, configure an SNI callback that returns the certif
     }
 ```
 
-Note: SNI support requires libmicrohttpd 0.9.71 or later compiled with GnuTLS.
+Note: SNI support requires libmicrohttpd 1.0.0 or later compiled with GnuTLS.
+
+[Back to TOC](#table-of-contents)
+
+## WebSocket Support
+
+libhttpserver provides WebSocket support when libmicrohttpd is built with WebSocket functionality. To use WebSockets, derive from the `websocket_handler` class and implement the `on_message()` method.
+
+### The websocket_handler class
+The `websocket_handler` class provides the following virtual methods:
+* _**void** on_open(**websocket_session&** session):_ Called when a new WebSocket connection is established. Default implementation does nothing.
+* _**void** on_message(**websocket_session&** session, **std::string_view** msg):_ Called when a text message is received. **This is the only pure virtual method and must be implemented.**
+* _**void** on_binary(**websocket_session&** session, **const void&ast;** data, **size_t** len):_ Called when a binary message is received. Default implementation does nothing.
+* _**void** on_ping(**websocket_session&** session, **std::string_view** payload):_ Called when a ping frame is received. Default implementation sends a pong.
+* _**void** on_close(**websocket_session&** session, **uint16_t** code, **const std::string&** reason):_ Called when the WebSocket connection is closed. Default implementation does nothing.
+
+### The websocket_session class
+The `websocket_session` class provides methods to interact with the client:
+* _**void** send_text(**const std::string&** msg):_ Send a text message.
+* _**void** send_binary(**const void&ast;** data, **size_t** len):_ Send a binary message.
+* _**void** send_ping(**const std::string&** payload = `""`):_ Send a ping frame.
+* _**void** send_pong(**const std::string&** payload = `""`):_ Send a pong frame.
+* _**void** close(**uint16_t** code = `1000`, **const std::string&** reason = `""`):_ Close the WebSocket connection.
+* _**bool** is_valid():_ Check if the session is still valid.
+
+### Registering WebSocket resources
+Register a WebSocket handler using `register_ws_resource`:
+```cpp
+    #include <httpserver.hpp>
+
+    using namespace httpserver;
+
+    class echo_handler : public websocket_handler {
+    public:
+        void on_message(websocket_session& session, std::string_view msg) override {
+            session.send_text("Echo: " + std::string(msg));
+        }
+    };
+
+    int main() {
+        webserver ws = create_webserver(8080);
+
+        echo_handler handler;
+        ws.register_ws_resource("/ws", &handler);
+        ws.start(true);
+
+        return 0;
+    }
+```
+
+Note: WebSocket support requires libmicrohttpd 1.0.0 or later built with WebSocket support enabled.
+
+[Back to TOC](#table-of-contents)
+
+## Daemon Introspection and External Event Loops
+
+libhttpserver exposes several methods for integrating with external event loops and for querying daemon state at runtime.
+
+### Daemon introspection
+* _**uint16_t** webserver::get_bound_port():_ Returns the actual port the daemon is bound to. This is especially useful when you pass port `0` to let the operating system choose an ephemeral port.
+* _**int** webserver::get_listen_fd():_ Returns the listen socket file descriptor, or `-1` if not available.
+* _**unsigned int** webserver::get_active_connections():_ Returns the number of currently active connections.
+
+### External event loop integration
+When using the server without internal threading (e.g., with `no_listen_socket()` or a single-threaded design), you can drive the event loop yourself:
+* _**bool** webserver::run():_ Process pending events once and return immediately.
+* _**bool** webserver::run_wait(**int32_t** millisec):_ Block until events are available or the timeout expires.
+* _**bool** webserver::get_fdset(...):_ Retrieve file descriptor sets for use with `select()`.
+* _**bool** webserver::get_timeout(**uint64_t&ast;** timeout):_ Get the maximum time to wait before calling `run()` again.
+* _**bool** webserver::add_connection(**int** socket, **const sockaddr&ast;** addr, **socklen_t** len):_ Hand off an externally-accepted connection to the daemon.
+* _**int** webserver::quiesce():_ Stop accepting new connections while allowing in-flight requests to complete. Returns the listen socket FD.
+
+### Example: querying the bound port
+```cpp
+    #include <httpserver.hpp>
+    #include <iostream>
+
+    using namespace httpserver;
+
+    class hello_resource : public http_resource {
+    public:
+        std::shared_ptr<http_response> render(const http_request&) {
+            return std::make_shared<string_response>("Hello!");
+        }
+    };
+
+    int main() {
+        webserver ws = create_webserver(0);  // Let the OS choose a port
+
+        hello_resource hr;
+        ws.register_resource("/hello", &hr);
+        ws.start(false);
+
+        std::cout << "Listening on port: " << ws.get_bound_port() << std::endl;
+        std::cout << "Active connections: " << ws.get_active_connections() << std::endl;
+
+        ws.stop();
+        return 0;
+    }
+```
 
 [Back to TOC](#table-of-contents)
 
 ## HTTP Utils
 libhttpserver provides a set of constants to help you develop your HTTP server. It would be redundant to list them here; so, please, consult the list directly [here](https://github.com/etr/libhttpserver/blob/master/src/httpserver/http_utils.hpp).
+
+Additionally, the following utility methods are available:
+* _**static const char&ast;** http_utils::reason_phrase(**unsigned int** status_code):_ Returns the standard HTTP reason phrase for a given status code (e.g., `"OK"` for 200, `"Not Found"` for 404).
+* _**static bool** http_utils::is_feature_supported(**int** feature):_ Checks whether a specific libmicrohttpd feature is supported on the current system. Feature constants are defined by the MHD_FEATURE enum.
+* _**static const char&ast;** http_utils::get_mhd_version():_ Returns the version string of the underlying libmicrohttpd library.
 
 [Back to TOC](#table-of-contents)
 
@@ -1365,6 +1528,297 @@ To test the above example, you can run the following command from a terminal:
     curl -XGET -v localhost:8080/hello
 
 You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/deferred_with_accumulator.cpp).
+
+#### Example of an empty response (204 No Content)
+```cpp
+    #include <httpserver.hpp>
+
+    using namespace httpserver;
+
+    class no_content_resource : public http_resource {
+    public:
+        std::shared_ptr<http_response> render_DELETE(const http_request&) {
+            // Return a 204 No Content response with no body
+            return std::make_shared<empty_response>(
+                    http::http_utils::http_no_content);
+        }
+
+        std::shared_ptr<http_response> render_HEAD(const http_request&) {
+            // Return a HEAD-only response with headers but no body
+            auto response = std::make_shared<empty_response>(
+                    http::http_utils::http_ok,
+                    empty_response::HEAD_ONLY);
+            response->with_header("X-Total-Count", "42");
+            return response;
+        }
+    };
+
+    int main() {
+        webserver ws = create_webserver(8080);
+
+        no_content_resource ncr;
+        ws.register_resource("/items", &ncr);
+        ws.start(true);
+
+        return 0;
+    }
+```
+To test the above example, you can run the following commands from a terminal:
+
+    curl -XDELETE -v localhost:8080/items
+    curl -I -v localhost:8080/items
+
+You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/empty_response_example.cpp).
+
+#### Example of a scatter-gather (iovec) response
+```cpp
+    #include <httpserver.hpp>
+
+    using namespace httpserver;
+
+    class iovec_resource : public http_resource {
+    public:
+        std::shared_ptr<http_response> render_GET(const http_request&) {
+            // Build a response from multiple separate buffers without copying
+            std::vector<std::string> parts;
+            parts.push_back("{\"header\": \"value\", ");
+            parts.push_back("\"items\": [1, 2, 3], ");
+            parts.push_back("\"footer\": \"end\"}");
+
+            return std::make_shared<iovec_response>(
+                    std::move(parts), 200, "application/json");
+        }
+    };
+
+    int main() {
+        webserver ws = create_webserver(8080);
+
+        iovec_resource ir;
+        ws.register_resource("/data", &ir);
+        ws.start(true);
+
+        return 0;
+    }
+```
+To test the above example, you can run the following command from a terminal:
+
+    curl -XGET -v localhost:8080/data
+
+You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/iovec_response_example.cpp).
+
+#### Example of a pipe-based streaming response
+```cpp
+    #include <cstring>
+    #include <thread>
+    #include <unistd.h>
+    #include <httpserver.hpp>
+
+    using namespace httpserver;
+
+    class pipe_resource : public http_resource {
+    public:
+        std::shared_ptr<http_response> render_GET(const http_request&) {
+            int pipefd[2];
+            if (pipe(pipefd) == -1) {
+                return std::make_shared<string_response>("pipe failed", 500);
+            }
+
+            // Spawn a thread to write data into the pipe
+            std::thread writer([fd = pipefd[1]]() {
+                const char* messages[] = {"Hello ", "from ", "a pipe!\n"};
+                for (const char* msg : messages) {
+                    ssize_t ret = write(fd, msg, strlen(msg));
+                    (void)ret;
+                }
+                close(fd);
+            });
+            writer.detach();
+
+            // Return the read end of the pipe as the response
+            return std::make_shared<pipe_response>(pipefd[0], 200, "text/plain");
+        }
+    };
+
+    int main() {
+        webserver ws = create_webserver(8080);
+
+        pipe_resource pr;
+        ws.register_resource("/stream", &pr);
+        ws.start(true);
+
+        return 0;
+    }
+```
+To test the above example, you can run the following command from a terminal:
+
+    curl -XGET -v localhost:8080/stream
+
+You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/pipe_response_example.cpp).
+
+#### Example of a WebSocket echo server
+```cpp
+    #include <iostream>
+    #include <httpserver.hpp>
+
+    using namespace httpserver;
+
+    class echo_handler : public websocket_handler {
+    public:
+        void on_open(websocket_session& session) override {
+            std::cout << "WebSocket connection opened" << std::endl;
+            session.send_text("Welcome to the echo server!");
+        }
+
+        void on_message(websocket_session& session, std::string_view msg) override {
+            std::cout << "Received: " << msg << std::endl;
+            session.send_text("Echo: " + std::string(msg));
+        }
+
+        void on_close(websocket_session& session, uint16_t code, const std::string& reason) override {
+            std::cout << "WebSocket closed (code=" << code << ", reason=" << reason << ")" << std::endl;
+        }
+    };
+
+    int main() {
+        webserver ws = create_webserver(8080);
+
+        echo_handler handler;
+        ws.register_ws_resource("/ws", &handler);
+        ws.start(true);
+
+        return 0;
+    }
+```
+Note: WebSocket support requires libmicrohttpd 1.0.0 built with WebSocket support. You can test this with any WebSocket client library or browser JavaScript: `new WebSocket("ws://localhost:8080/ws")`.
+
+You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/websocket_echo.cpp).
+
+#### Example of daemon introspection
+```cpp
+    #include <iostream>
+    #include <httpserver.hpp>
+
+    using namespace httpserver;
+
+    class hello_resource : public http_resource {
+    public:
+        std::shared_ptr<http_response> render_GET(const http_request&) {
+            return std::make_shared<string_response>("Hello, World!");
+        }
+    };
+
+    int main() {
+        // Use port 0 to let the OS assign an ephemeral port
+        webserver ws = create_webserver(0);
+
+        hello_resource hr;
+        ws.register_resource("/hello", &hr);
+        ws.start(false);
+
+        // Query daemon information
+        std::cout << "libmicrohttpd version: "
+                  << http::http_utils::get_mhd_version() << std::endl;
+        std::cout << "Bound port: " << ws.get_bound_port() << std::endl;
+        std::cout << "Listen FD: " << ws.get_listen_fd() << std::endl;
+        std::cout << "Active connections: " << ws.get_active_connections() << std::endl;
+        std::cout << "HTTP 200 reason: "
+                  << http::http_utils::reason_phrase(200) << std::endl;
+        std::cout << "HTTP 404 reason: "
+                  << http::http_utils::reason_phrase(404) << std::endl;
+
+        ws.sweet_kill();
+        return 0;
+    }
+```
+You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/daemon_info.cpp).
+
+#### Example of an external event loop
+```cpp
+    #include <csignal>
+    #include <iostream>
+    #include <httpserver.hpp>
+
+    using namespace httpserver;
+
+    static volatile bool running = true;
+
+    void signal_handler(int) { running = false; }
+
+    class hello_resource : public http_resource {
+    public:
+        std::shared_ptr<http_response> render_GET(const http_request&) {
+            return std::make_shared<string_response>("Hello from external event loop!");
+        }
+    };
+
+    int main() {
+        signal(SIGINT, signal_handler);
+
+        webserver ws = create_webserver(8080);
+
+        hello_resource hr;
+        ws.register_resource("/hello", &hr);
+        ws.start(false);
+
+        std::cout << "Server running on port " << ws.get_bound_port() << std::endl;
+
+        // Drive the event loop externally using run_wait
+        while (running) {
+            // Block for up to 1000ms waiting for HTTP activity
+            ws.run_wait(1000);
+
+            // You can do other work here between iterations
+        }
+
+        // Graceful shutdown: stop accepting new connections first
+        ws.quiesce();
+        ws.stop();
+
+        return 0;
+    }
+```
+To test the above example, you can run the following command from a terminal:
+
+    curl -XGET -v localhost:8080/hello
+
+You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/external_event_loop.cpp).
+
+#### Example of turbo mode with performance options
+```cpp
+    #include <httpserver.hpp>
+
+    using namespace httpserver;
+
+    class hello_resource : public http_resource {
+    public:
+        std::shared_ptr<http_response> render_GET(const http_request&) {
+            return std::make_shared<string_response>("Hello, turbo world!");
+        }
+    };
+
+    int main() {
+        // Create a high-performance server with turbo mode,
+        // suppressed date headers, and a thread pool.
+        webserver ws = create_webserver(8080)
+            .start_method(http::http_utils::INTERNAL_SELECT)
+            .max_threads(4)
+            .turbo()
+            .suppress_date_header()
+            .tcp_fastopen_queue_size(16)
+            .listen_backlog(128);
+
+        hello_resource hr;
+        ws.register_resource("/hello", &hr);
+        ws.start(true);
+
+        return 0;
+    }
+```
+To test the above example, you can run the following command from a terminal:
+
+    curl -XGET -v localhost:8080/hello
+
+You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/turbo_mode.cpp).
 
 [Back to TOC](#table-of-contents)
 

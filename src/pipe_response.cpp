@@ -18,31 +18,15 @@
      USA
 */
 
-#ifdef HAVE_DAUTH
-
-#include "httpserver/digest_auth_fail_response.hpp"
+#include "httpserver/pipe_response.hpp"
 #include <microhttpd.h>
-#include <iosfwd>
 
-struct MHD_Connection;
 struct MHD_Response;
 
 namespace httpserver {
 
-int digest_auth_fail_response::enqueue_response(MHD_Connection* connection, MHD_Response* response) {
-    return MHD_queue_auth_required_response3(
-        connection,
-        realm.c_str(),
-        opaque.c_str(),
-        domain.empty() ? nullptr : domain.c_str(),
-        response,
-        signal_stale ? MHD_YES : MHD_NO,
-        MHD_DIGEST_AUTH_MULT_QOP_ANY_NON_INT,
-        static_cast<MHD_DigestAuthMultiAlgo3>(algorithm),
-        userhash_support ? MHD_YES : MHD_NO,
-        prefer_utf8 ? MHD_YES : MHD_NO);
+MHD_Response* pipe_response::get_raw_response() {
+    return MHD_create_response_from_pipe(pipe_fd);
 }
 
 }  // namespace httpserver
-
-#endif  // HAVE_DAUTH

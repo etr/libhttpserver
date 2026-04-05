@@ -18,31 +18,29 @@
      USA
 */
 
-#ifdef HAVE_DAUTH
-
-#include "httpserver/digest_auth_fail_response.hpp"
+#include "httpserver/iovec_response.hpp"
 #include <microhttpd.h>
-#include <iosfwd>
+#include <vector>
 
-struct MHD_Connection;
 struct MHD_Response;
 
 namespace httpserver {
 
-int digest_auth_fail_response::enqueue_response(MHD_Connection* connection, MHD_Response* response) {
-    return MHD_queue_auth_required_response3(
-        connection,
-        realm.c_str(),
-        opaque.c_str(),
-        domain.empty() ? nullptr : domain.c_str(),
-        response,
-        signal_stale ? MHD_YES : MHD_NO,
-        MHD_DIGEST_AUTH_MULT_QOP_ANY_NON_INT,
-        static_cast<MHD_DigestAuthMultiAlgo3>(algorithm),
-        userhash_support ? MHD_YES : MHD_NO,
-        prefer_utf8 ? MHD_YES : MHD_NO);
+MHD_Response* iovec_response::get_raw_response() {
+    // MHD_create_response_from_iovec makes an internal copy of the iov array,
+    // so the local vector is safe. The buffer data pointed to by iov_base must
+    // remain valid until the response is destroyed — this is guaranteed because
+    // the buffers are owned by this iovec_response object.
+    std::vector<MHD_IoVec> iov(buffers.size());
+    for (size_t i = 0; i < buffers.size(); ++i) {
+        iov[i].iov_base = buffers[i].data();
+        iov[i].iov_len = buffers[i].size();
+    }
+    return MHD_create_response_from_iovec(
+        iov.data(),
+        static_cast<unsigned int>(iov.size()),
+        nullptr,
+        nullptr);
 }
 
 }  // namespace httpserver
-
-#endif  // HAVE_DAUTH
