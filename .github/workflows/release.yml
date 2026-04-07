@@ -78,21 +78,21 @@ jobs:
       id: cache-libmicrohttpd
       uses: actions/cache@v4
       with:
-        path: libmicrohttpd-0.9.77
-        key: ubuntu-latest-gcc-libmicrohttpd-0.9.77-pre-built-v2
+        path: libmicrohttpd-1.0.3
+        key: ubuntu-latest-gcc-libmicrohttpd-1.0.3-pre-built-v2
 
     - name: Build libmicrohttpd (if not cached)
       if: steps.cache-libmicrohttpd.outputs.cache-hit != 'true'
       run: |
-        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.77.tar.gz -o libmicrohttpd-0.9.77.tar.gz
-        tar -xzf libmicrohttpd-0.9.77.tar.gz
-        cd libmicrohttpd-0.9.77
+        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-1.0.3.tar.gz -o libmicrohttpd-1.0.3.tar.gz
+        tar -xzf libmicrohttpd-1.0.3.tar.gz
+        cd libmicrohttpd-1.0.3
         ./configure --disable-examples
         make
 
     - name: Install libmicrohttpd
       run: |
-        cd libmicrohttpd-0.9.77
+        cd libmicrohttpd-1.0.3
         sudo make install
         sudo ldconfig
 
@@ -130,21 +130,21 @@ jobs:
       id: cache-libmicrohttpd
       uses: actions/cache@v4
       with:
-        path: libmicrohttpd-0.9.77
-        key: ubuntu-latest-gcc-libmicrohttpd-0.9.77-pre-built-v2
+        path: libmicrohttpd-1.0.3
+        key: ubuntu-latest-gcc-libmicrohttpd-1.0.3-pre-built-v2
 
     - name: Build libmicrohttpd (if not cached)
       if: steps.cache-libmicrohttpd.outputs.cache-hit != 'true'
       run: |
-        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.77.tar.gz -o libmicrohttpd-0.9.77.tar.gz
-        tar -xzf libmicrohttpd-0.9.77.tar.gz
-        cd libmicrohttpd-0.9.77
+        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-1.0.3.tar.gz -o libmicrohttpd-1.0.3.tar.gz
+        tar -xzf libmicrohttpd-1.0.3.tar.gz
+        cd libmicrohttpd-1.0.3
         ./configure --disable-examples
         make
 
     - name: Install libmicrohttpd
       run: |
-        cd libmicrohttpd-0.9.77
+        cd libmicrohttpd-1.0.3
         sudo make install
         sudo ldconfig
 
@@ -181,21 +181,21 @@ jobs:
       id: cache-libmicrohttpd
       uses: actions/cache@v4
       with:
-        path: libmicrohttpd-0.9.77
-        key: macos-latest-gcc-libmicrohttpd-0.9.77-pre-built-v2
+        path: libmicrohttpd-1.0.3
+        key: macos-latest-gcc-libmicrohttpd-1.0.3-pre-built-v2
 
     - name: Build libmicrohttpd (if not cached)
       if: steps.cache-libmicrohttpd.outputs.cache-hit != 'true'
       run: |
-        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.77.tar.gz -o libmicrohttpd-0.9.77.tar.gz
-        tar -xzf libmicrohttpd-0.9.77.tar.gz
-        cd libmicrohttpd-0.9.77
+        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-1.0.3.tar.gz -o libmicrohttpd-1.0.3.tar.gz
+        tar -xzf libmicrohttpd-1.0.3.tar.gz
+        cd libmicrohttpd-1.0.3
         ./configure --disable-examples
         make
 
     - name: Install libmicrohttpd
       run: |
-        cd libmicrohttpd-0.9.77
+        cd libmicrohttpd-1.0.3
         sudo make install
 
     - name: Fetch curl from cache
@@ -263,9 +263,9 @@ jobs:
 
     - name: Build and install libmicrohttpd
       run: |
-        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-0.9.77.tar.gz -o libmicrohttpd-0.9.77.tar.gz
-        tar -xzf libmicrohttpd-0.9.77.tar.gz
-        cd libmicrohttpd-0.9.77
+        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-1.0.3.tar.gz -o libmicrohttpd-1.0.3.tar.gz
+        tar -xzf libmicrohttpd-1.0.3.tar.gz
+        cd libmicrohttpd-1.0.3
         ./configure --disable-examples --enable-poll=no
         make
         make install
