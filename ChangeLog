@@ -39,6 +39,9 @@ Version 0.20.0
 	Fixed auth skip path bypass via path traversal (e.g. /public/../protected).
 	Fixed use of free() instead of MHD_free() for digest auth username.
 	Fixed unchecked write error during file upload.
+	Fixed std::terminate when MHD invokes the URI log callback with a
+		null uri pointer (e.g. port scans, half-open connections, or
+		non-HTTP traffic). Resolves issue #371.
 
 Version 0.19.0 - 2023-06-15
 

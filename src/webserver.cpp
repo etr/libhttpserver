@@ -775,7 +775,12 @@ void* uri_log(void* cls, const char* uri, struct MHD_Connection *con) {
     std::ignore = con;
 
     auto mr = std::make_unique<details::modded_request>();
-    mr->complete_uri = uri;
+    // MHD may invoke this callback with a null uri before the request line
+    // has been parsed (e.g. port scans, half-open connections, or non-HTTP
+    // traffic on the listening port). Treat that as an empty URI so the
+    // std::string assignment does not throw std::logic_error and abort the
+    // process via std::terminate. See issue #371.
+    mr->complete_uri = (uri != nullptr) ? uri : "";
     return reinterpret_cast<void*>(mr.release());
 }
 

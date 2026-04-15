@@ -26,7 +26,7 @@ LDADD += -lcurl
 
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/
 METASOURCES = AUTO
-check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver new_response_types daemon_info
+check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver new_response_types daemon_info uri_log
 
 MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
 
@@ -46,6 +46,11 @@ http_response_SOURCES = unit/http_response_test.cpp
 create_webserver_SOURCES = unit/create_webserver_test.cpp
 new_response_types_SOURCES = integ/new_response_types.cpp
 daemon_info_SOURCES = integ/daemon_info.cpp
+uri_log_SOURCES = unit/uri_log_test.cpp
+# uri_log_test directly references libmicrohttpd via ~modded_request(), so
+# it needs an explicit -lmicrohttpd in its link line on top of the default
+# LDADD (modern ld enforces --no-copy-dt-needed-entries).
+uri_log_LDADD = $(LDADD) -lmicrohttpd
 
 noinst_HEADERS = littletest.hpp
 AM_CXXFLAGS += -Wall -fPIC -Wno-overloaded-virtual
