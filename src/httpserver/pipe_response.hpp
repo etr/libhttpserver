@@ -25,6 +25,7 @@
 #ifndef SRC_HTTPSERVER_PIPE_RESPONSE_HPP_
 #define SRC_HTTPSERVER_PIPE_RESPONSE_HPP_
 
+#include <string>
 #include "httpserver/http_utils.hpp"
 #include "httpserver/http_response.hpp"
 

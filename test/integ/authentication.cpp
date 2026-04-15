@@ -525,7 +525,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_user_cache_no_auth)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    long http_code = 0;
+    long http_code = 0;  // NOLINT(runtime/int)
     // No authentication - should trigger 401 challenge
     curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/cache_test");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);

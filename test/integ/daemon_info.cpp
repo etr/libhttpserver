@@ -94,7 +94,7 @@ LT_BEGIN_AUTO_TEST(daemon_info_suite, basic_request_succeeds)
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
     curl_easy_perform(curl);
-    long http_code = 0;
+    long http_code = 0;  // NOLINT(runtime/int)
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
     LT_CHECK_EQ(http_code, 200);
     LT_CHECK_EQ(s, "OK");
@@ -178,10 +178,10 @@ static bool drive_event_loop(webserver& ws, CURLM* multi, int max_iters) {
 }
 
 LT_BEGIN_AUTO_TEST(daemon_info_suite, external_event_loop)
-    // Start server with no internal threading (external event loop mode)
+    // Start server in external event loop mode (no internal threading)
     webserver ws = create_webserver(PORT)
-        .start_method(httpserver::http::http_utils::INTERNAL_SELECT)
-        .max_threads(0);
+        .start_method(httpserver::http::http_utils::EXTERNAL_SELECT)
+        .no_thread_safety();
 
     simple_resource sr;
     ws.register_resource("test", &sr);
@@ -206,7 +206,7 @@ LT_BEGIN_AUTO_TEST(daemon_info_suite, external_event_loop)
     bool completed = drive_event_loop(ws, multi, 200);
     LT_CHECK_EQ(completed, true);
 
-    long http_code = 0;
+    long http_code = 0;  // NOLINT(runtime/int)
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
     LT_CHECK_EQ(http_code, 200);
     LT_CHECK_EQ(s, "OK");

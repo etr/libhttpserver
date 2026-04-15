@@ -41,7 +41,9 @@ class hello_resource : public httpserver::http_resource {
 int main() {
     signal(SIGINT, signal_handler);
 
-    httpserver::webserver ws = httpserver::create_webserver(8080);
+    httpserver::webserver ws = httpserver::create_webserver(8080)
+        .start_method(httpserver::http::http_utils::EXTERNAL_SELECT)
+        .no_thread_safety();
 
     hello_resource hr;
     ws.register_resource("/hello", &hr);

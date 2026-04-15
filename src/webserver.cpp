@@ -19,10 +19,6 @@
 */
 
 #include "httpserver/webserver.hpp"
-#ifdef HAVE_WEBSOCKET
-#include "httpserver/websocket_handler.hpp"
-#include <microhttpd_ws.h>
-#endif  // HAVE_WEBSOCKET
 
 #if defined(_WIN32) && !defined(__CYGWIN__)
 #include <winsock2.h>
@@ -38,6 +34,10 @@
 
 #include <errno.h>
 #include <microhttpd.h>
+#ifdef HAVE_WEBSOCKET
+#include <microhttpd_ws.h>
+#include "httpserver/websocket_handler.hpp"
+#endif  // HAVE_WEBSOCKET
 #include <signal.h>
 #include <stdint.h>
 #include <stdio.h>

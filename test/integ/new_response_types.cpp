@@ -109,7 +109,7 @@ LT_BEGIN_AUTO_TEST(response_types_suite, empty_response_test)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    long http_code = 0;
+    long http_code = 0;  // NOLINT(runtime/int)
     curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/empty");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
@@ -128,7 +128,7 @@ LT_BEGIN_AUTO_TEST(response_types_suite, pipe_response_test)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    long http_code = 0;
+    long http_code = 0;  // NOLINT(runtime/int)
     curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/pipe");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
@@ -147,7 +147,7 @@ LT_BEGIN_AUTO_TEST(response_types_suite, iovec_response_test)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    long http_code = 0;
+    long http_code = 0;  // NOLINT(runtime/int)
     curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/iovec");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
