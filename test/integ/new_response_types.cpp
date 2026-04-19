@@ -83,7 +83,7 @@ class pipe_resource : public http_resource {
          close(pipefd[1]);
          return std::make_shared<pipe_response>(pipefd[0], 200);
      }
-};
+};  // NOLINT(readability/braces)
 
 class iovec_resource : public http_resource {
  public:
