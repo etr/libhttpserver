@@ -19,7 +19,12 @@
 */
 
 #include <curl/curl.h>
+#if defined(_WIN32) && !defined(__CYGWIN__)
+#include <io.h>
+#include <fcntl.h>
+#else
 #include <unistd.h>
+#endif
 #include <cstring>
 #include <memory>
 #include <string>
@@ -66,7 +71,11 @@ class pipe_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request&) {
          int pipefd[2];
+#if defined(_WIN32) && !defined(__CYGWIN__)
+         if (_pipe(pipefd, 4096, _O_BINARY) != 0) {
+#else
          if (pipe(pipefd) != 0) {
+#endif
              return std::make_shared<empty_response>(500);
          }
          const char* msg = "hello from pipe";
