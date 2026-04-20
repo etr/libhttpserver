@@ -178,10 +178,13 @@ static bool drive_event_loop(webserver& ws, CURLM* multi, int max_iters) {
 }
 
 LT_BEGIN_AUTO_TEST(daemon_info_suite, external_event_loop)
-    // Start server in external event loop mode (no internal threading)
+    // Start server in external event loop mode (no internal threading).
+    // Note: MHD_USE_NO_THREAD_SAFETY is intentionally omitted here; on
+    // Windows/MSYS2 builds it has been observed to make MHD_start_daemon
+    // reject the configuration. The default thread-safe daemon still
+    // supports being driven by MHD_run_wait from a single thread.
     webserver ws = create_webserver(PORT)
-        .start_method(httpserver::http::http_utils::EXTERNAL_SELECT)
-        .no_thread_safety();
+        .start_method(httpserver::http::http_utils::EXTERNAL_SELECT);
 
     simple_resource sr;
     ws.register_resource("test", &sr);
