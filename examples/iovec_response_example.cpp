@@ -18,31 +18,33 @@
      USA
 */
 
-#ifdef HAVE_DAUTH
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
-#include "httpserver/digest_auth_fail_response.hpp"
-#include <microhttpd.h>
-#include <iosfwd>
+#include <httpserver.hpp>
 
-struct MHD_Connection;
-struct MHD_Response;
+class iovec_resource : public httpserver::http_resource {
+ public:
+     std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request&) {
+         // Build a response from multiple separate buffers without copying
+         std::vector<std::string> parts;
+         parts.push_back("{\"header\": \"value\", ");
+         parts.push_back("\"items\": [1, 2, 3], ");
+         parts.push_back("\"footer\": \"end\"}");
 
-namespace httpserver {
+         return std::make_shared<httpserver::iovec_response>(
+                 std::move(parts), 200, "application/json");
+     }
+};
 
-int digest_auth_fail_response::enqueue_response(MHD_Connection* connection, MHD_Response* response) {
-    return MHD_queue_auth_required_response3(
-        connection,
-        realm.c_str(),
-        opaque.c_str(),
-        domain.empty() ? nullptr : domain.c_str(),
-        response,
-        signal_stale ? MHD_YES : MHD_NO,
-        MHD_DIGEST_AUTH_MULT_QOP_ANY_NON_INT,
-        static_cast<MHD_DigestAuthMultiAlgo3>(algorithm),
-        userhash_support ? MHD_YES : MHD_NO,
-        prefer_utf8 ? MHD_YES : MHD_NO);
+int main() {
+    httpserver::webserver ws = httpserver::create_webserver(8080);
+
+    iovec_resource ir;
+    ws.register_resource("/data", &ir);
+    ws.start(true);
+
+    return 0;
 }
-
-}  // namespace httpserver
-
-#endif  // HAVE_DAUTH

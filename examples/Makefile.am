@@ -19,7 +19,7 @@
 LDADD = $(top_builddir)/src/libhttpserver.la
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/
 METASOURCES = AUTO
-noinst_PROGRAMS = hello_world service minimal_hello_world custom_error allowing_disallowing_methods handlers hello_with_get_arg args_processing setting_headers custom_access_log minimal_https minimal_file_response minimal_deferred url_registration minimal_ip_ban benchmark_select benchmark_threads benchmark_nodelay deferred_with_accumulator file_upload file_upload_with_callback binary_buffer_response
+noinst_PROGRAMS = hello_world service minimal_hello_world custom_error allowing_disallowing_methods handlers hello_with_get_arg args_processing setting_headers custom_access_log minimal_https minimal_file_response minimal_deferred url_registration minimal_ip_ban benchmark_select benchmark_threads benchmark_nodelay deferred_with_accumulator file_upload file_upload_with_callback empty_response_example iovec_response_example pipe_response_example daemon_info external_event_loop turbo_mode binary_buffer_response
 
 hello_world_SOURCES = hello_world.cpp
 service_SOURCES = service.cpp
@@ -42,6 +42,12 @@ benchmark_threads_SOURCES = benchmark_threads.cpp
 benchmark_nodelay_SOURCES = benchmark_nodelay.cpp
 file_upload_SOURCES = file_upload.cpp
 file_upload_with_callback_SOURCES = file_upload_with_callback.cpp
+empty_response_example_SOURCES = empty_response_example.cpp
+iovec_response_example_SOURCES = iovec_response_example.cpp
+pipe_response_example_SOURCES = pipe_response_example.cpp
+daemon_info_SOURCES = daemon_info.cpp
+external_event_loop_SOURCES = external_event_loop.cpp
+turbo_mode_SOURCES = turbo_mode.cpp
 binary_buffer_response_SOURCES = binary_buffer_response.cpp
 
 if HAVE_BAUTH
@@ -59,4 +65,10 @@ endif
 if HAVE_DAUTH
 noinst_PROGRAMS += digest_authentication
 digest_authentication_SOURCES = digest_authentication.cpp
+endif
+
+if HAVE_WEBSOCKET
+noinst_PROGRAMS += websocket_echo
+websocket_echo_SOURCES = websocket_echo.cpp
+websocket_echo_LDADD = $(LDADD) -lmicrohttpd_ws
 endif
