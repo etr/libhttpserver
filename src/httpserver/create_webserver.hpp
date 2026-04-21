@@ -409,6 +409,76 @@ class create_webserver {
         return *this;
     }
 
+    create_webserver& no_listen_socket() {
+        _no_listen_socket = true;
+        return *this;
+    }
+
+    create_webserver& no_thread_safety() {
+        _no_thread_safety = true;
+        return *this;
+    }
+
+    create_webserver& turbo() {
+        _turbo = true;
+        return *this;
+    }
+
+    create_webserver& suppress_date_header() {
+        _suppress_date_header = true;
+        return *this;
+    }
+
+    create_webserver& listen_backlog(int backlog) {
+        _listen_backlog = backlog;
+        return *this;
+    }
+
+    create_webserver& address_reuse(int reuse) {
+        _address_reuse = reuse;
+        return *this;
+    }
+
+    create_webserver& connection_memory_increment(size_t increment) {
+        _connection_memory_increment = increment;
+        return *this;
+    }
+
+    create_webserver& tcp_fastopen_queue_size(int queue_size) {
+        _tcp_fastopen_queue_size = queue_size;
+        return *this;
+    }
+
+    create_webserver& sigpipe_handled_by_app() {
+        _sigpipe_handled_by_app = true;
+        return *this;
+    }
+
+    create_webserver& https_mem_dhparams(const std::string& dhparams) {
+        _https_mem_dhparams = dhparams;
+        return *this;
+    }
+
+    create_webserver& https_key_password(const std::string& password) {
+        _https_key_password = password;
+        return *this;
+    }
+
+    create_webserver& https_priorities_append(const std::string& priorities) {
+        _https_priorities_append = priorities;
+        return *this;
+    }
+
+    create_webserver& no_alpn() {
+        _no_alpn = true;
+        return *this;
+    }
+
+    create_webserver& client_discipline_level(int level) {
+        _client_discipline_level = level;
+        return *this;
+    }
+
  private:
      uint16_t _port = DEFAULT_WS_PORT;
      http::http_utils::start_method_T _start_method = http::http_utils::INTERNAL_SELECT;
@@ -461,6 +531,20 @@ class create_webserver {
      auth_handler_ptr _auth_handler = nullptr;
      std::vector<std::string> _auth_skip_paths;
      sni_callback_t _sni_callback = nullptr;
+     bool _no_listen_socket = false;
+     bool _no_thread_safety = false;
+     bool _turbo = false;
+     bool _suppress_date_header = false;
+     int _listen_backlog = 0;
+     int _address_reuse = 0;
+     size_t _connection_memory_increment = 0;
+     int _tcp_fastopen_queue_size = 0;
+     bool _sigpipe_handled_by_app = false;
+     std::string _https_mem_dhparams = "";
+     std::string _https_key_password = "";
+     std::string _https_priorities_append = "";
+     bool _no_alpn = false;
+     int _client_discipline_level = -1;
 
      friend class webserver;
 };

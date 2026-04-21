@@ -30,7 +30,7 @@ struct MHD_Response;
 namespace httpserver {
 
 int basic_auth_fail_response::enqueue_response(MHD_Connection* connection, MHD_Response* response) {
-    return MHD_queue_basic_auth_fail_response(connection, realm.c_str(), response);
+    return MHD_queue_basic_auth_required_response3(connection, realm.c_str(), prefer_utf8 ? MHD_YES : MHD_NO, response);
 }
 
 }  // namespace httpserver

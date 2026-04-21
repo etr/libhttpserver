@@ -38,6 +38,7 @@
 #include <limits>
 #include <map>
 #include <memory>
+
 #include <string>
 #include <utility>
 #include <vector>
@@ -307,26 +308,20 @@ class http_request {
      uint16_t get_requestor_port() const;
 
 #ifdef HAVE_DAUTH
-     bool check_digest_auth(const std::string& realm, const std::string& password, int nonce_timeout, bool* reload_nonce) const;
-
-     /**
-      * Check digest authentication using a pre-computed HA1 hash.
-      * The HA1 hash is computed as: hash(username:realm:password) using the specified algorithm.
-      * @param realm The authentication realm.
-      * @param digest Pointer to the pre-computed HA1 hash bytes.
-      * @param digest_size Size of the digest (16 for MD5, 32 for SHA-256).
-      * @param nonce_timeout Nonce validity timeout in seconds.
-      * @param reload_nonce Output: set to true if nonce should be regenerated.
-      * @param algo The digest algorithm (defaults to MD5).
-      * @return true if authenticated, false otherwise.
-      */
-     bool check_digest_auth_ha1(
+     http::http_utils::digest_auth_result check_digest_auth(
          const std::string& realm,
-         const unsigned char* digest,
-         size_t digest_size,
-         int nonce_timeout,
-         bool* reload_nonce,
-         http::http_utils::digest_algorithm algo = http::http_utils::digest_algorithm::MD5) const;
+         const std::string& password,
+         unsigned int nonce_timeout = 0,
+         uint32_t max_nc = 0,
+         http::http_utils::digest_algorithm algo = http::http_utils::digest_algorithm::SHA256) const;
+
+     http::http_utils::digest_auth_result check_digest_auth_digest(
+         const std::string& realm,
+         const void* userdigest,
+         size_t userdigest_size,
+         unsigned int nonce_timeout = 0,
+         uint32_t max_nc = 0,
+         http::http_utils::digest_algorithm algo = http::http_utils::digest_algorithm::SHA256) const;
 #endif  // HAVE_DAUTH
 
      friend std::ostream &operator<< (std::ostream &os, http_request &r);
@@ -387,6 +382,10 @@ class http_request {
 #ifdef HAVE_BAUTH
      void fetch_user_pass() const;
 #endif  // HAVE_BAUTH
+
+#ifdef HAVE_GNUTLS
+     void populate_all_cert_fields() const;
+#endif  // HAVE_GNUTLS
 
      /**
       * Method used to set an argument value by key.
@@ -505,6 +504,17 @@ class http_request {
 
         bool args_populated = false;
         bool path_pieces_cached = false;
+
+#ifdef HAVE_GNUTLS
+        bool client_cert_fields_cached = false;
+        std::string client_cert_dn;
+        std::string client_cert_issuer_dn;
+        std::string client_cert_cn;
+        std::string client_cert_fingerprint_sha256;
+        time_t client_cert_not_before = static_cast<time_t>(-1);
+        time_t client_cert_not_after = static_cast<time_t>(-1);
+        bool client_cert_verified = false;
+#endif  // HAVE_GNUTLS
      };
      std::unique_ptr<http_request_data_cache> cache = std::make_unique<http_request_data_cache>();
      void ensure_path_pieces_cached() const {

@@ -43,10 +43,12 @@ class basic_auth_fail_response : public string_response {
      explicit basic_auth_fail_response(
                 const std::string& content,
                 const std::string& realm = "",
+                bool prefer_utf8 = true,
                 int response_code = http::http_utils::http_ok,
                 const std::string& content_type = http::http_utils::text_plain):
             string_response(content, response_code, content_type),
-            realm(realm) { }
+            realm(realm),
+            prefer_utf8(prefer_utf8) { }
 
      basic_auth_fail_response(const basic_auth_fail_response& other) = default;
      basic_auth_fail_response(basic_auth_fail_response&& other) noexcept = default;
@@ -59,6 +61,7 @@ class basic_auth_fail_response : public string_response {
 
  private:
      std::string realm = "";
+     bool prefer_utf8 = true;
 };
 
 }  // namespace httpserver
