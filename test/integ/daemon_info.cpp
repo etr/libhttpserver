@@ -19,7 +19,11 @@
 */
 
 #include <curl/curl.h>
+#ifdef _WIN32
+#include <winsock2.h>
+#else
 #include <unistd.h>
+#endif
 #include <cstring>
 #include <memory>
 #include <string>
@@ -126,9 +130,17 @@ LT_BEGIN_AUTO_TEST(daemon_info_suite, quiesce_does_not_crash)
     // Note: quiesce may return -1 if not supported with current daemon flags
     // (e.g., thread-per-connection mode). We just verify it doesn't crash.
     int listen_fd = ws.quiesce();
-    // If quiesce succeeded, the FD should be positive
+    // If quiesce succeeded, the listen socket ownership transfers to us;
+    // close it so the port is freed for subsequent tests. On Windows, MHD
+    // sockets are Winsock SOCKETs and must be closed via closesocket()
+    // rather than POSIX close(), which would otherwise leak port 8080
+    // and cause later tests to fail bind.
     if (listen_fd > 0) {
+#ifdef _WIN32
+        closesocket(static_cast<SOCKET>(listen_fd));
+#else
         close(listen_fd);
+#endif
     }
 
     curl_easy_cleanup(curl);
