@@ -203,7 +203,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: curl-7.75.0
-        key: macos-latest-CURL-pre-built-v2
+        key: macos-latest-CURL-pre-built-v3
 
     - name: Build curl (if not cached)
       if: steps.cache-curl.outputs.cache-hit != 'true'
@@ -211,7 +211,7 @@ jobs:
         curl https://libhttpserver.s3.amazonaws.com/travis_stuff/curl-7.75.0.tar.gz -o curl-7.75.0.tar.gz
         tar -xzf curl-7.75.0.tar.gz
         cd curl-7.75.0
-        ./configure --with-darwinssl --without-ssl
+        ./configure --with-darwinssl --without-ssl --without-nghttp2 --without-libidn2 --without-libssh2 --without-brotli --without-zstd --without-librtmp --without-libpsl --disable-ldap --disable-ldaps
         make
 
     - name: Install curl
