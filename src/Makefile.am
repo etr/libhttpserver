@@ -16,12 +16,15 @@
 #     License along with this library; if not, write to the Free Software
 #     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-AM_CPPFLAGS = -I../ -I$(srcdir)/httpserver/
+AM_CPPFLAGS = -I../ -I$(srcdir)/httpserver/ -DHTTPSERVER_COMPILATION
 METASOURCES = AUTO
 lib_LTLIBRARIES = libhttpserver.la
 libhttpserver_la_SOURCES = string_utilities.cpp webserver.cpp http_utils.cpp file_info.cpp http_request.cpp http_response.cpp string_response.cpp digest_auth_fail_response.cpp deferred_response.cpp file_response.cpp pipe_response.cpp empty_response.cpp iovec_response.cpp http_resource.cpp create_webserver.cpp details/http_endpoint.cpp
-noinst_HEADERS = httpserver/string_utilities.hpp httpserver/details/modded_request.hpp gettext.h
-nobase_include_HEADERS = httpserver.hpp httpserver/create_webserver.hpp httpserver/webserver.hpp httpserver/http_utils.hpp httpserver/file_info.hpp httpserver/details/http_endpoint.hpp httpserver/http_request.hpp httpserver/http_response.hpp httpserver/http_resource.hpp httpserver/string_response.hpp httpserver/digest_auth_fail_response.hpp httpserver/deferred_response.hpp httpserver/file_response.hpp httpserver/pipe_response.hpp httpserver/empty_response.hpp httpserver/iovec_response.hpp httpserver/http_arg_value.hpp
+# noinst_HEADERS: shipped in the tarball but NEVER installed under $prefix/include.
+# Detail headers (httpserver/details/*.hpp) live here so they cannot leak to
+# downstream consumers — the public surface comes in through <httpserver.hpp>.
+noinst_HEADERS = httpserver/string_utilities.hpp httpserver/details/modded_request.hpp httpserver/details/http_endpoint.hpp gettext.h
+nobase_include_HEADERS = httpserver.hpp httpserver/create_webserver.hpp httpserver/webserver.hpp httpserver/http_utils.hpp httpserver/file_info.hpp httpserver/http_request.hpp httpserver/http_response.hpp httpserver/http_resource.hpp httpserver/string_response.hpp httpserver/digest_auth_fail_response.hpp httpserver/deferred_response.hpp httpserver/file_response.hpp httpserver/pipe_response.hpp httpserver/empty_response.hpp httpserver/iovec_response.hpp httpserver/http_arg_value.hpp
 
 if HAVE_BAUTH
 libhttpserver_la_SOURCES += basic_auth_fail_response.cpp

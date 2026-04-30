@@ -50,4 +50,6 @@
 #include "httpserver/websocket_handler.hpp"
 #endif  // HAVE_WEBSOCKET
 
+#undef _HTTPSERVER_HPP_INSIDE_
+
 #endif  // SRC_HTTPSERVER_HPP_
