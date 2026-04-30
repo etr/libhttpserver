@@ -87,11 +87,13 @@ Additionally, clients can specify resource limits on the overall number of conne
 libhttpserver can be used without any dependencies aside from libmicrohttpd.
 
 The minimum versions required are:
-* g++ >= 5.5.0 or clang-3.6
-* C++17 or newer
+* g++ >= 10 or clang >= 13 (Apple Clang from Xcode 15+)
+* C++20 or newer
 * libmicrohttpd >= 1.0.0
 * [Optionally]: for TLS (HTTPS) support, you'll need [libgnutls](http://www.gnutls.org/).
 * [Optionally]: to compile the code-reference, you'll need [doxygen](http://www.doxygen.nl/).
+
+On RHEL 9 (and derivatives), the stock GCC 11 is too old for some C++20 library features the build relies on; install the `gcc-toolset-14` package and `source /opt/rh/gcc-toolset-14/enable` before configuring.
 
 Additionally, for MinGW on windows you will need:
 * libwinpthread (For MinGW-w64, if you use thread model posix then you have this)

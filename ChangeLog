@@ -1,5 +1,10 @@
 Version 0.20.0
 
+	Raised minimum C++ standard to C++20. Build now requires gcc >= 10
+		or clang >= 13 (Apple Clang from Xcode 15+). Updated
+		AX_CXX_COMPILE_STDCXX macro (m4/ax_cxx_compile_stdcxx.m4) to
+		serial 25 to support C++20 detection. Pruned CI matrix rows
+		(gcc-9, clang-11, clang-12) that lack full C++20 support.
 	Raised minimum libmicrohttpd requirement to 1.0.0.
 	Migrated Basic Auth to v3 API (MHD_basic_auth_get_username_password3,
 		MHD_queue_basic_auth_required_response3) with UTF-8 support.
