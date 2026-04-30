@@ -108,16 +108,7 @@ jobs:
             debug: debug
             coverage: nocoverage
             shell: bash
-          - test-group: extra
-            os: ubuntu-latest
-            os-type: ubuntu
-            build-type: none
-            compiler-family: gcc
-            c-compiler: gcc-9
-            cc-compiler: g++-9
-            debug: nodebug
-            coverage: nocoverage
-            shell: bash
+          # gcc-9 dropped: lacks full C++20 support (no concepts library, no std::span, no <bit> features).
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
@@ -168,26 +159,7 @@ jobs:
             debug: nodebug
             coverage: nocoverage
             shell: bash
-          - test-group: extra
-            os: ubuntu-22.04
-            os-type: ubuntu
-            build-type: none
-            compiler-family: clang
-            c-compiler: clang-11
-            cc-compiler: clang++-11
-            debug: nodebug
-            coverage: nocoverage
-            shell: bash
-          - test-group: extra
-            os: ubuntu-22.04
-            os-type: ubuntu
-            build-type: none
-            compiler-family: clang
-            c-compiler: clang-12
-            cc-compiler: clang++-12
-            debug: nodebug
-            coverage: nocoverage
-            shell: bash
+          # clang-11 and clang-12 dropped: incomplete C++20 support (concepts/<bit>/<span> gaps).
           - test-group: extra
             os: ubuntu-22.04
             os-type: ubuntu
@@ -662,7 +634,7 @@ jobs:
         # IWYU always return an error code. If it returns "2" it indicates a success so we manage this within the function below.
         function safe_make_iwyu() {
           {
-            make -k CXX='/usr/local/bin/include-what-you-use -Xiwyu --mapping_file=${top_builddir}/../custom_iwyu.imp' CXXFLAGS="-std=c++11 -DHTTPSERVER_COMPILATION -D_REENTRANT $CXXFLAGS" ;
+            make -k CXX='/usr/local/bin/include-what-you-use -Xiwyu --mapping_file=${top_builddir}/../custom_iwyu.imp' CXXFLAGS="-std=c++20 -DHTTPSERVER_COMPILATION -D_REENTRANT $CXXFLAGS" ;
           } || {
             if [ $? -ne 2 ]; then
               return 1;
