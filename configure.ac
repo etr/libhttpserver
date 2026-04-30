@@ -127,7 +127,11 @@ if test x"$host" = x"$build"; then
         [AC_MSG_ERROR(["microhttpd.h not found"])]
     )
 
-    CXXFLAGS="-DHTTPSERVER_COMPILATION -D_REENTRANT $LIBMICROHTTPD_CFLAGS $CXXFLAGS"
+    # -DHTTPSERVER_COMPILATION is intentionally NOT injected globally into
+    # CXXFLAGS. It is added per-target via AM_CPPFLAGS in src/Makefile.am and
+    # test/Makefile.am so that examples (and any other consumer-style TUs)
+    # build through the umbrella header without seeing the internal macro.
+    CXXFLAGS="-D_REENTRANT $LIBMICROHTTPD_CFLAGS $CXXFLAGS"
     LDFLAGS="$LIBMICROHTTPD_LIBS $NETWORK_LIBS $ADDITIONAL_LIBS $LDFLAGS"
 
     cond_cross_compile="no"
@@ -140,7 +144,9 @@ else
         [AC_MSG_ERROR(["microhttpd.h not found"])]
     )
 
-    CXXFLAGS="-DHTTPSERVER_COMPILATION -D_REENTRANT $CXXFLAGS"
+    # See note above: HTTPSERVER_COMPILATION is scoped to lib + tests via
+    # per-directory AM_CPPFLAGS, not injected globally into CXXFLAGS.
+    CXXFLAGS="-D_REENTRANT $CXXFLAGS"
     LDFLAGS="$NETWORK_LIBS $ADDITIONAL_LIBS $LDFLAGS"
 
     cond_cross_compile="yes"
