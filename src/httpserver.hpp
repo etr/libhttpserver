@@ -35,6 +35,7 @@
 #include "httpserver/digest_auth_fail_response.hpp"
 #endif  // HAVE_DAUTH
 #include "httpserver/empty_response.hpp"
+#include "httpserver/feature_unavailable.hpp"
 #include "httpserver/file_response.hpp"
 #include "httpserver/http_arg_value.hpp"
 #include "httpserver/http_request.hpp"

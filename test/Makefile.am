@@ -26,7 +26,7 @@ LDADD += -lcurl
 
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/ -DHTTPSERVER_COMPILATION
 METASOURCES = AUTO
-check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver new_response_types daemon_info uri_log
+check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver new_response_types daemon_info uri_log feature_unavailable
 
 MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
 
@@ -51,6 +51,7 @@ uri_log_SOURCES = unit/uri_log_test.cpp
 # it needs an explicit -lmicrohttpd in its link line on top of the default
 # LDADD (modern ld enforces --no-copy-dt-needed-entries).
 uri_log_LDADD = $(LDADD) -lmicrohttpd
+feature_unavailable_SOURCES = unit/feature_unavailable_test.cpp
 
 noinst_HEADERS = littletest.hpp
 AM_CXXFLAGS += -Wall -fPIC -Wno-overloaded-virtual
