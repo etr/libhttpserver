@@ -80,10 +80,19 @@ For native Windows binaries, use the MinGW64 shell instead.
         ADDITIONAL_LIBS="-lpthread -no-undefined"
         NETWORK_LIBS="-lws2_32"
         native_srcdir=$(cd $srcdir; pwd -W)
+        # libmicrohttpd's <microhttpd.h> asserts _SYS_TYPES_FD_SET on Cygwin/MSYS.
+        # newlib defines that macro via <sys/select.h>, included from <sys/types.h>
+        # only when __BSD_VISIBLE -- i.e. when _DEFAULT_SOURCE is set. Strict ANSI
+        # C++ (-std=c++NN, AX_CXX_COMPILE_STDCXX noext) suppresses newlib's
+        # auto-define, so expose it explicitly here.
+        CPPFLAGS="-D_DEFAULT_SOURCE $CPPFLAGS"
         ;;
     *-cygwin*)
         NETWORK_HEADER="arpa/inet.h"
         ADDITIONAL_LIBS="-lpthread -no-undefined"
+        # See *-msys* note: libmicrohttpd's fd_set check needs _DEFAULT_SOURCE
+        # under -std=c++NN strict mode.
+        CPPFLAGS="-D_DEFAULT_SOURCE $CPPFLAGS"
         ;;
     *)
         NETWORK_HEADER="arpa/inet.h"
