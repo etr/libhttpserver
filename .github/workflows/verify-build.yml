@@ -108,17 +108,7 @@ jobs:
             debug: debug
             coverage: nocoverage
             shell: bash
-          # gcc-9 dropped: lacks full C++20 support (no concepts library, no std::span, no <bit> features).
-          - test-group: extra
-            os: ubuntu-latest
-            os-type: ubuntu
-            build-type: none
-            compiler-family: gcc
-            c-compiler: gcc-10
-            cc-compiler: g++-10
-            debug: nodebug
-            coverage: nocoverage
-            shell: bash
+          # gcc-9 and gcc-10 dropped: lack full C++20 support (no concepts library, no std::span, no <bit> features).
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
@@ -159,7 +149,8 @@ jobs:
             debug: nodebug
             coverage: nocoverage
             shell: bash
-          # clang-11 and clang-12 dropped: incomplete C++20 support (concepts/<bit>/<span> gaps).
+          # clang-11, clang-12, clang-14, and clang-15 dropped: incomplete C++20 support (concepts/<bit>/<span> gaps).
+          # clang-13 retained: passes the autoconf C++20 feature check on ubuntu-22.04.
           - test-group: extra
             os: ubuntu-22.04
             os-type: ubuntu
@@ -167,26 +158,6 @@ jobs:
             compiler-family: clang
             c-compiler: clang-13
             cc-compiler: clang++-13
-            debug: nodebug
-            coverage: nocoverage
-            shell: bash
-          - test-group: extra
-            os: ubuntu-latest
-            os-type: ubuntu
-            build-type: none
-            compiler-family: clang
-            c-compiler: clang-14
-            cc-compiler: clang++-14
-            debug: nodebug
-            coverage: nocoverage
-            shell: bash
-          - test-group: extra
-            os: ubuntu-latest
-            os-type: ubuntu
-            build-type: none
-            compiler-family: clang
-            c-compiler: clang-15
-            cc-compiler: clang++-15
             debug: nodebug
             coverage: nocoverage
             shell: bash
@@ -247,8 +218,8 @@ jobs:
             os-type: ubuntu
             build-type: select
             compiler-family: gcc
-            c-compiler: gcc-10
-            cc-compiler: g++-10
+            c-compiler: gcc-14
+            cc-compiler: g++-14
             debug: nodebug
             coverage: nocoverage
             shell: bash
@@ -257,8 +228,8 @@ jobs:
             os-type: ubuntu
             build-type: nodelay
             compiler-family: gcc
-            c-compiler: gcc-10
-            cc-compiler: g++-10
+            c-compiler: gcc-14
+            cc-compiler: g++-14
             debug: nodebug
             coverage: nocoverage
             shell: bash
@@ -267,8 +238,8 @@ jobs:
             os-type: ubuntu
             build-type: threads
             compiler-family: gcc
-            c-compiler: gcc-10
-            cc-compiler: g++-10
+            c-compiler: gcc-14
+            cc-compiler: g++-14
             debug: nodebug
             coverage: nocoverage
             shell: bash
@@ -277,8 +248,8 @@ jobs:
             os-type: ubuntu
             build-type: lint
             compiler-family: gcc
-            c-compiler: gcc-10
-            cc-compiler: g++-10
+            c-compiler: gcc-14
+            cc-compiler: g++-14
             debug: debug
             coverage: nocoverage
             shell: bash
@@ -362,7 +333,7 @@ jobs:
     - name: Install MSYS packages
       if: ${{ matrix.os-type == 'windows' && matrix.msys-env == 'MSYS' }}
       run: |
-        pacman --noconfirm -S --needed msys2-devel gcc make libcurl-devel libgnutls-devel
+        pacman --noconfirm -S --needed msys2-devel gcc make libcurl-devel libgnutls-devel libmicrohttpd-devel
 
     - name: Install Ubuntu test sources
       run: |
