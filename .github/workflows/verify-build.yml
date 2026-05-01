@@ -333,11 +333,15 @@ jobs:
     - name: Install MSYS packages
       if: ${{ matrix.os-type == 'windows' && matrix.msys-env == 'MSYS' }}
       run: |
-        pacman --noconfirm -S --needed msys2-devel gcc make libcurl-devel libgnutls-devel libmicrohttpd-devel
+        pacman --noconfirm -S --needed msys2-devel gcc make libcurl-devel libgnutls-devel
 
     - name: Install Ubuntu test sources
+      # ppa:ubuntu-toolchain-r/test was historically used to backport newer
+      # gcc onto older Ubuntu LTS. With the C++20 floor (TASK-001), our matrix
+      # only retains compilers that ship in stock ubuntu-22.04 / 24.04 repos
+      # (gcc-11..14, clang-13/16/17/18), so the PPA is no longer needed -- and
+      # add-apt-repository talks to launchpad, which is a flaky dependency.
       run: |
-        sudo add-apt-repository ppa:ubuntu-toolchain-r/test ;
         sudo apt-get update ;
       if: ${{ matrix.os-type == 'ubuntu' }}
 
