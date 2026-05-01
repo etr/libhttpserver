@@ -24,7 +24,7 @@ libhttpserver_la_SOURCES = string_utilities.cpp webserver.cpp http_utils.cpp fil
 # Detail headers (httpserver/details/*.hpp) live here so they cannot leak to
 # downstream consumers — the public surface comes in through <httpserver.hpp>.
 noinst_HEADERS = httpserver/string_utilities.hpp httpserver/details/modded_request.hpp httpserver/details/http_endpoint.hpp gettext.h
-nobase_include_HEADERS = httpserver.hpp httpserver/create_webserver.hpp httpserver/webserver.hpp httpserver/http_utils.hpp httpserver/file_info.hpp httpserver/http_request.hpp httpserver/http_response.hpp httpserver/http_resource.hpp httpserver/string_response.hpp httpserver/digest_auth_fail_response.hpp httpserver/deferred_response.hpp httpserver/file_response.hpp httpserver/pipe_response.hpp httpserver/empty_response.hpp httpserver/feature_unavailable.hpp httpserver/iovec_response.hpp httpserver/http_arg_value.hpp
+nobase_include_HEADERS = httpserver.hpp httpserver/create_webserver.hpp httpserver/webserver.hpp httpserver/http_utils.hpp httpserver/file_info.hpp httpserver/http_request.hpp httpserver/http_response.hpp httpserver/http_resource.hpp httpserver/string_response.hpp httpserver/digest_auth_fail_response.hpp httpserver/deferred_response.hpp httpserver/file_response.hpp httpserver/pipe_response.hpp httpserver/empty_response.hpp httpserver/feature_unavailable.hpp httpserver/iovec_entry.hpp httpserver/iovec_response.hpp httpserver/http_arg_value.hpp
 
 if HAVE_BAUTH
 libhttpserver_la_SOURCES += basic_auth_fail_response.cpp

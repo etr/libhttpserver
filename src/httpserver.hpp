@@ -42,6 +42,7 @@
 #include "httpserver/http_resource.hpp"
 #include "httpserver/http_response.hpp"
 #include "httpserver/http_utils.hpp"
+#include "httpserver/iovec_entry.hpp"
 #include "httpserver/iovec_response.hpp"
 #include "httpserver/file_info.hpp"
 #include "httpserver/pipe_response.hpp"
