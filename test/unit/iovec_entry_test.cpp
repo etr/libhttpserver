@@ -19,12 +19,13 @@
 */
 
 // Layout / POD-trait verification for `httpserver::iovec_entry`.
-// This TU is allowed to include <sys/uio.h> directly — it is an internal
-// test, not a header-hygiene sentinel. The library-side guarantee that
-// downstream code does NOT see <sys/uio.h> via the umbrella is asserted
-// separately by `header_hygiene_iovec_test.cpp`.
+// This TU is allowed to include <sys/uio.h> and <microhttpd.h> directly —
+// it is an internal test, not a header-hygiene sentinel. The library-side
+// guarantee that downstream code does NOT see <sys/uio.h> via the umbrella
+// is asserted separately by `header_hygiene_iovec_test.cpp`.
 
 #include <cstddef>
+#include <microhttpd.h>
 #include <sys/uio.h>
 #include <type_traits>
 
@@ -45,17 +46,6 @@ static_assert(std::is_same_v<decltype(httpserver::iovec_entry::base),
 static_assert(std::is_same_v<decltype(httpserver::iovec_entry::len),
                              std::size_t>,
               "iovec_entry::len must be std::size_t");
-
-// Layout pinning duplicated from the consumer perspective: defense in depth
-// against a future change to <sys/uio.h> on a divergent platform.
-static_assert(sizeof(httpserver::iovec_entry) == sizeof(struct iovec),
-              "iovec_entry size must match POSIX struct iovec");
-static_assert(offsetof(httpserver::iovec_entry, base) ==
-                  offsetof(struct iovec, iov_base),
-              "iovec_entry::base offset must match struct iovec::iov_base");
-static_assert(offsetof(httpserver::iovec_entry, len) ==
-                  offsetof(struct iovec, iov_len),
-              "iovec_entry::len offset must match struct iovec::iov_len");
 
 LT_BEGIN_SUITE(iovec_entry_suite)
     void set_up() {
@@ -96,6 +86,34 @@ LT_BEGIN_AUTO_TEST(iovec_entry_suite, reinterpret_cast_to_struct_iovec_preserves
     LT_CHECK_EQ(posix[1].iov_base, const_cast<void*>(static_cast<const void*>(b)));
     LT_CHECK_EQ(posix[1].iov_len, 4u);
 LT_END_AUTO_TEST(reinterpret_cast_to_struct_iovec_preserves_data)
+
+// Runtime bridge test for the actual production cast path: iovec_entry →
+// MHD_IoVec. Mirrors the struct iovec test above but exercises the type
+// used at dispatch time in iovec_response::get_raw_response().
+LT_BEGIN_AUTO_TEST(iovec_entry_suite, reinterpret_cast_to_MHD_IoVec_preserves_data)
+    const char* a = "hello";
+    const char* b = "world";
+    httpserver::iovec_entry entries[2] = {
+        {a, 5},
+        {b, 5},
+    };
+    const MHD_IoVec* mhd =
+        reinterpret_cast<const MHD_IoVec*>(&entries[0]);
+    LT_CHECK_EQ(mhd[0].iov_base, static_cast<const void*>(a));
+    LT_CHECK_EQ(mhd[0].iov_len, 5u);
+    LT_CHECK_EQ(mhd[1].iov_base, static_cast<const void*>(b));
+    LT_CHECK_EQ(mhd[1].iov_len, 5u);
+LT_END_AUTO_TEST(reinterpret_cast_to_MHD_IoVec_preserves_data)
+
+// Verify trivially-copyable guarantee has observable runtime effect:
+// a copy-constructed iovec_entry must preserve both members.
+LT_BEGIN_AUTO_TEST(iovec_entry_suite, copy_constructed_iovec_entry_preserves_members)
+    const char* payload = "data";
+    httpserver::iovec_entry original{payload, 4};
+    httpserver::iovec_entry copy = original;  // copy construction
+    LT_CHECK_EQ(copy.base, static_cast<const void*>(payload));
+    LT_CHECK_EQ(copy.len, 4u);
+LT_END_AUTO_TEST(copy_constructed_iovec_entry_preserves_members)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

@@ -30,7 +30,6 @@
 #include <string>
 #include "httpserver/http_arg_value.hpp"
 #include "httpserver/http_utils.hpp"
-#include "httpserver/iovec_entry.hpp"
 
 struct MHD_Connection;
 struct MHD_Response;

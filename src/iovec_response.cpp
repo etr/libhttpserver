@@ -22,8 +22,10 @@
 #include "httpserver/iovec_entry.hpp"
 
 #include <cstddef>
+#include <limits>
 #include <microhttpd.h>
 #include <sys/uio.h>
+#include <type_traits>
 #include <vector>
 
 struct MHD_Response;
@@ -66,25 +68,64 @@ static_assert(offsetof(::httpserver::iovec_entry, len) ==
                   offsetof(MHD_IoVec, iov_len),
     "iovec_entry::len offset must match MHD_IoVec::iov_len");
 
-MHD_Response* iovec_response::get_raw_response() {
-    // MHD_create_response_from_iovec makes an internal copy of the iov array,
-    // so the local vector is safe. The buffer data pointed to by iov_base must
-    // remain valid until the response is destroyed — this is guaranteed because
-    // the buffers are owned by this iovec_response object.
-    //
-    // The dispatch path builds a contiguous std::vector<iovec_entry> from the
-    // owned std::strings, then reinterpret_casts it to const MHD_IoVec* when
-    // calling MHD. The cast is well-defined because the layout-pinning
-    // static_asserts above guarantee identical size and field offsets. This
-    // same cast bridge will move into details/body.hpp when TASK-009 lands.
-    std::vector<iovec_entry> entries(buffers.size());
-    for (size_t i = 0; i < buffers.size(); ++i) {
-        entries[i].base = buffers[i].data();
-        entries[i].len = buffers[i].size();
+// Alignment pinning: ensures the reinterpret_cast array stride is safe on
+// architectures that trap on misaligned loads (SPARC, some ARM configs).
+// CWE-704: without alignof equality the cast is UB even when size/offset match.
+static_assert(alignof(::httpserver::iovec_entry) == alignof(struct iovec),
+    "iovec_entry alignment must match POSIX struct iovec — divergent platform; "
+    "implement memcpy fallback (see TASK-004)");
+static_assert(alignof(::httpserver::iovec_entry) == alignof(MHD_IoVec),
+    "iovec_entry alignment must match MHD_IoVec — MHD layout drift");
+
+// Standard-layout guarantee: required so that reinterpret_cast between
+// pointer-interconvertible types is well-defined under -fstrict-aliasing.
+static_assert(std::is_standard_layout_v<::httpserver::iovec_entry>,
+    "iovec_entry must be standard layout for reinterpret_cast to MHD_IoVec");
+
+iovec_response::iovec_response(
+        std::vector<std::string> owned_buffers,
+        int response_code,
+        const std::string& content_type)
+    : http_response(response_code, content_type),
+      owned_buffers_(std::move(owned_buffers)) {
+    // Build the iovec_entry array eagerly so get_raw_response() is
+    // allocation-free on the hot dispatch path.
+    entries_.reserve(owned_buffers_.size());
+    for (const auto& b : owned_buffers_) {
+        entries_.push_back({b.data(), b.size()});
     }
+}
+
+iovec_response::iovec_response(
+        std::vector<iovec_entry> caller_entries,
+        int response_code,
+        const std::string& content_type)
+    : http_response(response_code, content_type),
+      entries_(std::move(caller_entries)) {
+    // owned_buffers_ is empty — buffer ownership stays with the caller.
+}
+
+MHD_Response* iovec_response::get_raw_response() {
+    // Guard against integer narrowing: MHD_create_response_from_iovec takes
+    // an unsigned int count. A vector with more than UINT_MAX entries would
+    // silently truncate, causing MHD to read only part of the array while the
+    // reported body length diverges from the actual allocation (CWE-190,
+    // CWE-125). Return nullptr (the documented MHD "error" sentinel) instead.
+    if (entries_.size() >
+            static_cast<std::size_t>(
+                std::numeric_limits<unsigned int>::max())) {
+        return nullptr;
+    }
+
+    // The reinterpret_cast is well-defined because the layout-pinning
+    // static_asserts above guarantee identical size, field offsets, and
+    // alignment between iovec_entry and MHD_IoVec (C++ [basic.align],
+    // CWE-704). entries_ was populated at construction time: no heap
+    // allocation occurs on this path. The cast bridge will move into
+    // details/body.hpp when TASK-009 lands.
     return MHD_create_response_from_iovec(
-        reinterpret_cast<const MHD_IoVec*>(entries.data()),
-        static_cast<unsigned int>(entries.size()),
+        reinterpret_cast<const MHD_IoVec*>(entries_.data()),
+        static_cast<unsigned int>(entries_.size()),
         nullptr,
         nullptr);
 }
