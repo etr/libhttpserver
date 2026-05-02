@@ -38,6 +38,7 @@
 #include "httpserver/feature_unavailable.hpp"
 #include "httpserver/file_response.hpp"
 #include "httpserver/http_arg_value.hpp"
+#include "httpserver/http_method.hpp"
 #include "httpserver/http_request.hpp"
 #include "httpserver/http_resource.hpp"
 #include "httpserver/http_response.hpp"
