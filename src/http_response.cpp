@@ -190,6 +190,59 @@ void http_response::shoutCAST() {
 }
 
 // -----------------------------------------------------------------------
+// Fluent with_* setters (TASK-012, PRD-RSP-REQ-004).
+//
+// Each setter has two ref-qualified overloads. The bodies are a one-line
+// mutation (insert_or_assign for the maps, plain assignment for status),
+// followed by `return *this` (& overload) or `return std::move(*this)`
+// (&& overload). insert_or_assign — rather than `m[k] = v` — is used so
+// the by-value `std::string` parameters can be moved into the map slot
+// directly, avoiding an extra string copy at the insertion site when
+// the caller hands the setter an rvalue.
+// -----------------------------------------------------------------------
+http_response& http_response::with_header(std::string key,
+                                          std::string value) & {
+    headers_.insert_or_assign(std::move(key), std::move(value));
+    return *this;
+}
+http_response&& http_response::with_header(std::string key,
+                                           std::string value) && {
+    headers_.insert_or_assign(std::move(key), std::move(value));
+    return std::move(*this);
+}
+
+http_response& http_response::with_footer(std::string key,
+                                          std::string value) & {
+    footers_.insert_or_assign(std::move(key), std::move(value));
+    return *this;
+}
+http_response&& http_response::with_footer(std::string key,
+                                           std::string value) && {
+    footers_.insert_or_assign(std::move(key), std::move(value));
+    return std::move(*this);
+}
+
+http_response& http_response::with_cookie(std::string key,
+                                          std::string value) & {
+    cookies_.insert_or_assign(std::move(key), std::move(value));
+    return *this;
+}
+http_response&& http_response::with_cookie(std::string key,
+                                           std::string value) && {
+    cookies_.insert_or_assign(std::move(key), std::move(value));
+    return std::move(*this);
+}
+
+http_response& http_response::with_status(int code) & {
+    status_code_ = code;
+    return *this;
+}
+http_response&& http_response::with_status(int code) && {
+    status_code_ = code;
+    return std::move(*this);
+}
+
+// -----------------------------------------------------------------------
 // Const single-key accessors (TASK-011).
 //
 // All three share the same shape: heterogeneous lookup into the
