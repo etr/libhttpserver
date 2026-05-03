@@ -63,9 +63,9 @@
 // preprocessor-grep target `make check-hygiene` in the top-level
 // Makefile.am. Keep both lists in sync.
 
-#include <httpserver.hpp>
-
 #include <cstdio>
+
+#include <httpserver.hpp>
 
 int main() {
     int leaks = 0;

@@ -23,8 +23,9 @@
 // layout / width pinning, bitwise composition, complement bounding,
 // to_string totality, and round-trip via set/contains.
 
-#include <cstdint>
 #include <microhttpd.h>
+
+#include <cstdint>
 #include <string_view>
 #include <type_traits>
 
@@ -118,7 +119,7 @@ static_assert((~httpserver::http_method::get)
                   .contains(httpserver::http_method::post));
 
 // Compound assignment usable in constant context.
-static_assert([]{
+static_assert([] {
     httpserver::method_set s{};
     s |= httpserver::http_method::get;
     s |= httpserver::http_method::post;

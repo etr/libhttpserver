@@ -45,7 +45,7 @@ namespace httpserver {
 // name the enumerators).
 enum class body_kind : std::uint8_t {
     empty,
-    string,
+    string,    // NOLINT(build/include_what_you_use) - enumerator, not std::string
     file,
     iovec,
     pipe,

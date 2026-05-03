@@ -28,14 +28,17 @@
 //
 // Header-hygiene contract: only library .cpp files (and build-tree unit
 // tests compiled with -DHTTPSERVER_COMPILATION) may include this file.
+#ifndef SRC_HTTPSERVER_DETAILS_BODY_HPP_
+#define SRC_HTTPSERVER_DETAILS_BODY_HPP_
+
 #ifndef HTTPSERVER_COMPILATION
 #error "details/body.hpp is internal; build with -DHTTPSERVER_COMPILATION."
 #endif
 
-#ifndef SRC_HTTPSERVER_DETAILS_BODY_HPP_
-#define SRC_HTTPSERVER_DETAILS_BODY_HPP_
-
+#include <microhttpd.h>
 #include <sys/types.h>      // ssize_t
+#include <sys/uio.h>        // private header may include POSIX scatter/gather
+
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -43,9 +46,6 @@
 #include <string>
 #include <utility>
 #include <vector>
-
-#include <microhttpd.h>
-#include <sys/uio.h>        // private header may include POSIX scatter/gather
 
 #include "httpserver/body_kind.hpp"
 #include "httpserver/iovec_entry.hpp"

@@ -21,6 +21,7 @@
 #include "httpserver/details/body.hpp"
 
 #include <fcntl.h>
+#include <microhttpd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/uio.h>
@@ -29,10 +30,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <string>
 #include <type_traits>
 #include <utility>
-
-#include <microhttpd.h>
 
 namespace httpserver {
 

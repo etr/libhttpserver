@@ -24,9 +24,10 @@
 // guarantee that downstream code does NOT see <sys/uio.h> via the umbrella
 // is asserted separately by `header_hygiene_iovec_test.cpp`.
 
-#include <cstddef>
 #include <microhttpd.h>
 #include <sys/uio.h>
+
+#include <cstddef>
 #include <type_traits>
 
 #include "./httpserver.hpp"

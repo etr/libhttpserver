@@ -19,14 +19,18 @@
 */
 
 #include "httpserver/iovec_response.hpp"
-#include "httpserver/iovec_entry.hpp"
+
+#include <microhttpd.h>
+#include <sys/uio.h>
 
 #include <cstddef>
 #include <limits>
-#include <microhttpd.h>
-#include <sys/uio.h>
+#include <string>
 #include <type_traits>
+#include <utility>
 #include <vector>
+
+#include "httpserver/iovec_entry.hpp"
 
 struct MHD_Response;
 

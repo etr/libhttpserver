@@ -24,8 +24,10 @@
 // details/body.hpp directly (for the subclasses) — header-hygiene from
 // the consumer perspective is asserted separately by header_hygiene_*.
 
+#include <microhttpd.h>
 #include <sys/types.h>      // ssize_t
 #include <unistd.h>         // pipe, close
+
 #include <cerrno>
 #include <cstdint>
 #include <cstring>
@@ -35,8 +37,6 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
-
-#include <microhttpd.h>
 
 #include "./httpserver.hpp"                 // public umbrella → body_kind
 #include "httpserver/details/body.hpp"      // private hierarchy
@@ -53,11 +53,13 @@ static_assert(std::is_same_v<std::underlying_type_t<httpserver::body_kind>,
 static_assert(static_cast<int>(httpserver::body_kind::empty) == 0,
               "body_kind::empty must be the zero-initialised value");
 // Reference each enumerator at compile time so a missing one breaks the build.
-static_assert(static_cast<int>(httpserver::body_kind::string) >= 0);
-static_assert(static_cast<int>(httpserver::body_kind::file) >= 0);
-static_assert(static_cast<int>(httpserver::body_kind::iovec) >= 0);
-static_assert(static_cast<int>(httpserver::body_kind::pipe) >= 0);
-static_assert(static_cast<int>(httpserver::body_kind::deferred) >= 0);
+// Comparing against `empty` (=0) avoids -Wtype-limits on uint8_t-backed enums
+// while still touching every name.
+static_assert(httpserver::body_kind::string   != httpserver::body_kind::empty);
+static_assert(httpserver::body_kind::file     != httpserver::body_kind::empty);
+static_assert(httpserver::body_kind::iovec    != httpserver::body_kind::empty);
+static_assert(httpserver::body_kind::pipe     != httpserver::body_kind::empty);
+static_assert(httpserver::body_kind::deferred != httpserver::body_kind::empty);
 
 // -----------------------------------------------------------------------
 // Step 2 — abstract base contract.
@@ -248,7 +250,11 @@ LT_BEGIN_AUTO_TEST(body_suite, deferred_body_trampoline_invokes_stored_callable)
         [&](uint64_t pos, char* buf, std::size_t max) -> ssize_t {
             called = true;
             (void)pos;
-            if (max >= 2) { buf[0] = 'h'; buf[1] = 'i'; return 2; }
+            if (max >= 2) {
+                buf[0] = 'h';
+                buf[1] = 'i';
+                return 2;
+            }
             return 0;
         });
     char out[16] = {};
