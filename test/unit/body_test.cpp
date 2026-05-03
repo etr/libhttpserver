@@ -198,7 +198,14 @@ LT_END_AUTO_TEST(iovec_body_empty_entries_materializes)
 
 // -----------------------------------------------------------------------
 // pipe_body
+//
+// Gated on !_WIN32: MSYS2/mingw does not expose POSIX ::pipe() — Windows
+// pipes use _pipe() / CreatePipe(). The pipe_body class itself is portable
+// (it just owns and closes a fd) but the tests below need to *create* a
+// pipe to exercise it, which is platform-specific. The Linux/macOS CI
+// matrix exercises this code path.
 // -----------------------------------------------------------------------
+#ifndef _WIN32
 LT_BEGIN_AUTO_TEST(body_suite, pipe_body_kind_and_materialize)
     int fds[2];
     int rc = ::pipe(fds);
@@ -227,6 +234,7 @@ LT_BEGIN_AUTO_TEST(body_suite, pipe_body_destructor_closes_fd_when_not_materiali
     LT_CHECK_EQ(errno, EBADF);
     ::close(fds[1]);
 LT_END_AUTO_TEST(pipe_body_destructor_closes_fd_when_not_materialized)
+#endif  // !_WIN32
 
 // -----------------------------------------------------------------------
 // deferred_body
