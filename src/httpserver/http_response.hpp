@@ -40,9 +40,6 @@
 #include "httpserver/http_utils.hpp"
 #include "httpserver/iovec_entry.hpp"
 
-struct MHD_Connection;
-struct MHD_Response;
-
 namespace httpserver {
 
 // Forward-declared so http_response carries a `detail::body*` without
@@ -50,6 +47,13 @@ namespace httpserver {
 // into every consumer translation unit. The complete type is required at
 // destructor / move-op definition sites only; those live in the .cpp.
 namespace detail { class body; }
+
+// Forward declaration so http_response can grant `friend class webserver;`
+// without pulling webserver.hpp (and its libmicrohttpd surface) into this
+// public header. The friendship lets webserver dispatch reach the private
+// body_ pointer to call body_->materialize() without widening the public
+// API by one byte (TASK-013).
+class webserver;
 
 /**
  * Class representing an abstraction for an Http Response. It is used from classes using these apis to send information through http protocol.
@@ -61,7 +65,13 @@ namespace detail { class body; }
 // back to a heap pointer for outsized bodies. Move-only (DR-005);
 // copying a response would have to deep-copy the body, which is
 // semantically wrong for fd-owning bodies and unnecessary in practice.
-class http_response {
+//
+// `final` (PRD §3.5): the v1 polymorphic subclass hierarchy
+// (string_response, file_response, iovec_response, pipe_response,
+// deferred_response, empty_response, basic_auth_fail_response,
+// digest_auth_fail_response) was removed in TASK-013; the only way to
+// build a response is now through the static factories below.
+class http_response final {
  public:
      // Public type-trait shim used by the SBO unit test (TASK-009) to
      // assert the exemption from PRD-HDR-REQ-004 without poking private
@@ -75,11 +85,6 @@ class http_response {
      static constexpr std::size_t body_buf_size = 64;
 
      http_response() = default;
-
-     explicit http_response(int response_code, const std::string& content_type):
-         status_code_(response_code) {
-             headers_[http::http_utils::http_header_content_type] = content_type;
-     }
 
      // Move-only (DR-005, PRD-RSP-REQ-007). Copy ops are deleted because
      // a response's body may own non-copyable resources (file fds, pipe
@@ -95,11 +100,11 @@ class http_response {
      http_response(http_response&& other) noexcept;
      http_response& operator=(http_response&& other) noexcept;
 
-     // Destructor stays virtual for the v1 subclass hierarchy (TASK-013
-     // removes them; `final` lands then). Out-of-line because it calls
-     // body_->~body() and ::operator delete(body_), both of which need
-     // the complete type.
-     virtual ~http_response();
+     // De-virtualised in TASK-013: the class is `final`, so polymorphic
+     // destruction through a base pointer is impossible. Out-of-line
+     // because the body destruct + ::operator delete pairing needs the
+     // complete type detail::body.
+     ~http_response();
 
      // Body-kind discriminator (TASK-010 AC). Mirrors the kind reported
      // by the underlying detail::body, but answered without a virtual
@@ -155,8 +160,11 @@ class http_response {
                                              std::size_t size_hint = 0);
 
      // Construct an empty (no-payload) response. Defaults to 204
-     // No Content, matching v1 empty_response.
-     [[nodiscard]] static http_response empty();
+     // No Content, matching v1 empty_response. The optional `mhd_flags`
+     // argument forwards to MHD_set_response_options on the materialized
+     // MHD_Response — pass `MHD_RF_HEAD_ONLY_RESPONSE` to send a HEAD-only
+     // response with headers but no body, etc.
+     [[nodiscard]] static http_response empty(int mhd_flags = 0);
 
      // Construct a response that streams from a producer callback.
      // libmicrohttpd invokes `producer(pos, buf, max)` whenever it
@@ -248,22 +256,9 @@ class http_response {
 
      /**
       * Method used to get the response status code.
-      * Spelled `get_status` to match the v2 vocabulary (TASK-011);
-      * `get_response_code` survives as a compatibility alias while the
-      * v1 subclass hierarchy still inherits from http_response
-      * (TASK-013 removes both the subclasses and the alias together
-      * with the dispatch path in webserver.cpp:1336).
       * @return The response code
      **/
      [[nodiscard]] int get_status() const noexcept {
-         return status_code_;
-     }
-
-     // Compatibility shim retained while v1 subclasses still inherit
-     // (TASK-013 removes them). Internal dispatch (webserver.cpp:1336)
-     // reaches through a base pointer; that call site flips to
-     // get_status() when TASK-013 lands.
-     [[nodiscard]] int get_response_code() const noexcept {
          return status_code_;
      }
 
@@ -324,10 +319,6 @@ class http_response {
 
      void shoutCAST();
 
-     virtual MHD_Response* get_raw_response();
-     virtual void decorate_response(MHD_Response* response);
-     virtual int enqueue_response(MHD_Connection* connection, MHD_Response* response);
-
  private:
      int status_code_ = -1;
 
@@ -385,6 +376,14 @@ class http_response {
      // TASK-010) factory functions. The friend is restricted by name and
      // does not widen the public API.
      friend struct http_response_sbo_test_access;
+
+     // TASK-013: the dispatch path in webserver.cpp reaches the private
+     // body_ pointer to call body_->materialize() and read kind_/status_
+     // when constructing the wire response. A friend declaration is
+     // cheaper than exposing a public materialize_for_dispatch_() method
+     // on the value type and keeps the public API minimal. Forward-
+     // declared as `class webserver;` near the top of this header.
+     friend class webserver;
 };
 
 std::ostream &operator<<(std::ostream &os, const http_response &r);

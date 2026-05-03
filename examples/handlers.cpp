@@ -25,11 +25,11 @@
 class hello_world_resource : public httpserver::http_resource {
  public:
      std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request&) {
-         return std::shared_ptr<httpserver::http_response>(new httpserver::string_response("GET: Hello, World!"));
+         return std::shared_ptr<httpserver::http_response>(new httpserver::http_response(httpserver::http_response::string("GET: Hello, World!")));
      }
 
      std::shared_ptr<httpserver::http_response> render(const httpserver::http_request&) {
-         return std::shared_ptr<httpserver::http_response>(new httpserver::string_response("OTHER: Hello, World!"));
+         return std::shared_ptr<httpserver::http_response>(new httpserver::http_response(httpserver::http_response::string("OTHER: Hello, World!")));
      }
 };
 

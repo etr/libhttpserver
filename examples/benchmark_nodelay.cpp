@@ -48,7 +48,7 @@ int main(int argc, char** argv) {
         .tcp_nodelay()
         .max_threads(atoi(argv[2]));
 
-    std::shared_ptr<httpserver::http_response> hello = std::shared_ptr<httpserver::http_response>(new httpserver::string_response(BODY, 200));
+    std::shared_ptr<httpserver::http_response> hello = std::shared_ptr<httpserver::http_response>(new httpserver::http_response(httpserver::http_response::string(BODY)));
     hello->with_header("Server", "libhttpserver");
 
     hello_world_resource hwr(hello);

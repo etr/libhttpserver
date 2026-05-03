@@ -36,12 +36,11 @@ using std::vector;
 using httpserver::http_request;
 using httpserver::http_resource;
 using httpserver::http_response;
-using httpserver::string_response;
 
 class simple_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request&) {
-         return std::make_shared<string_response>("OK");
+         return std::make_shared<http_response>(http_response::string("OK"));
      }
 };
 
@@ -122,7 +121,7 @@ LT_END_AUTO_TEST(set_allowing_disable)
 class render_only_resource : public http_resource {
  public:
     shared_ptr<http_response> render(const http_request&) {
-        return std::make_shared<string_response>("render called", 200);
+        return std::make_shared<http_response>(http_response::string("render called"));
     }
 };
 

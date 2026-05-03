@@ -36,7 +36,6 @@ using std::string;
 using httpserver::http_resource;
 using httpserver::http_request;
 using httpserver::http_response;
-using httpserver::string_response;
 using httpserver::webserver;
 using httpserver::create_webserver;
 
@@ -58,7 +57,7 @@ size_t writefunc(void *ptr, size_t size, size_t nmemb, string *s) {
 class simple_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request&) {
-         return std::make_shared<string_response>("OK", 200, "text/plain");
+         return std::make_shared<http_response>(http_response::string("OK"));
      }
 };
 

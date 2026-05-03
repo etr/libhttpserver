@@ -20,21 +20,22 @@
 
 #include <memory>
 
+#include <microhttpd.h>
 #include <httpserver.hpp>
 
 class no_content_resource : public httpserver::http_resource {
  public:
      std::shared_ptr<httpserver::http_response> render_DELETE(const httpserver::http_request&) {
          // Return a 204 No Content response with no body
-         return std::make_shared<httpserver::empty_response>(
-                 httpserver::http::http_utils::http_no_content);
+         return std::make_shared<httpserver::http_response>(
+             httpserver::http_response::empty());
      }
 
      std::shared_ptr<httpserver::http_response> render_HEAD(const httpserver::http_request&) {
          // Return a HEAD-only response with headers but no body
-         auto response = std::make_shared<httpserver::empty_response>(
-                 httpserver::http::http_utils::http_ok,
-                 httpserver::empty_response::HEAD_ONLY);
+         auto response = std::make_shared<httpserver::http_response>(
+             httpserver::http_response::empty(MHD_RF_HEAD_ONLY_RESPONSE)
+                 .with_status(httpserver::http::http_utils::http_ok));
          response->with_header("X-Total-Count", "42");
          return response;
      }

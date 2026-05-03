@@ -27,18 +27,9 @@
 
 #define _HTTPSERVER_HPP_INSIDE_
 
-#ifdef HAVE_BAUTH
-#include "httpserver/basic_auth_fail_response.hpp"
-#endif  // HAVE_BAUTH
 #include "httpserver/body_kind.hpp"
 #include "httpserver/constants.hpp"
-#include "httpserver/deferred_response.hpp"
-#ifdef HAVE_DAUTH
-#include "httpserver/digest_auth_fail_response.hpp"
-#endif  // HAVE_DAUTH
-#include "httpserver/empty_response.hpp"
 #include "httpserver/feature_unavailable.hpp"
-#include "httpserver/file_response.hpp"
 #include "httpserver/http_arg_value.hpp"
 #include "httpserver/http_method.hpp"
 #include "httpserver/http_request.hpp"
@@ -46,10 +37,7 @@
 #include "httpserver/http_response.hpp"
 #include "httpserver/http_utils.hpp"
 #include "httpserver/iovec_entry.hpp"
-#include "httpserver/iovec_response.hpp"
 #include "httpserver/file_info.hpp"
-#include "httpserver/pipe_response.hpp"
-#include "httpserver/string_response.hpp"
 #include "httpserver/webserver.hpp"
 #ifdef HAVE_WEBSOCKET
 #include "httpserver/websocket_handler.hpp"

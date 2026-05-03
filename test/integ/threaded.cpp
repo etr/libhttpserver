@@ -35,7 +35,6 @@ using std::shared_ptr;
 using httpserver::http_resource;
 using httpserver::http_request;
 using httpserver::http_response;
-using httpserver::string_response;
 using httpserver::webserver;
 using httpserver::create_webserver;
 
@@ -52,7 +51,7 @@ using httpserver::create_webserver;
 class ok_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request&) {
-         return std::make_shared<string_response>("OK", 200, "text/plain");
+         return std::make_shared<http_response>(http_response::string("OK"));
      }
 };
 

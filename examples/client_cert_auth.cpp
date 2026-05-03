@@ -69,9 +69,7 @@ class secure_resource : public httpserver::http_resource {
     std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request& req) {
         // Check if client provided a certificate
         if (!req.has_client_certificate()) {
-            return std::make_shared<httpserver::string_response>(
-                "Client certificate required",
-                httpserver::http::http_utils::http_unauthorized, "text/plain");
+            return std::make_shared<httpserver::http_response>(httpserver::http_response::string("Client certificate required").with_status(httpserver::http::http_utils::http_unauthorized));
         }
 
         // Get certificate information
@@ -83,17 +81,13 @@ class secure_resource : public httpserver::http_resource {
 
         // Check if certificate is verified by our CA
         if (!verified) {
-            return std::make_shared<httpserver::string_response>(
-                "Certificate not verified by trusted CA",
-                httpserver::http::http_utils::http_forbidden, "text/plain");
+            return std::make_shared<httpserver::http_response>(httpserver::http_response::string("Certificate not verified by trusted CA").with_status(httpserver::http::http_utils::http_forbidden));
         }
 
         // Optional: Check fingerprint against allowlist
         if (!allowed_fingerprints.empty() &&
             allowed_fingerprints.find(fingerprint) == allowed_fingerprints.end()) {
-            return std::make_shared<httpserver::string_response>(
-                "Certificate not in allowlist",
-                httpserver::http::http_utils::http_forbidden, "text/plain");
+            return std::make_shared<httpserver::http_response>(httpserver::http_response::string("Certificate not in allowlist").with_status(httpserver::http::http_utils::http_forbidden));
         }
 
         // Check certificate validity times
@@ -102,15 +96,11 @@ class secure_resource : public httpserver::http_resource {
         time_t not_after = req.get_client_cert_not_after();
 
         if (now < not_before) {
-            return std::make_shared<httpserver::string_response>(
-                "Certificate not yet valid",
-                httpserver::http::http_utils::http_forbidden, "text/plain");
+            return std::make_shared<httpserver::http_response>(httpserver::http_response::string("Certificate not yet valid").with_status(httpserver::http::http_utils::http_forbidden));
         }
 
         if (now > not_after) {
-            return std::make_shared<httpserver::string_response>(
-                "Certificate has expired",
-                httpserver::http::http_utils::http_forbidden, "text/plain");
+            return std::make_shared<httpserver::http_response>(httpserver::http_response::string("Certificate has expired").with_status(httpserver::http::http_utils::http_forbidden));
         }
 
         // Build response with certificate info
@@ -121,7 +111,7 @@ class secure_resource : public httpserver::http_resource {
         response += "  Fingerprint (SHA-256): " + fingerprint + "\n";
         response += "  Verified: " + std::string(verified ? "Yes" : "No") + "\n";
 
-        return std::make_shared<httpserver::string_response>(response, 200, "text/plain");
+        return std::make_shared<httpserver::http_response>(httpserver::http_response::string(response));
     }
 };
 
@@ -140,7 +130,7 @@ class info_resource : public httpserver::http_resource {
             response += "Use --cert and --key with curl to provide one.\n";
         }
 
-        return std::make_shared<httpserver::string_response>(response, 200, "text/plain");
+        return std::make_shared<httpserver::http_response>(httpserver::http_response::string(response));
     }
 };
 

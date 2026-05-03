@@ -40,7 +40,7 @@ class pipe_resource : public httpserver::http_resource {
 #else
          if (pipe(pipefd) == -1) {
 #endif
-             return std::make_shared<httpserver::string_response>("pipe failed", 500);
+             return std::make_shared<httpserver::http_response>(httpserver::http_response::string("pipe failed").with_status(500));
          }
 
          // Spawn a thread to write data into the pipe
@@ -55,7 +55,9 @@ class pipe_resource : public httpserver::http_resource {
          writer.detach();
 
          // Return the read end of the pipe as the response
-         return std::make_shared<httpserver::pipe_response>(pipefd[0], 200, "text/plain");
+         return std::make_shared<httpserver::http_response>(
+             httpserver::http_response::pipe(pipefd[0])
+                 .with_header("Content-Type", "text/plain"));
      }
 };  // NOLINT(readability/braces)
 
