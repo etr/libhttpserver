@@ -26,7 +26,7 @@ LDADD += -lcurl
 
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/ -DHTTPSERVER_COMPILATION
 METASOURCES = AUTO
-check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec iovec_entry iovec_response http_method
+check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec iovec_entry iovec_response http_method constants
 
 MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
 
@@ -56,6 +56,7 @@ header_hygiene_iovec_SOURCES = unit/header_hygiene_iovec_test.cpp
 iovec_entry_SOURCES = unit/iovec_entry_test.cpp
 iovec_response_SOURCES = unit/iovec_response_test.cpp
 http_method_SOURCES = unit/http_method_test.cpp
+constants_SOURCES = unit/constants_test.cpp
 
 noinst_HEADERS = littletest.hpp
 AM_CXXFLAGS += -Wall -fPIC -Wno-overloaded-virtual

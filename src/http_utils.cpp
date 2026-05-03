@@ -18,6 +18,7 @@
      USA
 */
 
+#include "httpserver/constants.hpp"
 #include "httpserver/http_utils.hpp"
 
 #if defined(_WIN32) && !defined(__CYGWIN__)
@@ -373,12 +374,12 @@ ip_representation::ip_representation(const struct sockaddr* ip) {
             pieces[i] = (reinterpret_cast<const u_char*>(sin_addr6_pt))[i];
         }
     }
-    mask = DEFAULT_MASK_VALUE;
+    mask = constants::DEFAULT_MASK_VALUE;
 }
 
 ip_representation::ip_representation(const std::string& ip) {
     std::vector<std::string> parts;
-    mask = DEFAULT_MASK_VALUE;
+    mask = constants::DEFAULT_MASK_VALUE;
     std::fill(pieces, pieces + 16, 0);
     if (ip.find(':') != std::string::npos) {  // IPV6
         ip_version = http_utils::IPV6;

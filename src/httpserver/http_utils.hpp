@@ -56,9 +56,8 @@
 #include <string>
 #include <vector>
 
+#include "httpserver/constants.hpp"
 #include "httpserver/http_arg_value.hpp"
-
-#define DEFAULT_MASK_VALUE 0xFFFF
 
 
 namespace httpserver {
@@ -370,7 +369,7 @@ struct ip_representation {
 
     explicit ip_representation(http_utils::IP_version_T ip_version) :
         ip_version(ip_version) {
-            mask = DEFAULT_MASK_VALUE;
+            mask = constants::DEFAULT_MASK_VALUE;
             std::fill(pieces, pieces + 16, 0);
     }
 

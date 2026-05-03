@@ -25,11 +25,6 @@
 #ifndef SRC_HTTPSERVER_WEBSERVER_HPP_
 #define SRC_HTTPSERVER_WEBSERVER_HPP_
 
-#define NOT_FOUND_ERROR "Not Found"
-#define METHOD_ERROR "Method not Allowed"
-#define NOT_METHOD_ERROR "Method not Acceptable"
-#define GENERIC_ERROR "Internal Error"
-
 #include <microhttpd.h>
 #include <pthread.h>
 #include <stdarg.h>
@@ -54,6 +49,7 @@
 #include <gnutls/gnutls.h>
 #endif  // HAVE_GNUTLS
 
+#include "httpserver/constants.hpp"
 #include "httpserver/http_utils.hpp"
 #include "httpserver/create_webserver.hpp"
 #include "httpserver/details/http_endpoint.hpp"
