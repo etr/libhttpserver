@@ -26,7 +26,7 @@ LDADD += -lcurl
 
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/ -DHTTPSERVER_COMPILATION
 METASOURCES = AUTO
-check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec iovec_entry iovec_response http_method constants
+check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry iovec_response http_method constants
 
 MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
 
@@ -53,6 +53,18 @@ uri_log_SOURCES = unit/uri_log_test.cpp
 uri_log_LDADD = $(LDADD) -lmicrohttpd
 feature_unavailable_SOURCES = unit/feature_unavailable_test.cpp
 header_hygiene_iovec_SOURCES = unit/header_hygiene_iovec_test.cpp
+# header_hygiene: TASK-007 sentinel TU. Mimics a true consumer:
+# - per-target CPPFLAGS overrides AM_CPPFLAGS so HTTPSERVER_COMPILATION
+#   and the build-tree -I src/httpserver/ entries are NOT in scope (a
+#   real consumer wouldn't have either). Only -I$(top_srcdir)/src is
+#   passed so <httpserver.hpp> resolves.
+# - LDADD is overridden to empty: this is a pure-compile assertion, the
+#   `int main(){}` body has no library dependencies.
+# Currently in XFAIL_TESTS (see below); flips to PASS when M5 lands and
+# the umbrella is free of backend-header leakage.
+header_hygiene_SOURCES = unit/header_hygiene_test.cpp
+header_hygiene_CPPFLAGS = -I$(top_srcdir)/src $(CPPFLAGS)
+header_hygiene_LDADD =
 iovec_entry_SOURCES = unit/iovec_entry_test.cpp
 iovec_response_SOURCES = unit/iovec_response_test.cpp
 http_method_SOURCES = unit/http_method_test.cpp
@@ -68,6 +80,16 @@ AM_LDFLAGS += -O0 --coverage -lgcov --no-inline
 endif
 
 TESTS = $(check_PROGRAMS)
+
+# header_hygiene is expected to fail until M5 (TASK-014/015/019/020) lands and
+# <httpserver.hpp> stops transitively pulling in <microhttpd.h>, <pthread.h>,
+# <gnutls/gnutls.h>, <sys/socket.h>, and <sys/uio.h>. Automake's XFAIL_TESTS
+# mechanism marks the failure as "expected" so the suite stays green, and --
+# importantly -- when the umbrella becomes clean and the test starts passing,
+# Automake reports XPASS and treats it as a hard error. That XPASS is the
+# explicit signal for TASK-020 to remove this line. Do NOT silently delete the
+# XFAIL until the umbrella is clean.
+XFAIL_TESTS = header_hygiene
 
 @VALGRIND_CHECK_RULES@
 VALGRIND_SUPPRESSIONS_FILES = libhttpserver.supp
