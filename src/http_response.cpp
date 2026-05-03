@@ -192,53 +192,113 @@ void http_response::shoutCAST() {
 // -----------------------------------------------------------------------
 // Fluent with_* setters (TASK-012, PRD-RSP-REQ-004).
 //
-// Each setter has two ref-qualified overloads. The bodies are a one-line
-// mutation (insert_or_assign for the maps, plain assignment for status),
-// followed by `return *this` (& overload) or `return std::move(*this)`
-// (&& overload). insert_or_assign — rather than `m[k] = v` — is used so
-// the by-value `std::string` parameters can be moved into the map slot
-// directly, avoiding an extra string copy at the insertion site when
-// the caller hands the setter an rvalue.
+// Each setter has two ref-qualified overloads that delegate to a private
+// do_set_*() helper containing the validation + mutation logic. The
+// overloads differ only in their return statement: `& overload` returns
+// *this by lvalue reference; `&& overload` returns std::move(*this).
+// Centralising the mutation in a single helper means validation and
+// insert_or_assign are in exactly one place per setter, not duplicated
+// across every overload pair.
+//
+// Validation (security, TASK-012 review-pass):
+//   * with_header / with_footer: reject key or value containing CR,
+//     LF, or NUL — these characters can split an HTTP response and
+//     inject additional headers (CWE-113).
+//   * with_cookie: same CRLF/NUL rejection on name and value.
+//   * with_status: code must be in [100, 599] per RFC 9110 §15.
+//
+// insert_or_assign — rather than `m[k] = v` — is used so the by-value
+// `std::string` parameters can be moved into the map slot directly.
 // -----------------------------------------------------------------------
+
+// Shared forbidden-character set for header/footer/cookie field names
+// and values. The string_view spans all three bytes including the
+// embedded NUL.
+namespace {
+constexpr std::string_view kForbiddenFieldChars("\r\n\0", 3);
+
+void validate_header_field(std::string_view context,
+                           std::string_view key,
+                           std::string_view value) {
+    if (key.find_first_of(kForbiddenFieldChars) != std::string_view::npos) {
+        throw std::invalid_argument(
+            std::string(context) +
+            ": key contains forbidden control character (CR, LF, or NUL)");
+    }
+    if (value.find_first_of(kForbiddenFieldChars) != std::string_view::npos) {
+        throw std::invalid_argument(
+            std::string(context) +
+            ": value contains forbidden control character (CR, LF, or NUL)");
+    }
+}
+}  // namespace
+
+void http_response::do_set_header(std::string key, std::string value) {
+    validate_header_field("with_header", key, value);
+    headers_.insert_or_assign(std::move(key), std::move(value));
+}
+
+void http_response::do_set_footer(std::string key, std::string value) {
+    validate_header_field("with_footer", key, value);
+    footers_.insert_or_assign(std::move(key), std::move(value));
+}
+
+void http_response::do_set_cookie(std::string key, std::string value) {
+    validate_header_field("with_cookie", key, value);
+    cookies_.insert_or_assign(std::move(key), std::move(value));
+}
+
+void http_response::do_set_status(int code) {
+    if (code < 100 || code > 599) {
+        throw std::invalid_argument(
+            "with_status: HTTP status code out of range [100, 599]");
+    }
+    status_code_ = code;
+}
+
 http_response& http_response::with_header(std::string key,
                                           std::string value) & {
-    headers_.insert_or_assign(std::move(key), std::move(value));
+    do_set_header(std::move(key), std::move(value));
     return *this;
 }
+
 http_response&& http_response::with_header(std::string key,
                                            std::string value) && {
-    headers_.insert_or_assign(std::move(key), std::move(value));
+    do_set_header(std::move(key), std::move(value));
     return std::move(*this);
 }
 
 http_response& http_response::with_footer(std::string key,
                                           std::string value) & {
-    footers_.insert_or_assign(std::move(key), std::move(value));
+    do_set_footer(std::move(key), std::move(value));
     return *this;
 }
+
 http_response&& http_response::with_footer(std::string key,
                                            std::string value) && {
-    footers_.insert_or_assign(std::move(key), std::move(value));
+    do_set_footer(std::move(key), std::move(value));
     return std::move(*this);
 }
 
 http_response& http_response::with_cookie(std::string key,
                                           std::string value) & {
-    cookies_.insert_or_assign(std::move(key), std::move(value));
+    do_set_cookie(std::move(key), std::move(value));
     return *this;
 }
+
 http_response&& http_response::with_cookie(std::string key,
                                            std::string value) && {
-    cookies_.insert_or_assign(std::move(key), std::move(value));
+    do_set_cookie(std::move(key), std::move(value));
     return std::move(*this);
 }
 
 http_response& http_response::with_status(int code) & {
-    status_code_ = code;
+    do_set_status(code);
     return *this;
 }
+
 http_response&& http_response::with_status(int code) && {
-    status_code_ = code;
+    do_set_status(code);
     return std::move(*this);
 }
 

@@ -353,6 +353,16 @@ class http_response {
      void destroy_body() noexcept;
      void adopt_body_from(http_response& o) noexcept;
 
+     // Shared mutation helpers for the fluent setters (TASK-012
+     // review-pass). Each helper validates its inputs, then performs the
+     // map mutation or scalar assignment.  Centralising the logic here
+     // means the & and && overloads only differ in their return
+     // statement; the mutation + validation is in exactly one place.
+     void do_set_header(std::string key, std::string value);
+     void do_set_footer(std::string key, std::string value);
+     void do_set_cookie(std::string key, std::string value);
+     void do_set_status(int code);
+
      // Placement-new a concrete detail::body subclass into the SBO
      // buffer (or, if T does not fit, onto the heap via the matched
      // ::operator new(sizeof(T))/::operator delete pairing the

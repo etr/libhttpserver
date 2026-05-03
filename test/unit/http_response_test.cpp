@@ -601,6 +601,195 @@ LT_BEGIN_AUTO_TEST(http_response_suite, with_header_moves_string_args)
                 std::string_view(std::string(64, 'v')));
 LT_END_AUTO_TEST(with_header_moves_string_args)
 
+// -----------------------------------------------------------------------
+// TASK-012 review-pass: security validation on fluent setters.
+//
+// with_header, with_footer, with_cookie must reject keys/values that
+// contain CR (\r), LF (\n), or NUL (\0) — these characters allow
+// HTTP response-header injection (CWE-113). with_status must reject
+// codes outside [100, 599] per RFC 9110 §15.
+// -----------------------------------------------------------------------
+
+LT_BEGIN_AUTO_TEST(http_response_suite, with_header_rejects_crlf_in_value)
+    http_response resp = http_response::string("body");
+    bool threw = false;
+    try {
+        resp.with_header("X-Foo", "bar\r\nSet-Cookie: evil=1");
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK_EQ(threw, true);
+LT_END_AUTO_TEST(with_header_rejects_crlf_in_value)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, with_header_rejects_lf_in_value)
+    http_response resp = http_response::string("body");
+    bool threw = false;
+    try {
+        resp.with_header("X-Foo", "bar\ninjected");
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK_EQ(threw, true);
+LT_END_AUTO_TEST(with_header_rejects_lf_in_value)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, with_header_rejects_nul_in_value)
+    http_response resp = http_response::string("body");
+    bool threw = false;
+    try {
+        resp.with_header("X-Foo", std::string("bar\0baz", 7));
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK_EQ(threw, true);
+LT_END_AUTO_TEST(with_header_rejects_nul_in_value)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, with_header_rejects_crlf_in_key)
+    http_response resp = http_response::string("body");
+    bool threw = false;
+    try {
+        resp.with_header("X-Foo\r\nEvil", "value");
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK_EQ(threw, true);
+LT_END_AUTO_TEST(with_header_rejects_crlf_in_key)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, with_footer_rejects_crlf_in_value)
+    http_response resp = http_response::string("body");
+    bool threw = false;
+    try {
+        resp.with_footer("X-Footer", "val\r\ninjected");
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK_EQ(threw, true);
+LT_END_AUTO_TEST(with_footer_rejects_crlf_in_value)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, with_footer_rejects_lf_in_key)
+    http_response resp = http_response::string("body");
+    bool threw = false;
+    try {
+        resp.with_footer("X-Footer\nEvil", "value");
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK_EQ(threw, true);
+LT_END_AUTO_TEST(with_footer_rejects_lf_in_key)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, with_cookie_rejects_crlf_in_value)
+    http_response resp = http_response::string("body");
+    bool threw = false;
+    try {
+        resp.with_cookie("sid", "abc\r\nSet-Cookie: evil=1");
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK_EQ(threw, true);
+LT_END_AUTO_TEST(with_cookie_rejects_crlf_in_value)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, with_cookie_rejects_lf_in_name)
+    http_response resp = http_response::string("body");
+    bool threw = false;
+    try {
+        resp.with_cookie("sid\nevil", "value");
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK_EQ(threw, true);
+LT_END_AUTO_TEST(with_cookie_rejects_lf_in_name)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, with_cookie_rejects_nul_in_value)
+    http_response resp = http_response::string("body");
+    bool threw = false;
+    try {
+        resp.with_cookie("sid", std::string("abc\0def", 7));
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK_EQ(threw, true);
+LT_END_AUTO_TEST(with_cookie_rejects_nul_in_value)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, with_status_rejects_below_100)
+    http_response resp = http_response::string("body");
+    bool threw = false;
+    try {
+        resp.with_status(99);
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK_EQ(threw, true);
+LT_END_AUTO_TEST(with_status_rejects_below_100)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, with_status_rejects_above_599)
+    http_response resp = http_response::string("body");
+    bool threw = false;
+    try {
+        resp.with_status(600);
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK_EQ(threw, true);
+LT_END_AUTO_TEST(with_status_rejects_above_599)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, with_status_rejects_negative)
+    http_response resp = http_response::string("body");
+    bool threw = false;
+    try {
+        resp.with_status(-1);
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK_EQ(threw, true);
+LT_END_AUTO_TEST(with_status_rejects_negative)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, with_status_rejects_zero)
+    http_response resp = http_response::string("body");
+    bool threw = false;
+    try {
+        resp.with_status(0);
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK_EQ(threw, true);
+LT_END_AUTO_TEST(with_status_rejects_zero)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, with_status_accepts_boundary_100)
+    http_response resp = http_response::string("body");
+    bool threw = false;
+    try {
+        resp.with_status(100);
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK_EQ(threw, false);
+    LT_CHECK_EQ(resp.get_status(), 100);
+LT_END_AUTO_TEST(with_status_accepts_boundary_100)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, with_status_accepts_boundary_599)
+    http_response resp = http_response::string("body");
+    bool threw = false;
+    try {
+        resp.with_status(599);
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK_EQ(threw, false);
+    LT_CHECK_EQ(resp.get_status(), 599);
+LT_END_AUTO_TEST(with_status_accepts_boundary_599)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, with_header_accepts_valid_value)
+    http_response resp = http_response::string("body");
+    bool threw = false;
+    try {
+        resp.with_header("X-Foo", "valid value with spaces and colons: ok");
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK_EQ(threw, false);
+    LT_CHECK_EQ(resp.get_header("X-Foo"),
+                std::string_view("valid value with spaces and colons: ok"));
+LT_END_AUTO_TEST(with_header_accepts_valid_value)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()
