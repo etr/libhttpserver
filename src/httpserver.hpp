@@ -30,6 +30,7 @@
 #ifdef HAVE_BAUTH
 #include "httpserver/basic_auth_fail_response.hpp"
 #endif  // HAVE_BAUTH
+#include "httpserver/body_kind.hpp"
 #include "httpserver/constants.hpp"
 #include "httpserver/deferred_response.hpp"
 #ifdef HAVE_DAUTH

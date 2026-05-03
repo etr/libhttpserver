@@ -26,7 +26,7 @@ LDADD += -lcurl
 
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/ -DHTTPSERVER_COMPILATION
 METASOURCES = AUTO
-check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry iovec_response http_method constants
+check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry iovec_response http_method constants body
 
 MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
 
@@ -69,6 +69,12 @@ iovec_entry_SOURCES = unit/iovec_entry_test.cpp
 iovec_response_SOURCES = unit/iovec_response_test.cpp
 http_method_SOURCES = unit/http_method_test.cpp
 constants_SOURCES = unit/constants_test.cpp
+# body: TASK-008 unit test for the internal detail::body hierarchy. It
+# constructs/destroys MHD_Response objects directly via the libmicrohttpd
+# inspection APIs (no daemon), so it needs an explicit -lmicrohttpd link
+# the same way uri_log does.
+body_SOURCES = unit/body_test.cpp
+body_LDADD = $(LDADD) -lmicrohttpd
 
 noinst_HEADERS = littletest.hpp
 AM_CXXFLAGS += -Wall -fPIC -Wno-overloaded-virtual
