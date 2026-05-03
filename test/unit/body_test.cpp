@@ -152,6 +152,18 @@ LT_BEGIN_AUTO_TEST(body_suite, file_body_kind_and_materialize_existing_file)
     MHD_destroy_response(r);
 LT_END_AUTO_TEST(file_body_kind_and_materialize_existing_file)
 
+// security-reviewer-iter1-1 + performance-reviewer-iter1-2: file is opened and
+// stat'd at construction so size() is accurate before materialize() is called,
+// and materialize() uses fstat's st_size rather than lseek (no fd-position
+// side-effect, no TOCTOU window on the size).
+LT_BEGIN_AUTO_TEST(body_suite, file_body_size_known_before_materialize)
+    // test_content is 21 bytes ("test content of file\n").
+    httpserver::detail::file_body b("test_content");
+    // size() must be non-zero and correct at construction time — the file is
+    // opened and fstat'd in the constructor, not in materialize().
+    LT_CHECK_EQ(b.size(), static_cast<std::size_t>(21));
+LT_END_AUTO_TEST(file_body_size_known_before_materialize)
+
 LT_BEGIN_AUTO_TEST(body_suite, file_body_returns_null_on_missing_file)
     httpserver::detail::file_body b("/no/such/path/should/exist");
     // Mirrors v1 file_response::get_raw_response semantics.
@@ -247,6 +259,17 @@ LT_BEGIN_AUTO_TEST(body_suite, deferred_body_trampoline_invokes_stored_callable)
     LT_CHECK_EQ(out[0], 'h');
     LT_CHECK_EQ(out[1], 'i');
 LT_END_AUTO_TEST(deferred_body_trampoline_invokes_stored_callable)
+
+// security-reviewer-iter1-3: trampoline must not invoke an empty/null
+// std::function — it should return MHD_CONTENT_READER_END_WITH_ERROR instead
+// of throwing std::bad_function_call (which would terminate in MHD's IO thread).
+LT_BEGIN_AUTO_TEST(body_suite, deferred_body_trampoline_null_cls_returns_error)
+    // cls == nullptr: trampoline must guard against null self pointer.
+    char out[16] = {};
+    ssize_t n = httpserver::detail::deferred_body::trampoline(
+        nullptr, 0, out, sizeof(out));
+    LT_CHECK_EQ(n, static_cast<ssize_t>(MHD_CONTENT_READER_END_WITH_ERROR));
+LT_END_AUTO_TEST(deferred_body_trampoline_null_cls_returns_error)
 
 LT_BEGIN_AUTO_TEST(body_suite, deferred_body_destructor_releases_callable)
     auto sentinel = std::make_shared<int>(42);

@@ -36,6 +36,7 @@
 #define SRC_HTTPSERVER_DETAILS_BODY_HPP_
 
 #include <sys/types.h>      // ssize_t
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -116,24 +117,41 @@ class string_body final : public body {
 };
 
 // ---------------------------------------------------------------------------
-// file_body — opens path on materialize(); returns nullptr if open or
-// fstat fails (matches v1 file_response::get_raw_response exactly).
-// size_cached_ is reserved for future use; size() currently returns it
-// untouched (set on materialize) so the value reflects the on-disk size
-// only after a successful materialise. This matches v1, which never
-// exposed a size accessor at all.
+// file_body — opens the file and runs fstat at construction so that:
+//   * size() is accurate immediately (no need to call materialize() first)
+//   * materialize() avoids the lseek TOCTOU race (security-reviewer-iter1-1):
+//     st_size from fstat is used directly, the fd position is never changed
+//     before being handed to MHD_create_response_from_fd.
+//   * repeated open/fstat syscalls on re-materialize are eliminated
+//     (performance-reviewer-iter1-2).
+//
+// Caller path contract (security-reviewer-iter1-2 / CWE-23):
+//   path_ is assumed to be a validated, canonicalized path. O_NOFOLLOW
+//   blocks the final component being a symlink, but intermediate components
+//   are still followed. Callers supplying user-derived paths MUST canonicalize
+//   them (e.g. realpath()) before constructing file_body.
+//
+// Ownership / lifecycle:
+//   * If open or fstat fails at construction, fd_ == -1 and size_ == 0;
+//     materialize() will return nullptr.
+//   * If materialize() succeeds, MHD owns the fd (MHD_destroy_response closes
+//     it). materialized_ is set to suppress ~file_body's close.
+//   * If materialize() is never called, ~file_body closes fd_.
 // ---------------------------------------------------------------------------
 class file_body final : public body {
  public:
-    explicit file_body(std::string path) noexcept : path_(std::move(path)) {}
+    explicit file_body(std::string path) noexcept;
+    ~file_body() override;
 
     body_kind kind() const noexcept override { return body_kind::file; }
-    std::size_t size() const noexcept override { return size_cached_; }
+    std::size_t size() const noexcept override { return size_; }
     MHD_Response* materialize() override;
 
  private:
     std::string path_;
-    std::size_t size_cached_ = 0;
+    std::size_t size_ = 0;
+    int fd_ = -1;
+    bool materialized_ = false;
 };
 
 // ---------------------------------------------------------------------------
@@ -145,6 +163,29 @@ class file_body final : public body {
 // total_size_ is computed once at construction so size() is O(1); MHD's
 // MHD_IoVec doesn't expose total length and the architecture-spec
 // size() contract is "logical body size in bytes".
+//
+// LIFETIME CONTRACT (security-reviewer-iter1-2 / CWE-416):
+//   iovec_body owns the entries_ vector (the container), but the iov_base
+//   pointers inside each iovec_entry are BORROWED — they point into
+//   caller-owned buffers. After materialize() returns, libmicrohttpd holds
+//   those borrowed pointers until MHD_destroy_response() is called.
+//
+//   CALLERS MUST guarantee that all iov_base buffers (and the iovec_body
+//   itself) outlive the MHD_Response* returned by materialize(). The
+//   TASK-009/010 factory path enforces this by tying the iovec_body's
+//   lifetime to http_response, and http_response must outlive the MHD
+//   connection. Do NOT free the underlying buffer data before the
+//   MHD_Response is destroyed.
+//
+// ALLOCATION NOTE (performance-reviewer-iter1-1):
+//   std::vector unconditionally heap-allocates its backing store, so every
+//   iovec_body construction performs one heap allocation. The SBO
+//   static_assert only verifies that the vector control block (3 words)
+//   fits in the 64-byte inline slot; the iovec_entry array itself lives on
+//   the heap. This is intentional: iovec payloads are by definition
+//   scatter lists of borrowed pointers, so a further small-vector
+//   optimisation would only save one allocation while adding complexity.
+//   Per DR-005 the heap fallback is accepted for iovec_body.
 // ---------------------------------------------------------------------------
 class iovec_body final : public body {
  public:
@@ -200,6 +241,24 @@ class pipe_body final : public body {
 // The trampoline is the C-callable wrapper MHD invokes; it dispatches
 // to producer_. Exposed publicly (static method) so unit tests can
 // drive it without a daemon.
+//
+// NULL GUARD (security-reviewer-iter1-3 / CWE-476):
+//   trampoline() checks for null cls and empty producer_ before invoking
+//   the callable. MHD's callback mechanism does not catch C++ exceptions;
+//   a null-invoke would call std::terminate() in MHD's IO thread.
+//   If cls is null or producer_ is empty, trampoline returns
+//   MHD_CONTENT_READER_END_WITH_ERROR to signal an error to MHD.
+//
+// ALLOCATION NOTE (performance-reviewer-iter1-3):
+//   std::function internally uses small-buffer optimisation (SBO), but
+//   the SBO threshold is implementation-defined (typically 16-32 bytes on
+//   libstdc++ / libc++). Lambdas that capture more than one pointer (e.g.
+//   a user object reference plus a shared_ptr sentinel) will silently
+//   heap-allocate inside std::function. The static_assert on
+//   sizeof(deferred_body) only verifies that std::function's control
+//   block fits in the 64-byte SBO buffer, NOT that the callable itself
+//   is stored inline. Callers should minimise captures to stay within
+//   std::function's internal SSO threshold if zero-allocation is required.
 // ---------------------------------------------------------------------------
 class deferred_body final : public body {
  public:
@@ -207,7 +266,14 @@ class deferred_body final : public body {
         std::function<ssize_t(std::uint64_t, char*, std::size_t)>;
 
     explicit deferred_body(producer_type producer) noexcept
-        : producer_(std::move(producer)) {}
+        : producer_(std::move(producer)) {
+        // Precondition: caller must not pass a null/empty callable.
+        // An empty producer_ would cause trampoline() to return
+        // MHD_CONTENT_READER_END_WITH_ERROR on every MHD read callback,
+        // which is unlikely to be the caller's intent.
+        assert(producer_ != nullptr &&
+               "deferred_body: producer must not be empty");
+    }
 
     body_kind kind() const noexcept override { return body_kind::deferred; }
     std::size_t size() const noexcept override { return 0; }  // size unknown

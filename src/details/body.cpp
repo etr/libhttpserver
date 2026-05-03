@@ -102,35 +102,54 @@ MHD_Response* string_body::materialize() {
 }
 
 // ---------------------------------------------------------------------------
-// file_body — replicates v1 file_response::get_raw_response exactly.
+// file_body — opens the file and fstat's it at construction so size() is
+// accurate immediately.  materialize() uses fstat's st_size; it never calls
+// lseek(), so the fd's read position remains at 0 when handed to
+// MHD_create_response_from_fd (security-reviewer-iter1-1 / CWE-367).
 // ---------------------------------------------------------------------------
-MHD_Response* file_body::materialize() {
+file_body::file_body(std::string path) noexcept
+    : path_(std::move(path)) {
 #ifndef _WIN32
-    int fd = ::open(path_.c_str(), O_RDONLY | O_NOFOLLOW);
+    fd_ = ::open(path_.c_str(), O_RDONLY | O_NOFOLLOW);
 #else
-    int fd = ::open(path_.c_str(), O_RDONLY);
+    fd_ = ::open(path_.c_str(), O_RDONLY);
 #endif
-    if (fd == -1) return nullptr;
+    if (fd_ == -1) return;
 
     struct stat sb;
-    if (::fstat(fd, &sb) != 0 || !S_ISREG(sb.st_mode)) {
-        ::close(fd);
-        return nullptr;
+    if (::fstat(fd_, &sb) != 0 || !S_ISREG(sb.st_mode)) {
+        ::close(fd_);
+        fd_ = -1;
+        return;
     }
 
-    off_t size = ::lseek(fd, 0, SEEK_END);
-    if (size == static_cast<off_t>(-1)) {
-        ::close(fd);
-        return nullptr;
-    }
+    // Use fstat's st_size directly — no lseek, no TOCTOU, no fd-position
+    // side-effect (security-reviewer-iter1-1 / performance-reviewer-iter1-4).
+    size_ = static_cast<std::size_t>(sb.st_size);
+}
 
-    if (size) {
-        size_cached_ = static_cast<std::size_t>(size);
-        return MHD_create_response_from_fd(
-            static_cast<std::size_t>(size), fd);
+file_body::~file_body() {
+    // Close only if MHD never took ownership (materialized_ stays false until
+    // MHD_create_response_from_fd returns non-null).
+    if (!materialized_ && fd_ != -1) {
+        ::close(fd_);
     }
-    ::close(fd);
-    size_cached_ = 0;
+}
+
+MHD_Response* file_body::materialize() {
+    if (fd_ == -1) return nullptr;
+
+    if (size_) {
+        MHD_Response* r = MHD_create_response_from_fd(size_, fd_);
+        if (r != nullptr) {
+            materialized_ = true;  // MHD now owns fd_
+        }
+        return r;
+    }
+    // Zero-byte file: serve empty response without giving the fd to MHD.
+    ::close(fd_);
+    fd_ = -1;
+    materialized_ = true;  // suppress ~file_body's close (already closed)
     return MHD_create_response_from_buffer(
         0, nullptr, MHD_RESPMEM_PERSISTENT);
 }
@@ -177,7 +196,14 @@ MHD_Response* pipe_body::materialize() {
 // ---------------------------------------------------------------------------
 ssize_t deferred_body::trampoline(void* cls, std::uint64_t pos,
                                   char* buf, std::size_t max) {
+    // Guard against null cls or empty producer_ (security-reviewer-iter1-3 /
+    // CWE-476). MHD's callback mechanism does not catch C++ exceptions, so
+    // throwing std::bad_function_call here would call std::terminate().
+    // Return MHD_CONTENT_READER_END_WITH_ERROR instead.
     auto* self = static_cast<deferred_body*>(cls);
+    if (!self || !self->producer_) {
+        return MHD_CONTENT_READER_END_WITH_ERROR;
+    }
     return self->producer_(pos, buf, max);
 }
 
