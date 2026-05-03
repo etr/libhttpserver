@@ -20,6 +20,8 @@
 
 #include <sstream>
 #include <string>
+#include <string_view>
+#include <type_traits>
 
 #include "./littletest.hpp"
 #include "./httpserver.hpp"
@@ -73,7 +75,7 @@ LT_BEGIN_AUTO_TEST(http_response_suite, get_headers)
     http_response resp(200, "text/plain");
     resp.with_header("Header1", "Value1");
     resp.with_header("Header2", "Value2");
-    auto headers = resp.get_headers();
+    const auto& headers = resp.get_headers();
     LT_CHECK_EQ(headers.at("Header1"), "Value1");
     LT_CHECK_EQ(headers.at("Header2"), "Value2");
 LT_END_AUTO_TEST(get_headers)
@@ -82,7 +84,7 @@ LT_BEGIN_AUTO_TEST(http_response_suite, get_footers)
     http_response resp(200, "text/plain");
     resp.with_footer("Footer1", "Value1");
     resp.with_footer("Footer2", "Value2");
-    auto footers = resp.get_footers();
+    const auto& footers = resp.get_footers();
     LT_CHECK_EQ(footers.at("Footer1"), "Value1");
     LT_CHECK_EQ(footers.at("Footer2"), "Value2");
 LT_END_AUTO_TEST(get_footers)
@@ -91,7 +93,7 @@ LT_BEGIN_AUTO_TEST(http_response_suite, get_cookies)
     http_response resp(200, "text/plain");
     resp.with_cookie("Cookie1", "Value1");
     resp.with_cookie("Cookie2", "Value2");
-    auto cookies = resp.get_cookies();
+    const auto& cookies = resp.get_cookies();
     LT_CHECK_EQ(cookies.at("Cookie1"), "Value1");
     LT_CHECK_EQ(cookies.at("Cookie2"), "Value2");
 LT_END_AUTO_TEST(get_cookies)
@@ -183,22 +185,22 @@ LT_END_AUTO_TEST(response_code_500)
 // Test get_header with nonexistent key
 LT_BEGIN_AUTO_TEST(http_response_suite, get_header_nonexistent)
     http_response resp(200, "text/plain");
-    string header = resp.get_header("NonExistent");
-    LT_CHECK_EQ(header, "");
+    auto header = resp.get_header("NonExistent");
+    LT_CHECK_EQ(header.empty(), true);
 LT_END_AUTO_TEST(get_header_nonexistent)
 
 // Test get_footer with nonexistent key
 LT_BEGIN_AUTO_TEST(http_response_suite, get_footer_nonexistent)
     http_response resp(200, "text/plain");
-    string footer = resp.get_footer("NonExistent");
-    LT_CHECK_EQ(footer, "");
+    auto footer = resp.get_footer("NonExistent");
+    LT_CHECK_EQ(footer.empty(), true);
 LT_END_AUTO_TEST(get_footer_nonexistent)
 
 // Test get_cookie with nonexistent key
 LT_BEGIN_AUTO_TEST(http_response_suite, get_cookie_nonexistent)
     http_response resp(200, "text/plain");
-    string cookie = resp.get_cookie("NonExistent");
-    LT_CHECK_EQ(cookie, "");
+    auto cookie = resp.get_cookie("NonExistent");
+    LT_CHECK_EQ(cookie.empty(), true);
 LT_END_AUTO_TEST(get_cookie_nonexistent)
 
 // Test multiple headers
@@ -251,21 +253,21 @@ LT_END_AUTO_TEST(overwrite_cookie)
 // Test empty headers map (using default constructor to get truly empty headers)
 LT_BEGIN_AUTO_TEST(http_response_suite, empty_headers_map)
     http_response resp;  // Default constructor - no content type header added
-    auto headers = resp.get_headers();
+    const auto& headers = resp.get_headers();
     LT_CHECK_EQ(headers.empty(), true);
 LT_END_AUTO_TEST(empty_headers_map)
 
 // Test empty footers map
 LT_BEGIN_AUTO_TEST(http_response_suite, empty_footers_map)
     http_response resp(200, "text/plain");
-    auto footers = resp.get_footers();
+    const auto& footers = resp.get_footers();
     LT_CHECK_EQ(footers.empty(), true);
 LT_END_AUTO_TEST(empty_footers_map)
 
 // Test empty cookies map
 LT_BEGIN_AUTO_TEST(http_response_suite, empty_cookies_map)
     http_response resp(200, "text/plain");
-    auto cookies = resp.get_cookies();
+    const auto& cookies = resp.get_cookies();
     LT_CHECK_EQ(cookies.empty(), true);
 LT_END_AUTO_TEST(empty_cookies_map)
 
@@ -325,6 +327,146 @@ LT_BEGIN_AUTO_TEST(http_response_suite, cookie_special_characters)
     resp.with_cookie("Data", "value=with=equals");
     LT_CHECK_EQ(resp.get_cookie("Data"), "value=with=equals");
 LT_END_AUTO_TEST(cookie_special_characters)
+
+// =====================================================================
+// TASK-011: const-correct accessors. The single-key accessors must be
+// callable on a const http_response&, return std::string_view, and must
+// NOT insert on miss. The map-returning accessors and the trivial
+// scalar accessors (get_status, kind) must be noexcept.
+// =====================================================================
+
+// AC #1: `void f(const http_response& r) { auto v = r.get_header("X-Foo"); }`
+// compiles. Also pins down the return type.
+LT_BEGIN_AUTO_TEST(http_response_suite, get_header_const_callable)
+    http_response resp = http_response::string("body");
+    resp.with_header("X-Foo", "bar");
+    const http_response& cref = resp;
+    auto v = cref.get_header("X-Foo");
+    static_assert(std::is_same_v<decltype(v), std::string_view>,
+                  "get_header on const& must return std::string_view");
+    LT_CHECK_EQ(v, std::string_view("bar"));
+LT_END_AUTO_TEST(get_header_const_callable)
+
+// AC #2: get_header on a missing key does NOT insert — headers map size
+// is unchanged after the lookup.
+LT_BEGIN_AUTO_TEST(http_response_suite, get_header_no_insert_on_miss)
+    http_response resp = http_response::string("body");
+    resp.with_header("X-Present", "value");
+    const std::size_t before = resp.get_headers().size();
+    const http_response& cref = resp;
+    auto v = cref.get_header("X-Missing");
+    LT_CHECK_EQ(v.empty(), true);
+    LT_CHECK_EQ(resp.get_headers().size(), before);
+LT_END_AUTO_TEST(get_header_no_insert_on_miss)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, get_footer_no_insert_on_miss)
+    http_response resp = http_response::string("body");
+    resp.with_footer("F-Present", "value");
+    const std::size_t before = resp.get_footers().size();
+    const http_response& cref = resp;
+    auto v = cref.get_footer("F-Missing");
+    LT_CHECK_EQ(v.empty(), true);
+    LT_CHECK_EQ(resp.get_footers().size(), before);
+LT_END_AUTO_TEST(get_footer_no_insert_on_miss)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, get_cookie_no_insert_on_miss)
+    http_response resp = http_response::string("body");
+    resp.with_cookie("C-Present", "value");
+    const std::size_t before = resp.get_cookies().size();
+    const http_response& cref = resp;
+    auto v = cref.get_cookie("C-Missing");
+    LT_CHECK_EQ(v.empty(), true);
+    LT_CHECK_EQ(resp.get_cookies().size(), before);
+LT_END_AUTO_TEST(get_cookie_no_insert_on_miss)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, get_header_returns_empty_view_on_miss)
+    http_response resp = http_response::string("body");
+    const http_response& cref = resp;
+    std::string_view v = cref.get_header("Nope");
+    LT_CHECK_EQ(v.empty(), true);
+    LT_CHECK_EQ(v.size(), static_cast<std::size_t>(0));
+LT_END_AUTO_TEST(get_header_returns_empty_view_on_miss)
+
+// AC #3: read back a header set via with_header from a `const&` reference.
+LT_BEGIN_AUTO_TEST(http_response_suite, get_header_const_reference_after_with_header)
+    http_response resp = http_response::string("body");
+    resp.with_header("X-Set-Via-With", "the-value");
+    const http_response& cref = resp;
+    LT_CHECK_EQ(cref.get_header("X-Set-Via-With"), std::string_view("the-value"));
+LT_END_AUTO_TEST(get_header_const_reference_after_with_header)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, get_status_const_callable)
+    http_response resp = http_response::string("body");
+    static_assert(noexcept(std::declval<const http_response&>().get_status()),
+                  "get_status() must be noexcept");
+    static_assert(std::is_same_v<decltype(std::declval<const http_response&>()
+                                              .get_status()),
+                                 int>,
+                  "get_status() must return int");
+    const http_response& cref = resp;
+    LT_CHECK_EQ(cref.get_status(), 200);
+LT_END_AUTO_TEST(get_status_const_callable)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, kind_const_callable)
+    http_response resp = http_response::string("body");
+    static_assert(noexcept(std::declval<const http_response&>().kind()),
+                  "kind() must be noexcept");
+    const http_response& cref = resp;
+    LT_CHECK_EQ(cref.kind() == httpserver::body_kind::string, true);
+LT_END_AUTO_TEST(kind_const_callable)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, get_headers_returns_const_ref_noexcept)
+    http_response resp = http_response::string("body");
+    static_assert(noexcept(std::declval<const http_response&>().get_headers()),
+                  "get_headers() must be noexcept");
+    static_assert(noexcept(std::declval<const http_response&>().get_footers()),
+                  "get_footers() must be noexcept");
+    static_assert(noexcept(std::declval<const http_response&>().get_cookies()),
+                  "get_cookies() must be noexcept");
+    const http_response& cref = resp;
+    // Returns by const reference: the same address comes back twice.
+    const auto& m1 = cref.get_headers();
+    const auto& m2 = cref.get_headers();
+    LT_CHECK_EQ(&m1 == &m2, true);
+LT_END_AUTO_TEST(get_headers_returns_const_ref_noexcept)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, single_key_accessors_take_string_view)
+    // Direct invocability check via member function pointer types.
+    using GetHeaderFn = std::string_view (http_response::*)(std::string_view) const;
+    using GetFooterFn = std::string_view (http_response::*)(std::string_view) const;
+    using GetCookieFn = std::string_view (http_response::*)(std::string_view) const;
+    GetHeaderFn h = &http_response::get_header;
+    GetFooterFn f = &http_response::get_footer;
+    GetCookieFn c = &http_response::get_cookie;
+    (void)h;
+    (void)f;
+    (void)c;
+    // Also a smoke runtime check that a string_view literal works directly.
+    http_response resp = http_response::string("body");
+    resp.with_header("X-K", "v");
+    const http_response& cref = resp;
+    std::string_view key("X-K");
+    LT_CHECK_EQ(cref.get_header(key), std::string_view("v"));
+LT_END_AUTO_TEST(single_key_accessors_take_string_view)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, header_lookup_is_case_insensitive)
+    http_response resp = http_response::string("body");
+    resp.with_header("X-Foo", "bar");
+    const http_response& cref = resp;
+    LT_CHECK_EQ(cref.get_header("x-foo"), std::string_view("bar"));
+    LT_CHECK_EQ(cref.get_header("X-FOO"), std::string_view("bar"));
+LT_END_AUTO_TEST(header_lookup_is_case_insensitive)
+
+// View obtained after with_header replaces an existing key reflects the
+// new value. We do NOT assert anything about the *old* view's validity —
+// that would be testing undefined behaviour.
+LT_BEGIN_AUTO_TEST(http_response_suite, get_header_view_reflects_replacement)
+    http_response resp = http_response::string("body");
+    resp.with_header("K", "v1");
+    LT_CHECK_EQ(resp.get_header("K"), std::string_view("v1"));
+    resp.with_header("K", "v2");
+    LT_CHECK_EQ(resp.get_header("K"), std::string_view("v2"));
+LT_END_AUTO_TEST(get_header_view_reflects_replacement)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

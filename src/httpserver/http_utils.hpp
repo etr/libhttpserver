@@ -312,6 +312,12 @@ class http_utils {
 
 class header_comparator {
  public:
+     // is_transparent enables heterogeneous lookup against header_map
+     // (std::map<std::string, std::string, header_comparator>): callers
+     // can pass std::string_view directly to find()/count() without
+     // constructing a std::string. Required by TASK-011's
+     // string_view-returning const accessors on http_response.
+     using is_transparent = std::true_type;
      /**
       * Operator used to compare strings.
       * @param first string
