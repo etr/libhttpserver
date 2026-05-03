@@ -50,9 +50,10 @@ class basic_auth_fail_response : public string_response {
             realm(realm),
             prefer_utf8(prefer_utf8) { }
 
-     basic_auth_fail_response(const basic_auth_fail_response& other) = default;
+     // Move-only: base http_response is now move-only (TASK-009 / DR-005).
+     basic_auth_fail_response(const basic_auth_fail_response&) = delete;
      basic_auth_fail_response(basic_auth_fail_response&& other) noexcept = default;
-     basic_auth_fail_response& operator=(const basic_auth_fail_response& b) = default;
+     basic_auth_fail_response& operator=(const basic_auth_fail_response&) = delete;
      basic_auth_fail_response& operator=(basic_auth_fail_response&& b) = default;
 
      ~basic_auth_fail_response() = default;

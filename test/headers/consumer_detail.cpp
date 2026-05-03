@@ -31,5 +31,5 @@
 // For TASK-002 we keep the dual-mode gate (per the plan's Phase 3a-i), so this
 // TU is built WITHOUT defining _HTTPSERVER_HPP_INSIDE_ — the detail gate then
 // fires for the same reason as A.1.
-#include "httpserver/details/http_endpoint.hpp"
+#include "httpserver/detail/http_endpoint.hpp"
 int main() { return 0; }

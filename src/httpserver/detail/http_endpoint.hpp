@@ -22,8 +22,8 @@
 #error "Only <httpserver.hpp> or <httpserverpp> can be included directly."
 #endif
 
-#ifndef SRC_HTTPSERVER_DETAILS_HTTP_ENDPOINT_HPP_
-#define SRC_HTTPSERVER_DETAILS_HTTP_ENDPOINT_HPP_
+#ifndef SRC_HTTPSERVER_DETAIL_HTTP_ENDPOINT_HPP_
+#define SRC_HTTPSERVER_DETAIL_HTTP_ENDPOINT_HPP_
 
 // cpplint errors on regex because it is replaced (in Chromium) by re2 google library.
 // We don't have that alternative here (and we are actively avoiding dependencies).
@@ -193,4 +193,4 @@ class http_endpoint {
 }  // namespace details
 
 }  // namespace httpserver
-#endif  // SRC_HTTPSERVER_DETAILS_HTTP_ENDPOINT_HPP_
+#endif  // SRC_HTTPSERVER_DETAIL_HTTP_ENDPOINT_HPP_

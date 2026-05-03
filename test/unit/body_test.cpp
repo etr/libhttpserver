@@ -21,7 +21,7 @@
 // Unit tests for the internal detail::body hierarchy and the public
 // body_kind enum (TASK-008). This TU is a build-tree test and is allowed
 // to include both the public umbrella (for body_kind) and the private
-// details/body.hpp directly (for the subclasses) — header-hygiene from
+// detail/body.hpp directly (for the subclasses) — header-hygiene from
 // the consumer perspective is asserted separately by header_hygiene_*.
 
 #include <microhttpd.h>
@@ -39,7 +39,7 @@
 #include <vector>
 
 #include "./httpserver.hpp"                 // public umbrella → body_kind
-#include "httpserver/details/body.hpp"      // private hierarchy
+#include "httpserver/detail/body.hpp"       // private hierarchy
 #include "./littletest.hpp"
 
 // -----------------------------------------------------------------------
@@ -71,7 +71,7 @@ static_assert(std::has_virtual_destructor_v<httpserver::detail::body>,
 
 // -----------------------------------------------------------------------
 // Step 3 — per-subclass SBO budget + base relationship.
-// Mirrored asserts: identical lines also live in details/body.hpp; placing
+// Mirrored asserts: identical lines also live in detail/body.hpp; placing
 // them here gives a second failure site if the header drifts.
 // -----------------------------------------------------------------------
 static_assert(sizeof(httpserver::detail::empty_body) <= 64,

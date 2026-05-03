@@ -28,11 +28,11 @@
 //
 // Header-hygiene contract: only library .cpp files (and build-tree unit
 // tests compiled with -DHTTPSERVER_COMPILATION) may include this file.
-#ifndef SRC_HTTPSERVER_DETAILS_BODY_HPP_
-#define SRC_HTTPSERVER_DETAILS_BODY_HPP_
+#ifndef SRC_HTTPSERVER_DETAIL_BODY_HPP_
+#define SRC_HTTPSERVER_DETAIL_BODY_HPP_
 
 #ifndef HTTPSERVER_COMPILATION
-#error "details/body.hpp is internal; build with -DHTTPSERVER_COMPILATION."
+#error "detail/body.hpp is internal; build with -DHTTPSERVER_COMPILATION."
 #endif
 
 #include <microhttpd.h>
@@ -42,7 +42,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <new>              // placement-new used by move_into() overrides
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -73,11 +75,25 @@ class body {
     virtual std::size_t size() const noexcept = 0;
     virtual MHD_Response* materialize() = 0;
 
+    // Placement-move into `dst`. Concrete subclasses must placement-new
+    // a moved-from copy of *this into the buffer at dst (which the caller
+    // guarantees to have correct alignment and at least sizeof(*this)
+    // bytes). Used by http_response's move ctor / move-assign to relocate
+    // an inline-stored body across SBO buffers without copying. Must be
+    // noexcept so http_response's move ops can themselves be noexcept
+    // (TASK-009 AC, DR-005).
+    virtual void move_into(void* dst) noexcept = 0;
+
  protected:
     body() = default;
     body(const body&) = delete;
     body& operator=(const body&) = delete;
-    body(body&&) = delete;
+    // Move ctor is intentionally NOT deleted. Concrete subclasses opt
+    // back in (each declares a noexcept move ctor) so move_into() can
+    // placement-move-construct into a target buffer. The base move-assign
+    // stays deleted because inline relocation never assigns into an
+    // existing instance — it always destroys-and-reconstructs.
+    body(body&&) noexcept = default;
     body& operator=(body&&) = delete;
 };
 
@@ -89,9 +105,15 @@ class empty_body final : public body {
     empty_body() noexcept = default;
     explicit empty_body(int flags) noexcept : flags_(flags) {}
 
+    empty_body(empty_body&&) noexcept = default;
+
     body_kind kind() const noexcept override { return body_kind::empty; }
     std::size_t size() const noexcept override { return 0; }
     MHD_Response* materialize() override;
+
+    void move_into(void* dst) noexcept override {
+        ::new (dst) empty_body(std::move(*this));
+    }
 
  private:
     int flags_ = 0;
@@ -107,9 +129,15 @@ class string_body final : public body {
     explicit string_body(std::string content) noexcept
         : content_(std::move(content)) {}
 
+    string_body(string_body&&) noexcept = default;
+
     body_kind kind() const noexcept override { return body_kind::string; }
     std::size_t size() const noexcept override { return content_.size(); }
     MHD_Response* materialize() override;
+
+    void move_into(void* dst) noexcept override {
+        ::new (dst) string_body(std::move(*this));
+    }
 
  private:
     std::string content_;
@@ -142,9 +170,19 @@ class file_body final : public body {
     explicit file_body(std::string path) noexcept;
     ~file_body() override;
 
+    // Hand-written move: transfers fd_ ownership and marks the source as
+    // already-materialized so its destructor skips the close path
+    // (otherwise the moved-from body would close the fd we just gave to
+    // the destination).
+    file_body(file_body&& o) noexcept;
+
     body_kind kind() const noexcept override { return body_kind::file; }
     std::size_t size() const noexcept override { return size_; }
     MHD_Response* materialize() override;
+
+    void move_into(void* dst) noexcept override {
+        ::new (dst) file_body(std::move(*this));
+    }
 
  private:
     std::string path_;
@@ -192,9 +230,15 @@ class iovec_body final : public body {
         : entries_(std::move(entries)),
           total_size_(compute_total_size(entries_)) {}
 
+    iovec_body(iovec_body&&) noexcept = default;
+
     body_kind kind() const noexcept override { return body_kind::iovec; }
     std::size_t size() const noexcept override { return total_size_; }
     MHD_Response* materialize() override;
+
+    void move_into(void* dst) noexcept override {
+        ::new (dst) iovec_body(std::move(*this));
+    }
 
  private:
     static std::size_t compute_total_size(
@@ -222,9 +266,17 @@ class pipe_body final : public body {
     explicit pipe_body(int fd) noexcept : fd_(fd) {}
     ~pipe_body() override;
 
+    // Hand-written move: transfers fd_ and suppresses the source's close
+    // path (mirrors file_body for the same reason).
+    pipe_body(pipe_body&& o) noexcept;
+
     body_kind kind() const noexcept override { return body_kind::pipe; }
     std::size_t size() const noexcept override { return 0; }  // size unknown
     MHD_Response* materialize() override;
+
+    void move_into(void* dst) noexcept override {
+        ::new (dst) pipe_body(std::move(*this));
+    }
 
  private:
     int fd_ = -1;
@@ -274,9 +326,15 @@ class deferred_body final : public body {
                "deferred_body: producer must not be empty");
     }
 
+    deferred_body(deferred_body&&) noexcept = default;
+
     body_kind kind() const noexcept override { return body_kind::deferred; }
     std::size_t size() const noexcept override { return 0; }  // size unknown
     MHD_Response* materialize() override;
+
+    void move_into(void* dst) noexcept override {
+        ::new (dst) deferred_body(std::move(*this));
+    }
 
     // Public so unit tests can drive it directly; also passed by name
     // to MHD_create_response_from_callback in materialize().
@@ -308,7 +366,26 @@ static_assert(sizeof(deferred_body) <= 64,
 static_assert(alignof(deferred_body) <= 16,
               "deferred_body alignment must be <= 16 (DR-005)");
 
+// Per-subclass nothrow-move contract. http_response::move_into(...) is
+// noexcept (TASK-009 AC), and that depends on every concrete body's move
+// constructor being noexcept. If a future change to one of the members
+// breaks this (e.g. swapping std::function for a wrapper that allocates
+// on move), the assert fires here so the regression is caught at the
+// subclass site, not buried in http_response.cpp.
+static_assert(std::is_nothrow_move_constructible_v<empty_body>,
+              "empty_body move ctor must be noexcept (TASK-009 / DR-005)");
+static_assert(std::is_nothrow_move_constructible_v<string_body>,
+              "string_body move ctor must be noexcept (TASK-009 / DR-005)");
+static_assert(std::is_nothrow_move_constructible_v<file_body>,
+              "file_body move ctor must be noexcept (TASK-009 / DR-005)");
+static_assert(std::is_nothrow_move_constructible_v<iovec_body>,
+              "iovec_body move ctor must be noexcept (TASK-009 / DR-005)");
+static_assert(std::is_nothrow_move_constructible_v<pipe_body>,
+              "pipe_body move ctor must be noexcept (TASK-009 / DR-005)");
+static_assert(std::is_nothrow_move_constructible_v<deferred_body>,
+              "deferred_body move ctor must be noexcept (TASK-009 / DR-005)");
+
 }  // namespace detail
 
 }  // namespace httpserver
-#endif  // SRC_HTTPSERVER_DETAILS_BODY_HPP_
+#endif  // SRC_HTTPSERVER_DETAIL_BODY_HPP_

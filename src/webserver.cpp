@@ -58,8 +58,8 @@
 
 #include "httpserver/constants.hpp"
 #include "httpserver/create_webserver.hpp"
-#include "httpserver/details/http_endpoint.hpp"
-#include "httpserver/details/modded_request.hpp"
+#include "httpserver/detail/http_endpoint.hpp"
+#include "httpserver/detail/modded_request.hpp"
 #include "httpserver/http_request.hpp"
 #include "httpserver/http_resource.hpp"
 #include "httpserver/http_response.hpp"

@@ -52,7 +52,7 @@
 #include "httpserver/constants.hpp"
 #include "httpserver/http_utils.hpp"
 #include "httpserver/create_webserver.hpp"
-#include "httpserver/details/http_endpoint.hpp"
+#include "httpserver/detail/http_endpoint.hpp"
 
 namespace httpserver { class http_resource; }
 namespace httpserver { class http_response; }

@@ -21,7 +21,7 @@
 #include <string>
 
 #include "./httpserver.hpp"
-#include "httpserver/details/modded_request.hpp"
+#include "httpserver/detail/modded_request.hpp"
 
 #include "./littletest.hpp"
 

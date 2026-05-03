@@ -126,12 +126,12 @@ check-headers:
 	@echo "  PASS: A.4 umbrella does not leak _HTTPSERVER_HPP_INSIDE_"
 
 # check-install-layout asserts that `make install DESTDIR=$(STAGE)` produces
-# a public include tree with NO `details/` directory and NO `*_impl.hpp` files.
+# a public include tree with NO `detail/` directory and NO `*_impl.hpp` files.
 # This protects the public/private split as described in TASK-002 / DR-002.
 CHECK_INSTALL_STAGE = $(abs_top_builddir)/.install-stage
 
 check-install-layout:
-	@echo "=== check-install-layout: staged install must hide details/ and *_impl.hpp ==="
+	@echo "=== check-install-layout: staged install must hide detail/ and *_impl.hpp ==="
 	@if test "$(CHECK_INSTALL_SHARED)" != "yes"; then \
 	    rm -rf $(CHECK_INSTALL_STAGE); \
 	    $(MAKE) $(AM_MAKEFLAGS) install DESTDIR=$(CHECK_INSTALL_STAGE) >check-install.log 2>&1 || { \
@@ -143,10 +143,10 @@ check-install-layout:
 	    }; \
 	    rm -f check-install.log; \
 	fi
-	@leaked_details=`find $(CHECK_INSTALL_STAGE) -type d -name details 2>/dev/null`; \
-	if test -n "$$leaked_details"; then \
-	    echo "FAIL: details/ directory leaked into install:"; \
-	    echo "$$leaked_details"; \
+	@leaked_detail=`find $(CHECK_INSTALL_STAGE) -type d -name detail 2>/dev/null`; \
+	if test -n "$$leaked_detail"; then \
+	    echo "FAIL: detail/ directory leaked into install:"; \
+	    echo "$$leaked_detail"; \
 	    if test "$(CHECK_INSTALL_SHARED)" != "yes"; then rm -rf $(CHECK_INSTALL_STAGE); fi; \
 	    exit 1; \
 	fi

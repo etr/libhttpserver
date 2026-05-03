@@ -18,7 +18,7 @@
      USA
 */
 
-#include "httpserver/details/http_endpoint.hpp"
+#include "httpserver/detail/http_endpoint.hpp"
 
 #include <iostream>
 #include <string>

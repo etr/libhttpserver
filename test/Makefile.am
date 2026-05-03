@@ -26,7 +26,7 @@ LDADD += -lcurl
 
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/ -DHTTPSERVER_COMPILATION
 METASOURCES = AUTO
-check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry iovec_response http_method constants body
+check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry iovec_response http_method constants body http_response_sbo
 
 MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
 
@@ -75,6 +75,15 @@ constants_SOURCES = unit/constants_test.cpp
 # the same way uri_log does.
 body_SOURCES = unit/body_test.cpp
 body_LDADD = $(LDADD) -lmicrohttpd
+
+# http_response_sbo: TASK-009 unit test for the SBO value-type layout of
+# http_response. Pokes the private body_/body_storage_/body_inline_/kind_
+# members through a friend declaration, exercises the four-case move
+# cross-product, and asserts the type-trait acceptance criteria. Needs
+# -lmicrohttpd because it transitively touches detail::body subclasses
+# whose materialize() returns MHD_Response*.
+http_response_sbo_SOURCES = unit/http_response_sbo_test.cpp
+http_response_sbo_LDADD = $(LDADD) -lmicrohttpd
 
 noinst_HEADERS = littletest.hpp
 AM_CXXFLAGS += -Wall -fPIC -Wno-overloaded-virtual

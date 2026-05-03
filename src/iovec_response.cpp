@@ -134,7 +134,7 @@ MHD_Response* iovec_response::get_raw_response() {
     // alignment between iovec_entry and MHD_IoVec (C++ [basic.align],
     // CWE-704). entries_ was populated at construction time: no heap
     // allocation occurs on this path. The cast bridge will move into
-    // details/body.hpp when TASK-009 lands.
+    // detail/body.hpp when TASK-009 lands.
     return MHD_create_response_from_iovec(
         reinterpret_cast<const MHD_IoVec*>(entries_.data()),
         static_cast<unsigned int>(entries_.size()),
