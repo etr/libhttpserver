@@ -33,11 +33,9 @@
 #include <variant>
 #include <vector>
 
+#include "httpserver/constants.hpp"
 #include "httpserver/http_response.hpp"
 #include "httpserver/http_utils.hpp"
-
-#define DEFAULT_WS_TIMEOUT 180
-#define DEFAULT_WS_PORT 9898
 
 namespace httpserver {
 
@@ -480,13 +478,13 @@ class create_webserver {
     }
 
  private:
-     uint16_t _port = DEFAULT_WS_PORT;
+     uint16_t _port = constants::DEFAULT_WS_PORT;
      http::http_utils::start_method_T _start_method = http::http_utils::INTERNAL_SELECT;
      int _max_threads = 0;
      int _max_connections = 0;
      int _memory_limit = 0;
      size_t _content_size_limit = std::numeric_limits<size_t>::max();
-     int _connection_timeout = DEFAULT_WS_TIMEOUT;
+     int _connection_timeout = constants::DEFAULT_WS_TIMEOUT;
      int _per_IP_connection_limit = 0;
      log_access_ptr _log_access = nullptr;
      log_error_ptr _log_error = nullptr;

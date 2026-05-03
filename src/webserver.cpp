@@ -56,6 +56,7 @@
 #include <utility>
 #include <vector>
 
+#include "httpserver/constants.hpp"
 #include "httpserver/create_webserver.hpp"
 #include "httpserver/details/http_endpoint.hpp"
 #include "httpserver/details/modded_request.hpp"
@@ -1019,7 +1020,7 @@ std::shared_ptr<http_response> webserver::not_found_page(details::modded_request
     if (not_found_resource != nullptr) {
         return not_found_resource(*mr->dhr);
     } else {
-        return std::make_shared<string_response>(NOT_FOUND_ERROR, http_utils::http_not_found);
+        return std::make_shared<string_response>(std::string{constants::NOT_FOUND_ERROR}, http_utils::http_not_found);
     }
 }
 
@@ -1027,7 +1028,7 @@ std::shared_ptr<http_response> webserver::method_not_allowed_page(details::modde
     if (method_not_allowed_resource != nullptr) {
         return method_not_allowed_resource(*mr->dhr);
     } else {
-        return std::make_shared<string_response>(METHOD_ERROR, http_utils::http_method_not_allowed);
+        return std::make_shared<string_response>(std::string{constants::METHOD_ERROR}, http_utils::http_method_not_allowed);
     }
 }
 
@@ -1035,7 +1036,7 @@ std::shared_ptr<http_response> webserver::internal_error_page(details::modded_re
     if (internal_error_resource != nullptr && !force_our) {
         return internal_error_resource(*mr->dhr);
     } else {
-        return std::make_shared<string_response>(GENERIC_ERROR, http_utils::http_internal_server_error);
+        return std::make_shared<string_response>(std::string{constants::GENERIC_ERROR}, http_utils::http_internal_server_error);
     }
 }
 
