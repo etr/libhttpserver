@@ -21,17 +21,25 @@
 #include "httpserver/http_response.hpp"
 
 #include <microhttpd.h>
+#include <sys/types.h>          // ssize_t (for the deferred() producer)
 
+#include <cassert>
 #include <cstddef>
+#include <cstdint>
+#include <functional>
 #include <iostream>
 #include <map>
 #include <new>
+#include <span>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 #include "httpserver/detail/body.hpp"   // complete type for body_->~body()
 #include "httpserver/http_utils.hpp"
+#include "httpserver/iovec_entry.hpp"
 
 namespace httpserver {
 
@@ -198,6 +206,134 @@ std::ostream &operator<< (std::ostream& os, const http_response& r) {
     http::dump_header_map(os, "Cookies", to_view_map(r.cookies_));
 
     return os;
+}
+
+// -----------------------------------------------------------------------
+// emplace_body — single placement-new entry point shared by all
+// factories (TASK-010). Centralising the SBO-vs-heap decision here means
+// the matched ::operator new(sizeof(T)) / ::operator delete pairing the
+// destructor relies on (TASK-009 OQ-4) lives in exactly one place; a
+// stray plain `new T(...)` in any factory would mismatch the
+// destructor's ::operator delete and trip ASan immediately.
+//
+// Defined out-of-line in this TU because every factory in this file
+// instantiates it (so no separate-TU instantiation is needed) and the
+// template body needs the complete type detail::body. Per-T size+align
+// guards duplicate the SBO budget asserts in detail/body.hpp so an
+// over-sized future body subclass fails to compile at the factory site
+// rather than silently triggering the heap fallback.
+// -----------------------------------------------------------------------
+template <typename T, typename... Args>
+void http_response::emplace_body(body_kind k, Args&&... args) {
+    static_assert(std::is_base_of_v<detail::body, T>,
+                  "emplace_body: T must derive from detail::body");
+    assert(body_ == nullptr &&
+           "emplace_body: body slot already populated");
+    if constexpr (sizeof(T) <= body_buf_size && alignof(T) <= 16) {
+        // SBO inline path.
+        body_ = ::new (body_storage_) T(std::forward<Args>(args)...);
+        body_inline_ = true;
+    } else {
+        // Heap fallback. ::operator new(sizeof(T)) is paired exactly
+        // with the destructor's ::operator delete(body_); a plain
+        // `new T(...)` here would mismatch.
+        void* mem = ::operator new(sizeof(T));
+        try {
+            body_ = ::new (mem) T(std::forward<Args>(args)...);
+        } catch (...) {
+            ::operator delete(mem);
+            throw;
+        }
+        body_inline_ = false;
+    }
+    kind_ = k;
+}
+
+// -----------------------------------------------------------------------
+// Static factories (TASK-010). Each factory:
+//   1. constructs a default http_response (status_code_ = -1, no body),
+//   2. sets the status code and any per-kind headers,
+//   3. emplaces the appropriate detail::body subclass via emplace_body.
+//
+// The status-code defaults match v1: 200 for content-bearing bodies,
+// 204 for empty(), 401 for unauthorized().
+// -----------------------------------------------------------------------
+
+http_response http_response::empty() {
+    http_response r;
+    r.status_code_ = http::http_utils::http_no_content;  // 204
+    r.emplace_body<detail::empty_body>(body_kind::empty);
+    return r;
+}
+
+http_response http_response::string(std::string body,
+                                    std::string content_type) {
+    http_response r;
+    r.status_code_ = http::http_utils::http_ok;          // 200
+    r.with_header(http::http_utils::http_header_content_type,
+                  std::move(content_type));
+    r.emplace_body<detail::string_body>(body_kind::string,
+                                        std::move(body));
+    return r;
+}
+
+http_response http_response::file(std::string path) {
+    http_response r;
+    r.status_code_ = http::http_utils::http_ok;
+    r.emplace_body<detail::file_body>(body_kind::file, std::move(path));
+    return r;
+}
+
+http_response http_response::iovec(std::span<const iovec_entry> entries) {
+    // Deep-copy into the body's owned vector so the caller's span need
+    // not outlive the response. The buffers each entry's `base` points
+    // at remain BORROWED — see detail::iovec_body's lifetime contract.
+    std::vector<iovec_entry> v(entries.begin(), entries.end());
+    http_response r;
+    r.status_code_ = http::http_utils::http_ok;
+    r.emplace_body<detail::iovec_body>(body_kind::iovec, std::move(v));
+    return r;
+}
+
+http_response http_response::pipe(int fd, std::size_t size_hint) {
+    (void)size_hint;  // reserved for future use
+    http_response r;
+    r.status_code_ = http::http_utils::http_ok;
+    r.emplace_body<detail::pipe_body>(body_kind::pipe, fd);
+    return r;
+}
+
+http_response http_response::deferred(
+        std::function<ssize_t(std::uint64_t, char*, std::size_t)> producer) {
+    http_response r;
+    r.status_code_ = http::http_utils::http_ok;
+    r.emplace_body<detail::deferred_body>(body_kind::deferred,
+                                          std::move(producer));
+    return r;
+}
+
+http_response http_response::unauthorized(std::string_view scheme,
+                                          std::string_view realm,
+                                          std::string body) {
+    http_response r;
+    r.status_code_ = http::http_utils::http_unauthorized;        // 401
+    // Build `<scheme> realm="<realm>"`. AC #3 requires byte-for-byte
+    // `Basic realm="myrealm"` for the canonical case.
+    std::string challenge;
+    challenge.reserve(scheme.size() + realm.size() + 10);
+    challenge.append(scheme.data(), scheme.size());
+    challenge.append(" realm=\"", 8);
+    challenge.append(realm.data(), realm.size());
+    challenge.push_back('"');
+    r.with_header(http::http_utils::http_header_www_authenticate,
+                  challenge);
+    // The body slot literally holds a string_body (possibly empty), so
+    // kind() reports body_kind::string. Switching to body_kind::empty
+    // for the empty-body case would fork the construction path and
+    // break the invariant that kind() reflects the placed-new body.
+    r.emplace_body<detail::string_body>(body_kind::string,
+                                        std::move(body));
+    return r;
 }
 
 }  // namespace httpserver

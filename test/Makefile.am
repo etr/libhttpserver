@@ -26,7 +26,7 @@ LDADD += -lcurl
 
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/ -DHTTPSERVER_COMPILATION
 METASOURCES = AUTO
-check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry iovec_response http_method constants body http_response_sbo
+check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry iovec_response http_method constants body http_response_sbo http_response_factories
 
 MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
 
@@ -84,6 +84,16 @@ body_LDADD = $(LDADD) -lmicrohttpd
 # whose materialize() returns MHD_Response*.
 http_response_sbo_SOURCES = unit/http_response_sbo_test.cpp
 http_response_sbo_LDADD = $(LDADD) -lmicrohttpd
+
+# http_response_factories: TASK-010 unit test for the static factory
+# functions on http_response (string/file/iovec/pipe/empty/deferred/
+# unauthorized). Each factory placement-news the corresponding
+# detail::body subclass into the SBO buffer, so this TU includes the
+# private detail/body.hpp via the build-tree -DHTTPSERVER_COMPILATION
+# path. Needs -lmicrohttpd for the same transitive reasons as
+# http_response_sbo.
+http_response_factories_SOURCES = unit/http_response_factories_test.cpp
+http_response_factories_LDADD = $(LDADD) -lmicrohttpd
 
 noinst_HEADERS = littletest.hpp
 AM_CXXFLAGS += -Wall -fPIC -Wno-overloaded-virtual
