@@ -253,6 +253,24 @@ jobs:
             debug: debug
             coverage: nocoverage
             shell: bash
+          # TASK-007: dedicated header-hygiene gate. Runs `make check-hygiene`
+          # (preprocesses <httpserver.hpp> against the staged install and greps
+          # for forbidden backend headers). Surfaces this gate as its own named
+          # GitHub Actions check so reviewers see header-hygiene status
+          # independently of the broader `make check` log. Until M5 lands the
+          # check is informational (HEADER_HYGIENE_STRICT defaults to "no");
+          # TASK-020 flips it to strict.
+          - test-group: extra
+            os: ubuntu-latest
+            os-type: ubuntu
+            build-type: header-hygiene
+            compiler-family: gcc
+            c-compiler: gcc-14
+            cc-compiler: g++-14
+            debug: nodebug
+            coverage: nocoverage
+            linking: dynamic
+            shell: bash
           - test-group: basic
             os: windows-latest
             os-type: windows
@@ -632,7 +650,18 @@ jobs:
       run: |
         cd build ;
         make check;
-      if: ${{ matrix.build-type != 'iwyu' && matrix.compiler-family != 'arm-cross' }}
+      if: ${{ matrix.build-type != 'iwyu' && matrix.compiler-family != 'arm-cross' && matrix.build-type != 'header-hygiene' }}
+
+    - name: Run header-hygiene check
+      # TASK-007: dedicated public-header hygiene gate. Runs the
+      # preprocessor-grep target (Layer 2) against a staged install and
+      # reports any forbidden backend headers reaching <httpserver.hpp>.
+      # Currently informational (HEADER_HYGIENE_STRICT=no) -- TASK-020
+      # flips this to strict when M5 closes the umbrella.
+      run: |
+        cd build
+        make check-hygiene
+      if: ${{ matrix.build-type == 'header-hygiene' }}
 
     - name: Print tests results
       shell: bash
