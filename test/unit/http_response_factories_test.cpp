@@ -51,6 +51,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -300,6 +301,121 @@ LT_BEGIN_AUTO_TEST(http_response_factories_suite,
                 static_cast<int>(body_kind::string));
     LT_CHECK_EQ(r.get_response_code(), 401);
 LT_END_AUTO_TEST(unauthorized_with_explicit_body)
+
+// -----------------------------------------------------------------------
+// unauthorized() — header injection validation (security-reviewer-iter1-1,
+// security-reviewer-iter1-2). CRLF sequences in scheme or realm must be
+// rejected (std::invalid_argument) to prevent header injection (CWE-113).
+// Double-quotes embedded in realm must be escaped per RFC 7235 §2.1
+// (backslash-escape) so the quoted-string is syntactically valid.
+// -----------------------------------------------------------------------
+LT_BEGIN_AUTO_TEST(http_response_factories_suite,
+                   unauthorized_crlf_in_scheme_throws)
+    // CRLF in scheme must throw — caller error, not a runtime failure.
+    bool caught = false;
+    try {
+        auto r = http_response::unauthorized("Basic\r\nX-Injected: hdr",
+                                             "myrealm");
+        (void)r;
+    } catch (const std::invalid_argument&) {
+        caught = true;
+    }
+    LT_CHECK_EQ(caught, true);
+LT_END_AUTO_TEST(unauthorized_crlf_in_scheme_throws)
+
+LT_BEGIN_AUTO_TEST(http_response_factories_suite,
+                   unauthorized_lf_in_scheme_throws)
+    bool caught = false;
+    try {
+        auto r = http_response::unauthorized("Basic\nEvil: hdr", "myrealm");
+        (void)r;
+    } catch (const std::invalid_argument&) {
+        caught = true;
+    }
+    LT_CHECK_EQ(caught, true);
+LT_END_AUTO_TEST(unauthorized_lf_in_scheme_throws)
+
+LT_BEGIN_AUTO_TEST(http_response_factories_suite,
+                   unauthorized_cr_in_scheme_throws)
+    bool caught = false;
+    try {
+        auto r = http_response::unauthorized("Basic\r", "myrealm");
+        (void)r;
+    } catch (const std::invalid_argument&) {
+        caught = true;
+    }
+    LT_CHECK_EQ(caught, true);
+LT_END_AUTO_TEST(unauthorized_cr_in_scheme_throws)
+
+LT_BEGIN_AUTO_TEST(http_response_factories_suite,
+                   unauthorized_nul_in_scheme_throws)
+    // NUL in scheme is equally dangerous — reject it.
+    bool caught = false;
+    try {
+        std::string s("Basic");
+        s.push_back('\0');
+        s += "evil";
+        auto r = http_response::unauthorized(std::string_view(s.data(),
+                                                               s.size()),
+                                             "myrealm");
+        (void)r;
+    } catch (const std::invalid_argument&) {
+        caught = true;
+    }
+    LT_CHECK_EQ(caught, true);
+LT_END_AUTO_TEST(unauthorized_nul_in_scheme_throws)
+
+LT_BEGIN_AUTO_TEST(http_response_factories_suite,
+                   unauthorized_crlf_in_realm_throws)
+    bool caught = false;
+    try {
+        auto r = http_response::unauthorized(
+            "Basic", "evil\r\nX-Injected: hdr");
+        (void)r;
+    } catch (const std::invalid_argument&) {
+        caught = true;
+    }
+    LT_CHECK_EQ(caught, true);
+LT_END_AUTO_TEST(unauthorized_crlf_in_realm_throws)
+
+LT_BEGIN_AUTO_TEST(http_response_factories_suite,
+                   unauthorized_lf_in_realm_throws)
+    bool caught = false;
+    try {
+        auto r = http_response::unauthorized("Basic", "evil\nMore: hdr");
+        (void)r;
+    } catch (const std::invalid_argument&) {
+        caught = true;
+    }
+    LT_CHECK_EQ(caught, true);
+LT_END_AUTO_TEST(unauthorized_lf_in_realm_throws)
+
+LT_BEGIN_AUTO_TEST(http_response_factories_suite,
+                   unauthorized_nul_in_realm_throws)
+    bool caught = false;
+    try {
+        std::string realm("my");
+        realm.push_back('\0');
+        realm += "realm";
+        auto r = http_response::unauthorized(
+            "Basic", std::string_view(realm.data(), realm.size()));
+        (void)r;
+    } catch (const std::invalid_argument&) {
+        caught = true;
+    }
+    LT_CHECK_EQ(caught, true);
+LT_END_AUTO_TEST(unauthorized_nul_in_realm_throws)
+
+LT_BEGIN_AUTO_TEST(http_response_factories_suite,
+                   unauthorized_double_quote_in_realm_is_escaped)
+    // RFC 7235 §2.1: double-quotes inside a quoted-string must be
+    // backslash-escaped.  realm=foo"bar must produce
+    // WWW-Authenticate: Basic realm="foo\"bar"
+    auto r = http_response::unauthorized("Basic", R"(foo"bar)");
+    LT_CHECK_EQ(
+        r.get_header(httpserver::http::http_utils::http_header_www_authenticate),
+        std::string(R"(Basic realm="foo\"bar")"));
+LT_END_AUTO_TEST(unauthorized_double_quote_in_realm_is_escaped)
 
 // -----------------------------------------------------------------------
 // Move smoke: factory results survive being returned from a function.

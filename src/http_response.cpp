@@ -31,6 +31,7 @@
 #include <map>
 #include <new>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -315,15 +316,46 @@ http_response http_response::deferred(
 http_response http_response::unauthorized(std::string_view scheme,
                                           std::string_view realm,
                                           std::string body) {
+    // Security: reject scheme or realm values containing CR, LF, or NUL.
+    // Any of these characters can be used to inject additional HTTP headers
+    // into the WWW-Authenticate response header (CWE-113). This is always a
+    // caller error — callers must never pass untrusted user input as scheme
+    // or realm without first validating it. Throw std::invalid_argument so
+    // the error is visible and cannot be silently swallowed.
+    static constexpr std::string_view kForbidden("\r\n\0", 3);
+    if (scheme.find_first_of(kForbidden) != std::string_view::npos) {
+        throw std::invalid_argument(
+            "http_response::unauthorized: scheme contains forbidden control "
+            "character (CR, LF, or NUL)");
+    }
+    if (realm.find_first_of(kForbidden) != std::string_view::npos) {
+        throw std::invalid_argument(
+            "http_response::unauthorized: realm contains forbidden control "
+            "character (CR, LF, or NUL)");
+    }
+
+    // Security: escape double-quote characters inside realm per RFC 7235
+    // §2.1 quoted-string rules. An unescaped " terminates the quoted-string
+    // early, producing syntactically invalid header values that some parsers
+    // misinterpret (CWE-116).
+    std::string escaped_realm;
+    escaped_realm.reserve(realm.size());
+    for (char c : realm) {
+        if (c == '"') {
+            escaped_realm.push_back('\\');
+        }
+        escaped_realm.push_back(c);
+    }
+
     http_response r;
     r.status_code_ = http::http_utils::http_unauthorized;        // 401
-    // Build `<scheme> realm="<realm>"`. AC #3 requires byte-for-byte
-    // `Basic realm="myrealm"` for the canonical case.
+    // Build `<scheme> realm="<escaped_realm>"`. AC #3 requires byte-for-byte
+    // `Basic realm="myrealm"` for the canonical case (which has no quotes).
     std::string challenge;
-    challenge.reserve(scheme.size() + realm.size() + 10);
+    challenge.reserve(scheme.size() + escaped_realm.size() + 10);
     challenge.append(scheme.data(), scheme.size());
     challenge.append(" realm=\"", 8);
-    challenge.append(realm.data(), realm.size());
+    challenge.append(escaped_realm);
     challenge.push_back('"');
     r.with_header(http::http_utils::http_header_www_authenticate,
                   challenge);
