@@ -22,8 +22,8 @@
 #error "Only <httpserver.hpp> or <httpserverpp> can be included directly."
 #endif
 
-#ifndef SRC_HTTPSERVER_DETAILS_MODDED_REQUEST_HPP_
-#define SRC_HTTPSERVER_DETAILS_MODDED_REQUEST_HPP_
+#ifndef SRC_HTTPSERVER_DETAIL_MODDED_REQUEST_HPP_
+#define SRC_HTTPSERVER_DETAIL_MODDED_REQUEST_HPP_
 
 #include <string>
 #include <memory>
@@ -33,7 +33,7 @@
 
 namespace httpserver {
 
-namespace details {
+namespace detail {
 
 struct modded_request {
     struct MHD_PostProcessor *pp = nullptr;
@@ -66,8 +66,8 @@ struct modded_request {
     }
 };
 
-}  // namespace details
+}  // namespace detail
 
 }  // namespace httpserver
 
-#endif  // SRC_HTTPSERVER_DETAILS_MODDED_REQUEST_HPP_
+#endif  // SRC_HTTPSERVER_DETAIL_MODDED_REQUEST_HPP_

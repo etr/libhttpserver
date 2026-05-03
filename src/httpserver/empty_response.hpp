@@ -51,10 +51,11 @@ class empty_response : public http_response {
          http_response(response_code, ""),
          flags(flags) { }
 
-     empty_response(const empty_response& other) = default;
+     // Move-only: base http_response is now move-only (TASK-009 / DR-005).
+     empty_response(const empty_response&) = delete;
      empty_response(empty_response&& other) noexcept = default;
 
-     empty_response& operator=(const empty_response& b) = default;
+     empty_response& operator=(const empty_response&) = delete;
      empty_response& operator=(empty_response&& b) = default;
 
      ~empty_response() = default;

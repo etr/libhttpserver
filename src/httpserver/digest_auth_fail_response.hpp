@@ -60,9 +60,10 @@ class digest_auth_fail_response : public string_response {
          userhash_support(userhash_support),
          prefer_utf8(prefer_utf8) { }
 
-     digest_auth_fail_response(const digest_auth_fail_response& other) = default;
+     // Move-only: base http_response is now move-only (TASK-009 / DR-005).
+     digest_auth_fail_response(const digest_auth_fail_response&) = delete;
      digest_auth_fail_response(digest_auth_fail_response&& other) noexcept = default;
-     digest_auth_fail_response& operator=(const digest_auth_fail_response& b) = default;
+     digest_auth_fail_response& operator=(const digest_auth_fail_response&) = delete;
      digest_auth_fail_response& operator=(digest_auth_fail_response&& b) = default;
 
      ~digest_auth_fail_response() = default;

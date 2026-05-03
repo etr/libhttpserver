@@ -2,7 +2,7 @@
 
 **Responsibility:** Library entry point. Owns the libmicrohttpd daemon, the route table, the IP block list, the connection arena pool. Provides start/stop, route registration (lambda + class forms), `block_ip`/`unblock_ip`, `features()`.
 
-**Implementation:** PIMPL via `std::unique_ptr<webserver_impl>`. Public header `<httpserver/webserver.hpp>` includes only `<httpserver/create_webserver.hpp>` and standard library, never `<microhttpd.h>` or `<pthread.h>`. `webserver_impl` (in `src/httpserver/details/webserver_impl.hpp`) holds the `MHD_Daemon*`, the route-table data structures, per-connection arena state, and synchronization primitives.
+**Implementation:** PIMPL via `std::unique_ptr<webserver_impl>`. Public header `<httpserver/webserver.hpp>` includes only `<httpserver/create_webserver.hpp>` and standard library, never `<microhttpd.h>` or `<pthread.h>`. `webserver_impl` (in `src/httpserver/detail/webserver_impl.hpp`) holds the `MHD_Daemon*`, the route-table data structures, per-connection arena state, and synchronization primitives.
 
 **Interfaces:**
 - Exposes (from PRD §3.4 and §3.7):

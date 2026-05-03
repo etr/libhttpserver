@@ -8,7 +8,7 @@
 Verify and lock the "no backend headers in public surface" invariant after PIMPL splits and accessor refactors land, removing any straggler includes that survived earlier tasks.
 
 **Action Items:**
-- [ ] `grep -lE 'microhttpd\.h|pthread\.h|gnutls/gnutls\.h|sys/socket\.h|sys/uio\.h' src/httpserver/*.hpp`. Each file that turns up: route the include into the corresponding `details/*_impl.hpp` or `.cpp` file.
+- [ ] `grep -lE 'microhttpd\.h|pthread\.h|gnutls/gnutls\.h|sys/socket\.h|sys/uio\.h' src/httpserver/*.hpp`. Each file that turns up: route the include into the corresponding `detail/*_impl.hpp` or `.cpp` file.
 - [ ] Verify after the sweep that the grep returns zero results.
 - [ ] Ensure the hygiene CI test from TASK-007 now passes. **Specifically:**
   - [ ] In `test/Makefile.am`, delete the line `XFAIL_TESTS = header_hygiene` (and the explanatory comment block above it). After this edit, `make check` should report `PASS: header_hygiene` -- not `XFAIL` and not `XPASS`.

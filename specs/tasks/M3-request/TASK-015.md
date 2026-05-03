@@ -5,10 +5,10 @@
 **Estimate:** M
 
 **Goal:**
-Move `http_request`'s backend-coupled members (`MHD_Connection*`, raw GnuTLS handle, computed caches) into `details/http_request_impl.hpp` behind a `std::unique_ptr<http_request_impl>`. No API rename yet.
+Move `http_request`'s backend-coupled members (`MHD_Connection*`, raw GnuTLS handle, computed caches) into `detail/http_request_impl.hpp` behind a `std::unique_ptr<http_request_impl>`. No API rename yet.
 
 **Action Items:**
-- [ ] Create `src/httpserver/details/http_request_impl.hpp` (gated `HTTPSERVER_COMPILATION` only).
+- [ ] Create `src/httpserver/detail/http_request_impl.hpp` (gated `HTTPSERVER_COMPILATION` only).
 - [ ] Move all backend-coupled state into the impl struct: `MHD_Connection* conn_`, `gnutls_session_t tls_session_`, parsed-args cache, headers cache, etc.
 - [ ] Public `http_request.hpp` declares `std::unique_ptr<http_request_impl> impl_;` and forward-declares the impl class.
 - [ ] Implement existing public methods as forwarders to `impl_->method()`.

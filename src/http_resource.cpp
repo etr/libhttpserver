@@ -43,12 +43,12 @@ void resource_init(std::map<std::string, bool>* method_state) {
     (*method_state)[MHD_HTTP_METHOD_PATCH] = true;
 }
 
-namespace details {
+namespace detail {
 
 std::shared_ptr<http_response> empty_render(const http_request&) {
     return std::make_shared<string_response>();
 }
 
-}  // namespace details
+}  // namespace detail
 
 }  // namespace httpserver

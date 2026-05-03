@@ -40,7 +40,7 @@ namespace httpserver { class http_response; }
 
 namespace httpserver {
 
-namespace details { std::shared_ptr<http_response> empty_render(const http_request& r); }
+namespace detail { std::shared_ptr<http_response> empty_render(const http_request& r); }
 
 void resource_init(std::map<std::string, bool>* res);
 
@@ -60,7 +60,7 @@ class http_resource {
       * @return A http_response object
      **/
      virtual std::shared_ptr<http_response> render(const http_request& req) {
-         return details::empty_render(req);
+         return detail::empty_render(req);
      }
 
      /**

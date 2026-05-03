@@ -39,9 +39,9 @@ struct MHD_Response;
 
 namespace httpserver {
 
-namespace details {
+namespace detail {
 MHD_Response* get_raw_response_helper(void* cls, ssize_t (*cb)(void*, uint64_t, char*, size_t));
-}  // namespace details
+}  // namespace detail
 
 template <class T>
 class deferred_response : public string_response {
@@ -58,15 +58,16 @@ class deferred_response : public string_response {
          initial_content(content),
          content_offset(0) { }
 
-     deferred_response(const deferred_response& other) = default;
+     // Move-only: base http_response is now move-only (TASK-009 / DR-005).
+     deferred_response(const deferred_response&) = delete;
      deferred_response(deferred_response&& other) noexcept = default;
-     deferred_response& operator=(const deferred_response& b) = default;
+     deferred_response& operator=(const deferred_response&) = delete;
      deferred_response& operator=(deferred_response&& b) = default;
 
      ~deferred_response() = default;
 
      MHD_Response* get_raw_response() {
-         return details::get_raw_response_helper(reinterpret_cast<void*>(this), &cb);
+         return detail::get_raw_response_helper(reinterpret_cast<void*>(this), &cb);
      }
 
  private:

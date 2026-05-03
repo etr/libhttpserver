@@ -45,10 +45,11 @@ class string_response : public http_response {
          http_response(response_code, content_type),
          content(std::move(content)) { }
 
-     string_response(const string_response& other) = default;
+     // Move-only: base http_response is now move-only (TASK-009 / DR-005).
+     string_response(const string_response&) = delete;
      string_response(string_response&& other) noexcept = default;
 
-     string_response& operator=(const string_response& b) = default;
+     string_response& operator=(const string_response&) = delete;
      string_response& operator=(string_response&& b) = default;
 
      ~string_response() = default;

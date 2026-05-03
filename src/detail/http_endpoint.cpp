@@ -29,7 +29,7 @@
 #include <string>
 #include <vector>
 
-#include "httpserver/details/http_endpoint.hpp"
+#include "httpserver/detail/http_endpoint.hpp"
 #include "httpserver/http_utils.hpp"
 
 using std::string;
@@ -37,7 +37,7 @@ using std::vector;
 
 namespace httpserver {
 
-namespace details {
+namespace detail {
 
 http_endpoint::~http_endpoint() {
 }
@@ -162,6 +162,6 @@ bool http_endpoint::match(const http_endpoint& url) const {
     return regex_match(nn, re_url_normalized);
 }
 
-}  // namespace details
+}  // namespace detail
 
 }  // namespace httpserver

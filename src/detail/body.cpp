@@ -18,7 +18,7 @@
      USA
 */
 
-#include "httpserver/details/body.hpp"
+#include "httpserver/detail/body.hpp"
 
 #include <fcntl.h>
 #include <microhttpd.h>
@@ -143,6 +143,18 @@ file_body::~file_body() {
     }
 }
 
+// Hand-written move ctor: transfers fd_ ownership to the destination and
+// flips the source's materialized_ to true so the source's destructor
+// skips the close path. Without this, the moved-from file_body would
+// close the fd we just handed off — a classic double-close bug
+// (CWE-415). std::exchange keeps the move noexcept.
+file_body::file_body(file_body&& o) noexcept
+    : path_(std::move(o.path_)),
+      size_(o.size_),
+      fd_(std::exchange(o.fd_, -1)),
+      materialized_(std::exchange(o.materialized_, true)) {
+}
+
 MHD_Response* file_body::materialize() {
     if (fd_ == -1) return nullptr;
 
@@ -188,6 +200,13 @@ pipe_body::~pipe_body() {
     if (!materialized_ && fd_ != -1) {
         ::close(fd_);
     }
+}
+
+// Same shape as file_body's move ctor: transfer fd_, mark source as
+// already-materialized so its destructor skips close.
+pipe_body::pipe_body(pipe_body&& o) noexcept
+    : fd_(std::exchange(o.fd_, -1)),
+      materialized_(std::exchange(o.materialized_, true)) {
 }
 
 MHD_Response* pipe_body::materialize() {

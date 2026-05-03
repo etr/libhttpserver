@@ -58,8 +58,8 @@
 
 #include "httpserver/constants.hpp"
 #include "httpserver/create_webserver.hpp"
-#include "httpserver/details/http_endpoint.hpp"
-#include "httpserver/details/modded_request.hpp"
+#include "httpserver/detail/http_endpoint.hpp"
+#include "httpserver/detail/modded_request.hpp"
 #include "httpserver/http_request.hpp"
 #include "httpserver/http_resource.hpp"
 #include "httpserver/http_response.hpp"
@@ -228,7 +228,7 @@ void webserver::request_completed(void *cls, struct MHD_Connection *connection, 
     std::ignore = connection;
     std::ignore = toe;
 
-    delete static_cast<details::modded_request*>(*con_cls);
+    delete static_cast<detail::modded_request*>(*con_cls);
 }
 
 bool webserver::register_resource(const std::string& resource, http_resource* hrm, bool family) {
@@ -240,10 +240,10 @@ bool webserver::register_resource(const std::string& resource, http_resource* hr
         throw std::invalid_argument("The resource should be '' or '/' and be marked as family when using a single_resource server");
     }
 
-    details::http_endpoint idx(resource, family, true, regex_checking);
+    detail::http_endpoint idx(resource, family, true, regex_checking);
 
     std::unique_lock registered_resources_lock(registered_resources_mutex);
-    pair<map<details::http_endpoint, http_resource*>::iterator, bool> result = registered_resources.insert(map<details::http_endpoint, http_resource*>::value_type(idx, hrm));
+    pair<map<detail::http_endpoint, http_resource*>::iterator, bool> result = registered_resources.insert(map<detail::http_endpoint, http_resource*>::value_type(idx, hrm));
 
     if (result.second) {
         bool is_exact = !family && idx.get_url_pars().empty();
@@ -251,7 +251,7 @@ bool webserver::register_resource(const std::string& resource, http_resource* hr
             registered_resources_str.insert(pair<string, http_resource*>(idx.get_url_complete(), result.first->second));
         }
         if (idx.is_regex_compiled()) {
-            registered_resources_regex.insert(map<details::http_endpoint, http_resource*>::value_type(idx, hrm));
+            registered_resources_regex.insert(map<detail::http_endpoint, http_resource*>::value_type(idx, hrm));
         }
         registered_resources_lock.unlock();
         invalidate_route_cache();
@@ -572,7 +572,7 @@ void webserver::invalidate_route_cache() {
 
 void webserver::unregister_resource(const string& resource) {
     // family does not matter - it just checks the url_normalized anyhow
-    details::http_endpoint he(resource, false, true, regex_checking);
+    detail::http_endpoint he(resource, false, true, regex_checking);
     std::unique_lock registered_resources_lock(registered_resources_mutex);
 
     // Invalidate cache while holding registered_resources_mutex to prevent
@@ -775,7 +775,7 @@ void* uri_log(void* cls, const char* uri, struct MHD_Connection *con) {
     std::ignore = cls;
     std::ignore = con;
 
-    auto mr = std::make_unique<details::modded_request>();
+    auto mr = std::make_unique<detail::modded_request>();
     // MHD may invoke this callback with a null uri before the request line
     // has been parsed (e.g. port scans, half-open connections, or non-HTTP
     // traffic on the listening port). Treat that as an empty URI so the
@@ -830,7 +830,7 @@ MHD_Result webserver::post_iterator(void *cls, enum MHD_ValueKind kind,
     // Parameter needed to respect MHD interface, but not needed here.
     std::ignore = kind;
 
-    struct details::modded_request* mr = (struct details::modded_request*) cls;
+    struct detail::modded_request* mr = (struct detail::modded_request*) cls;
 
     if (!filename) {
         // There is no actual file, just set the arg key/value and return.
@@ -1016,7 +1016,7 @@ void webserver::upgrade_handler(void *cls, struct MHD_Connection* connection,
 }
 #endif  // HAVE_WEBSOCKET
 
-std::shared_ptr<http_response> webserver::not_found_page(details::modded_request* mr) const {
+std::shared_ptr<http_response> webserver::not_found_page(detail::modded_request* mr) const {
     if (not_found_resource != nullptr) {
         return not_found_resource(*mr->dhr);
     } else {
@@ -1024,7 +1024,7 @@ std::shared_ptr<http_response> webserver::not_found_page(details::modded_request
     }
 }
 
-std::shared_ptr<http_response> webserver::method_not_allowed_page(details::modded_request* mr) const {
+std::shared_ptr<http_response> webserver::method_not_allowed_page(detail::modded_request* mr) const {
     if (method_not_allowed_resource != nullptr) {
         return method_not_allowed_resource(*mr->dhr);
     } else {
@@ -1032,7 +1032,7 @@ std::shared_ptr<http_response> webserver::method_not_allowed_page(details::modde
     }
 }
 
-std::shared_ptr<http_response> webserver::internal_error_page(details::modded_request* mr, bool force_our) const {
+std::shared_ptr<http_response> webserver::internal_error_page(detail::modded_request* mr, bool force_our) const {
     if (internal_error_resource != nullptr && !force_our) {
         return internal_error_resource(*mr->dhr);
     } else {
@@ -1081,7 +1081,7 @@ bool webserver::should_skip_auth(const std::string& path) const {
     return false;
 }
 
-MHD_Result webserver::requests_answer_first_step(MHD_Connection* connection, struct details::modded_request* mr) {
+MHD_Result webserver::requests_answer_first_step(MHD_Connection* connection, struct detail::modded_request* mr) {
     mr->dhr.reset(new http_request(connection, unescaper));
     mr->dhr->set_file_cleanup_callback(file_cleanup_callback);
 
@@ -1106,7 +1106,7 @@ MHD_Result webserver::requests_answer_first_step(MHD_Connection* connection, str
 
 MHD_Result webserver::requests_answer_second_step(MHD_Connection* connection, const char* method,
         const char* version, const char* upload_data,
-        size_t* upload_data_size, struct details::modded_request* mr) {
+        size_t* upload_data_size, struct detail::modded_request* mr) {
     if (0 == *upload_data_size) return complete_request(connection, mr, version, method);
 
     if (mr->has_body) {
@@ -1134,7 +1134,7 @@ MHD_Result webserver::requests_answer_second_step(MHD_Connection* connection, co
     return MHD_YES;
 }
 
-struct MHD_Response* webserver::get_raw_response_with_fallback(details::modded_request* mr) {
+struct MHD_Response* webserver::get_raw_response_with_fallback(detail::modded_request* mr) {
     try {
         struct MHD_Response* raw = mr->dhrs->get_raw_response();
         if (raw == nullptr) {
@@ -1159,7 +1159,7 @@ struct MHD_Response* webserver::get_raw_response_with_fallback(details::modded_r
     }
 }
 
-MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct details::modded_request* mr, const char* method) {
+MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct detail::modded_request* mr, const char* method) {
     int to_ret = MHD_NO;
 
 #ifdef HAVE_WEBSOCKET
@@ -1231,7 +1231,7 @@ MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct details
             fe = registered_resources_str.find(st_url);
             if (fe == registered_resources_str.end()) {
                 if (regex_checking) {
-                    details::http_endpoint endpoint(st_url, false, false, false);
+                    detail::http_endpoint endpoint(st_url, false, false, false);
 
                     // Data needed for parameter extraction after match.
                     // On cache hit, we copy these while holding the cache lock
@@ -1256,7 +1256,7 @@ MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct details
 
                     if (!found) {
                         // Cache miss — perform regex scan
-                        map<details::http_endpoint, http_resource*>::iterator found_endpoint;
+                        map<detail::http_endpoint, http_resource*>::iterator found_endpoint;
 
                         size_t len = 0;
                         size_t tot_len = 0;
@@ -1368,7 +1368,7 @@ MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct details
     return (MHD_Result) to_ret;
 }
 
-MHD_Result webserver::complete_request(MHD_Connection* connection, struct details::modded_request* mr, const char* version, const char* method) {
+MHD_Result webserver::complete_request(MHD_Connection* connection, struct detail::modded_request* mr, const char* version, const char* method) {
     mr->ws = this;
 
     mr->dhr->set_path(mr->standardized_url);
@@ -1380,7 +1380,7 @@ MHD_Result webserver::complete_request(MHD_Connection* connection, struct detail
 
 MHD_Result webserver::answer_to_connection(void* cls, MHD_Connection* connection, const char* url, const char* method,
         const char* version, const char* upload_data, size_t* upload_data_size, void** con_cls) {
-    struct details::modded_request* mr = static_cast<struct details::modded_request*>(*con_cls);
+    struct detail::modded_request* mr = static_cast<struct detail::modded_request*>(*con_cls);
 
     if (mr->dhr) {
         return static_cast<webserver*>(cls)->requests_answer_second_step(connection, method, version, upload_data, upload_data_size, mr);

@@ -9,7 +9,7 @@ Delete the public-facing response subclasses and the `get_raw_response`/`decorat
 
 **Action Items:**
 - [ ] Remove `src/httpserver/string_response.hpp`, `file_response.hpp`, `iovec_response.hpp`, `pipe_response.hpp`, `deferred_response.hpp`, `empty_response.hpp`, `basic_auth_fail_response.hpp`, `digest_auth_fail_response.hpp` from the installed set.
-- [ ] Delete those classes' source files (or move any salvageable logic into `details/body.hpp`).
+- [ ] Delete those classes' source files (or move any salvageable logic into `detail/body.hpp`).
 - [ ] Remove the public virtual methods `get_raw_response`, `decorate_response`, `enqueue_response` from `http_response.hpp`.
 - [ ] Update `<httpserver.hpp>` umbrella to drop the removed includes.
 - [ ] Internal dispatch path (in `webserver.cpp` or `http_response.cpp`) calls `body_->materialize(...)` instead of the removed virtuals.

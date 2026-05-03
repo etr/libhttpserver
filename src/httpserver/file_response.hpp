@@ -57,10 +57,11 @@ class file_response : public http_response {
          http_response(response_code, content_type),
          filename(filename) { }
 
-     file_response(const file_response& other) = default;
+     // Move-only: base http_response is now move-only (TASK-009 / DR-005).
+     file_response(const file_response&) = delete;
      file_response(file_response&& other) noexcept = default;
 
-     file_response& operator=(const file_response& b) = default;
+     file_response& operator=(const file_response&) = delete;
      file_response& operator=(file_response&& b) = default;
 
      ~file_response() = default;
