@@ -24,8 +24,10 @@
 #include <microhttpd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <sys/uio.h>
 #include <unistd.h>
+#ifndef _WIN32
+#include <sys/uio.h>        // POSIX struct iovec — used for layout-pin asserts
+#endif
 
 #include <cstddef>
 #include <cstdint>
@@ -47,7 +49,12 @@ namespace detail {
 //
 // LIBHTTPSERVER_TODO_TASK013: drop the originals from iovec_response.cpp
 // when iovec_response is removed.
+//
+// The POSIX `struct iovec` asserts are gated on !_WIN32 (no <sys/uio.h> on
+// MSYS2/mingw); the MHD_IoVec asserts run everywhere because that's the
+// type the dispatch path actually casts to.
 // ---------------------------------------------------------------------------
+#ifndef _WIN32
 static_assert(sizeof(::httpserver::iovec_entry) == sizeof(struct iovec),
     "iovec_entry size must match POSIX struct iovec — divergent platform; "
     "implement memcpy fallback (see TASK-004)");
@@ -57,6 +64,10 @@ static_assert(offsetof(::httpserver::iovec_entry, base) ==
 static_assert(offsetof(::httpserver::iovec_entry, len) ==
                   offsetof(struct iovec, iov_len),
     "iovec_entry::len offset must match struct iovec::iov_len");
+static_assert(alignof(::httpserver::iovec_entry) == alignof(struct iovec),
+    "iovec_entry alignment must match POSIX struct iovec — divergent platform; "
+    "implement memcpy fallback (see TASK-004)");
+#endif  // !_WIN32
 
 static_assert(sizeof(::httpserver::iovec_entry) == sizeof(MHD_IoVec),
     "iovec_entry size must match libmicrohttpd MHD_IoVec — MHD layout drift");
@@ -66,10 +77,6 @@ static_assert(offsetof(::httpserver::iovec_entry, base) ==
 static_assert(offsetof(::httpserver::iovec_entry, len) ==
                   offsetof(MHD_IoVec, iov_len),
     "iovec_entry::len offset must match MHD_IoVec::iov_len");
-
-static_assert(alignof(::httpserver::iovec_entry) == alignof(struct iovec),
-    "iovec_entry alignment must match POSIX struct iovec — divergent platform; "
-    "implement memcpy fallback (see TASK-004)");
 static_assert(alignof(::httpserver::iovec_entry) == alignof(MHD_IoVec),
     "iovec_entry alignment must match MHD_IoVec — MHD layout drift");
 

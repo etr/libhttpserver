@@ -21,7 +21,9 @@
 #include "httpserver/iovec_response.hpp"
 
 #include <microhttpd.h>
-#include <sys/uio.h>
+#ifndef _WIN32
+#include <sys/uio.h>        // POSIX struct iovec — used for layout-pin asserts
+#endif
 
 #include <cstddef>
 #include <limits>
@@ -52,7 +54,12 @@ namespace httpserver {
 // asserts are the gate — a build failure on the divergent platform is
 // the desired outcome (loud, immediate, with the assert string naming
 // what diverged).
+//
+// The POSIX `struct iovec` asserts are gated on !_WIN32: MSYS2/mingw does
+// not ship <sys/uio.h>. The MHD_IoVec asserts are unconditional — that's
+// the type the dispatch path actually casts to.
 // ---------------------------------------------------------------------------
+#ifndef _WIN32
 static_assert(sizeof(::httpserver::iovec_entry) == sizeof(struct iovec),
     "iovec_entry size must match POSIX struct iovec — divergent platform; "
     "implement memcpy fallback (see TASK-004)");
@@ -62,6 +69,10 @@ static_assert(offsetof(::httpserver::iovec_entry, base) ==
 static_assert(offsetof(::httpserver::iovec_entry, len) ==
                   offsetof(struct iovec, iov_len),
     "iovec_entry::len offset must match struct iovec::iov_len");
+static_assert(alignof(::httpserver::iovec_entry) == alignof(struct iovec),
+    "iovec_entry alignment must match POSIX struct iovec — divergent platform; "
+    "implement memcpy fallback (see TASK-004)");
+#endif  // !_WIN32
 
 static_assert(sizeof(::httpserver::iovec_entry) == sizeof(MHD_IoVec),
     "iovec_entry size must match libmicrohttpd MHD_IoVec — MHD layout drift");
@@ -75,9 +86,6 @@ static_assert(offsetof(::httpserver::iovec_entry, len) ==
 // Alignment pinning: ensures the reinterpret_cast array stride is safe on
 // architectures that trap on misaligned loads (SPARC, some ARM configs).
 // CWE-704: without alignof equality the cast is UB even when size/offset match.
-static_assert(alignof(::httpserver::iovec_entry) == alignof(struct iovec),
-    "iovec_entry alignment must match POSIX struct iovec — divergent platform; "
-    "implement memcpy fallback (see TASK-004)");
 static_assert(alignof(::httpserver::iovec_entry) == alignof(MHD_IoVec),
     "iovec_entry alignment must match MHD_IoVec — MHD layout drift");
 

@@ -37,7 +37,6 @@
 
 #include <microhttpd.h>
 #include <sys/types.h>      // ssize_t
-#include <sys/uio.h>        // private header may include POSIX scatter/gather
 
 #include <cassert>
 #include <cstddef>
