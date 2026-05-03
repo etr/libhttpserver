@@ -267,17 +267,60 @@ class http_response {
          return status_code_;
      }
 
-     void with_header(const std::string& key, const std::string& value) {
-         headers_[key] = value;
-     }
+     // ------------------------------------------------------------------
+     // Fluent setters (TASK-012, PRD-RSP-REQ-004).
+     //
+     // Each setter is overloaded on the value-category of *this so that
+     // both lvalue and rvalue (factory) chains keep the response live
+     // and zero-copy:
+     //
+     //   * The `&` overload returns http_response& so that
+     //         r.with_header(k, v).with_status(s);
+     //     compiles and returns *this when `r` is an lvalue.
+     //   * The `&&` overload returns http_response&& so that
+     //         http_response::string("hi").with_header(...).with_status(...)
+     //     keeps the temporary as an rvalue end-to-end; the chain calls
+     //     successive `&&` overloads on the same SBO-inline body without
+     //     any intermediate move-construction or heap relocation.
+     //
+     // String parameters are taken by value: the body internally moves
+     // them into the underlying header/footer/cookie maps via
+     // insert_or_assign, so callers can either copy or move into the
+     // setter without an extra allocation.
+     //
+     // Backward compatibility (constraint): pre-TASK-012 callers wrote
+     //         r.with_header(k, v);
+     // in statement form, discarding the (then `void`) return. Switching
+     // the return type to a non-`[[nodiscard]]` reference is strictly
+     // source-compatible — the reference is silently ignored.
+     //
+     // Cookie API decision (action item #4 of TASK-012): the v2.0 cookie
+     // surface is the v1 (name, value) string-pair shape. `with_cookie`
+     // overwrites any prior entry for `name` (the cookie map is keyed
+     // case-insensitively). The value is rendered verbatim into the
+     // `Set-Cookie` header by decorate_response, so callers who need
+     // attributes (Path, Secure, HttpOnly, SameSite, ...) pre-format the
+     // value, e.g. with_cookie("sid", "abc; Path=/; Secure; HttpOnly").
+     // A structured cookie type with first-class attribute fields is
+     // intentionally deferred to a follow-up task; it can be added as a
+     // non-breaking overload alongside this string-pair API.
+     //
+     // Note on with_status: status replaces the stored code outright,
+     // including any flag bits set by shoutCAST() (which ORs
+     // MHD_ICY_FLAG into status_code_). Callers wanting both write
+     // with_status(...) first and shoutCAST() second.
+     // ------------------------------------------------------------------
+     http_response& with_header(std::string key, std::string value) &;
+     http_response&& with_header(std::string key, std::string value) &&;
 
-     void with_footer(const std::string& key, const std::string& value) {
-         footers_[key] = value;
-     }
+     http_response& with_footer(std::string key, std::string value) &;
+     http_response&& with_footer(std::string key, std::string value) &&;
 
-     void with_cookie(const std::string& key, const std::string& value) {
-         cookies_[key] = value;
-     }
+     http_response& with_cookie(std::string key, std::string value) &;
+     http_response&& with_cookie(std::string key, std::string value) &&;
+
+     http_response& with_status(int code) &;
+     http_response&& with_status(int code) &&;
 
      void shoutCAST();
 
@@ -309,6 +352,16 @@ class http_response {
      // the inline-vs-heap discriminator details.
      void destroy_body() noexcept;
      void adopt_body_from(http_response& o) noexcept;
+
+     // Shared mutation helpers for the fluent setters (TASK-012
+     // review-pass). Each helper validates its inputs, then performs the
+     // map mutation or scalar assignment.  Centralising the logic here
+     // means the & and && overloads only differ in their return
+     // statement; the mutation + validation is in exactly one place.
+     void do_set_header(std::string key, std::string value);
+     void do_set_footer(std::string key, std::string value);
+     void do_set_cookie(std::string key, std::string value);
+     void do_set_status(int code);
 
      // Placement-new a concrete detail::body subclass into the SBO
      // buffer (or, if T does not fit, onto the heap via the matched

@@ -22,6 +22,7 @@
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <utility>
 
 #include "./littletest.hpp"
 #include "./httpserver.hpp"
@@ -467,6 +468,327 @@ LT_BEGIN_AUTO_TEST(http_response_suite, get_header_view_reflects_replacement)
     resp.with_header("K", "v2");
     LT_CHECK_EQ(resp.get_header("K"), std::string_view("v2"));
 LT_END_AUTO_TEST(get_header_view_reflects_replacement)
+
+// -----------------------------------------------------------------------
+// TASK-012: fluent with_* setters return http_response& / http_response&&
+// (PRD-RSP-REQ-004). Tests below pin the new contract:
+//   * the AC chain compiles end-to-end (factory_chain_compiles_and_works);
+//   * lvalue chains return identity (lvalue_chain_returns_lvalue_ref);
+//   * ref-qualifier dispatch is exact at the type level
+//     (with_setters_return_types_are_ref_qualified);
+//   * statement-form pre-TASK-012 callers still compile unchanged
+//     (statement_form_with_setters_still_compile);
+//   * with_status round-trips and is composition-safe
+//     (with_status_changes_status_code, with_status_preserves_body_and_headers);
+//   * mutation is observable through the returned reference
+//     (mutation_observable_through_returned_ref);
+//   * by-value string parameters are move-friendly (with_header_moves_string_args).
+// The SBO-inline / zero-copy invariant for the rvalue chain is verified
+// in test/unit/http_response_factories_test.cpp where the SBO friend
+// struct is already defined.
+// -----------------------------------------------------------------------
+
+LT_BEGIN_AUTO_TEST(http_response_suite, factory_chain_compiles_and_works)
+    auto r = http_response::string("hi")
+                 .with_header("X-Foo", "bar")
+                 .with_status(201);
+    LT_CHECK_EQ(r.get_status(), 201);
+    LT_CHECK_EQ(r.get_header("X-Foo"), std::string_view("bar"));
+    LT_CHECK_EQ(r.get_header("Content-Type"), std::string_view("text/plain"));
+    LT_CHECK_EQ(static_cast<int>(r.kind()),
+                static_cast<int>(httpserver::body_kind::string));
+LT_END_AUTO_TEST(factory_chain_compiles_and_works)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, lvalue_chain_returns_lvalue_ref)
+    http_response r = http_response::empty();
+    auto& ret = r.with_header("A", "1").with_footer("B", "2")
+                  .with_cookie("c", "3").with_status(202);
+    LT_CHECK_EQ(&ret, &r);  // Identity: returned ref must be *this.
+    LT_CHECK_EQ(r.get_header("A"), std::string_view("1"));
+    LT_CHECK_EQ(r.get_footer("B"), std::string_view("2"));
+    LT_CHECK_EQ(r.get_cookie("c"), std::string_view("3"));
+    LT_CHECK_EQ(r.get_status(), 202);
+LT_END_AUTO_TEST(lvalue_chain_returns_lvalue_ref)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, with_setters_return_types_are_ref_qualified)
+    using R = httpserver::http_response;
+    // & overload returns R&
+    static_assert(std::is_same_v<
+        decltype(std::declval<R&>().with_header(std::string{}, std::string{})),
+        R&>, "with_header() & must return http_response&");
+    static_assert(std::is_same_v<
+        decltype(std::declval<R&>().with_footer(std::string{}, std::string{})),
+        R&>, "with_footer() & must return http_response&");
+    static_assert(std::is_same_v<
+        decltype(std::declval<R&>().with_cookie(std::string{}, std::string{})),
+        R&>, "with_cookie() & must return http_response&");
+    static_assert(std::is_same_v<
+        decltype(std::declval<R&>().with_status(0)),
+        R&>, "with_status() & must return http_response&");
+    // && overload returns R&&
+    static_assert(std::is_same_v<
+        decltype(std::declval<R&&>().with_header(std::string{}, std::string{})),
+        R&&>, "with_header() && must return http_response&&");
+    static_assert(std::is_same_v<
+        decltype(std::declval<R&&>().with_footer(std::string{}, std::string{})),
+        R&&>, "with_footer() && must return http_response&&");
+    static_assert(std::is_same_v<
+        decltype(std::declval<R&&>().with_cookie(std::string{}, std::string{})),
+        R&&>, "with_cookie() && must return http_response&&");
+    static_assert(std::is_same_v<
+        decltype(std::declval<R&&>().with_status(0)),
+        R&&>, "with_status() && must return http_response&&");
+    // Smoke runtime check so the suite still has at least one runtime
+    // assertion (a static_assert-only test would still pass if removed).
+    LT_CHECK_EQ(true, true);
+LT_END_AUTO_TEST(with_setters_return_types_are_ref_qualified)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, statement_form_with_setters_still_compile)
+    // Backward-compat: pre-TASK-012 callers wrote `r.with_X(k, v);` in
+    // statement form, discarding the (then void) return. Switching to
+    // a reference return must keep this form compiling unchanged.
+    http_response resp = http_response::string("body");
+    resp.with_header("X-A", "1");
+    resp.with_footer("X-B", "2");
+    resp.with_cookie("c", "3");
+    resp.with_status(202);
+    LT_CHECK_EQ(resp.get_header("X-A"), std::string_view("1"));
+    LT_CHECK_EQ(resp.get_footer("X-B"), std::string_view("2"));
+    LT_CHECK_EQ(resp.get_cookie("c"), std::string_view("3"));
+    LT_CHECK_EQ(resp.get_status(), 202);
+LT_END_AUTO_TEST(statement_form_with_setters_still_compile)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, with_status_changes_status_code)
+    http_response r = http_response::string("body");
+    LT_CHECK_EQ(r.get_status(), 200);  // factory default
+    r.with_status(404);
+    LT_CHECK_EQ(r.get_status(), 404);
+    r.with_status(500);
+    LT_CHECK_EQ(r.get_status(), 500);
+LT_END_AUTO_TEST(with_status_changes_status_code)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, with_status_preserves_body_and_headers)
+    auto r = http_response::string("payload", "application/json")
+                 .with_header("X-K", "v")
+                 .with_status(418);
+    LT_CHECK_EQ(r.get_status(), 418);
+    LT_CHECK_EQ(r.get_header("Content-Type"),
+                std::string_view("application/json"));
+    LT_CHECK_EQ(r.get_header("X-K"), std::string_view("v"));
+    LT_CHECK_EQ(static_cast<int>(r.kind()),
+                static_cast<int>(httpserver::body_kind::string));
+LT_END_AUTO_TEST(with_status_preserves_body_and_headers)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, mutation_observable_through_returned_ref)
+    http_response r = http_response::empty();
+    auto& ret = r.with_header("X-Trace", "a");
+    LT_CHECK_EQ(ret.get_header("X-Trace"), std::string_view("a"));
+    // And the rvalue chain leaves the result in the bound variable.
+    auto r2 = http_response::empty().with_header("X-Trace", "b");
+    LT_CHECK_EQ(r2.get_header("X-Trace"), std::string_view("b"));
+LT_END_AUTO_TEST(mutation_observable_through_returned_ref)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, with_header_moves_string_args)
+    // By-value string parameters must accept rvalue inputs and forward
+    // them into the underlying map. We don't assert on the moved-from
+    // state of the source strings (the standard only guarantees "valid
+    // but unspecified") — only that the value lands in the map intact.
+    http_response r = http_response::empty();
+    std::string key = "X-Long-Header-Name-To-Avoid-SSO";
+    std::string value(64, 'v');  // > SSO threshold on libstdc++/libc++
+    r.with_header(std::move(key), std::move(value));
+    LT_CHECK_EQ(r.get_header("X-Long-Header-Name-To-Avoid-SSO"),
+                std::string_view(std::string(64, 'v')));
+LT_END_AUTO_TEST(with_header_moves_string_args)
+
+// -----------------------------------------------------------------------
+// TASK-012 review-pass: security validation on fluent setters.
+//
+// with_header, with_footer, with_cookie must reject keys/values that
+// contain CR (\r), LF (\n), or NUL (\0) — these characters allow
+// HTTP response-header injection (CWE-113). with_status must reject
+// codes outside [100, 599] per RFC 9110 §15.
+// -----------------------------------------------------------------------
+
+LT_BEGIN_AUTO_TEST(http_response_suite, with_header_rejects_crlf_in_value)
+    http_response resp = http_response::string("body");
+    bool threw = false;
+    try {
+        resp.with_header("X-Foo", "bar\r\nSet-Cookie: evil=1");
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK_EQ(threw, true);
+LT_END_AUTO_TEST(with_header_rejects_crlf_in_value)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, with_header_rejects_lf_in_value)
+    http_response resp = http_response::string("body");
+    bool threw = false;
+    try {
+        resp.with_header("X-Foo", "bar\ninjected");
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK_EQ(threw, true);
+LT_END_AUTO_TEST(with_header_rejects_lf_in_value)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, with_header_rejects_nul_in_value)
+    http_response resp = http_response::string("body");
+    bool threw = false;
+    try {
+        resp.with_header("X-Foo", std::string("bar\0baz", 7));
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK_EQ(threw, true);
+LT_END_AUTO_TEST(with_header_rejects_nul_in_value)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, with_header_rejects_crlf_in_key)
+    http_response resp = http_response::string("body");
+    bool threw = false;
+    try {
+        resp.with_header("X-Foo\r\nEvil", "value");
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK_EQ(threw, true);
+LT_END_AUTO_TEST(with_header_rejects_crlf_in_key)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, with_footer_rejects_crlf_in_value)
+    http_response resp = http_response::string("body");
+    bool threw = false;
+    try {
+        resp.with_footer("X-Footer", "val\r\ninjected");
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK_EQ(threw, true);
+LT_END_AUTO_TEST(with_footer_rejects_crlf_in_value)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, with_footer_rejects_lf_in_key)
+    http_response resp = http_response::string("body");
+    bool threw = false;
+    try {
+        resp.with_footer("X-Footer\nEvil", "value");
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK_EQ(threw, true);
+LT_END_AUTO_TEST(with_footer_rejects_lf_in_key)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, with_cookie_rejects_crlf_in_value)
+    http_response resp = http_response::string("body");
+    bool threw = false;
+    try {
+        resp.with_cookie("sid", "abc\r\nSet-Cookie: evil=1");
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK_EQ(threw, true);
+LT_END_AUTO_TEST(with_cookie_rejects_crlf_in_value)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, with_cookie_rejects_lf_in_name)
+    http_response resp = http_response::string("body");
+    bool threw = false;
+    try {
+        resp.with_cookie("sid\nevil", "value");
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK_EQ(threw, true);
+LT_END_AUTO_TEST(with_cookie_rejects_lf_in_name)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, with_cookie_rejects_nul_in_value)
+    http_response resp = http_response::string("body");
+    bool threw = false;
+    try {
+        resp.with_cookie("sid", std::string("abc\0def", 7));
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK_EQ(threw, true);
+LT_END_AUTO_TEST(with_cookie_rejects_nul_in_value)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, with_status_rejects_below_100)
+    http_response resp = http_response::string("body");
+    bool threw = false;
+    try {
+        resp.with_status(99);
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK_EQ(threw, true);
+LT_END_AUTO_TEST(with_status_rejects_below_100)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, with_status_rejects_above_599)
+    http_response resp = http_response::string("body");
+    bool threw = false;
+    try {
+        resp.with_status(600);
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK_EQ(threw, true);
+LT_END_AUTO_TEST(with_status_rejects_above_599)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, with_status_rejects_negative)
+    http_response resp = http_response::string("body");
+    bool threw = false;
+    try {
+        resp.with_status(-1);
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK_EQ(threw, true);
+LT_END_AUTO_TEST(with_status_rejects_negative)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, with_status_rejects_zero)
+    http_response resp = http_response::string("body");
+    bool threw = false;
+    try {
+        resp.with_status(0);
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK_EQ(threw, true);
+LT_END_AUTO_TEST(with_status_rejects_zero)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, with_status_accepts_boundary_100)
+    http_response resp = http_response::string("body");
+    bool threw = false;
+    try {
+        resp.with_status(100);
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK_EQ(threw, false);
+    LT_CHECK_EQ(resp.get_status(), 100);
+LT_END_AUTO_TEST(with_status_accepts_boundary_100)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, with_status_accepts_boundary_599)
+    http_response resp = http_response::string("body");
+    bool threw = false;
+    try {
+        resp.with_status(599);
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK_EQ(threw, false);
+    LT_CHECK_EQ(resp.get_status(), 599);
+LT_END_AUTO_TEST(with_status_accepts_boundary_599)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, with_header_accepts_valid_value)
+    http_response resp = http_response::string("body");
+    bool threw = false;
+    try {
+        resp.with_header("X-Foo", "valid value with spaces and colons: ok");
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK_EQ(threw, false);
+    LT_CHECK_EQ(resp.get_header("X-Foo"),
+                std::string_view("valid value with spaces and colons: ok"));
+LT_END_AUTO_TEST(with_header_accepts_valid_value)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

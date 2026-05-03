@@ -440,6 +440,24 @@ LT_BEGIN_AUTO_TEST(http_response_factories_suite,
     LT_CHECK_EQ(other.get_response_code(), 200);
 LT_END_AUTO_TEST(factory_move_preserves_kind_and_headers)
 
+// -----------------------------------------------------------------------
+// TASK-012 zero-copy invariant: chained with_* calls on a factory's
+// rvalue must not perturb the SBO placement. http_response::string(...)
+// places a string_body inline in the SBO buffer; the && overloads of
+// with_header / with_status return http_response&& (i.e. propagate the
+// xvalue without an intermediate copy/move-construct), so the body
+// pointer must remain inline through the chain.
+// -----------------------------------------------------------------------
+LT_BEGIN_AUTO_TEST(http_response_factories_suite,
+                   factory_chain_keeps_body_inline_in_sbo)
+    auto r = http_response::string("hi")
+                 .with_header("X-Foo", "bar")
+                 .with_status(201);
+    LT_CHECK_EQ(SBO::body_inline(r), true);
+    LT_CHECK_EQ(static_cast<int>(SBO::kind(r)),
+                static_cast<int>(body_kind::string));
+LT_END_AUTO_TEST(factory_chain_keeps_body_inline_in_sbo)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()
