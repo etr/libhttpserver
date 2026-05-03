@@ -650,7 +650,7 @@ jobs:
       run: |
         cd build ;
         make check;
-      if: ${{ matrix.build-type != 'iwyu' && matrix.compiler-family != 'arm-cross' }}
+      if: ${{ matrix.build-type != 'iwyu' && matrix.compiler-family != 'arm-cross' && matrix.build-type != 'header-hygiene' }}
 
     - name: Run header-hygiene check
       # TASK-007: dedicated public-header hygiene gate. Runs the

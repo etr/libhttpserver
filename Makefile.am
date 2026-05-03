@@ -132,36 +132,38 @@ CHECK_INSTALL_STAGE = $(abs_top_builddir)/.install-stage
 
 check-install-layout:
 	@echo "=== check-install-layout: staged install must hide details/ and *_impl.hpp ==="
-	@rm -rf $(CHECK_INSTALL_STAGE)
-	@$(MAKE) $(AM_MAKEFLAGS) install DESTDIR=$(CHECK_INSTALL_STAGE) >check-install.log 2>&1 || { \
-	    echo "FAIL: staged install failed"; \
-	    cat check-install.log; \
-	    rm -f check-install.log; \
+	@if test "$(CHECK_INSTALL_SHARED)" != "yes"; then \
 	    rm -rf $(CHECK_INSTALL_STAGE); \
-	    exit 1; \
-	}
-	@rm -f check-install.log
+	    $(MAKE) $(AM_MAKEFLAGS) install DESTDIR=$(CHECK_INSTALL_STAGE) >check-install.log 2>&1 || { \
+	        echo "FAIL: staged install failed"; \
+	        cat check-install.log; \
+	        rm -f check-install.log; \
+	        rm -rf $(CHECK_INSTALL_STAGE); \
+	        exit 1; \
+	    }; \
+	    rm -f check-install.log; \
+	fi
 	@leaked_details=`find $(CHECK_INSTALL_STAGE) -type d -name details 2>/dev/null`; \
 	if test -n "$$leaked_details"; then \
 	    echo "FAIL: details/ directory leaked into install:"; \
 	    echo "$$leaked_details"; \
-	    rm -rf $(CHECK_INSTALL_STAGE); \
+	    if test "$(CHECK_INSTALL_SHARED)" != "yes"; then rm -rf $(CHECK_INSTALL_STAGE); fi; \
 	    exit 1; \
 	fi
 	@leaked_impl=`find $(CHECK_INSTALL_STAGE) -name '*_impl.hpp' 2>/dev/null`; \
 	if test -n "$$leaked_impl"; then \
 	    echo "FAIL: *_impl.hpp file leaked into install:"; \
 	    echo "$$leaked_impl"; \
-	    rm -rf $(CHECK_INSTALL_STAGE); \
+	    if test "$(CHECK_INSTALL_SHARED)" != "yes"; then rm -rf $(CHECK_INSTALL_STAGE); fi; \
 	    exit 1; \
 	fi
 	@umbrella_count=`find $(CHECK_INSTALL_STAGE) -name 'httpserver.hpp' | wc -l | tr -d ' '`; \
 	if test "$$umbrella_count" != "1"; then \
 	    echo "FAIL: expected exactly 1 installed httpserver.hpp, got $$umbrella_count"; \
-	    rm -rf $(CHECK_INSTALL_STAGE); \
+	    if test "$(CHECK_INSTALL_SHARED)" != "yes"; then rm -rf $(CHECK_INSTALL_STAGE); fi; \
 	    exit 1; \
 	fi
-	@rm -rf $(CHECK_INSTALL_STAGE)
+	@if test "$(CHECK_INSTALL_SHARED)" != "yes"; then rm -rf $(CHECK_INSTALL_STAGE); fi
 	@echo "  PASS: staged install layout is clean"
 
 # ---------------------------------------------------------------------------
@@ -200,13 +202,33 @@ CHECK_HYGIENE_STAGE      = $(abs_top_builddir)/.hygiene-stage
 CHECK_HYGIENE_CXX        = $(CXX) -std=c++20 -E -I$(CHECK_HYGIENE_STAGE)$(includedir) $(CPPFLAGS)
 HEADER_HYGIENE_STRICT   ?= no
 
-check-hygiene:
-	@echo "=== check-hygiene: <httpserver.hpp> must not transitively include backend headers ==="
+# Sentinel file: only re-run the staged install when headers have changed.
+# This is an mtime gate used exclusively for standalone `make check-hygiene`
+# invocations — it avoids paying a full `make install` cost on every
+# repeated standalone run.  When check-local drives check-hygiene it sets
+# CHECK_HYGIENE_SHARED=yes and passes CHECK_HYGIENE_STAGE pointing at its
+# own pre-built shared stage, so this stamp target is bypassed entirely.
+HYGIENE_STAMP = $(CHECK_HYGIENE_STAGE)/.hygiene-stamp
+
+$(HYGIENE_STAMP): $(wildcard $(top_srcdir)/src/httpserver/*.hpp)
 	@rm -rf $(CHECK_HYGIENE_STAGE)
 	@$(MAKE) $(AM_MAKEFLAGS) install DESTDIR=$(CHECK_HYGIENE_STAGE) >check-hygiene-install.log 2>&1 || { \
 	    echo "FAIL: staged install failed"; cat check-hygiene-install.log; \
 	    rm -f check-hygiene-install.log; rm -rf $(CHECK_HYGIENE_STAGE); exit 1; }
 	@rm -f check-hygiene-install.log
+	@touch $(HYGIENE_STAMP)
+
+check-hygiene:
+	@echo "=== check-hygiene: <httpserver.hpp> must not transitively include backend headers ==="
+	@if test "$(CHECK_HYGIENE_SHARED)" != "yes"; then \
+	    $(MAKE) $(AM_MAKEFLAGS) $(HYGIENE_STAMP); \
+	else \
+	    if ! test -d "$(CHECK_HYGIENE_STAGE)"; then \
+	        echo "FAIL: CHECK_HYGIENE_SHARED=yes but stage dir '$(CHECK_HYGIENE_STAGE)' does not exist."; \
+	        echo "  Always pair CHECK_HYGIENE_SHARED=yes with CHECK_HYGIENE_STAGE=<valid-dir>."; \
+	        exit 1; \
+	    fi; \
+	fi
 	@status=0; \
 	if ! $(CHECK_HYGIENE_CXX) $(top_srcdir)/test/headers/consumer_umbrella_no_backend.cpp >check-hygiene.i 2>check-hygiene.err; then \
 	    if test "$(HEADER_HYGIENE_STRICT)" = "yes"; then \
@@ -220,7 +242,7 @@ check-hygiene:
 	        sed 's/^/    /' check-hygiene.err | tail -10; \
 	    fi; \
 	else \
-	    leaks=`grep -hE '^# [0-9]+ "[^"]*($(HEADER_HYGIENE_FORBIDDEN))"' check-hygiene.i | awk '{print $$3}' | sort -u`; \
+	    leaks=`grep -hE '^# [0-9]+ "[^"]*/($(HEADER_HYGIENE_FORBIDDEN))"' check-hygiene.i | awk '{print $$3}' | sort -u`; \
 	    if test -n "$$leaks"; then \
 	        if test "$(HEADER_HYGIENE_STRICT)" = "yes"; then \
 	            echo "FAIL: forbidden headers leaked through <httpserver.hpp>:"; \
@@ -235,15 +257,34 @@ check-hygiene:
 	    fi; \
 	fi; \
 	rm -f check-hygiene.i check-hygiene.err; \
-	rm -rf $(CHECK_HYGIENE_STAGE); \
 	exit $$status
 
-check-local: check-headers check-install-layout check-hygiene
+# check-local runs check-install-layout and check-hygiene against a single
+# shared staged install to avoid paying two full `make install` costs on
+# every `make check`. Both sub-checks can still be invoked standalone (they
+# will do their own install when CHECK_*_SHARED is not set).
+check-local: check-headers
+	@echo "=== Shared staged install for check-install-layout and check-hygiene ==="
+	@rm -rf $(abs_top_builddir)/.shared-check-stage
+	@$(MAKE) $(AM_MAKEFLAGS) install DESTDIR=$(abs_top_builddir)/.shared-check-stage >check-shared-install.log 2>&1 || { \
+	    echo "FAIL: shared staged install failed"; cat check-shared-install.log; \
+	    rm -f check-shared-install.log; rm -rf $(abs_top_builddir)/.shared-check-stage; exit 1; }
+	@rm -f check-shared-install.log
+	@$(MAKE) $(AM_MAKEFLAGS) check-install-layout \
+	    CHECK_INSTALL_STAGE=$(abs_top_builddir)/.shared-check-stage \
+	    CHECK_INSTALL_SHARED=yes
+	@$(MAKE) $(AM_MAKEFLAGS) check-hygiene \
+	    CHECK_HYGIENE_STAGE=$(abs_top_builddir)/.shared-check-stage \
+	    CHECK_HYGIENE_SHARED=yes
+	@rm -rf $(abs_top_builddir)/.shared-check-stage
 
 .PHONY: check-headers check-install-layout check-hygiene
 
 MOSTLYCLEANFILES = $(DX_CLEANFILES) *.gcda *.gcno *.gcov
 DISTCLEANFILES = DIST_REVISION
+
+clean-local:
+	rm -rf $(CHECK_HYGIENE_STAGE) $(abs_top_builddir)/.shared-check-stage $(CHECK_INSTALL_STAGE)
 
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = libhttpserver.pc
