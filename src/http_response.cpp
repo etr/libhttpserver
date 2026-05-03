@@ -189,6 +189,39 @@ void http_response::shoutCAST() {
     status_code_ |= http::http_utils::shoutcast_response;
 }
 
+// -----------------------------------------------------------------------
+// Const single-key accessors (TASK-011).
+//
+// All three share the same shape: heterogeneous lookup into the
+// corresponding header_map (transparent header_comparator), returning an
+// empty std::string_view on miss. NEVER inserts (PRD-RSP-REQ-003); the
+// previous v1 accessors used `headers_[key]`, which silently inserted
+// an empty entry on miss and consequently could not be const.
+//
+// View lifetime is documented in the class-level contract block in
+// http_response.hpp.
+// -----------------------------------------------------------------------
+namespace {
+inline std::string_view header_map_find_view(const http::header_map& m,
+                                             std::string_view key) {
+    auto it = m.find(key);
+    if (it == m.end()) return {};
+    return std::string_view(it->second);
+}
+}  // namespace
+
+std::string_view http_response::get_header(std::string_view key) const {
+    return header_map_find_view(headers_, key);
+}
+
+std::string_view http_response::get_footer(std::string_view key) const {
+    return header_map_find_view(footers_, key);
+}
+
+std::string_view http_response::get_cookie(std::string_view key) const {
+    return header_map_find_view(cookies_, key);
+}
+
 namespace {
 static inline http::header_view_map to_view_map(const http::header_map& hdr_map) {
     http::header_view_map view_map;

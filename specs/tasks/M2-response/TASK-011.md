@@ -8,13 +8,13 @@
 Make read accessors callable on `const http_response&`, returning views without inserting on miss.
 
 **Action Items:**
-- [ ] `std::string_view get_header(std::string_view key) const;` returns empty view on miss; does NOT insert.
-- [ ] Same for `get_footer(std::string_view) const;` and `get_cookie(std::string_view) const;`.
-- [ ] `const header_map& get_headers() const noexcept;` (and `get_footers`, `get_cookies`).
-- [ ] `int get_status() const noexcept;`
-- [ ] `body_kind kind() const noexcept;`
-- [ ] Remove any v1 accessor that inserted on miss (e.g., `headers[key]` patterns).
-- [ ] Audit `string_view` returns: the storage must outlive the view. Document lifetime contract on each accessor (views invalidated by mutation of the response, e.g., `with_header` may rehash the map).
+- [x] `std::string_view get_header(std::string_view key) const;` returns empty view on miss; does NOT insert.
+- [x] Same for `get_footer(std::string_view) const;` and `get_cookie(std::string_view) const;`.
+- [x] `const header_map& get_headers() const noexcept;` (and `get_footers`, `get_cookies`).
+- [x] `int get_status() const noexcept;`
+- [x] `body_kind kind() const noexcept;`
+- [x] Remove any v1 accessor that inserted on miss (e.g., `headers[key]` patterns).
+- [x] Audit `string_view` returns: the storage must outlive the view. Document lifetime contract on each accessor (views invalidated by mutation of the response, e.g., `with_header` may rehash the map).
 
 **Dependencies:**
 - Blocked by: TASK-009
@@ -30,4 +30,4 @@ Make read accessors callable on `const http_response&`, returning views without 
 **Related Requirements:** PRD-RSP-REQ-002, PRD-RSP-REQ-003
 **Related Decisions:** §2.2 (const correctness), §4.3
 
-**Status:** Not Started
+**Status:** Done

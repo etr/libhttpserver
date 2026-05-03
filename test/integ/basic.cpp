@@ -2472,9 +2472,14 @@ class response_footer_resource : public http_resource {
         response->with_footer("X-Checksum", "abc123");
         response->with_footer("X-Processing-Time", "42ms");
 
-        // Test get_footer and get_footers on response
+        // Test get_footer and get_footers on response. The returned
+        // string_view points into the response's storage; we only
+        // read it before returning so the response (and thus the
+        // backing string) outlives any read.
         auto checksum = response->get_footer("X-Checksum");
         auto all_footers = response->get_footers();
+        (void)checksum;
+        (void)all_footers;
 
         return response;
     }

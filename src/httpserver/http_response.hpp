@@ -183,33 +183,54 @@ class http_response {
          std::string_view realm,
          std::string body = {});
 
-     /**
-      * Method used to get a specified header defined for the response
-      * @param key The header identification
-      * @return a string representing the value assumed by the header
-     **/
-     const std::string& get_header(const std::string& key) {
-         return headers_[key];
-     }
+     // -----------------------------------------------------------------
+     // Read accessors (TASK-011, PRD-RSP-REQ-002 / PRD-RSP-REQ-003).
+     //
+     // Lifetime contract for the string_view-returning accessors:
+     //
+     // The returned view points into storage owned by *this. The view is
+     // valid until ANY of the following happen:
+     //   1. *this is destroyed.
+     //   2. *this is moved-from (move ctor / move-assign target).
+     //   3. The corresponding map is mutated for the SAME key
+     //      (with_header(key, ...) replacing an existing value
+     //      invalidates a view obtained from a prior get_header(key)).
+     //
+     // std::map's node-stability guarantee means that adding or removing
+     // OTHER keys does NOT invalidate views of unrelated keys; only
+     // same-key re-assignment, erase, or whole-response destruction
+     // does. Multi-value headers are not modelled in v2.0 — header_map
+     // is single-valued per key.
+     //
+     // Callers MUST NOT keep the view past the next non-const operation
+     // on the response, and MUST NOT keep it past the response's
+     // destruction. If a longer lifetime is required, copy into a
+     // std::string.
+     //
+     // No noexcept on the single-key accessors: std::map::find can in
+     // principle propagate a comparator exception. The map-returning
+     // accessors and the trivial scalar accessors (get_status, kind) are
+     // noexcept (they only return a reference / scalar member).
+     // -----------------------------------------------------------------
 
-     /**
-      * Method used to get a specified footer defined for the response
-      * @param key The footer identification
-      * @return a string representing the value assumed by the footer
-     **/
-     const std::string& get_footer(const std::string& key) {
-         return footers_[key];
-     }
+     /// Returns the value of header `key`, or an empty view if absent.
+     /// Does NOT insert on miss (PRD-RSP-REQ-003).
+     /// View lifetime: see lifetime contract above.
+     [[nodiscard]] std::string_view get_header(std::string_view key) const;
 
-     const std::string& get_cookie(const std::string& key) {
-         return cookies_[key];
-     }
+     /// Returns the value of footer `key`, or an empty view if absent.
+     /// Does NOT insert on miss. View lifetime: see lifetime contract.
+     [[nodiscard]] std::string_view get_footer(std::string_view key) const;
+
+     /// Returns the value of cookie `key`, or an empty view if absent.
+     /// Does NOT insert on miss. View lifetime: see lifetime contract.
+     [[nodiscard]] std::string_view get_cookie(std::string_view key) const;
 
      /**
       * Method used to get all headers passed with the request.
       * @return a map<string,string> containing all headers.
      **/
-     const std::map<std::string, std::string, http::header_comparator>& get_headers() const {
+     [[nodiscard]] const http::header_map& get_headers() const noexcept {
          return headers_;
      }
 
@@ -217,19 +238,32 @@ class http_response {
       * Method used to get all footers passed with the request.
       * @return a map<string,string> containing all footers.
      **/
-     const std::map<std::string, std::string, http::header_comparator>& get_footers() const {
+     [[nodiscard]] const http::header_map& get_footers() const noexcept {
          return footers_;
      }
 
-     const std::map<std::string, std::string, http::header_comparator>& get_cookies() const {
+     [[nodiscard]] const http::header_map& get_cookies() const noexcept {
          return cookies_;
      }
 
      /**
-      * Method used to get the response code from the response
+      * Method used to get the response status code.
+      * Spelled `get_status` to match the v2 vocabulary (TASK-011);
+      * `get_response_code` survives as a compatibility alias while the
+      * v1 subclass hierarchy still inherits from http_response
+      * (TASK-013 removes both the subclasses and the alias together
+      * with the dispatch path in webserver.cpp:1336).
       * @return The response code
      **/
-     int get_response_code() const {
+     [[nodiscard]] int get_status() const noexcept {
+         return status_code_;
+     }
+
+     // Compatibility shim retained while v1 subclasses still inherit
+     // (TASK-013 removes them). Internal dispatch (webserver.cpp:1336)
+     // reaches through a base pointer; that call site flips to
+     // get_status() when TASK-013 lands.
+     [[nodiscard]] int get_response_code() const noexcept {
          return status_code_;
      }
 
