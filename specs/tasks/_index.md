@@ -89,7 +89,7 @@ Nominally: **13 sequential tasks**, each S–XL. Most other tasks parallelize of
 | TASK-004 | Library-defined `iovec_entry` POD with layout-pinning asserts | M1 | Done | TASK-002 |
 | TASK-005 | Add `http_method` enum and `method_set` bitmask | M1 | Done | TASK-002 |
 | TASK-006 | Replace `#define` constants with `httpserver::constants` | M1 | Done | TASK-002 |
-| TASK-007 | CI test for public-header hygiene | M1 | Not Started | TASK-002 |
+| TASK-007 | CI test for public-header hygiene | M1 | Done | TASK-002 |
 | TASK-008 | Internal `detail::body` hierarchy | M2 | Not Started | TASK-002 |
 | TASK-009 | `http_response` value type with SBO buffer | M2 | Not Started | TASK-008 |
 | TASK-010 | `http_response` factory functions | M2 | Not Started | TASK-008, TASK-009, TASK-004 |
