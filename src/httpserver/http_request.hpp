@@ -52,7 +52,7 @@ struct MHD_Connection;
 
 namespace httpserver {
 
-namespace details { struct modded_request; }
+namespace detail { struct modded_request; }
 
 /**
  * Class representing an abstraction for an Http Request. It is used from classes using these apis to receive information through http protocol.
@@ -534,7 +534,7 @@ class http_request {
      }
 
      friend class webserver;
-     friend struct details::modded_request;
+     friend struct detail::modded_request;
 };
 
 std::ostream &operator<< (std::ostream &os, const http_request &r);

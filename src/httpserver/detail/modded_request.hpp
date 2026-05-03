@@ -33,7 +33,7 @@
 
 namespace httpserver {
 
-namespace details {
+namespace detail {
 
 struct modded_request {
     struct MHD_PostProcessor *pp = nullptr;
@@ -66,7 +66,7 @@ struct modded_request {
     }
 };
 
-}  // namespace details
+}  // namespace detail
 
 }  // namespace httpserver
 

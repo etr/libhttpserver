@@ -35,7 +35,7 @@
 
 namespace httpserver {
 
-namespace details {
+namespace detail {
 
 class http_resource;
 
@@ -190,7 +190,7 @@ class http_endpoint {
      bool reg_compiled;
 };
 
-}  // namespace details
+}  // namespace detail
 
 }  // namespace httpserver
 #endif  // SRC_HTTPSERVER_DETAIL_HTTP_ENDPOINT_HPP_

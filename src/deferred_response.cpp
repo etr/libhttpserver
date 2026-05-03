@@ -26,12 +26,12 @@ struct MHD_Response;
 
 namespace httpserver {
 
-namespace details {
+namespace detail {
 
 MHD_Response* get_raw_response_helper(void* cls, ssize_t (*cb)(void*, uint64_t, char*, size_t)) {
     return MHD_create_response_from_callback(MHD_SIZE_UNKNOWN, 1024, cb, cls, nullptr);
 }
 
-}  // namespace details
+}  // namespace detail
 
 }  // namespace httpserver

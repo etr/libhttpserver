@@ -26,7 +26,7 @@
 
 #include "./littletest.hpp"
 
-using httpserver::details::http_endpoint;
+using httpserver::detail::http_endpoint;
 using std::string;
 using std::vector;
 

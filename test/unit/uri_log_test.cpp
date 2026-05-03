@@ -53,7 +53,7 @@ LT_BEGIN_AUTO_TEST(uri_log_suite, null_uri_does_not_throw)
     LT_CHECK_NOTHROW(raw = httpserver::uri_log(nullptr, nullptr, nullptr));
     LT_CHECK(raw != nullptr);
 
-    auto* mr = static_cast<httpserver::details::modded_request*>(raw);
+    auto* mr = static_cast<httpserver::detail::modded_request*>(raw);
     LT_CHECK_EQ(mr->complete_uri, std::string(""));
     delete mr;
 LT_END_AUTO_TEST(null_uri_does_not_throw)
@@ -64,7 +64,7 @@ LT_BEGIN_AUTO_TEST(uri_log_suite, valid_uri_is_stored)
     void* raw = httpserver::uri_log(nullptr, uri, nullptr);
     LT_CHECK(raw != nullptr);
 
-    auto* mr = static_cast<httpserver::details::modded_request*>(raw);
+    auto* mr = static_cast<httpserver::detail::modded_request*>(raw);
     LT_CHECK_EQ(mr->complete_uri, std::string(uri));
     delete mr;
 LT_END_AUTO_TEST(valid_uri_is_stored)
@@ -76,7 +76,7 @@ LT_BEGIN_AUTO_TEST(uri_log_suite, empty_uri_is_stored)
     void* raw = httpserver::uri_log(nullptr, "", nullptr);
     LT_CHECK(raw != nullptr);
 
-    auto* mr = static_cast<httpserver::details::modded_request*>(raw);
+    auto* mr = static_cast<httpserver::detail::modded_request*>(raw);
     LT_CHECK_EQ(mr->complete_uri, std::string(""));
     delete mr;
 LT_END_AUTO_TEST(empty_uri_is_stored)

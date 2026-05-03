@@ -59,7 +59,7 @@ namespace httpserver { class http_response; }
 #ifdef HAVE_WEBSOCKET
 namespace httpserver { class websocket_handler; }
 #endif  // HAVE_WEBSOCKET
-namespace httpserver { namespace details { struct modded_request; } }
+namespace httpserver { namespace detail { struct modded_request; } }
 
 struct MHD_Connection;
 
@@ -277,12 +277,12 @@ class webserver {
      const bool no_alpn;
      const int client_discipline_level;
      std::shared_mutex registered_resources_mutex;
-     std::map<details::http_endpoint, http_resource*> registered_resources;
+     std::map<detail::http_endpoint, http_resource*> registered_resources;
      std::map<std::string, http_resource*> registered_resources_str;
-     std::map<details::http_endpoint, http_resource*> registered_resources_regex;
+     std::map<detail::http_endpoint, http_resource*> registered_resources_regex;
 
      struct route_cache_entry {
-         details::http_endpoint matched_endpoint;
+         detail::http_endpoint matched_endpoint;
          http_resource* resource;
      };
      static constexpr size_t ROUTE_CACHE_MAX_SIZE = 256;
@@ -302,9 +302,9 @@ class webserver {
      std::map<std::string, websocket_handler*> registered_ws_handlers;
 #endif  // HAVE_WEBSOCKET
 
-     std::shared_ptr<http_response> method_not_allowed_page(details::modded_request* mr) const;
-     std::shared_ptr<http_response> internal_error_page(details::modded_request* mr, bool force_our = false) const;
-     std::shared_ptr<http_response> not_found_page(details::modded_request* mr) const;
+     std::shared_ptr<http_response> method_not_allowed_page(detail::modded_request* mr) const;
+     std::shared_ptr<http_response> internal_error_page(detail::modded_request* mr, bool force_our = false) const;
+     std::shared_ptr<http_response> not_found_page(detail::modded_request* mr) const;
      bool should_skip_auth(const std::string& path) const;
 
      static void request_completed(void *cls,
@@ -331,17 +331,17 @@ class webserver {
                                  struct MHD_UpgradeResponseHandle *urh);
 #endif  // HAVE_WEBSOCKET
 
-     MHD_Result requests_answer_first_step(MHD_Connection* connection, struct details::modded_request* mr);
+     MHD_Result requests_answer_first_step(MHD_Connection* connection, struct detail::modded_request* mr);
 
      MHD_Result requests_answer_second_step(MHD_Connection* connection,
              const char* method, const char* version, const char* upload_data,
-             size_t* upload_data_size, struct details::modded_request* mr);
+             size_t* upload_data_size, struct detail::modded_request* mr);
 
-     MHD_Result finalize_answer(MHD_Connection* connection, struct details::modded_request* mr, const char* method);
+     MHD_Result finalize_answer(MHD_Connection* connection, struct detail::modded_request* mr, const char* method);
 
-     struct MHD_Response* get_raw_response_with_fallback(details::modded_request* mr);
+     struct MHD_Response* get_raw_response_with_fallback(detail::modded_request* mr);
 
-     MHD_Result complete_request(MHD_Connection* connection, struct details::modded_request* mr, const char* version, const char* method);
+     MHD_Result complete_request(MHD_Connection* connection, struct detail::modded_request* mr, const char* version, const char* method);
 
      void invalidate_route_cache();
 

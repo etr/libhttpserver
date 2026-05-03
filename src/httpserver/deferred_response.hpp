@@ -39,9 +39,9 @@ struct MHD_Response;
 
 namespace httpserver {
 
-namespace details {
+namespace detail {
 MHD_Response* get_raw_response_helper(void* cls, ssize_t (*cb)(void*, uint64_t, char*, size_t));
-}  // namespace details
+}  // namespace detail
 
 template <class T>
 class deferred_response : public string_response {
@@ -67,7 +67,7 @@ class deferred_response : public string_response {
      ~deferred_response() = default;
 
      MHD_Response* get_raw_response() {
-         return details::get_raw_response_helper(reinterpret_cast<void*>(this), &cb);
+         return detail::get_raw_response_helper(reinterpret_cast<void*>(this), &cb);
      }
 
  private:
