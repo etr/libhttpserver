@@ -2,7 +2,7 @@
 
 **Responsibility:** Polymorphic body representation backing `http_response`'s SBO buffer. Each subclass carries the data needed for one body kind and knows how to stream itself into an MHD response.
 
-**Implementation:** Abstract base in `src/httpserver/details/body.hpp` (not installed):
+**Implementation:** Abstract base in `src/httpserver/detail/body.hpp` (not installed):
 
 ```cpp
 namespace httpserver::detail {

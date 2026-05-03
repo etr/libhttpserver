@@ -23,7 +23,7 @@
 │     └── http_request::impl (allocated from connection's arena)         │
 │                                                                         │
 │  detail::body (polymorphic; subclasses string/file/iovec/pipe/         │
-│                deferred/empty live in details/body.hpp)                 │
+│                deferred/empty live in detail/body.hpp)                  │
 └──────────┬───────────────────────────────────────────────────────────┘
            │
 ┌──────────┴───────────────────────────────────────────────────────────┐
@@ -41,7 +41,7 @@
 | `http_response` | Response value: status, headers, footers, cookies, body | Non-PIMPL value type; polymorphic body in 64-byte SBO buffer with heap fallback |
 | `http_resource` | Class-form handler (state shared across HTTP methods of one resource) | Public abstract base; allow-mask held as `method_set` (`uint32_t` bitmask) |
 | `websocket_handler` | Per-endpoint WebSocket protocol handler | Public abstract base; registered via `unique_ptr` / `shared_ptr` overloads |
-| `detail::body` | Polymorphic body kinds (string / file / iovec / pipe / deferred / empty) | Internal hierarchy in `src/httpserver/details/body.hpp` |
+| `detail::body` | Polymorphic body kinds (string / file / iovec / pipe / deferred / empty) | Internal hierarchy in `src/httpserver/detail/body.hpp` |
 | Route table | Path → (method_set, handler) lookup | `unordered_map` (exact) + radix tree (parameterized + prefix) + regex chain (fallback) |
 
 ---

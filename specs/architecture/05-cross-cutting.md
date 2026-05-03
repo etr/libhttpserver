@@ -55,7 +55,7 @@ src/
 │   ├── create_webserver.hpp
 │   ├── create_test_request.hpp
 │   ├── file_info.hpp
-│   └── details/                          # NOT installed (existing convention)
+│   └── detail/                          # NOT installed (existing convention)
 │       ├── webserver_impl.hpp            # NEW
 │       ├── http_request_impl.hpp         # NEW
 │       ├── body.hpp                      # NEW — detail::body + subclasses
@@ -64,6 +64,6 @@ src/
 └── *.cpp                                  # implementations
 ```
 
-Public headers gate on `_HTTPSERVER_HPP_INSIDE_` or `HTTPSERVER_COMPILATION`. `details/` headers gate on `HTTPSERVER_COMPILATION` only (consumers cannot reach in). `Makefile.am` continues to install `httpserver/*.hpp` and exclude `httpserver/details/`.
+Public headers gate on `_HTTPSERVER_HPP_INSIDE_` or `HTTPSERVER_COMPILATION`. `detail/` headers gate on `HTTPSERVER_COMPILATION` only (consumers cannot reach in). `Makefile.am` continues to install `httpserver/*.hpp` and exclude `httpserver/detail/`.
 
 ---
