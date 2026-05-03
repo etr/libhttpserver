@@ -13,6 +13,7 @@ Delete the public-facing response subclasses and the `get_raw_response`/`decorat
 - [ ] Remove the public virtual methods `get_raw_response`, `decorate_response`, `enqueue_response` from `http_response.hpp`.
 - [ ] Update `<httpserver.hpp>` umbrella to drop the removed includes.
 - [ ] Internal dispatch path (in `webserver.cpp` or `http_response.cpp`) calls `body_->materialize(...)` instead of the removed virtuals.
+- [ ] Add `final` to `http_response` (deferred from TASK-009 because the v1 subclasses still inherited at that point — see TASK-009 plan OQ-1). Per PRD §3.5 the class must be sealed.
 
 **Dependencies:**
 - Blocked by: TASK-009, TASK-010, TASK-011, TASK-012
@@ -21,6 +22,7 @@ Delete the public-facing response subclasses and the `get_raw_response`/`decorat
 **Acceptance Criteria:**
 - `grep -E 'class\s+\w+_response\s*:' src/httpserver/*.hpp` returns no public results (PRD §3.5 acceptance).
 - `grep -E 'get_raw_response|decorate_response|enqueue_response' src/httpserver/*.hpp` returns no results.
+- `static_assert(std::is_final_v<httpserver::http_response>);` (deferred AC from TASK-009 — PRD §3.5 sealed value type).
 - Existing tests that constructed `string_response` etc. directly are migrated to factories (or removed if they were testing private details).
 - Typecheck passes.
 - Tests pass.

@@ -16,7 +16,7 @@ Provide one canonical way to construct each body kind via static factories that 
   - `static http_response empty();`
   - `static http_response deferred(std::function<ssize_t(std::uint64_t, char*, std::size_t)> producer);`
   - `static http_response unauthorized(std::string_view scheme, std::string_view realm, std::string body = {});`
-- [ ] Each factory placement-news the appropriate `detail::body` subclass into `body_storage_`; falls back to `new` if the subclass doesn't fit (per DR-005 graceful fallback).
+- [ ] Each factory placement-news the appropriate `detail::body` subclass into `body_storage_` (and sets `body_inline_ = true`); for the (currently empty) heap-fallback path, the factory MUST use `::operator new(sizeof(concrete_body))` followed by placement-new (NOT plain `new concrete_body(...)`) so that `http_response`'s destructor — which always calls `body_->~body()` and then `::operator delete(body_)` for the heap path — does not double-destroy. This contract is set by TASK-009 (plan OQ-4) for symmetry between inline and heap teardown.
 - [ ] `unauthorized()` covers both basic and digest auth (scheme parameter); replaces v1's `basic_auth_fail_response` and `digest_auth_fail_response`.
 - [ ] Document lifetime: `pipe(fd, ...)` takes ownership of `fd` and closes it after the response is materialized.
 
