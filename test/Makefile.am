@@ -26,7 +26,7 @@ LDADD += -lcurl
 
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/ -DHTTPSERVER_COMPILATION
 METASOURCES = AUTO
-check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories webserver_pimpl
+check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories webserver_pimpl http_request_pimpl
 
 MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
 
@@ -100,6 +100,14 @@ http_response_factories_LDADD = $(LDADD) -lmicrohttpd
 # non-movable. Pure compile test -- empty LDADD.
 webserver_pimpl_SOURCES = unit/webserver_pimpl_test.cpp
 webserver_pimpl_LDADD =
+
+# http_request_pimpl: TASK-015 sentinel. Compile-time assertions that the
+# http_request PIMPL split has happened: <microhttpd.h>/<gnutls/gnutls.h>
+# no longer leak through the public http_request.hpp, http_request is
+# move-only, and sizeof(http_request) shrank to a small bag plus one
+# impl pointer. Pure compile test -- empty LDADD.
+http_request_pimpl_SOURCES = unit/http_request_pimpl_test.cpp
+http_request_pimpl_LDADD =
 
 noinst_HEADERS = littletest.hpp
 AM_CXXFLAGS += -Wall -fPIC -Wno-overloaded-virtual

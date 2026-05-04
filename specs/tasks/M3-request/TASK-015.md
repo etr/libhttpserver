@@ -8,11 +8,11 @@
 Move `http_request`'s backend-coupled members (`MHD_Connection*`, raw GnuTLS handle, computed caches) into `detail/http_request_impl.hpp` behind a `std::unique_ptr<http_request_impl>`. No API rename yet.
 
 **Action Items:**
-- [ ] Create `src/httpserver/detail/http_request_impl.hpp` (gated `HTTPSERVER_COMPILATION` only).
-- [ ] Move all backend-coupled state into the impl struct: `MHD_Connection* conn_`, `gnutls_session_t tls_session_`, parsed-args cache, headers cache, etc.
-- [ ] Public `http_request.hpp` declares `std::unique_ptr<http_request_impl> impl_;` and forward-declares the impl class.
-- [ ] Implement existing public methods as forwarders to `impl_->method()`.
-- [ ] Move `<microhttpd.h>`, `<gnutls/gnutls.h>` includes from public `http_request.hpp` into `http_request_impl.hpp` and `http_request.cpp`.
+- [x] Create `src/httpserver/detail/http_request_impl.hpp` (gated `HTTPSERVER_COMPILATION` only).
+- [x] Move all backend-coupled state into the impl struct: `MHD_Connection* conn_`, `gnutls_session_t tls_session_`, parsed-args cache, headers cache, etc.
+- [x] Public `http_request.hpp` declares `std::unique_ptr<http_request_impl> impl_;` and forward-declares the impl class.
+- [x] Implement existing public methods as forwarders to `impl_->method()`.
+- [x] Move `<microhttpd.h>`, `<gnutls/gnutls.h>` includes from public `http_request.hpp` into `http_request_impl.hpp` and `http_request.cpp`.
 
 **Dependencies:**
 - Blocked by: TASK-002, TASK-014
@@ -28,4 +28,4 @@ Move `http_request`'s backend-coupled members (`MHD_Connection*`, raw GnuTLS han
 **Related Requirements:** PRD-HDR-REQ-001..004
 **Related Decisions:** DR-003b, §4.2
 
-**Status:** Not Started
+**Status:** In Progress
