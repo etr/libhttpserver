@@ -20,19 +20,27 @@
 */
 
 #include "httpserver/http_request.hpp"
+#include "httpserver/detail/http_request_impl.hpp"
+
 #include <stdio.h>
 #include <stdlib.h>
+#include <algorithm>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <string>
+#include <tuple>
 #include <vector>
+
 #include "httpserver/http_utils.hpp"
 #include "httpserver/string_utilities.hpp"
 
 #ifdef HAVE_GNUTLS
 #include <gnutls/x509.h>
 
-// RAII wrapper for gnutls_x509_crt_t to ensure proper cleanup
+namespace {
+
+// RAII wrapper for gnutls_x509_crt_t to ensure proper cleanup.
 class scoped_x509_cert {
  public:
     scoped_x509_cert() : cert_(nullptr), valid_(false) {}
@@ -96,19 +104,376 @@ class scoped_x509_cert {
     gnutls_x509_crt_t cert_;
     bool valid_;
 };
+
+}  // namespace
 #endif  // HAVE_GNUTLS
 
 namespace httpserver {
 
 const char http_request::EMPTY[] = "";
 
+namespace {
+
 struct arguments_accumulator {
     unescaper_ptr unescaper;
     std::map<std::string, std::vector<std::string>, http::arg_comparator>* arguments;
 };
 
+}  // namespace
+
+// ============================================================================
+// detail::http_request_impl method bodies
+//
+// Each body is the verbatim relocation of the v1 http_request method,
+// with `cache->X` rewritten to `this->X`, `underlying_connection` to
+// `connection_`, `unescaper` to `unescaper_`, `files` to `files_`, and
+// `file_cleanup_callback` to `file_cleanup_callback_`.
+// ============================================================================
+
+namespace detail {
+
+std::string_view http_request_impl::get_connection_value(std::string_view key, MHD_ValueKind kind) const {
+    // Test-request path: connection_ is null, fall back to local storage.
+    if (connection_ == nullptr) {
+        const auto* map = [&]() -> const http::header_map* {
+            switch (kind) {
+                case MHD_HEADER_KIND: return &headers_local;
+                case MHD_FOOTER_KIND: return &footers_local;
+                case MHD_COOKIE_KIND: return &cookies_local;
+                default:             return nullptr;
+            }
+        }();
+        if (map != nullptr) {
+            auto it = map->find(std::string(key));
+            if (it != map->end()) return it->second;
+        }
+        return http_request::EMPTY;
+    }
+
+    const char* header_c = MHD_lookup_connection_value(connection_, kind, key.data());
+
+    if (header_c == nullptr) return http_request::EMPTY;
+
+    return header_c;
+}
+
+MHD_Result http_request_impl::build_request_header(void* cls, MHD_ValueKind kind,
+                                                   const char* key, const char* value) {
+    // Parameters needed to respect MHD interface, but not used in the implementation.
+    std::ignore = kind;
+
+    http::header_view_map* dhr = static_cast<http::header_view_map*>(cls);
+    (*dhr)[key] = value;
+    return MHD_YES;
+}
+
+http::header_view_map http_request_impl::get_headerlike_values(MHD_ValueKind kind) const {
+    http::header_view_map headers;
+
+    // Test-request path: connection_ is null, build view map from local storage.
+    if (connection_ == nullptr) {
+        const auto* map = [&]() -> const http::header_map* {
+            switch (kind) {
+                case MHD_HEADER_KIND: return &headers_local;
+                case MHD_FOOTER_KIND: return &footers_local;
+                case MHD_COOKIE_KIND: return &cookies_local;
+                default:             return nullptr;
+            }
+        }();
+        if (map != nullptr) {
+            for (const auto& [k, v] : *map) {
+                headers[k] = v;
+            }
+        }
+        return headers;
+    }
+
+    MHD_get_connection_values(connection_, kind, &http_request_impl::build_request_header,
+                              reinterpret_cast<void*>(&headers));
+
+    return headers;
+}
+
+MHD_Result http_request_impl::build_request_args(void* cls, MHD_ValueKind kind,
+                                                 const char* key, const char* arg_value) {
+    // Parameters needed to respect MHD interface, but not used in the implementation.
+    std::ignore = kind;
+
+    arguments_accumulator* aa = static_cast<arguments_accumulator*>(cls);
+    std::string value = ((arg_value == nullptr) ? "" : arg_value);
+
+    http::base_unescaper(&value, aa->unescaper);
+    (*aa->arguments)[key].push_back(value);
+    return MHD_YES;
+}
+
+MHD_Result http_request_impl::build_request_querystring(void* cls, MHD_ValueKind kind,
+                                                        const char* key_value, const char* arg_value) {
+    // Parameters needed to respect MHD interface, but not used in the implementation.
+    std::ignore = kind;
+
+    std::string* qs = static_cast<std::string*>(cls);
+
+    std::string_view key = key_value;
+    std::string_view value = ((arg_value == nullptr) ? "" : arg_value);
+
+    // Limit to a single allocation.
+    qs->reserve(qs->size() + key.size() + value.size() + 3);
+
+    *qs += ((*qs == "") ? "?" : "&");
+    *qs += key;
+    *qs += "=";
+    *qs += value;
+
+    return MHD_YES;
+}
+
+void http_request_impl::populate_args() const {
+    if (args_populated) {
+        return;
+    }
+    // Test-request path: connection_ is null, args already set directly.
+    if (connection_ == nullptr) {
+        args_populated = true;
+        return;
+    }
+    arguments_accumulator aa;
+    aa.unescaper = unescaper_;
+    aa.arguments = &unescaped_args;
+    MHD_get_connection_values(connection_, MHD_GET_ARGUMENT_KIND,
+                              &http_request_impl::build_request_args,
+                              reinterpret_cast<void*>(&aa));
+
+    args_populated = true;
+}
+
+void http_request_impl::ensure_path_pieces_cached(std::string_view path) const {
+    if (!path_pieces_cached) {
+        path_pieces = http::http_utils::tokenize_url(std::string(path));
+        path_pieces_cached = true;
+    }
+}
+
+void http_request_impl::set_arg(const std::string& key, const std::string& value,
+                                std::size_t content_size_limit) {
+    unescaped_args[key].push_back(value.substr(0, content_size_limit));
+}
+
+void http_request_impl::set_arg(const char* key, const char* value, std::size_t size,
+                                std::size_t content_size_limit) {
+    unescaped_args[key].push_back(std::string(value, std::min(size, content_size_limit)));
+}
+
+void http_request_impl::set_arg_flat(const std::string& key, const std::string& value,
+                                     std::size_t content_size_limit) {
+    unescaped_args[key] = { (value.substr(0, content_size_limit)) };
+}
+
+void http_request_impl::set_args(const std::map<std::string, std::string>& args,
+                                 std::size_t content_size_limit) {
+    for (auto const& [key, value] : args) {
+        unescaped_args[key].push_back(value.substr(0, content_size_limit));
+    }
+}
+
+void http_request_impl::grow_last_arg(const std::string& key, const std::string& value) {
+    auto it = unescaped_args.find(key);
+
+    if (it != unescaped_args.end()) {
+        if (!it->second.empty()) {
+            it->second.back() += value;
+        } else {
+            it->second.push_back(value);
+        }
+    } else {
+        unescaped_args[key] = {value};
+    }
+}
+
+#ifdef HAVE_BAUTH
+void http_request_impl::fetch_user_pass() const {
+    // Test-request path: connection_ is null, credentials already set.
+    if (connection_ == nullptr) {
+        return;
+    }
+    struct MHD_BasicAuthInfo* info = MHD_basic_auth_get_username_password3(connection_);
+
+    if (info != nullptr) {
+        username.assign(info->username, info->username_len);
+        if (info->password != nullptr) {
+            password.assign(info->password, info->password_len);
+        }
+        MHD_free(info);
+    }
+}
+#endif  // HAVE_BAUTH
+
+#ifdef HAVE_GNUTLS
+bool http_request_impl::has_tls_session() const {
+    // Test-request path: connection_ is null, return the local flag.
+    if (connection_ == nullptr) {
+        return tls_enabled_local;
+    }
+    const MHD_ConnectionInfo* conninfo = MHD_get_connection_info(connection_, MHD_CONNECTION_INFO_GNUTLS_SESSION);
+    return (conninfo != nullptr);
+}
+
+gnutls_session_t http_request_impl::get_tls_session() const {
+    const MHD_ConnectionInfo* conninfo = MHD_get_connection_info(connection_, MHD_CONNECTION_INFO_GNUTLS_SESSION);
+
+    if (conninfo == nullptr) {
+        return nullptr;
+    }
+
+    return static_cast<gnutls_session_t>(conninfo->tls_session);
+}
+
+bool http_request_impl::has_client_certificate() const {
+    if (!has_tls_session()) {
+        return false;
+    }
+
+    gnutls_session_t session = get_tls_session();
+    unsigned int list_size = 0;
+    const gnutls_datum_t* cert_list = gnutls_certificate_get_peers(session, &list_size);
+
+    return (cert_list != nullptr && list_size > 0);
+}
+
+void http_request_impl::populate_all_cert_fields() const {
+    if (client_cert_fields_cached) {
+        return;
+    }
+
+    client_cert_fields_cached = true;
+
+    gnutls_session_t session = nullptr;
+    if (has_tls_session()) {
+        session = get_tls_session();
+    }
+
+    scoped_x509_cert cert;
+    if (session != nullptr) {
+        cert.init_from_session(session);
+    }
+
+    if (!cert.is_valid()) {
+        // Default values (empty strings and -1) are already set by the
+        // impl member initializers; client_cert_verified defaults to false.
+        return;
+    }
+
+    // Client certificate verification
+    {
+        unsigned int status = 0;
+        if (gnutls_certificate_verify_peers2(session, &status) == GNUTLS_E_SUCCESS) {
+            client_cert_verified = (status == 0);
+        }
+    }
+
+    // Subject DN
+    {
+        size_t dn_size = 0;
+        gnutls_x509_crt_get_dn(cert.get(), nullptr, &dn_size);
+        std::string dn(dn_size, '\0');
+        if (gnutls_x509_crt_get_dn(cert.get(), &dn[0], &dn_size) == GNUTLS_E_SUCCESS) {
+            if (!dn.empty() && dn.back() == '\0') dn.pop_back();
+            client_cert_dn = dn;
+        }
+    }
+
+    // Issuer DN
+    {
+        size_t dn_size = 0;
+        gnutls_x509_crt_get_issuer_dn(cert.get(), nullptr, &dn_size);
+        std::string dn(dn_size, '\0');
+        if (gnutls_x509_crt_get_issuer_dn(cert.get(), &dn[0], &dn_size) == GNUTLS_E_SUCCESS) {
+            if (!dn.empty() && dn.back() == '\0') dn.pop_back();
+            client_cert_issuer_dn = dn;
+        }
+    }
+
+    // Common Name
+    {
+        size_t cn_size = 0;
+        gnutls_x509_crt_get_dn_by_oid(cert.get(), GNUTLS_OID_X520_COMMON_NAME, 0, 0, nullptr, &cn_size);
+        if (cn_size > 0) {
+            std::string cn(cn_size, '\0');
+            if (gnutls_x509_crt_get_dn_by_oid(cert.get(), GNUTLS_OID_X520_COMMON_NAME, 0, 0, &cn[0], &cn_size) == GNUTLS_E_SUCCESS) {
+                if (!cn.empty() && cn.back() == '\0') cn.pop_back();
+                client_cert_cn = cn;
+            }
+        }
+    }
+
+    // SHA-256 fingerprint
+    {
+        unsigned char fingerprint[32];
+        size_t fingerprint_size = sizeof(fingerprint);
+        if (gnutls_x509_crt_get_fingerprint(cert.get(), GNUTLS_DIG_SHA256, fingerprint, &fingerprint_size) == GNUTLS_E_SUCCESS) {
+            std::string hex_fingerprint;
+            hex_fingerprint.reserve(fingerprint_size * 2);
+            for (size_t i = 0; i < fingerprint_size; ++i) {
+                char hex[3];
+                snprintf(hex, sizeof(hex), "%02x", fingerprint[i]);
+                hex_fingerprint += hex;
+            }
+            client_cert_fingerprint_sha256 = hex_fingerprint;
+        }
+    }
+
+    // Validity times
+    client_cert_not_before = gnutls_x509_crt_get_activation_time(cert.get());
+    client_cert_not_after = gnutls_x509_crt_get_expiration_time(cert.get());
+}
+#endif  // HAVE_GNUTLS
+
+}  // namespace detail
+
+// ============================================================================
+// http_request: public-API forwarders + small outer-state setters.
+// ============================================================================
+
+http_request::http_request(struct MHD_Connection* underlying_connection, unescaper_ptr unescaper)
+    : impl_(std::make_unique<detail::http_request_impl>(underlying_connection, unescaper)) {}
+
+http_request::~http_request() {
+    if (impl_) {
+        for (const auto& [key, by_filename] : impl_->files_) {
+            for (const auto& [fname, finfo] : by_filename) {
+                bool should_delete = true;
+                if (impl_->file_cleanup_callback_ != nullptr) {
+                    try {
+                        should_delete = impl_->file_cleanup_callback_(key, fname, finfo);
+                    } catch (...) {
+                        // If callback throws, default to deleting the file.
+                        should_delete = true;
+                    }
+                }
+                if (should_delete) {
+                    // C++17 has std::filesystem::remove()
+                    remove(finfo.get_file_system_file_name().c_str());
+                }
+            }
+        }
+    }
+}
+
 void http_request::set_method(const std::string& method) {
     this->method = method;
+}
+
+const std::vector<std::string> http_request::get_path_pieces() const {
+    impl_->ensure_path_pieces_cached(path);
+    return impl_->path_pieces;
+}
+
+const std::string http_request::get_path_piece(int index) const {
+    impl_->ensure_path_pieces_cached(path);
+    if (static_cast<int>(impl_->path_pieces.size()) > index) {
+        return impl_->path_pieces[index];
+    }
+    return EMPTY;
 }
 
 #ifdef HAVE_DAUTH
@@ -121,7 +486,7 @@ http::http_utils::digest_auth_result http_request::check_digest_auth(
     std::string_view digested_user = get_digested_user();
 
     enum MHD_DigestAuthResult result = MHD_digest_auth_check3(
-        underlying_connection,
+        impl_->connection_,
         realm.c_str(),
         digested_user.data(),
         password.c_str(),
@@ -143,7 +508,7 @@ http::http_utils::digest_auth_result http_request::check_digest_auth_digest(
     std::string_view digested_user = get_digested_user();
 
     enum MHD_DigestAuthResult result = MHD_digest_auth_check_digest3(
-        underlying_connection,
+        impl_->connection_,
         realm.c_str(),
         digested_user.data(),
         userdigest,
@@ -157,87 +522,35 @@ http::http_utils::digest_auth_result http_request::check_digest_auth_digest(
 }
 #endif  // HAVE_DAUTH
 
-std::string_view http_request::get_connection_value(std::string_view key, enum MHD_ValueKind kind) const {
-    const char* header_c = MHD_lookup_connection_value(underlying_connection, kind, key.data());
-
-    if (header_c == nullptr) return EMPTY;
-
-    return header_c;
-}
-
-MHD_Result http_request::build_request_header(void *cls, enum MHD_ValueKind kind, const char *key, const char *value) {
-    // Parameters needed to respect MHD interface, but not used in the implementation.
-    std::ignore = kind;
-
-    http::header_view_map* dhr = static_cast<http::header_view_map*>(cls);
-    (*dhr)[key] = value;
-    return MHD_YES;
-}
-
-const http::header_view_map http_request::get_headerlike_values(enum MHD_ValueKind kind) const {
-    http::header_view_map headers;
-
-    MHD_get_connection_values(underlying_connection, kind, &build_request_header, reinterpret_cast<void*>(&headers));
-
-    return headers;
-}
-
 std::string_view http_request::get_header(std::string_view key) const {
-    return get_connection_value(key, MHD_HEADER_KIND);
+    return impl_->get_connection_value(key, MHD_HEADER_KIND);
 }
 
 const http::header_view_map http_request::get_headers() const {
-    return get_headerlike_values(MHD_HEADER_KIND);
+    return impl_->get_headerlike_values(MHD_HEADER_KIND);
 }
 
 std::string_view http_request::get_footer(std::string_view key) const {
-    return get_connection_value(key, MHD_FOOTER_KIND);
+    return impl_->get_connection_value(key, MHD_FOOTER_KIND);
 }
 
 const http::header_view_map http_request::get_footers() const {
-    return get_headerlike_values(MHD_FOOTER_KIND);
+    return impl_->get_headerlike_values(MHD_FOOTER_KIND);
 }
 
 std::string_view http_request::get_cookie(std::string_view key) const {
-    return get_connection_value(key, MHD_COOKIE_KIND);
+    return impl_->get_connection_value(key, MHD_COOKIE_KIND);
 }
 
 const http::header_view_map http_request::get_cookies() const {
-    return get_headerlike_values(MHD_COOKIE_KIND);
-}
-
-void http_request::populate_args() const {
-    if (cache->args_populated) {
-        return;
-    }
-    arguments_accumulator aa;
-    aa.unescaper = unescaper;
-    aa.arguments = &cache->unescaped_args;
-    MHD_get_connection_values(underlying_connection, MHD_GET_ARGUMENT_KIND, &build_request_args, reinterpret_cast<void*>(&aa));
-
-    cache->args_populated = true;
-}
-
-
-void http_request::grow_last_arg(const std::string& key, const std::string& value) {
-    auto it = cache->unescaped_args.find(key);
-
-    if (it != cache->unescaped_args.end()) {
-        if (!it->second.empty()) {
-            it->second.back() += value;
-        } else {
-            it->second.push_back(value);
-        }
-    } else {
-        cache->unescaped_args[key] = {value};
-    }
+    return impl_->get_headerlike_values(MHD_COOKIE_KIND);
 }
 
 http_arg_value http_request::get_arg(std::string_view key) const {
-    populate_args();
+    impl_->populate_args();
 
-    auto it = cache->unescaped_args.find(key);
-    if (it != cache->unescaped_args.end()) {
+    auto it = impl_->unescaped_args.find(key);
+    if (it != impl_->unescaped_args.end()) {
         http_arg_value arg;
         arg.values.reserve(it->second.size());
         for (const auto& value : it->second) {
@@ -249,20 +562,22 @@ http_arg_value http_request::get_arg(std::string_view key) const {
 }
 
 std::string_view http_request::get_arg_flat(std::string_view key) const {
-    auto const it = cache->unescaped_args.find(key);
+    impl_->populate_args();
 
-    if (it != cache->unescaped_args.end()) {
+    auto const it = impl_->unescaped_args.find(key);
+
+    if (it != impl_->unescaped_args.end()) {
         return it->second[0];
     }
 
-    return get_connection_value(key, MHD_GET_ARGUMENT_KIND);
+    return impl_->get_connection_value(key, MHD_GET_ARGUMENT_KIND);
 }
 
 const http::arg_view_map http_request::get_args() const {
-    populate_args();
+    impl_->populate_args();
 
     http::arg_view_map arguments;
-    for (const auto& [key, value] : cache->unescaped_args) {
+    for (const auto& [key, value] : impl_->unescaped_args) {
         auto& arg_values = arguments[key];
         for (const auto& v : value) {
             arg_values.values.push_back(v);
@@ -272,279 +587,193 @@ const http::arg_view_map http_request::get_args() const {
 }
 
 const std::map<std::string_view, std::string_view, http::arg_comparator> http_request::get_args_flat() const {
-    populate_args();
+    impl_->populate_args();
     std::map<std::string_view, std::string_view, http::arg_comparator> ret;
-    for (const auto&[key, val] : cache->unescaped_args) {
+    for (const auto& [key, val] : impl_->unescaped_args) {
         ret[key] = val[0];
     }
     return ret;
 }
 
 http::file_info& http_request::get_or_create_file_info(const std::string& key, const std::string& upload_file_name) {
-    return files[key][upload_file_name];
+    return impl_->files_[key][upload_file_name];
+}
+
+const std::map<std::string, std::map<std::string, http::file_info>> http_request::get_files() const {
+    return impl_->files_;
 }
 
 std::string_view http_request::get_querystring() const {
-    if (!cache->querystring.empty()) {
-        return cache->querystring;
+    if (!impl_->querystring.empty()) {
+        return impl_->querystring;
     }
 
-    MHD_get_connection_values(underlying_connection, MHD_GET_ARGUMENT_KIND, &build_request_querystring, reinterpret_cast<void*>(&cache->querystring));
+    // Test-request path: connection_ is null, querystring already set (or empty).
+    if (impl_->connection_ == nullptr) {
+        return impl_->querystring;
+    }
 
-    return cache->querystring;
-}
+    MHD_get_connection_values(impl_->connection_, MHD_GET_ARGUMENT_KIND,
+                              &detail::http_request_impl::build_request_querystring,
+                              reinterpret_cast<void*>(&impl_->querystring));
 
-MHD_Result http_request::build_request_args(void *cls, enum MHD_ValueKind kind, const char *key, const char *arg_value) {
-    // Parameters needed to respect MHD interface, but not used in the implementation.
-    std::ignore = kind;
-
-    arguments_accumulator* aa = static_cast<arguments_accumulator*>(cls);
-    std::string value = ((arg_value == nullptr) ? "" : arg_value);
-
-    http::base_unescaper(&value, aa->unescaper);
-    (*aa->arguments)[key].push_back(value);
-    return MHD_YES;
-}
-
-MHD_Result http_request::build_request_querystring(void *cls, enum MHD_ValueKind kind, const char *key_value, const char *arg_value) {
-    // Parameters needed to respect MHD interface, but not used in the implementation.
-    std::ignore = kind;
-
-    std::string* querystring = static_cast<std::string*>(cls);
-
-    std::string_view key = key_value;
-    std::string_view value = ((arg_value == nullptr) ? "" : arg_value);
-
-    // Limit to a single allocation.
-    querystring->reserve(querystring->size() + key.size() + value.size() + 3);
-
-    *querystring += ((*querystring == "") ? "?" : "&");
-    *querystring += key;
-    *querystring += "=";
-    *querystring += value;
-
-    return MHD_YES;
+    return impl_->querystring;
 }
 
 #ifdef HAVE_BAUTH
-void http_request::fetch_user_pass() const {
-    struct MHD_BasicAuthInfo* info = MHD_basic_auth_get_username_password3(underlying_connection);
-
-    if (info != nullptr) {
-        cache->username.assign(info->username, info->username_len);
-        if (info->password != nullptr) {
-            cache->password.assign(info->password, info->password_len);
-        }
-        MHD_free(info);
-    }
-}
-
 std::string_view http_request::get_user() const {
-    if (!cache->username.empty()) {
-        return cache->username;
+    if (!impl_->username.empty()) {
+        return impl_->username;
     }
-    fetch_user_pass();
-    return cache->username;
+    impl_->fetch_user_pass();
+    return impl_->username;
 }
 
 std::string_view http_request::get_pass() const {
-    if (!cache->password.empty()) {
-        return cache->password;
+    if (!impl_->password.empty()) {
+        return impl_->password;
     }
-    fetch_user_pass();
-    return cache->password;
+    impl_->fetch_user_pass();
+    return impl_->password;
 }
 #endif  // HAVE_BAUTH
 
 #ifdef HAVE_DAUTH
 std::string_view http_request::get_digested_user() const {
-    if (!cache->digested_user.empty()) {
-        return cache->digested_user;
+    if (!impl_->digested_user.empty()) {
+        return impl_->digested_user;
     }
 
-    struct MHD_DigestAuthUsernameInfo* info = MHD_digest_auth_get_username3(underlying_connection);
+    // Test-request path: connection_ is null, digested_user already set.
+    if (impl_->connection_ == nullptr) {
+        return impl_->digested_user;
+    }
 
-    cache->digested_user = EMPTY;
+    struct MHD_DigestAuthUsernameInfo* info = MHD_digest_auth_get_username3(impl_->connection_);
+
+    impl_->digested_user = EMPTY;
     if (info != nullptr) {
         if (info->username != nullptr) {
-            cache->digested_user.assign(info->username, info->username_len);
+            impl_->digested_user.assign(info->username, info->username_len);
         }
         MHD_free(info);
     }
 
-    return cache->digested_user;
+    return impl_->digested_user;
 }
 #endif  // HAVE_DAUTH
 
 #ifdef HAVE_GNUTLS
 bool http_request::has_tls_session() const {
-    const MHD_ConnectionInfo * conninfo = MHD_get_connection_info(underlying_connection, MHD_CONNECTION_INFO_GNUTLS_SESSION);
-    return (conninfo != nullptr);
+    return impl_->has_tls_session();
 }
 
 gnutls_session_t http_request::get_tls_session() const {
-    const MHD_ConnectionInfo * conninfo = MHD_get_connection_info(underlying_connection, MHD_CONNECTION_INFO_GNUTLS_SESSION);
-
-    if (conninfo == nullptr) {
-        return nullptr;
-    }
-
-    return static_cast<gnutls_session_t>(conninfo->tls_session);
+    return impl_->get_tls_session();
 }
 
 bool http_request::has_client_certificate() const {
-    if (!has_tls_session()) {
-        return false;
-    }
-
-    gnutls_session_t session = get_tls_session();
-    unsigned int list_size = 0;
-    const gnutls_datum_t* cert_list = gnutls_certificate_get_peers(session, &list_size);
-
-    return (cert_list != nullptr && list_size > 0);
-}
-
-void http_request::populate_all_cert_fields() const {
-    if (cache->client_cert_fields_cached) {
-        return;
-    }
-
-    cache->client_cert_fields_cached = true;
-
-    gnutls_session_t session = nullptr;
-    if (has_tls_session()) {
-        session = get_tls_session();
-    }
-
-    scoped_x509_cert cert;
-    if (session != nullptr) {
-        cert.init_from_session(session);
-    }
-
-    if (!cert.is_valid()) {
-        // Default values (empty strings and -1) are already set by the
-        // cache struct initializers; client_cert_verified defaults to false.
-        return;
-    }
-
-    // Client certificate verification
-    {
-        unsigned int status = 0;
-        if (gnutls_certificate_verify_peers2(session, &status) == GNUTLS_E_SUCCESS) {
-            cache->client_cert_verified = (status == 0);
-        }
-    }
-
-    // Subject DN
-    {
-        size_t dn_size = 0;
-        gnutls_x509_crt_get_dn(cert.get(), nullptr, &dn_size);
-        std::string dn(dn_size, '\0');
-        if (gnutls_x509_crt_get_dn(cert.get(), &dn[0], &dn_size) == GNUTLS_E_SUCCESS) {
-            if (!dn.empty() && dn.back() == '\0') dn.pop_back();
-            cache->client_cert_dn = dn;
-        }
-    }
-
-    // Issuer DN
-    {
-        size_t dn_size = 0;
-        gnutls_x509_crt_get_issuer_dn(cert.get(), nullptr, &dn_size);
-        std::string dn(dn_size, '\0');
-        if (gnutls_x509_crt_get_issuer_dn(cert.get(), &dn[0], &dn_size) == GNUTLS_E_SUCCESS) {
-            if (!dn.empty() && dn.back() == '\0') dn.pop_back();
-            cache->client_cert_issuer_dn = dn;
-        }
-    }
-
-    // Common Name
-    {
-        size_t cn_size = 0;
-        gnutls_x509_crt_get_dn_by_oid(cert.get(), GNUTLS_OID_X520_COMMON_NAME, 0, 0, nullptr, &cn_size);
-        if (cn_size > 0) {
-            std::string cn(cn_size, '\0');
-            if (gnutls_x509_crt_get_dn_by_oid(cert.get(), GNUTLS_OID_X520_COMMON_NAME, 0, 0, &cn[0], &cn_size) == GNUTLS_E_SUCCESS) {
-                if (!cn.empty() && cn.back() == '\0') cn.pop_back();
-                cache->client_cert_cn = cn;
-            }
-        }
-    }
-
-    // SHA-256 fingerprint
-    {
-        unsigned char fingerprint[32];
-        size_t fingerprint_size = sizeof(fingerprint);
-        if (gnutls_x509_crt_get_fingerprint(cert.get(), GNUTLS_DIG_SHA256, fingerprint, &fingerprint_size) == GNUTLS_E_SUCCESS) {
-            std::string hex_fingerprint;
-            hex_fingerprint.reserve(fingerprint_size * 2);
-            for (size_t i = 0; i < fingerprint_size; ++i) {
-                char hex[3];
-                snprintf(hex, sizeof(hex), "%02x", fingerprint[i]);
-                hex_fingerprint += hex;
-            }
-            cache->client_cert_fingerprint_sha256 = hex_fingerprint;
-        }
-    }
-
-    // Validity times
-    cache->client_cert_not_before = gnutls_x509_crt_get_activation_time(cert.get());
-    cache->client_cert_not_after = gnutls_x509_crt_get_expiration_time(cert.get());
+    return impl_->has_client_certificate();
 }
 
 std::string http_request::get_client_cert_dn() const {
-    populate_all_cert_fields();
-    return cache->client_cert_dn;
+    impl_->populate_all_cert_fields();
+    return impl_->client_cert_dn;
 }
 
 std::string http_request::get_client_cert_issuer_dn() const {
-    populate_all_cert_fields();
-    return cache->client_cert_issuer_dn;
+    impl_->populate_all_cert_fields();
+    return impl_->client_cert_issuer_dn;
 }
 
 std::string http_request::get_client_cert_cn() const {
-    populate_all_cert_fields();
-    return cache->client_cert_cn;
+    impl_->populate_all_cert_fields();
+    return impl_->client_cert_cn;
 }
 
 bool http_request::is_client_cert_verified() const {
-    populate_all_cert_fields();
-    return cache->client_cert_verified;
+    impl_->populate_all_cert_fields();
+    return impl_->client_cert_verified;
 }
 
 std::string http_request::get_client_cert_fingerprint_sha256() const {
-    populate_all_cert_fields();
-    return cache->client_cert_fingerprint_sha256;
+    impl_->populate_all_cert_fields();
+    return impl_->client_cert_fingerprint_sha256;
 }
 
 time_t http_request::get_client_cert_not_before() const {
-    populate_all_cert_fields();
-    return cache->client_cert_not_before;
+    impl_->populate_all_cert_fields();
+    return impl_->client_cert_not_before;
 }
 
 time_t http_request::get_client_cert_not_after() const {
-    populate_all_cert_fields();
-    return cache->client_cert_not_after;
+    impl_->populate_all_cert_fields();
+    return impl_->client_cert_not_after;
 }
 #endif  // HAVE_GNUTLS
 
 std::string_view http_request::get_requestor() const {
-    if (!cache->requestor_ip.empty()) {
-        return cache->requestor_ip;
+    if (!impl_->requestor_ip.empty()) {
+        return impl_->requestor_ip;
     }
 
-    const MHD_ConnectionInfo * conninfo = MHD_get_connection_info(underlying_connection, MHD_CONNECTION_INFO_CLIENT_ADDRESS);
+    // Test-request path: connection_ is null, requestor_ip already set.
+    if (impl_->connection_ == nullptr) {
+        return impl_->requestor_ip;
+    }
 
-    cache->requestor_ip = http::get_ip_str(conninfo->client_addr);
-    return cache->requestor_ip;
+    const MHD_ConnectionInfo* conninfo = MHD_get_connection_info(impl_->connection_, MHD_CONNECTION_INFO_CLIENT_ADDRESS);
+
+    if (conninfo == nullptr) {
+        return EMPTY;
+    }
+
+    impl_->requestor_ip = http::get_ip_str(conninfo->client_addr);
+    return impl_->requestor_ip;
 }
 
 uint16_t http_request::get_requestor_port() const {
-    const MHD_ConnectionInfo * conninfo = MHD_get_connection_info(underlying_connection, MHD_CONNECTION_INFO_CLIENT_ADDRESS);
+    // Test-request path: connection_ is null, use local port.
+    if (impl_->connection_ == nullptr) {
+        return impl_->requestor_port_local;
+    }
+
+    const MHD_ConnectionInfo* conninfo = MHD_get_connection_info(impl_->connection_, MHD_CONNECTION_INFO_CLIENT_ADDRESS);
+
+    if (conninfo == nullptr) {
+        return 0;
+    }
 
     return http::get_port(conninfo->client_addr);
 }
 
-std::ostream &operator<< (std::ostream &os, const http_request &r) {
+// ----- Private setters used by webserver_impl dispatch. ---------------------
+
+void http_request::set_arg(const std::string& key, const std::string& value) {
+    impl_->set_arg(key, value, content_size_limit);
+}
+
+void http_request::set_arg(const char* key, const char* value, size_t size) {
+    impl_->set_arg(key, value, size, content_size_limit);
+}
+
+void http_request::set_arg_flat(const std::string& key, const std::string& value) {
+    impl_->set_arg_flat(key, value, content_size_limit);
+}
+
+void http_request::set_args(const std::map<std::string, std::string>& args) {
+    impl_->set_args(args, content_size_limit);
+}
+
+void http_request::grow_last_arg(const std::string& key, const std::string& value) {
+    impl_->grow_last_arg(key, value);
+}
+
+void http_request::set_file_cleanup_callback(file_cleanup_callback_ptr callback) {
+    impl_->file_cleanup_callback_ = callback;
+}
+
+std::ostream& operator<< (std::ostream& os, const http_request& r) {
     os << r.get_method() << " Request [";
 #ifdef HAVE_BAUTH
     os << "user:\"" << r.get_user() << "\" pass:\"" << r.get_pass() << "\"";
@@ -560,26 +789,6 @@ std::ostream &operator<< (std::ostream &os, const http_request &r) {
        << " ] Port [ " << r.get_requestor_port() << " ]" << std::endl;
 
     return os;
-}
-
-http_request::~http_request() {
-    for (const auto& file_key : get_files()) {
-        for (const auto& files : file_key.second) {
-            bool should_delete = true;
-            if (file_cleanup_callback != nullptr) {
-                try {
-                    should_delete = file_cleanup_callback(file_key.first, files.first, files.second);
-                } catch (...) {
-                    // If callback throws, default to deleting the file
-                    should_delete = true;
-                }
-            }
-            if (should_delete) {
-                // C++17 has std::filesystem::remove()
-                remove(files.second.get_file_system_file_name().c_str());
-            }
-        }
-    }
 }
 
 }  // namespace httpserver

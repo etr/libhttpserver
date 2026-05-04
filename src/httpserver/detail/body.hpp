@@ -139,6 +139,11 @@ class string_body final : public body {
         ::new (dst) string_body(std::move(*this));
     }
 
+    /// Returns the body string. Primarily for tests.
+    [[nodiscard]] const std::string& get_content() const noexcept {
+        return content_;
+    }
+
  private:
     std::string content_;
 };

@@ -25,15 +25,19 @@
 #ifndef SRC_HTTPSERVER_HTTP_REQUEST_HPP_
 #define SRC_HTTPSERVER_HTTP_REQUEST_HPP_
 
-#include <microhttpd.h>
-
-#ifdef HAVE_GNUTLS
-#include <gnutls/gnutls.h>
-#endif  // HAVE_GNUTLS
+// TASK-015: <microhttpd.h> and <gnutls/gnutls.h> intentionally do NOT
+// appear here. Backend-coupled state moved to detail/http_request_impl.hpp.
+// The two backend-typed names that still surface in this header
+// (MHD_Connection* in the private parameterized constructor; gnutls_session_t
+// in the public get_tls_session() return type) are introduced via narrow
+// forward declarations below, so a downstream consumer never has to
+// include <microhttpd.h> or <gnutls/gnutls.h> to use libhttpserver.
+//
+// TASK-019 will remove gnutls_session_t from the public surface entirely
+// (replaced by high-level cert accessors); at that point the typedef
+// forward-decl below disappears.
 
 #include <stddef.h>
-#include <algorithm>
-#include <array>
 #include <iosfwd>
 #include <limits>
 #include <map>
@@ -48,12 +52,24 @@
 #include "httpserver/file_info.hpp"
 #include "httpserver/create_webserver.hpp"
 
-struct MHD_Connection;
+#ifdef HAVE_GNUTLS
+// Narrow forward declaration of GnuTLS's session handle. Mirrors the
+// upstream typedef in <gnutls/gnutls.h>:
+//     typedef struct gnutls_session_int *gnutls_session_t;
+// This satisfies the public method signature `gnutls_session_t
+// get_tls_session() const;` without dragging the GnuTLS header into
+// downstream consumers. TASK-019 will replace get_tls_session() with
+// higher-level accessors and this forward-decl will disappear.
+typedef struct gnutls_session_int *gnutls_session_t;
+#endif  // HAVE_GNUTLS
 
 namespace httpserver {
 
-namespace detail { struct modded_request; }
-namespace detail { class webserver_impl; }
+namespace detail {
+struct modded_request;
+class webserver_impl;
+class http_request_impl;
+}  // namespace detail
 
 /**
  * Class representing an abstraction for an Http Request. It is used from classes using these apis to receive information through http protocol.
@@ -98,23 +114,14 @@ class http_request {
       * Method used to get all pieces of the path requested; considering an url splitted by '/'.
       * @return a vector of strings containing all pieces
      **/
-     const std::vector<std::string> get_path_pieces() const {
-         ensure_path_pieces_cached();
-         return cache->path_pieces;
-     }
+     const std::vector<std::string> get_path_pieces() const;
 
      /**
       * Method used to obtain a specified piece of the path; considering an url splitted by '/'.
       * @param index the index of the piece selected
       * @return the selected piece in form of string
      **/
-     const std::string get_path_piece(int index) const {
-         ensure_path_pieces_cached();
-         if (static_cast<int>(cache->path_pieces.size()) > index) {
-             return cache->path_pieces[index];
-         }
-         return EMPTY;
-     }
+     const std::string get_path_piece(int index) const;
 
      /**
       * Method used to get the METHOD used to make the request.
@@ -170,9 +177,7 @@ class http_request {
       * Method used to get all files passed with the request.
       * @result result a map<std::string, map<std::string, http::file_info> > that will be filled with all files
      **/
-     const std::map<std::string, std::map<std::string, http::file_info>> get_files() const {
-          return files;
-     }
+     const std::map<std::string, std::map<std::string, http::file_info>> get_files() const;
 
      /**
       * Method used to get a specific header passed with the request.
@@ -335,9 +340,14 @@ class http_request {
      **/
      http_request() = default;
 
-     http_request(MHD_Connection* underlying_connection, unescaper_ptr unescaper):
-         underlying_connection(underlying_connection),
-         unescaper(unescaper) {}
+#ifdef HTTPSERVER_COMPILATION
+     // Internal-only constructor: takes a live MHD_Connection*. Hidden
+     // from public consumers via the HTTPSERVER_COMPILATION gate so that
+     // <microhttpd.h> need not be reachable when downstream code includes
+     // <httpserver.hpp>. Reachable only from src/webserver.cpp via the
+     // friend webserver_impl declaration below.
+     http_request(struct MHD_Connection* underlying_connection, unescaper_ptr unescaper);
+#endif  // HTTPSERVER_COMPILATION
 
      /**
       * Copy constructor. Deleted to make class move-only. The class is move-only for several reasons:
@@ -363,39 +373,26 @@ class http_request {
      http_request& operator=(const http_request& b) = delete;
      http_request& operator=(http_request&& b) = default;
 
+     // Backend-agnostic outer state. Everything else lives behind impl_.
      std::string path;
      std::string method;
-     std::map<std::string, std::map<std::string, http::file_info>> files;
      std::string content = "";
      size_t content_size_limit = std::numeric_limits<size_t>::max();
      std::string version;
 
-     struct MHD_Connection* underlying_connection = nullptr;
-
-     unescaper_ptr unescaper = nullptr;
-
-     static MHD_Result build_request_header(void *cls, enum MHD_ValueKind kind, const char *key, const char *value);
-
-     static MHD_Result build_request_args(void *cls, enum MHD_ValueKind kind, const char *key, const char *value);
-
-     static MHD_Result build_request_querystring(void *cls, enum MHD_ValueKind kind, const char *key, const char *value);
-
-#ifdef HAVE_BAUTH
-     void fetch_user_pass() const;
-#endif  // HAVE_BAUTH
-
-#ifdef HAVE_GNUTLS
-     void populate_all_cert_fields() const;
-#endif  // HAVE_GNUTLS
+     // PIMPL: backend-coupled state (MHD_Connection*, unescaper, file
+     // table, parsed-args / cookies / cert caches) lives behind this
+     // pointer in src/httpserver/detail/http_request_impl.hpp. The
+     // dtor is out-of-line in http_request.cpp so the unique_ptr can
+     // see the complete impl type.
+     std::unique_ptr<detail::http_request_impl> impl_;
 
      /**
       * Method used to set an argument value by key.
       * @param key The name identifying the argument
       * @param value The value assumed by the argument
      **/
-     void set_arg(const std::string& key, const std::string& value) {
-         cache->unescaped_args[key].push_back(value.substr(0, content_size_limit));
-     }
+     void set_arg(const std::string& key, const std::string& value);
 
      /**
       * Method used to set an argument value by key.
@@ -403,18 +400,14 @@ class http_request {
       * @param value The value assumed by the argument
       * @param size The size in number of char of the value parameter.
      **/
-     void set_arg(const char* key, const char* value, size_t size) {
-         cache->unescaped_args[key].push_back(std::string(value, std::min(size, content_size_limit)));
-     }
+     void set_arg(const char* key, const char* value, size_t size);
 
      /**
       * Method used to set an argument value by key. If a key already exists, overwrites it.
       * @param key The name identifying the argument
       * @param value The value assumed by the argument
      **/
-     void set_arg_flat(const std::string& key, const std::string& value) {
-         cache->unescaped_args[key] = { (value.substr(0, content_size_limit)) };
-     }
+     void set_arg_flat(const std::string& key, const std::string& value);
 
      void grow_last_arg(const std::string& key, const std::string& value);
 
@@ -472,71 +465,14 @@ class http_request {
       * Method used to set all arguments of the request.
       * @param args The args key-value map to set for the request.
      **/
-     void set_args(const std::map<std::string, std::string>& args) {
-         for (auto const& [key, value] : args) {
-             cache->unescaped_args[key].push_back(value.substr(0, content_size_limit));
-         }
-     }
+     void set_args(const std::map<std::string, std::string>& args);
 
-     std::string_view get_connection_value(std::string_view key, enum MHD_ValueKind kind) const;
-     const http::header_view_map get_headerlike_values(enum MHD_ValueKind kind) const;
-
-     // http_request objects are owned by a single connection and are not
-    // shared across threads. Lazy caching (path_pieces, args, etc.) is
-    // safe without synchronization under this invariant.
-
-    // Cache certain data items on demand so we can consistently return views
-     // over the data. Some things we transform before returning to the user for
-     // simplicity (e.g. query_str, requestor), others out of necessity (arg unescaping).
-     // Others (username, password, digested_user) MHD returns as char* that we need
-     // to make a copy of and free anyway.
-     struct http_request_data_cache {
-#ifdef HAVE_BAUTH
-        std::string username;
-        std::string password;
-#endif  // HAVE_BAUTH
-        std::string querystring;
-        std::string requestor_ip;
-#ifdef HAVE_DAUTH
-        std::string digested_user;
-#endif  // HAVE_DAUTH
-        std::map<std::string, std::vector<std::string>, http::arg_comparator> unescaped_args;
-        std::vector<std::string> path_pieces;
-
-        bool args_populated = false;
-        bool path_pieces_cached = false;
-
-#ifdef HAVE_GNUTLS
-        bool client_cert_fields_cached = false;
-        std::string client_cert_dn;
-        std::string client_cert_issuer_dn;
-        std::string client_cert_cn;
-        std::string client_cert_fingerprint_sha256;
-        time_t client_cert_not_before = static_cast<time_t>(-1);
-        time_t client_cert_not_after = static_cast<time_t>(-1);
-        bool client_cert_verified = false;
-#endif  // HAVE_GNUTLS
-     };
-     std::unique_ptr<http_request_data_cache> cache = std::make_unique<http_request_data_cache>();
-     void ensure_path_pieces_cached() const {
-         if (!cache->path_pieces_cached) {
-             cache->path_pieces = http::http_utils::tokenize_url(path);
-             cache->path_pieces_cached = true;
-         }
-     }
-
-     // Populate the data cache unescaped_args
-     void populate_args() const;
-
-     file_cleanup_callback_ptr file_cleanup_callback = nullptr;
-
-     void set_file_cleanup_callback(file_cleanup_callback_ptr callback) {
-         file_cleanup_callback = callback;
-     }
+     void set_file_cleanup_callback(file_cleanup_callback_ptr callback);
 
      friend class webserver;
      friend class detail::webserver_impl;  // TASK-014: PIMPL dispatch path
      friend struct detail::modded_request;
+     friend class create_test_request;    // TASK-015: test builder accesses impl_
 };
 
 std::ostream &operator<< (std::ostream &os, const http_request &r);
