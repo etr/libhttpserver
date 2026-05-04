@@ -86,7 +86,8 @@ LT_BEGIN_AUTO_TEST(create_test_request_suite, build_headers)
     LT_CHECK_EQ(std::string(req.get_header("Accept")), std::string("text/plain"));
     LT_CHECK_EQ(std::string(req.get_header("NonExistent")), std::string(""));
 
-    auto headers = req.get_headers();
+    // TASK-017: get_headers() returns const&; bind by reference.
+    const auto& headers = req.get_headers();
     LT_CHECK_EQ(headers.size(), static_cast<size_t>(2));
 LT_END_AUTO_TEST(build_headers)
 
@@ -99,10 +100,11 @@ LT_BEGIN_AUTO_TEST(create_test_request_suite, build_footers_cookies)
     LT_CHECK_EQ(std::string(req.get_footer("X-Checksum")), std::string("abc123"));
     LT_CHECK_EQ(std::string(req.get_cookie("session_id")), std::string("xyz789"));
 
-    auto footers = req.get_footers();
+    // TASK-017: get_footers/get_cookies() return const&; bind by reference.
+    const auto& footers = req.get_footers();
     LT_CHECK_EQ(footers.size(), static_cast<size_t>(1));
 
-    auto cookies = req.get_cookies();
+    const auto& cookies = req.get_cookies();
     LT_CHECK_EQ(cookies.size(), static_cast<size_t>(1));
 LT_END_AUTO_TEST(build_footers_cookies)
 
@@ -280,7 +282,8 @@ LT_BEGIN_AUTO_TEST(create_test_request_suite, build_path_pieces)
     auto req = create_test_request()
         .path("/api/users/42")
         .build();
-    auto pieces = req.get_path_pieces();
+    // TASK-017: get_path_pieces() returns const&; bind by reference.
+    const auto& pieces = req.get_path_pieces();
     LT_CHECK_EQ(pieces.size(), static_cast<size_t>(3));
     LT_CHECK_EQ(pieces[0], std::string("api"));
     LT_CHECK_EQ(pieces[1], std::string("users"));
@@ -294,6 +297,37 @@ LT_BEGIN_AUTO_TEST(create_test_request_suite, method_uppercase)
         .build();
     LT_CHECK_EQ(std::string(req.get_method()), std::string("POST"));
 LT_END_AUTO_TEST(method_uppercase)
+
+// TASK-017: container getters return `const ContainerType&` aliasing
+// impl-owned storage. Repeated calls on the same const http_request must
+// return the same address (the cached container in the impl), proving:
+//   (a) the return type is a reference (you can take its address),
+//   (b) the cache is built once and reused on subsequent calls.
+LT_BEGIN_AUTO_TEST(create_test_request_suite, getters_return_const_ref_stable)
+    auto req = create_test_request()
+        .header("X-Foo", "1")
+        .footer("X-Bar", "2")
+        .cookie("session", "3")
+        .arg("a", "b")
+        .path("/p/q/r")
+        .build();
+    const httpserver::http_request& cref = req;
+
+    // Call each getter twice and verify the address is stable.
+    LT_CHECK_EQ(&cref.get_headers(),     &cref.get_headers());
+    LT_CHECK_EQ(&cref.get_footers(),     &cref.get_footers());
+    LT_CHECK_EQ(&cref.get_cookies(),     &cref.get_cookies());
+    LT_CHECK_EQ(&cref.get_args(),        &cref.get_args());
+    LT_CHECK_EQ(&cref.get_path_pieces(), &cref.get_path_pieces());
+    LT_CHECK_EQ(&cref.get_files(),       &cref.get_files());
+
+    // Sanity: the cached values are also non-empty / correct.
+    LT_CHECK_EQ(cref.get_headers().size(), static_cast<size_t>(1));
+    LT_CHECK_EQ(cref.get_footers().size(), static_cast<size_t>(1));
+    LT_CHECK_EQ(cref.get_cookies().size(), static_cast<size_t>(1));
+    LT_CHECK_EQ(cref.get_args().size(),    static_cast<size_t>(1));
+    LT_CHECK_EQ(cref.get_path_pieces().size(), static_cast<size_t>(3));
+LT_END_AUTO_TEST(getters_return_const_ref_stable)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

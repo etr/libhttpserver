@@ -110,6 +110,25 @@ struct http_request_impl_deleter {
  * get_pass(), get_digested_user(), get_header(), get_footer(),
  * get_cookie(), get_requestor().
  * (security-reviewer-iter1-1, CWE-416 Use After Free.)
+ *
+ * ### Container reference lifetime contract (TASK-017)
+ *
+ * The container getters `get_headers()`, `get_footers()`, `get_cookies()`,
+ * `get_args()`, `get_path_pieces()`, and `get_files()` all return a
+ * `const ContainerType&` rather than a by-value copy. The reference and
+ * any iterators / pointers / element references derived from it remain
+ * valid until the `http_request` object is destroyed (typically when the
+ * handler invocation returns).
+ *
+ * In particular, the `std::string_view` keys and values held inside the
+ * `header_view_map` and `arg_view_map` returned by these getters carry the
+ * same lifetime restriction as the standalone `std::string_view` accessors
+ * above: do not store them past the handler call frame. Copy explicitly
+ * if a longer lifetime is required.
+ *
+ * Implementation note: the first call to get_headers / get_footers /
+ * get_cookies / get_args / get_path_pieces lazily populates a per-request
+ * cache; subsequent calls are O(1) and return the same reference.
 **/
 class http_request {
  public:
@@ -155,9 +174,10 @@ class http_request {
 
      /**
       * Method used to get all pieces of the path requested; considering an url splitted by '/'.
-      * @return a vector of strings containing all pieces
+      * @return a vector of strings containing all pieces. The reference
+      *         remains valid until the http_request is destroyed.
      **/
-     const std::vector<std::string> get_path_pieces() const;
+     [[nodiscard]] const std::vector<std::string>& get_path_pieces() const;
 
      /**
       * Method used to obtain a specified piece of the path; considering an url splitted by '/'.
@@ -176,30 +196,35 @@ class http_request {
 
      /**
       * Method used to get all headers passed with the request.
-      * @param result a map<string, string> > that will be filled with all headers
-      * @result the size of the map
+      * @return a const reference to a map<string_view, string_view>
+      *         containing all headers. The reference (and the views it
+      *         holds) remain valid until the http_request is destroyed.
      **/
-     const http::header_view_map get_headers() const;
+     [[nodiscard]] const http::header_view_map& get_headers() const;
 
      /**
       * Method used to get all footers passed with the request.
-      * @param result a map<string, string> > that will be filled with all footers
-      * @result the size of the map
+      * @return a const reference to a map<string_view, string_view>
+      *         containing all footers. The reference (and the views it
+      *         holds) remain valid until the http_request is destroyed.
      **/
-     const http::header_view_map get_footers() const;
+     [[nodiscard]] const http::header_view_map& get_footers() const;
 
      /**
       * Method used to get all cookies passed with the request.
-      * @param result a map<string, string> > that will be filled with all cookies
-      * @result the size of the map
+      * @return a const reference to a map<string_view, string_view>
+      *         containing all cookies. The reference (and the views it
+      *         holds) remain valid until the http_request is destroyed.
      **/
-     const http::header_view_map get_cookies() const;
+     [[nodiscard]] const http::header_view_map& get_cookies() const;
 
      /**
       * Method used to get all args passed with the request.
-      * @result the size of the map
+      * @return a const reference to the args map. The reference (and the
+      *         string_view keys/values it holds) remain valid until the
+      *         http_request is destroyed.
      **/
-     const http::arg_view_map get_args() const;
+     [[nodiscard]] const http::arg_view_map& get_args() const;
 
      /**
       * Method used to get all args passed with the request. If any key has multiple
@@ -218,9 +243,11 @@ class http_request {
 
      /**
       * Method used to get all files passed with the request.
-      * @result result a map<std::string, map<std::string, http::file_info> > that will be filled with all files
+      * @return a const reference to a map<std::string, map<std::string,
+      *         http::file_info>> containing all files. The reference
+      *         remains valid until the http_request is destroyed.
      **/
-     const std::map<std::string, std::map<std::string, http::file_info>> get_files() const;
+     [[nodiscard]] const std::map<std::string, std::map<std::string, http::file_info>>& get_files() const noexcept;
 
      /**
       * Method used to get a specific header passed with the request.

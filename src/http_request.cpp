@@ -168,31 +168,61 @@ MHD_Result http_request_impl::build_request_header(void* cls, MHD_ValueKind kind
     return MHD_YES;
 }
 
-http::header_view_map http_request_impl::get_headerlike_values(MHD_ValueKind kind) const {
-    http::header_view_map headers;
-
-    // Test-request path: connection_ is null, build view map from local storage.
-    if (connection_ == nullptr) {
-        const auto* map = [&]() -> const http::header_map* {
-            switch (kind) {
-                case MHD_HEADER_KIND: return &headers_local;
-                case MHD_FOOTER_KIND: return &footers_local;
-                case MHD_COOKIE_KIND: return &cookies_local;
-                default:             return nullptr;
-            }
-        }();
-        if (map != nullptr) {
-            for (const auto& [k, v] : *map) {
-                headers[k] = v;
-            }
-        }
-        return headers;
+const http::header_view_map& http_request_impl::ensure_headerlike_cache(MHD_ValueKind kind) const {
+    // Pick the cache slot and build-flag matching `kind`. We resolve them
+    // up front so the cold (build) and warm (return) paths share a single
+    // reference without re-switching.
+    http::header_view_map* cache = nullptr;
+    bool* built = nullptr;
+    const http::header_map* local_fallback = nullptr;
+    switch (kind) {
+        case MHD_HEADER_KIND:
+            cache = &headers_cached_;
+            built = &headers_cache_built_;
+            local_fallback = &headers_local;
+            break;
+        case MHD_FOOTER_KIND:
+            cache = &footers_cached_;
+            built = &footers_cache_built_;
+            local_fallback = &footers_local;
+            break;
+        case MHD_COOKIE_KIND:
+            cache = &cookies_cached_;
+            built = &cookies_cache_built_;
+            local_fallback = &cookies_local;
+            break;
+        default:
+            // Unsupported kind: hand back the headers cache (kept empty)
+            // as a safe fallback; the public API never reaches here.
+            cache = &headers_cached_;
+            built = &headers_cache_built_;
+            local_fallback = &headers_local;
+            break;
     }
 
-    MHD_get_connection_values(connection_, kind, &http_request_impl::build_request_header,
-                              reinterpret_cast<void*>(&headers));
+    if (*built) {
+        return *cache;
+    }
 
-    return headers;
+    // Test-request path: connection_ is null, build the view map from
+    // local owning storage (the create_test_request builder populated it).
+    if (connection_ == nullptr) {
+        if (local_fallback != nullptr) {
+            for (const auto& [k, v] : *local_fallback) {
+                (*cache)[k] = v;
+            }
+        }
+        *built = true;
+        return *cache;
+    }
+
+    // Live-request path: ask MHD to enumerate values for this kind into
+    // the cache. The string_view keys/values alias MHD-owned storage that
+    // outlives the request handler.
+    MHD_get_connection_values(connection_, kind, &http_request_impl::build_request_header,
+                              reinterpret_cast<void*>(cache));
+    *built = true;
+    return *cache;
 }
 
 MHD_Result http_request_impl::build_request_args(void* cls, MHD_ValueKind kind,
@@ -652,18 +682,21 @@ void http_request::set_method(const std::string& method) {
     this->method = method;
 }
 
-const std::vector<std::string> http_request::get_path_pieces() const {
+const std::vector<std::string>& http_request::get_path_pieces() const {
+    // TASK-017: lazily populate the public-typed mirror cache from the
+    // (already-built) pmr-backed `path_pieces` and return it by const&.
+    // Two caches in lockstep -- the pmr one stays arena-friendly for any
+    // future internal consumer; the public one is what the API exposes.
     impl_->ensure_path_pieces_cached(path);
-    // path_pieces is now pmr-backed; copy element-wise back into a default-
-    // allocator std::vector<std::string> for the public return type. The
-    // copy is intrinsic to the v1 API contract; TASK-017 narrows this to
-    // a const& return that aliases the impl-side storage.
-    std::vector<std::string> out;
-    out.reserve(impl_->path_pieces.size());
-    for (const auto& p : impl_->path_pieces) {
-        out.emplace_back(p.data(), p.size());
+    if (!impl_->path_pieces_public_built_) {
+        impl_->path_pieces_public_.clear();
+        impl_->path_pieces_public_.reserve(impl_->path_pieces.size());
+        for (const auto& p : impl_->path_pieces) {
+            impl_->path_pieces_public_.emplace_back(p.data(), p.size());
+        }
+        impl_->path_pieces_public_built_ = true;
     }
-    return out;
+    return impl_->path_pieces_public_;
 }
 
 const std::string http_request::get_path_piece(int index) const {
@@ -725,24 +758,24 @@ std::string_view http_request::get_header(std::string_view key) const {
     return impl_->get_connection_value(key, MHD_HEADER_KIND);
 }
 
-const http::header_view_map http_request::get_headers() const {
-    return impl_->get_headerlike_values(MHD_HEADER_KIND);
+const http::header_view_map& http_request::get_headers() const {
+    return impl_->ensure_headerlike_cache(MHD_HEADER_KIND);
 }
 
 std::string_view http_request::get_footer(std::string_view key) const {
     return impl_->get_connection_value(key, MHD_FOOTER_KIND);
 }
 
-const http::header_view_map http_request::get_footers() const {
-    return impl_->get_headerlike_values(MHD_FOOTER_KIND);
+const http::header_view_map& http_request::get_footers() const {
+    return impl_->ensure_headerlike_cache(MHD_FOOTER_KIND);
 }
 
 std::string_view http_request::get_cookie(std::string_view key) const {
     return impl_->get_connection_value(key, MHD_COOKIE_KIND);
 }
 
-const http::header_view_map http_request::get_cookies() const {
-    return impl_->get_headerlike_values(MHD_COOKIE_KIND);
+const http::header_view_map& http_request::get_cookies() const {
+    return impl_->ensure_headerlike_cache(MHD_COOKIE_KIND);
 }
 
 http_arg_value http_request::get_arg(std::string_view key) const {
@@ -772,17 +805,25 @@ std::string_view http_request::get_arg_flat(std::string_view key) const {
     return impl_->get_connection_value(key, MHD_GET_ARGUMENT_KIND);
 }
 
-const http::arg_view_map http_request::get_args() const {
+const http::arg_view_map& http_request::get_args() const {
+    // TASK-017: lazily populate the args view-map cache from the pmr-backed
+    // `unescaped_args` (which is itself populated lazily by populate_args()).
     impl_->populate_args();
-
-    http::arg_view_map arguments;
-    for (const auto& [key, value] : impl_->unescaped_args) {
-        auto& arg_values = arguments[key];
-        for (const auto& v : value) {
-            arg_values.values.push_back(v);
+    if (!impl_->args_view_cache_built_) {
+        impl_->args_view_cached_.clear();
+        for (const auto& [key, value] : impl_->unescaped_args) {
+            // The string_view keys/values alias the pmr-backed strings owned
+            // by `unescaped_args` -- same lifetime as the request.
+            auto& arg_values = impl_->args_view_cached_[
+                std::string_view(key.data(), key.size())];
+            arg_values.values.reserve(value.size());
+            for (const auto& v : value) {
+                arg_values.values.emplace_back(v.data(), v.size());
+            }
         }
+        impl_->args_view_cache_built_ = true;
     }
-    return arguments;
+    return impl_->args_view_cached_;
 }
 
 const std::map<std::string_view, std::string_view, http::arg_comparator> http_request::get_args_flat() const {
@@ -798,7 +839,7 @@ http::file_info& http_request::get_or_create_file_info(const std::string& key, c
     return impl_->files_[key][upload_file_name];
 }
 
-const std::map<std::string, std::map<std::string, http::file_info>> http_request::get_files() const {
+const std::map<std::string, std::map<std::string, http::file_info>>& http_request::get_files() const noexcept {
     return impl_->files_;
 }
 

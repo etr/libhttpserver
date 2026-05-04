@@ -40,9 +40,11 @@ class args_resource : public httpserver::http_resource {
 
         response_body << "=== Using get_args() (supports multiple values per key) ===\n\n";
 
-        // get_args() returns a map where each key maps to an http_arg_value.
-        // http_arg_value contains a vector of values for parameters like "?id=1&id=2&id=3"
-        auto args = req.get_args();
+        // get_args() returns a const reference to a map where each key
+        // maps to an http_arg_value. http_arg_value contains a vector of
+        // values for parameters like "?id=1&id=2&id=3". The reference
+        // remains valid for the duration of this handler call.
+        const auto& args = req.get_args();
         for (const auto& [key, arg_value] : args) {
             response_body << "Key: " << key << "\n";
             // Use get_all_values() to get all values for this key

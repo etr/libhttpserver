@@ -176,6 +176,40 @@ class http_request_impl {
     mutable bool args_populated = false;
     mutable bool path_pieces_cached = false;
 
+    // TASK-017: per-request caches for the six container getters. These
+    // are typed in the public-API container types (default-allocator) so
+    // http_request::get_*() can return `const ContainerType&` aliasing
+    // impl-owned storage. Each is built lazily on the first getter call
+    // and reused on subsequent calls.
+    //
+    // Allocator note: the public container types embed std::string_view
+    // (header_view_map / arg_view_map) or std::string (path_pieces_public_)
+    // and use the default allocator. They cannot be made PMR without
+    // changing the public surface (TASK-017 plan, "Storage strategy").
+    // The first call therefore allocates on the global heap; subsequent
+    // calls are O(1) and zero-allocating -- a strict win over v1, which
+    // paid the allocation on every call.
+    //
+    // The header/footer/cookie caches alias MHD-owned strings via
+    // string_view, so they share the request's lifetime; the arg-view
+    // cache aliases the impl's pmr-backed `unescaped_args`, same lifetime.
+    mutable http::header_view_map headers_cached_;
+    mutable http::header_view_map footers_cached_;
+    mutable http::header_view_map cookies_cached_;
+    mutable bool headers_cache_built_ = false;
+    mutable bool footers_cache_built_ = false;
+    mutable bool cookies_cache_built_ = false;
+
+    mutable http::arg_view_map args_view_cached_;
+    mutable bool args_view_cache_built_ = false;
+
+    // Public-typed mirror of `path_pieces` (the pmr::vector<pmr::string>
+    // already kept above). Two caches in lockstep: the pmr version stays
+    // arena-friendly for any future internal consumer; the public version
+    // is what get_path_pieces() returns by const&.
+    mutable std::vector<std::string> path_pieces_public_;
+    mutable bool path_pieces_public_built_ = false;
+
 #ifdef HAVE_GNUTLS
     mutable bool client_cert_fields_cached = false;
     mutable std::pmr::string client_cert_dn;
@@ -189,7 +223,11 @@ class http_request_impl {
 
     // --- helpers (moved out of http_request public header) ---
     std::string_view get_connection_value(std::string_view key, MHD_ValueKind kind) const;
-    http::header_view_map get_headerlike_values(MHD_ValueKind kind) const;
+    // TASK-017: ensures the cache for `kind` (HEADER / FOOTER / COOKIE) is
+    // populated and returns a const reference to it. First call fills the
+    // map (test-request fallback or MHD scan); subsequent calls return
+    // the same reference in O(1).
+    const http::header_view_map& ensure_headerlike_cache(MHD_ValueKind kind) const;
     void populate_args() const;
     void ensure_path_pieces_cached(std::string_view path) const;
 

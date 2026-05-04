@@ -2366,11 +2366,18 @@ LT_END_AUTO_TEST(querystring_caching)
 class args_cache_resource : public http_resource {
  public:
     shared_ptr<http_response> render_GET(const http_request& req) {
-        // Call get_args twice to test caching
-        auto args1 = req.get_args();
-        auto args2 = req.get_args();  // Should hit cache
+        // Call get_args twice to test caching. TASK-017: returns const&
+        // aliasing the impl-owned cache; both binds should be the same
+        // address. We don't read args1/args2 here -- the test for caching
+        // is end-to-end via the response body -- but we keep them as
+        // references to lock in the new contract at the call site.
+        const auto& args1 = req.get_args();
+        const auto& args2 = req.get_args();  // Should hit cache
+        (void)args1;
+        (void)args2;
 
-        // Also test get_args_flat
+        // Also test get_args_flat (still by-value for now -- TASK-017 only
+        // narrows the six container getters listed in its acceptance set).
         auto flat = req.get_args_flat();
 
         std::string response;
@@ -2409,8 +2416,9 @@ LT_END_AUTO_TEST(args_caching)
 class footer_test_resource : public http_resource {
  public:
     shared_ptr<http_response> render_POST(const http_request& req) {
-        // Test get_footers() - returns empty map for non-chunked requests
-        auto footers = req.get_footers();
+        // Test get_footers() - returns empty map for non-chunked requests.
+        // TASK-017: now returns const& aliasing impl-owned storage.
+        const auto& footers = req.get_footers();
 
         // Test get_footer() with a key that doesn't exist
         auto footer_val = req.get_footer("X-Test-Trailer");

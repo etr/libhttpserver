@@ -251,26 +251,31 @@ class print_file_upload_resource : public http_resource {
  public:
      shared_ptr<http_response> render_POST(const http_request& req) {
          content = req.get_content();
-         auto args_view = req.get_args();
-         // req may go out of scope, so we need to copy the values.
+         // TASK-017: get_args() now returns a const& -- read-only iteration
+         // here, so bind by const reference. The body still copies into the
+         // owning `args` member because req goes out of scope after render.
+         const auto& args_view = req.get_args();
          for (auto const& item : args_view) {
             for (auto const & value : item.second.get_all_values()) {
                 args[string(item.first)].push_back(string(value));
             }
          }
+         // Deliberate copy: req goes out of scope after render() returns,
+         // so we snapshot the file table into the resource's owning member.
          files = req.get_files();
          return std::make_shared<http_response>(http_response::string("OK").with_status(201));
      }
 
      shared_ptr<http_response> render_PUT(const http_request& req) {
          content = req.get_content();
-         auto args_view = req.get_args();
-         // req may go out of scope, so we need to copy the values.
+         const auto& args_view = req.get_args();
          for (auto const& item : args_view) {
             for (auto const & value : item.second.get_all_values()) {
                 args[string(item.first)].push_back(string(value));
             }
          }
+         // Deliberate copy: req goes out of scope after render() returns,
+         // so we snapshot the file table into the resource's owning member.
          files = req.get_files();
          return std::make_shared<http_response>(http_response::string("OK"));
      }
