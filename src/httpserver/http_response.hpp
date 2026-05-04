@@ -367,7 +367,11 @@ class http_response final {
      template <typename T, typename... Args>
      void emplace_body(body_kind k, Args&&... args);
 
- protected:
+     // Friend declarations belong in private: — friendship is unaffected
+     // by access specifiers, but placing them here (rather than in a
+     // misleading protected: section) signals clearly that these names can
+     // bypass encapsulation; http_response is final so there are no
+     // subclasses to inherit any protected access anyway.
      friend std::ostream &operator<< (std::ostream &os, const http_response &r);
 
      // The TASK-009 SBO unit test exercises the four-case move

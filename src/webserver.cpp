@@ -1389,16 +1389,10 @@ MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct detail:
                     mr->dhrs->with_header(http_utils::http_header_allow, header_value);
                 }
             }
-        } catch(const std::exception& e) {
+        } catch(...) {
             // The user-supplied internal_error_resource may itself throw;
             // fall back to the built-in error page in that case (force_our=true)
             // so we never let exceptions escape into libmicrohttpd.
-            try {
-                mr->dhrs = internal_error_page(mr);
-            } catch(...) {
-                mr->dhrs = internal_error_page(mr, true);
-            }
-        } catch(...) {
             try {
                 mr->dhrs = internal_error_page(mr);
             } catch(...) {

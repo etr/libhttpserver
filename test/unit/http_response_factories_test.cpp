@@ -185,6 +185,16 @@ LT_BEGIN_AUTO_TEST(http_response_factories_suite,
     // Build a span over a temporary array; let the array go out of
     // scope before we observe r. The factory's deep-copy must keep the
     // body's iovec_entry vector valid.
+    //
+    // Span deep-copy / caller-buffer lifetime contract:
+    //   http_response::iovec() copies the iovec_entry structs (base+len
+    //   pairs) into an internal std::vector.  The *entries* are owned by
+    //   the response, but the *buffers they point to* are NOT copied —
+    //   callers must keep their payload buffers alive until the response
+    //   is dispatched (i.e. until the MHD send callback completes).
+    //   http_response itself is move-only, so copy-prohibition does not
+    //   apply; the invariant to test is that the internal vector survives
+    //   after the caller's span goes out of scope.
     auto r = []() {
         std::array<httpserver::iovec_entry, 1> entries{{ {"x", 1} }};
         return http_response::iovec(entries);
@@ -192,6 +202,26 @@ LT_BEGIN_AUTO_TEST(http_response_factories_suite,
     LT_CHECK_EQ(static_cast<int>(r.kind()),
                 static_cast<int>(body_kind::iovec));
 LT_END_AUTO_TEST(iovec_factory_deep_copies_span)
+
+LT_BEGIN_AUTO_TEST(http_response_factories_suite, iovec_factory_empty_span)
+    // An iovec with zero entries must not crash, must have kind iovec,
+    // and the default status (200) must be preserved.
+    std::array<httpserver::iovec_entry, 0> entries{};
+    auto r = http_response::iovec(std::span<const httpserver::iovec_entry>(entries));
+    LT_CHECK_EQ(static_cast<int>(r.kind()),
+                static_cast<int>(body_kind::iovec));
+    LT_CHECK_EQ(r.get_status(), 200);
+LT_END_AUTO_TEST(iovec_factory_empty_span)
+
+LT_BEGIN_AUTO_TEST(http_response_factories_suite, iovec_factory_single_entry)
+    // A single-entry iovec must produce kind iovec and the default status.
+    static const char buf[] = "hello";
+    std::array<httpserver::iovec_entry, 1> entries{{ {buf, 5} }};
+    auto r = http_response::iovec(entries);
+    LT_CHECK_EQ(static_cast<int>(r.kind()),
+                static_cast<int>(body_kind::iovec));
+    LT_CHECK_EQ(r.get_status(), 200);
+LT_END_AUTO_TEST(iovec_factory_single_entry)
 
 // -----------------------------------------------------------------------
 // pipe() — owns the fd, destructor closes it when not materialized.

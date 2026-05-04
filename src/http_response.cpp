@@ -311,7 +311,7 @@ std::string_view http_response::get_cookie(std::string_view key) const {
 }
 
 namespace {
-static inline http::header_view_map to_view_map(const http::header_map& hdr_map) {
+inline http::header_view_map to_view_map(const http::header_map& hdr_map) {
     http::header_view_map view_map;
     for (const auto& item : hdr_map) {
         view_map[std::string_view(item.first)] = std::string_view(item.second);
@@ -447,13 +447,14 @@ http_response http_response::unauthorized(std::string_view scheme,
     // caller error — callers must never pass untrusted user input as scheme
     // or realm without first validating it. Throw std::invalid_argument so
     // the error is visible and cannot be silently swallowed.
-    static constexpr std::string_view kForbidden("\r\n\0", 3);
-    if (scheme.find_first_of(kForbidden) != std::string_view::npos) {
+    // kForbiddenFieldChars is the same constant used by validate_header_field
+    // above — reused here to avoid a duplicate definition.
+    if (scheme.find_first_of(kForbiddenFieldChars) != std::string_view::npos) {
         throw std::invalid_argument(
             "http_response::unauthorized: scheme contains forbidden control "
             "character (CR, LF, or NUL)");
     }
-    if (realm.find_first_of(kForbidden) != std::string_view::npos) {
+    if (realm.find_first_of(kForbiddenFieldChars) != std::string_view::npos) {
         throw std::invalid_argument(
             "http_response::unauthorized: realm contains forbidden control "
             "character (CR, LF, or NUL)");

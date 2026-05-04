@@ -240,6 +240,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
+    long http_code = 0;  // NOLINT(runtime/int)
     curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_DIGEST);
 #if defined(_WINDOWS)
     curl_easy_setopt(curl, CURLOPT_USERPWD, "examplerealm/myuser:mypass");
@@ -256,13 +257,23 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth)
     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
-    // v2 limitation: digest handshake does not complete — body remains FAIL.
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    // v2 contract: the server issues a static 401 Digest challenge; the
+    // handshake cannot complete (no nonce/opaque state machine), so the
+    // body remains FAIL and the status must be 401.
+    LT_CHECK_EQ(http_code, 401);
     LT_CHECK_EQ(s, "FAIL");
     curl_easy_cleanup(curl);
 
     ws.stop();
 LT_END_AUTO_TEST(digest_auth)
 
+// TODO(v2-digest): digest_auth_wrong_pass is indistinguishable from digest_auth
+// under v2 because the handshake never completes regardless of credentials.
+// Wrong-pass vs. correct-pass both reach the same static 401 challenge path.
+// This test becomes meaningful again when full v2 digest support is added
+// (MHD nonce/opaque state machine).  Until then it exercises a different
+// digest_resource instance only.
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_wrong_pass)
     webserver ws = create_webserver(PORT)
         .digest_auth_random("myrandom")
@@ -303,6 +314,10 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_wrong_pass)
     ws.stop();
 LT_END_AUTO_TEST(digest_auth_wrong_pass)
 
+// TODO(v2-digest): digest_auth_with_ha1_md5 is indistinguishable from
+// digest_auth under v2 — check_digest_auth_digest() is never reached because
+// get_digested_user() always returns empty string (no nonce roundtrip).
+// This test becomes meaningful when full v2 digest support is added.
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5)
     webserver ws = create_webserver(PORT)
         .digest_auth_random("myrandom")
@@ -345,6 +360,9 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5)
     ws.stop();
 LT_END_AUTO_TEST(digest_auth_with_ha1_md5)
 
+// TODO(v2-digest): digest_auth_with_ha1_md5_wrong_pass is indistinguishable
+// from digest_auth_with_ha1_md5 under v2 — wrong-pass vs. correct-pass both
+// yield the same static 401 challenge. Becomes meaningful with full v2 digest.
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5_wrong_pass)
     webserver ws = create_webserver(PORT)
         .digest_auth_random("myrandom")
@@ -385,6 +403,9 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5_wrong_pass)
     ws.stop();
 LT_END_AUTO_TEST(digest_auth_with_ha1_md5_wrong_pass)
 
+// TODO(v2-digest): digest_auth_with_ha1_sha256 is indistinguishable from
+// digest_auth under v2 — SHA-256 vs. MD5 path is unreachable (no nonce
+// roundtrip). Becomes meaningful when full v2 digest support is added.
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256)
     webserver ws = create_webserver(PORT)
         .digest_auth_random("myrandom")
@@ -427,6 +448,10 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256)
     ws.stop();
 LT_END_AUTO_TEST(digest_auth_with_ha1_sha256)
 
+// TODO(v2-digest): digest_auth_with_ha1_sha256_wrong_pass is
+// indistinguishable from digest_auth_with_ha1_sha256 under v2 — wrong-pass
+// vs. correct-pass both yield the same static 401 challenge. Becomes
+// meaningful when full v2 digest support is added.
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256_wrong_pass)
     webserver ws = create_webserver(PORT)
         .digest_auth_random("myrandom")
