@@ -20,7 +20,6 @@
 
 #include "httpserver/http_response.hpp"
 
-#include <microhttpd.h>
 #include <sys/types.h>          // ssize_t (for the deferred() producer)
 
 #include <cassert>
@@ -112,9 +111,9 @@ void http_response::adopt_body_from(http_response& o) noexcept {
 // -----------------------------------------------------------------------
 // Destructor.
 //
-// Subclass-virtual destructor: required as long as the v1 subclass
-// hierarchy still inherits from http_response. TASK-013 marks the class
-// `final` once those subclasses are removed.
+// De-virtualised in TASK-013: the class is `final`, so polymorphic
+// destruction through a base pointer is impossible. Out-of-line because
+// destroy_body() needs the complete type detail::body.
 // -----------------------------------------------------------------------
 http_response::~http_response() {
     destroy_body();
@@ -159,30 +158,6 @@ http_response& http_response::operator=(http_response&& o) noexcept {
     kind_ = o.kind_;
     adopt_body_from(o);
     return *this;
-}
-
-MHD_Response* http_response::get_raw_response() {
-    return MHD_create_response_from_buffer(0, nullptr, MHD_RESPMEM_PERSISTENT);
-}
-
-void http_response::decorate_response(MHD_Response* response) {
-    std::map<std::string, std::string, http::header_comparator>::iterator it;
-
-    for (it=headers_.begin() ; it != headers_.end(); ++it) {
-        MHD_add_response_header(response, (*it).first.c_str(), (*it).second.c_str());
-    }
-
-    for (it=footers_.begin() ; it != footers_.end(); ++it) {
-        MHD_add_response_footer(response, (*it).first.c_str(), (*it).second.c_str());
-    }
-
-    for (it=cookies_.begin(); it != cookies_.end(); ++it) {
-        MHD_add_response_header(response, "Set-Cookie", ((*it).first + "=" + (*it).second).c_str());
-    }
-}
-
-int http_response::enqueue_response(MHD_Connection* connection, MHD_Response* response) {
-    return MHD_queue_response(connection, status_code_, response);
 }
 
 void http_response::shoutCAST() {
@@ -336,7 +311,7 @@ std::string_view http_response::get_cookie(std::string_view key) const {
 }
 
 namespace {
-static inline http::header_view_map to_view_map(const http::header_map& hdr_map) {
+inline http::header_view_map to_view_map(const http::header_map& hdr_map) {
     http::header_view_map view_map;
     for (const auto& item : hdr_map) {
         view_map[std::string_view(item.first)] = std::string_view(item.second);
@@ -406,10 +381,10 @@ void http_response::emplace_body(body_kind k, Args&&... args) {
 // 204 for empty(), 401 for unauthorized().
 // -----------------------------------------------------------------------
 
-http_response http_response::empty() {
+http_response http_response::empty(int mhd_flags) {
     http_response r;
     r.status_code_ = http::http_utils::http_no_content;  // 204
-    r.emplace_body<detail::empty_body>(body_kind::empty);
+    r.emplace_body<detail::empty_body>(body_kind::empty, mhd_flags);
     return r;
 }
 
@@ -427,6 +402,10 @@ http_response http_response::string(std::string body,
 http_response http_response::file(std::string path) {
     http_response r;
     r.status_code_ = http::http_utils::http_ok;
+    // Match v1 file_response default Content-Type. Callers can override
+    // with .with_header("Content-Type", "...") in the chain.
+    r.with_header(http::http_utils::http_header_content_type,
+                  http::http_utils::application_octet_stream);
     r.emplace_body<detail::file_body>(body_kind::file, std::move(path));
     return r;
 }
@@ -468,13 +447,14 @@ http_response http_response::unauthorized(std::string_view scheme,
     // caller error — callers must never pass untrusted user input as scheme
     // or realm without first validating it. Throw std::invalid_argument so
     // the error is visible and cannot be silently swallowed.
-    static constexpr std::string_view kForbidden("\r\n\0", 3);
-    if (scheme.find_first_of(kForbidden) != std::string_view::npos) {
+    // kForbiddenFieldChars is the same constant used by validate_header_field
+    // above — reused here to avoid a duplicate definition.
+    if (scheme.find_first_of(kForbiddenFieldChars) != std::string_view::npos) {
         throw std::invalid_argument(
             "http_response::unauthorized: scheme contains forbidden control "
             "character (CR, LF, or NUL)");
     }
-    if (realm.find_first_of(kForbidden) != std::string_view::npos) {
+    if (realm.find_first_of(kForbiddenFieldChars) != std::string_view::npos) {
         throw std::invalid_argument(
             "http_response::unauthorized: realm contains forbidden control "
             "character (CR, LF, or NUL)");

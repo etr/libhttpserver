@@ -79,12 +79,16 @@ static_assert(std::is_same_v<http_response::body_pointer_type, body*>,
 static_assert(http_response::body_buf_size == 64,
               "DR-005: SBO buffer is 64 bytes");
 
+// TASK-013 AC: with the v1 *_response subclass hierarchy gone, http_response
+// is the v2 sealed value type. Deferred from TASK-009 (OQ-1) because the v1
+// subclasses still inherited at that point. PRD §3.5 mandates the seal.
+static_assert(std::is_final_v<httpserver::http_response>,
+              "TASK-013 AC: http_response is sealed (PRD §3.5)");
+
 // http_response carrying alignas(16) std::byte[64] must be aligned >= 16.
 static_assert(alignof(http_response) >= 16,
               "alignas(16) on body_storage_ requires class alignment >= 16");
 
-// `final` is deliberately NOT asserted here. TASK-013 picks it up after
-// the v1 subclasses are removed.
 
 namespace httpserver {
 
@@ -323,14 +327,17 @@ LT_END_AUTO_TEST(self_move_assign_safe)
 // Header/footer/cookie fields move with the rest of the response.
 // -----------------------------------------------------------------------
 LT_BEGIN_AUTO_TEST(http_response_sbo_suite, headers_move_with_response)
-    http_response src(201, "application/json");
-    src.with_header("X-Trace", "abc123");
-    src.with_footer("X-Footer", "fv");
-    src.with_cookie("Sess", "ck");
+    // TASK-013: legacy 2-arg ctor and get_response_code() shim removed.
+    // Construct via the v2 string() factory and read via get_status().
+    http_response src = http_response::string("body", "application/json")
+                            .with_status(201)
+                            .with_header("X-Trace", "abc123")
+                            .with_footer("X-Footer", "fv")
+                            .with_cookie("Sess", "ck");
 
     http_response dst(std::move(src));
 
-    LT_CHECK_EQ(dst.get_response_code(), 201);
+    LT_CHECK_EQ(dst.get_status(), 201);
     LT_CHECK_EQ(dst.get_header("X-Trace"), "abc123");
     LT_CHECK_EQ(dst.get_footer("X-Footer"), "fv");
     LT_CHECK_EQ(dst.get_cookie("Sess"), "ck");

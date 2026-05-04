@@ -47,7 +47,7 @@ int main(int argc, char** argv) {
         .start_method(httpserver::http::http_utils::INTERNAL_SELECT)
         .max_threads(atoi(argv[2]));
 
-    std::shared_ptr<httpserver::http_response> hello = std::shared_ptr<httpserver::http_response>(new httpserver::string_response(BODY, 200));
+    std::shared_ptr<httpserver::http_response> hello = std::shared_ptr<httpserver::http_response>(new httpserver::http_response(httpserver::http_response::string(BODY)));
     hello->with_header("Server", "libhttpserver");
 
     hello_world_resource hwr(hello);

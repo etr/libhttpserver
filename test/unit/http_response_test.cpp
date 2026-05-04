@@ -29,7 +29,6 @@
 
 using std::string;
 using httpserver::http_response;
-using httpserver::string_response;
 
 LT_BEGIN_SUITE(http_response_suite)
     void set_up() {
@@ -41,39 +40,34 @@ LT_END_SUITE(http_response_suite)
 
 LT_BEGIN_AUTO_TEST(http_response_suite, default_response_code)
     http_response resp;
-    LT_CHECK_EQ(resp.get_response_code(), -1);
+    LT_CHECK_EQ(resp.get_status(), -1);
 LT_END_AUTO_TEST(default_response_code)
 
-LT_BEGIN_AUTO_TEST(http_response_suite, custom_response_code)
-    http_response resp(404, "text/plain");
-    LT_CHECK_EQ(resp.get_response_code(), 404);
-LT_END_AUTO_TEST(custom_response_code)
-
-LT_BEGIN_AUTO_TEST(http_response_suite, string_response_code)
-    string_response resp("Not Found", 404, "text/plain");
-    LT_CHECK_EQ(resp.get_response_code(), 404);
-LT_END_AUTO_TEST(string_response_code)
+LT_BEGIN_AUTO_TEST(http_response_suite, factory_status_404)
+    http_response resp = http_response::string("Not Found").with_status(404);
+    LT_CHECK_EQ(resp.get_status(), 404);
+LT_END_AUTO_TEST(factory_status_404)
 
 LT_BEGIN_AUTO_TEST(http_response_suite, header_operations)
-    http_response resp(200, "text/plain");
+    http_response resp = http_response::string("body");
     resp.with_header("X-Custom-Header", "HeaderValue");
     LT_CHECK_EQ(resp.get_header("X-Custom-Header"), "HeaderValue");
 LT_END_AUTO_TEST(header_operations)
 
 LT_BEGIN_AUTO_TEST(http_response_suite, footer_operations)
-    http_response resp(200, "text/plain");
+    http_response resp = http_response::string("body");
     resp.with_footer("X-Footer", "FooterValue");
     LT_CHECK_EQ(resp.get_footer("X-Footer"), "FooterValue");
 LT_END_AUTO_TEST(footer_operations)
 
 LT_BEGIN_AUTO_TEST(http_response_suite, cookie_operations)
-    http_response resp(200, "text/plain");
+    http_response resp = http_response::string("body");
     resp.with_cookie("SessionId", "abc123");
     LT_CHECK_EQ(resp.get_cookie("SessionId"), "abc123");
 LT_END_AUTO_TEST(cookie_operations)
 
 LT_BEGIN_AUTO_TEST(http_response_suite, get_headers)
-    http_response resp(200, "text/plain");
+    http_response resp = http_response::string("body");
     resp.with_header("Header1", "Value1");
     resp.with_header("Header2", "Value2");
     const auto& headers = resp.get_headers();
@@ -82,7 +76,7 @@ LT_BEGIN_AUTO_TEST(http_response_suite, get_headers)
 LT_END_AUTO_TEST(get_headers)
 
 LT_BEGIN_AUTO_TEST(http_response_suite, get_footers)
-    http_response resp(200, "text/plain");
+    http_response resp = http_response::string("body");
     resp.with_footer("Footer1", "Value1");
     resp.with_footer("Footer2", "Value2");
     const auto& footers = resp.get_footers();
@@ -91,7 +85,7 @@ LT_BEGIN_AUTO_TEST(http_response_suite, get_footers)
 LT_END_AUTO_TEST(get_footers)
 
 LT_BEGIN_AUTO_TEST(http_response_suite, get_cookies)
-    http_response resp(200, "text/plain");
+    http_response resp = http_response::string("body");
     resp.with_cookie("Cookie1", "Value1");
     resp.with_cookie("Cookie2", "Value2");
     const auto& cookies = resp.get_cookies();
@@ -100,27 +94,21 @@ LT_BEGIN_AUTO_TEST(http_response_suite, get_cookies)
 LT_END_AUTO_TEST(get_cookies)
 
 LT_BEGIN_AUTO_TEST(http_response_suite, shoutcast_response)
-    string_response resp("OK", 200, "audio/mpeg");
-    int original_code = resp.get_response_code();
+    http_response resp = http_response::string("OK", "audio/mpeg");
+    int original_code = resp.get_status();
     resp.shoutCAST();
     // shoutCAST sets the MHD_ICY_FLAG (1 << 31) on response_code
     // Verify the flag bit is set (use unsigned comparison)
-    LT_CHECK_EQ(static_cast<unsigned int>(resp.get_response_code()) & 0x80000000u, 0x80000000u);
+    LT_CHECK_EQ(static_cast<unsigned int>(resp.get_status()) & 0x80000000u, 0x80000000u);
     // Also verify the original code bits are preserved
-    LT_CHECK_EQ(resp.get_response_code() & 0x7FFFFFFF, original_code);
+    LT_CHECK_EQ(resp.get_status() & 0x7FFFFFFF, original_code);
 LT_END_AUTO_TEST(shoutcast_response)
 
-LT_BEGIN_AUTO_TEST(http_response_suite, string_response_default_constructor)
-    string_response resp;
-    // Default constructor should create response with default values
-    LT_CHECK_EQ(resp.get_response_code(), -1);
-LT_END_AUTO_TEST(string_response_default_constructor)
-
-LT_BEGIN_AUTO_TEST(http_response_suite, string_response_content_only)
-    string_response resp("Hello World");
+LT_BEGIN_AUTO_TEST(http_response_suite, factory_string_default_status)
+    http_response resp = http_response::string("Hello World");
     // Should use default response code (200) and content type (text/plain)
-    LT_CHECK_EQ(resp.get_response_code(), 200);
-LT_END_AUTO_TEST(string_response_content_only)
+    LT_CHECK_EQ(resp.get_status(), 200);
+LT_END_AUTO_TEST(factory_string_default_status)
 
 LT_BEGIN_AUTO_TEST(http_response_suite, ostream_operator_empty)
     // Test ostream operator with default response (no headers/footers/cookies)
@@ -138,7 +126,8 @@ LT_END_AUTO_TEST(ostream_operator_empty)
 
 LT_BEGIN_AUTO_TEST(http_response_suite, ostream_operator_full)
     // Test ostream operator with headers, footers, and cookies
-    http_response resp(201, "application/json");
+    http_response resp = http_response::string("body", "application/json")
+                             .with_status(201);
     resp.with_header("X-Header1", "Value1");
     resp.with_header("X-Header2", "Value2");
     resp.with_footer("X-Footer", "FooterVal");
@@ -159,54 +148,54 @@ LT_END_AUTO_TEST(ostream_operator_full)
 
 // Test response code constants
 LT_BEGIN_AUTO_TEST(http_response_suite, response_code_200)
-    string_response resp("OK", 200, "text/plain");
-    LT_CHECK_EQ(resp.get_response_code(), 200);
+    http_response resp = http_response::string("OK").with_status(200);
+    LT_CHECK_EQ(resp.get_status(), 200);
 LT_END_AUTO_TEST(response_code_200)
 
 LT_BEGIN_AUTO_TEST(http_response_suite, response_code_201)
-    string_response resp("Created", 201, "text/plain");
-    LT_CHECK_EQ(resp.get_response_code(), 201);
+    http_response resp = http_response::string("Created").with_status(201);
+    LT_CHECK_EQ(resp.get_status(), 201);
 LT_END_AUTO_TEST(response_code_201)
 
 LT_BEGIN_AUTO_TEST(http_response_suite, response_code_301)
-    string_response resp("", 301, "text/plain");
-    LT_CHECK_EQ(resp.get_response_code(), 301);
+    http_response resp = http_response::string("").with_status(301);
+    LT_CHECK_EQ(resp.get_status(), 301);
 LT_END_AUTO_TEST(response_code_301)
 
 LT_BEGIN_AUTO_TEST(http_response_suite, response_code_400)
-    string_response resp("Bad Request", 400, "text/plain");
-    LT_CHECK_EQ(resp.get_response_code(), 400);
+    http_response resp = http_response::string("Bad Request").with_status(400);
+    LT_CHECK_EQ(resp.get_status(), 400);
 LT_END_AUTO_TEST(response_code_400)
 
 LT_BEGIN_AUTO_TEST(http_response_suite, response_code_500)
-    string_response resp("Internal Server Error", 500, "text/plain");
-    LT_CHECK_EQ(resp.get_response_code(), 500);
+    http_response resp = http_response::string("Internal Server Error").with_status(500);
+    LT_CHECK_EQ(resp.get_status(), 500);
 LT_END_AUTO_TEST(response_code_500)
 
 // Test get_header with nonexistent key
 LT_BEGIN_AUTO_TEST(http_response_suite, get_header_nonexistent)
-    http_response resp(200, "text/plain");
+    http_response resp = http_response::string("body");
     auto header = resp.get_header("NonExistent");
     LT_CHECK_EQ(header.empty(), true);
 LT_END_AUTO_TEST(get_header_nonexistent)
 
 // Test get_footer with nonexistent key
 LT_BEGIN_AUTO_TEST(http_response_suite, get_footer_nonexistent)
-    http_response resp(200, "text/plain");
+    http_response resp = http_response::string("body");
     auto footer = resp.get_footer("NonExistent");
     LT_CHECK_EQ(footer.empty(), true);
 LT_END_AUTO_TEST(get_footer_nonexistent)
 
 // Test get_cookie with nonexistent key
 LT_BEGIN_AUTO_TEST(http_response_suite, get_cookie_nonexistent)
-    http_response resp(200, "text/plain");
+    http_response resp = http_response::string("body");
     auto cookie = resp.get_cookie("NonExistent");
     LT_CHECK_EQ(cookie.empty(), true);
 LT_END_AUTO_TEST(get_cookie_nonexistent)
 
 // Test multiple headers
 LT_BEGIN_AUTO_TEST(http_response_suite, multiple_headers)
-    http_response resp(200, "text/plain");
+    http_response resp = http_response::string("body");
     resp.with_header("H1", "V1");
     resp.with_header("H2", "V2");
     resp.with_header("H3", "V3");
@@ -217,7 +206,7 @@ LT_END_AUTO_TEST(multiple_headers)
 
 // Test multiple footers
 LT_BEGIN_AUTO_TEST(http_response_suite, multiple_footers)
-    http_response resp(200, "text/plain");
+    http_response resp = http_response::string("body");
     resp.with_footer("F1", "V1");
     resp.with_footer("F2", "V2");
     LT_CHECK_EQ(resp.get_footer("F1"), "V1");
@@ -226,7 +215,7 @@ LT_END_AUTO_TEST(multiple_footers)
 
 // Test multiple cookies
 LT_BEGIN_AUTO_TEST(http_response_suite, multiple_cookies)
-    http_response resp(200, "text/plain");
+    http_response resp = http_response::string("body");
     resp.with_cookie("C1", "V1");
     resp.with_cookie("C2", "V2");
     LT_CHECK_EQ(resp.get_cookie("C1"), "V1");
@@ -235,7 +224,7 @@ LT_END_AUTO_TEST(multiple_cookies)
 
 // Test overwriting header
 LT_BEGIN_AUTO_TEST(http_response_suite, overwrite_header)
-    http_response resp(200, "text/plain");
+    http_response resp = http_response::string("body");
     resp.with_header("Key", "Value1");
     LT_CHECK_EQ(resp.get_header("Key"), "Value1");
     resp.with_header("Key", "Value2");
@@ -244,7 +233,7 @@ LT_END_AUTO_TEST(overwrite_header)
 
 // Test overwriting cookie
 LT_BEGIN_AUTO_TEST(http_response_suite, overwrite_cookie)
-    http_response resp(200, "text/plain");
+    http_response resp = http_response::string("body");
     resp.with_cookie("Cookie", "OldValue");
     LT_CHECK_EQ(resp.get_cookie("Cookie"), "OldValue");
     resp.with_cookie("Cookie", "NewValue");
@@ -260,21 +249,21 @@ LT_END_AUTO_TEST(empty_headers_map)
 
 // Test empty footers map
 LT_BEGIN_AUTO_TEST(http_response_suite, empty_footers_map)
-    http_response resp(200, "text/plain");
+    http_response resp = http_response::string("body");
     const auto& footers = resp.get_footers();
     LT_CHECK_EQ(footers.empty(), true);
 LT_END_AUTO_TEST(empty_footers_map)
 
 // Test empty cookies map
 LT_BEGIN_AUTO_TEST(http_response_suite, empty_cookies_map)
-    http_response resp(200, "text/plain");
+    http_response resp = http_response::string("body");
     const auto& cookies = resp.get_cookies();
     LT_CHECK_EQ(cookies.empty(), true);
 LT_END_AUTO_TEST(empty_cookies_map)
 
 // Test ostream with only headers
 LT_BEGIN_AUTO_TEST(http_response_suite, ostream_operator_headers_only)
-    http_response resp(200, "text/plain");
+    http_response resp = http_response::string("body");
     resp.with_header("X-Custom", "Value");
     std::ostringstream oss;
     oss << resp;
@@ -285,7 +274,7 @@ LT_END_AUTO_TEST(ostream_operator_headers_only)
 
 // Test ostream with only footers
 LT_BEGIN_AUTO_TEST(http_response_suite, ostream_operator_footers_only)
-    http_response resp(200, "text/plain");
+    http_response resp = http_response::string("body");
     resp.with_footer("X-Footer", "FootVal");
     std::ostringstream oss;
     oss << resp;
@@ -295,7 +284,7 @@ LT_END_AUTO_TEST(ostream_operator_footers_only)
 
 // Test ostream with only cookies
 LT_BEGIN_AUTO_TEST(http_response_suite, ostream_operator_cookies_only)
-    http_response resp(200, "text/plain");
+    http_response resp = http_response::string("body");
     resp.with_cookie("Session", "abc123");
     std::ostringstream oss;
     oss << resp;
@@ -303,28 +292,33 @@ LT_BEGIN_AUTO_TEST(http_response_suite, ostream_operator_cookies_only)
     LT_CHECK_EQ(output.find("Session") != string::npos, true);
 LT_END_AUTO_TEST(ostream_operator_cookies_only)
 
-// Test string_response with all parameters
-LT_BEGIN_AUTO_TEST(http_response_suite, string_response_full_params)
-    string_response resp("Body content", 201, "application/json");
-    LT_CHECK_EQ(resp.get_response_code(), 201);
-LT_END_AUTO_TEST(string_response_full_params)
+// Test http_response::string factory with all parameters
+LT_BEGIN_AUTO_TEST(http_response_suite, factory_string_full_params)
+    http_response resp = http_response::string("Body content", "application/json")
+                             .with_status(201);
+    LT_CHECK_EQ(resp.get_status(), 201);
+    LT_CHECK_EQ(resp.get_header("Content-Type"),
+                std::string_view("application/json"));
+LT_END_AUTO_TEST(factory_string_full_params)
 
 // Test http_response with content_type parameter
-LT_BEGIN_AUTO_TEST(http_response_suite, http_response_content_type)
-    http_response resp(200, "application/json");
-    LT_CHECK_EQ(resp.get_response_code(), 200);
-LT_END_AUTO_TEST(http_response_content_type)
+LT_BEGIN_AUTO_TEST(http_response_suite, factory_string_with_content_type)
+    http_response resp = http_response::string("body", "application/json");
+    LT_CHECK_EQ(resp.get_status(), 200);
+    LT_CHECK_EQ(resp.get_header("Content-Type"),
+                std::string_view("application/json"));
+LT_END_AUTO_TEST(factory_string_with_content_type)
 
 // Test special characters in header values
 LT_BEGIN_AUTO_TEST(http_response_suite, header_special_characters)
-    http_response resp(200, "text/plain");
+    http_response resp = http_response::string("body");
     resp.with_header("Content-Disposition", "attachment; filename=\"file.txt\"");
     LT_CHECK_EQ(resp.get_header("Content-Disposition"), "attachment; filename=\"file.txt\"");
 LT_END_AUTO_TEST(header_special_characters)
 
 // Test special characters in cookie values
 LT_BEGIN_AUTO_TEST(http_response_suite, cookie_special_characters)
-    http_response resp(200, "text/plain");
+    http_response resp = http_response::string("body");
     resp.with_cookie("Data", "value=with=equals");
     LT_CHECK_EQ(resp.get_cookie("Data"), "value=with=equals");
 LT_END_AUTO_TEST(cookie_special_characters)
@@ -471,21 +465,7 @@ LT_END_AUTO_TEST(get_header_view_reflects_replacement)
 
 // -----------------------------------------------------------------------
 // TASK-012: fluent with_* setters return http_response& / http_response&&
-// (PRD-RSP-REQ-004). Tests below pin the new contract:
-//   * the AC chain compiles end-to-end (factory_chain_compiles_and_works);
-//   * lvalue chains return identity (lvalue_chain_returns_lvalue_ref);
-//   * ref-qualifier dispatch is exact at the type level
-//     (with_setters_return_types_are_ref_qualified);
-//   * statement-form pre-TASK-012 callers still compile unchanged
-//     (statement_form_with_setters_still_compile);
-//   * with_status round-trips and is composition-safe
-//     (with_status_changes_status_code, with_status_preserves_body_and_headers);
-//   * mutation is observable through the returned reference
-//     (mutation_observable_through_returned_ref);
-//   * by-value string parameters are move-friendly (with_header_moves_string_args).
-// The SBO-inline / zero-copy invariant for the rvalue chain is verified
-// in test/unit/http_response_factories_test.cpp where the SBO friend
-// struct is already defined.
+// (PRD-RSP-REQ-004).
 // -----------------------------------------------------------------------
 
 LT_BEGIN_AUTO_TEST(http_response_suite, factory_chain_compiles_and_works)

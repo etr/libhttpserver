@@ -80,7 +80,7 @@ class args_resource : public httpserver::http_resource {
             response_body << "name (via get_arg_flat): " << name_flat << "\n";
         }
 
-        return std::make_shared<httpserver::string_response>(response_body.str(), 200, "text/plain");
+        return std::make_shared<httpserver::http_response>(httpserver::http_response::string(response_body.str()));
     }
 };
 

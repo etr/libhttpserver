@@ -23,17 +23,17 @@
 #include <httpserver.hpp>
 
 std::shared_ptr<httpserver::http_response> not_found_custom(const httpserver::http_request&) {
-    return std::shared_ptr<httpserver::string_response>(new httpserver::string_response("Not found custom", 404, "text/plain"));
+    return std::shared_ptr<httpserver::http_response>(new httpserver::http_response(httpserver::http_response::string("Not found custom").with_status(404)));
 }
 
 std::shared_ptr<httpserver::http_response> not_allowed_custom(const httpserver::http_request&) {
-    return std::shared_ptr<httpserver::string_response>(new httpserver::string_response("Not allowed custom", 405, "text/plain"));
+    return std::shared_ptr<httpserver::http_response>(new httpserver::http_response(httpserver::http_response::string("Not allowed custom").with_status(405)));
 }
 
 class hello_world_resource : public httpserver::http_resource {
  public:
      std::shared_ptr<httpserver::http_response> render(const httpserver::http_request&) {
-         return std::shared_ptr<httpserver::http_response>(new httpserver::string_response("Hello, World!"));
+         return std::shared_ptr<httpserver::http_response>(new httpserver::http_response(httpserver::http_response::string("Hello, World!")));
      }
 };
 

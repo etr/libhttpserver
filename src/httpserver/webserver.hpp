@@ -341,6 +341,16 @@ class webserver {
 
      struct MHD_Response* get_raw_response_with_fallback(detail::modded_request* mr);
 
+     // TASK-013: dispatch helpers replacing the v1 http_response virtuals
+     // (`get_raw_response`, `decorate_response`, `enqueue_response`). The
+     // wire-construction logic now lives in the dispatch path because
+     // http_response is a sealed value type with no MHD knowledge.
+     // webserver is a friend of http_response so materialize_response()
+     // can reach the private body_ pointer.
+     static struct MHD_Response* materialize_response(http_response* resp);
+     static void decorate_mhd_response(struct MHD_Response* response,
+                                       const http_response& resp);
+
      MHD_Result complete_request(MHD_Connection* connection, struct detail::modded_request* mr, const char* version, const char* method);
 
      void invalidate_route_cache();

@@ -29,19 +29,16 @@ class digest_resource : public httpserver::http_resource {
      std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request& req) {
          using httpserver::http::http_utils;
          if (req.get_digested_user() == "") {
-             return std::make_shared<httpserver::digest_auth_fail_response>("FAIL", "test@example.com", MY_OPAQUE, true,
-                 http_utils::http_ok, http_utils::text_plain, http_utils::digest_algorithm::MD5);
+             return std::make_shared<httpserver::http_response>(httpserver::http_response::unauthorized("Digest", "test@example.com", "FAIL"));
          } else {
              auto result = req.check_digest_auth("test@example.com", "mypass", 300, 0, http_utils::digest_algorithm::MD5);
              if (result == http_utils::digest_auth_result::NONCE_STALE) {
-                 return std::make_shared<httpserver::digest_auth_fail_response>("FAIL", "test@example.com", MY_OPAQUE, true,
-                     http_utils::http_ok, http_utils::text_plain, http_utils::digest_algorithm::MD5);
+                 return std::make_shared<httpserver::http_response>(httpserver::http_response::unauthorized("Digest", "test@example.com", "FAIL"));
              } else if (result != http_utils::digest_auth_result::OK) {
-                 return std::make_shared<httpserver::digest_auth_fail_response>("FAIL", "test@example.com", MY_OPAQUE, false,
-                     http_utils::http_ok, http_utils::text_plain, http_utils::digest_algorithm::MD5);
+                 return std::make_shared<httpserver::http_response>(httpserver::http_response::unauthorized("Digest", "test@example.com", "FAIL"));
              }
          }
-         return std::make_shared<httpserver::string_response>("SUCCESS", 200, "text/plain");
+         return std::make_shared<httpserver::http_response>(httpserver::http_response::string("SUCCESS"));
      }
 };
 

@@ -23,7 +23,7 @@
 // Each factory placement-news the corresponding detail::body subclass
 // into the SBO buffer (or, in the future, onto the heap) and tags the
 // response with the appropriate body_kind. Tests cover:
-//   * the public observable contract: kind(), get_response_code(),
+//   * the public observable contract: kind(), get_status(),
 //     get_header() — the surface a v2 caller sees;
 //   * the SBO inline placement, asserted through the existing
 //     http_response_sbo_test_access friend so no new private members
@@ -115,7 +115,7 @@ LT_BEGIN_AUTO_TEST(http_response_factories_suite, empty_factory)
     LT_ASSERT_NEQ(SBO::body_ptr(r),
                   static_cast<httpserver::detail::body*>(nullptr));
     // Default status code: 204 No Content (matches v1 empty_response).
-    LT_CHECK_EQ(r.get_response_code(), 204);
+    LT_CHECK_EQ(r.get_status(), 204);
 LT_END_AUTO_TEST(empty_factory)
 
 // -----------------------------------------------------------------------
@@ -132,7 +132,7 @@ LT_BEGIN_AUTO_TEST(http_response_factories_suite,
                    string_factory_default_content_type)
     auto r = http_response::string("hi");
     LT_CHECK_EQ(r.get_header("Content-Type"), std::string("text/plain"));
-    LT_CHECK_EQ(r.get_response_code(), 200);
+    LT_CHECK_EQ(r.get_status(), 200);
 LT_END_AUTO_TEST(string_factory_default_content_type)
 
 LT_BEGIN_AUTO_TEST(http_response_factories_suite,
@@ -151,7 +151,7 @@ LT_BEGIN_AUTO_TEST(http_response_factories_suite, file_factory_existing)
     LT_CHECK_EQ(static_cast<int>(r.kind()),
                 static_cast<int>(body_kind::file));
     LT_CHECK_EQ(SBO::body_inline(r), true);
-    LT_CHECK_EQ(r.get_response_code(), 200);
+    LT_CHECK_EQ(r.get_status(), 200);
 LT_END_AUTO_TEST(file_factory_existing)
 
 LT_BEGIN_AUTO_TEST(http_response_factories_suite,
@@ -177,7 +177,7 @@ LT_BEGIN_AUTO_TEST(http_response_factories_suite, iovec_factory_kind)
     auto r = http_response::iovec(entries);
     LT_CHECK_EQ(static_cast<int>(r.kind()),
                 static_cast<int>(body_kind::iovec));
-    LT_CHECK_EQ(r.get_response_code(), 200);
+    LT_CHECK_EQ(r.get_status(), 200);
 LT_END_AUTO_TEST(iovec_factory_kind)
 
 LT_BEGIN_AUTO_TEST(http_response_factories_suite,
@@ -185,6 +185,16 @@ LT_BEGIN_AUTO_TEST(http_response_factories_suite,
     // Build a span over a temporary array; let the array go out of
     // scope before we observe r. The factory's deep-copy must keep the
     // body's iovec_entry vector valid.
+    //
+    // Span deep-copy / caller-buffer lifetime contract:
+    //   http_response::iovec() copies the iovec_entry structs (base+len
+    //   pairs) into an internal std::vector.  The *entries* are owned by
+    //   the response, but the *buffers they point to* are NOT copied —
+    //   callers must keep their payload buffers alive until the response
+    //   is dispatched (i.e. until the MHD send callback completes).
+    //   http_response itself is move-only, so copy-prohibition does not
+    //   apply; the invariant to test is that the internal vector survives
+    //   after the caller's span goes out of scope.
     auto r = []() {
         std::array<httpserver::iovec_entry, 1> entries{{ {"x", 1} }};
         return http_response::iovec(entries);
@@ -192,6 +202,26 @@ LT_BEGIN_AUTO_TEST(http_response_factories_suite,
     LT_CHECK_EQ(static_cast<int>(r.kind()),
                 static_cast<int>(body_kind::iovec));
 LT_END_AUTO_TEST(iovec_factory_deep_copies_span)
+
+LT_BEGIN_AUTO_TEST(http_response_factories_suite, iovec_factory_empty_span)
+    // An iovec with zero entries must not crash, must have kind iovec,
+    // and the default status (200) must be preserved.
+    std::array<httpserver::iovec_entry, 0> entries{};
+    auto r = http_response::iovec(std::span<const httpserver::iovec_entry>(entries));
+    LT_CHECK_EQ(static_cast<int>(r.kind()),
+                static_cast<int>(body_kind::iovec));
+    LT_CHECK_EQ(r.get_status(), 200);
+LT_END_AUTO_TEST(iovec_factory_empty_span)
+
+LT_BEGIN_AUTO_TEST(http_response_factories_suite, iovec_factory_single_entry)
+    // A single-entry iovec must produce kind iovec and the default status.
+    static const char buf[] = "hello";
+    std::array<httpserver::iovec_entry, 1> entries{{ {buf, 5} }};
+    auto r = http_response::iovec(entries);
+    LT_CHECK_EQ(static_cast<int>(r.kind()),
+                static_cast<int>(body_kind::iovec));
+    LT_CHECK_EQ(r.get_status(), 200);
+LT_END_AUTO_TEST(iovec_factory_single_entry)
 
 // -----------------------------------------------------------------------
 // pipe() — owns the fd, destructor closes it when not materialized.
@@ -207,7 +237,7 @@ LT_BEGIN_AUTO_TEST(http_response_factories_suite, pipe_factory_kind)
         auto r = http_response::pipe(fds[0]);
         LT_CHECK_EQ(static_cast<int>(r.kind()),
                     static_cast<int>(body_kind::pipe));
-        LT_CHECK_EQ(r.get_response_code(), 200);
+        LT_CHECK_EQ(r.get_status(), 200);
     }
     // Destructor must have closed fds[0]; second close fails with EBADF.
     int second = ::close(fds[0]);
@@ -243,7 +273,7 @@ LT_BEGIN_AUTO_TEST(http_response_factories_suite, deferred_factory_kind)
     LT_CHECK_EQ(static_cast<int>(r.kind()),
                 static_cast<int>(body_kind::deferred));
     LT_CHECK_EQ(SBO::body_inline(r), true);
-    LT_CHECK_EQ(r.get_response_code(), 200);
+    LT_CHECK_EQ(r.get_status(), 200);
 LT_END_AUTO_TEST(deferred_factory_kind)
 
 LT_BEGIN_AUTO_TEST(http_response_factories_suite,
@@ -268,9 +298,9 @@ LT_END_AUTO_TEST(deferred_factory_releases_capture_on_destruction)
 LT_BEGIN_AUTO_TEST(http_response_factories_suite,
                    unauthorized_basic_status_and_header)
     auto r = http_response::unauthorized("Basic", "myrealm");
-    LT_CHECK_EQ(r.get_response_code(),
+    LT_CHECK_EQ(r.get_status(),
                 httpserver::http::http_utils::http_unauthorized);
-    LT_CHECK_EQ(r.get_response_code(), 401);
+    LT_CHECK_EQ(r.get_status(), 401);
     // AC requires byte-for-byte match.
     LT_CHECK_EQ(r.get_header(httpserver::http::http_utils::http_header_www_authenticate),
                 std::string(R"(Basic realm="myrealm")"));
@@ -299,7 +329,7 @@ LT_BEGIN_AUTO_TEST(http_response_factories_suite,
                                          "please log in");
     LT_CHECK_EQ(static_cast<int>(r.kind()),
                 static_cast<int>(body_kind::string));
-    LT_CHECK_EQ(r.get_response_code(), 401);
+    LT_CHECK_EQ(r.get_status(), 401);
 LT_END_AUTO_TEST(unauthorized_with_explicit_body)
 
 // -----------------------------------------------------------------------
@@ -430,14 +460,14 @@ LT_BEGIN_AUTO_TEST(http_response_factories_suite,
     LT_CHECK_EQ(static_cast<int>(r.kind()),
                 static_cast<int>(body_kind::string));
     LT_CHECK_EQ(r.get_header("Content-Type"), std::string("text/html"));
-    LT_CHECK_EQ(r.get_response_code(), 200);
+    LT_CHECK_EQ(r.get_status(), 200);
 
     // And one move-assign.
     http_response other = http_response::empty();
     other = std::move(r);
     LT_CHECK_EQ(static_cast<int>(other.kind()),
                 static_cast<int>(body_kind::string));
-    LT_CHECK_EQ(other.get_response_code(), 200);
+    LT_CHECK_EQ(other.get_status(), 200);
 LT_END_AUTO_TEST(factory_move_preserves_kind_and_headers)
 
 // -----------------------------------------------------------------------

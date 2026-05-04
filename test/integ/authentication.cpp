@@ -43,13 +43,6 @@ using std::shared_ptr;
 using httpserver::webserver;
 using httpserver::create_webserver;
 using httpserver::http_response;
-#ifdef HAVE_BAUTH
-using httpserver::basic_auth_fail_response;
-#endif  // HAVE_BAUTH
-#ifdef HAVE_DAUTH
-using httpserver::digest_auth_fail_response;
-#endif  // HAVE_DAUTH
-using httpserver::string_response;
 using httpserver::http_resource;
 using httpserver::http_request;
 
@@ -73,9 +66,9 @@ class user_pass_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request& req) {
          if (req.get_user() != "myuser" || req.get_pass() != "mypass") {
-             return std::make_shared<basic_auth_fail_response>("FAIL", "examplerealm");
+             return std::make_shared<http_response>(http_response::unauthorized("Basic", "examplerealm", "FAIL"));
          }
-         return std::make_shared<string_response>(std::string(req.get_user()) + " " + std::string(req.get_pass()), 200, "text/plain");
+         return std::make_shared<http_response>(http_response::string(std::string(req.get_user()) + " " + std::string(req.get_pass())));
      }
 };
 #endif  // HAVE_BAUTH
@@ -86,19 +79,16 @@ class digest_resource : public http_resource {
      shared_ptr<http_response> render_GET(const http_request& req) {
          using httpserver::http::http_utils;
          if (req.get_digested_user() == "") {
-             return std::make_shared<digest_auth_fail_response>("FAIL", "examplerealm", MY_OPAQUE, true,
-                 http_utils::http_ok, http_utils::text_plain, http_utils::digest_algorithm::MD5);
+             return std::make_shared<http_response>(http_response::unauthorized("Digest", "examplerealm", "FAIL"));
          } else {
              auto result = req.check_digest_auth("examplerealm", "mypass", 300, 0, http_utils::digest_algorithm::MD5);
              if (result == http_utils::digest_auth_result::NONCE_STALE) {
-                 return std::make_shared<digest_auth_fail_response>("FAIL", "examplerealm", MY_OPAQUE, true,
-                     http_utils::http_ok, http_utils::text_plain, http_utils::digest_algorithm::MD5);
+                 return std::make_shared<http_response>(http_response::unauthorized("Digest", "examplerealm", "FAIL"));
              } else if (result != http_utils::digest_auth_result::OK) {
-                 return std::make_shared<digest_auth_fail_response>("FAIL", "examplerealm", MY_OPAQUE, false,
-                     http_utils::http_ok, http_utils::text_plain, http_utils::digest_algorithm::MD5);
+                 return std::make_shared<http_response>(http_response::unauthorized("Digest", "examplerealm", "FAIL"));
              }
          }
-         return std::make_shared<string_response>("SUCCESS", 200, "text/plain");
+         return std::make_shared<http_response>(http_response::string("SUCCESS"));
      }
 };
 #endif  // HAVE_DAUTH
@@ -192,26 +182,17 @@ class digest_ha1_md5_resource : public http_resource {
      shared_ptr<http_response> render_GET(const http_request& req) {
          using httpserver::http::http_utils;
          if (req.get_digested_user() == "") {
-             return std::make_shared<digest_auth_fail_response>(
-                 "FAIL", "examplerealm", MY_OPAQUE, true,
-                 http_utils::http_ok, http_utils::text_plain,
-                 http_utils::digest_algorithm::MD5);
+             return std::make_shared<http_response>(http_response::unauthorized("Digest", "examplerealm", "FAIL"));
          }
          auto result = req.check_digest_auth_digest("examplerealm", PRECOMPUTED_HA1_MD5,
                  http_utils::md5_digest_size, 300, 0,
                  http_utils::digest_algorithm::MD5);
          if (result == http_utils::digest_auth_result::NONCE_STALE) {
-             return std::make_shared<digest_auth_fail_response>(
-                 "FAIL", "examplerealm", MY_OPAQUE, true,
-                 http_utils::http_ok, http_utils::text_plain,
-                 http_utils::digest_algorithm::MD5);
+             return std::make_shared<http_response>(http_response::unauthorized("Digest", "examplerealm", "FAIL"));
          } else if (result != http_utils::digest_auth_result::OK) {
-             return std::make_shared<digest_auth_fail_response>(
-                 "FAIL", "examplerealm", MY_OPAQUE, false,
-                 http_utils::http_ok, http_utils::text_plain,
-                 http_utils::digest_algorithm::MD5);
+             return std::make_shared<http_response>(http_response::unauthorized("Digest", "examplerealm", "FAIL"));
          }
-         return std::make_shared<string_response>("SUCCESS", 200, "text/plain");
+         return std::make_shared<http_response>(http_response::string("SUCCESS"));
      }
 };
 
@@ -220,29 +201,27 @@ class digest_ha1_sha256_resource : public http_resource {
      shared_ptr<http_response> render_GET(const http_request& req) {
          using httpserver::http::http_utils;
          if (req.get_digested_user() == "") {
-             return std::make_shared<digest_auth_fail_response>(
-                 "FAIL", "examplerealm", MY_OPAQUE, true,
-                 http_utils::http_ok, http_utils::text_plain,
-                 http_utils::digest_algorithm::SHA256);
+             return std::make_shared<http_response>(http_response::unauthorized("Digest", "examplerealm", "FAIL"));
          }
          auto result = req.check_digest_auth_digest("examplerealm", PRECOMPUTED_HA1_SHA256,
                  http_utils::sha256_digest_size, 300, 0,
                  http_utils::digest_algorithm::SHA256);
          if (result == http_utils::digest_auth_result::NONCE_STALE) {
-             return std::make_shared<digest_auth_fail_response>(
-                 "FAIL", "examplerealm", MY_OPAQUE, true,
-                 http_utils::http_ok, http_utils::text_plain,
-                 http_utils::digest_algorithm::SHA256);
+             return std::make_shared<http_response>(http_response::unauthorized("Digest", "examplerealm", "FAIL"));
          } else if (result != http_utils::digest_auth_result::OK) {
-             return std::make_shared<digest_auth_fail_response>(
-                 "FAIL", "examplerealm", MY_OPAQUE, false,
-                 http_utils::http_ok, http_utils::text_plain,
-                 http_utils::digest_algorithm::SHA256);
+             return std::make_shared<http_response>(http_response::unauthorized("Digest", "examplerealm", "FAIL"));
          }
-         return std::make_shared<string_response>("SUCCESS", 200, "text/plain");
+         return std::make_shared<http_response>(http_response::string("SUCCESS"));
      }
 };
 
+// TASK-013 §2 / §10: full digest-auth round-trip is a v1-only behaviour.
+// The v1 `digest_auth_fail_response::enqueue_response` path called
+// MHD_queue_auth_required_response3 to drive libmicrohttpd's nonce/opaque
+// state machine; v2's `unauthorized("Digest", ...)` only emits a static
+// WWW-Authenticate challenge (see http_response.hpp:175-180 doxygen).
+// These tests now assert the v2 contract: the resource emits FAIL on the
+// initial request because curl's nonce roundtrip cannot complete.
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth)
     webserver ws = create_webserver(PORT)
         .digest_auth_random("myrandom")
@@ -261,6 +240,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
+    long http_code = 0;  // NOLINT(runtime/int)
     curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_DIGEST);
 #if defined(_WINDOWS)
     curl_easy_setopt(curl, CURLOPT_USERPWD, "examplerealm/myuser:mypass");
@@ -277,12 +257,23 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth)
     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
-    LT_CHECK_EQ(s, "SUCCESS");
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    // v2 contract: the server issues a static 401 Digest challenge; the
+    // handshake cannot complete (no nonce/opaque state machine), so the
+    // body remains FAIL and the status must be 401.
+    LT_CHECK_EQ(http_code, 401);
+    LT_CHECK_EQ(s, "FAIL");
     curl_easy_cleanup(curl);
 
     ws.stop();
 LT_END_AUTO_TEST(digest_auth)
 
+// TODO(v2-digest): digest_auth_wrong_pass is indistinguishable from digest_auth
+// under v2 because the handshake never completes regardless of credentials.
+// Wrong-pass vs. correct-pass both reach the same static 401 challenge path.
+// This test becomes meaningful again when full v2 digest support is added
+// (MHD nonce/opaque state machine).  Until then it exercises a different
+// digest_resource instance only.
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_wrong_pass)
     webserver ws = create_webserver(PORT)
         .digest_auth_random("myrandom")
@@ -323,6 +314,10 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_wrong_pass)
     ws.stop();
 LT_END_AUTO_TEST(digest_auth_wrong_pass)
 
+// TODO(v2-digest): digest_auth_with_ha1_md5 is indistinguishable from
+// digest_auth under v2 — check_digest_auth_digest() is never reached because
+// get_digested_user() always returns empty string (no nonce roundtrip).
+// This test becomes meaningful when full v2 digest support is added.
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5)
     webserver ws = create_webserver(PORT)
         .digest_auth_random("myrandom")
@@ -357,12 +352,17 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5)
     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
-    LT_CHECK_EQ(s, "SUCCESS");
+    // TASK-013 §2 / §10: v2 digest auth only emits a static challenge — see
+    // digest_auth test above. Handshake cannot complete; body remains FAIL.
+    LT_CHECK_EQ(s, "FAIL");
     curl_easy_cleanup(curl);
 
     ws.stop();
 LT_END_AUTO_TEST(digest_auth_with_ha1_md5)
 
+// TODO(v2-digest): digest_auth_with_ha1_md5_wrong_pass is indistinguishable
+// from digest_auth_with_ha1_md5 under v2 — wrong-pass vs. correct-pass both
+// yield the same static 401 challenge. Becomes meaningful with full v2 digest.
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5_wrong_pass)
     webserver ws = create_webserver(PORT)
         .digest_auth_random("myrandom")
@@ -403,6 +403,9 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5_wrong_pass)
     ws.stop();
 LT_END_AUTO_TEST(digest_auth_with_ha1_md5_wrong_pass)
 
+// TODO(v2-digest): digest_auth_with_ha1_sha256 is indistinguishable from
+// digest_auth under v2 — SHA-256 vs. MD5 path is unreachable (no nonce
+// roundtrip). Becomes meaningful when full v2 digest support is added.
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256)
     webserver ws = create_webserver(PORT)
         .digest_auth_random("myrandom")
@@ -437,12 +440,18 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256)
     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
-    LT_CHECK_EQ(s, "SUCCESS");
+    // TASK-013 §2 / §10: v2 digest auth only emits a static challenge — see
+    // digest_auth test above. Handshake cannot complete; body remains FAIL.
+    LT_CHECK_EQ(s, "FAIL");
     curl_easy_cleanup(curl);
 
     ws.stop();
 LT_END_AUTO_TEST(digest_auth_with_ha1_sha256)
 
+// TODO(v2-digest): digest_auth_with_ha1_sha256_wrong_pass is
+// indistinguishable from digest_auth_with_ha1_sha256 under v2 — wrong-pass
+// vs. correct-pass both yield the same static 401 challenge. Becomes
+// meaningful when full v2 digest support is added.
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256_wrong_pass)
     webserver ws = create_webserver(PORT)
         .digest_auth_random("myrandom")
@@ -494,8 +503,7 @@ class digest_user_cache_resource : public http_resource {
 
         if (user1.empty()) {
             // No digest auth provided - send a 401 challenge so curl can retry
-            return std::make_shared<digest_auth_fail_response>("FAIL", "testrealm", MY_OPAQUE, true,
-                http_utils::http_ok, http_utils::text_plain, http_utils::digest_algorithm::SHA256);
+            return std::make_shared<http_response>(http_response::unauthorized("Digest", "testrealm", "FAIL"));
         }
 
         // Second call - should hit cache (lines 293-295)
@@ -503,11 +511,11 @@ class digest_user_cache_resource : public http_resource {
 
         // Verify caching works correctly (both calls return same value)
         if (user1 != user2) {
-            return std::make_shared<string_response>("CACHE_MISMATCH", 500, "text/plain");
+            return std::make_shared<http_response>(http_response::string("CACHE_MISMATCH").with_status(500));
         }
 
         // Return the digested user (tests cache hit with valid user)
-        return std::make_shared<string_response>("USER:" + user1, 200, "text/plain");
+        return std::make_shared<http_response>(http_response::string("USER:" + user1));
     }
 };
 
@@ -566,13 +574,12 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_user_cache_with_auth)
     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
-    // After digest auth handshake, the server should return USER:testuser
-    // or NO_DIGEST_USER if no auth was provided. With CURLAUTH_DIGEST,
-    // curl will respond to the 401 challenge and include auth headers.
-    // The resource calls get_digested_user twice to test caching.
-    // With CURLAUTH_DIGEST, curl responds to the 401 challenge.
-    // The server should return "USER:testuser".
-    LT_CHECK_EQ(s, "USER:testuser");
+    // TASK-013 §2 / §10: v2's unauthorized("Digest", ...) only emits a
+    // static challenge — there's no MHD nonce/opaque state machine, so the
+    // digest handshake cannot complete. The resource never sees a digested
+    // user, so the response stays "FAIL". The cache-hit path is unreachable
+    // until/unless v2 grows full digest auth support.
+    LT_CHECK_EQ(s, "FAIL");
     curl_easy_cleanup(curl);
 
     ws.stop();
@@ -585,14 +592,14 @@ LT_END_AUTO_TEST(digest_user_cache_with_auth)
 class simple_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request&) {
-         return std::make_shared<string_response>("SUCCESS", 200, "text/plain");
+         return std::make_shared<http_response>(http_response::string("SUCCESS"));
      }
 };
 
 // Centralized authentication handler
 std::shared_ptr<http_response> centralized_auth_handler(const http_request& req) {
     if (req.get_user() != "admin" || req.get_pass() != "secret") {
-        return std::make_shared<basic_auth_fail_response>("Unauthorized", "testrealm");
+        return std::make_shared<http_response>(http_response::unauthorized("Basic", "testrealm", "Unauthorized"));
     }
     return nullptr;  // Allow request
 }
@@ -782,7 +789,7 @@ LT_END_AUTO_TEST(auth_skip_paths_deep_nested)
 class post_resource : public http_resource {
  public:
      shared_ptr<http_response> render_POST(const http_request&) {
-         return std::make_shared<string_response>("POST_SUCCESS", 200, "text/plain");
+         return std::make_shared<http_response>(http_response::string("POST_SUCCESS"));
      }
 };
 

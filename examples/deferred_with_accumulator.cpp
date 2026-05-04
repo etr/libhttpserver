@@ -20,6 +20,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstdint>
 #include <cstring>
 // cpplint errors on chrono and thread because they are replaced (in Chromium) by other google libraries.
 // This is not an issue here.
@@ -62,7 +63,20 @@ class deferred_resource : public httpserver::http_resource {
  public:
      std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request&) {
          std::shared_ptr<std::atomic<int> > closure_data(new std::atomic<int>(counter++));
-         return std::shared_ptr<httpserver::deferred_response<std::atomic<int> > >(new httpserver::deferred_response<std::atomic<int> >(test_callback, closure_data, "cycle callback response"));
+         std::string initial = "cycle callback response";
+         return std::make_shared<httpserver::http_response>(
+             httpserver::http_response::deferred(
+                 [closure_data, initial,
+                  served = false](std::uint64_t, char* buf,
+                                  std::size_t max) mutable -> ssize_t {
+                     if (!served) {
+                         served = true;
+                         std::size_t n = std::min(initial.size(), max);
+                         memcpy(buf, initial.data(), n);
+                         return n;
+                     }
+                     return test_callback(closure_data, buf, max);
+                 }));
      }
 };
 

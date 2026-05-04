@@ -66,8 +66,7 @@ class image_resource : public httpserver::http_resource {
 
         // Use string_response with the appropriate content type. The response
         // will send the exact bytes contained in the string.
-        return std::make_shared<httpserver::string_response>(
-                std::move(image_data), 200, "image/png");
+        return std::make_shared<httpserver::http_response>(httpserver::http_response::string(std::move(image_data), "image/png"));
     }
 };
 

@@ -28,21 +28,18 @@ using httpserver::http_response;
 using httpserver::http_resource;
 using httpserver::webserver;
 using httpserver::create_webserver;
-using httpserver::string_response;
-using httpserver::basic_auth_fail_response;
-
 // Simple resource that doesn't need to handle auth itself
 class hello_resource : public http_resource {
  public:
     std::shared_ptr<http_response> render_GET(const http_request&) {
-        return std::make_shared<string_response>("Hello, authenticated user!", 200, "text/plain");
+        return std::make_shared<http_response>(http_response::string("Hello, authenticated user!"));
     }
 };
 
 class health_resource : public http_resource {
  public:
     std::shared_ptr<http_response> render_GET(const http_request&) {
-        return std::make_shared<string_response>("OK", 200, "text/plain");
+        return std::make_shared<http_response>(http_response::string("OK"));
     }
 };
 
@@ -50,7 +47,7 @@ class health_resource : public http_resource {
 // Returns nullptr to allow the request, or an http_response to reject it
 std::shared_ptr<http_response> auth_handler(const http_request& req) {
     if (req.get_user() != "admin" || req.get_pass() != "secret") {
-        return std::make_shared<basic_auth_fail_response>("Unauthorized", "MyRealm");
+        return std::make_shared<http_response>(http_response::unauthorized("Basic", "MyRealm", "Unauthorized"));
     }
     return nullptr;  // Allow request
 }

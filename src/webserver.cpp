@@ -65,7 +65,7 @@
 #include "httpserver/http_response.hpp"
 #include "httpserver/http_utils.hpp"
 #include "httpserver/string_utilities.hpp"
-#include "httpserver/string_response.hpp"
+#include "httpserver/detail/body.hpp"
 
 struct MHD_Connection;
 
@@ -1020,7 +1020,9 @@ std::shared_ptr<http_response> webserver::not_found_page(detail::modded_request*
     if (not_found_resource != nullptr) {
         return not_found_resource(*mr->dhr);
     } else {
-        return std::make_shared<string_response>(std::string{constants::NOT_FOUND_ERROR}, http_utils::http_not_found);
+        return std::make_shared<http_response>(
+            http_response::string(std::string{constants::NOT_FOUND_ERROR})
+                .with_status(http_utils::http_not_found));
     }
 }
 
@@ -1028,7 +1030,9 @@ std::shared_ptr<http_response> webserver::method_not_allowed_page(detail::modded
     if (method_not_allowed_resource != nullptr) {
         return method_not_allowed_resource(*mr->dhr);
     } else {
-        return std::make_shared<string_response>(std::string{constants::METHOD_ERROR}, http_utils::http_method_not_allowed);
+        return std::make_shared<http_response>(
+            http_response::string(std::string{constants::METHOD_ERROR})
+                .with_status(http_utils::http_method_not_allowed));
     }
 }
 
@@ -1036,7 +1040,9 @@ std::shared_ptr<http_response> webserver::internal_error_page(detail::modded_req
     if (internal_error_resource != nullptr && !force_our) {
         return internal_error_resource(*mr->dhr);
     } else {
-        return std::make_shared<string_response>(std::string{constants::GENERIC_ERROR}, http_utils::http_internal_server_error);
+        return std::make_shared<http_response>(
+            http_response::string(std::string{constants::GENERIC_ERROR})
+                .with_status(http_utils::http_internal_server_error));
     }
 }
 
@@ -1134,25 +1140,60 @@ MHD_Result webserver::requests_answer_second_step(MHD_Connection* connection, co
     return MHD_YES;
 }
 
+// TASK-013: dispatch helpers replacing the v1 `get_raw_response`,
+// `decorate_response`, and `enqueue_response` virtuals on http_response.
+// Now that http_response is a final value type and the v1 polymorphic
+// subclass hierarchy is gone, the wire-construction logic lives here in
+// the dispatch path. webserver is a friend of http_response (declared in
+// http_response.hpp) so it can reach body_ directly.
+//
+// materialize_response: ask the body to produce a fresh MHD_Response
+// with no headers/footers/cookies attached.
+//
+// decorate_mhd_response: walk the response's header/footer/cookie maps
+// and attach each to the materialized MHD_Response. Equivalent to v1's
+// http_response::decorate_response, moved into the dispatch path so
+// http_response no longer carries any MHD_* knowledge.
+MHD_Response* webserver::materialize_response(http_response* resp) {
+    if (resp == nullptr || resp->body_ == nullptr) {
+        return nullptr;
+    }
+    return resp->body_->materialize();
+}
+
+void webserver::decorate_mhd_response(MHD_Response* response,
+                                      const http_response& resp) {
+    for (const auto& [k, v] : resp.get_headers()) {
+        MHD_add_response_header(response, k.c_str(), v.c_str());
+    }
+    for (const auto& [k, v] : resp.get_footers()) {
+        MHD_add_response_footer(response, k.c_str(), v.c_str());
+    }
+    for (const auto& [k, v] : resp.get_cookies()) {
+        MHD_add_response_header(response, "Set-Cookie",
+                                (k + "=" + v).c_str());
+    }
+}
+
 struct MHD_Response* webserver::get_raw_response_with_fallback(detail::modded_request* mr) {
     try {
-        struct MHD_Response* raw = mr->dhrs->get_raw_response();
+        struct MHD_Response* raw = materialize_response(mr->dhrs.get());
         if (raw == nullptr) {
             mr->dhrs = internal_error_page(mr);
-            raw = mr->dhrs->get_raw_response();
+            raw = materialize_response(mr->dhrs.get());
         }
         return raw;
     } catch(const std::invalid_argument&) {
         try {
             mr->dhrs = not_found_page(mr);
-            return mr->dhrs->get_raw_response();
+            return materialize_response(mr->dhrs.get());
         } catch(...) {
             return nullptr;
         }
     } catch(...) {
         try {
             mr->dhrs = internal_error_page(mr);
-            return mr->dhrs->get_raw_response();
+            return materialize_response(mr->dhrs.get());
         } catch(...) {
             return nullptr;
         }
@@ -1333,7 +1374,7 @@ MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct detail:
             }
             if (hrm->is_allowed(method)) {
                 mr->dhrs = ((hrm)->*(mr->callback))(*mr->dhr);  // copy in memory (move in case)
-                if (mr->dhrs.get() == nullptr || mr->dhrs->get_response_code() == -1) {
+                if (mr->dhrs.get() == nullptr || mr->dhrs->get_status() == -1) {
                     mr->dhrs = internal_error_page(mr);
                 }
             } else {
@@ -1348,10 +1389,15 @@ MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct detail:
                     mr->dhrs->with_header(http_utils::http_header_allow, header_value);
                 }
             }
-        } catch(const std::exception& e) {
-            mr->dhrs = internal_error_page(mr);
         } catch(...) {
-            mr->dhrs = internal_error_page(mr);
+            // The user-supplied internal_error_resource may itself throw;
+            // fall back to the built-in error page in that case (force_our=true)
+            // so we never let exceptions escape into libmicrohttpd.
+            try {
+                mr->dhrs = internal_error_page(mr);
+            } catch(...) {
+                mr->dhrs = internal_error_page(mr, true);
+            }
         }
     } else if (mr->dhrs == nullptr) {
         mr->dhrs = not_found_page(mr);
@@ -1360,10 +1406,10 @@ MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct detail:
     raw_response = get_raw_response_with_fallback(mr);
     if (raw_response == nullptr) {
         mr->dhrs = internal_error_page(mr, true);
-        raw_response = mr->dhrs->get_raw_response();
+        raw_response = materialize_response(mr->dhrs.get());
     }
-    mr->dhrs->decorate_response(raw_response);
-    to_ret = mr->dhrs->enqueue_response(connection, raw_response);
+    decorate_mhd_response(raw_response, *mr->dhrs);
+    to_ret = MHD_queue_response(connection, mr->dhrs->get_status(), raw_response);
     MHD_destroy_response(raw_response);
     return (MHD_Result) to_ret;
 }

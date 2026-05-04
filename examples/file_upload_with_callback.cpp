@@ -40,7 +40,7 @@ class file_upload_resource : public httpserver::http_resource {
          get_response += "  </body>\n";
          get_response += "</html>\n";
 
-         return std::shared_ptr<httpserver::http_response>(new httpserver::string_response(get_response, 200, "text/html"));
+         return std::shared_ptr<httpserver::http_response>(new httpserver::http_response(httpserver::http_response::string(get_response, "text/html")));
      }
 
      std::shared_ptr<httpserver::http_response> render_POST(const httpserver::http_request& req) {
@@ -60,7 +60,7 @@ class file_upload_resource : public httpserver::http_resource {
         post_response += "  </ul>\n";
         post_response += "  <a href=\"/\">Upload more</a>\n";
         post_response += "</body>\n</html>";
-        return std::shared_ptr<httpserver::http_response>(new httpserver::string_response(post_response, 201, "text/html"));
+        return std::shared_ptr<httpserver::http_response>(new httpserver::http_response(httpserver::http_response::string(post_response, "text/html").with_status(201)));
     }
 };
 

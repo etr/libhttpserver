@@ -8,12 +8,12 @@
 Delete the public-facing response subclasses and the `get_raw_response`/`decorate_response`/`enqueue_response` virtuals so the new factory-based surface is the only way to build a response.
 
 **Action Items:**
-- [ ] Remove `src/httpserver/string_response.hpp`, `file_response.hpp`, `iovec_response.hpp`, `pipe_response.hpp`, `deferred_response.hpp`, `empty_response.hpp`, `basic_auth_fail_response.hpp`, `digest_auth_fail_response.hpp` from the installed set.
-- [ ] Delete those classes' source files (or move any salvageable logic into `detail/body.hpp`).
-- [ ] Remove the public virtual methods `get_raw_response`, `decorate_response`, `enqueue_response` from `http_response.hpp`.
-- [ ] Update `<httpserver.hpp>` umbrella to drop the removed includes.
-- [ ] Internal dispatch path (in `webserver.cpp` or `http_response.cpp`) calls `body_->materialize(...)` instead of the removed virtuals.
-- [ ] Add `final` to `http_response` (deferred from TASK-009 because the v1 subclasses still inherited at that point — see TASK-009 plan OQ-1). Per PRD §3.5 the class must be sealed.
+- [x] Remove `src/httpserver/string_response.hpp`, `file_response.hpp`, `iovec_response.hpp`, `pipe_response.hpp`, `deferred_response.hpp`, `empty_response.hpp`, `basic_auth_fail_response.hpp`, `digest_auth_fail_response.hpp` from the installed set.
+- [x] Delete those classes' source files (or move any salvageable logic into `detail/body.hpp`).
+- [x] Remove the public virtual methods `get_raw_response`, `decorate_response`, `enqueue_response` from `http_response.hpp`.
+- [x] Update `<httpserver.hpp>` umbrella to drop the removed includes.
+- [x] Internal dispatch path (in `webserver.cpp` or `http_response.cpp`) calls `body_->materialize(...)` instead of the removed virtuals.
+- [x] Add `final` to `http_response` (deferred from TASK-009 because the v1 subclasses still inherited at that point — see TASK-009 plan OQ-1). Per PRD §3.5 the class must be sealed.
 
 **Dependencies:**
 - Blocked by: TASK-009, TASK-010, TASK-011, TASK-012
@@ -30,4 +30,4 @@ Delete the public-facing response subclasses and the `get_raw_response`/`decorat
 **Related Requirements:** PRD-RSP-REQ-006, PRD-HDR-REQ-005
 **Related Decisions:** §4.3, §4.8
 
-**Status:** Not Started
+**Status:** Done
