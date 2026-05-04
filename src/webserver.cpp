@@ -273,6 +273,13 @@ bool webserver::start(bool blocking) {
     vector<struct MHD_OptionItem> iov;
 
     iov.push_back(gen(MHD_OPTION_NOTIFY_COMPLETED, (intptr_t) &detail::webserver_impl::request_completed, nullptr));
+    // TASK-016: per-connection arena anchor. MHD_OPTION_NOTIFY_CONNECTION
+    // hands us a per-connection void** (socket_context) on STARTED, where
+    // we new a detail::connection_state (which owns the arena), and on
+    // CLOSED, where we delete it. This makes the arena's lifetime equal
+    // to the MHD_Connection's lifetime; request_completed reuses the
+    // arena across keep-alive request boundaries via arena_.release().
+    iov.push_back(gen(MHD_OPTION_NOTIFY_CONNECTION, (intptr_t) &detail::webserver_impl::connection_notify, nullptr));
     iov.push_back(gen(MHD_OPTION_URI_LOG_CALLBACK, (intptr_t) &detail::webserver_impl::uri_log, this));
     iov.push_back(gen(MHD_OPTION_EXTERNAL_LOGGER, (intptr_t) &detail::webserver_impl::error_log, this));
     iov.push_back(gen(MHD_OPTION_UNESCAPE_CALLBACK, (intptr_t) &detail::webserver_impl::unescaper_func, this));
@@ -614,10 +621,49 @@ namespace detail {
 void webserver_impl::request_completed(void *cls, struct MHD_Connection *connection, void **con_cls, enum MHD_RequestTerminationCode toe) {
     // These parameters are passed to respect the MHD interface, but are not needed here.
     std::ignore = cls;
-    std::ignore = connection;
     std::ignore = toe;
 
+    // (1) Destroy the modded_request first. This runs ~http_request,
+    //     which calls the arena_deleter on the impl's unique_ptr (a
+    //     destructor-only call: monotonic_buffer_resource never
+    //     deallocates per-object), running every PMR string/vector/map
+    //     destructor before we reset the arena.
     delete static_cast<detail::modded_request*>(*con_cls);
+    *con_cls = nullptr;
+
+    // (2) Now that no live object inside the arena's storage remains,
+    //     rewind the bump pointer. The next request on this keep-alive
+    //     connection reuses the same memory (verified by the
+    //     http_request_arena unit test).
+    if (connection != nullptr) {
+        const MHD_ConnectionInfo* ci = MHD_get_connection_info(
+            connection, MHD_CONNECTION_INFO_SOCKET_CONTEXT);
+        if (ci != nullptr && ci->socket_context != nullptr) {
+            auto* cs = static_cast<detail::connection_state*>(ci->socket_context);
+            cs->arena_.release();
+        }
+    }
+}
+
+void webserver_impl::connection_notify(void* cls, struct MHD_Connection* connection,
+                                       void** socket_context,
+                                       enum MHD_ConnectionNotificationCode toe) {
+    std::ignore = cls;
+    std::ignore = connection;
+
+    switch (toe) {
+        case MHD_CONNECTION_NOTIFY_STARTED:
+            // Allocate the per-connection state (and its embedded arena)
+            // on connection start. The new is the only heap allocation
+            // tied to a connection's lifetime; afterwards every request
+            // on this connection draws its impl out of the arena.
+            *socket_context = new detail::connection_state();
+            break;
+        case MHD_CONNECTION_NOTIFY_CLOSED:
+            delete static_cast<detail::connection_state*>(*socket_context);
+            *socket_context = nullptr;
+            break;
+    }
 }
 
 #ifdef HAVE_GNUTLS

@@ -69,6 +69,19 @@ namespace detail {
 struct modded_request;
 class webserver_impl;
 class http_request_impl;
+// TASK-016: custom deleter for http_request_impl. Used by the
+// std::unique_ptr<http_request_impl, http_request_impl_deleter> below
+// so the destructor path Just Works for both heap- and arena-allocated
+// impls. Definition lives out-of-line in src/http_request.cpp; this
+// forward-declaration alone keeps <memory_resource> off the public
+// header. The deleter holds a single function pointer (no allocator
+// state spelled in the public type), so sizeof(unique_ptr<impl,
+// deleter>) is two pointers regardless of where the impl is allocated.
+struct http_request_impl_deleter {
+    using fn_t = void (*)(http_request_impl*);
+    fn_t fn = nullptr;
+    void operator()(http_request_impl* p) const noexcept;
+};
 }  // namespace detail
 
 /**
@@ -385,7 +398,12 @@ class http_request {
      // pointer in src/httpserver/detail/http_request_impl.hpp. The
      // dtor is out-of-line in http_request.cpp so the unique_ptr can
      // see the complete impl type.
-     std::unique_ptr<detail::http_request_impl> impl_;
+     // TASK-016: the deleter is custom because the impl can be allocated
+     // either on the heap (default-resource fallback / test path) or on
+     // a per-connection arena (live request path). The deleter dispatches
+     // to the right reclamation strategy based on a function pointer set
+     // at construction.
+     std::unique_ptr<detail::http_request_impl, detail::http_request_impl_deleter> impl_;
 
      /**
       * Method used to set an argument value by key.
