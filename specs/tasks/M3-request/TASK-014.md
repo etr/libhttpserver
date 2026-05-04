@@ -8,12 +8,12 @@
 Move `webserver`'s backend state (`MHD_Daemon*`, mutexes, ban set, connection table) into `detail/webserver_impl.hpp` so the public header carries only `std::unique_ptr<webserver_impl>`. No API rename or behavioral change yet — pure structural move.
 
 **Action Items:**
-- [ ] Create `src/httpserver/detail/webserver_impl.hpp` (gated `HTTPSERVER_COMPILATION` only).
-- [ ] Move from public `webserver.hpp` into `webserver_impl`: `MHD_Daemon* daemon_`, all mutex/cond_var members, ban list, connection-state map, route-table data structures.
-- [ ] Public `webserver.hpp` declares `class webserver { ... std::unique_ptr<webserver_impl> impl_; ... };` and forward-declares `class webserver_impl;` in `httpserver::detail` namespace.
-- [ ] Implement public methods as one-liners forwarding to `impl_->method()`.
-- [ ] Move `<microhttpd.h>` and `<pthread.h>` includes from public `webserver.hpp` into `webserver_impl.hpp` and `webserver.cpp`.
-- [ ] Define a `connection_state` struct inside `webserver_impl` (will host the per-connection arena in TASK-016).
+- [x] Create `src/httpserver/detail/webserver_impl.hpp` (gated `HTTPSERVER_COMPILATION` only).
+- [x] Move from public `webserver.hpp` into `webserver_impl`: `MHD_Daemon* daemon_`, all mutex/cond_var members, ban list, connection-state map, route-table data structures.
+- [x] Public `webserver.hpp` declares `class webserver { ... std::unique_ptr<webserver_impl> impl_; ... };` and forward-declares `class webserver_impl;` in `httpserver::detail` namespace.
+- [x] Implement public methods as one-liners forwarding to `impl_->method()`.
+- [x] Move `<microhttpd.h>` and `<pthread.h>` includes from public `webserver.hpp` into `webserver_impl.hpp` and `webserver.cpp`.
+- [x] Define a `connection_state` struct inside `webserver_impl` (will host the per-connection arena in TASK-016).
 
 **Dependencies:**
 - Blocked by: TASK-002
@@ -29,4 +29,4 @@ Move `webserver`'s backend state (`MHD_Daemon*`, mutexes, ban set, connection ta
 **Related Requirements:** PRD-HDR-REQ-001..004
 **Related Decisions:** DR-002, DR-003b, §4.1
 
-**Status:** Not Started
+**Status:** Done

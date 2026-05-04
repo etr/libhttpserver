@@ -37,8 +37,6 @@ namespace httpserver {
 
 namespace detail {
 
-class http_resource;
-
 /**
  * Class representing an Http Endpoint. It is an abstraction used by the APIs.
 **/

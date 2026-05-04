@@ -53,6 +53,7 @@ struct MHD_Connection;
 namespace httpserver {
 
 namespace detail { struct modded_request; }
+namespace detail { class webserver_impl; }
 
 /**
  * Class representing an abstraction for an Http Request. It is used from classes using these apis to receive information through http protocol.
@@ -534,6 +535,7 @@ class http_request {
      }
 
      friend class webserver;
+     friend class detail::webserver_impl;  // TASK-014: PIMPL dispatch path
      friend struct detail::modded_request;
 };
 

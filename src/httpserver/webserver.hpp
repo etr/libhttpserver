@@ -25,8 +25,6 @@
 #ifndef SRC_HTTPSERVER_WEBSERVER_HPP_
 #define SRC_HTTPSERVER_WEBSERVER_HPP_
 
-#include <microhttpd.h>
-#include <pthread.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -35,33 +33,28 @@
 #include <sys/socket.h>
 #endif
 
-#include <list>
-#include <map>
 #include <memory>
-#include <mutex>
-#include <set>
-#include <shared_mutex>
 #include <string>
-#include <unordered_map>
 #include <vector>
-
-#ifdef HAVE_GNUTLS
-#include <gnutls/gnutls.h>
-#endif  // HAVE_GNUTLS
 
 #include "httpserver/constants.hpp"
 #include "httpserver/http_utils.hpp"
 #include "httpserver/create_webserver.hpp"
-#include "httpserver/detail/http_endpoint.hpp"
 
-namespace httpserver { class http_resource; }
-namespace httpserver { class http_response; }
+// Forward declarations: backend (MHD) types are intentionally NOT pulled in.
+// libmicrohttpd's <microhttpd.h> and <pthread.h> live behind the PIMPL
+// boundary in detail/webserver_impl.hpp (TASK-014).
+namespace httpserver {
+class http_resource;
+class http_response;
 #ifdef HAVE_WEBSOCKET
-namespace httpserver { class websocket_handler; }
+class websocket_handler;
 #endif  // HAVE_WEBSOCKET
-namespace httpserver { namespace detail { struct modded_request; } }
-
-struct MHD_Connection;
+namespace detail {
+struct modded_request;
+class webserver_impl;
+}  // namespace detail
+}  // namespace httpserver
 
 namespace httpserver {
 
@@ -76,6 +69,11 @@ class webserver {
       * Destructor of the class
      **/
      ~webserver();
+     // PIMPL-owned: copy/move would slice the backing impl object.
+     webserver(const webserver&) = delete;
+     webserver& operator=(const webserver&) = delete;
+     webserver(webserver&&) = delete;
+     webserver& operator=(webserver&&) = delete;
      /**
       * Method used to start the webserver.
       * This method can be blocking or not.
@@ -202,9 +200,6 @@ class webserver {
      bool register_ws_resource(const std::string& resource, websocket_handler* handler);
 #endif  // HAVE_WEBSOCKET
 
- protected:
-     webserver& operator=(const webserver& other);
-
  private:
      const uint16_t port;
      http::http_utils::start_method_T start_method;
@@ -220,9 +215,6 @@ class webserver {
      unescaper_ptr unescaper;
      const struct sockaddr* bind_address;
      std::shared_ptr<struct sockaddr_storage> bind_address_storage;
-     /* Changed type to MHD_socket because this type will always reflect the
-     platform's actual socket type (e.g. SOCKET on windows, int on unixes)*/
-     MHD_socket bind_socket;
      const int max_thread_stack_size;
      const bool use_ssl;
      const bool use_ipv6;
@@ -237,7 +229,6 @@ class webserver {
      const psk_cred_handler_callback psk_cred_handler;
      const std::string digest_auth_random;
      const int nonce_nc_size;
-     bool running;
      const http::http_utils::policy_T default_policy;
 #ifdef HAVE_BAUTH
      const bool basic_auth_enabled;
@@ -253,8 +244,6 @@ class webserver {
      const bool deferred_enabled;
      const bool single_resource;
      const bool tcp_nodelay;
-     pthread_mutex_t mutexwait;
-     pthread_cond_t mutexcond;
      const render_ptr not_found_resource;
      const render_ptr method_not_allowed_resource;
      const render_ptr internal_error_resource;
@@ -276,111 +265,21 @@ class webserver {
      const std::string https_priorities_append;
      const bool no_alpn;
      const int client_discipline_level;
-     std::shared_mutex registered_resources_mutex;
-     std::map<detail::http_endpoint, http_resource*> registered_resources;
-     std::map<std::string, http_resource*> registered_resources_str;
-     std::map<detail::http_endpoint, http_resource*> registered_resources_regex;
 
-     struct route_cache_entry {
-         detail::http_endpoint matched_endpoint;
-         http_resource* resource;
-     };
-     static constexpr size_t ROUTE_CACHE_MAX_SIZE = 256;
-     std::mutex route_cache_mutex;
-     std::list<std::pair<std::string, route_cache_entry>> route_cache_list;
-     std::unordered_map<std::string, std::list<std::pair<std::string, route_cache_entry>>::iterator> route_cache_map;
+     // PIMPL: backend-coupled state (MHD daemon, pthread mutexes, route
+     // table, ban set, route cache, websocket registry, GnuTLS SNI cache,
+     // and the dispatch helpers / MHD trampolines that operate on those)
+     // lives behind this pointer in detail/webserver_impl.hpp. The public
+     // header carries no <microhttpd.h>/<pthread.h>/<gnutls/...> baggage.
+     std::unique_ptr<detail::webserver_impl> impl_;
 
-     std::shared_mutex bans_mutex;
-     std::set<http::ip_representation> bans;
-
-     std::shared_mutex allowances_mutex;
-     std::set<http::ip_representation> allowances;
-
-     struct MHD_Daemon* daemon;
-
-#ifdef HAVE_WEBSOCKET
-     std::map<std::string, websocket_handler*> registered_ws_handlers;
-#endif  // HAVE_WEBSOCKET
-
-     std::shared_ptr<http_response> method_not_allowed_page(detail::modded_request* mr) const;
-     std::shared_ptr<http_response> internal_error_page(detail::modded_request* mr, bool force_our = false) const;
-     std::shared_ptr<http_response> not_found_page(detail::modded_request* mr) const;
-     bool should_skip_auth(const std::string& path) const;
-
-     static void request_completed(void *cls,
-             struct MHD_Connection *connection, void **con_cls,
-             enum MHD_RequestTerminationCode toe);
-
-     static MHD_Result answer_to_connection(void* cls, MHD_Connection* connection, const char* url,
-             const char* method, const char* version, const char* upload_data,
-             size_t* upload_data_size, void** con_cls);
-
-     static MHD_Result post_iterator(void *cls, enum MHD_ValueKind kind, const char *key,
-             const char *filename, const char *content_type, const char *transfer_encoding,
-             const char *data, uint64_t off, size_t size);
-
-#ifdef HAVE_WEBSOCKET
-     struct ws_upgrade_data {
-         webserver* ws;
-         websocket_handler* handler;
-     };
-
-     static void upgrade_handler(void *cls, struct MHD_Connection* connection,
-                                 void *req_cls, const char *extra_in,
-                                 size_t extra_in_size, MHD_socket sock,
-                                 struct MHD_UpgradeResponseHandle *urh);
-#endif  // HAVE_WEBSOCKET
-
-     MHD_Result requests_answer_first_step(MHD_Connection* connection, struct detail::modded_request* mr);
-
-     MHD_Result requests_answer_second_step(MHD_Connection* connection,
-             const char* method, const char* version, const char* upload_data,
-             size_t* upload_data_size, struct detail::modded_request* mr);
-
-     MHD_Result finalize_answer(MHD_Connection* connection, struct detail::modded_request* mr, const char* method);
-
-     struct MHD_Response* get_raw_response_with_fallback(detail::modded_request* mr);
-
-     // TASK-013: dispatch helpers replacing the v1 http_response virtuals
-     // (`get_raw_response`, `decorate_response`, `enqueue_response`). The
-     // wire-construction logic now lives in the dispatch path because
-     // http_response is a sealed value type with no MHD knowledge.
-     // webserver is a friend of http_response so materialize_response()
-     // can reach the private body_ pointer.
-     static struct MHD_Response* materialize_response(http_response* resp);
-     static void decorate_mhd_response(struct MHD_Response* response,
-                                       const http_response& resp);
-
-     MHD_Result complete_request(MHD_Connection* connection, struct detail::modded_request* mr, const char* version, const char* method);
-
-     void invalidate_route_cache();
-
-#ifdef HAVE_GNUTLS
-     // MHD_PskServerCredentialsCallback signature
-     static int psk_cred_handler_func(void* cls,
-                                       struct MHD_Connection* connection,
-                                       const char* username,
-                                       void** psk,
-                                       size_t* psk_size);
-
-#ifdef MHD_OPTION_HTTPS_CERT_CALLBACK
-     // SNI certificate callback function (libmicrohttpd 0.9.71+)
-     static int sni_cert_callback_func(void* cls,
-                                        struct MHD_Connection* connection,
-                                        const char* server_name,
-                                        gnutls_certificate_credentials_t* creds);
-
-     // Cache for loaded credentials per server name
-     mutable std::map<std::string, gnutls_certificate_credentials_t> sni_credentials_cache;
-     mutable std::shared_mutex sni_credentials_mutex;
-#endif  // MHD_OPTION_HTTPS_CERT_CALLBACK
-#endif  // HAVE_GNUTLS
-
-     friend MHD_Result policy_callback(void *cls, const struct sockaddr* addr, socklen_t addrlen);
-     friend void error_log(void* cls, const char* fmt, va_list ap);
-     friend void access_log(webserver* cls, std::string uri);
-     friend void* uri_log(void* cls, const char* uri);
-     friend size_t unescaper_func(void * cls, struct MHD_Connection *c, char *s);
+     // detail::webserver_impl reads the const config bag above (tcp_nodelay,
+     // unescaper, regex_checking, auth_handler, etc.) when servicing
+     // requests, and houses the MHD trampolines / dispatch helpers so
+     // <microhttpd.h> stays out of this public header. Granting friendship
+     // is preferable to introducing a long list of trivial public getters
+     // that cross the PIMPL boundary in both directions.
+     friend class detail::webserver_impl;
      friend class http_response;
 };
 
