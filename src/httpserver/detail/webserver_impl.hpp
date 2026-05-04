@@ -36,9 +36,13 @@
 #include <pthread.h>
 #include <stdarg.h>
 
+#include <array>
+#include <cstddef>
+#include <cstring>
 #include <list>
 #include <map>
 #include <memory>
+#include <memory_resource>
 #include <mutex>
 #include <set>
 #include <shared_mutex>
@@ -72,16 +76,71 @@ struct modded_request;
 
 // connection_state: per-MHD_Connection arena anchor.
 //
-// Defined as a near-empty type so downstream tasks (TASK-016) can add
-// members (e.g. std::pmr::monotonic_buffer_resource arena_) without
-// retouching the public header. Copy/move are deleted now so adding
-// non-copyable/non-movable members later does not change the trait.
+// Owns a std::pmr::monotonic_buffer_resource over an embedded initial
+// buffer. The arena is allocated once per MHD connection (in
+// webserver_impl::connection_notify on MHD_CONNECTION_NOTIFY_STARTED)
+// and torn down on MHD_CONNECTION_NOTIFY_CLOSED. Between requests on a
+// keep-alive connection, request_completed calls arena_.release() to
+// rewind the bump pointer, so a second request reuses the same memory.
+//
+// Lifetime contract for views returned by http_request getters: they
+// remain valid until the request-completion callback fires for the
+// request they were derived from. Capturing them past the user
+// handler's return is undefined behavior. (See architecture doc
+// 04-components/http-request.md.)
+//
+// Initial-buffer sizing math (8 KiB):
+//   - sizeof(http_request_impl) ~= 600-700 B with libstdc++/libc++
+//     map/string layouts.
+//   - A typical small GET populates ~1.5 KiB across header_view_map,
+//     querystring, requestor_ip; a small POST with a few args ~2.5 KiB.
+//   - Each std::pmr::map node (unescaped_args) is ~64-96 B on
+//     libstdc++/libc++, so 5 headers/args already consume ~400-500 B
+//     in tree nodes alone. 4 KiB was undersized for realistic requests
+//     with moderate arg counts; 8 KiB matches the test's own generous
+//     buffer and covers the common case without overflow to the upstream
+//     heap. (performance-reviewer-iter1-1.)
+//   - Overflow spills to the upstream resource (default = heap) silently
+//     -- it is a correctness fall-through, not a hard limit.
+//   - TODO(M5): expose ARENA_INITIAL_BYTES via create_webserver if/when
+//     profiling shows tuning value.
 struct connection_state {
+    static constexpr std::size_t ARENA_INITIAL_BYTES = 8192;
+
+    // The buffer aliases storage for any PMR-aware object the arena
+    // hands out, so it must satisfy the strictest fundamental alignment.
+    alignas(std::max_align_t) std::array<std::byte, ARENA_INITIAL_BYTES> initial_buffer_{};
+
+    // upstream defaults to new_delete_resource (= get_default_resource).
+    // We pass it explicitly to make the contract obvious in source.
+    std::pmr::monotonic_buffer_resource arena_{
+        initial_buffer_.data(), initial_buffer_.size(),
+        std::pmr::new_delete_resource()};
+
     connection_state() = default;
     connection_state(const connection_state&) = delete;
     connection_state& operator=(const connection_state&) = delete;
     connection_state(connection_state&&) = delete;
     connection_state& operator=(connection_state&&) = delete;
+
+    // reset_arena(): release the bump pointer AND zero the initial buffer.
+    //
+    // The plain arena_.release() rewinds the bump pointer so the next
+    // request reuses the same memory, but it does NOT clear the reclaimed
+    // bytes. Credentials (username, password, digested_user) written into
+    // the arena by a previous request would therefore linger in the buffer
+    // until overwritten by the next request's lazy-cache population.
+    // Explicit zeroing after release() closes that residual-credential
+    // window. (security-reviewer-iter1-3, CWE-226.)
+    //
+    // Using std::memset here (rather than explicit_bzero / SecureZeroMemory)
+    // is acceptable because the buffer is accessed again immediately by the
+    // next request's arena allocation, preventing the compiler from
+    // optimising the clear away as a dead store.
+    void reset_arena() noexcept {
+        arena_.release();
+        std::memset(initial_buffer_.data(), 0, ARENA_INITIAL_BYTES);
+    }
 };
 
 // webserver_impl: backing object holding all backend-coupled state of
@@ -186,6 +245,13 @@ class webserver_impl {
     // owning `webserver*` (so callbacks can read the const config bag).
     static void request_completed(void* cls, struct MHD_Connection* connection,
                                   void** con_cls, enum MHD_RequestTerminationCode toe);
+    // Per-connection lifetime callback. cls is unused (nullptr).
+    // socket_context is MHD's per-connection void* slot: we new/delete a
+    // detail::connection_state through it on STARTED/CLOSED, so the
+    // arena lives exactly as long as the MHD_Connection does.
+    static void connection_notify(void* cls, struct MHD_Connection* connection,
+                                  void** socket_context,
+                                  enum MHD_ConnectionNotificationCode toe);
     static MHD_Result answer_to_connection(void* cls, MHD_Connection* connection,
             const char* url, const char* method, const char* version,
             const char* upload_data, size_t* upload_data_size, void** con_cls);

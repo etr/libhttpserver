@@ -26,7 +26,7 @@ LDADD += -lcurl
 
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/ -DHTTPSERVER_COMPILATION
 METASOURCES = AUTO
-check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories webserver_pimpl http_request_pimpl create_test_request
+check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories webserver_pimpl http_request_pimpl create_test_request http_request_arena
 
 MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
 
@@ -115,6 +115,16 @@ http_request_pimpl_LDADD =
 # maps rather than a live MHD_Connection*.
 create_test_request_SOURCES = unit/create_test_request_test.cpp
 create_test_request_LDADD = $(LDADD) -lmicrohttpd
+
+# http_request_arena: TASK-016 unit test for the per-connection arena. Asserts
+# that connection_state owns a std::pmr::monotonic_buffer_resource arena_,
+# that arena_.release() rewinds the bump pointer, and that an
+# http_request_impl constructed from the arena does not touch the upstream
+# memory resource on the warm path. Exercises detail/http_request_impl.hpp
+# directly via the build-tree HTTPSERVER_COMPILATION include path. Needs
+# -lmicrohttpd because it transitively touches MHD types through the impl.
+http_request_arena_SOURCES = unit/http_request_arena_test.cpp
+http_request_arena_LDADD = $(LDADD) -lmicrohttpd
 
 noinst_HEADERS = littletest.hpp
 AM_CXXFLAGS += -Wall -fPIC -Wno-overloaded-virtual

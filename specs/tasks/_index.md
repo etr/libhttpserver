@@ -98,7 +98,7 @@ Nominally: **13 sequential tasks**, each S–XL. Most other tasks parallelize of
 | TASK-013 | Remove `*_response` subclasses and dispatch virtuals | M2 | Done | TASK-009, TASK-010, TASK-011, TASK-012 |
 | TASK-014 | `webserver_impl` skeleton (PIMPL prep) | M3 | In Progress | TASK-002 |
 | TASK-015 | `http_request_impl` skeleton (PIMPL split) | M3 | In Progress | TASK-002, TASK-014 |
-| TASK-016 | Per-connection arena for `http_request_impl` | M3 | Not Started | TASK-014, TASK-015 |
+| TASK-016 | Per-connection arena for `http_request_impl` | M3 | Done | TASK-014, TASK-015 |
 | TASK-017 | `http_request` container getters return `const&` | M3 | Not Started | TASK-015 |
 | TASK-018 | `http_request` single-key getters return `string_view`, all const | M3 | Not Started | TASK-015, TASK-016 |
 | TASK-019 | High-level GnuTLS accessors replacing `gnutls_session_t` | M3 | Not Started | TASK-015 |

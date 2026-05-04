@@ -28,12 +28,27 @@
 
 namespace httpserver {
 
+namespace {
+
+// TASK-016: heap-deleter used for the test-request impl. The live-request
+// constructor in http_request.cpp uses an internal-linkage delete_impl_heap
+// of the same shape; reproducing it here avoids exposing it across TUs.
+// Both implementations call operator delete, matching v1 lifetime exactly.
+void delete_test_impl_heap(detail::http_request_impl* p) noexcept {
+    delete p;
+}
+
+}  // namespace
+
 http_request create_test_request::build() {
     http_request req;
 
     // Allocate an impl for this test request (connection_ stays null,
     // indicating the test-request path to all MHD-touching accessors).
-    req.impl_ = std::make_unique<detail::http_request_impl>();
+    // Heap-allocated; uses the heap deleter so destruction frees via
+    // operator delete -- same lifetime as v1.
+    req.impl_.reset(new detail::http_request_impl());
+    req.impl_.get_deleter().fn = &delete_test_impl_heap;
 
     req.set_method(_method);
     req.set_path(_path);
@@ -44,27 +59,42 @@ http_request create_test_request::build() {
     req.impl_->footers_local = std::move(_footers);
     req.impl_->cookies_local = std::move(_cookies);
 
+    // Test-request path: the impl was default-constructed (no arena), so
+    // its pmr-aware members fall back to std::pmr::get_default_resource()
+    // -- equivalent to plain heap allocation. Cross-allocator move is not
+    // available, so we copy element-wise via .assign(ptr, len) /
+    // emplace_back(view, alloc).
+    auto args_alloc = req.impl_->unescaped_args.get_allocator();
     for (auto& [key, values] : _args) {
+        auto it = req.impl_->unescaped_args.find(std::string_view(key));
+        if (it == req.impl_->unescaped_args.end()) {
+            std::pmr::vector<std::pmr::string> empty(args_alloc);
+            auto inserted = req.impl_->unescaped_args.emplace(
+                std::pmr::string(key.data(), key.size(), args_alloc),
+                std::move(empty));
+            it = inserted.first;
+        }
         for (auto& value : values) {
-            req.impl_->unescaped_args[key].push_back(std::move(value));
+            it->second.emplace_back(value.data(), value.size());
         }
     }
     req.impl_->args_populated = true;
 
     if (!_querystring.empty()) {
-        req.impl_->querystring = std::move(_querystring);
+        req.impl_->querystring.assign(_querystring.data(), _querystring.size());
     }
 
 #ifdef HAVE_BAUTH
-    req.impl_->username = std::move(_user);
-    req.impl_->password = std::move(_pass);
+    req.impl_->username.assign(_user.data(), _user.size());
+    req.impl_->password.assign(_pass.data(), _pass.size());
 #endif  // HAVE_BAUTH
 
 #ifdef HAVE_DAUTH
-    req.impl_->digested_user = std::move(_digested_user);
+    req.impl_->digested_user.assign(_digested_user.data(),
+                                    _digested_user.size());
 #endif  // HAVE_DAUTH
 
-    req.impl_->requestor_ip = std::move(_requestor);
+    req.impl_->requestor_ip.assign(_requestor.data(), _requestor.size());
     req.impl_->requestor_port_local = _requestor_port;
 
 #ifdef HAVE_GNUTLS
