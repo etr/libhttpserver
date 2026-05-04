@@ -108,26 +108,7 @@ jobs:
             debug: debug
             coverage: nocoverage
             shell: bash
-          - test-group: extra
-            os: ubuntu-latest
-            os-type: ubuntu
-            build-type: none
-            compiler-family: gcc
-            c-compiler: gcc-9
-            cc-compiler: g++-9
-            debug: nodebug
-            coverage: nocoverage
-            shell: bash
-          - test-group: extra
-            os: ubuntu-latest
-            os-type: ubuntu
-            build-type: none
-            compiler-family: gcc
-            c-compiler: gcc-10
-            cc-compiler: g++-10
-            debug: nodebug
-            coverage: nocoverage
-            shell: bash
+          # gcc-9 and gcc-10 dropped: lack full C++20 support (no concepts library, no std::span, no <bit> features).
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
@@ -168,26 +149,8 @@ jobs:
             debug: nodebug
             coverage: nocoverage
             shell: bash
-          - test-group: extra
-            os: ubuntu-22.04
-            os-type: ubuntu
-            build-type: none
-            compiler-family: clang
-            c-compiler: clang-11
-            cc-compiler: clang++-11
-            debug: nodebug
-            coverage: nocoverage
-            shell: bash
-          - test-group: extra
-            os: ubuntu-22.04
-            os-type: ubuntu
-            build-type: none
-            compiler-family: clang
-            c-compiler: clang-12
-            cc-compiler: clang++-12
-            debug: nodebug
-            coverage: nocoverage
-            shell: bash
+          # clang-11, clang-12, clang-14, and clang-15 dropped: incomplete C++20 support (concepts/<bit>/<span> gaps).
+          # clang-13 retained: passes the autoconf C++20 feature check on ubuntu-22.04.
           - test-group: extra
             os: ubuntu-22.04
             os-type: ubuntu
@@ -195,26 +158,6 @@ jobs:
             compiler-family: clang
             c-compiler: clang-13
             cc-compiler: clang++-13
-            debug: nodebug
-            coverage: nocoverage
-            shell: bash
-          - test-group: extra
-            os: ubuntu-latest
-            os-type: ubuntu
-            build-type: none
-            compiler-family: clang
-            c-compiler: clang-14
-            cc-compiler: clang++-14
-            debug: nodebug
-            coverage: nocoverage
-            shell: bash
-          - test-group: extra
-            os: ubuntu-latest
-            os-type: ubuntu
-            build-type: none
-            compiler-family: clang
-            c-compiler: clang-15
-            cc-compiler: clang++-15
             debug: nodebug
             coverage: nocoverage
             shell: bash
@@ -275,8 +218,8 @@ jobs:
             os-type: ubuntu
             build-type: select
             compiler-family: gcc
-            c-compiler: gcc-10
-            cc-compiler: g++-10
+            c-compiler: gcc-14
+            cc-compiler: g++-14
             debug: nodebug
             coverage: nocoverage
             shell: bash
@@ -285,8 +228,8 @@ jobs:
             os-type: ubuntu
             build-type: nodelay
             compiler-family: gcc
-            c-compiler: gcc-10
-            cc-compiler: g++-10
+            c-compiler: gcc-14
+            cc-compiler: g++-14
             debug: nodebug
             coverage: nocoverage
             shell: bash
@@ -295,8 +238,8 @@ jobs:
             os-type: ubuntu
             build-type: threads
             compiler-family: gcc
-            c-compiler: gcc-10
-            cc-compiler: g++-10
+            c-compiler: gcc-14
+            cc-compiler: g++-14
             debug: nodebug
             coverage: nocoverage
             shell: bash
@@ -305,10 +248,28 @@ jobs:
             os-type: ubuntu
             build-type: lint
             compiler-family: gcc
-            c-compiler: gcc-10
-            cc-compiler: g++-10
+            c-compiler: gcc-14
+            cc-compiler: g++-14
             debug: debug
             coverage: nocoverage
+            shell: bash
+          # TASK-007: dedicated header-hygiene gate. Runs `make check-hygiene`
+          # (preprocesses <httpserver.hpp> against the staged install and greps
+          # for forbidden backend headers). Surfaces this gate as its own named
+          # GitHub Actions check so reviewers see header-hygiene status
+          # independently of the broader `make check` log. Until M5 lands the
+          # check is informational (HEADER_HYGIENE_STRICT defaults to "no");
+          # TASK-020 flips it to strict.
+          - test-group: extra
+            os: ubuntu-latest
+            os-type: ubuntu
+            build-type: header-hygiene
+            compiler-family: gcc
+            c-compiler: gcc-14
+            cc-compiler: g++-14
+            debug: nodebug
+            coverage: nocoverage
+            linking: dynamic
             shell: bash
           - test-group: basic
             os: windows-latest
@@ -393,8 +354,12 @@ jobs:
         pacman --noconfirm -S --needed msys2-devel gcc make libcurl-devel libgnutls-devel
 
     - name: Install Ubuntu test sources
+      # ppa:ubuntu-toolchain-r/test was historically used to backport newer
+      # gcc onto older Ubuntu LTS. With the C++20 floor (TASK-001), our matrix
+      # only retains compilers that ship in stock ubuntu-22.04 / 24.04 repos
+      # (gcc-11..14, clang-13/16/17/18), so the PPA is no longer needed -- and
+      # add-apt-repository talks to launchpad, which is a flaky dependency.
       run: |
-        sudo add-apt-repository ppa:ubuntu-toolchain-r/test ;
         sudo apt-get update ;
       if: ${{ matrix.os-type == 'ubuntu' }}
 
@@ -662,7 +627,7 @@ jobs:
         # IWYU always return an error code. If it returns "2" it indicates a success so we manage this within the function below.
         function safe_make_iwyu() {
           {
-            make -k CXX='/usr/local/bin/include-what-you-use -Xiwyu --mapping_file=${top_builddir}/../custom_iwyu.imp' CXXFLAGS="-std=c++11 -DHTTPSERVER_COMPILATION -D_REENTRANT $CXXFLAGS" ;
+            make -k CXX='/usr/local/bin/include-what-you-use -Xiwyu --mapping_file=${top_builddir}/../custom_iwyu.imp' CXXFLAGS="-std=c++20 -DHTTPSERVER_COMPILATION -D_REENTRANT $CXXFLAGS" ;
           } || {
             if [ $? -ne 2 ]; then
               return 1;
@@ -685,7 +650,18 @@ jobs:
       run: |
         cd build ;
         make check;
-      if: ${{ matrix.build-type != 'iwyu' && matrix.compiler-family != 'arm-cross' }}
+      if: ${{ matrix.build-type != 'iwyu' && matrix.compiler-family != 'arm-cross' && matrix.build-type != 'header-hygiene' }}
+
+    - name: Run header-hygiene check
+      # TASK-007: dedicated public-header hygiene gate. Runs the
+      # preprocessor-grep target (Layer 2) against a staged install and
+      # reports any forbidden backend headers reaching <httpserver.hpp>.
+      # Currently informational (HEADER_HYGIENE_STRICT=no) -- TASK-020
+      # flips this to strict when M5 closes the umbrella.
+      run: |
+        cd build
+        make check-hygiene
+      if: ${{ matrix.build-type == 'header-hygiene' }}
 
     - name: Print tests results
       shell: bash

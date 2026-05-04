@@ -19,6 +19,7 @@
 */
 
 #include "httpserver/webserver.hpp"
+#include "httpserver/detail/webserver_impl.hpp"
 
 #if defined(_WIN32) && !defined(__CYGWIN__)
 #include <winsock2.h>
@@ -56,17 +57,16 @@
 #include <utility>
 #include <vector>
 
+#include "httpserver/constants.hpp"
 #include "httpserver/create_webserver.hpp"
-#include "httpserver/details/http_endpoint.hpp"
-#include "httpserver/details/modded_request.hpp"
+#include "httpserver/detail/http_endpoint.hpp"
+#include "httpserver/detail/modded_request.hpp"
 #include "httpserver/http_request.hpp"
 #include "httpserver/http_resource.hpp"
 #include "httpserver/http_response.hpp"
 #include "httpserver/http_utils.hpp"
 #include "httpserver/string_utilities.hpp"
-#include "httpserver/string_response.hpp"
-
-struct MHD_Connection;
+#include "httpserver/detail/body.hpp"
 
 #define _REENTRANT 1
 
@@ -77,10 +77,6 @@ struct MHD_Connection;
 
 #ifndef SOCK_CLOEXEC
 #define SOCK_CLOEXEC 02000000
-#endif
-
-#if MHD_VERSION < 0x00097002
-typedef int MHD_Result;
 #endif
 
 using std::string;
@@ -94,18 +90,6 @@ using httpserver::http::ip_representation;
 using httpserver::http::base_unescaper;
 
 namespace httpserver {
-
-MHD_Result policy_callback(void *, const struct sockaddr*, socklen_t);
-void error_log(void*, const char*, va_list);
-void* uri_log(void*, const char*, struct MHD_Connection *con);
-void access_log(webserver*, string);
-size_t unescaper_func(void*, struct MHD_Connection*, char*);
-
-struct compare_value {
-    bool operator() (const std::pair<int, int>& left, const std::pair<int, int>& right) const {
-        return left.second < right.second;
-    }
-};
 
 #if !defined(_WIN32) && !defined(__MINGW32__) && !defined(__CYGWIN__)
 static void catcher(int) { }
@@ -130,7 +114,32 @@ static void ignore_sigpipe() {
 #endif
 }
 
-// WEBSERVER
+namespace detail {
+
+// ----- webserver_impl construction / destruction -------------------------
+
+webserver_impl::webserver_impl(webserver* parent_ptr) : parent(parent_ptr) {
+    pthread_mutex_init(&mutexwait, nullptr);
+    pthread_cond_init(&mutexcond, nullptr);
+}
+
+webserver_impl::~webserver_impl() {
+    pthread_mutex_destroy(&mutexwait);
+    pthread_cond_destroy(&mutexcond);
+
+#if defined(HAVE_GNUTLS) && defined(MHD_OPTION_HTTPS_CERT_CALLBACK)
+    // Clean up cached SNI credentials
+    for (auto& [name, creds] : sni_credentials_cache) {
+        gnutls_certificate_free_credentials(creds);
+    }
+    sni_credentials_cache.clear();
+#endif  // HAVE_GNUTLS && MHD_OPTION_HTTPS_CERT_CALLBACK
+}
+
+}  // namespace detail
+
+// ----- webserver construction / destruction ------------------------------
+
 webserver::webserver(const create_webserver& params):
     port(params._port),
     start_method(params._start_method),
@@ -146,7 +155,6 @@ webserver::webserver(const create_webserver& params):
     unescaper(params._unescaper),
     bind_address(params._bind_address),
     bind_address_storage(params._bind_address_storage),
-    bind_socket(params._bind_socket),
     max_thread_stack_size(params._max_thread_stack_size),
     use_ssl(params._use_ssl),
     use_ipv6(params._use_ipv6),
@@ -161,7 +169,6 @@ webserver::webserver(const create_webserver& params):
     psk_cred_handler(params._psk_cred_handler),
     digest_auth_random(params._digest_auth_random),
     nonce_nc_size(params._nonce_nc_size),
-    running(false),
     default_policy(params._default_policy),
 #ifdef HAVE_BAUTH
     basic_auth_enabled(params._basic_auth_enabled),
@@ -197,38 +204,23 @@ webserver::webserver(const create_webserver& params):
     https_key_password(params._https_key_password),
     https_priorities_append(params._https_priorities_append),
     no_alpn(params._no_alpn),
-    client_discipline_level(params._client_discipline_level) {
+    client_discipline_level(params._client_discipline_level),
+    impl_(std::make_unique<detail::webserver_impl>(this)) {
         ignore_sigpipe();
-        pthread_mutex_init(&mutexwait, nullptr);
-        pthread_cond_init(&mutexcond, nullptr);
+        impl_->bind_socket = params._bind_socket;
 }
 
 webserver::~webserver() {
     stop();
-    pthread_mutex_destroy(&mutexwait);
-    pthread_cond_destroy(&mutexcond);
-
-#if defined(HAVE_GNUTLS) && defined(MHD_OPTION_HTTPS_CERT_CALLBACK)
-    // Clean up cached SNI credentials
-    for (auto& [name, creds] : sni_credentials_cache) {
-        gnutls_certificate_free_credentials(creds);
-    }
-    sni_credentials_cache.clear();
-#endif  // HAVE_GNUTLS && MHD_OPTION_HTTPS_CERT_CALLBACK
+    // impl_'s destructor (running pthread destroys + GnuTLS cleanup) runs
+    // when the unique_ptr is destroyed, after this body finishes.
 }
 
 void webserver::sweet_kill() {
     stop();
 }
 
-void webserver::request_completed(void *cls, struct MHD_Connection *connection, void **con_cls, enum MHD_RequestTerminationCode toe) {
-    // These parameters are passed to respect the MHD interface, but are not needed here.
-    std::ignore = cls;
-    std::ignore = connection;
-    std::ignore = toe;
-
-    delete static_cast<details::modded_request*>(*con_cls);
-}
+// ----- Resource registration --------------------------------------------
 
 bool webserver::register_resource(const std::string& resource, http_resource* hrm, bool family) {
     if (hrm == nullptr) {
@@ -239,21 +231,21 @@ bool webserver::register_resource(const std::string& resource, http_resource* hr
         throw std::invalid_argument("The resource should be '' or '/' and be marked as family when using a single_resource server");
     }
 
-    details::http_endpoint idx(resource, family, true, regex_checking);
+    detail::http_endpoint idx(resource, family, true, regex_checking);
 
-    std::unique_lock registered_resources_lock(registered_resources_mutex);
-    pair<map<details::http_endpoint, http_resource*>::iterator, bool> result = registered_resources.insert(map<details::http_endpoint, http_resource*>::value_type(idx, hrm));
+    std::unique_lock registered_resources_lock(impl_->registered_resources_mutex);
+    pair<map<detail::http_endpoint, http_resource*>::iterator, bool> result = impl_->registered_resources.insert(map<detail::http_endpoint, http_resource*>::value_type(idx, hrm));
 
     if (result.second) {
         bool is_exact = !family && idx.get_url_pars().empty();
         if (is_exact) {
-            registered_resources_str.insert(pair<string, http_resource*>(idx.get_url_complete(), result.first->second));
+            impl_->registered_resources_str.insert(pair<string, http_resource*>(idx.get_url_complete(), result.first->second));
         }
         if (idx.is_regex_compiled()) {
-            registered_resources_regex.insert(map<details::http_endpoint, http_resource*>::value_type(idx, hrm));
+            impl_->registered_resources_regex.insert(map<detail::http_endpoint, http_resource*>::value_type(idx, hrm));
         }
         registered_resources_lock.unlock();
-        invalidate_route_cache();
+        impl_->invalidate_route_cache();
         return true;
     }
 
@@ -265,8 +257,8 @@ bool webserver::register_ws_resource(const std::string& resource, websocket_hand
     if (handler == nullptr) {
         throw std::invalid_argument("The websocket_handler pointer cannot be null");
     }
-    std::unique_lock lock(registered_resources_mutex);
-    registered_ws_handlers[http_utils::standardize_url(resource)] = handler;
+    std::unique_lock lock(impl_->registered_resources_mutex);
+    impl_->registered_ws_handlers[http_utils::standardize_url(resource)] = handler;
     return true;
 }
 #endif  // HAVE_WEBSOCKET
@@ -280,13 +272,13 @@ bool webserver::start(bool blocking) {
     } gen;
     vector<struct MHD_OptionItem> iov;
 
-    iov.push_back(gen(MHD_OPTION_NOTIFY_COMPLETED, (intptr_t) &request_completed, nullptr));
-    iov.push_back(gen(MHD_OPTION_URI_LOG_CALLBACK, (intptr_t) &uri_log, this));
-    iov.push_back(gen(MHD_OPTION_EXTERNAL_LOGGER, (intptr_t) &error_log, this));
-    iov.push_back(gen(MHD_OPTION_UNESCAPE_CALLBACK, (intptr_t) &unescaper_func, this));
+    iov.push_back(gen(MHD_OPTION_NOTIFY_COMPLETED, (intptr_t) &detail::webserver_impl::request_completed, nullptr));
+    iov.push_back(gen(MHD_OPTION_URI_LOG_CALLBACK, (intptr_t) &detail::webserver_impl::uri_log, this));
+    iov.push_back(gen(MHD_OPTION_EXTERNAL_LOGGER, (intptr_t) &detail::webserver_impl::error_log, this));
+    iov.push_back(gen(MHD_OPTION_UNESCAPE_CALLBACK, (intptr_t) &detail::webserver_impl::unescaper_func, this));
     iov.push_back(gen(MHD_OPTION_CONNECTION_TIMEOUT, connection_timeout));
-    if (bind_socket != 0) {
-        iov.push_back(gen(MHD_OPTION_LISTEN_SOCKET, bind_socket));
+    if (impl_->bind_socket != 0) {
+        iov.push_back(gen(MHD_OPTION_LISTEN_SOCKET, impl_->bind_socket));
     }
 
     if (start_method == http_utils::THREAD_PER_CONNECTION && (max_threads != 0 || max_thread_stack_size != 0)) {
@@ -347,13 +339,13 @@ bool webserver::start(bool blocking) {
 
     if (psk_cred_handler != nullptr && use_ssl) {
         iov.push_back(gen(MHD_OPTION_GNUTLS_PSK_CRED_HANDLER,
-                          (intptr_t)&psk_cred_handler_func, this));
+                          (intptr_t)&detail::webserver_impl::psk_cred_handler_func, this));
     }
 
 #ifdef MHD_OPTION_HTTPS_CERT_CALLBACK
     if (sni_callback != nullptr && use_ssl) {
         iov.push_back(gen(MHD_OPTION_HTTPS_CERT_CALLBACK,
-                          (intptr_t)&sni_cert_callback_func, this));
+                          (intptr_t)&detail::webserver_impl::sni_cert_callback_func, this));
     }
 #endif  // MHD_OPTION_HTTPS_CERT_CALLBACK
 #endif  // HAVE_GNUTLS
@@ -446,102 +438,102 @@ bool webserver::start(bool blocking) {
     }
 
 #ifdef HAVE_WEBSOCKET
-    if (!registered_ws_handlers.empty()) {
+    if (!impl_->registered_ws_handlers.empty()) {
         start_conf |= MHD_ALLOW_UPGRADE;
     }
 #endif  // HAVE_WEBSOCKET
 
 
-    daemon = nullptr;
+    impl_->daemon = nullptr;
     if (bind_address == nullptr) {
-        daemon = MHD_start_daemon(start_conf, port, &policy_callback, this,
-                &answer_to_connection, this, MHD_OPTION_ARRAY,
+        impl_->daemon = MHD_start_daemon(start_conf, port, &detail::webserver_impl::policy_callback, this,
+                &detail::webserver_impl::answer_to_connection, impl_.get(), MHD_OPTION_ARRAY,
                 &iov[0], MHD_OPTION_END);
     } else {
-        daemon = MHD_start_daemon(start_conf, 1, &policy_callback, this,
-                &answer_to_connection, this, MHD_OPTION_ARRAY,
+        impl_->daemon = MHD_start_daemon(start_conf, 1, &detail::webserver_impl::policy_callback, this,
+                &detail::webserver_impl::answer_to_connection, impl_.get(), MHD_OPTION_ARRAY,
                 &iov[0], MHD_OPTION_SOCK_ADDR, bind_address, MHD_OPTION_END);
     }
 
-    if (daemon == nullptr) {
+    if (impl_->daemon == nullptr) {
         throw std::invalid_argument("Unable to connect daemon to port: " + std::to_string(port));
     }
 
     bool value_onclose = false;
 
-    running = true;
+    impl_->running = true;
 
     if (blocking) {
-        pthread_mutex_lock(&mutexwait);
-        while (blocking && running) {
-            pthread_cond_wait(&mutexcond, &mutexwait);
+        pthread_mutex_lock(&impl_->mutexwait);
+        while (blocking && impl_->running) {
+            pthread_cond_wait(&impl_->mutexcond, &impl_->mutexwait);
         }
-        pthread_mutex_unlock(&mutexwait);
+        pthread_mutex_unlock(&impl_->mutexwait);
         value_onclose = true;
     }
     return value_onclose;
 }
 
 bool webserver::is_running() {
-    return running;
+    return impl_->running;
 }
 
 bool webserver::stop() {
-    if (!running) return false;
+    if (!impl_->running) return false;
 
-    pthread_mutex_lock(&mutexwait);
-    running = false;
-    pthread_cond_signal(&mutexcond);
-    pthread_mutex_unlock(&mutexwait);
+    pthread_mutex_lock(&impl_->mutexwait);
+    impl_->running = false;
+    pthread_cond_signal(&impl_->mutexcond);
+    pthread_mutex_unlock(&impl_->mutexwait);
 
-    MHD_stop_daemon(daemon);
+    MHD_stop_daemon(impl_->daemon);
 
-    shutdown(bind_socket, 2);
+    shutdown(impl_->bind_socket, 2);
 
     return true;
 }
 
 int webserver::quiesce() {
-    if (daemon == nullptr) return -1;
-    MHD_socket fd = MHD_quiesce_daemon(daemon);
+    if (impl_->daemon == nullptr) return -1;
+    MHD_socket fd = MHD_quiesce_daemon(impl_->daemon);
     return static_cast<int>(fd);
 }
 
 int webserver::get_listen_fd() const {
-    if (daemon == nullptr) return -1;
-    const union MHD_DaemonInfo* info = MHD_get_daemon_info(daemon, MHD_DAEMON_INFO_LISTEN_FD);
+    if (impl_->daemon == nullptr) return -1;
+    const union MHD_DaemonInfo* info = MHD_get_daemon_info(impl_->daemon, MHD_DAEMON_INFO_LISTEN_FD);
     if (info == nullptr) return -1;
     return static_cast<int>(info->listen_fd);
 }
 
 unsigned int webserver::get_active_connections() const {
-    if (daemon == nullptr) return 0;
-    const union MHD_DaemonInfo* info = MHD_get_daemon_info(daemon, MHD_DAEMON_INFO_CURRENT_CONNECTIONS);
+    if (impl_->daemon == nullptr) return 0;
+    const union MHD_DaemonInfo* info = MHD_get_daemon_info(impl_->daemon, MHD_DAEMON_INFO_CURRENT_CONNECTIONS);
     if (info == nullptr) return 0;
     return info->num_connections;
 }
 
 uint16_t webserver::get_bound_port() const {
-    if (daemon == nullptr) return 0;
-    const union MHD_DaemonInfo* info = MHD_get_daemon_info(daemon, MHD_DAEMON_INFO_BIND_PORT);
+    if (impl_->daemon == nullptr) return 0;
+    const union MHD_DaemonInfo* info = MHD_get_daemon_info(impl_->daemon, MHD_DAEMON_INFO_BIND_PORT);
     if (info == nullptr) return 0;
     return info->port;
 }
 
 bool webserver::run() {
-    if (daemon == nullptr) return false;
-    return MHD_run(daemon) == MHD_YES;
+    if (impl_->daemon == nullptr) return false;
+    return MHD_run(impl_->daemon) == MHD_YES;
 }
 
 bool webserver::run_wait(int32_t millisec) {
-    if (daemon == nullptr) return false;
-    return MHD_run_wait(daemon, millisec) == MHD_YES;
+    if (impl_->daemon == nullptr) return false;
+    return MHD_run_wait(impl_->daemon, millisec) == MHD_YES;
 }
 
 bool webserver::get_fdset(fd_set* read_fd_set, fd_set* write_fd_set, fd_set* except_fd_set, int* max_fd) {
-    if (daemon == nullptr) return false;
+    if (impl_->daemon == nullptr) return false;
     MHD_socket mhd_max_fd = 0;
-    if (MHD_get_fdset(daemon, read_fd_set, write_fd_set, except_fd_set, &mhd_max_fd) != MHD_YES) {
+    if (MHD_get_fdset(impl_->daemon, read_fd_set, write_fd_set, except_fd_set, &mhd_max_fd) != MHD_YES) {
         return false;
     }
     *max_fd = static_cast<int>(mhd_max_fd);
@@ -549,9 +541,9 @@ bool webserver::get_fdset(fd_set* read_fd_set, fd_set* write_fd_set, fd_set* exc
 }
 
 bool webserver::get_timeout(uint64_t* timeout) {
-    if (daemon == nullptr) return false;
+    if (impl_->daemon == nullptr) return false;
     MHD_UNSIGNED_LONG_LONG mhd_timeout = 0;
-    if (MHD_get_timeout(daemon, &mhd_timeout) != MHD_YES) {
+    if (MHD_get_timeout(impl_->daemon, &mhd_timeout) != MHD_YES) {
         return false;
     }
     *timeout = static_cast<uint64_t>(mhd_timeout);
@@ -559,68 +551,73 @@ bool webserver::get_timeout(uint64_t* timeout) {
 }
 
 bool webserver::add_connection(int client_socket, const struct sockaddr* addr, socklen_t addrlen) {
-    if (daemon == nullptr) return false;
-    return MHD_add_connection(daemon, client_socket, addr, addrlen) == MHD_YES;
-}
-
-void webserver::invalidate_route_cache() {
-    std::lock_guard<std::mutex> lock(route_cache_mutex);
-    route_cache_list.clear();
-    route_cache_map.clear();
+    if (impl_->daemon == nullptr) return false;
+    return MHD_add_connection(impl_->daemon, client_socket, addr, addrlen) == MHD_YES;
 }
 
 void webserver::unregister_resource(const string& resource) {
     // family does not matter - it just checks the url_normalized anyhow
-    details::http_endpoint he(resource, false, true, regex_checking);
-    std::unique_lock registered_resources_lock(registered_resources_mutex);
+    detail::http_endpoint he(resource, false, true, regex_checking);
+    std::unique_lock registered_resources_lock(impl_->registered_resources_mutex);
 
     // Invalidate cache while holding registered_resources_mutex to prevent
     // any thread from retrieving dangling resource pointers from the cache
     // after we erase from the resource maps.
     {
-        std::lock_guard<std::mutex> cache_lock(route_cache_mutex);
-        route_cache_list.clear();
-        route_cache_map.clear();
+        std::lock_guard<std::mutex> cache_lock(impl_->route_cache_mutex);
+        impl_->route_cache_list.clear();
+        impl_->route_cache_map.clear();
     }
 
-    registered_resources.erase(he);
-    registered_resources.erase(he.get_url_complete());
-    registered_resources_str.erase(he.get_url_complete());
-    registered_resources_regex.erase(he);
+    impl_->registered_resources.erase(he);
+    impl_->registered_resources.erase(he.get_url_complete());
+    impl_->registered_resources_str.erase(he.get_url_complete());
+    impl_->registered_resources_regex.erase(he);
 }
 
 void webserver::ban_ip(const string& ip) {
-    std::unique_lock bans_lock(bans_mutex);
+    std::unique_lock bans_lock(impl_->bans_mutex);
     ip_representation t_ip(ip);
-    set<ip_representation>::iterator it = bans.find(t_ip);
-    if (it != bans.end() && (t_ip.weight() < (*it).weight())) {
-        bans.erase(it);
-        bans.insert(t_ip);
+    set<ip_representation>::iterator it = impl_->bans.find(t_ip);
+    if (it != impl_->bans.end() && (t_ip.weight() < (*it).weight())) {
+        impl_->bans.erase(it);
+        impl_->bans.insert(t_ip);
     } else {
-        bans.insert(t_ip);
+        impl_->bans.insert(t_ip);
     }
 }
 
 void webserver::allow_ip(const string& ip) {
-    std::unique_lock allowances_lock(allowances_mutex);
+    std::unique_lock allowances_lock(impl_->allowances_mutex);
     ip_representation t_ip(ip);
-    set<ip_representation>::iterator it = allowances.find(t_ip);
-    if (it != allowances.end() && (t_ip.weight() < (*it).weight())) {
-        allowances.erase(it);
-        allowances.insert(t_ip);
+    set<ip_representation>::iterator it = impl_->allowances.find(t_ip);
+    if (it != impl_->allowances.end() && (t_ip.weight() < (*it).weight())) {
+        impl_->allowances.erase(it);
+        impl_->allowances.insert(t_ip);
     } else {
-        allowances.insert(t_ip);
+        impl_->allowances.insert(t_ip);
     }
 }
 
 void webserver::unban_ip(const string& ip) {
-    std::unique_lock bans_lock(bans_mutex);
-    bans.erase(ip_representation(ip));
+    std::unique_lock bans_lock(impl_->bans_mutex);
+    impl_->bans.erase(ip_representation(ip));
 }
 
 void webserver::disallow_ip(const string& ip) {
-    std::unique_lock allowances_lock(allowances_mutex);
-    allowances.erase(ip_representation(ip));
+    std::unique_lock allowances_lock(impl_->allowances_mutex);
+    impl_->allowances.erase(ip_representation(ip));
+}
+
+namespace detail {
+
+void webserver_impl::request_completed(void *cls, struct MHD_Connection *connection, void **con_cls, enum MHD_RequestTerminationCode toe) {
+    // These parameters are passed to respect the MHD interface, but are not needed here.
+    std::ignore = cls;
+    std::ignore = connection;
+    std::ignore = toe;
+
+    delete static_cast<detail::modded_request*>(*con_cls);
 }
 
 #ifdef HAVE_GNUTLS
@@ -628,7 +625,7 @@ void webserver::disallow_ip(const string& ip) {
 // The 'cls' parameter is our webserver pointer (passed via MHD_OPTION)
 // Returns 0 on success, -1 on error
 // The psk output should be allocated with malloc() - MHD will free it
-int webserver::psk_cred_handler_func(void* cls,
+int webserver_impl::psk_cred_handler_func(void* cls,
                                       struct MHD_Connection* connection,
                                       const char* username,
                                       void** psk,
@@ -678,7 +675,7 @@ int webserver::psk_cred_handler_func(void* cls,
 #ifdef MHD_OPTION_HTTPS_CERT_CALLBACK
 // SNI callback for selecting certificates based on server name
 // Returns 0 on success, -1 on failure
-int webserver::sni_cert_callback_func(void* cls,
+int webserver_impl::sni_cert_callback_func(void* cls,
                                        struct MHD_Connection* connection,
                                        const char* server_name,
                                        gnutls_certificate_credentials_t* creds) {
@@ -689,13 +686,15 @@ int webserver::sni_cert_callback_func(void* cls,
         return -1;
     }
 
+    webserver_impl* impl = ws->impl_.get();
+
     std::string name(server_name);
 
     // Check if we have cached credentials for this server name
     {
-        std::shared_lock lock(ws->sni_credentials_mutex);
-        auto it = ws->sni_credentials_cache.find(name);
-        if (it != ws->sni_credentials_cache.end()) {
+        std::shared_lock lock(impl->sni_credentials_mutex);
+        auto it = impl->sni_credentials_cache.find(name);
+        if (it != impl->sni_credentials_cache.end()) {
             *creds = it->second;
             return 0;
         }
@@ -730,16 +729,16 @@ int webserver::sni_cert_callback_func(void* cls,
 
     // Cache the credentials with double-check to avoid race condition
     {
-        std::unique_lock lock(ws->sni_credentials_mutex);
+        std::unique_lock lock(impl->sni_credentials_mutex);
         // Re-check after acquiring exclusive lock - another thread may have inserted
-        auto it = ws->sni_credentials_cache.find(name);
-        if (it != ws->sni_credentials_cache.end()) {
+        auto it = impl->sni_credentials_cache.find(name);
+        if (it != impl->sni_credentials_cache.end()) {
             // Another thread already cached credentials, use theirs and free ours
             gnutls_certificate_free_credentials(new_creds);
             *creds = it->second;
             return 0;
         }
-        ws->sni_credentials_cache[name] = new_creds;
+        impl->sni_credentials_cache[name] = new_creds;
     }
 
     *creds = new_creds;
@@ -748,7 +747,11 @@ int webserver::sni_cert_callback_func(void* cls,
 #endif  // MHD_OPTION_HTTPS_CERT_CALLBACK
 #endif  // HAVE_GNUTLS
 
-MHD_Result policy_callback(void *cls, const struct sockaddr* addr, socklen_t addrlen) {
+}  // namespace detail
+
+namespace detail {
+
+MHD_Result webserver_impl::policy_callback(void *cls, const struct sockaddr* addr, socklen_t addrlen) {
     // Parameter needed to respect MHD interface, but not needed here.
     std::ignore = addrlen;
 
@@ -756,10 +759,11 @@ MHD_Result policy_callback(void *cls, const struct sockaddr* addr, socklen_t add
 
     if (!ws->ban_system_enabled) return MHD_YES;
 
-    std::shared_lock bans_lock(ws->bans_mutex);
-    std::shared_lock allowances_lock(ws->allowances_mutex);
-    const bool is_banned = ws->bans.count(ip_representation(addr));
-    const bool is_allowed = ws->allowances.count(ip_representation(addr));
+    auto* impl = ws->impl_.get();
+    std::shared_lock bans_lock(impl->bans_mutex);
+    std::shared_lock allowances_lock(impl->allowances_mutex);
+    const bool is_banned = impl->bans.count(ip_representation(addr));
+    const bool is_allowed = impl->allowances.count(ip_representation(addr));
 
     if ((ws->default_policy == http_utils::ACCEPT && is_banned && !is_allowed) ||
         (ws->default_policy == http_utils::REJECT && (!is_allowed || is_banned))) {
@@ -769,12 +773,12 @@ MHD_Result policy_callback(void *cls, const struct sockaddr* addr, socklen_t add
     return MHD_YES;
 }
 
-void* uri_log(void* cls, const char* uri, struct MHD_Connection *con) {
+void* webserver_impl::uri_log(void* cls, const char* uri, struct MHD_Connection *con) {
     // Parameter needed to respect MHD interface, but not needed here.
     std::ignore = cls;
     std::ignore = con;
 
-    auto mr = std::make_unique<details::modded_request>();
+    auto mr = std::make_unique<detail::modded_request>();
     // MHD may invoke this callback with a null uri before the request line
     // has been parsed (e.g. port scans, half-open connections, or non-HTTP
     // traffic on the listening port). Treat that as an empty URI so the
@@ -784,7 +788,7 @@ void* uri_log(void* cls, const char* uri, struct MHD_Connection *con) {
     return reinterpret_cast<void*>(mr.release());
 }
 
-void error_log(void* cls, const char* fmt, va_list ap) {
+void webserver_impl::error_log(void* cls, const char* fmt, va_list ap) {
     webserver* dws = static_cast<webserver*>(cls);
 
     std::string msg;
@@ -806,11 +810,11 @@ void error_log(void* cls, const char* fmt, va_list ap) {
     if (dws->log_error != nullptr) dws->log_error(msg);
 }
 
-void access_log(webserver* dws, string uri) {
+void webserver_impl::access_log(webserver* dws, const string& uri) {
     if (dws->log_access != nullptr) dws->log_access(uri);
 }
 
-size_t unescaper_func(void * cls, struct MHD_Connection *c, char *s) {
+size_t webserver_impl::unescaper_func(void * cls, struct MHD_Connection *c, char *s) {
     // Parameter needed to respect MHD interface, but not needed here.
     std::ignore = cls;
     std::ignore = c;
@@ -823,13 +827,17 @@ size_t unescaper_func(void * cls, struct MHD_Connection *c, char *s) {
     return std::char_traits<char>::length(s);
 }
 
-MHD_Result webserver::post_iterator(void *cls, enum MHD_ValueKind kind,
+}  // namespace detail
+
+namespace detail {
+
+MHD_Result webserver_impl::post_iterator(void *cls, enum MHD_ValueKind kind,
         const char *key, const char *filename, const char *content_type,
         const char *transfer_encoding, const char *data, uint64_t off, size_t size) {
     // Parameter needed to respect MHD interface, but not needed here.
     std::ignore = kind;
 
-    struct details::modded_request* mr = (struct details::modded_request*) cls;
+    struct detail::modded_request* mr = (struct detail::modded_request*) cls;
 
     if (!filename) {
         // There is no actual file, just set the arg key/value and return.
@@ -906,6 +914,8 @@ MHD_Result webserver::post_iterator(void *cls, enum MHD_ValueKind kind,
     }
 }
 
+}  // namespace detail
+
 #ifdef HAVE_WEBSOCKET
 static void decode_websocket_buffer(struct MHD_WebSocketStream* ws_stream,
                                     websocket_handler* handler,
@@ -972,7 +982,9 @@ static void decode_websocket_buffer(struct MHD_WebSocketStream* ws_stream,
     }
 }
 
-void webserver::upgrade_handler(void *cls, struct MHD_Connection* connection,
+namespace detail {
+
+void webserver_impl::upgrade_handler(void *cls, struct MHD_Connection* connection,
                                 void *req_cls, const char *extra_in,
                                 size_t extra_in_size, MHD_socket sock,
                                 struct MHD_UpgradeResponseHandle *urh) {
@@ -1013,31 +1025,49 @@ void webserver::upgrade_handler(void *cls, struct MHD_Connection* connection,
 
     // Session destructor will free ws_stream and close urh
 }
+
+}  // namespace detail
 #endif  // HAVE_WEBSOCKET
 
-std::shared_ptr<http_response> webserver::not_found_page(details::modded_request* mr) const {
-    if (not_found_resource != nullptr) {
-        return not_found_resource(*mr->dhr);
+namespace detail {
+
+std::shared_ptr<http_response> webserver_impl::not_found_page(detail::modded_request* mr) const {
+    if (parent->not_found_resource != nullptr) {
+        return parent->not_found_resource(*mr->dhr);
     } else {
-        return std::make_shared<string_response>(NOT_FOUND_ERROR, http_utils::http_not_found);
+        return std::make_shared<http_response>(
+            http_response::string(std::string{constants::NOT_FOUND_ERROR})
+                .with_status(http_utils::http_not_found));
     }
 }
 
-std::shared_ptr<http_response> webserver::method_not_allowed_page(details::modded_request* mr) const {
-    if (method_not_allowed_resource != nullptr) {
-        return method_not_allowed_resource(*mr->dhr);
+std::shared_ptr<http_response> webserver_impl::method_not_allowed_page(detail::modded_request* mr) const {
+    if (parent->method_not_allowed_resource != nullptr) {
+        return parent->method_not_allowed_resource(*mr->dhr);
     } else {
-        return std::make_shared<string_response>(METHOD_ERROR, http_utils::http_method_not_allowed);
+        return std::make_shared<http_response>(
+            http_response::string(std::string{constants::METHOD_ERROR})
+                .with_status(http_utils::http_method_not_allowed));
     }
 }
 
-std::shared_ptr<http_response> webserver::internal_error_page(details::modded_request* mr, bool force_our) const {
-    if (internal_error_resource != nullptr && !force_our) {
-        return internal_error_resource(*mr->dhr);
+std::shared_ptr<http_response> webserver_impl::internal_error_page(detail::modded_request* mr, bool force_our) const {
+    if (parent->internal_error_resource != nullptr && !force_our) {
+        return parent->internal_error_resource(*mr->dhr);
     } else {
-        return std::make_shared<string_response>(GENERIC_ERROR, http_utils::http_internal_server_error);
+        return std::make_shared<http_response>(
+            http_response::string(std::string{constants::GENERIC_ERROR})
+                .with_status(http_utils::http_internal_server_error));
     }
 }
+
+void webserver_impl::invalidate_route_cache() {
+    std::lock_guard<std::mutex> lock(route_cache_mutex);
+    route_cache_list.clear();
+    route_cache_map.clear();
+}
+
+}  // namespace detail
 
 static std::string normalize_path(const std::string& path) {
     std::vector<std::string> segments;
@@ -1065,10 +1095,12 @@ static std::string normalize_path(const std::string& path) {
     return normalized;
 }
 
-bool webserver::should_skip_auth(const std::string& path) const {
+namespace detail {
+
+bool webserver_impl::should_skip_auth(const std::string& path) const {
     std::string normalized = normalize_path(path);
 
-    for (const auto& skip_path : auth_skip_paths) {
+    for (const auto& skip_path : parent->auth_skip_paths) {
         if (skip_path == normalized) return true;
         // Support wildcard suffix (e.g., "/public/*")
         if (skip_path.size() > 2 && skip_path.back() == '*' &&
@@ -1080,32 +1112,32 @@ bool webserver::should_skip_auth(const std::string& path) const {
     return false;
 }
 
-MHD_Result webserver::requests_answer_first_step(MHD_Connection* connection, struct details::modded_request* mr) {
-    mr->dhr.reset(new http_request(connection, unescaper));
-    mr->dhr->set_file_cleanup_callback(file_cleanup_callback);
+MHD_Result webserver_impl::requests_answer_first_step(MHD_Connection* connection, struct detail::modded_request* mr) {
+    mr->dhr.reset(new http_request(connection, parent->unescaper));
+    mr->dhr->set_file_cleanup_callback(parent->file_cleanup_callback);
 
     if (!mr->has_body) {
         return MHD_YES;
     }
 
-    mr->dhr->set_content_size_limit(content_size_limit);
+    mr->dhr->set_content_size_limit(parent->content_size_limit);
     const char *encoding = MHD_lookup_connection_value(connection, MHD_HEADER_KIND, http_utils::http_header_content_type);
 
-    if (post_process_enabled &&
+    if (parent->post_process_enabled &&
         (nullptr != encoding &&
             ((0 == strncasecmp(http_utils::http_post_encoding_form_urlencoded, encoding, strlen(http_utils::http_post_encoding_form_urlencoded))) ||
              (0 == strncasecmp(http_utils::http_post_encoding_multipart_formdata, encoding, strlen(http_utils::http_post_encoding_multipart_formdata)))))) {
         const size_t post_memory_limit(32 * 1024);  // Same as #MHD_POOL_SIZE_DEFAULT
-        mr->pp = MHD_create_post_processor(connection, post_memory_limit, &post_iterator, mr);
+        mr->pp = MHD_create_post_processor(connection, post_memory_limit, &webserver_impl::post_iterator, mr);
     } else {
         mr->pp = nullptr;
     }
     return MHD_YES;
 }
 
-MHD_Result webserver::requests_answer_second_step(MHD_Connection* connection, const char* method,
+MHD_Result webserver_impl::requests_answer_second_step(MHD_Connection* connection, const char* method,
         const char* version, const char* upload_data,
-        size_t* upload_data_size, struct details::modded_request* mr) {
+        size_t* upload_data_size, struct detail::modded_request* mr) {
     if (0 == *upload_data_size) return complete_request(connection, mr, version, method);
 
     if (mr->has_body) {
@@ -1116,12 +1148,12 @@ MHD_Result webserver::requests_answer_second_step(MHD_Connection* connection, co
         // multipart/form-data and application/x-www-form-urlencoded
         // all other content (which is indicated by mr-pp == nullptr)
         // has to be put to the content even if put_processed_data_to_content is set to false
-        if (mr->pp == nullptr || put_processed_data_to_content) {
+        if (mr->pp == nullptr || parent->put_processed_data_to_content) {
             mr->dhr->grow_content(upload_data, *upload_data_size);
         }
 
         if (mr->pp != nullptr) {
-            mr->ws = this;
+            mr->ws = parent;
             MHD_post_process(mr->pp, upload_data, *upload_data_size);
             if (mr->upload_ostrm != nullptr && mr->upload_ostrm->is_open()) {
                 mr->upload_ostrm->close();
@@ -1133,32 +1165,65 @@ MHD_Result webserver::requests_answer_second_step(MHD_Connection* connection, co
     return MHD_YES;
 }
 
-struct MHD_Response* webserver::get_raw_response_with_fallback(details::modded_request* mr) {
+// TASK-013: dispatch helpers replacing the v1 `get_raw_response`,
+// `decorate_response`, and `enqueue_response` virtuals on http_response.
+// Now that http_response is a final value type and the v1 polymorphic
+// subclass hierarchy is gone, the wire-construction logic lives here in
+// the dispatch path. webserver_impl is a friend of http_response (declared
+// in http_response.hpp) so it can reach body_ directly.
+//
+// materialize_response: ask the body to produce a fresh MHD_Response
+// with no headers/footers/cookies attached.
+//
+// decorate_mhd_response: walk the response's header/footer/cookie maps
+// and attach each to the materialized MHD_Response.
+MHD_Response* webserver_impl::materialize_response(http_response* resp) {
+    if (resp == nullptr || resp->body_ == nullptr) {
+        return nullptr;
+    }
+    return resp->body_->materialize();
+}
+
+void webserver_impl::decorate_mhd_response(MHD_Response* response,
+                                      const http_response& resp) {
+    for (const auto& [k, v] : resp.get_headers()) {
+        MHD_add_response_header(response, k.c_str(), v.c_str());
+    }
+    for (const auto& [k, v] : resp.get_footers()) {
+        MHD_add_response_footer(response, k.c_str(), v.c_str());
+    }
+    for (const auto& [k, v] : resp.get_cookies()) {
+        MHD_add_response_header(response, "Set-Cookie",
+                                (k + "=" + v).c_str());
+    }
+}
+
+struct MHD_Response* webserver_impl::get_raw_response_with_fallback(detail::modded_request* mr) {
     try {
-        struct MHD_Response* raw = mr->dhrs->get_raw_response();
+        struct MHD_Response* raw = materialize_response(mr->dhrs.get());
         if (raw == nullptr) {
             mr->dhrs = internal_error_page(mr);
-            raw = mr->dhrs->get_raw_response();
+            raw = materialize_response(mr->dhrs.get());
         }
         return raw;
     } catch(const std::invalid_argument&) {
         try {
             mr->dhrs = not_found_page(mr);
-            return mr->dhrs->get_raw_response();
+            return materialize_response(mr->dhrs.get());
         } catch(...) {
             return nullptr;
         }
     } catch(...) {
         try {
             mr->dhrs = internal_error_page(mr);
-            return mr->dhrs->get_raw_response();
+            return materialize_response(mr->dhrs.get());
         } catch(...) {
             return nullptr;
         }
     }
 }
 
-MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct details::modded_request* mr, const char* method) {
+MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection, struct detail::modded_request* mr, const char* method) {
     int to_ret = MHD_NO;
 
 #ifdef HAVE_WEBSOCKET
@@ -1196,7 +1261,7 @@ MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct details
                 lock.unlock();
 
                 ws_upgrade_data* data = new ws_upgrade_data{this, handler};
-                struct MHD_Response* response = MHD_create_response_for_upgrade(&upgrade_handler, data);
+                struct MHD_Response* response = MHD_create_response_for_upgrade(&webserver_impl::upgrade_handler, data);
                 if (response != nullptr) {
                     // Add required WebSocket response headers
                     MHD_add_response_header(response, MHD_HTTP_HEADER_UPGRADE, "websocket");
@@ -1225,12 +1290,12 @@ MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct details
     struct MHD_Response* raw_response;
     {
         std::shared_lock registered_resources_lock(registered_resources_mutex);
-        if (!single_resource) {
+        if (!parent->single_resource) {
             const char* st_url = mr->standardized_url.c_str();
             fe = registered_resources_str.find(st_url);
             if (fe == registered_resources_str.end()) {
-                if (regex_checking) {
-                    details::http_endpoint endpoint(st_url, false, false, false);
+                if (parent->regex_checking) {
+                    detail::http_endpoint endpoint(st_url, false, false, false);
 
                     // Data needed for parameter extraction after match.
                     // On cache hit, we copy these while holding the cache lock
@@ -1255,7 +1320,7 @@ MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct details
 
                     if (!found) {
                         // Cache miss — perform regex scan
-                        map<details::http_endpoint, http_resource*>::iterator found_endpoint;
+                        map<detail::http_endpoint, http_resource*>::iterator found_endpoint;
 
                         size_t len = 0;
                         size_t tot_len = 0;
@@ -1313,10 +1378,10 @@ MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct details
     }
 
     // Check centralized authentication if handler is configured
-    if (found && auth_handler != nullptr) {
+    if (found && parent->auth_handler != nullptr) {
         std::string path(mr->dhr->get_path());
         if (!should_skip_auth(path)) {
-            std::shared_ptr<http_response> auth_response = auth_handler(*mr->dhr);
+            std::shared_ptr<http_response> auth_response = parent->auth_handler(*mr->dhr);
             if (auth_response != nullptr) {
                 mr->dhrs = auth_response;
                 found = false;  // Skip resource rendering, go directly to response
@@ -1332,7 +1397,7 @@ MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct details
             }
             if (hrm->is_allowed(method)) {
                 mr->dhrs = ((hrm)->*(mr->callback))(*mr->dhr);  // copy in memory (move in case)
-                if (mr->dhrs.get() == nullptr || mr->dhrs->get_response_code() == -1) {
+                if (mr->dhrs.get() == nullptr || mr->dhrs->get_status() == -1) {
                     mr->dhrs = internal_error_page(mr);
                 }
             } else {
@@ -1347,10 +1412,15 @@ MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct details
                     mr->dhrs->with_header(http_utils::http_header_allow, header_value);
                 }
             }
-        } catch(const std::exception& e) {
-            mr->dhrs = internal_error_page(mr);
         } catch(...) {
-            mr->dhrs = internal_error_page(mr);
+            // The user-supplied internal_error_resource may itself throw;
+            // fall back to the built-in error page in that case (force_our=true)
+            // so we never let exceptions escape into libmicrohttpd.
+            try {
+                mr->dhrs = internal_error_page(mr);
+            } catch(...) {
+                mr->dhrs = internal_error_page(mr, true);
+            }
         }
     } else if (mr->dhrs == nullptr) {
         mr->dhrs = not_found_page(mr);
@@ -1359,16 +1429,16 @@ MHD_Result webserver::finalize_answer(MHD_Connection* connection, struct details
     raw_response = get_raw_response_with_fallback(mr);
     if (raw_response == nullptr) {
         mr->dhrs = internal_error_page(mr, true);
-        raw_response = mr->dhrs->get_raw_response();
+        raw_response = materialize_response(mr->dhrs.get());
     }
-    mr->dhrs->decorate_response(raw_response);
-    to_ret = mr->dhrs->enqueue_response(connection, raw_response);
+    decorate_mhd_response(raw_response, *mr->dhrs);
+    to_ret = MHD_queue_response(connection, mr->dhrs->get_status(), raw_response);
     MHD_destroy_response(raw_response);
     return (MHD_Result) to_ret;
 }
 
-MHD_Result webserver::complete_request(MHD_Connection* connection, struct details::modded_request* mr, const char* version, const char* method) {
-    mr->ws = this;
+MHD_Result webserver_impl::complete_request(MHD_Connection* connection, struct detail::modded_request* mr, const char* version, const char* method) {
+    mr->ws = parent;
 
     mr->dhr->set_path(mr->standardized_url);
     mr->dhr->set_method(method);
@@ -1377,29 +1447,30 @@ MHD_Result webserver::complete_request(MHD_Connection* connection, struct detail
     return finalize_answer(connection, mr, method);
 }
 
-MHD_Result webserver::answer_to_connection(void* cls, MHD_Connection* connection, const char* url, const char* method,
+MHD_Result webserver_impl::answer_to_connection(void* cls, MHD_Connection* connection, const char* url, const char* method,
         const char* version, const char* upload_data, size_t* upload_data_size, void** con_cls) {
-    struct details::modded_request* mr = static_cast<struct details::modded_request*>(*con_cls);
+    struct detail::modded_request* mr = static_cast<struct detail::modded_request*>(*con_cls);
+    auto* impl = static_cast<webserver_impl*>(cls);
 
     if (mr->dhr) {
-        return static_cast<webserver*>(cls)->requests_answer_second_step(connection, method, version, upload_data, upload_data_size, mr);
+        return impl->requests_answer_second_step(connection, method, version, upload_data, upload_data_size, mr);
     }
 
     const MHD_ConnectionInfo * conninfo = MHD_get_connection_info(connection, MHD_CONNECTION_INFO_CONNECTION_FD);
 
-    if (conninfo != nullptr && static_cast<webserver*>(cls)->tcp_nodelay) {
+    if (conninfo != nullptr && impl->parent->tcp_nodelay) {
         int yes = 1;
         setsockopt(conninfo->connect_fd, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<char*>(&yes), sizeof(int));
     }
 
     std::string t_url = url;
 
-    base_unescaper(&t_url, static_cast<webserver*>(cls)->unescaper);
+    base_unescaper(&t_url, impl->parent->unescaper);
     mr->standardized_url = http_utils::standardize_url(t_url);
 
     mr->has_body = false;
 
-    access_log(static_cast<webserver*>(cls), mr->complete_uri + " METHOD: " + method);
+    webserver_impl::access_log(impl->parent, mr->complete_uri + " METHOD: " + method);
 
     // Case-sensitive per RFC 7230 §3.1.1: HTTP method is case-sensitive.
     if (0 == strcmp(method, http_utils::http_method_get)) {
@@ -1426,7 +1497,9 @@ MHD_Result webserver::answer_to_connection(void* cls, MHD_Connection* connection
         mr->callback = &http_resource::render_OPTIONS;
     }
 
-    return static_cast<webserver*>(cls)->requests_answer_first_step(connection, mr);
+    return impl->requests_answer_first_step(connection, mr);
 }
+
+}  // namespace detail
 
 }  // namespace httpserver

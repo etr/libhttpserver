@@ -37,6 +37,7 @@
 namespace httpserver {
 
 class http_request;
+namespace detail { class webserver_impl; }
 
 class websocket_session {
  public:
@@ -61,6 +62,7 @@ class websocket_session {
      bool valid;
 
      friend class webserver;
+     friend class detail::webserver_impl;  // TASK-014: PIMPL upgrade path
 };
 
 class websocket_handler {

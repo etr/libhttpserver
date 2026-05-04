@@ -39,9 +39,7 @@ using std::vector;
 using httpserver::http_resource;
 using httpserver::http_request;
 using httpserver::http_response;
-using httpserver::empty_response;
-using httpserver::pipe_response;
-using httpserver::iovec_response;
+using httpserver::iovec_entry;
 using httpserver::webserver;
 using httpserver::create_webserver;
 
@@ -63,7 +61,7 @@ size_t writefunc(void *ptr, size_t size, size_t nmemb, string *s) {
 class empty_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request&) {
-         return std::make_shared<empty_response>(204);
+         return std::make_shared<http_response>(http_response::empty());
      }
 };
 
@@ -76,20 +74,33 @@ class pipe_resource : public http_resource {
 #else
          if (pipe(pipefd) != 0) {
 #endif
-             return std::make_shared<empty_response>(500);
+             return std::make_shared<http_response>(
+                 http_response::empty().with_status(500));
          }
          const char* msg = "hello from pipe";
          write(pipefd[1], msg, strlen(msg));
          close(pipefd[1]);
-         return std::make_shared<pipe_response>(pipefd[0], 200);
+         return std::make_shared<http_response>(http_response::pipe(pipefd[0]));
      }
 };  // NOLINT(readability/braces)
+
+// v2 iovec uses borrowed buffers. The static parts must outlive the response;
+// here they live for the program's duration as static storage.
+static const char kHello[] = "Hello";
+static const char kSpace[] = " ";
+static const char kWorld[] = "World";
 
 class iovec_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request&) {
-         vector<string> parts = {"Hello", " ", "World"};
-         return std::make_shared<iovec_response>(parts, 200, "text/plain");
+         std::vector<iovec_entry> parts = {
+             { kHello, sizeof(kHello) - 1 },
+             { kSpace, sizeof(kSpace) - 1 },
+             { kWorld, sizeof(kWorld) - 1 },
+         };
+         return std::make_shared<http_response>(
+             http_response::iovec(parts)
+                 .with_header("Content-Type", "text/plain"));
      }
 };
 

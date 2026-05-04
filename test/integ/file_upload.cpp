@@ -54,8 +54,6 @@ using std::stringstream;
 using httpserver::http_resource;
 using httpserver::http_request;
 using httpserver::http_response;
-using httpserver::string_response;
-using httpserver::file_response;
 using httpserver::webserver;
 using httpserver::create_webserver;
 using httpserver::http::arg_map;
@@ -261,7 +259,7 @@ class print_file_upload_resource : public http_resource {
             }
          }
          files = req.get_files();
-         return std::make_shared<string_response>("OK", 201, "text/plain");
+         return std::make_shared<http_response>(http_response::string("OK").with_status(201));
      }
 
      shared_ptr<http_response> render_PUT(const http_request& req) {
@@ -274,7 +272,7 @@ class print_file_upload_resource : public http_resource {
             }
          }
          files = req.get_files();
-         return std::make_shared<string_response>("OK", 200, "text/plain");
+         return std::make_shared<http_response>(http_response::string("OK"));
      }
 
      const std::map<string, std::vector<string>, httpserver::http::arg_comparator> get_args() const {

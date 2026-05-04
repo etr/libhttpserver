@@ -25,7 +25,9 @@
 class file_response_resource : public httpserver::http_resource {
  public:
      std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request&) {
-         return std::shared_ptr<httpserver::file_response>(new httpserver::file_response("test_content", 200, "text/plain"));
+         return std::make_shared<httpserver::http_response>(
+             httpserver::http_response::file("test_content")
+                 .with_header("Content-Type", "text/plain"));
      }
 };
 

@@ -71,7 +71,7 @@ size_t writefunc(void *ptr, size_t size, size_t nmemb, std::string *s) {
 class ok_resource : public httpserver::http_resource {
  public:
      shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request&) {
-         return std::make_shared<httpserver::string_response>("OK", 200, "text/plain");
+         return std::make_shared<httpserver::http_response>(httpserver::http_response::string("OK"));
      }
 };
 
@@ -90,17 +90,19 @@ class tls_info_resource : public httpserver::http_resource {
          } else {
              response = "NO_TLS_SESSION";
          }
-         return std::make_shared<httpserver::string_response>(response, 200, "text/plain");
+         return std::make_shared<httpserver::http_response>(httpserver::http_response::string(response));
      }
 };
 #endif  // HAVE_GNUTLS
 
 shared_ptr<httpserver::http_response> not_found_custom(const httpserver::http_request&) {
-    return std::make_shared<httpserver::string_response>("Not found custom", 404, "text/plain");
+    return std::make_shared<httpserver::http_response>(
+        httpserver::http_response::string("Not found custom").with_status(404));
 }
 
 shared_ptr<httpserver::http_response> not_allowed_custom(const httpserver::http_request&) {
-    return std::make_shared<httpserver::string_response>("Not allowed custom", 405, "text/plain");
+    return std::make_shared<httpserver::http_response>(
+        httpserver::http_response::string("Not allowed custom").with_status(405));
 }
 
 LT_BEGIN_SUITE(ws_start_stop_suite)
@@ -860,7 +862,7 @@ class tls_check_non_tls_resource : public httpserver::http_resource {
      std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request& req) {
          // On non-TLS connection, has_tls_session should return false
          std::string response = req.has_tls_session() ? "HAS_TLS" : "NO_TLS";
-         return std::make_shared<httpserver::string_response>(response, 200, "text/plain");
+         return std::make_shared<httpserver::http_response>(httpserver::http_response::string(response));
      }
 };
 
@@ -980,7 +982,7 @@ class client_cert_info_resource : public httpserver::http_resource {
          } else {
              response = "NO_CLIENT_CERT";
          }
-         return std::make_shared<httpserver::string_response>(response, 200, "text/plain");
+         return std::make_shared<httpserver::http_response>(httpserver::http_response::string(response));
      }
 };
 

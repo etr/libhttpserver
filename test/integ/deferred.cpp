@@ -34,6 +34,8 @@
 #include <signal.h>
 #include <unistd.h>
 
+#include <algorithm>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <memory>
@@ -50,7 +52,6 @@ using httpserver::create_webserver;
 using httpserver::http_response;
 using httpserver::http_request;
 using httpserver::http_resource;
-using httpserver::deferred_response;
 
 size_t writefunc(void *ptr, size_t size, size_t nmemb, string *s) {
     s->append(reinterpret_cast<char*>(ptr), size*nmemb);
@@ -90,10 +91,27 @@ ssize_t test_callback_with_data(shared_ptr<test_data> closure_data, char* buf, s
     }
 }
 
+// TASK-013: v1's deferred_response<T> had a typed callable + initial content
+// prefix. v2's http_response::deferred(producer) is type-erased through
+// std::function and has no initial-content parameter; the lambda below
+// reproduces the v1 prefix-then-callback semantics by emitting the prefix
+// once before delegating to the typed callback.
 class deferred_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request&) {
-         return std::make_shared<deferred_response<void>>(test_callback, nullptr, "cycle callback response");
+         std::string initial = "cycle callback response";
+         return std::make_shared<http_response>(http_response::deferred(
+             [initial, served = false](std::uint64_t,
+                                       char* buf,
+                                       std::size_t max) mutable -> ssize_t {
+                 if (!served) {
+                     served = true;
+                     std::size_t n = std::min(initial.size(), max);
+                     memcpy(buf, initial.data(), n);
+                     return n;
+                 }
+                 return test_callback(nullptr, buf, max);
+             }));
      }
 };
 
@@ -102,14 +120,30 @@ class deferred_resource_with_data : public http_resource {
      shared_ptr<http_response> render_GET(const http_request&) {
          auto internal_info = std::make_shared<test_data>();
          internal_info->value = 42;
-         return std::make_shared<deferred_response<test_data>>(test_callback_with_data, internal_info, "cycle callback response");
+         std::string initial = "cycle callback response";
+         return std::make_shared<http_response>(http_response::deferred(
+             [internal_info, initial,
+              served = false](std::uint64_t,
+                              char* buf,
+                              std::size_t max) mutable -> ssize_t {
+                 if (!served) {
+                     served = true;
+                     std::size_t n = std::min(initial.size(), max);
+                     memcpy(buf, initial.data(), n);
+                     return n;
+                 }
+                 return test_callback_with_data(internal_info, buf, max);
+             }));
      }
 };
 
 class deferred_resource_empty_content : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request&) {
-         return std::make_shared<deferred_response<void>>(test_callback, nullptr);
+         return std::make_shared<http_response>(http_response::deferred(
+             [](std::uint64_t, char* buf, std::size_t max) -> ssize_t {
+                 return test_callback(nullptr, buf, max);
+             }));
      }
 };
 

@@ -45,8 +45,6 @@ using std::stringstream;
 using httpserver::http_resource;
 using httpserver::http_request;
 using httpserver::http_response;
-using httpserver::string_response;
-using httpserver::file_response;
 using httpserver::webserver;
 using httpserver::create_webserver;
 
@@ -69,37 +67,37 @@ size_t headerfunc(void *ptr, size_t size, size_t nmemb, map<string, string>* ss)
 class simple_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request&) {
-         return std::make_shared<string_response>("OK", 200, "text/plain");
+         return std::make_shared<http_response>(http_response::string("OK"));
      }
      shared_ptr<http_response> render_POST(const http_request& req) {
-         return std::make_shared<string_response>(std::string(req.get_arg("arg1")) + std::string(req.get_arg("arg2")), 200, "text/plain");
+         return std::make_shared<http_response>(http_response::string(std::string(req.get_arg("arg1")) + std::string(req.get_arg("arg2"))));
      }
 };
 
 class large_post_resource_last_value : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request&) {
-         return std::make_shared<string_response>("OK", 200, "text/plain");
+         return std::make_shared<http_response>(http_response::string("OK"));
      }
      shared_ptr<http_response> render_POST(const http_request& req) {
-         return std::make_shared<string_response>(std::string(req.get_arg("arg1").get_all_values().back()), 200, "text/plain");
+         return std::make_shared<http_response>(http_response::string(std::string(req.get_arg("arg1").get_all_values().back())));
      }
 };
 
 class large_post_resource_first_value : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request&) {
-         return std::make_shared<string_response>("OK", 200, "text/plain");
+         return std::make_shared<http_response>(http_response::string("OK"));
      }
      shared_ptr<http_response> render_POST(const http_request& req) {
-         return std::make_shared<string_response>(std::string(req.get_arg("arg1").get_all_values().front()), 200, "text/plain");
+         return std::make_shared<http_response>(http_response::string(std::string(req.get_arg("arg1").get_all_values().front())));
      }
 };
 
 class arg_value_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request&) {
-         return std::make_shared<string_response>("OK", 200, "text/plain");
+         return std::make_shared<http_response>(http_response::string("OK"));
      }
      shared_ptr<http_response> render_POST(const http_request& req) {
          auto const arg_value = req.get_arg("arg").get_all_values();
@@ -109,14 +107,14 @@ class arg_value_resource : public http_resource {
          std::string all_values = std::accumulate(std::next(arg_value.begin()), arg_value.end(), std::string(arg_value[0]), [](std::string a, std::string_view in) {
             return std::move(a) + std::string(in);
          });
-         return std::make_shared<string_response>(all_values, 200, "text/plain");
+         return std::make_shared<http_response>(http_response::string(all_values));
      }
 };
 
 class args_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request& req) {
-         return std::make_shared<string_response>(std::string(req.get_arg("arg")) + std::string(req.get_arg("arg2")), 200, "text/plain");
+         return std::make_shared<http_response>(http_response::string(std::string(req.get_arg("arg")) + std::string(req.get_arg("arg2"))));
      }
 };
 
@@ -128,21 +126,21 @@ class args_flat_resource : public http_resource {
          for (const auto& [key, value] : args) {
              ss << key << "=" << value << ";";
          }
-         return std::make_shared<string_response>(ss.str(), 200, "text/plain");
+         return std::make_shared<http_response>(http_response::string(ss.str()));
      }
 };
 
 class long_content_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request&) {
-         return std::make_shared<string_response>(lorem_ipsum, 200, "text/plain");
+         return std::make_shared<http_response>(http_response::string(lorem_ipsum));
      }
 };
 
 class header_set_test_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request&) {
-         auto hrb = std::make_shared<string_response>("OK", 200, "text/plain");
+         auto hrb = std::make_shared<http_response>(http_response::string("OK"));
          hrb->with_header("KEY", "VALUE");
          return hrb;
      }
@@ -151,7 +149,7 @@ class header_set_test_resource : public http_resource {
 class cookie_set_test_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request&) {
-         auto hrb = std::make_shared<string_response>("OK", 200, "text/plain");
+         auto hrb = std::make_shared<http_response>(http_response::string("OK"));
          hrb->with_cookie("MyCookie", "CookieValue");
          return hrb;
      }
@@ -160,28 +158,28 @@ class cookie_set_test_resource : public http_resource {
 class cookie_reading_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request& req) {
-         return std::make_shared<string_response>(std::string(req.get_cookie("name")), 200, "text/plain");
+         return std::make_shared<http_response>(http_response::string(std::string(req.get_cookie("name"))));
      }
 };
 
 class header_reading_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request& req) {
-         return std::make_shared<string_response>(std::string(req.get_header("MyHeader")), 200, "text/plain");
+         return std::make_shared<http_response>(http_response::string(std::string(req.get_header("MyHeader"))));
      }
 };
 
 class full_args_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request& req) {
-         return std::make_shared<string_response>(std::string(req.get_args().at("arg")), 200, "text/plain");
+         return std::make_shared<http_response>(http_response::string(std::string(req.get_args().at("arg"))));
      }
 };
 
 class querystring_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request& req) {
-         return std::make_shared<string_response>(std::string(req.get_querystring()), 200, "text/plain");
+         return std::make_shared<http_response>(http_response::string(std::string(req.get_querystring())));
      }
 };
 
@@ -192,65 +190,65 @@ class path_pieces_resource : public http_resource {
          for (unsigned int i = 0; i < req.get_path_pieces().size(); i++) {
              ss << req.get_path_piece(i) << ",";
          }
-         return std::make_shared<string_response>(ss.str(), 200, "text/plain");
+         return std::make_shared<http_response>(http_response::string(ss.str()));
      }
 };
 
 class complete_test_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request&) {
-         return std::make_shared<string_response>("OK", 200, "text/plain");
+         return std::make_shared<http_response>(http_response::string("OK"));
      }
 
      shared_ptr<http_response> render_POST(const http_request&) {
-         return std::make_shared<string_response>("OK", 200, "text/plain");
+         return std::make_shared<http_response>(http_response::string("OK"));
      }
 
      shared_ptr<http_response> render_PUT(const http_request&) {
-         return std::make_shared<string_response>("OK", 200, "text/plain");
+         return std::make_shared<http_response>(http_response::string("OK"));
      }
 
      shared_ptr<http_response> render_DELETE(const http_request&) {
-         return std::make_shared<string_response>("OK", 200, "text/plain");
+         return std::make_shared<http_response>(http_response::string("OK"));
      }
 
      shared_ptr<http_response> render_PATCH(const http_request&) {
-         return std::make_shared<string_response>("OK", 200, "text/plain");
+         return std::make_shared<http_response>(http_response::string("OK"));
      }
 
      shared_ptr<http_response> render_HEAD(const http_request&) {
-         return std::make_shared<string_response>("", 200, "text/plain");
+         return std::make_shared<http_response>(http_response::string(""));
      }
 
      shared_ptr<http_response> render_OPTIONS(const http_request&) {
-         auto resp = std::make_shared<string_response>("", 200, "text/plain");
+         auto resp = std::make_shared<http_response>(http_response::string(""));
          resp->with_header("Allow", "GET, POST, PUT, DELETE, HEAD, OPTIONS");
          return resp;
      }
 
      shared_ptr<http_response> render_TRACE(const http_request&) {
-         return std::make_shared<string_response>("TRACE OK", 200, "message/http");
+         return std::make_shared<http_response>(http_response::string("TRACE OK", "message/http"));
      }
 };
 
 class only_render_resource : public http_resource {
  public:
      shared_ptr<http_response> render(const http_request&) {
-         return std::make_shared<string_response>("OK", 200, "text/plain");
+         return std::make_shared<http_response>(http_response::string("OK"));
      }
 };
 
 class ok_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request&) {
-         return std::make_shared<string_response>("OK", 200, "text/plain");
+         return std::make_shared<http_response>(http_response::string("OK"));
      }
 };
 
 class nok_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request&) {
-         return std::make_shared<string_response>("NOK", 200, "text/plain");
+         return std::make_shared<http_response>(http_response::string("NOK"));
      }
 };
 
@@ -259,7 +257,7 @@ class static_resource : public http_resource {
      explicit static_resource(std::string r) : resp(std::move(r)) {}
 
      shared_ptr<http_response> render_GET(const http_request&) {
-         return std::make_shared<string_response>(resp, 200, "text/plain");
+         return std::make_shared<http_response>(http_response::string(resp));
      }
 
      std::string resp;
@@ -283,21 +281,21 @@ class empty_response_resource : public http_resource {
 class file_response_resource : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request&) {
-         return std::make_shared<file_response>("test_content", 200, "text/plain");
+         return std::make_shared<http_response>(http_response::file("test_content").with_header("Content-Type", "text/plain"));
      }
 };
 
 class file_response_resource_empty : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request&) {
-         return std::make_shared<file_response>("test_content_empty", 200, "text/plain");
+         return std::make_shared<http_response>(http_response::file("test_content_empty").with_header("Content-Type", "text/plain"));
      }
 };
 
 class file_response_resource_default_content_type : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request&) {
-         return std::make_shared<file_response>("test_content", 200);
+         return std::make_shared<http_response>(http_response::file("test_content"));
      }
 };
 #endif  // HTTPSERVER_NO_LOCAL_FS
@@ -305,7 +303,7 @@ class file_response_resource_default_content_type : public http_resource {
 class file_response_resource_missing : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request&) {
-         return std::make_shared<file_response>("missing", 200);
+         return std::make_shared<http_response>(http_response::file("missing"));
      }
 };
 
@@ -313,7 +311,7 @@ class file_response_resource_missing : public http_resource {
 class file_response_resource_dir : public http_resource {
  public:
      shared_ptr<http_response> render_GET(const http_request&) {
-         return std::make_shared<file_response>("integ", 200);
+         return std::make_shared<http_response>(http_response::file("integ"));
      }
 };
 #endif  // HTTPSERVER_NO_LOCAL_FS
@@ -338,7 +336,7 @@ class print_request_resource : public http_resource {
 
      shared_ptr<http_response> render_GET(const http_request& req) {
          (*ss) << req;
-         return std::make_shared<string_response>("OK", 200, "text/plain");
+         return std::make_shared<http_response>(http_response::string("OK"));
      }
 
  private:
@@ -350,7 +348,7 @@ class print_response_resource : public http_resource {
      explicit print_response_resource(stringstream* ss) : ss(ss) {}
 
      shared_ptr<http_response> render_GET(const http_request&) {
-         auto hresp = std::make_shared<string_response>("OK", 200, "text/plain");
+         auto hresp = std::make_shared<http_response>(http_response::string("OK"));
 
          hresp->with_header("MyResponseHeader", "MyResponseHeaderValue");
          hresp->with_footer("MyResponseFooter", "MyResponseFooterValue");
@@ -372,15 +370,14 @@ class request_info_resource : public http_resource {
          ss << "requestor=" << req.get_requestor()
             << "&port=" << req.get_requestor_port()
             << "&version=" << req.get_version();
-         return std::make_shared<string_response>(ss.str(), 200, "text/plain");
+         return std::make_shared<http_response>(http_response::string(ss.str()));
      }
 };
 
 class content_limit_resource : public http_resource {
  public:
      shared_ptr<http_response> render_POST(const http_request& req) {
-         return std::make_shared<string_response>(
-             req.content_too_large() ? "TOO_LARGE" : "OK", 200, "text/plain");
+         return std::make_shared<http_response>(http_response::string(req.content_too_large() ? "TOO_LARGE" : "OK"));
      }
 };
 
@@ -2013,58 +2010,48 @@ LT_BEGIN_AUTO_TEST(basic_suite, only_render_patch)
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(only_render_patch)
 
-// Custom response class that throws std::invalid_argument in get_raw_response
-class invalid_argument_response : public http_response {
+// TASK-013: the v1 subclassing approach (override get_raw_response to throw)
+// is gone — http_response is `final`. The dispatch path's exception-handling
+// regression coverage is preserved by routing through a deferred body whose
+// MHD_Response construction triggers the throw. Since the v2 deferred body's
+// materialize() does not invoke the producer (MHD invokes it later when it
+// pulls bytes), and MHD never executes producer callbacks before queueing,
+// we instead throw from a custom resource render(). The render handler runs
+// inside webserver::finalize_answer's try/catch (line 1351), which routes to
+// internal_error_page on std::exception and on `...`. This preserves the same
+// dispatch behaviour the v1 throwing-response classes covered, by exercising
+// the same try/catch at a different injection point.
+
+// Resource that throws std::invalid_argument from render()
+class invalid_arg_resource : public http_resource {
  public:
-    invalid_argument_response() : http_response(200, "text/plain") {}
-    MHD_Response* get_raw_response() override {
+    shared_ptr<http_response> render_GET(const http_request&) {
         throw std::invalid_argument("Resource not found");
     }
 };
 
-// Resource that returns invalid_argument_response
-class invalid_arg_resource : public http_resource {
+// Resource that throws std::runtime_error from render()
+class runtime_error_resource : public http_resource {
  public:
     shared_ptr<http_response> render_GET(const http_request&) {
-        return std::make_shared<invalid_argument_response>();
-    }
-};
-
-// Custom response class that throws std::runtime_error in get_raw_response
-class runtime_error_response : public http_response {
- public:
-    runtime_error_response() : http_response(200, "text/plain") {}
-    MHD_Response* get_raw_response() override {
         throw std::runtime_error("Internal error in response");
     }
 };
 
-// Resource that returns runtime_error_response
-class runtime_error_resource : public http_resource {
+// Resource that throws a non-std exception from render()
+class non_std_exception_resource : public http_resource {
  public:
     shared_ptr<http_response> render_GET(const http_request&) {
-        return std::make_shared<runtime_error_response>();
-    }
-};
-
-// Custom response class that throws non-std exception in get_raw_response
-class non_std_exception_response : public http_response {
- public:
-    non_std_exception_response() : http_response(200, "text/plain") {}
-    MHD_Response* get_raw_response() override {
         throw 42;  // Throws an int, not a std::exception
     }
 };
 
-// Resource that returns non_std_exception_response
-class non_std_exception_resource : public http_resource {
- public:
-    shared_ptr<http_response> render_GET(const http_request&) {
-        return std::make_shared<non_std_exception_response>();
-    }
-};
-
-// Test response throwing std::invalid_argument -> should get 404
+// Test render throwing std::invalid_argument -> dispatch routes to 500.
+// (TASK-013: the v1 invalid_argument-from-get_raw_response branch that
+// returned 404 went away with the get_raw_response virtual; renders that
+// throw any std::exception now consistently produce 500 via finalize_answer's
+// outer try/catch — which preserves the dispatch-exception-handling
+// regression coverage at a different injection point.)
 LT_BEGIN_AUTO_TEST(basic_suite, response_throws_invalid_argument)
     invalid_arg_resource resource;
     LT_ASSERT_EQ(true, ws->register_resource("invalid_arg", &resource));
@@ -2081,7 +2068,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, response_throws_invalid_argument)
 
     int64_t http_code = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-    LT_ASSERT_EQ(http_code, 404);  // invalid_argument -> not found
+    LT_ASSERT_EQ(http_code, 500);  // render throw -> internal server error
 
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(response_throws_invalid_argument)
@@ -2204,7 +2191,7 @@ class arg_echo_resource : public http_resource {
  public:
     shared_ptr<http_response> render_GET(const http_request& req) {
         std::string arg = std::string(req.get_arg_flat("key"));
-        return std::make_shared<string_response>(arg, 200, "text/plain");
+        return std::make_shared<http_response>(http_response::string(arg));
     }
 };
 
@@ -2233,7 +2220,7 @@ LT_END_AUTO_TEST(custom_unescaper)
 
 // Custom not_found handler
 shared_ptr<http_response> my_custom_not_found(const http_request&) {
-    return std::make_shared<string_response>("CUSTOM_404", 404, "text/plain");
+    return std::make_shared<http_response>(http_response::string("CUSTOM_404").with_status(404));
 }
 
 LT_BEGIN_AUTO_TEST(basic_suite, custom_not_found_handler)
@@ -2259,7 +2246,7 @@ LT_END_AUTO_TEST(custom_not_found_handler)
 
 // Custom method_not_allowed handler
 shared_ptr<http_response> my_custom_method_not_allowed(const http_request&) {
-    return std::make_shared<string_response>("CUSTOM_405", 405, "text/plain");
+    return std::make_shared<http_response>(http_response::string("CUSTOM_405").with_status(405));
 }
 
 // Resource that only allows POST
@@ -2270,7 +2257,7 @@ class post_only_resource : public http_resource {
         set_allowing("POST", true);
     }
     shared_ptr<http_response> render_POST(const http_request&) {
-        return std::make_shared<string_response>("POST_OK", 200, "text/plain");
+        return std::make_shared<http_response>(http_response::string("POST_OK"));
     }
 };
 
@@ -2309,7 +2296,7 @@ class requestor_cache_resource : public http_resource {
         std::string ip2 = std::string(req.get_requestor());
 
         std::string response = "IP:" + ip + ",PORT:" + std::to_string(port);
-        return std::make_shared<string_response>(response, 200, "text/plain");
+        return std::make_shared<http_response>(http_response::string(response));
     }
 };
 
@@ -2346,7 +2333,7 @@ class querystring_cache_resource : public http_resource {
         std::string qs1 = std::string(req.get_querystring());
         std::string qs2 = std::string(req.get_querystring());  // Should hit cache
 
-        return std::make_shared<string_response>(qs1, 200, "text/plain");
+        return std::make_shared<http_response>(http_response::string(qs1));
     }
 };
 
@@ -2390,7 +2377,7 @@ class args_cache_resource : public http_resource {
         for (const auto& [key, val] : flat) {
             response += std::string(key) + "=" + std::string(val) + ";";
         }
-        return std::make_shared<string_response>(response, 200, "text/plain");
+        return std::make_shared<http_response>(http_response::string(response));
     }
 };
 
@@ -2434,7 +2421,7 @@ class footer_test_resource : public http_resource {
             response += ",X-Test-Trailer=" + std::string(footer_val);
         }
 
-        return std::make_shared<string_response>(response, 200, "text/plain");
+        return std::make_shared<http_response>(http_response::string(response));
     }
 };
 
@@ -2467,14 +2454,19 @@ LT_END_AUTO_TEST(footer_access_no_trailers)
 class response_footer_resource : public http_resource {
  public:
     shared_ptr<http_response> render_GET(const http_request&) {
-        auto response = std::make_shared<string_response>("body content", 200, "text/plain");
+        auto response = std::make_shared<http_response>(http_response::string("body content"));
         // Add a footer to the response
         response->with_footer("X-Checksum", "abc123");
         response->with_footer("X-Processing-Time", "42ms");
 
-        // Test get_footer and get_footers on response
+        // Test get_footer and get_footers on response. The returned
+        // string_view points into the response's storage; we only
+        // read it before returning so the response (and thus the
+        // backing string) outlives any read.
         auto checksum = response->get_footer("X-Checksum");
         auto all_footers = response->get_footers();
+        (void)checksum;
+        (void)all_footers;
 
         return response;
     }
@@ -2511,7 +2503,7 @@ class arg_not_found_resource : public http_resource {
         auto missing_arg = req.get_arg("nonexistent_key");
         // http_arg_value.get_all_values() should return empty vector
         std::string result = missing_arg.get_all_values().empty() ? "EMPTY" : "HAS_VALUES";
-        return std::make_shared<string_response>(result, 200, "text/plain");
+        return std::make_shared<http_response>(http_response::string(result));
     }
 };
 
@@ -2539,7 +2531,7 @@ class arg_flat_fallback_resource : public http_resource {
         // Test get_arg_flat with a key that exists in GET args but not in unescaped_args
         // This tests the fallback branch in get_arg_flat
         std::string val = std::string(req.get_arg_flat("qparam"));
-        return std::make_shared<string_response>(val, 200, "text/plain");
+        return std::make_shared<http_response>(http_response::string(val));
     }
 };
 
@@ -2568,7 +2560,7 @@ class path_piece_oob_resource : public http_resource {
         std::string piece = req.get_path_piece(100);  // Way beyond the path pieces
         // Should return empty string
         std::string result = piece.empty() ? "OOB_EMPTY" : piece;
-        return std::make_shared<string_response>(result, 200, "text/plain");
+        return std::make_shared<http_response>(http_response::string(result));
     }
 };
 
@@ -2595,7 +2587,7 @@ class empty_querystring_resource : public http_resource {
     shared_ptr<http_response> render_GET(const http_request& req) {
         std::string qs = std::string(req.get_querystring());
         std::string result = qs.empty() ? "NO_QS" : qs;
-        return std::make_shared<string_response>(result, 200, "text/plain");
+        return std::make_shared<http_response>(http_response::string(result));
     }
 };
 
@@ -2636,7 +2628,7 @@ class null_value_query_resource : public http_resource {
                             std::string(normal_arg.get_all_values()[0]));
         ss << ",qs=" << (qs.find("keyonly") != string::npos ? "HAS_KEYONLY" : "NO_KEYONLY");
 
-        return std::make_shared<string_response>(ss.str(), 200, "text/plain");
+        return std::make_shared<http_response>(http_response::string(ss.str()));
     }
 };
 
@@ -2652,7 +2644,7 @@ class auth_cache_resource : public http_resource {
         std::string pass2 = std::string(req.get_pass());  // Should hit cache
 
         std::string result = user1.empty() ? "NO_AUTH" : ("USER:" + user1);
-        return std::make_shared<string_response>(result, 200, "text/plain");
+        return std::make_shared<http_response>(http_response::string(result));
     }
 };
 #endif  // HAVE_BAUTH
@@ -2809,7 +2801,7 @@ class arg_flat_multi_resource : public http_resource {
     shared_ptr<http_response> render_GET(const http_request& req) {
         // get_arg_flat should return the first value even for multi-value args
         std::string flat_val = std::string(req.get_arg_flat("key"));
-        return std::make_shared<string_response>("flat=" + flat_val, 200, "text/plain");
+        return std::make_shared<http_response>(http_response::string("flat=" + flat_val));
     }
 };
 
@@ -2999,7 +2991,7 @@ LT_END_AUTO_TEST(default_render_method)
 class render_override_resource : public http_resource {
  public:
     shared_ptr<http_response> render(const http_request&) {
-        return std::make_shared<string_response>("base_render", 200, "text/plain");
+        return std::make_shared<http_response>(http_response::string("base_render"));
     }
 };
 
@@ -3137,7 +3129,7 @@ LT_END_AUTO_TEST(all_methods_fallthrough_to_render)
 
 // Test internal_error_resource custom handler
 shared_ptr<http_response> custom_internal_error_handler(const http_request&) {
-    return std::make_shared<string_response>("Custom Internal Error", 500, "text/plain");
+    return std::make_shared<http_response>(http_response::string("Custom Internal Error").with_status(500));
 }
 
 class throwing_resource : public http_resource {
@@ -3180,7 +3172,7 @@ class arg_flat_resource : public http_resource {
     shared_ptr<http_response> render_GET(const http_request& req) {
         // get_arg_flat should fall back to MHD connection value for query params
         std::string result = std::string(req.get_arg_flat("q"));
-        return std::make_shared<string_response>(result, 200, "text/plain");
+        return std::make_shared<http_response>(http_response::string(result));
     }
 };
 
@@ -3212,7 +3204,7 @@ class large_multipart_resource : public http_resource {
  public:
     shared_ptr<http_response> render_POST(const http_request& req) {
         std::string result = std::string(req.get_arg("large_field"));
-        return std::make_shared<string_response>(std::to_string(result.size()), 200, "text/plain");
+        return std::make_shared<http_response>(http_response::string(std::to_string(result.size())));
     }
 };
 
@@ -3271,7 +3263,7 @@ class client_cert_non_tls_resource : public http_resource {
         result += "fingerprint:" + req.get_client_cert_fingerprint_sha256() + ";";
         result += "not_before:" + std::to_string(req.get_client_cert_not_before()) + ";";
         result += "not_after:" + std::to_string(req.get_client_cert_not_after());
-        return std::make_shared<string_response>(result, 200, "text/plain");
+        return std::make_shared<http_response>(http_response::string(result));
     }
 };
 

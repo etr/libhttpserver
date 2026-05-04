@@ -56,9 +56,8 @@
 #include <string>
 #include <vector>
 
+#include "httpserver/constants.hpp"
 #include "httpserver/http_arg_value.hpp"
-
-#define DEFAULT_MASK_VALUE 0xFFFF
 
 
 namespace httpserver {
@@ -313,6 +312,12 @@ class http_utils {
 
 class header_comparator {
  public:
+     // is_transparent enables heterogeneous lookup against header_map
+     // (std::map<std::string, std::string, header_comparator>): callers
+     // can pass std::string_view directly to find()/count() without
+     // constructing a std::string. Required by TASK-011's
+     // string_view-returning const accessors on http_response.
+     using is_transparent = std::true_type;
      /**
       * Operator used to compare strings.
       * @param first string
@@ -370,7 +375,7 @@ struct ip_representation {
 
     explicit ip_representation(http_utils::IP_version_T ip_version) :
         ip_version(ip_version) {
-            mask = DEFAULT_MASK_VALUE;
+            mask = constants::DEFAULT_MASK_VALUE;
             std::fill(pieces, pieces + 16, 0);
     }
 

@@ -24,9 +24,7 @@
 #include <map>
 #include <memory>
 #include <string>
-#include "httpserver/string_response.hpp"
-
-namespace httpserver { class http_response; }
+#include "httpserver/http_response.hpp"
 
 namespace httpserver {
 
@@ -43,12 +41,17 @@ void resource_init(std::map<std::string, bool>* method_state) {
     (*method_state)[MHD_HTTP_METHOD_PATCH] = true;
 }
 
-namespace details {
+namespace detail {
 
 std::shared_ptr<http_response> empty_render(const http_request&) {
-    return std::make_shared<string_response>();
+    // Return a default-constructed (status_code_ = -1) http_response so
+    // webserver::finalize_answer sees the sentinel and routes to
+    // internal_error_page (matching v1's `string_response()` default-ctor
+    // behaviour that the test/integ/basic.cpp::default_render_method test
+    // pins).
+    return std::make_shared<http_response>();
 }
 
-}  // namespace details
+}  // namespace detail
 
 }  // namespace httpserver

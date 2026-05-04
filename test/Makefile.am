@@ -24,9 +24,9 @@ endif
 
 LDADD += -lcurl
 
-AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/
+AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/ -DHTTPSERVER_COMPILATION
 METASOURCES = AUTO
-check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver new_response_types daemon_info uri_log
+check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories webserver_pimpl
 
 MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
 
@@ -51,6 +51,55 @@ uri_log_SOURCES = unit/uri_log_test.cpp
 # it needs an explicit -lmicrohttpd in its link line on top of the default
 # LDADD (modern ld enforces --no-copy-dt-needed-entries).
 uri_log_LDADD = $(LDADD) -lmicrohttpd
+feature_unavailable_SOURCES = unit/feature_unavailable_test.cpp
+header_hygiene_iovec_SOURCES = unit/header_hygiene_iovec_test.cpp
+# header_hygiene: TASK-007 sentinel TU. Mimics a true consumer:
+# - per-target CPPFLAGS overrides AM_CPPFLAGS so HTTPSERVER_COMPILATION
+#   and the build-tree -I src/httpserver/ entries are NOT in scope (a
+#   real consumer wouldn't have either). Only -I$(top_srcdir)/src is
+#   passed so <httpserver.hpp> resolves.
+# - LDADD is overridden to empty: this is a pure-compile assertion, the
+#   `int main(){}` body has no library dependencies.
+# Currently in XFAIL_TESTS (see below); flips to PASS when M5 lands and
+# the umbrella is free of backend-header leakage.
+header_hygiene_SOURCES = unit/header_hygiene_test.cpp
+header_hygiene_CPPFLAGS = -I$(top_srcdir)/src $(CPPFLAGS)
+header_hygiene_LDADD =
+iovec_entry_SOURCES = unit/iovec_entry_test.cpp
+http_method_SOURCES = unit/http_method_test.cpp
+constants_SOURCES = unit/constants_test.cpp
+# body: TASK-008 unit test for the internal detail::body hierarchy. It
+# constructs/destroys MHD_Response objects directly via the libmicrohttpd
+# inspection APIs (no daemon), so it needs an explicit -lmicrohttpd link
+# the same way uri_log does.
+body_SOURCES = unit/body_test.cpp
+body_LDADD = $(LDADD) -lmicrohttpd
+
+# http_response_sbo: TASK-009 unit test for the SBO value-type layout of
+# http_response. Pokes the private body_/body_storage_/body_inline_/kind_
+# members through a friend declaration, exercises the four-case move
+# cross-product, and asserts the type-trait acceptance criteria. Needs
+# -lmicrohttpd because it transitively touches detail::body subclasses
+# whose materialize() returns MHD_Response*.
+http_response_sbo_SOURCES = unit/http_response_sbo_test.cpp
+http_response_sbo_LDADD = $(LDADD) -lmicrohttpd
+
+# http_response_factories: TASK-010 unit test for the static factory
+# functions on http_response (string/file/iovec/pipe/empty/deferred/
+# unauthorized). Each factory placement-news the corresponding
+# detail::body subclass into the SBO buffer, so this TU includes the
+# private detail/body.hpp via the build-tree -DHTTPSERVER_COMPILATION
+# path. Needs -lmicrohttpd for the same transitive reasons as
+# http_response_sbo.
+http_response_factories_SOURCES = unit/http_response_factories_test.cpp
+http_response_factories_LDADD = $(LDADD) -lmicrohttpd
+
+# webserver_pimpl: TASK-014 sentinel. Compile-time assertions that the
+# PIMPL split has happened: <microhttpd.h>/<pthread.h> no longer leak
+# through the public webserver.hpp, and webserver is non-copyable and
+# non-movable. Pure compile test -- empty LDADD.
+webserver_pimpl_SOURCES = unit/webserver_pimpl_test.cpp
+webserver_pimpl_LDADD =
 
 noinst_HEADERS = littletest.hpp
 AM_CXXFLAGS += -Wall -fPIC -Wno-overloaded-virtual
@@ -62,6 +111,16 @@ AM_LDFLAGS += -O0 --coverage -lgcov --no-inline
 endif
 
 TESTS = $(check_PROGRAMS)
+
+# header_hygiene is expected to fail until M5 (TASK-014/015/019/020) lands and
+# <httpserver.hpp> stops transitively pulling in <microhttpd.h>, <pthread.h>,
+# <gnutls/gnutls.h>, <sys/socket.h>, and <sys/uio.h>. Automake's XFAIL_TESTS
+# mechanism marks the failure as "expected" so the suite stays green, and --
+# importantly -- when the umbrella becomes clean and the test starts passing,
+# Automake reports XPASS and treats it as a hard error. That XPASS is the
+# explicit signal for TASK-020 to remove this line. Do NOT silently delete the
+# XFAIL until the umbrella is clean.
+XFAIL_TESTS = header_hygiene
 
 @VALGRIND_CHECK_RULES@
 VALGRIND_SUPPRESSIONS_FILES = libhttpserver.supp

@@ -25,17 +25,24 @@
 
 #include <httpserver.hpp>
 
+// v2's iovec body uses borrowed buffers — the data must outlive the response.
+// Static-lifetime literals satisfy that contract for this demo.
+static const char kPart1[] = "{\"header\": \"value\", ";
+static const char kPart2[] = "\"items\": [1, 2, 3], ";
+static const char kPart3[] = "\"footer\": \"end\"}";
+
 class iovec_resource : public httpserver::http_resource {
  public:
      std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request&) {
          // Build a response from multiple separate buffers without copying
-         std::vector<std::string> parts;
-         parts.push_back("{\"header\": \"value\", ");
-         parts.push_back("\"items\": [1, 2, 3], ");
-         parts.push_back("\"footer\": \"end\"}");
-
-         return std::make_shared<httpserver::iovec_response>(
-                 std::move(parts), 200, "application/json");
+         std::vector<httpserver::iovec_entry> parts = {
+             { kPart1, sizeof(kPart1) - 1 },
+             { kPart2, sizeof(kPart2) - 1 },
+             { kPart3, sizeof(kPart3) - 1 },
+         };
+         return std::make_shared<httpserver::http_response>(
+             httpserver::http_response::iovec(parts)
+                 .with_header("Content-Type", "application/json"));
      }
 };
 
