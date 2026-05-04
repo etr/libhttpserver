@@ -20,7 +20,9 @@
 */
 
 #include "httpserver/create_test_request.hpp"
+#include "httpserver/detail/http_request_impl.hpp"
 
+#include <memory>
 #include <string>
 #include <utility>
 
@@ -29,40 +31,44 @@ namespace httpserver {
 http_request create_test_request::build() {
     http_request req;
 
+    // Allocate an impl for this test request (connection_ stays null,
+    // indicating the test-request path to all MHD-touching accessors).
+    req.impl_ = std::make_unique<detail::http_request_impl>();
+
     req.set_method(_method);
     req.set_path(_path);
     req.set_version(_version);
     req.set_content(_content);
 
-    req.headers_local = std::move(_headers);
-    req.footers_local = std::move(_footers);
-    req.cookies_local = std::move(_cookies);
+    req.impl_->headers_local = std::move(_headers);
+    req.impl_->footers_local = std::move(_footers);
+    req.impl_->cookies_local = std::move(_cookies);
 
     for (auto& [key, values] : _args) {
         for (auto& value : values) {
-            req.cache->unescaped_args[key].push_back(std::move(value));
+            req.impl_->unescaped_args[key].push_back(std::move(value));
         }
     }
-    req.cache->args_populated = true;
+    req.impl_->args_populated = true;
 
     if (!_querystring.empty()) {
-        req.cache->querystring = std::move(_querystring);
+        req.impl_->querystring = std::move(_querystring);
     }
 
 #ifdef HAVE_BAUTH
-    req.cache->username = std::move(_user);
-    req.cache->password = std::move(_pass);
+    req.impl_->username = std::move(_user);
+    req.impl_->password = std::move(_pass);
 #endif  // HAVE_BAUTH
 
 #ifdef HAVE_DAUTH
-    req.cache->digested_user = std::move(_digested_user);
+    req.impl_->digested_user = std::move(_digested_user);
 #endif  // HAVE_DAUTH
 
-    req.cache->requestor_ip = std::move(_requestor);
-    req.requestor_port_local = _requestor_port;
+    req.impl_->requestor_ip = std::move(_requestor);
+    req.impl_->requestor_port_local = _requestor_port;
 
 #ifdef HAVE_GNUTLS
-    req.tls_enabled_local = _tls_enabled;
+    req.impl_->tls_enabled_local = _tls_enabled;
 #endif  // HAVE_GNUTLS
 
     return req;

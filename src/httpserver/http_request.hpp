@@ -472,6 +472,7 @@ class http_request {
      friend class webserver;
      friend class detail::webserver_impl;  // TASK-014: PIMPL dispatch path
      friend struct detail::modded_request;
+     friend class create_test_request;    // TASK-015: test builder accesses impl_
 };
 
 std::ostream &operator<< (std::ostream &os, const http_request &r);

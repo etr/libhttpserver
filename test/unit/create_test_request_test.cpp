@@ -22,14 +22,32 @@
 #include <string>
 
 #include "./httpserver.hpp"
+#include "httpserver/create_test_request.hpp"
+#include "httpserver/detail/body.hpp"
 #include "./littletest.hpp"
 
 using httpserver::create_test_request;
 using httpserver::http_request;
 using httpserver::http_resource;
 using httpserver::http_response;
-using httpserver::string_response;
-using httpserver::file_response;
+
+// Test-only accessor for http_response internals (same pattern as
+// http_response_sbo_test.cpp and http_response_factories_test.cpp).
+namespace httpserver {
+struct http_response_sbo_test_access {
+    static bool body_inline(http_response& r) noexcept {
+        return r.body_inline_;
+    }
+    static httpserver::detail::body* body_ptr(http_response& r) noexcept {
+        return r.body_;
+    }
+    static body_kind kind(http_response& r) noexcept { return r.kind_; }
+};
+}  // namespace httpserver
+
+namespace {
+using SBO = httpserver::http_response_sbo_test_access;
+}  // namespace
 
 LT_BEGIN_SUITE(create_test_request_suite)
     void set_up() {
@@ -195,7 +213,7 @@ class greeting_resource : public http_resource {
     std::shared_ptr<http_response> render_GET(const http_request& req) override {
         std::string name(req.get_arg_flat("name"));
         if (name.empty()) name = "World";
-        return std::make_shared<string_response>("Hello, " + name);
+        return std::make_shared<http_response>(http_response::string("Hello, " + name));
     }
 };
 
@@ -206,22 +224,15 @@ LT_BEGIN_AUTO_TEST(create_test_request_suite, render_with_test_request)
         .arg("name", "Alice")
         .build();
     auto resp = resource.render_GET(req);
-    auto* sr = dynamic_cast<string_response*>(resp.get());
-    LT_ASSERT(sr != nullptr);
-    LT_CHECK_EQ(std::string(sr->get_content()), std::string("Hello, Alice"));
+    LT_ASSERT(resp != nullptr);
+    // Verify the response body kind is string.
+    LT_CHECK_EQ(static_cast<int>(resp->kind()),
+                static_cast<int>(httpserver::body_kind::string));
+    // Verify the response body content reflects the arg.
+    auto* sb = dynamic_cast<httpserver::detail::string_body*>(SBO::body_ptr(*resp));
+    LT_ASSERT(sb != nullptr);
+    LT_CHECK_EQ(sb->get_content(), std::string("Hello, Alice"));
 LT_END_AUTO_TEST(render_with_test_request)
-
-// Test string_response get_content
-LT_BEGIN_AUTO_TEST(create_test_request_suite, string_response_get_content)
-    string_response resp("test body", 200);
-    LT_CHECK_EQ(std::string(resp.get_content()), std::string("test body"));
-LT_END_AUTO_TEST(string_response_get_content)
-
-// Test file_response get_filename
-LT_BEGIN_AUTO_TEST(create_test_request_suite, file_response_get_filename)
-    file_response resp("/tmp/test.txt", 200);
-    LT_CHECK_EQ(std::string(resp.get_filename()), std::string("/tmp/test.txt"));
-LT_END_AUTO_TEST(file_response_get_filename)
 
 // Test full chain of all builder methods
 LT_BEGIN_AUTO_TEST(create_test_request_suite, full_chain)
@@ -237,8 +248,10 @@ LT_BEGIN_AUTO_TEST(create_test_request_suite, full_chain)
         .arg("key1", "val1")
         .arg("key2", "val2")
         .querystring("?key1=val1&key2=val2")
+#ifdef HAVE_BAUTH
         .user("testuser")
         .pass("testpass")
+#endif
         .requestor("10.0.0.1")
         .requestor_port(9090)
         .build();
@@ -254,8 +267,10 @@ LT_BEGIN_AUTO_TEST(create_test_request_suite, full_chain)
     LT_CHECK_EQ(std::string(req.get_arg_flat("key1")), std::string("val1"));
     LT_CHECK_EQ(std::string(req.get_arg_flat("key2")), std::string("val2"));
     LT_CHECK_EQ(std::string(req.get_querystring()), std::string("?key1=val1&key2=val2"));
+#ifdef HAVE_BAUTH
     LT_CHECK_EQ(std::string(req.get_user()), std::string("testuser"));
     LT_CHECK_EQ(std::string(req.get_pass()), std::string("testpass"));
+#endif
     LT_CHECK_EQ(std::string(req.get_requestor()), std::string("10.0.0.1"));
     LT_CHECK_EQ(req.get_requestor_port(), static_cast<uint16_t>(9090));
 LT_END_AUTO_TEST(full_chain)

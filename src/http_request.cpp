@@ -133,6 +133,23 @@ struct arguments_accumulator {
 namespace detail {
 
 std::string_view http_request_impl::get_connection_value(std::string_view key, MHD_ValueKind kind) const {
+    // Test-request path: connection_ is null, fall back to local storage.
+    if (connection_ == nullptr) {
+        const auto* map = [&]() -> const http::header_map* {
+            switch (kind) {
+                case MHD_HEADER_KIND: return &headers_local;
+                case MHD_FOOTER_KIND: return &footers_local;
+                case MHD_COOKIE_KIND: return &cookies_local;
+                default:             return nullptr;
+            }
+        }();
+        if (map != nullptr) {
+            auto it = map->find(std::string(key));
+            if (it != map->end()) return it->second;
+        }
+        return http_request::EMPTY;
+    }
+
     const char* header_c = MHD_lookup_connection_value(connection_, kind, key.data());
 
     if (header_c == nullptr) return http_request::EMPTY;
@@ -152,6 +169,24 @@ MHD_Result http_request_impl::build_request_header(void* cls, MHD_ValueKind kind
 
 http::header_view_map http_request_impl::get_headerlike_values(MHD_ValueKind kind) const {
     http::header_view_map headers;
+
+    // Test-request path: connection_ is null, build view map from local storage.
+    if (connection_ == nullptr) {
+        const auto* map = [&]() -> const http::header_map* {
+            switch (kind) {
+                case MHD_HEADER_KIND: return &headers_local;
+                case MHD_FOOTER_KIND: return &footers_local;
+                case MHD_COOKIE_KIND: return &cookies_local;
+                default:             return nullptr;
+            }
+        }();
+        if (map != nullptr) {
+            for (const auto& [k, v] : *map) {
+                headers[k] = v;
+            }
+        }
+        return headers;
+    }
 
     MHD_get_connection_values(connection_, kind, &http_request_impl::build_request_header,
                               reinterpret_cast<void*>(&headers));
@@ -195,6 +230,11 @@ MHD_Result http_request_impl::build_request_querystring(void* cls, MHD_ValueKind
 
 void http_request_impl::populate_args() const {
     if (args_populated) {
+        return;
+    }
+    // Test-request path: connection_ is null, args already set directly.
+    if (connection_ == nullptr) {
+        args_populated = true;
         return;
     }
     arguments_accumulator aa;
@@ -252,6 +292,10 @@ void http_request_impl::grow_last_arg(const std::string& key, const std::string&
 
 #ifdef HAVE_BAUTH
 void http_request_impl::fetch_user_pass() const {
+    // Test-request path: connection_ is null, credentials already set.
+    if (connection_ == nullptr) {
+        return;
+    }
     struct MHD_BasicAuthInfo* info = MHD_basic_auth_get_username_password3(connection_);
 
     if (info != nullptr) {
@@ -266,6 +310,10 @@ void http_request_impl::fetch_user_pass() const {
 
 #ifdef HAVE_GNUTLS
 bool http_request_impl::has_tls_session() const {
+    // Test-request path: connection_ is null, return the local flag.
+    if (connection_ == nullptr) {
+        return tls_enabled_local;
+    }
     const MHD_ConnectionInfo* conninfo = MHD_get_connection_info(connection_, MHD_CONNECTION_INFO_GNUTLS_SESSION);
     return (conninfo != nullptr);
 }
@@ -514,6 +562,8 @@ http_arg_value http_request::get_arg(std::string_view key) const {
 }
 
 std::string_view http_request::get_arg_flat(std::string_view key) const {
+    impl_->populate_args();
+
     auto const it = impl_->unescaped_args.find(key);
 
     if (it != impl_->unescaped_args.end()) {
@@ -558,6 +608,11 @@ std::string_view http_request::get_querystring() const {
         return impl_->querystring;
     }
 
+    // Test-request path: connection_ is null, querystring already set (or empty).
+    if (impl_->connection_ == nullptr) {
+        return impl_->querystring;
+    }
+
     MHD_get_connection_values(impl_->connection_, MHD_GET_ARGUMENT_KIND,
                               &detail::http_request_impl::build_request_querystring,
                               reinterpret_cast<void*>(&impl_->querystring));
@@ -586,6 +641,11 @@ std::string_view http_request::get_pass() const {
 #ifdef HAVE_DAUTH
 std::string_view http_request::get_digested_user() const {
     if (!impl_->digested_user.empty()) {
+        return impl_->digested_user;
+    }
+
+    // Test-request path: connection_ is null, digested_user already set.
+    if (impl_->connection_ == nullptr) {
         return impl_->digested_user;
     }
 
@@ -657,14 +717,32 @@ std::string_view http_request::get_requestor() const {
         return impl_->requestor_ip;
     }
 
+    // Test-request path: connection_ is null, requestor_ip already set.
+    if (impl_->connection_ == nullptr) {
+        return impl_->requestor_ip;
+    }
+
     const MHD_ConnectionInfo* conninfo = MHD_get_connection_info(impl_->connection_, MHD_CONNECTION_INFO_CLIENT_ADDRESS);
+
+    if (conninfo == nullptr) {
+        return EMPTY;
+    }
 
     impl_->requestor_ip = http::get_ip_str(conninfo->client_addr);
     return impl_->requestor_ip;
 }
 
 uint16_t http_request::get_requestor_port() const {
+    // Test-request path: connection_ is null, use local port.
+    if (impl_->connection_ == nullptr) {
+        return impl_->requestor_port_local;
+    }
+
     const MHD_ConnectionInfo* conninfo = MHD_get_connection_info(impl_->connection_, MHD_CONNECTION_INFO_CLIENT_ADDRESS);
+
+    if (conninfo == nullptr) {
+        return 0;
+    }
 
     return http::get_port(conninfo->client_addr);
 }

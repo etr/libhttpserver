@@ -26,7 +26,7 @@ LDADD += -lcurl
 
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/ -DHTTPSERVER_COMPILATION
 METASOURCES = AUTO
-check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories webserver_pimpl http_request_pimpl
+check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories webserver_pimpl http_request_pimpl create_test_request
 
 MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
 
@@ -108,6 +108,13 @@ webserver_pimpl_LDADD =
 # impl pointer. Pure compile test -- empty LDADD.
 http_request_pimpl_SOURCES = unit/http_request_pimpl_test.cpp
 http_request_pimpl_LDADD =
+
+# create_test_request: TASK-015 functional tests for the create_test_request
+# builder and the http_request public API on test-constructed requests. Wires
+# up headers/footers/cookies/args/querystring/requestor/auth via impl_ local
+# maps rather than a live MHD_Connection*.
+create_test_request_SOURCES = unit/create_test_request_test.cpp
+create_test_request_LDADD = $(LDADD) -lmicrohttpd
 
 noinst_HEADERS = littletest.hpp
 AM_CXXFLAGS += -Wall -fPIC -Wno-overloaded-virtual

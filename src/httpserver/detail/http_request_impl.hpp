@@ -92,6 +92,18 @@ class http_request_impl {
     file_cleanup_callback_ptr file_cleanup_callback_ = nullptr;
     std::map<std::string, std::map<std::string, http::file_info>> files_;
 
+    // --- test-request local storage ---
+    // When connection_ is null (create_test_request path), get_header /
+    // get_footer / get_cookie / get_headerlike_values / get_requestor_port /
+    // has_tls_session fall back to these instead of calling MHD APIs.
+    http::header_map headers_local;
+    http::header_map footers_local;
+    http::header_map cookies_local;
+    uint16_t requestor_port_local = 0;
+#ifdef HAVE_GNUTLS
+    bool tls_enabled_local = false;
+#endif  // HAVE_GNUTLS
+
     // --- lazy caches (formerly the http_request_data_cache struct) ---
     // All marked mutable: const accessors lazily populate them.
 #ifdef HAVE_BAUTH
