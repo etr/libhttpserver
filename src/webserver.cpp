@@ -632,15 +632,25 @@ void webserver_impl::request_completed(void *cls, struct MHD_Connection *connect
     *con_cls = nullptr;
 
     // (2) Now that no live object inside the arena's storage remains,
-    //     rewind the bump pointer. The next request on this keep-alive
-    //     connection reuses the same memory (verified by the
-    //     http_request_arena unit test).
+    //     rewind the bump pointer AND zero the initial buffer so that
+    //     credentials from the completed request do not linger in the
+    //     reused memory (security-reviewer-iter1-3). reset_arena() does
+    //     both atomically. The next request on this keep-alive connection
+    //     reuses the same memory (verified by http_request_arena unit test).
+    //
+    // MHD ordering guarantee: NOTIFY_COMPLETED always fires before
+    // NOTIFY_CLOSED for the same connection (MHD documentation, section
+    // "Thread model guarantees"). Therefore the connection_state pointer
+    // accessed here is guaranteed live. The NOTIFY_CLOSED handler
+    // (connection_notify) must NOT be called concurrently on a different
+    // thread for the same connection while this callback is executing.
+    // (security-reviewer-iter1-4: thread-safety ordering invariant.)
     if (connection != nullptr) {
         const MHD_ConnectionInfo* ci = MHD_get_connection_info(
             connection, MHD_CONNECTION_INFO_SOCKET_CONTEXT);
         if (ci != nullptr && ci->socket_context != nullptr) {
             auto* cs = static_cast<detail::connection_state*>(ci->socket_context);
-            cs->arena_.release();
+            cs->reset_arena();
         }
     }
 }
@@ -660,6 +670,14 @@ void webserver_impl::connection_notify(void* cls, struct MHD_Connection* connect
             *socket_context = new detail::connection_state();
             break;
         case MHD_CONNECTION_NOTIFY_CLOSED:
+            // MHD ordering guarantee: NOTIFY_COMPLETED fires before
+            // NOTIFY_CLOSED for the same connection. By the time we reach
+            // this branch, request_completed has already called reset_arena()
+            // and the modded_request has already been deleted -- so the
+            // connection_state is no longer referenced by any live object.
+            // (security-reviewer-iter1-4: documents the invariant that
+            // prevents the concurrent request_completed + NOTIFY_CLOSED
+            // race described in CWE-362.)
             delete static_cast<detail::connection_state*>(*socket_context);
             *socket_context = nullptr;
             break;

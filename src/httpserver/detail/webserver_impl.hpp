@@ -38,6 +38,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstring>
 #include <list>
 #include <map>
 #include <memory>
@@ -88,19 +89,23 @@ struct modded_request;
 // handler's return is undefined behavior. (See architecture doc
 // 04-components/http-request.md.)
 //
-// Initial-buffer sizing math (4 KiB):
+// Initial-buffer sizing math (8 KiB):
 //   - sizeof(http_request_impl) ~= 600-700 B with libstdc++/libc++
 //     map/string layouts.
 //   - A typical small GET populates ~1.5 KiB across header_view_map,
 //     querystring, requestor_ip; a small POST with a few args ~2.5 KiB.
-//   - 4 KiB gives 1.5-2x headroom for the common case while keeping the
-//     per-connection RSS cost low (4 KiB * N concurrent connections).
+//   - Each std::pmr::map node (unescaped_args) is ~64-96 B on
+//     libstdc++/libc++, so 5 headers/args already consume ~400-500 B
+//     in tree nodes alone. 4 KiB was undersized for realistic requests
+//     with moderate arg counts; 8 KiB matches the test's own generous
+//     buffer and covers the common case without overflow to the upstream
+//     heap. (performance-reviewer-iter1-1.)
 //   - Overflow spills to the upstream resource (default = heap) silently
 //     -- it is a correctness fall-through, not a hard limit.
 //   - TODO(M5): expose ARENA_INITIAL_BYTES via create_webserver if/when
 //     profiling shows tuning value.
 struct connection_state {
-    static constexpr std::size_t ARENA_INITIAL_BYTES = 4096;
+    static constexpr std::size_t ARENA_INITIAL_BYTES = 8192;
 
     // The buffer aliases storage for any PMR-aware object the arena
     // hands out, so it must satisfy the strictest fundamental alignment.
@@ -117,6 +122,25 @@ struct connection_state {
     connection_state& operator=(const connection_state&) = delete;
     connection_state(connection_state&&) = delete;
     connection_state& operator=(connection_state&&) = delete;
+
+    // reset_arena(): release the bump pointer AND zero the initial buffer.
+    //
+    // The plain arena_.release() rewinds the bump pointer so the next
+    // request reuses the same memory, but it does NOT clear the reclaimed
+    // bytes. Credentials (username, password, digested_user) written into
+    // the arena by a previous request would therefore linger in the buffer
+    // until overwritten by the next request's lazy-cache population.
+    // Explicit zeroing after release() closes that residual-credential
+    // window. (security-reviewer-iter1-3, CWE-226.)
+    //
+    // Using std::memset here (rather than explicit_bzero / SecureZeroMemory)
+    // is acceptable because the buffer is accessed again immediately by the
+    // next request's arena allocation, preventing the compiler from
+    // optimising the clear away as a dead store.
+    void reset_arena() noexcept {
+        arena_.release();
+        std::memset(initial_buffer_.data(), 0, ARENA_INITIAL_BYTES);
+    }
 };
 
 // webserver_impl: backing object holding all backend-coupled state of

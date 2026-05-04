@@ -85,7 +85,31 @@ struct http_request_impl_deleter {
 }  // namespace detail
 
 /**
- * Class representing an abstraction for an Http Request. It is used from classes using these apis to receive information through http protocol.
+ * Class representing an abstraction for an Http Request. It is used from
+ * classes using these APIs to receive information through the HTTP protocol.
+ *
+ * ### string_view lifetime contract (TASK-016)
+ *
+ * Several getter methods return `std::string_view` rather than `std::string`
+ * for zero-copy access to request data that lives in a per-connection arena.
+ * **All `std::string_view` values returned by this class are only valid
+ * within the handler's call frame.** They alias arena-backed storage that is
+ * released by the request-completion callback once the handler returns.
+ *
+ * Concretely: do NOT store a `std::string_view` from any getter in a
+ * variable with a lifetime that outlasts the handler invocation.  If you
+ * need the data beyond the handler, copy it into a `std::string`:
+ *
+ *     // Safe: copy before the handler returns.
+ *     std::string username_copy(request.get_user());
+ *
+ *     // UNSAFE: the view is dangling after the handler returns.
+ *     std::string_view view = request.get_user();  // captured past return!
+ *
+ * Getters affected: get_arg_flat(), get_querystring(), get_user(),
+ * get_pass(), get_digested_user(), get_header(), get_footer(),
+ * get_cookie(), get_requestor().
+ * (security-reviewer-iter1-1, CWE-416 Use After Free.)
 **/
 class http_request {
  public:
@@ -95,14 +119,18 @@ class http_request {
      /**
       * Method used to get the username eventually passed through basic authentication.
       * @return string representation of the username.
+      * @note The returned view is only valid within the handler's call frame.
+      *       Copy into std::string if the value must outlast the handler.
      **/
      std::string_view get_user() const;
 #endif  // HAVE_BAUTH
 
 #ifdef HAVE_DAUTH
      /**
-      * Method used to get the username extracted from a digest authentication
-      * @return the username
+      * Method used to get the username extracted from a digest authentication.
+      * @return the username.
+      * @note The returned view is only valid within the handler's call frame.
+      *       Copy into std::string if the value must outlast the handler.
      **/
      std::string_view get_digested_user() const;
 #endif  // HAVE_DAUTH
@@ -111,6 +139,8 @@ class http_request {
      /**
       * Method used to get the password eventually passed through basic authentication.
       * @return string representation of the password.
+      * @note The returned view is only valid within the handler's call frame.
+      *       Copy into std::string if the value must outlast the handler.
      **/
      std::string_view get_pass() const;
 #endif  // HAVE_BAUTH
@@ -196,15 +226,20 @@ class http_request {
       * Method used to get a specific header passed with the request.
       * @param key the specific header to get the value from
       * @return the value of the header.
+      * @note The returned view is only valid within the handler's call frame.
      **/
      std::string_view get_header(std::string_view key) const;
 
+     /**
+      * @note The returned view is only valid within the handler's call frame.
+     **/
      std::string_view get_cookie(std::string_view key) const;
 
      /**
       * Method used to get a specific footer passed with the request.
       * @param key the specific footer to get the value from
       * @return the value of the footer.
+      * @note The returned view is only valid within the handler's call frame.
      **/
      std::string_view get_footer(std::string_view key) const;
 
@@ -220,6 +255,8 @@ class http_request {
       * If the arg key has more than one value, only one is returned.
       * @param key the specific argument to get the value from
       * @return the value of the arg.
+      * @note The returned view is only valid within the handler's call frame.
+      *       Copy into std::string if the value must outlast the handler.
      **/
      std::string_view get_arg_flat(std::string_view key) const;
 
@@ -239,8 +276,9 @@ class http_request {
          return content.size() >= content_size_limit;
      }
      /**
-      * Method used to get the content of the query string..
-      * @return the query string in string representation
+      * Method used to get the content of the query string.
+      * @return the query string in string representation.
+      * @note The returned view is only valid within the handler's call frame.
      **/
      std::string_view get_querystring() const;
 
@@ -316,7 +354,8 @@ class http_request {
 
      /**
       * Method used to get the requestor.
-      * @return the requestor
+      * @return the requestor (IP address string).
+      * @note The returned view is only valid within the handler's call frame.
      **/
      std::string_view get_requestor() const;
 

@@ -26,9 +26,11 @@
 // HTTPSERVER_COMPILATION so this stays internal.
 #include "httpserver/detail/webserver_impl.hpp"
 
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <algorithm>
+#include <atomic>
 #include <iostream>
 #include <map>
 #include <memory>
@@ -117,18 +119,8 @@ namespace httpserver {
 
 const char http_request::EMPTY[] = "";
 
-namespace {
-
-struct arguments_accumulator {
-    unescaper_ptr unescaper;
-    // TASK-016: arguments now points at the impl's pmr-backed map so
-    // build_request_args allocates argument keys/values from the
-    // per-connection arena rather than the global heap.
-    std::pmr::map<std::pmr::string, std::pmr::vector<std::pmr::string>,
-                  http::arg_comparator>* arguments;
-};
-
-}  // namespace
+// (arguments_accumulator moved to http_request_impl.hpp so unit tests
+// can drive build_request_args directly; see security-reviewer-iter1-2.)
 
 // ============================================================================
 // detail::http_request_impl method bodies
@@ -210,11 +202,35 @@ MHD_Result http_request_impl::build_request_args(void* cls, MHD_ValueKind kind,
 
     arguments_accumulator* aa = static_cast<arguments_accumulator*>(cls);
 
+    // Security guard (security-reviewer-iter1-2): reject requests that
+    // exceed the per-request argument count or total byte budget. Both
+    // limits prevent a crafted request with thousands of unique GET
+    // arguments from exhausting the per-connection arena and the heap
+    // upstream. Returning MHD_NO stops MHD's iteration over remaining
+    // arguments immediately.
+    std::string_view key_sv(key);
+    std::string_view val_sv((arg_value != nullptr) ? arg_value : "");
+
+    // Apply count limit: check how many unique keys exist so far.
+    auto& args = *aa->arguments;
+    const std::size_t new_unique =
+        (args.find(key_sv) == args.end()) ? 1u : 0u;
+    if (args.size() + new_unique > aa->max_args_count) {
+        return MHD_NO;
+    }
+
+    // Apply byte limit: count key + value bytes accumulated so far.
+    const std::size_t this_pair_bytes = key_sv.size() + val_sv.size();
+    if (aa->accumulated_bytes + this_pair_bytes > aa->max_args_bytes) {
+        return MHD_NO;
+    }
+    aa->accumulated_bytes += this_pair_bytes;
+
     // Unescape into a temporary std::string (the C-style unescaper is
     // string-typed). The unescape itself touches the global heap if the
     // key/value spill out of std::string's small-buffer; tracked by
     // TASK-018 (move the unescape onto the arena too).
-    std::string value = ((arg_value == nullptr) ? "" : arg_value);
+    std::string value(val_sv);
     http::base_unescaper(&value, aa->unescaper);
 
     // Look up via heterogeneous string_view (no allocation), insert the
@@ -222,9 +238,7 @@ MHD_Result http_request_impl::build_request_args(void* cls, MHD_ValueKind kind,
     // value vector is allocator-constructed in place via the same
     // allocator (scoped propagation gives nested pmr::strings the
     // right allocator too).
-    auto& args = *aa->arguments;
     auto pmr_alloc = args.get_allocator();
-    std::string_view key_sv(key);
     auto it = args.find(key_sv);
     if (it == args.end()) {
         std::pmr::vector<std::pmr::string> empty(pmr_alloc);
@@ -557,6 +571,14 @@ namespace {
 // it. If nothing is registered (test paths, very old MHD versions, or
 // connection_notify hasn't fired yet for some reason), fall back to the
 // default heap resource so behavior matches v1.
+//
+// performance-reviewer-iter1-4: the fallback is intentionally silent in
+// production (to preserve v1 behaviour), but in debug builds we log a
+// warning and increment a counter so integration tests can observe
+// misconfiguration (e.g. MHD_OPTION_NOTIFY_CONNECTION not wired).
+// Access the counter via httpserver::detail::arena_fallback_count().
+static std::atomic<std::uint64_t> g_arena_fallback_count{0};
+
 std::pmr::memory_resource* pick_resource(struct MHD_Connection* connection) {
     if (connection == nullptr) {
         return std::pmr::get_default_resource();
@@ -564,6 +586,17 @@ std::pmr::memory_resource* pick_resource(struct MHD_Connection* connection) {
     const MHD_ConnectionInfo* ci =
         MHD_get_connection_info(connection, MHD_CONNECTION_INFO_SOCKET_CONTEXT);
     if (ci == nullptr || ci->socket_context == nullptr) {
+#ifndef NDEBUG
+        ++g_arena_fallback_count;
+        // Emit a single-line diagnostic so integration tests and CI logs
+        // surface misconfiguration without crashing.
+        fprintf(stderr,
+                "[libhttpserver] WARN: connection %p has no arena "
+                "socket_context; falling back to heap allocation "
+                "(fallback count: %" PRIu64 ")\n",
+                static_cast<void*>(connection),
+                g_arena_fallback_count.load());
+#endif
         return std::pmr::get_default_resource();
     }
     auto* cs = static_cast<httpserver::detail::connection_state*>(ci->socket_context);

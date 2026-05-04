@@ -220,6 +220,37 @@ class http_request_impl {
                                                 const char* key, const char* value);
 };
 
+// Accumulator passed as cls to build_request_args via
+// MHD_get_connection_values. Moved to this header (from the anonymous
+// namespace in http_request.cpp) so unit tests can drive
+// build_request_args directly and verify the DoS guard.
+//
+// Security limits (security-reviewer-iter1-2):
+//   max_args_count: maximum number of distinct argument keys to accept
+//     before returning MHD_NO. Prevents arena exhaustion from crafted
+//     requests with thousands of unique GET parameters.
+//   max_args_bytes: maximum total key+value bytes accumulated before
+//     returning MHD_NO. Applies the same protection on a byte basis.
+//
+// Defaults are deliberately large (64 K / 64 KiB) so existing callers
+// that construct the accumulator without setting these fields remain
+// compatible. The webserver hot path sets these from connection_state
+// or a compile-time constant once the create_webserver API exposes them
+// (TODO(M5)).
+struct arguments_accumulator {
+    unescaper_ptr unescaper = nullptr;
+    // TASK-016: points at the impl's pmr-backed map.
+    std::pmr::map<std::pmr::string, std::pmr::vector<std::pmr::string>,
+                  http::arg_comparator>* arguments = nullptr;
+    // Per-request hard limits (security-reviewer-iter1-2).
+    static constexpr std::size_t DEFAULT_MAX_ARGS_COUNT = 64;
+    static constexpr std::size_t DEFAULT_MAX_ARGS_BYTES = 65536;
+    std::size_t max_args_count = DEFAULT_MAX_ARGS_COUNT;
+    std::size_t max_args_bytes = DEFAULT_MAX_ARGS_BYTES;
+    // Running byte total (key + value lengths) across all calls.
+    std::size_t accumulated_bytes = 0;
+};
+
 }  // namespace httpserver::detail
 
 #endif  // SRC_HTTPSERVER_DETAIL_HTTP_REQUEST_IMPL_HPP_
