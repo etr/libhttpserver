@@ -52,8 +52,12 @@ namespace detail { class body; }
 // without pulling webserver.hpp (and its libmicrohttpd surface) into this
 // public header. The friendship lets webserver dispatch reach the private
 // body_ pointer to call body_->materialize() without widening the public
-// API by one byte (TASK-013).
+// API by one byte (TASK-013). After TASK-014 the dispatch helpers moved
+// behind the PIMPL boundary, so the friendship is also extended to
+// detail::webserver_impl. The pre-TASK-014 `friend class webserver;`
+// remains for backward compatibility within the translation unit.
 class webserver;
+namespace detail { class webserver_impl; }
 
 /**
  * Class representing an abstraction for an Http Response. It is used from classes using these apis to send information through http protocol.
@@ -387,7 +391,11 @@ class http_response final {
      // cheaper than exposing a public materialize_for_dispatch_() method
      // on the value type and keeps the public API minimal. Forward-
      // declared as `class webserver;` near the top of this header.
+     // TASK-014: the dispatch helpers moved behind the PIMPL boundary.
+     // detail::webserver_impl is the actual reader of body_/kind_/status_
+     // now; webserver itself no longer touches the response wire path.
      friend class webserver;
+     friend class detail::webserver_impl;
 };
 
 std::ostream &operator<<(std::ostream &os, const http_response &r);

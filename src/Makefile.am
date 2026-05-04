@@ -23,7 +23,7 @@ libhttpserver_la_SOURCES = string_utilities.cpp webserver.cpp http_utils.cpp fil
 # noinst_HEADERS: shipped in the tarball but NEVER installed under $prefix/include.
 # Detail headers (httpserver/detail/*.hpp) live here so they cannot leak to
 # downstream consumers — the public surface comes in through <httpserver.hpp>.
-noinst_HEADERS = httpserver/string_utilities.hpp httpserver/detail/modded_request.hpp httpserver/detail/http_endpoint.hpp httpserver/detail/body.hpp gettext.h
+noinst_HEADERS = httpserver/string_utilities.hpp httpserver/detail/modded_request.hpp httpserver/detail/http_endpoint.hpp httpserver/detail/body.hpp httpserver/detail/webserver_impl.hpp gettext.h
 nobase_include_HEADERS = httpserver.hpp httpserver/body_kind.hpp httpserver/constants.hpp httpserver/create_webserver.hpp httpserver/webserver.hpp httpserver/http_utils.hpp httpserver/file_info.hpp httpserver/http_request.hpp httpserver/http_response.hpp httpserver/http_resource.hpp httpserver/feature_unavailable.hpp httpserver/iovec_entry.hpp httpserver/http_arg_value.hpp httpserver/http_method.hpp
 
 if HAVE_WEBSOCKET

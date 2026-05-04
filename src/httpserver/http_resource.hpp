@@ -37,6 +37,8 @@
 
 namespace httpserver { class http_request; }
 namespace httpserver { class http_response; }
+namespace httpserver { class webserver; }
+namespace httpserver { namespace detail { class webserver_impl; } }
 
 namespace httpserver {
 
@@ -228,6 +230,7 @@ class http_resource {
 
  private:
      friend class webserver;
+     friend class detail::webserver_impl;  // TASK-014: dispatch helpers
      friend void resource_init(std::map<std::string, bool>* res);
      std::map<std::string, bool> method_state;
 };
