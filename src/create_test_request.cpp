@@ -20,11 +20,13 @@
 */
 
 #include "httpserver/create_test_request.hpp"
-#include "httpserver/detail/http_request_impl.hpp"
 
 #include <memory>
 #include <string>
 #include <utility>
+
+#include "httpserver/detail/http_request_impl.hpp"
+#include "httpserver/string_utilities.hpp"
 
 namespace httpserver {
 
@@ -50,7 +52,7 @@ http_request create_test_request::build() {
     req.impl_.reset(new detail::http_request_impl());
     req.impl_.get_deleter().fn = &delete_test_impl_heap;
 
-    req.set_method(_method);
+    req.set_method(string_utilities::to_upper_copy(_method));
     req.set_path(_path);
     req.set_version(_version);
     req.set_content(_content);

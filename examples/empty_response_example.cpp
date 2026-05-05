@@ -18,9 +18,10 @@
      USA
 */
 
+#include <microhttpd.h>
+
 #include <memory>
 
-#include <microhttpd.h>
 #include <httpserver.hpp>
 
 class no_content_resource : public httpserver::http_resource {

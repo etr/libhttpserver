@@ -20,15 +20,11 @@
 */
 
 #include "httpserver/http_request.hpp"
-#include "httpserver/detail/http_request_impl.hpp"
-// TASK-016: pull in connection_state to read the per-connection arena
-// out of MHD on impl construction. Both headers are gated by
-// HTTPSERVER_COMPILATION so this stays internal.
-#include "httpserver/detail/webserver_impl.hpp"
 
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
+
 #include <algorithm>
 #include <atomic>
 #include <iostream>
@@ -37,8 +33,14 @@
 #include <memory_resource>
 #include <string>
 #include <tuple>
+#include <utility>
 #include <vector>
 
+// TASK-016: pull in connection_state to read the per-connection arena
+// out of MHD on impl construction. Both headers are gated by
+// HTTPSERVER_COMPILATION so this stays internal.
+#include "httpserver/detail/http_request_impl.hpp"
+#include "httpserver/detail/webserver_impl.hpp"
 #include "httpserver/http_utils.hpp"
 #include "httpserver/string_utilities.hpp"
 
