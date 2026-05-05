@@ -8,10 +8,10 @@
 Stop copying maps/vectors out of `http_request` on every getter call.
 
 **Action Items:**
-- [ ] Change return types of `get_args`, `get_path_pieces`, `get_files`, `get_headers`, `get_footers`, `get_cookies` from by-value to `const ContainerType&`.
-- [ ] Mark each getter `const`.
-- [ ] If a v1 caller relied on copy semantics (modifying the returned value), update it to copy explicitly at the call site.
-- [ ] Document in the header that the returned reference is valid until the request object is destroyed (typically until handler return).
+- [x] Change return types of `get_args`, `get_path_pieces`, `get_files`, `get_headers`, `get_footers`, `get_cookies` from by-value to `const ContainerType&`.
+- [x] Mark each getter `const`.
+- [x] If a v1 caller relied on copy semantics (modifying the returned value), update it to copy explicitly at the call site.
+- [x] Document in the header that the returned reference is valid until the request object is destroyed (typically until handler return).
 
 **Dependencies:**
 - Blocked by: TASK-015
@@ -27,4 +27,4 @@ Stop copying maps/vectors out of `http_request` on every getter call.
 **Related Requirements:** PRD-REQ-REQ-001
 **Related Decisions:** §4.2
 
-**Status:** Not Started
+**Status:** Done

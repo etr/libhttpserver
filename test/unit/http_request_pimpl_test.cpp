@@ -32,7 +32,11 @@
 // HTTPSERVER_COMPILATION is supplied by test/Makefile.am AM_CPPFLAGS.
 #include "httpserver/http_request.hpp"
 
+#include <map>
+#include <string>
 #include <type_traits>
+#include <utility>
+#include <vector>
 
 // (1) Externally non-constructible: copy is deleted (the dtor removes
 //     transient files from disk; copying would double-free) and move
@@ -66,5 +70,66 @@ static_assert(sizeof(httpserver::http_request) <= 24 * sizeof(void*),
 //     (no impl indirection), the type can become smaller.
 static_assert(sizeof(httpserver::http_request) >= sizeof(void*),
               "http_request must hold at least one pointer (the impl)");
+
+// (4) TASK-017: container getters return `const ContainerType&`.
+//
+//     The acceptance criterion in specs/tasks/M3-request/TASK-017.md mandates:
+//
+//         static_assert(std::is_lvalue_reference_v<
+//             decltype(std::declval<const http_request&>().get_headers())>);
+//
+//     We assert the same for the six container getters, plus the exact
+//     return-type identity (so a future widening that returns by value
+//     again is caught at compile time, not just by perf regression).
+using cref = const httpserver::http_request&;
+
+static_assert(std::is_lvalue_reference_v<
+                  decltype(std::declval<cref>().get_headers())>,
+              "get_headers must return an lvalue reference");
+static_assert(std::is_lvalue_reference_v<
+                  decltype(std::declval<cref>().get_footers())>,
+              "get_footers must return an lvalue reference");
+static_assert(std::is_lvalue_reference_v<
+                  decltype(std::declval<cref>().get_cookies())>,
+              "get_cookies must return an lvalue reference");
+static_assert(std::is_lvalue_reference_v<
+                  decltype(std::declval<cref>().get_args())>,
+              "get_args must return an lvalue reference");
+static_assert(std::is_lvalue_reference_v<
+                  decltype(std::declval<cref>().get_path_pieces())>,
+              "get_path_pieces must return an lvalue reference");
+static_assert(std::is_lvalue_reference_v<
+                  decltype(std::declval<cref>().get_files())>,
+              "get_files must return an lvalue reference");
+
+// Exact-type assertions: each getter returns const Container& by reference
+// to a container owned by the request's impl. Locking the precise type also
+// catches accidental drift to a non-const reference.
+static_assert(std::is_same_v<
+                  decltype(std::declval<cref>().get_headers()),
+                  const httpserver::http::header_view_map&>,
+              "get_headers must return const http::header_view_map&");
+static_assert(std::is_same_v<
+                  decltype(std::declval<cref>().get_footers()),
+                  const httpserver::http::header_view_map&>,
+              "get_footers must return const http::header_view_map&");
+static_assert(std::is_same_v<
+                  decltype(std::declval<cref>().get_cookies()),
+                  const httpserver::http::header_view_map&>,
+              "get_cookies must return const http::header_view_map&");
+static_assert(std::is_same_v<
+                  decltype(std::declval<cref>().get_args()),
+                  const httpserver::http::arg_view_map&>,
+              "get_args must return const http::arg_view_map&");
+static_assert(std::is_same_v<
+                  decltype(std::declval<cref>().get_path_pieces()),
+                  const std::vector<std::string>&>,
+              "get_path_pieces must return const std::vector<std::string>&");
+static_assert(std::is_same_v<
+                  decltype(std::declval<cref>().get_files()),
+                  const std::map<std::string,
+                                 std::map<std::string,
+                                          httpserver::http::file_info>>&>,
+              "get_files must return const std::map<...>&");
 
 int main() { return 0; }
