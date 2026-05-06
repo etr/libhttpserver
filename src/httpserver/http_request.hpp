@@ -165,10 +165,14 @@ class http_request {
 #endif  // HAVE_BAUTH
 
      /**
-      * Method used to get the path requested
-      * @return string representing the path requested.
+      * Method used to get the path requested.
+      * @return string_view spelling the request path.
+      * @note The returned view aliases storage owned by this http_request and
+      *       is only valid for the lifetime of the request object (typically
+      *       the duration of the handler invocation). Copy into std::string
+      *       to extend the lifetime.
      **/
-     std::string_view get_path() const {
+     std::string_view get_path() const noexcept {
          return path;
      }
 
@@ -188,9 +192,13 @@ class http_request {
 
      /**
       * Method used to get the METHOD used to make the request.
-      * @return string representing the method.
+      * @return string_view spelling the request method (GET / POST / ...).
+      * @note The returned view aliases storage owned by this http_request and
+      *       is only valid for the lifetime of the request object (typically
+      *       the duration of the handler invocation). Copy into std::string
+      *       to extend the lifetime.
      **/
-     std::string_view get_method() const {
+     std::string_view get_method() const noexcept {
          return method;
      }
 
@@ -289,9 +297,13 @@ class http_request {
 
      /**
       * Method used to get the content of the request.
-      * @return the content in string representation
+      * @return string_view over the request body.
+      * @note The returned view aliases storage owned by this http_request and
+      *       is only valid for the lifetime of the request object (typically
+      *       the duration of the handler invocation). Copy into std::string
+      *       to extend the lifetime.
      **/
-     std::string_view get_content() const {
+     std::string_view get_content() const noexcept {
          return content;
      }
 
@@ -304,16 +316,26 @@ class http_request {
      }
      /**
       * Method used to get the content of the query string.
-      * @return the query string in string representation.
-      * @note The returned view is only valid within the handler's call frame.
+      * @return string_view over the assembled query string (e.g. "?a=1&b=2"),
+      *         empty when no query was supplied.
+      * @note The returned view aliases storage owned by this http_request and
+      *       is only valid for the lifetime of the request object (typically
+      *       the duration of the handler invocation). Copy into std::string
+      *       to extend the lifetime.
+      * @note (TASK-018) The querystring is assembled eagerly at construction
+      *       on the live MHD path, so the public reader is `noexcept`.
      **/
-     std::string_view get_querystring() const;
+     std::string_view get_querystring() const noexcept;
 
      /**
       * Method used to get the version of the request.
-      * @return the version in string representation
+      * @return string_view spelling the HTTP version (e.g. "HTTP/1.1").
+      * @note The returned view aliases storage owned by this http_request and
+      *       is only valid for the lifetime of the request object (typically
+      *       the duration of the handler invocation). Copy into std::string
+      *       to extend the lifetime.
      **/
-     std::string_view get_version() const {
+     std::string_view get_version() const noexcept {
          return version;
      }
 

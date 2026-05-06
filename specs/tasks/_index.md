@@ -100,7 +100,7 @@ Nominally: **13 sequential tasks**, each S–XL. Most other tasks parallelize of
 | TASK-015 | `http_request_impl` skeleton (PIMPL split) | M3 | In Progress | TASK-002, TASK-014 |
 | TASK-016 | Per-connection arena for `http_request_impl` | M3 | Done | TASK-014, TASK-015 |
 | TASK-017 | `http_request` container getters return `const&` | M3 | Done | TASK-015 |
-| TASK-018 | `http_request` single-key getters return `string_view`, all const | M3 | Not Started | TASK-015, TASK-016 |
+| TASK-018 | `http_request` single-key getters return `string_view`, all const | M3 | Done | TASK-015, TASK-016 |
 | TASK-019 | High-level GnuTLS accessors replacing `gnutls_session_t` | M3 | Not Started | TASK-015 |
 | TASK-020 | Final public-header backend-include sweep | M3 | Not Started | TASK-014, TASK-015, TASK-019 |
 | TASK-021 | `http_resource` allow-mask via `method_set` | M4 | Not Started | TASK-005 |

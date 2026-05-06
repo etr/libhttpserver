@@ -8,11 +8,11 @@
 Make per-key lookups allocation-free and callable on `const http_request&`, with empty result on miss instead of insertion.
 
 **Action Items:**
-- [ ] `string_view get_header(string_view key) const;` — empty on miss; never inserts.
-- [ ] Same for `get_cookie`, `get_footer`, `get_arg`, `get_arg_flat`.
-- [ ] `string_view get_path() const noexcept;`, `get_method() const noexcept;`, `get_version() const noexcept;`, `get_content() const noexcept;`, `get_querystring() const noexcept;`.
-- [ ] Replace any v1 path that modified internal state from a getter (e.g., lazy parse caches) to use `mutable` storage on the impl with a one-time-fill pattern, keeping the public method `const`.
-- [ ] Document lifetime: the view is valid for the lifetime of the request object (which is the lifetime of the handler invocation).
+- [x] `string_view get_header(string_view key) const;` — empty on miss; never inserts.
+- [x] Same for `get_cookie`, `get_footer`, `get_arg`, `get_arg_flat`.
+- [x] `string_view get_path() const noexcept;`, `get_method() const noexcept;`, `get_version() const noexcept;`, `get_content() const noexcept;`, `get_querystring() const noexcept;`.
+- [x] Replace any v1 path that modified internal state from a getter (e.g., lazy parse caches) to use `mutable` storage on the impl with a one-time-fill pattern, keeping the public method `const`.
+- [x] Document lifetime: the view is valid for the lifetime of the request object (which is the lifetime of the handler invocation).
 
 **Dependencies:**
 - Blocked by: TASK-015, TASK-016
@@ -28,4 +28,4 @@ Make per-key lookups allocation-free and callable on `const http_request&`, with
 **Related Requirements:** PRD §2 const-correctness NFR, PRD-REQ-REQ-001
 **Related Decisions:** §2.2, §4.2
 
-**Status:** Not Started
+**Status:** Done

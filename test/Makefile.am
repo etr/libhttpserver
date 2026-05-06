@@ -26,7 +26,7 @@ LDADD += -lcurl
 
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/ -DHTTPSERVER_COMPILATION
 METASOURCES = AUTO
-check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories webserver_pimpl http_request_pimpl create_test_request http_request_arena
+check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_const_getters
 
 MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
 
@@ -125,6 +125,16 @@ create_test_request_LDADD = $(LDADD) -lmicrohttpd
 # -lmicrohttpd because it transitively touches MHD types through the impl.
 http_request_arena_SOURCES = unit/http_request_arena_test.cpp
 http_request_arena_LDADD = $(LDADD) -lmicrohttpd
+
+# http_request_const_getters: TASK-018 sentinel. Compile-time assertions
+# that the per-key getters (get_header / get_cookie / get_footer /
+# get_arg / get_arg_flat) and the always-present getters (get_path /
+# get_method / get_version / get_content / get_querystring) are callable
+# on `const http_request&` and (for the always-present five) noexcept.
+# Locks the public-API contract via static_assert so accidental drift is
+# caught at compile time. Pure compile test -- empty LDADD.
+http_request_const_getters_SOURCES = unit/http_request_const_getters_test.cpp
+http_request_const_getters_LDADD =
 
 noinst_HEADERS = littletest.hpp
 AM_CXXFLAGS += -Wall -fPIC -Wno-overloaded-virtual

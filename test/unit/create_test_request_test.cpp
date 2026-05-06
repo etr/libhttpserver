@@ -329,6 +329,62 @@ LT_BEGIN_AUTO_TEST(create_test_request_suite, getters_return_const_ref_stable)
     LT_CHECK_EQ(cref.get_path_pieces().size(), static_cast<size_t>(3));
 LT_END_AUTO_TEST(getters_return_const_ref_stable)
 
+// TASK-018: per-key getters must be empty-on-miss and must NOT insert
+// the missing key into the underlying maps. We assert this externally by
+// observing the public container-getter sizes before and after a series
+// of misses. The container caches are built on the first call (so we
+// snapshot the baseline AFTER the first call), then we hammer the per-key
+// getters with missing keys and confirm the container sizes haven't grown.
+LT_BEGIN_AUTO_TEST(create_test_request_suite, missing_key_does_not_insert)
+    auto req = create_test_request()
+        .header("Present", "yes")
+        .footer("AlsoPresent", "yes")
+        .cookie("CookiePresent", "yes")
+        .arg("argKey", "v")
+        .build();
+    const httpserver::http_request& r = req;
+
+    // Build the container caches once so the size snapshot is stable.
+    const auto headers_before = r.get_headers().size();
+    const auto footers_before = r.get_footers().size();
+    const auto cookies_before = r.get_cookies().size();
+    const auto args_before    = r.get_args().size();
+
+    // Five misses on each kind. Each must return empty and must NOT
+    // insert into the underlying maps.
+    for (int i = 0; i < 5; ++i) {
+        LT_CHECK(r.get_header("Missing-Header").empty());
+        LT_CHECK(r.get_footer("Missing-Footer").empty());
+        LT_CHECK(r.get_cookie("Missing-Cookie").empty());
+        LT_CHECK(r.get_arg_flat("Missing-Arg").empty());
+        LT_CHECK(r.get_arg("Missing-Arg").values.empty());
+    }
+
+    // The container caches expose the underlying map sizes. If any of
+    // the per-key misses had inserted, these would have grown.
+    LT_CHECK_EQ(r.get_headers().size(), headers_before);
+    LT_CHECK_EQ(r.get_footers().size(), footers_before);
+    LT_CHECK_EQ(r.get_cookies().size(), cookies_before);
+    LT_CHECK_EQ(r.get_args().size(),    args_before);
+LT_END_AUTO_TEST(missing_key_does_not_insert)
+
+// TASK-018: per-key getters return string_view aliasing the request's
+// owned storage and surface the correct value on a hit.
+LT_BEGIN_AUTO_TEST(create_test_request_suite, getters_return_string_view_correct_value)
+    auto req = create_test_request()
+        .header("X-Foo", "foo-value")
+        .footer("X-Bar", "bar-value")
+        .cookie("session", "sess-value")
+        .arg("q", "q-value")
+        .build();
+    const httpserver::http_request& r = req;
+
+    LT_CHECK_EQ(std::string(r.get_header("X-Foo")),   std::string("foo-value"));
+    LT_CHECK_EQ(std::string(r.get_footer("X-Bar")),   std::string("bar-value"));
+    LT_CHECK_EQ(std::string(r.get_cookie("session")), std::string("sess-value"));
+    LT_CHECK_EQ(std::string(r.get_arg_flat("q")),     std::string("q-value"));
+LT_END_AUTO_TEST(getters_return_string_view_correct_value)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()
