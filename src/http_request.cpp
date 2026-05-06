@@ -656,6 +656,20 @@ http_request::http_request(struct MHD_Connection* underlying_connection, unescap
         impl_.reset(p);
         impl_.get_deleter().fn = &detail::destroy_impl_arena;
     }
+
+    // TASK-018: assemble the querystring eagerly on the live-MHD path so
+    // the public reader can be `noexcept`. On the test-request path
+    // (connection_ == nullptr) the create_test_request builder is the
+    // sole writer of impl_->querystring; leave it untouched here.
+    // Allocations during assembly land on the per-connection arena (or
+    // the heap fallback) and may throw -- that's permitted during
+    // construction.
+    if (impl_->connection_ != nullptr) {
+        MHD_get_connection_values(
+            impl_->connection_, MHD_GET_ARGUMENT_KIND,
+            &detail::http_request_impl::build_request_querystring,
+            reinterpret_cast<void*>(&impl_->querystring));
+    }
 }
 
 http_request::~http_request() {
@@ -845,20 +859,10 @@ const std::map<std::string, std::map<std::string, http::file_info>>& http_reques
     return impl_->files_;
 }
 
-std::string_view http_request::get_querystring() const {
-    if (!impl_->querystring.empty()) {
-        return impl_->querystring;
-    }
-
-    // Test-request path: connection_ is null, querystring already set (or empty).
-    if (impl_->connection_ == nullptr) {
-        return impl_->querystring;
-    }
-
-    MHD_get_connection_values(impl_->connection_, MHD_GET_ARGUMENT_KIND,
-                              &detail::http_request_impl::build_request_querystring,
-                              reinterpret_cast<void*>(&impl_->querystring));
-
+std::string_view http_request::get_querystring() const noexcept {
+    // TASK-018: querystring is assembled eagerly during construction (live
+    // MHD path) or set directly by create_test_request (test path), so the
+    // reader is a trivial member access -- genuinely noexcept.
     return impl_->querystring;
 }
 
