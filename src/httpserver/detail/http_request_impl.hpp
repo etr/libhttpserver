@@ -39,6 +39,7 @@
 #endif  // HAVE_GNUTLS
 
 #include <stddef.h>
+#include <cstdint>
 #include <ctime>
 #include <map>
 #include <memory_resource>
@@ -211,13 +212,18 @@ class http_request_impl {
     mutable bool path_pieces_public_built_ = false;
 
 #ifdef HAVE_GNUTLS
+    // TASK-019: cache fields for the high-level cert accessors. The two
+    // time fields are spelled std::int64_t (not std::time_t) so they
+    // match the public API one-for-one and so the value is portable
+    // across platforms where time_t may be 32-bit (e.g. some Windows
+    // builds).
     mutable bool client_cert_fields_cached = false;
     mutable std::pmr::string client_cert_dn;
     mutable std::pmr::string client_cert_issuer_dn;
     mutable std::pmr::string client_cert_cn;
     mutable std::pmr::string client_cert_fingerprint_sha256;
-    mutable std::time_t client_cert_not_before = static_cast<std::time_t>(-1);
-    mutable std::time_t client_cert_not_after = static_cast<std::time_t>(-1);
+    mutable std::int64_t client_cert_not_before = -1;
+    mutable std::int64_t client_cert_not_after = -1;
     mutable bool client_cert_verified = false;
 #endif  // HAVE_GNUTLS
 

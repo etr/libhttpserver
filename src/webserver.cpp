@@ -73,6 +73,30 @@
 #ifdef HAVE_GNUTLS
 #include <gnutls/gnutls.h>
 #include <gnutls/x509.h>
+
+// TASK-019: pin httpserver::http::http_utils::cred_type_T values to the
+// GnuTLS credentials enum. The cred_type_T enum body in
+// src/httpserver/http_utils.hpp hard-codes the integer values rather
+// than referencing GNUTLS_CRD_* (which would force the public header to
+// drag <gnutls/gnutls.h> through the umbrella). This block is the
+// compile-time guard that those hard-coded values stay in lockstep
+// with the upstream definitions; an upstream renumber breaks the build
+// here, where someone with full context can react.
+static_assert(static_cast<int>(::httpserver::http::http_utils::CERTIFICATE) ==
+              static_cast<int>(GNUTLS_CRD_CERTIFICATE),
+              "cred_type_T::CERTIFICATE drifted from GNUTLS_CRD_CERTIFICATE");
+static_assert(static_cast<int>(::httpserver::http::http_utils::ANON) ==
+              static_cast<int>(GNUTLS_CRD_ANON),
+              "cred_type_T::ANON drifted from GNUTLS_CRD_ANON");
+static_assert(static_cast<int>(::httpserver::http::http_utils::SRP) ==
+              static_cast<int>(GNUTLS_CRD_SRP),
+              "cred_type_T::SRP drifted from GNUTLS_CRD_SRP");
+static_assert(static_cast<int>(::httpserver::http::http_utils::PSK) ==
+              static_cast<int>(GNUTLS_CRD_PSK),
+              "cred_type_T::PSK drifted from GNUTLS_CRD_PSK");
+static_assert(static_cast<int>(::httpserver::http::http_utils::IA) ==
+              static_cast<int>(GNUTLS_CRD_IA),
+              "cred_type_T::IA drifted from GNUTLS_CRD_IA");
 #endif  // HAVE_GNUTLS
 
 #ifndef SOCK_CLOEXEC

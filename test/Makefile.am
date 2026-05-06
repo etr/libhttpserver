@@ -26,7 +26,7 @@ LDADD += -lcurl
 
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/ -DHTTPSERVER_COMPILATION
 METASOURCES = AUTO
-check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_const_getters
+check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_const_getters http_request_tls_accessors
 
 MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
 
@@ -135,6 +135,17 @@ http_request_arena_LDADD = $(LDADD) -lmicrohttpd
 # caught at compile time. Pure compile test -- empty LDADD.
 http_request_const_getters_SOURCES = unit/http_request_const_getters_test.cpp
 http_request_const_getters_LDADD =
+
+# http_request_tls_accessors: TASK-019 sentinel. Compile-time assertions
+# that the high-level GnuTLS accessors on http_request exist
+# unconditionally (no #ifdef HAVE_GNUTLS gate around the public
+# declarations), that the raw `gnutls_session_t get_tls_session()` member
+# has been removed from the public surface, that return types match the
+# TASK-019 spec (string_view / int64_t / bool), and that the five
+# documented-noexcept accessors carry the noexcept specifier. Pure
+# compile test -- empty LDADD.
+http_request_tls_accessors_SOURCES = unit/http_request_tls_accessors_test.cpp
+http_request_tls_accessors_LDADD =
 
 noinst_HEADERS = littletest.hpp
 AM_CXXFLAGS += -Wall -fPIC -Wno-overloaded-virtual

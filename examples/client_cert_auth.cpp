@@ -52,6 +52,7 @@
  *    curl -k https://localhost:8443/secure
  */
 
+#include <cstdint>
 #include <iostream>
 #include <memory>
 #include <set>
@@ -72,11 +73,14 @@ class secure_resource : public httpserver::http_resource {
             return std::make_shared<httpserver::http_response>(httpserver::http_response::string("Client certificate required").with_status(httpserver::http::http_utils::http_unauthorized));
         }
 
-        // Get certificate information
-        std::string cn = req.get_client_cert_cn();
-        std::string dn = req.get_client_cert_dn();
-        std::string issuer = req.get_client_cert_issuer_dn();
-        std::string fingerprint = req.get_client_cert_fingerprint_sha256();
+        // Get certificate information. TASK-019: the four string-typed
+        // accessors return string_view aliasing per-request storage; we
+        // copy into std::string here so the locals survive the rest of
+        // this method (and so the `+` chains below compile).
+        std::string cn(req.get_client_cert_cn());
+        std::string dn(req.get_client_cert_dn());
+        std::string issuer(req.get_client_cert_issuer_dn());
+        std::string fingerprint(req.get_client_cert_fingerprint_sha256());
         bool verified = req.is_client_cert_verified();
 
         // Check if certificate is verified by our CA
@@ -90,10 +94,11 @@ class secure_resource : public httpserver::http_resource {
             return std::make_shared<httpserver::http_response>(httpserver::http_response::string("Certificate not in allowlist").with_status(httpserver::http::http_utils::http_forbidden));
         }
 
-        // Check certificate validity times
+        // Check certificate validity times. TASK-019 narrows the
+        // accessor return type to std::int64_t.
         time_t now = time(nullptr);
-        time_t not_before = req.get_client_cert_not_before();
-        time_t not_after = req.get_client_cert_not_after();
+        std::int64_t not_before = req.get_client_cert_not_before();
+        std::int64_t not_after = req.get_client_cert_not_after();
 
         if (now < not_before) {
             return std::make_shared<httpserver::http_response>(httpserver::http_response::string("Certificate not yet valid").with_status(httpserver::http::http_utils::http_forbidden));
@@ -123,7 +128,9 @@ class info_resource : public httpserver::http_resource {
 
         if (req.has_client_certificate()) {
             response = "Client certificate detected:\n";
-            response += "  Common Name: " + req.get_client_cert_cn() + "\n";
+            // TASK-019: get_client_cert_cn() returns string_view; copy
+            // into std::string for the `+` chain.
+            response += "  Common Name: " + std::string(req.get_client_cert_cn()) + "\n";
             response += "  Verified: " + std::string(req.is_client_cert_verified() ? "Yes" : "No") + "\n";
         } else {
             response = "No client certificate provided.\n";

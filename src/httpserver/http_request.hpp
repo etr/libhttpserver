@@ -25,25 +25,25 @@
 #ifndef SRC_HTTPSERVER_HTTP_REQUEST_HPP_
 #define SRC_HTTPSERVER_HTTP_REQUEST_HPP_
 
-// TASK-015: <microhttpd.h> and <gnutls/gnutls.h> intentionally do NOT
-// appear here. Backend-coupled state moved to detail/http_request_impl.hpp.
-// The two backend-typed names that still surface in this header
-// (MHD_Connection* in the private parameterized constructor; gnutls_session_t
-// in the public get_tls_session() return type) are introduced via narrow
-// forward declarations below, so a downstream consumer never has to
-// include <microhttpd.h> or <gnutls/gnutls.h> to use libhttpserver.
-//
-// TASK-019 will remove gnutls_session_t from the public surface entirely
-// (replaced by high-level cert accessors); at that point the typedef
-// forward-decl below disappears.
+// TASK-015 / TASK-019: <microhttpd.h> and <gnutls/gnutls.h> intentionally
+// do NOT appear here. Backend-coupled state lives behind
+// detail/http_request_impl.hpp. After TASK-019 the public surface no
+// longer mentions any GnuTLS type: the raw session-handle accessor that
+// previously returned the gnutls session is removed, replaced by
+// high-level cert accessors (has_tls_session / has_client_certificate /
+// get_client_cert_* / is_client_cert_verified). The lone remaining
+// backend-typed name on the surface is `struct MHD_Connection*` on the
+// private MHD-bound constructor (gated by HTTPSERVER_COMPILATION below).
 
 #include <stddef.h>
+#include <cstdint>
 #include <iosfwd>
 #include <limits>
 #include <map>
 #include <memory>
 
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -51,17 +51,6 @@
 #include "httpserver/http_utils.hpp"
 #include "httpserver/file_info.hpp"
 #include "httpserver/create_webserver.hpp"
-
-#ifdef HAVE_GNUTLS
-// Narrow forward declaration of GnuTLS's session handle. Mirrors the
-// upstream typedef in <gnutls/gnutls.h>:
-//     typedef struct gnutls_session_int *gnutls_session_t;
-// This satisfies the public method signature `gnutls_session_t
-// get_tls_session() const;` without dragging the GnuTLS header into
-// downstream consumers. TASK-019 will replace get_tls_session() with
-// higher-level accessors and this forward-decl will disappear.
-typedef struct gnutls_session_int *gnutls_session_t;
-#endif  // HAVE_GNUTLS
 
 namespace httpserver {
 
@@ -339,67 +328,92 @@ class http_request {
          return version;
      }
 
-#ifdef HAVE_GNUTLS
-     /**
-      * Method used to check if there is a TLS session.
-      * @return the TLS session
-      **/
-      bool has_tls_session() const;
+     // ---------------------------------------------------------------
+     // TASK-019: high-level GnuTLS accessors. Declared unconditionally
+     // (no #ifdef HAVE_GNUTLS gate) so the public surface is identical
+     // in TLS-enabled and TLS-disabled builds. When HAVE_GNUTLS is off
+     // at build time the implementations return empty / false / -1
+     // sentinels without throwing (per architecture spec §7).
+     // ---------------------------------------------------------------
 
      /**
-      * Method used to get the TLS session.
-      * @return the TLS session
+      * Method used to check whether the request was carried over a TLS
+      * session.
+      * @return true when a live TLS session is present, false otherwise
+      *         (including when HAVE_GNUTLS is disabled at build time).
       **/
-      gnutls_session_t get_tls_session() const;
+     bool has_tls_session() const noexcept;
 
      /**
-      * Check if a client certificate is present in the TLS session.
-      * @return true if client certificate is present
+      * Method used to check whether the peer presented a client
+      * certificate over the TLS session.
+      * @return true when a peer certificate is available, false
+      *         otherwise (including when HAVE_GNUTLS is disabled at
+      *         build time).
       **/
-      bool has_client_certificate() const;
+     bool has_client_certificate() const noexcept;
 
      /**
-      * Get the Subject Distinguished Name from the client certificate.
-      * @return the subject DN as a string, empty if not available
+      * Subject Distinguished Name from the client certificate.
+      * @return string_view over the cached subject DN; empty when no
+      *         peer cert is present or HAVE_GNUTLS is disabled.
+      * @note The returned view aliases storage owned by this
+      *       http_request and is only valid for the lifetime of the
+      *       request object (typically the handler invocation). Copy
+      *       into std::string to extend the lifetime.
       **/
-      std::string get_client_cert_dn() const;
+     std::string_view get_client_cert_dn() const;
 
      /**
-      * Get the Issuer Distinguished Name from the client certificate.
-      * @return the issuer DN as a string, empty if not available
+      * Issuer Distinguished Name from the client certificate.
+      * @return string_view over the cached issuer DN; empty when no
+      *         peer cert is present or HAVE_GNUTLS is disabled.
+      * @note Same lifetime contract as get_client_cert_dn().
       **/
-      std::string get_client_cert_issuer_dn() const;
+     std::string_view get_client_cert_issuer_dn() const;
 
      /**
-      * Get the Common Name (CN) from the client certificate subject.
-      * @return the CN as a string, empty if not available
+      * Common Name (CN) from the client certificate subject.
+      * @return string_view over the cached CN; empty when no peer cert
+      *         is present, the cert subject has no CN attribute, or
+      *         HAVE_GNUTLS is disabled.
+      * @note Multi-CN subjects: only the first CN is reported.
+      * @note Same lifetime contract as get_client_cert_dn().
       **/
-      std::string get_client_cert_cn() const;
+     std::string_view get_client_cert_cn() const;
 
      /**
-      * Check if the client certificate chain has been verified.
-      * @return true if certificate verification passed
+      * SHA-256 fingerprint of the client certificate (hex-encoded).
+      * @return string_view over the lowercase hex-encoded SHA-256
+      *         fingerprint (64 hex chars); empty when no peer cert is
+      *         present or HAVE_GNUTLS is disabled.
+      * @note Same lifetime contract as get_client_cert_dn().
       **/
-      bool is_client_cert_verified() const;
+     std::string_view get_client_cert_fingerprint_sha256() const;
 
      /**
-      * Get the SHA-256 fingerprint of the client certificate.
-      * @return hex-encoded SHA-256 fingerprint, empty if not available
+      * Whether the peer certificate chain validated successfully against
+      * the configured trust anchors.
+      * @return true on successful validation, false otherwise (including
+      *         when no cert was presented or HAVE_GNUTLS is disabled).
       **/
-      std::string get_client_cert_fingerprint_sha256() const;
+     bool is_client_cert_verified() const noexcept;
 
      /**
-      * Get the not-before (validity start) time of the client certificate.
-      * @return validity start time as time_t, -1 if not available
+      * Activation time (`Not Before`) of the client certificate, in
+      * seconds since the UNIX epoch.
+      * @return seconds-since-epoch as a 64-bit signed integer; -1 when
+      *         no peer cert is present or HAVE_GNUTLS is disabled.
       **/
-      time_t get_client_cert_not_before() const;
+     std::int64_t get_client_cert_not_before() const noexcept;
 
      /**
-      * Get the not-after (validity end) time of the client certificate.
-      * @return validity end time as time_t, -1 if not available
+      * Expiration time (`Not After`) of the client certificate, in
+      * seconds since the UNIX epoch.
+      * @return seconds-since-epoch as a 64-bit signed integer; -1 when
+      *         no peer cert is present or HAVE_GNUTLS is disabled.
       **/
-      time_t get_client_cert_not_after() const;
-#endif  // HAVE_GNUTLS
+     std::int64_t get_client_cert_not_after() const noexcept;
 
      /**
       * Method used to get the requestor.

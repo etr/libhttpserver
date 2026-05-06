@@ -18,6 +18,7 @@
     USA
 */
 
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -189,7 +190,46 @@ LT_BEGIN_AUTO_TEST(create_test_request_suite, build_no_tls)
     auto req = create_test_request().build();
     LT_CHECK_EQ(req.has_tls_session(), false);
 LT_END_AUTO_TEST(build_no_tls)
+
+// TASK-019: even with tls_enabled() set on the test builder, no peer
+// certificate is attached (the test-request path has no live MHD
+// connection from which to extract one). All cert getters must return
+// their documented sentinels.
+LT_BEGIN_AUTO_TEST(create_test_request_suite, build_tls_enabled_no_peer_cert)
+    auto req = create_test_request().tls_enabled().build();
+    LT_CHECK_EQ(req.has_tls_session(), true);
+    LT_CHECK_EQ(req.has_client_certificate(), false);
+    LT_CHECK(req.get_client_cert_dn().empty());
+    LT_CHECK(req.get_client_cert_issuer_dn().empty());
+    LT_CHECK(req.get_client_cert_cn().empty());
+    LT_CHECK(req.get_client_cert_fingerprint_sha256().empty());
+    LT_CHECK_EQ(req.is_client_cert_verified(), false);
+    LT_CHECK_EQ(req.get_client_cert_not_before(), static_cast<std::int64_t>(-1));
+    LT_CHECK_EQ(req.get_client_cert_not_after(), static_cast<std::int64_t>(-1));
+LT_END_AUTO_TEST(build_tls_enabled_no_peer_cert)
 #endif  // HAVE_GNUTLS
+
+// TASK-019: the high-level cert accessors are declared unconditionally,
+// so they must compile and behave (return sentinels) in both build
+// modes -- HAVE_GNUTLS on or off. This test is NOT #ifdef-gated; the
+// runtime contract is the same either way: no live cert means
+// empty / false / -1.
+LT_BEGIN_AUTO_TEST(create_test_request_suite, build_no_client_cert_returns_sentinels)
+    auto req = create_test_request().build();
+    try {
+        LT_CHECK_EQ(req.has_tls_session(), false);
+        LT_CHECK_EQ(req.has_client_certificate(), false);
+        LT_CHECK(req.get_client_cert_dn().empty());
+        LT_CHECK(req.get_client_cert_issuer_dn().empty());
+        LT_CHECK(req.get_client_cert_cn().empty());
+        LT_CHECK(req.get_client_cert_fingerprint_sha256().empty());
+        LT_CHECK_EQ(req.is_client_cert_verified(), false);
+        LT_CHECK_EQ(req.get_client_cert_not_before(), static_cast<std::int64_t>(-1));
+        LT_CHECK_EQ(req.get_client_cert_not_after(), static_cast<std::int64_t>(-1));
+    } catch (...) {
+        LT_FAIL("cert accessors must not throw on a test request without a live cert");
+    }
+LT_END_AUTO_TEST(build_no_client_cert_returns_sentinels)
 
 // Test that all getters on a minimal request return empty without crashing
 LT_BEGIN_AUTO_TEST(create_test_request_suite, empty_getters_no_crash)
