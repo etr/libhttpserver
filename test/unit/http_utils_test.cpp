@@ -31,6 +31,7 @@
 #endif
 
 #include <sys/stat.h>
+#include <unistd.h>  // TASK-020: unlink (was reachable transitively via httpserver/http_utils.hpp -> microhttpd.h)
 #include <cstdio>
 #include <iostream>
 #include <map>

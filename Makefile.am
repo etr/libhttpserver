@@ -195,9 +195,20 @@ check-install-layout:
 #
 # Cross-reference: keep HEADER_HYGIENE_FORBIDDEN in sync with the
 # #ifdef ladder in test/unit/header_hygiene_test.cpp.
+#
+# TASK-020 caveat (libc++): <pthread.h> is intentionally absent from
+# the forbidden list below. libc++ (Apple's default STL on macOS)
+# unconditionally includes <pthread.h> from any STL container header
+# (<vector>, <string>, <map>, etc.) via its
+# <__thread/support/pthread.h> backend. The resulting `# N "...pthread.h"`
+# line markers therefore appear in the preprocessed output even though
+# libhttpserver itself does not include <pthread.h>. The runtime
+# sentinel test/unit/header_hygiene_test.cpp keeps the pthread guard
+# but skips it when _LIBCPP_VERSION is defined, so the same invariant
+# is still enforced under libstdc++ and other STLs.
 # ---------------------------------------------------------------------------
 
-HEADER_HYGIENE_FORBIDDEN = microhttpd\.h|pthread\.h|gnutls/gnutls\.h|sys/socket\.h|sys/uio\.h
+HEADER_HYGIENE_FORBIDDEN = microhttpd\.h|gnutls/gnutls\.h|sys/socket\.h|sys/uio\.h
 CHECK_HYGIENE_STAGE      = $(abs_top_builddir)/.hygiene-stage
 CHECK_HYGIENE_CXX        = $(CXX) -std=c++20 -E -I$(CHECK_HYGIENE_STAGE)$(includedir) $(CPPFLAGS)
 HEADER_HYGIENE_STRICT   ?= yes

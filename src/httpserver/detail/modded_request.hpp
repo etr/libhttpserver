@@ -25,6 +25,8 @@
 #ifndef SRC_HTTPSERVER_DETAIL_MODDED_REQUEST_HPP_
 #define SRC_HTTPSERVER_DETAIL_MODDED_REQUEST_HPP_
 
+#include <microhttpd.h>  // TASK-020: MHD_destroy_post_processor (no longer reachable transitively via http_request.hpp -> http_utils.hpp)
+
 #include <string>
 #include <memory>
 #include <fstream>

@@ -561,10 +561,19 @@ bool webserver::run_wait(int32_t millisec) {
     return MHD_run_wait(impl_->daemon, millisec) == MHD_YES;
 }
 
-bool webserver::get_fdset(fd_set* read_fd_set, fd_set* write_fd_set, fd_set* except_fd_set, int* max_fd) {
+bool webserver::get_fdset(void* read_fd_set, void* write_fd_set, void* except_fd_set, int* max_fd) {
+    // TASK-020: the public signature accepts `void*` so the public header
+    // does not need <sys/select.h>. Callers pass real `fd_set*` pointers
+    // (the implicit conversion to `void*` is well-defined in C++); cast
+    // back here, where <sys/select.h> is reachable transitively via
+    // <microhttpd.h>.
     if (impl_->daemon == nullptr) return false;
     MHD_socket mhd_max_fd = 0;
-    if (MHD_get_fdset(impl_->daemon, read_fd_set, write_fd_set, except_fd_set, &mhd_max_fd) != MHD_YES) {
+    if (MHD_get_fdset(impl_->daemon,
+                      static_cast<fd_set*>(read_fd_set),
+                      static_cast<fd_set*>(write_fd_set),
+                      static_cast<fd_set*>(except_fd_set),
+                      &mhd_max_fd) != MHD_YES) {
         return false;
     }
     *max_fd = static_cast<int>(mhd_max_fd);
@@ -581,9 +590,18 @@ bool webserver::get_timeout(uint64_t* timeout) {
     return true;
 }
 
-bool webserver::add_connection(int client_socket, const struct sockaddr* addr, socklen_t addrlen) {
+bool webserver::add_connection(int client_socket, const struct sockaddr* addr, unsigned int addrlen) {
+    // TASK-020: the public signature accepts `unsigned int` instead of
+    // `socklen_t` so the public header does not need <sys/socket.h>.
+    // POSIX guarantees `socklen_t` is an unsigned integer of at least 32
+    // bits; `unsigned int` matches on every supported platform. The
+    // static_assert below pins that contract.
+    static_assert(sizeof(unsigned int) >= sizeof(socklen_t),
+                  "unsigned int is narrower than socklen_t on this platform; "
+                  "webserver::add_connection's public signature must be widened.");
     if (impl_->daemon == nullptr) return false;
-    return MHD_add_connection(impl_->daemon, client_socket, addr, addrlen) == MHD_YES;
+    return MHD_add_connection(impl_->daemon, client_socket, addr,
+                              static_cast<socklen_t>(addrlen)) == MHD_YES;
 }
 
 void webserver::unregister_resource(const string& resource) {
