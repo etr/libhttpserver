@@ -449,6 +449,12 @@ bool http_request_impl::has_tls_session() const {
 }
 
 gnutls_session_t http_request_impl::get_tls_session() const {
+    // TASK-019: the test-request path (connection_ == nullptr) has no
+    // live MHD connection to query; return null so callers fall back
+    // to the no-cert sentinels rather than UB-dereferencing in MHD.
+    if (connection_ == nullptr) {
+        return nullptr;
+    }
     const MHD_ConnectionInfo* conninfo = MHD_get_connection_info(connection_, MHD_CONNECTION_INFO_GNUTLS_SESSION);
 
     if (conninfo == nullptr) {
@@ -463,7 +469,15 @@ bool http_request_impl::has_client_certificate() const {
         return false;
     }
 
+    // TASK-019: even when the test-request flag advertises a TLS
+    // session, there is no live MHD connection from which to extract
+    // peer certs. Bail out before calling into GnuTLS so the public
+    // accessors honour the "no live cert means false / empty / -1"
+    // sentinel contract.
     gnutls_session_t session = get_tls_session();
+    if (session == nullptr) {
+        return false;
+    }
     unsigned int list_size = 0;
     const gnutls_datum_t* cert_list = gnutls_certificate_get_peers(session, &list_size);
 
@@ -555,9 +569,15 @@ void http_request_impl::populate_all_cert_fields() const {
         }
     }
 
-    // Validity times
-    client_cert_not_before = gnutls_x509_crt_get_activation_time(cert.get());
-    client_cert_not_after = gnutls_x509_crt_get_expiration_time(cert.get());
+    // Validity times. The GnuTLS API returns std::time_t; we cast to
+    // int64_t so the public accessors can return a fixed-width type
+    // regardless of how the local platform sizes time_t. ((time_t)-1
+    // round-trips cleanly because both width and signedness are
+    // preserved by the static_cast.)
+    client_cert_not_before = static_cast<std::int64_t>(
+        gnutls_x509_crt_get_activation_time(cert.get()));
+    client_cert_not_after = static_cast<std::int64_t>(
+        gnutls_x509_crt_get_expiration_time(cert.get()));
 }
 #endif  // HAVE_GNUTLS
 
@@ -909,63 +929,116 @@ std::string_view http_request::get_digested_user() const {
 }
 #endif  // HAVE_DAUTH
 
+// ----------------------------------------------------------------------
+// TASK-019: high-level GnuTLS accessors. Public surface is unconditional
+// (same symbols visible whether HAVE_GNUTLS is on or off at build time);
+// only the body of each method dispatches on HAVE_GNUTLS. Sentinel
+// returns when GnuTLS is disabled match the architecture spec §7:
+// empty for the four string_view accessors, false for the three
+// predicates, -1 for the two time accessors.
+//
+// The five accessors documented as `noexcept` (the three predicates and
+// the two times) wrap populate_all_cert_fields() in try/catch so that a
+// hypothetical std::bad_alloc from the cache-fill path doesn't violate
+// the noexcept commitment; on throw we return the documented sentinel.
+// The four string_view accessors deliberately omit `noexcept` so the
+// allocator failure mode is observable (and they don't need a
+// try/catch).
+// ----------------------------------------------------------------------
+bool http_request::has_tls_session() const noexcept {
 #ifdef HAVE_GNUTLS
-bool http_request::has_tls_session() const {
     return impl_->has_tls_session();
+#else
+    return false;
+#endif
 }
 
-gnutls_session_t http_request::get_tls_session() const {
-    return impl_->get_tls_session();
-}
-
-bool http_request::has_client_certificate() const {
+bool http_request::has_client_certificate() const noexcept {
+#ifdef HAVE_GNUTLS
     return impl_->has_client_certificate();
+#else
+    return false;
+#endif
 }
 
-// Helper: convert a pmr::string to a default-allocator std::string for
-// the public-API return types that still spell std::string. The copy is
-// inherent to the v1 API; TASK-018 narrows these to string_view returns.
-namespace {
-inline std::string to_std_string(const std::pmr::string& s) {
-    return std::string(s.data(), s.size());
-}
-}  // namespace
-
-std::string http_request::get_client_cert_dn() const {
+std::string_view http_request::get_client_cert_dn() const {
+#ifdef HAVE_GNUTLS
     impl_->populate_all_cert_fields();
-    return to_std_string(impl_->client_cert_dn);
+    return std::string_view(impl_->client_cert_dn.data(),
+                            impl_->client_cert_dn.size());
+#else
+    return std::string_view{};
+#endif
 }
 
-std::string http_request::get_client_cert_issuer_dn() const {
+std::string_view http_request::get_client_cert_issuer_dn() const {
+#ifdef HAVE_GNUTLS
     impl_->populate_all_cert_fields();
-    return to_std_string(impl_->client_cert_issuer_dn);
+    return std::string_view(impl_->client_cert_issuer_dn.data(),
+                            impl_->client_cert_issuer_dn.size());
+#else
+    return std::string_view{};
+#endif
 }
 
-std::string http_request::get_client_cert_cn() const {
+std::string_view http_request::get_client_cert_cn() const {
+#ifdef HAVE_GNUTLS
     impl_->populate_all_cert_fields();
-    return to_std_string(impl_->client_cert_cn);
+    return std::string_view(impl_->client_cert_cn.data(),
+                            impl_->client_cert_cn.size());
+#else
+    return std::string_view{};
+#endif
 }
 
-bool http_request::is_client_cert_verified() const {
+std::string_view http_request::get_client_cert_fingerprint_sha256() const {
+#ifdef HAVE_GNUTLS
     impl_->populate_all_cert_fields();
-    return impl_->client_cert_verified;
+    return std::string_view(impl_->client_cert_fingerprint_sha256.data(),
+                            impl_->client_cert_fingerprint_sha256.size());
+#else
+    return std::string_view{};
+#endif
 }
 
-std::string http_request::get_client_cert_fingerprint_sha256() const {
-    impl_->populate_all_cert_fields();
-    return to_std_string(impl_->client_cert_fingerprint_sha256);
+bool http_request::is_client_cert_verified() const noexcept {
+#ifdef HAVE_GNUTLS
+    try {
+        impl_->populate_all_cert_fields();
+        return impl_->client_cert_verified;
+    } catch (...) {
+        return false;
+    }
+#else
+    return false;
+#endif
 }
 
-time_t http_request::get_client_cert_not_before() const {
-    impl_->populate_all_cert_fields();
-    return impl_->client_cert_not_before;
+std::int64_t http_request::get_client_cert_not_before() const noexcept {
+#ifdef HAVE_GNUTLS
+    try {
+        impl_->populate_all_cert_fields();
+        return impl_->client_cert_not_before;
+    } catch (...) {
+        return -1;
+    }
+#else
+    return -1;
+#endif
 }
 
-time_t http_request::get_client_cert_not_after() const {
-    impl_->populate_all_cert_fields();
-    return impl_->client_cert_not_after;
+std::int64_t http_request::get_client_cert_not_after() const noexcept {
+#ifdef HAVE_GNUTLS
+    try {
+        impl_->populate_all_cert_fields();
+        return impl_->client_cert_not_after;
+    } catch (...) {
+        return -1;
+    }
+#else
+    return -1;
+#endif
 }
-#endif  // HAVE_GNUTLS
 
 std::string_view http_request::get_requestor() const {
     if (!impl_->requestor_ip.empty()) {

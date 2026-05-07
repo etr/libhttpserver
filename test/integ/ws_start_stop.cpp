@@ -33,15 +33,16 @@
 #include <curl/curl.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <cstdint>
 #include <cstdio>
 #include <memory>
 #include <string>
 #include <utility>
 
-#ifdef HAVE_GNUTLS
-#include <gnutls/gnutls.h>
-#endif
-
+// TASK-019: <gnutls/gnutls.h> no longer needed here. The previous
+// version of `tls_info_resource` accessed `req.get_tls_session()` to
+// inspect the raw gnutls_session_t; that accessor is gone. Migrated to
+// `req.has_tls_session()` only.
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
 
@@ -76,20 +77,16 @@ class ok_resource : public httpserver::http_resource {
 };
 
 #ifdef HAVE_GNUTLS
+// TASK-019: migrated off the raw gnutls_session_t accessor (which has
+// been removed from the public surface). The high-level
+// `has_tls_session()` predicate carries the same observable signal for
+// this test (the existing `tls_session_getters` test only checks for
+// "TLS_SESSION_PRESENT").
 class tls_info_resource : public httpserver::http_resource {
  public:
      shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request& req) {
-         std::string response;
-         if (req.has_tls_session()) {
-             gnutls_session_t session = req.get_tls_session();
-             if (session != nullptr) {
-                 response = "TLS_SESSION_PRESENT";
-             } else {
-                 response = "TLS_SESSION_NULL";
-             }
-         } else {
-             response = "NO_TLS_SESSION";
-         }
+         std::string response = req.has_tls_session() ? "TLS_SESSION_PRESENT"
+                                                      : "NO_TLS_SESSION";
          return std::make_shared<httpserver::http_response>(httpserver::http_response::string(response));
      }
 };
@@ -964,13 +961,17 @@ class client_cert_info_resource : public httpserver::http_resource {
          std::string response;
          if (req.has_client_certificate()) {
              response = "HAS_CLIENT_CERT";
-             std::string dn = req.get_client_cert_dn();
-             std::string issuer = req.get_client_cert_issuer_dn();
-             std::string cn = req.get_client_cert_cn();
-             std::string fingerprint = req.get_client_cert_fingerprint_sha256();
+             // TASK-019: the four cert-string accessors return
+             // std::string_view; the explicit string(string_view) ctor
+             // requires direct-init, so we use parens not `=`.
+             std::string dn(req.get_client_cert_dn());
+             std::string issuer(req.get_client_cert_issuer_dn());
+             std::string cn(req.get_client_cert_cn());
+             std::string fingerprint(req.get_client_cert_fingerprint_sha256());
              bool verified = req.is_client_cert_verified();
-             time_t not_before = req.get_client_cert_not_before();
-             time_t not_after = req.get_client_cert_not_after();
+             // TASK-019: the two time accessors return std::int64_t.
+             std::int64_t not_before = req.get_client_cert_not_before();
+             std::int64_t not_after = req.get_client_cert_not_after();
 
              response += "|DN:" + dn;
              response += "|ISSUER:" + issuer;
@@ -1220,6 +1221,108 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_untrusted)
     curl_easy_cleanup(curl);
     ws.stop();
 LT_END_AUTO_TEST(client_cert_untrusted)
+
+// TASK-019: end-to-end test of the high-level cert accessors against a
+// known client certificate. Verifies the new return types
+// (string_view / int64_t / bool) and the documented value contracts:
+//   - DN/issuer DN both contain "O=Test Org" and "CN=Test Client"
+//     (the test cert is self-signed, so subject and issuer match).
+//   - CN is exactly "Test Client".
+//   - SHA-256 fingerprint length 64, all chars in [0-9a-f].
+//   - not_before / not_after are positive epoch seconds with
+//     not_after > not_before.
+//   - is_client_cert_verified() reports true (the test trust store is
+//     the cert itself).
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_accessors_known_values)
+    int port = PORT + 53;
+    httpserver::webserver ws = httpserver::create_webserver(port)
+        .use_ssl()
+        .https_mem_key(ROOT "/key.pem")
+        .https_mem_cert(ROOT "/cert.pem")
+        .https_mem_trust(ROOT "/client_cert.pem");
+    client_cert_info_resource cert_info;
+    LT_ASSERT_EQ(true, ws.register_resource("cert_info", &cert_info));
+    try {
+        ws.start(false);
+    } catch (const std::exception& e) {
+        // SSL setup may fail in some environments, skip the test.
+        LT_CHECK_EQ(1, 1);
+        return;
+    }
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    std::string url = "https://localhost:" + std::to_string(port) + "/cert_info";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+    curl_easy_setopt(curl, CURLOPT_SSLCERT, ROOT "/client_cert.pem");
+    curl_easy_setopt(curl, CURLOPT_SSLKEY, ROOT "/client_key.pem");
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+
+    // The resource serialises:
+    //   HAS_CLIENT_CERT|DN:<dn>|ISSUER:<issuer>|CN:<cn>|FP:<fp>
+    //   |VERIFIED:<yes|no>|NOT_BEFORE:<n>|NOT_AFTER:<n>
+    LT_ASSERT_NEQ(s.find("HAS_CLIENT_CERT"), std::string::npos);
+
+    // Helper: extract the substring between |TAG:` and the next `|` (or
+    // end of string for the last field).
+    auto extract = [&](const char* tag) -> std::string {
+        std::string needle = std::string("|") + tag + ":";
+        size_t start = s.find(needle);
+        if (start == std::string::npos) return std::string();
+        start += needle.size();
+        size_t end = s.find('|', start);
+        if (end == std::string::npos) end = s.size();
+        return s.substr(start, end - start);
+    };
+
+    std::string dn      = extract("DN");
+    std::string issuer  = extract("ISSUER");
+    std::string cn      = extract("CN");
+    std::string fp      = extract("FP");
+    std::string verified = extract("VERIFIED");
+    std::string nb_s    = extract("NOT_BEFORE");
+    std::string na_s    = extract("NOT_AFTER");
+
+    // Subject and issuer DN both contain the expected attributes.
+    LT_CHECK_NEQ(dn.find("O=Test Org"), std::string::npos);
+    LT_CHECK_NEQ(dn.find("CN=Test Client"), std::string::npos);
+    LT_CHECK_NEQ(issuer.find("O=Test Org"), std::string::npos);
+    LT_CHECK_NEQ(issuer.find("CN=Test Client"), std::string::npos);
+    // Self-signed: subject DN == issuer DN.
+    LT_CHECK_EQ(dn, issuer);
+
+    // CN is exactly "Test Client".
+    LT_CHECK_EQ(cn, std::string("Test Client"));
+
+    // Fingerprint: 64 lowercase hex chars (32 bytes SHA-256, hex-encoded).
+    LT_CHECK_EQ(fp.length(), 64u);
+    for (char c : fp) {
+        bool valid = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+        LT_CHECK(valid);
+    }
+
+    // Verification: the trust store is the cert itself, so verification
+    // succeeds.
+    LT_CHECK_EQ(verified, std::string("yes"));
+
+    // Validity window: positive epoch seconds, not_after > not_before.
+    std::int64_t nb = std::stoll(nb_s);
+    std::int64_t na = std::stoll(na_s);
+    LT_CHECK(nb > 0);
+    LT_CHECK(na > 0);
+    LT_CHECK(na > nb);
+
+    curl_easy_cleanup(curl);
+    ws.stop();
+LT_END_AUTO_TEST(client_cert_accessors_known_values)
 
 // Test SNI callback configuration
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, sni_callback_setup)

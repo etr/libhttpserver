@@ -25,9 +25,14 @@
 #ifndef SRC_HTTPSERVER_HTTP_UTILS_HPP_
 #define SRC_HTTPSERVER_HTTP_UTILS_HPP_
 
-#ifdef HAVE_GNUTLS
-#include <gnutls/gnutls.h>
-#endif
+// TASK-019: <gnutls/gnutls.h> deliberately NOT included here. The
+// `cred_type_T` enum below previously took its values from GNUTLS_CRD_*
+// macros, dragging the GnuTLS header through the umbrella to every
+// downstream consumer. The values are now hard-coded to match the
+// stable `gnutls_credentials_type_t` ABI. A static_assert block in
+// src/webserver.cpp (where <gnutls/gnutls.h> is reachable) pins the
+// enum values to the GnuTLS macros so an upstream renumber breaks the
+// build at the right place.
 
 // needed to force Vista as a bare minimum to have inet_ntop (libmicro defines
 // this to include XP support as a lower version).
@@ -87,15 +92,21 @@ struct generateFilenameException : public std::exception {
 
 class http_utils {
  public:
+     // TASK-019: hard-coded values matching gnutls_credentials_type_t
+     // (a stable public ABI). Values pinned to the GnuTLS macros via
+     // static_assert in src/webserver.cpp so an upstream renumber would
+     // break the build. The enum is unconditional (PRD-FLG-REQ-001
+     // forbids gating public-header declarations on HAVE_GNUTLS); when
+     // GnuTLS is disabled at build time, selecting one of these via
+     // create_webserver().cred_type(...) hits the existing
+     // feature-unavailable path on use_ssl(true).
      enum cred_type_T {
-         NONE = -1
-#ifdef HAVE_GNUTLS
-         , CERTIFICATE = GNUTLS_CRD_CERTIFICATE,
-         ANON = GNUTLS_CRD_ANON,
-         SRP = GNUTLS_CRD_SRP,
-         PSK = GNUTLS_CRD_PSK,
-         IA = GNUTLS_CRD_IA
-#endif
+         NONE = -1,
+         CERTIFICATE = 1,  // GNUTLS_CRD_CERTIFICATE
+         ANON = 2,         // GNUTLS_CRD_ANON
+         SRP = 3,          // GNUTLS_CRD_SRP
+         PSK = 4,          // GNUTLS_CRD_PSK
+         IA = 5            // GNUTLS_CRD_IA
      };
 
      enum start_method_T {

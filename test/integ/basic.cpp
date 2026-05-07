@@ -3262,13 +3262,16 @@ class client_cert_non_tls_resource : public http_resource {
     shared_ptr<http_response> render_GET(const http_request& req) {
         std::string result;
         // All these should return false/empty since this is not a TLS connection
+        // TASK-019: the four cert-string accessors return string_view.
+        // `const char* + string_view` is not in the standard, so we
+        // copy each view into a std::string for the `+` chain.
         result += "has_tls_session:" + std::string(req.has_tls_session() ? "yes" : "no") + ";";
         result += "has_client_cert:" + std::string(req.has_client_certificate() ? "yes" : "no") + ";";
-        result += "dn:" + req.get_client_cert_dn() + ";";
-        result += "issuer:" + req.get_client_cert_issuer_dn() + ";";
-        result += "cn:" + req.get_client_cert_cn() + ";";
+        result += "dn:" + std::string(req.get_client_cert_dn()) + ";";
+        result += "issuer:" + std::string(req.get_client_cert_issuer_dn()) + ";";
+        result += "cn:" + std::string(req.get_client_cert_cn()) + ";";
         result += "verified:" + std::string(req.is_client_cert_verified() ? "yes" : "no") + ";";
-        result += "fingerprint:" + req.get_client_cert_fingerprint_sha256() + ";";
+        result += "fingerprint:" + std::string(req.get_client_cert_fingerprint_sha256()) + ";";
         result += "not_before:" + std::to_string(req.get_client_cert_not_before()) + ";";
         result += "not_after:" + std::to_string(req.get_client_cert_not_after());
         return std::make_shared<http_response>(http_response::string(result));
