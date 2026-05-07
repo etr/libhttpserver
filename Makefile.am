@@ -196,16 +196,23 @@ check-install-layout:
 # Cross-reference: keep HEADER_HYGIENE_FORBIDDEN in sync with the
 # #ifdef ladder in test/unit/header_hygiene_test.cpp.
 #
-# TASK-020 caveat (libc++): <pthread.h> is intentionally absent from
-# the forbidden list below. libc++ (Apple's default STL on macOS)
-# unconditionally includes <pthread.h> from any STL container header
-# (<vector>, <string>, <map>, etc.) via its
-# <__thread/support/pthread.h> backend. The resulting `# N "...pthread.h"`
-# line markers therefore appear in the preprocessed output even though
-# libhttpserver itself does not include <pthread.h>. The runtime
-# sentinel test/unit/header_hygiene_test.cpp keeps the pthread guard
-# but skips it when _LIBCPP_VERSION is defined, so the same invariant
-# is still enforced under libstdc++ and other STLs.
+# TASK-020 caveat (libc++ AND libstdc++ in thread mode): <pthread.h>
+# is intentionally absent from the forbidden list below. Both
+# mainstream STLs unconditionally pull <pthread.h> in from any STL
+# container header (<vector>, <string>, <map>, etc.) when threading
+# is enabled:
+#   - libc++ (Apple's default STL on macOS) routes through
+#     <__thread/support/pthread.h>.
+#   - libstdc++ in thread-enabled mode (which is the default whenever
+#     -D_REENTRANT is set, as configure.ac does) routes through
+#     <bits/gthr-default.h>, which #include <pthread.h> directly.
+# The resulting `# N "...pthread.h"` line markers therefore appear in
+# the preprocessed output even though libhttpserver itself does not
+# include <pthread.h>. The runtime sentinel
+# test/unit/header_hygiene_test.cpp keeps the pthread guards but skips
+# them on both libc++ (_LIBCPP_VERSION) and libstdc++ in thread mode
+# (_GLIBCXX_HAS_GTHREADS), so the guards still fire on STLs that don't
+# route std::thread through pthread (e.g. MSVC's Microsoft STL).
 # ---------------------------------------------------------------------------
 
 HEADER_HYGIENE_FORBIDDEN = microhttpd\.h|gnutls/gnutls\.h|sys/socket\.h|sys/uio\.h

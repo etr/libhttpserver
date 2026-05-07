@@ -59,16 +59,20 @@
 // red states during M2-M5 -- the leaks must be removed in production
 // code, not here.
 //
-// TASK-020 caveat (libc++/Apple): libc++ (Apple's default STL)
-// unconditionally includes <pthread.h> from any STL container header
-// (<vector>, <string>, <map>, etc.) via its
-// <__thread/support/pthread.h> backend. That defines _PTHREAD_H even
-// when libhttpserver itself does not include <pthread.h>. This is an
-// STL implementation detail, not a libhttpserver leak. We therefore
-// skip the pthread guards on libc++ (detected via _LIBCPP_VERSION).
-// On libstdc++ and other STLs, the same containers do NOT pull in
-// <pthread.h> transitively, so the guards remain a meaningful leak
-// signal there.
+// TASK-020 caveat (libc++ AND libstdc++ in thread mode): both
+// mainstream STLs pull <pthread.h> in transitively from any STL
+// container header (<vector>, <string>, <map>, etc.) when threading
+// is enabled, so _PTHREAD_H / _PTHREAD_H_ being defined is an STL
+// implementation detail, not a libhttpserver leak:
+//   - libc++ (Apple's default STL on macOS) routes through
+//     <__thread/support/pthread.h>.
+//   - libstdc++ in thread-enabled mode (which is the default whenever
+//     -D_REENTRANT is set, as configure.ac does) routes through
+//     <bits/gthr-default.h>, which #include <pthread.h> directly.
+// We therefore skip the pthread guards on both STLs (detected via
+// _LIBCPP_VERSION and _GLIBCXX_HAS_GTHREADS respectively). The guards
+// remain meaningful on STLs that don't use pthread for std::thread
+// (e.g. MSVC's Microsoft STL, which uses Win32 threading).
 //
 // Cross-reference: the same forbidden-header list is enforced via the
 // preprocessor-grep target `make check-hygiene` in the top-level
@@ -86,12 +90,14 @@ int main() {
     ++leaks;
 #endif
 
-// TASK-020: libc++ unconditionally drags <pthread.h> in from any STL
-// container header via its <__thread/support/pthread.h> backend, so
-// _PTHREAD_H / _PTHREAD_H_ defined on libc++ is not a libhttpserver
-// leak signal -- it is an STL implementation detail. Skip these guards
-// on libc++; keep them strict on libstdc++ and other STLs.
-#ifndef _LIBCPP_VERSION
+// TASK-020: both libc++ and libstdc++ (in thread-enabled mode, which
+// is the default whenever -D_REENTRANT is set) unconditionally drag
+// <pthread.h> in from any STL container header. _PTHREAD_H /
+// _PTHREAD_H_ being defined under either STL is an implementation
+// detail, not a libhttpserver leak. Skip these guards on both;
+// keep them strict on STLs that don't route std::thread through
+// pthread (e.g. MSVC's Microsoft STL).
+#if !defined(_LIBCPP_VERSION) && !defined(_GLIBCXX_HAS_GTHREADS)
 #ifdef _PTHREAD_H
     std::fprintf(stderr, "LEAK: <pthread.h> reached the consumer TU (glibc/musl guard _PTHREAD_H)\n");
     ++leaks;
@@ -101,7 +107,7 @@ int main() {
     std::fprintf(stderr, "LEAK: <pthread.h> reached the consumer TU (macOS/BSD guard _PTHREAD_H_)\n");
     ++leaks;
 #endif
-#endif  // !_LIBCPP_VERSION
+#endif  // !_LIBCPP_VERSION && !_GLIBCXX_HAS_GTHREADS
 
 #ifdef GNUTLS_GNUTLS_H
     std::fprintf(stderr, "LEAK: <gnutls/gnutls.h> reached the consumer TU (guard GNUTLS_GNUTLS_H)\n");
