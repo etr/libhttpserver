@@ -37,4 +37,4 @@ Replace methods that returned raw `gnutls_session_t` (or other GnuTLS types) wit
 **Related Requirements:** PRD-HDR-REQ-003, PRD-FLG-REQ-002
 **Related Decisions:** §4.2, §6.2
 
-**Status:** In Progress
+**Status:** Done
