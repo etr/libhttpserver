@@ -186,21 +186,32 @@ check-install-layout:
 #      avoids false positives from substrings in code or comments.
 #
 # HEADER_HYGIENE_STRICT controls whether a leak is fatal:
-#   - "no"  (default until M5): leaks are reported as EXPECTED-FAIL
-#           and exit 0. This keeps `make check` green during M2-M5
-#           while making M2-M5 progress visible in CI logs.
-#   - "yes" (TASK-020 close-out): leaks are fatal. Set this from the
-#           command line (`make check-hygiene HEADER_HYGIENE_STRICT=yes`)
-#           or flip the default below.
+#   - "yes" (default since TASK-020): leaks fail the build. The umbrella
+#           is now clean and any regression should break CI loudly.
+#   - "no"  (legacy): leaks were reported as EXPECTED-FAIL and exit 0
+#           while M2-M5 were in flight. Override from the command line
+#           (`make check-hygiene HEADER_HYGIENE_STRICT=no`) only if you
+#           are deliberately running against an in-flight umbrella.
 #
 # Cross-reference: keep HEADER_HYGIENE_FORBIDDEN in sync with the
 # #ifdef ladder in test/unit/header_hygiene_test.cpp.
+#
+# TASK-020 caveat (libc++): <pthread.h> is intentionally absent from
+# the forbidden list below. libc++ (Apple's default STL on macOS)
+# unconditionally includes <pthread.h> from any STL container header
+# (<vector>, <string>, <map>, etc.) via its
+# <__thread/support/pthread.h> backend. The resulting `# N "...pthread.h"`
+# line markers therefore appear in the preprocessed output even though
+# libhttpserver itself does not include <pthread.h>. The runtime
+# sentinel test/unit/header_hygiene_test.cpp keeps the pthread guard
+# but skips it when _LIBCPP_VERSION is defined, so the same invariant
+# is still enforced under libstdc++ and other STLs.
 # ---------------------------------------------------------------------------
 
-HEADER_HYGIENE_FORBIDDEN = microhttpd\.h|pthread\.h|gnutls/gnutls\.h|sys/socket\.h|sys/uio\.h
+HEADER_HYGIENE_FORBIDDEN = microhttpd\.h|gnutls/gnutls\.h|sys/socket\.h|sys/uio\.h
 CHECK_HYGIENE_STAGE      = $(abs_top_builddir)/.hygiene-stage
 CHECK_HYGIENE_CXX        = $(CXX) -std=c++20 -E -I$(CHECK_HYGIENE_STAGE)$(includedir) $(CPPFLAGS)
-HEADER_HYGIENE_STRICT   ?= no
+HEADER_HYGIENE_STRICT   ?= yes
 
 # Sentinel file: only re-run the staged install when headers have changed.
 # This is an mtime gate used exclusively for standalone `make check-hygiene`

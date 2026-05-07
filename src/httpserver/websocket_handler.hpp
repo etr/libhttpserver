@@ -27,12 +27,23 @@
 
 #ifdef HAVE_WEBSOCKET
 
-#include <microhttpd.h>
-#include <microhttpd_ws.h>
+// TASK-020: <microhttpd.h> and <microhttpd_ws.h> are deliberately NOT
+// included from this public header. The class below uses two
+// MHD-defined struct types only by pointer (forward-declared at file
+// scope below) and `MHD_socket` (an integer typedef -- `int` on POSIX,
+// `SOCKET` (`UINT_PTR`) on Windows). Because typedef-names cannot be
+// forward-declared, the public surface uses `std::intptr_t` -- which
+// is at least as wide as `MHD_socket` on every platform we support.
+// A static_assert in src/websocket_handler.cpp pins that invariant
+// where <microhttpd.h> is reachable. The src/websocket_handler.cpp
+// translation unit casts back to `MHD_socket` at the boundary.
 #include <cstddef>
 #include <cstdint>
 #include <string>
 #include <string_view>
+
+struct MHD_UpgradeResponseHandle;
+struct MHD_WebSocketStream;
 
 namespace httpserver {
 
@@ -49,14 +60,18 @@ class websocket_session {
      bool is_valid() const;
 
  private:
-     websocket_session(MHD_socket sock, struct MHD_UpgradeResponseHandle* urh,
+     // `sock` carries an MHD_socket value; the public-header type is
+     // std::intptr_t so this header does not need <microhttpd.h>.
+     // src/websocket_handler.cpp casts back to MHD_socket at the
+     // boundary and static_asserts the underlying-width invariant.
+     websocket_session(std::intptr_t sock, struct MHD_UpgradeResponseHandle* urh,
                        struct MHD_WebSocketStream* ws_stream);
      ~websocket_session();
 
      websocket_session(const websocket_session&) = delete;
      websocket_session& operator=(const websocket_session&) = delete;
 
-     MHD_socket sock;
+     std::intptr_t sock;
      struct MHD_UpgradeResponseHandle* urh;
      struct MHD_WebSocketStream* ws_stream;
      bool valid;

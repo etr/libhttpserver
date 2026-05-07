@@ -24,6 +24,7 @@
 #include <direct.h>
 #define MKDIR(path) _mkdir(path)
 #else
+#include <unistd.h>  // TASK-020: unlink/rmdir; previously reachable transitively via <httpserver.hpp> -> <sys/socket.h>
 #define MKDIR(path) mkdir(path, 0755)
 #endif
 #include <cassert>

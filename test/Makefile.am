@@ -158,15 +158,10 @@ endif
 
 TESTS = $(check_PROGRAMS)
 
-# header_hygiene is expected to fail until M5 (TASK-014/015/019/020) lands and
-# <httpserver.hpp> stops transitively pulling in <microhttpd.h>, <pthread.h>,
-# <gnutls/gnutls.h>, <sys/socket.h>, and <sys/uio.h>. Automake's XFAIL_TESTS
-# mechanism marks the failure as "expected" so the suite stays green, and --
-# importantly -- when the umbrella becomes clean and the test starts passing,
-# Automake reports XPASS and treats it as a hard error. That XPASS is the
-# explicit signal for TASK-020 to remove this line. Do NOT silently delete the
-# XFAIL until the umbrella is clean.
-XFAIL_TESTS = header_hygiene
+# TASK-020 has landed: <httpserver.hpp> no longer transitively pulls in any
+# forbidden backend header, so header_hygiene is now an unconditional PASS.
+# (Earlier milestones tracked the failure via XFAIL_TESTS; that line was
+# removed when the umbrella went clean.)
 
 @VALGRIND_CHECK_RULES@
 VALGRIND_SUPPRESSIONS_FILES = libhttpserver.supp

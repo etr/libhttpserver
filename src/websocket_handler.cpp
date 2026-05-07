@@ -29,14 +29,25 @@
 #include <sys/socket.h>
 #endif
 
+#include <cstdint>
 #include <cstring>
 #include <string>
 
 namespace httpserver {
 
+// TASK-020: pin the public-header `std::intptr_t` choice for the
+// websocket socket handle to libmicrohttpd's `MHD_socket` typedef.
+// `intptr_t` is at least as wide as any integer-or-pointer scalar type
+// on every supported platform; if a future MHD release widens
+// `MHD_socket` past `intptr_t`, this assert fails and the public
+// signature must be revisited.
+static_assert(sizeof(MHD_socket) <= sizeof(std::intptr_t),
+              "MHD_socket is wider than std::intptr_t on this platform; "
+              "websocket_session::sock's public type must be widened.");
+
 // websocket_session implementation
 
-websocket_session::websocket_session(MHD_socket sock, struct MHD_UpgradeResponseHandle* urh,
+websocket_session::websocket_session(std::intptr_t sock, struct MHD_UpgradeResponseHandle* urh,
                                      struct MHD_WebSocketStream* ws_stream):
     sock(sock), urh(urh), ws_stream(ws_stream), valid(true) {
 }
@@ -65,7 +76,7 @@ void websocket_session::send_text(const std::string& msg) {
     char* frame = nullptr;
     size_t frame_len = 0;
     if (MHD_websocket_encode_text(ws_stream, msg.c_str(), msg.size(), 0, &frame, &frame_len, nullptr) == MHD_WEBSOCKET_STATUS_OK) {
-        if (!send_all(sock, frame, frame_len)) valid = false;
+        if (!send_all(static_cast<MHD_socket>(sock), frame, frame_len)) valid = false;
         MHD_websocket_free(ws_stream, frame);
     }
 }
@@ -75,7 +86,7 @@ void websocket_session::send_binary(const void* data, size_t len) {
     char* frame = nullptr;
     size_t frame_len = 0;
     if (MHD_websocket_encode_binary(ws_stream, static_cast<const char*>(data), len, 0, &frame, &frame_len) == MHD_WEBSOCKET_STATUS_OK) {
-        if (!send_all(sock, frame, frame_len)) valid = false;
+        if (!send_all(static_cast<MHD_socket>(sock), frame, frame_len)) valid = false;
         MHD_websocket_free(ws_stream, frame);
     }
 }
@@ -85,7 +96,7 @@ void websocket_session::send_ping(const std::string& payload) {
     char* frame = nullptr;
     size_t frame_len = 0;
     if (MHD_websocket_encode_ping(ws_stream, payload.c_str(), payload.size(), &frame, &frame_len) == MHD_WEBSOCKET_STATUS_OK) {
-        if (!send_all(sock, frame, frame_len)) valid = false;
+        if (!send_all(static_cast<MHD_socket>(sock), frame, frame_len)) valid = false;
         MHD_websocket_free(ws_stream, frame);
     }
 }
@@ -95,7 +106,7 @@ void websocket_session::send_pong(const std::string& payload) {
     char* frame = nullptr;
     size_t frame_len = 0;
     if (MHD_websocket_encode_pong(ws_stream, payload.c_str(), payload.size(), &frame, &frame_len) == MHD_WEBSOCKET_STATUS_OK) {
-        if (!send_all(sock, frame, frame_len)) valid = false;
+        if (!send_all(static_cast<MHD_socket>(sock), frame, frame_len)) valid = false;
         MHD_websocket_free(ws_stream, frame);
     }
 }
@@ -106,7 +117,7 @@ void websocket_session::close(uint16_t code, const std::string& reason) {
     char* frame = nullptr;
     size_t frame_len = 0;
     if (MHD_websocket_encode_close(ws_stream, code, reason.c_str(), reason.size(), &frame, &frame_len) == MHD_WEBSOCKET_STATUS_OK) {
-        send_all(sock, frame, frame_len);
+        send_all(static_cast<MHD_socket>(sock), frame, frame_len);
         MHD_websocket_free(ws_stream, frame);
     }
 }

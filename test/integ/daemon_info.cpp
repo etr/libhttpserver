@@ -24,6 +24,7 @@
 #else
 #include <unistd.h>
 #endif
+#include <microhttpd.h>  // TASK-020: MHD_FEATURE_* enumerators (no longer reachable transitively via httpserver/http_utils.hpp)
 #include <cstring>
 #include <memory>
 #include <string>

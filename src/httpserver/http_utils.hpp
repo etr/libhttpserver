@@ -25,14 +25,18 @@
 #ifndef SRC_HTTPSERVER_HTTP_UTILS_HPP_
 #define SRC_HTTPSERVER_HTTP_UTILS_HPP_
 
-// TASK-019: <gnutls/gnutls.h> deliberately NOT included here. The
-// `cred_type_T` enum below previously took its values from GNUTLS_CRD_*
-// macros, dragging the GnuTLS header through the umbrella to every
-// downstream consumer. The values are now hard-coded to match the
-// stable `gnutls_credentials_type_t` ABI. A static_assert block in
-// src/webserver.cpp (where <gnutls/gnutls.h> is reachable) pins the
-// enum values to the GnuTLS macros so an upstream renumber breaks the
-// build at the right place.
+// TASK-019 / TASK-020: backend headers (<microhttpd.h>, <gnutls/gnutls.h>,
+// <sys/socket.h>) are deliberately NOT included from this public header.
+// The enums declared below previously took their integer values from
+// upstream macros (MHD_USE_*, MHD_DIGEST_AUTH_ALGO3_*, MHD_DAUTH_*,
+// GNUTLS_CRD_*), dragging the backend headers through the umbrella to
+// every downstream consumer. Those values are now hard-coded to match
+// the stable upstream ABI; static_assert blocks in src/webserver.cpp
+// and src/http_request.cpp (where the upstream headers are reachable)
+// pin the enum values to the upstream macros so any renumber breaks
+// the build at the right place. `struct sockaddr` is forward-declared
+// at file scope; the implementations live in src/http_utils.cpp where
+// <sys/socket.h> is reachable directly.
 
 // needed to force Vista as a bare minimum to have inet_ntop (libmicro defines
 // this to include XP support as a lower version).
@@ -42,17 +46,8 @@
 #define _WIN32_WINNT 0x600
 #endif
 
-// needed to have the fd_set definition ahead of microhttpd.h import
-#if defined(__CYGWIN__)
-#include <sys/select.h>
-#endif
-
-#include <microhttpd.h>
 #include <stddef.h>
-
-#if !defined(__MINGW32__)
-#include <sys/socket.h>
-#endif
+#include <stdint.h>
 
 #include <algorithm>
 #include <cctype>
@@ -63,6 +58,13 @@
 
 #include "httpserver/constants.hpp"
 #include "httpserver/http_arg_value.hpp"
+
+// Forward-declare the BSD-socket address family. Only pointer-to-incomplete
+// uses appear in this header; the .cpp side pulls in <sys/socket.h> directly.
+// MinGW spells the corresponding type via <winsock2.h>; the same forward
+// declaration is valid there since the canonical name `struct sockaddr` is
+// the same across POSIX and Win32.
+struct sockaddr;
 
 
 namespace httpserver {
@@ -109,10 +111,16 @@ class http_utils {
          IA = 5            // GNUTLS_CRD_IA
      };
 
+     // TASK-020: hard-coded values mirroring libmicrohttpd's MHD_FLAG enum
+     // (MHD_USE_AUTO=65536, MHD_USE_SELECT_INTERNALLY=8,
+     //  MHD_USE_THREAD_PER_CONNECTION=4). Pinned to the upstream macros
+     // via static_assert in src/webserver.cpp so an upstream renumber
+     // breaks the build at the right place rather than silently mis-routing
+     // start-mode selection.
      enum start_method_T {
-         INTERNAL_SELECT = MHD_USE_SELECT_INTERNALLY | MHD_USE_AUTO,
-         THREAD_PER_CONNECTION = MHD_USE_THREAD_PER_CONNECTION | MHD_USE_AUTO,
-         EXTERNAL_SELECT = MHD_USE_AUTO
+         INTERNAL_SELECT = 65544,        // MHD_USE_SELECT_INTERNALLY | MHD_USE_AUTO
+         THREAD_PER_CONNECTION = 65540,  // MHD_USE_THREAD_PER_CONNECTION | MHD_USE_AUTO
+         EXTERNAL_SELECT = 65536         // MHD_USE_AUTO
      };
 
      enum policy_T {
@@ -125,33 +133,42 @@ class http_utils {
          IPV6 = 16
      };
 
-#ifdef HAVE_DAUTH
+     // TASK-020: hard-coded values mirroring libmicrohttpd's
+     // MHD_DigestAuthAlgo3 / MHD_DigestAuthResult enums. The integer
+     // values follow upstream's bitfield encoding
+     // (BASE_ALGO_X | NON_SESSION = X | 64 for the algorithms; the
+     // result codes are stable signed ints). Pinned via static_assert
+     // in src/http_request.cpp where <microhttpd.h> is reachable, so
+     // an upstream renumber breaks the build at the right place.
+     // The enums are unconditional (PRD-FLG-REQ-001 forbids gating
+     // public-header declarations on HAVE_DAUTH); when digest auth is
+     // disabled at build time, the corresponding methods on
+     // http_request hit the existing feature-unavailable path.
      enum class digest_algorithm {
-         MD5 = MHD_DIGEST_AUTH_ALGO3_MD5,
-         SHA256 = MHD_DIGEST_AUTH_ALGO3_SHA256,
-         SHA512_256 = MHD_DIGEST_AUTH_ALGO3_SHA512_256
+         MD5 = 65,         // MHD_DIGEST_BASE_ALGO_MD5 | MHD_DIGEST_AUTH_ALGO3_NON_SESSION
+         SHA256 = 66,      // MHD_DIGEST_BASE_ALGO_SHA256 | MHD_DIGEST_AUTH_ALGO3_NON_SESSION
+         SHA512_256 = 68   // MHD_DIGEST_BASE_ALGO_SHA512_256 | MHD_DIGEST_AUTH_ALGO3_NON_SESSION
      };
 
      enum class digest_auth_result {
-         OK = MHD_DAUTH_OK,
-         ERROR = MHD_DAUTH_ERROR,
-         WRONG_HEADER = MHD_DAUTH_WRONG_HEADER,
-         WRONG_USERNAME = MHD_DAUTH_WRONG_USERNAME,
-         WRONG_REALM = MHD_DAUTH_WRONG_REALM,
-         WRONG_URI = MHD_DAUTH_WRONG_URI,
-         WRONG_QOP = MHD_DAUTH_WRONG_QOP,
-         WRONG_ALGO = MHD_DAUTH_WRONG_ALGO,
-         TOO_LARGE = MHD_DAUTH_TOO_LARGE,
-         NONCE_STALE = MHD_DAUTH_NONCE_STALE,
-         NONCE_OTHER_COND = MHD_DAUTH_NONCE_OTHER_COND,
-         NONCE_WRONG = MHD_DAUTH_NONCE_WRONG,
-         RESPONSE_WRONG = MHD_DAUTH_RESPONSE_WRONG
+         OK = 1,                  // MHD_DAUTH_OK
+         ERROR = 0,               // MHD_DAUTH_ERROR
+         WRONG_HEADER = -1,       // MHD_DAUTH_WRONG_HEADER
+         WRONG_USERNAME = -2,     // MHD_DAUTH_WRONG_USERNAME
+         WRONG_REALM = -3,        // MHD_DAUTH_WRONG_REALM
+         WRONG_URI = -4,          // MHD_DAUTH_WRONG_URI
+         WRONG_QOP = -5,          // MHD_DAUTH_WRONG_QOP
+         WRONG_ALGO = -6,         // MHD_DAUTH_WRONG_ALGO
+         TOO_LARGE = -15,         // MHD_DAUTH_TOO_LARGE
+         NONCE_STALE = -17,       // MHD_DAUTH_NONCE_STALE
+         NONCE_OTHER_COND = -18,  // MHD_DAUTH_NONCE_OTHER_COND
+         NONCE_WRONG = -33,       // MHD_DAUTH_NONCE_WRONG
+         RESPONSE_WRONG = -34     // MHD_DAUTH_RESPONSE_WRONG
      };
 
      static constexpr size_t md5_digest_size = 16;
      static constexpr size_t sha256_digest_size = 32;
      static constexpr size_t sha512_256_digest_size = 32;
-#endif  // HAVE_DAUTH
 
      static const uint16_t http_method_connect_code;
      static const uint16_t http_method_delete_code;
@@ -302,7 +319,12 @@ class http_utils {
      static std::string sanitize_upload_filename(const std::string& filename);
 
      static const char* reason_phrase(unsigned int status_code);
-     static bool is_feature_supported(enum MHD_FEATURE feature);
+     // TASK-020: parameter is the integer value of an `MHD_FEATURE`
+     // enumerator. The signature is `int` rather than `enum MHD_FEATURE`
+     // so this header doesn't have to drag in <microhttpd.h>; callers
+     // can still pass an `MHD_FEATURE_*` enumerator directly because the
+     // enum's underlying type implicitly converts to int.
+     static bool is_feature_supported(int feature);
      static const char* get_mhd_version();
 };
 

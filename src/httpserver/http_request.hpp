@@ -52,6 +52,18 @@
 #include "httpserver/file_info.hpp"
 #include "httpserver/create_webserver.hpp"
 
+#ifdef HTTPSERVER_COMPILATION
+// Forward-declare MHD_Connection at GLOBAL scope. The internal
+// MHD_Connection*-taking constructor on http_request (declared below
+// inside namespace httpserver) is gated on HTTPSERVER_COMPILATION.
+// Without this top-level declaration, the elaborated type specifier
+// `struct MHD_Connection*` inside `namespace httpserver` would inject
+// `httpserver::MHD_Connection` and shadow the real (global)
+// MHD_Connection that <microhttpd.h> defines, producing a chain of
+// "cannot convert MHD_Connection*" errors in src/http_request.cpp.
+struct MHD_Connection;
+#endif  // HTTPSERVER_COMPILATION
+
 namespace httpserver {
 
 namespace detail {
@@ -461,7 +473,16 @@ class http_request {
      // <microhttpd.h> need not be reachable when downstream code includes
      // <httpserver.hpp>. Reachable only from src/webserver.cpp via the
      // friend webserver_impl declaration below.
-     http_request(struct MHD_Connection* underlying_connection, unescaper_ptr unescaper);
+     //
+     // The MHD_Connection* type is forward-declared at global scope
+     // above (see the comment near the `struct MHD_Connection;` line),
+     // not inside namespace httpserver, because in TASK-020 the public
+     // umbrella stopped transitively pulling in <microhttpd.h>. Without
+     // the global forward decl, an in-namespace elaborated type specifier
+     // would inject `httpserver::MHD_Connection` and shadow the real
+     // (global-namespace) type once <microhttpd.h> is reached later in
+     // src/http_request.cpp.
+     http_request(MHD_Connection* underlying_connection, unescaper_ptr unescaper);
 #endif  // HTTPSERVER_COMPILATION
 
      /**
