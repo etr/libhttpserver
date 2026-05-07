@@ -1,0 +1,8 @@
+---
+# Codacy project configuration.
+#
+# specs/ holds internal groundwork artifacts (product specs, architecture
+# notes, task records, review notes). They are not user-facing docs and are
+# not subject to the same markdown style as README/ChangeLog/CONTRIBUTING.
+exclude_paths:
+  - 'specs/**'

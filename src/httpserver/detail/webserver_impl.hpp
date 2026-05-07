@@ -25,6 +25,11 @@
 // is supplied through src/Makefile.am AM_CPPFLAGS). It is NOT included
 // from the public umbrella <httpserver.hpp>, so the gate is the strict
 // one-mode form, not the dual-mode form used by other detail headers.
+//
+// Members below are accessed from src/webserver.cpp; cppcheck analyses
+// each TU in isolation and cannot see the uses, so the unusedStructMember
+// check must be suppressed at the file level.
+// cppcheck-suppress-file unusedStructMember
 #if !defined(HTTPSERVER_COMPILATION)
 #error "webserver_impl.hpp is internal; only reachable when compiling libhttpserver."
 #endif

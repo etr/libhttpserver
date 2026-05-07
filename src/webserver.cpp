@@ -496,7 +496,7 @@ bool webserver::start(bool blocking) {
 
     if (blocking) {
         pthread_mutex_lock(&impl_->mutexwait);
-        while (blocking && impl_->running) {
+        while (impl_->running) {
             pthread_cond_wait(&impl_->mutexcond, &impl_->mutexwait);
         }
         pthread_mutex_unlock(&impl_->mutexwait);
@@ -943,7 +943,7 @@ MHD_Result webserver_impl::post_iterator(void *cls, enum MHD_ValueKind kind,
     // Parameter needed to respect MHD interface, but not needed here.
     std::ignore = kind;
 
-    struct detail::modded_request* mr = (struct detail::modded_request*) cls;
+    auto* mr = static_cast<detail::modded_request*>(cls);
 
     if (!filename) {
         // There is no actual file, just set the arg key/value and return.

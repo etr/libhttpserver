@@ -41,6 +41,12 @@ namespace httpserver {
 //
 // `base` is `const void*` because libhttpserver never writes through
 // these buffers on the response path.
+//
+// Both fields are accessed from src/http_response.cpp and src/detail/body.cpp
+// (offsetof layout pinning + iovec construction); cppcheck analyses each TU
+// in isolation and cannot see the uses, so unusedStructMember is suppressed
+// at the file level.
+// cppcheck-suppress-file unusedStructMember
 struct iovec_entry {
     const void* base;
     std::size_t len;
