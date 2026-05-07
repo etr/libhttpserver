@@ -18,7 +18,6 @@
      USA
 */
 
-#include "httpserver/constants.hpp"
 #include "httpserver/http_utils.hpp"
 
 // TASK-020: <microhttpd.h> is no longer pulled in transitively by
@@ -57,6 +56,7 @@
 #include <utility>
 #include <vector>
 
+#include "httpserver/constants.hpp"
 #include "httpserver/string_utilities.hpp"
 
 #pragma GCC diagnostic ignored "-Warray-bounds"
@@ -634,8 +634,8 @@ static_assert(
     static_cast<int>(http_utils::digest_auth_result::OK) == MHD_DAUTH_OK,
     "digest_auth_result::OK diverged from MHD_DAUTH_OK");
 static_assert(
-    static_cast<int>(http_utils::digest_auth_result::ERROR) == MHD_DAUTH_ERROR,
-    "digest_auth_result::ERROR diverged from MHD_DAUTH_ERROR");
+    static_cast<int>(http_utils::digest_auth_result::GENERIC_ERROR) == MHD_DAUTH_ERROR,
+    "digest_auth_result::GENERIC_ERROR diverged from MHD_DAUTH_ERROR");
 static_assert(
     static_cast<int>(http_utils::digest_auth_result::WRONG_HEADER) == MHD_DAUTH_WRONG_HEADER,
     "digest_auth_result::WRONG_HEADER diverged from MHD_DAUTH_WRONG_HEADER");

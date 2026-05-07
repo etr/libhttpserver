@@ -152,7 +152,10 @@ class http_utils {
 
      enum class digest_auth_result {
          OK = 1,                  // MHD_DAUTH_OK
-         ERROR = 0,               // MHD_DAUTH_ERROR
+         // GENERIC_ERROR (not "ERROR") because <wingdi.h> on Windows
+         // unconditionally `#define`s ERROR to 0, which the preprocessor
+         // expands inside scoped-enum bodies just like anywhere else.
+         GENERIC_ERROR = 0,       // MHD_DAUTH_ERROR ("general error")
          WRONG_HEADER = -1,       // MHD_DAUTH_WRONG_HEADER
          WRONG_USERNAME = -2,     // MHD_DAUTH_WRONG_USERNAME
          WRONG_REALM = -3,        // MHD_DAUTH_WRONG_REALM
