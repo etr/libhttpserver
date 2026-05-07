@@ -84,9 +84,8 @@ LT_BEGIN_AUTO_TEST(http_resource_suite, allow_some_methods)
     LT_CHECK_EQ(allowed.contains(http_method::get), true);
     LT_CHECK_EQ(allowed.contains(http_method::post), true);
     LT_CHECK_EQ(allowed.contains(http_method::put), false);
-    // Bit-pattern: get=bit 0, post=bit 2.
     LT_CHECK_EQ(allowed.bits,
-                (std::uint32_t{1} << 0) | (std::uint32_t{1} << 2));
+                method_set{}.set(http_method::get).set(http_method::post).bits);
 LT_END_AUTO_TEST(allow_some_methods)
 
 LT_BEGIN_AUTO_TEST(http_resource_suite, allow_all_methods)
@@ -208,6 +207,17 @@ LT_BEGIN_AUTO_TEST(http_resource_suite, set_allowing_multiple_times)
     sr.set_allowing(http_method::get, false);  // Double false
     LT_CHECK_EQ(sr.is_allowed(http_method::get), false);
 LT_END_AUTO_TEST(set_allowing_multiple_times)
+
+// security: set_allowing(count_, true) must have no effect — the sentinel
+// must never appear in the allowed-set so is_allowed(count_) stays false.
+LT_BEGIN_AUTO_TEST(http_resource_suite, set_allowing_count_sentinel_has_no_effect)
+    simple_resource sr;
+    sr.set_allowing(http_method::count_, true);
+    // The sentinel bit must not have been set.
+    LT_CHECK_EQ(sr.is_allowed(http_method::count_), false);
+    // The rest of the allowed set must be unchanged (still all-set by default).
+    LT_CHECK_EQ(sr.get_allowed_methods().bits, method_set{}.set_all().bits);
+LT_END_AUTO_TEST(set_allowing_count_sentinel_has_no_effect)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

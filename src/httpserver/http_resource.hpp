@@ -144,6 +144,7 @@ class http_resource {
       * @param allow true to enable the method, false to disable it
      **/
      void set_allowing(http_method method, bool allow) noexcept {
+         if (method == http_method::count_) return;  // sentinel; never settable
          if (allow) {
              methods_allowed_.set(method);
          } else {
