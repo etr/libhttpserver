@@ -25,15 +25,9 @@
 #ifndef SRC_HTTPSERVER_HTTP_RESOURCE_HPP_
 #define SRC_HTTPSERVER_HTTP_RESOURCE_HPP_
 
-#ifdef DEBUG
-#include <iostream>
-#endif
-
-#include <map>
 #include <memory>
-#include <string>
-#include <utility>
-#include <vector>
+
+#include "httpserver/http_method.hpp"
 
 namespace httpserver { class http_request; }
 namespace httpserver { class http_response; }
@@ -43,8 +37,6 @@ namespace httpserver { namespace detail { class webserver_impl; } }
 namespace httpserver {
 
 namespace detail { std::shared_ptr<http_response> empty_render(const http_request& r); }
-
-void resource_init(std::map<std::string, bool>* res);
 
 /**
  * Class representing a callable http resource.
@@ -147,81 +139,62 @@ class http_resource {
      }
 
      /**
-      * Method used to set if a specific method is allowed or not on this request
-      * @param method method to set permission on
-      * @param allowed boolean indicating if the method is allowed or not
+      * Toggle whether a specific http_method is allowed on this resource.
+      * @param method enum identifying the method (no string lookup)
+      * @param allow true to enable the method, false to disable it
      **/
-     void set_allowing(const std::string& method, bool allowed) {
-         if (method_state.count(method)) {
-             method_state[method] = allowed;
-         }
-     }
-
-     /**
-      * Method used to implicitly allow all methods
-     **/
-     void allow_all() {
-         std::map<std::string, bool>::iterator it;
-         for (it=method_state.begin(); it != method_state.end(); ++it) {
-             method_state[(*it).first] = true;
-         }
-     }
-
-     /**
-      * Method used to implicitly disallow all methods
-     **/
-     void disallow_all() {
-         std::map<std::string, bool>::iterator it;
-         for (it=method_state.begin(); it != method_state.end(); ++it) {
-             method_state[(*it).first] = false;
-         }
-     }
-
-     /**
-      * Method used to discover if an http method is allowed or not for this resource
-      * @param method Method to discover allowings
-      * @return true if the method is allowed
-     **/
-     bool is_allowed(const std::string& method) {
-         if (method_state.count(method)) {
-             return method_state[method];
+     void set_allowing(http_method method, bool allow) noexcept {
+         if (allow) {
+             methods_allowed_.set(method);
          } else {
-#ifdef DEBUG
-             std::map<std::string, bool>::iterator it;
-             for (it = method_state.begin(); it != method_state.end(); ++it) {
-                 std::cout << (*it).first << " -> " << (*it).second << std::endl;
-             }
-#endif  // DEBUG
-             return false;
+             methods_allowed_.clear(method);
          }
      }
 
      /**
-      * Method used to return a list of currently allowed HTTP methods for this resource
-      * @return vector of strings
+      * Allow every defined http_method on this resource.
      **/
-     std::vector<std::string> get_allowed_methods() {
-         std::vector<std::string> allowed_methods;
+     void allow_all() noexcept {
+         methods_allowed_.set_all();
+     }
 
-         for (auto it = method_state.cbegin(); it != method_state.cend(); ++it) {
-             if ( (*it).second ) {
-                 allowed_methods.push_back((*it).first);
-             }
-         }
+     /**
+      * Disallow every http_method on this resource.
+     **/
+     void disallow_all() noexcept {
+         methods_allowed_.clear_all();
+     }
 
-         return allowed_methods;
+     /**
+      * Test whether `method` is allowed on this resource. Const-noexcept
+      * because the answer is a single bitmask test on a trivial member;
+      * no string lookup, no allocation.
+      * @param method enum identifying the method to query
+      * @return true if the method is currently allowed
+     **/
+     bool is_allowed(http_method method) const noexcept {
+         return methods_allowed_.contains(method);
+     }
+
+     /**
+      * Return the full allow-mask by value. The returned method_set is
+      * trivially copyable (sizeof == 4) so by-value is the natural ABI.
+     **/
+     method_set get_allowed_methods() const noexcept {
+         return methods_allowed_;
      }
 
  protected:
      /**
-      * Constructor of the class
+      * Constructor of the class. The default state allows every defined
+      * http_method, matching the v1 behaviour where `resource_init`
+      * marked all nine methods true.
      **/
-     http_resource() {
-         resource_init(&method_state);
-     }
+     http_resource() = default;
 
      /**
-      * Copy constructor
+      * Copy / move special members are trivial — the only data member
+      * is method_set (a 32-bit aggregate).
      **/
      http_resource(const http_resource& b) = default;
      http_resource(http_resource&& b) noexcept = default;
@@ -231,9 +204,19 @@ class http_resource {
  private:
      friend class webserver;
      friend class detail::webserver_impl;  // TASK-014: dispatch helpers
-     friend void resource_init(std::map<std::string, bool>* res);
-     std::map<std::string, bool> method_state;
+
+     // Default-allow every valid method. method_set::set_all() is
+     // constexpr, so the chained call is a constant expression and the
+     // default member initialiser stays well-formed.
+     method_set methods_allowed_ = method_set{}.set_all();
 };
+
+// TASK-021 acceptance: http_resource is now a vptr plus a 32-bit
+// method_set plus padding. The cap below leaves headroom for one
+// future small member (e.g. an arena tag) without re-invalidating
+// PRD-REQ-REQ-002 / PRD-REQ-REQ-003.
+static_assert(sizeof(http_resource) <= sizeof(void*) + sizeof(method_set) * 2,
+              "http_resource should be approximately vptr + method_set");
 
 }  // namespace httpserver
 #endif  // SRC_HTTPSERVER_HTTP_RESOURCE_HPP_

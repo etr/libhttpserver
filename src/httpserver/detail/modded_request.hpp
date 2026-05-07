@@ -31,6 +31,7 @@
 #include <memory>
 #include <fstream>
 
+#include "httpserver/http_method.hpp"
 #include "httpserver/http_request.hpp"
 
 namespace httpserver {
@@ -44,6 +45,14 @@ struct modded_request {
     webserver* ws = nullptr;
 
     std::shared_ptr<http_response> (httpserver::http_resource::*callback)(const httpserver::http_request&);
+
+    // TASK-021: enum form of the wire method, decoded once at the
+    // dispatch boundary in webserver_impl::answer_to_connection. Used
+    // by finalize_answer to ask http_resource::is_allowed without a
+    // per-request string compare. Defaults to count_ — a sentinel
+    // outside the valid_method_mask, so is_allowed returns false for
+    // unrecognized verbs (the 405 path).
+    httpserver::http_method method_enum = httpserver::http_method::count_;
 
     std::unique_ptr<http_request> dhr = nullptr;
     std::shared_ptr<http_response> dhrs;

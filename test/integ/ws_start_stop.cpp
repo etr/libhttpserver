@@ -711,7 +711,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_error_resources)
     }
 
     {
-    ok.set_allowing("PUT", false);
+    ok.set_allowing(httpserver::http_method::put, false);
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;

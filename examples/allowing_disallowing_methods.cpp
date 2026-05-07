@@ -34,7 +34,7 @@ int main() {
 
     hello_world_resource hwr;
     hwr.disallow_all();
-    hwr.set_allowing("GET", true);
+    hwr.set_allowing(httpserver::http_method::get, true);
     ws.register_resource("/hello", &hwr);
     ws.start(true);
 

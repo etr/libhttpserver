@@ -1642,8 +1642,8 @@ LT_END_AUTO_TEST(regex_url_exact_match)
 LT_BEGIN_AUTO_TEST(basic_suite, method_not_allowed_header)
     simple_resource resource;
     resource.disallow_all();
-    resource.set_allowing("POST", true);
-    resource.set_allowing("HEAD", true);
+    resource.set_allowing(httpserver::http_method::post, true);
+    resource.set_allowing(httpserver::http_method::head, true);
     LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
@@ -1661,7 +1661,10 @@ LT_BEGIN_AUTO_TEST(basic_suite, method_not_allowed_header)
     int64_t http_code = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
     LT_ASSERT_EQ(http_code, 405);
-    // elements in http_resource::method_state are sorted (std::map)
+    // TASK-021: Allow-header tokens are emitted in http_method
+    // enum-declaration order (head=1, post=2). For this test the
+    // resulting "HEAD, POST" matches v1's std::map alphabetical order
+    // by coincidence; do not generalize the assumption.
     LT_CHECK_EQ(ss["Allow"], "HEAD, POST");
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(method_not_allowed_header)
@@ -2254,7 +2257,7 @@ class post_only_resource : public http_resource {
  public:
     post_only_resource() {
         disallow_all();
-        set_allowing("POST", true);
+        set_allowing(httpserver::http_method::post, true);
     }
     shared_ptr<http_response> render_POST(const http_request&) {
         return std::make_shared<http_response>(http_response::string("POST_OK"));
