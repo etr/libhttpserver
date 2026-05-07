@@ -103,7 +103,7 @@ Nominally: **13 sequential tasks**, each S–XL. Most other tasks parallelize of
 | TASK-018 | `http_request` single-key getters return `string_view`, all const | M3 | Done | TASK-015, TASK-016 |
 | TASK-019 | High-level GnuTLS accessors replacing `gnutls_session_t` | M3 | Done | TASK-015 |
 | TASK-020 | Final public-header backend-include sweep | M3 | Done | TASK-014, TASK-015, TASK-019 |
-| TASK-021 | `http_resource` allow-mask via `method_set` | M4 | Not Started | TASK-005 |
+| TASK-021 | `http_resource` allow-mask via `method_set` | M4 | Done | TASK-005 |
 | TASK-022 | Snake_case `render_*` overrides on `http_resource` | M4 | Not Started | TASK-021 |
 | TASK-023 | Smart-pointer `register_resource` overloads | M4 | Not Started | TASK-014 |
 | TASK-024 | `register_path` and `register_prefix` (replace `bool family`) | M4 | Not Started | TASK-023 |

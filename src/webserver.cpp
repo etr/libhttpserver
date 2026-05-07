@@ -1329,7 +1329,7 @@ struct MHD_Response* webserver_impl::get_raw_response_with_fallback(detail::modd
     }
 }
 
-MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection, struct detail::modded_request* mr, const char* method) {
+MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection, struct detail::modded_request* mr) {
     int to_ret = MHD_NO;
 
 #ifdef HAVE_WEBSOCKET
@@ -1501,7 +1501,7 @@ MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection, struct de
                 MHD_destroy_post_processor(mr->pp);
                 mr->pp = nullptr;
             }
-            if (hrm->is_allowed(method)) {
+            if (hrm->is_allowed(mr->method_enum)) {
                 mr->dhrs = ((hrm)->*(mr->callback))(*mr->dhr);  // copy in memory (move in case)
                 if (mr->dhrs.get() == nullptr || mr->dhrs->get_status() == -1) {
                     mr->dhrs = internal_error_page(mr);
@@ -1509,12 +1509,22 @@ MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection, struct de
             } else {
                 mr->dhrs = method_not_allowed_page(mr);
 
-                vector<string> allowed_methods = hrm->get_allowed_methods();
-                if (allowed_methods.size() > 0) {
-                    string header_value = allowed_methods[0];
-                    for (auto it = allowed_methods.cbegin() + 1; it != allowed_methods.cend(); ++it) {
-                        header_value += ", " + (*it);
+                // TASK-021: serialize the allow-mask in enum-declaration
+                // order (GET, HEAD, POST, PUT, DELETE, CONNECT, OPTIONS,
+                // TRACE, PATCH). v1 used std::map iteration order
+                // (alphabetical); the only existing assertion in-tree is
+                // "HEAD, POST" which is preserved by enum order.
+                method_set allowed = hrm->get_allowed_methods();
+                string header_value;
+                for (std::uint8_t i = 0;
+                     i < static_cast<std::uint8_t>(http_method::count_); ++i) {
+                    auto m = static_cast<http_method>(i);
+                    if (allowed.contains(m)) {
+                        if (!header_value.empty()) header_value += ", ";
+                        header_value += std::string(to_string(m));
                     }
+                }
+                if (!header_value.empty()) {
                     mr->dhrs->with_header(http_utils::http_header_allow, header_value);
                 }
             }
@@ -1550,7 +1560,7 @@ MHD_Result webserver_impl::complete_request(MHD_Connection* connection, struct d
     mr->dhr->set_method(method);
     mr->dhr->set_version(version);
 
-    return finalize_answer(connection, mr, method);
+    return finalize_answer(connection, mr);
 }
 
 MHD_Result webserver_impl::answer_to_connection(void* cls, MHD_Connection* connection, const char* url, const char* method,
@@ -1579,29 +1589,44 @@ MHD_Result webserver_impl::answer_to_connection(void* cls, MHD_Connection* conne
     webserver_impl::access_log(impl->parent, mr->complete_uri + " METHOD: " + method);
 
     // Case-sensitive per RFC 7230 §3.1.1: HTTP method is case-sensitive.
+    // TASK-021: also record the enum form once so finalize_answer can
+    // call hrm->is_allowed without re-scanning the wire string.
     if (0 == strcmp(method, http_utils::http_method_get)) {
         mr->callback = &http_resource::render_GET;
+        mr->method_enum = http_method::get;
     } else if (0 == strcmp(method, http_utils::http_method_post)) {
         mr->callback = &http_resource::render_POST;
+        mr->method_enum = http_method::post;
         mr->has_body = true;
     } else if (0 == strcmp(method, http_utils::http_method_put)) {
         mr->callback = &http_resource::render_PUT;
+        mr->method_enum = http_method::put;
         mr->has_body = true;
     } else if (0 == strcmp(method, http_utils::http_method_delete)) {
         mr->callback = &http_resource::render_DELETE;
+        mr->method_enum = http_method::del;
         mr->has_body = true;
     } else if (0 == strcmp(method, http_utils::http_method_patch)) {
         mr->callback = &http_resource::render_PATCH;
+        mr->method_enum = http_method::patch;
         mr->has_body = true;
     } else if (0 == strcmp(method, http_utils::http_method_head)) {
         mr->callback = &http_resource::render_HEAD;
+        mr->method_enum = http_method::head;
     } else if (0 == strcmp(method, http_utils::http_method_connect)) {
         mr->callback = &http_resource::render_CONNECT;
+        mr->method_enum = http_method::connect;
     } else if (0 == strcmp(method, http_utils::http_method_trace)) {
         mr->callback = &http_resource::render_TRACE;
+        mr->method_enum = http_method::trace;
     } else if (0 == strcmp(method, http_utils::http_method_options)) {
         mr->callback = &http_resource::render_OPTIONS;
+        mr->method_enum = http_method::options;
     }
+    // Else: mr->method_enum stays at the default (count_), so
+    // is_allowed(count_) returns false and the request takes the 405
+    // path. Pre-existing latent bug: mr->callback may also be left
+    // un-set here; see TASK-027 for the dispatch redesign.
 
     return impl->requests_answer_first_step(connection, mr);
 }

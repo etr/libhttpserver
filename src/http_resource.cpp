@@ -19,27 +19,12 @@
 */
 
 #include "httpserver/http_resource.hpp"
-#include <microhttpd.h>
-#include <iosfwd>
-#include <map>
+
 #include <memory>
-#include <string>
+
 #include "httpserver/http_response.hpp"
 
 namespace httpserver {
-
-// RESOURCE
-void resource_init(std::map<std::string, bool>* method_state) {
-    (*method_state)[MHD_HTTP_METHOD_GET] = true;
-    (*method_state)[MHD_HTTP_METHOD_POST] = true;
-    (*method_state)[MHD_HTTP_METHOD_PUT] = true;
-    (*method_state)[MHD_HTTP_METHOD_HEAD] = true;
-    (*method_state)[MHD_HTTP_METHOD_DELETE] = true;
-    (*method_state)[MHD_HTTP_METHOD_TRACE] = true;
-    (*method_state)[MHD_HTTP_METHOD_CONNECT] = true;
-    (*method_state)[MHD_HTTP_METHOD_OPTIONS] = true;
-    (*method_state)[MHD_HTTP_METHOD_PATCH] = true;
-}
 
 namespace detail {
 

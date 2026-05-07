@@ -18,24 +18,20 @@
      USA
 */
 
-#include <microhttpd.h>
-
-#include <algorithm>
+#include <cstdint>
 #include <memory>
-#include <string>
-#include <vector>
+#include <type_traits>
 
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
 
 using std::shared_ptr;
-using std::sort;
-using std::string;
-using std::vector;
 
+using httpserver::http_method;
 using httpserver::http_request;
 using httpserver::http_resource;
 using httpserver::http_response;
+using httpserver::method_set;
 
 class simple_resource : public http_resource {
  public:
@@ -43,6 +39,26 @@ class simple_resource : public http_resource {
          return std::make_shared<http_response>(http_response::string("OK"));
      }
 };
+
+// TASK-021 acceptance: http_resource shrinks by at least the cost of
+// an empty std::map<std::string, bool>. Empty std::map is typically
+// ~48 bytes on libstdc++/libc++; the v1 resource was ~56-64 bytes.
+// The new resource is just vptr + uint32_t + padding, so a generous
+// 32-byte ceiling cleanly distinguishes the new layout from the old.
+// TASK-039 will measure formally; this assertion makes the shrink
+// observable now.
+static_assert(sizeof(http_resource) <= 32,
+              "http_resource should be vptr + method_set padding");
+
+// Const-noexcept acceptance criteria pinned at compile time: both
+// query members must be callable on a const reference and must be
+// declared noexcept.
+static_assert(noexcept(std::declval<const http_resource&>()
+                           .is_allowed(http_method::get)),
+              "is_allowed(http_method) must be const noexcept");
+static_assert(noexcept(std::declval<const http_resource&>()
+                           .get_allowed_methods()),
+              "get_allowed_methods() must be const noexcept");
 
 LT_BEGIN_SUITE(http_resource_suite)
     void set_up() {
@@ -55,66 +71,46 @@ LT_END_SUITE(http_resource_suite)
 LT_BEGIN_AUTO_TEST(http_resource_suite, disallow_all_methods)
     simple_resource sr;
     sr.disallow_all();
-    auto allowed_methods = sr.get_allowed_methods();
-    LT_CHECK_EQ(allowed_methods.size(), 0);
+    method_set allowed = sr.get_allowed_methods();
+    LT_CHECK_EQ(allowed.bits, 0u);
 LT_END_AUTO_TEST(disallow_all_methods)
 
 LT_BEGIN_AUTO_TEST(http_resource_suite, allow_some_methods)
     simple_resource sr;
     sr.disallow_all();
-    sr.set_allowing(MHD_HTTP_METHOD_GET, true);
-    sr.set_allowing(MHD_HTTP_METHOD_POST, true);
-    auto allowed_methods = sr.get_allowed_methods();
-    LT_CHECK_EQ(allowed_methods.size(), 2);
-    // elements in http_resource::method_state are sorted (std::map)
-    vector<string> some_methods{MHD_HTTP_METHOD_GET, MHD_HTTP_METHOD_POST};
-    sort(some_methods.begin(), some_methods.end());
-    LT_CHECK_COLLECTIONS_EQ(allowed_methods.cbegin(), allowed_methods.cend(),
-            some_methods.cbegin())
+    sr.set_allowing(http_method::get, true);
+    sr.set_allowing(http_method::post, true);
+    method_set allowed = sr.get_allowed_methods();
+    LT_CHECK_EQ(allowed.contains(http_method::get), true);
+    LT_CHECK_EQ(allowed.contains(http_method::post), true);
+    LT_CHECK_EQ(allowed.contains(http_method::put), false);
+    LT_CHECK_EQ(allowed.bits,
+                method_set{}.set(http_method::get).set(http_method::post).bits);
 LT_END_AUTO_TEST(allow_some_methods)
 
 LT_BEGIN_AUTO_TEST(http_resource_suite, allow_all_methods)
     simple_resource sr;
     sr.allow_all();
-    auto allowed_methods = sr.get_allowed_methods();
-    // elements in http_resource::method_state are sorted (std::map)
-    vector<string> all_methods{MHD_HTTP_METHOD_GET, MHD_HTTP_METHOD_POST,
-            MHD_HTTP_METHOD_PUT, MHD_HTTP_METHOD_HEAD, MHD_HTTP_METHOD_DELETE,
-            MHD_HTTP_METHOD_TRACE, MHD_HTTP_METHOD_CONNECT,
-            MHD_HTTP_METHOD_OPTIONS, MHD_HTTP_METHOD_PATCH};
-    sort(all_methods.begin(), all_methods.end());
-    LT_CHECK_COLLECTIONS_EQ(allowed_methods.cbegin(), allowed_methods.cend(),
-            all_methods.cbegin())
+    method_set allowed = sr.get_allowed_methods();
+    LT_CHECK_EQ(allowed.contains(http_method::get), true);
+    LT_CHECK_EQ(allowed.contains(http_method::head), true);
+    LT_CHECK_EQ(allowed.contains(http_method::post), true);
+    LT_CHECK_EQ(allowed.contains(http_method::put), true);
+    LT_CHECK_EQ(allowed.contains(http_method::del), true);
+    LT_CHECK_EQ(allowed.contains(http_method::connect), true);
+    LT_CHECK_EQ(allowed.contains(http_method::options), true);
+    LT_CHECK_EQ(allowed.contains(http_method::trace), true);
+    LT_CHECK_EQ(allowed.contains(http_method::patch), true);
 LT_END_AUTO_TEST(allow_all_methods)
-
-LT_BEGIN_AUTO_TEST(http_resource_suite, set_allowing_nonexistent_method)
-    simple_resource sr;
-    // Try to set allowing for a method not in method_state
-    // This should be silently ignored (no effect)
-    sr.set_allowing("NONEXISTENT", true);
-    auto allowed_methods = sr.get_allowed_methods();
-    // Verify that NONEXISTENT is not in the list
-    LT_CHECK_EQ(std::find(allowed_methods.begin(), allowed_methods.end(),
-                          "NONEXISTENT") == allowed_methods.end(), true);
-LT_END_AUTO_TEST(set_allowing_nonexistent_method)
-
-LT_BEGIN_AUTO_TEST(http_resource_suite, is_allowed_nonexistent_method)
-    simple_resource sr;
-    // Check that is_allowed returns false for unknown methods
-    LT_CHECK_EQ(sr.is_allowed("UNKNOWN_METHOD"), false);
-    LT_CHECK_EQ(sr.is_allowed("CUSTOM"), false);
-LT_END_AUTO_TEST(is_allowed_nonexistent_method)
 
 LT_BEGIN_AUTO_TEST(http_resource_suite, set_allowing_disable)
     simple_resource sr;
-    // By default, GET is allowed
-    LT_CHECK_EQ(sr.is_allowed(MHD_HTTP_METHOD_GET), true);
-    // Disable GET
-    sr.set_allowing(MHD_HTTP_METHOD_GET, false);
-    LT_CHECK_EQ(sr.is_allowed(MHD_HTTP_METHOD_GET), false);
-    // Re-enable GET
-    sr.set_allowing(MHD_HTTP_METHOD_GET, true);
-    LT_CHECK_EQ(sr.is_allowed(MHD_HTTP_METHOD_GET), true);
+    // By default, GET is allowed.
+    LT_CHECK_EQ(sr.is_allowed(http_method::get), true);
+    sr.set_allowing(http_method::get, false);
+    LT_CHECK_EQ(sr.is_allowed(http_method::get), false);
+    sr.set_allowing(http_method::get, true);
+    LT_CHECK_EQ(sr.is_allowed(http_method::get), true);
 LT_END_AUTO_TEST(set_allowing_disable)
 
 // Test resource that only overrides render() method
@@ -133,89 +129,95 @@ class empty_resource : public http_resource {
 
 LT_BEGIN_AUTO_TEST(http_resource_suite, default_render_returns_empty)
     empty_resource er;
-    // Create a minimal mock request - we need to test that render() returns empty
-    // Since we can't create a proper http_request without MHD internals,
-    // we just verify the resource exists and has correct method state
-    auto allowed = er.get_allowed_methods();
-    LT_CHECK_EQ(allowed.size(), 9);  // All 9 methods allowed by default
+    // All 9 methods allowed by default.
+    method_set allowed = er.get_allowed_methods();
+    for (std::uint8_t i = 0;
+         i < static_cast<std::uint8_t>(http_method::count_); ++i) {
+        LT_CHECK_EQ(allowed.contains(static_cast<http_method>(i)), true);
+    }
 LT_END_AUTO_TEST(default_render_returns_empty)
 
 LT_BEGIN_AUTO_TEST(http_resource_suite, render_only_resource_methods_allowed)
     render_only_resource ror;
     // All methods should be allowed by default
-    LT_CHECK_EQ(ror.is_allowed(MHD_HTTP_METHOD_GET), true);
-    LT_CHECK_EQ(ror.is_allowed(MHD_HTTP_METHOD_POST), true);
-    LT_CHECK_EQ(ror.is_allowed(MHD_HTTP_METHOD_PUT), true);
-    LT_CHECK_EQ(ror.is_allowed(MHD_HTTP_METHOD_HEAD), true);
-    LT_CHECK_EQ(ror.is_allowed(MHD_HTTP_METHOD_DELETE), true);
-    LT_CHECK_EQ(ror.is_allowed(MHD_HTTP_METHOD_TRACE), true);
-    LT_CHECK_EQ(ror.is_allowed(MHD_HTTP_METHOD_CONNECT), true);
-    LT_CHECK_EQ(ror.is_allowed(MHD_HTTP_METHOD_OPTIONS), true);
-    LT_CHECK_EQ(ror.is_allowed(MHD_HTTP_METHOD_PATCH), true);
+    LT_CHECK_EQ(ror.is_allowed(http_method::get), true);
+    LT_CHECK_EQ(ror.is_allowed(http_method::post), true);
+    LT_CHECK_EQ(ror.is_allowed(http_method::put), true);
+    LT_CHECK_EQ(ror.is_allowed(http_method::head), true);
+    LT_CHECK_EQ(ror.is_allowed(http_method::del), true);
+    LT_CHECK_EQ(ror.is_allowed(http_method::trace), true);
+    LT_CHECK_EQ(ror.is_allowed(http_method::connect), true);
+    LT_CHECK_EQ(ror.is_allowed(http_method::options), true);
+    LT_CHECK_EQ(ror.is_allowed(http_method::patch), true);
 LT_END_AUTO_TEST(render_only_resource_methods_allowed)
 
-LT_BEGIN_AUTO_TEST(http_resource_suite, resource_init_sets_all_methods)
+LT_BEGIN_AUTO_TEST(http_resource_suite, default_state_all_methods_set)
     simple_resource sr;
-    // Verify all 9 HTTP methods are initialized
-    auto allowed = sr.get_allowed_methods();
-    LT_CHECK_EQ(allowed.size(), 9);
-LT_END_AUTO_TEST(resource_init_sets_all_methods)
+    // The default-constructed resource has every valid method bit set.
+    method_set allowed = sr.get_allowed_methods();
+    LT_CHECK_EQ(allowed.bits, method_set{}.set_all().bits);
+LT_END_AUTO_TEST(default_state_all_methods_set)
 
-LT_BEGIN_AUTO_TEST(http_resource_suite, get_allowed_methods_only_returns_true)
+LT_BEGIN_AUTO_TEST(http_resource_suite, get_allowed_methods_only_returns_set)
     simple_resource sr;
-    // Disallow some methods
-    sr.set_allowing(MHD_HTTP_METHOD_POST, false);
-    sr.set_allowing(MHD_HTTP_METHOD_PUT, false);
-    sr.set_allowing(MHD_HTTP_METHOD_DELETE, false);
+    sr.set_allowing(http_method::post, false);
+    sr.set_allowing(http_method::put, false);
+    sr.set_allowing(http_method::del, false);
 
-    auto allowed = sr.get_allowed_methods();
-    // Should only return 6 methods now (9 - 3)
-    LT_CHECK_EQ(allowed.size(), 6);
-
-    // Verify POST, PUT, DELETE are not in the list
-    LT_CHECK_EQ(std::find(allowed.begin(), allowed.end(),
-                          MHD_HTTP_METHOD_POST) == allowed.end(), true);
-    LT_CHECK_EQ(std::find(allowed.begin(), allowed.end(),
-                          MHD_HTTP_METHOD_PUT) == allowed.end(), true);
-    LT_CHECK_EQ(std::find(allowed.begin(), allowed.end(),
-                          MHD_HTTP_METHOD_DELETE) == allowed.end(), true);
-LT_END_AUTO_TEST(get_allowed_methods_only_returns_true)
+    method_set allowed = sr.get_allowed_methods();
+    LT_CHECK_EQ(allowed.contains(http_method::post), false);
+    LT_CHECK_EQ(allowed.contains(http_method::put), false);
+    LT_CHECK_EQ(allowed.contains(http_method::del), false);
+    // Other methods stay allowed.
+    LT_CHECK_EQ(allowed.contains(http_method::get), true);
+    LT_CHECK_EQ(allowed.contains(http_method::head), true);
+    LT_CHECK_EQ(allowed.contains(http_method::trace), true);
+LT_END_AUTO_TEST(get_allowed_methods_only_returns_set)
 
 LT_BEGIN_AUTO_TEST(http_resource_suite, is_allowed_known_methods)
     simple_resource sr;
-    // All standard methods should be allowed by default
-    LT_CHECK_EQ(sr.is_allowed(MHD_HTTP_METHOD_GET), true);
-    LT_CHECK_EQ(sr.is_allowed(MHD_HTTP_METHOD_POST), true);
-    LT_CHECK_EQ(sr.is_allowed(MHD_HTTP_METHOD_PUT), true);
-    LT_CHECK_EQ(sr.is_allowed(MHD_HTTP_METHOD_HEAD), true);
-    LT_CHECK_EQ(sr.is_allowed(MHD_HTTP_METHOD_DELETE), true);
-    LT_CHECK_EQ(sr.is_allowed(MHD_HTTP_METHOD_TRACE), true);
-    LT_CHECK_EQ(sr.is_allowed(MHD_HTTP_METHOD_CONNECT), true);
-    LT_CHECK_EQ(sr.is_allowed(MHD_HTTP_METHOD_OPTIONS), true);
-    LT_CHECK_EQ(sr.is_allowed(MHD_HTTP_METHOD_PATCH), true);
+    LT_CHECK_EQ(sr.is_allowed(http_method::get), true);
+    LT_CHECK_EQ(sr.is_allowed(http_method::post), true);
+    LT_CHECK_EQ(sr.is_allowed(http_method::put), true);
+    LT_CHECK_EQ(sr.is_allowed(http_method::head), true);
+    LT_CHECK_EQ(sr.is_allowed(http_method::del), true);
+    LT_CHECK_EQ(sr.is_allowed(http_method::trace), true);
+    LT_CHECK_EQ(sr.is_allowed(http_method::connect), true);
+    LT_CHECK_EQ(sr.is_allowed(http_method::options), true);
+    LT_CHECK_EQ(sr.is_allowed(http_method::patch), true);
 LT_END_AUTO_TEST(is_allowed_known_methods)
 
 LT_BEGIN_AUTO_TEST(http_resource_suite, allow_all_after_disallow_all)
     simple_resource sr;
     sr.disallow_all();
-    LT_CHECK_EQ(sr.get_allowed_methods().size(), 0);
+    LT_CHECK_EQ(sr.get_allowed_methods().bits, 0u);
 
     sr.allow_all();
-    LT_CHECK_EQ(sr.get_allowed_methods().size(), 9);
+    LT_CHECK_EQ(sr.get_allowed_methods().bits, method_set{}.set_all().bits);
 LT_END_AUTO_TEST(allow_all_after_disallow_all)
 
 LT_BEGIN_AUTO_TEST(http_resource_suite, set_allowing_multiple_times)
     simple_resource sr;
-    // Toggle GET multiple times
-    LT_CHECK_EQ(sr.is_allowed(MHD_HTTP_METHOD_GET), true);
-    sr.set_allowing(MHD_HTTP_METHOD_GET, false);
-    LT_CHECK_EQ(sr.is_allowed(MHD_HTTP_METHOD_GET), false);
-    sr.set_allowing(MHD_HTTP_METHOD_GET, true);
-    LT_CHECK_EQ(sr.is_allowed(MHD_HTTP_METHOD_GET), true);
-    sr.set_allowing(MHD_HTTP_METHOD_GET, false);
-    sr.set_allowing(MHD_HTTP_METHOD_GET, false);  // Double false
-    LT_CHECK_EQ(sr.is_allowed(MHD_HTTP_METHOD_GET), false);
+    LT_CHECK_EQ(sr.is_allowed(http_method::get), true);
+    sr.set_allowing(http_method::get, false);
+    LT_CHECK_EQ(sr.is_allowed(http_method::get), false);
+    sr.set_allowing(http_method::get, true);
+    LT_CHECK_EQ(sr.is_allowed(http_method::get), true);
+    sr.set_allowing(http_method::get, false);
+    sr.set_allowing(http_method::get, false);  // Double false
+    LT_CHECK_EQ(sr.is_allowed(http_method::get), false);
 LT_END_AUTO_TEST(set_allowing_multiple_times)
+
+// security: set_allowing(count_, true) must have no effect — the sentinel
+// must never appear in the allowed-set so is_allowed(count_) stays false.
+LT_BEGIN_AUTO_TEST(http_resource_suite, set_allowing_count_sentinel_has_no_effect)
+    simple_resource sr;
+    sr.set_allowing(http_method::count_, true);
+    // The sentinel bit must not have been set.
+    LT_CHECK_EQ(sr.is_allowed(http_method::count_), false);
+    // The rest of the allowed set must be unchanged (still all-set by default).
+    LT_CHECK_EQ(sr.get_allowed_methods().bits, method_set{}.set_all().bits);
+LT_END_AUTO_TEST(set_allowing_count_sentinel_has_no_effect)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

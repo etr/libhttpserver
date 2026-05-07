@@ -235,8 +235,10 @@ class webserver_impl {
     MHD_Result requests_answer_second_step(MHD_Connection* connection,
             const char* method, const char* version, const char* upload_data,
             size_t* upload_data_size, modded_request* mr);
-    MHD_Result finalize_answer(MHD_Connection* connection, modded_request* mr,
-                               const char* method);
+    // TASK-021: the wire-string `method` parameter was dropped because
+    // finalize_answer now consults mr->method_enum (set once by
+    // answer_to_connection) for the is_allowed check.
+    MHD_Result finalize_answer(MHD_Connection* connection, modded_request* mr);
     MHD_Result complete_request(MHD_Connection* connection, modded_request* mr,
                                 const char* version, const char* method);
     struct MHD_Response* get_raw_response_with_fallback(modded_request* mr);
