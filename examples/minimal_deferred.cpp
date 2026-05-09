@@ -44,7 +44,7 @@ ssize_t test_callback(std::shared_ptr<void> closure_data, char* buf, size_t max)
 
 class deferred_resource : public httpserver::http_resource {
  public:
-     std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request&) {
+     std::shared_ptr<httpserver::http_response> render_get(const httpserver::http_request&) {
          std::string initial = "cycle callback response";
          return std::make_shared<httpserver::http_response>(
              httpserver::http_response::deferred(

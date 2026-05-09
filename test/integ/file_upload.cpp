@@ -250,7 +250,7 @@ static std::tuple<bool, CURLcode, int32_t> send_file_via_put() {
 
 class print_file_upload_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_POST(const http_request& req) {
+     shared_ptr<http_response> render_post(const http_request& req) {
          content = req.get_content();
          // TASK-017: get_args() now returns a const& -- read-only iteration
          // here, so bind by const reference. The body still copies into the
@@ -267,7 +267,7 @@ class print_file_upload_resource : public http_resource {
          return std::make_shared<http_response>(http_response::string("OK").with_status(201));
      }
 
-     shared_ptr<http_response> render_PUT(const http_request& req) {
+     shared_ptr<http_response> render_put(const http_request& req) {
          content = req.get_content();
          const auto& args_view = req.get_args();
          for (auto const& item : args_view) {

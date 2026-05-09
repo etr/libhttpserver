@@ -35,7 +35,7 @@ using httpserver::method_set;
 
 class simple_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_GET(const http_request&) {
+     shared_ptr<http_response> render_get(const http_request&) override {
          return std::make_shared<http_response>(http_response::string("OK"));
      }
 };

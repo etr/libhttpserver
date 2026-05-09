@@ -27,7 +27,7 @@
 
 class file_upload_resource : public httpserver::http_resource {
  public:
-     std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request&) {
+     std::shared_ptr<httpserver::http_response> render_get(const httpserver::http_request&) {
          std::string get_response = "<html>\n";
          get_response += "  <body>\n";
          get_response += "    <h1>File Upload with Cleanup Callback Demo</h1>\n";
@@ -43,7 +43,7 @@ class file_upload_resource : public httpserver::http_resource {
          return std::shared_ptr<httpserver::http_response>(new httpserver::http_response(httpserver::http_response::string(get_response, "text/html")));
      }
 
-     std::shared_ptr<httpserver::http_response> render_POST(const httpserver::http_request& req) {
+     std::shared_ptr<httpserver::http_response> render_post(const httpserver::http_request& req) {
         std::string post_response = "<html>\n";
         post_response += "<body>\n";
         post_response += "  <h1>Upload Complete</h1>\n";

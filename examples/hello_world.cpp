@@ -49,7 +49,7 @@ int main() {
 
     hello_world_resource hwr;
     // This way we are registering the hello_world_resource to answer for the endpoint
-    // "/hello". The requested method is called (if the request is a GET we call the render_GET
+    // "/hello". The requested method is called (if the request is a GET we call the render_get
     // method. In case that the specific render method is not implemented, the generic "render"
     // method is called.
     ws.register_resource("/hello", &hwr, true);

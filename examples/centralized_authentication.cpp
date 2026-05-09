@@ -31,14 +31,14 @@ using httpserver::create_webserver;
 // Simple resource that doesn't need to handle auth itself
 class hello_resource : public http_resource {
  public:
-    std::shared_ptr<http_response> render_GET(const http_request&) {
+    std::shared_ptr<http_response> render_get(const http_request&) {
         return std::make_shared<http_response>(http_response::string("Hello, authenticated user!"));
     }
 };
 
 class health_resource : public http_resource {
  public:
-    std::shared_ptr<http_response> render_GET(const http_request&) {
+    std::shared_ptr<http_response> render_get(const http_request&) {
         return std::make_shared<http_response>(http_response::string("OK"));
     }
 };
