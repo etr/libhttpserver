@@ -8,7 +8,7 @@
 Rename `render_GET` / `render_POST` / etc. to `render_get` / `render_post` / etc. so the public API obeys the snake_case rule.
 
 **Action Items:**
-- [ ] Rename virtual overrides:
+- [x] Rename virtual overrides:
   - `render_GET` → `render_get`
   - `render_POST` → `render_post`
   - `render_PUT` → `render_put`
@@ -18,10 +18,10 @@ Rename `render_GET` / `render_POST` / etc. to `render_get` / `render_post` / etc
   - `render_HEAD` → `render_head`
   - `render_CONNECT` → `render_connect`
   - `render_TRACE` → `render_trace`
-- [ ] Default `render(...)` fallback signature unchanged.
-- [ ] Update return type to `http_response` by value (was a pointer / shared_ptr in v1) — coupled with TASK-036's full handler-return refactor.
-- [ ] Update all examples and tests to use the new names.
-- [ ] Remove the old camelCase names entirely (no compatibility shim — v2.0 is a clean break).
+- [x] Default `render(...)` fallback signature unchanged.
+- Return-type change to `http_response` by value is deferred to TASK-036 (full handler-return refactor).
+- [x] Update all examples and tests to use the new names.
+- [x] Remove the old camelCase names entirely (no compatibility shim — v2.0 is a clean break).
 
 **Dependencies:**
 - Blocked by: TASK-021
@@ -36,4 +36,4 @@ Rename `render_GET` / `render_POST` / etc. to `render_get` / `render_post` / etc
 **Related Requirements:** PRD-NAM-REQ-001
 **Related Decisions:** §3.7, §4.4
 
-**Status:** Not Started
+**Status:** Done
