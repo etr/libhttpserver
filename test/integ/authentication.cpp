@@ -64,7 +64,7 @@ size_t writefunc(void *ptr, size_t size, size_t nmemb, std::string *s) {
 #ifdef HAVE_BAUTH
 class user_pass_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_GET(const http_request& req) {
+     shared_ptr<http_response> render_get(const http_request& req) {
          if (req.get_user() != "myuser" || req.get_pass() != "mypass") {
              return std::make_shared<http_response>(http_response::unauthorized("Basic", "examplerealm", "FAIL"));
          }
@@ -76,7 +76,7 @@ class user_pass_resource : public http_resource {
 #ifdef HAVE_DAUTH
 class digest_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_GET(const http_request& req) {
+     shared_ptr<http_response> render_get(const http_request& req) {
          using httpserver::http::http_utils;
          if (req.get_digested_user() == "") {
              return std::make_shared<http_response>(http_response::unauthorized("Digest", "examplerealm", "FAIL"));
@@ -179,7 +179,7 @@ static const unsigned char PRECOMPUTED_HA1_SHA256[32] = {
 
 class digest_ha1_md5_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_GET(const http_request& req) {
+     shared_ptr<http_response> render_get(const http_request& req) {
          using httpserver::http::http_utils;
          if (req.get_digested_user() == "") {
              return std::make_shared<http_response>(http_response::unauthorized("Digest", "examplerealm", "FAIL"));
@@ -198,7 +198,7 @@ class digest_ha1_md5_resource : public http_resource {
 
 class digest_ha1_sha256_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_GET(const http_request& req) {
+     shared_ptr<http_response> render_get(const http_request& req) {
          using httpserver::http::http_utils;
          if (req.get_digested_user() == "") {
              return std::make_shared<http_response>(http_response::unauthorized("Digest", "examplerealm", "FAIL"));
@@ -496,7 +496,7 @@ LT_END_AUTO_TEST(digest_auth_with_ha1_sha256_wrong_pass)
 // Covers http_request.cpp lines 293-295 (cache hit) and 300 (nullptr branch)
 class digest_user_cache_resource : public http_resource {
  public:
-    shared_ptr<http_response> render_GET(const http_request& req) {
+    shared_ptr<http_response> render_get(const http_request& req) {
         using httpserver::http::http_utils;
         // First call - will populate cache (line 300 nullptr or non-null branch)
         std::string user1 = std::string(req.get_digested_user());
@@ -591,7 +591,7 @@ LT_END_AUTO_TEST(digest_user_cache_with_auth)
 // Simple resource for centralized auth tests
 class simple_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_GET(const http_request&) {
+     shared_ptr<http_response> render_get(const http_request&) {
          return std::make_shared<http_response>(http_response::string("SUCCESS"));
      }
 };
@@ -788,7 +788,7 @@ LT_END_AUTO_TEST(auth_skip_paths_deep_nested)
 // Test POST method with centralized auth
 class post_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_POST(const http_request&) {
+     shared_ptr<http_response> render_post(const http_request&) {
          return std::make_shared<http_response>(http_response::string("POST_SUCCESS"));
      }
 };

@@ -26,13 +26,13 @@
 
 class no_content_resource : public httpserver::http_resource {
  public:
-     std::shared_ptr<httpserver::http_response> render_DELETE(const httpserver::http_request&) {
+     std::shared_ptr<httpserver::http_response> render_delete(const httpserver::http_request&) {
          // Return a 204 No Content response with no body
          return std::make_shared<httpserver::http_response>(
              httpserver::http_response::empty());
      }
 
-     std::shared_ptr<httpserver::http_response> render_HEAD(const httpserver::http_request&) {
+     std::shared_ptr<httpserver::http_response> render_head(const httpserver::http_request&) {
          // Return a HEAD-only response with headers but no body
          auto response = std::make_shared<httpserver::http_response>(
              httpserver::http_response::empty(MHD_RF_HEAD_ONLY_RESPONSE)

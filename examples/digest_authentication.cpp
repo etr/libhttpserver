@@ -26,7 +26,7 @@
 
 class digest_resource : public httpserver::http_resource {
  public:
-     std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request& req) {
+     std::shared_ptr<httpserver::http_response> render_get(const httpserver::http_request& req) {
          using httpserver::http::http_utils;
          if (req.get_digested_user() == "") {
              return std::make_shared<httpserver::http_response>(httpserver::http_response::unauthorized("Digest", "test@example.com", "FAIL"));

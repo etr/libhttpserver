@@ -1592,35 +1592,35 @@ MHD_Result webserver_impl::answer_to_connection(void* cls, MHD_Connection* conne
     // TASK-021: also record the enum form once so finalize_answer can
     // call hrm->is_allowed without re-scanning the wire string.
     if (0 == strcmp(method, http_utils::http_method_get)) {
-        mr->callback = &http_resource::render_GET;
+        mr->callback = &http_resource::render_get;
         mr->method_enum = http_method::get;
     } else if (0 == strcmp(method, http_utils::http_method_post)) {
-        mr->callback = &http_resource::render_POST;
+        mr->callback = &http_resource::render_post;
         mr->method_enum = http_method::post;
         mr->has_body = true;
     } else if (0 == strcmp(method, http_utils::http_method_put)) {
-        mr->callback = &http_resource::render_PUT;
+        mr->callback = &http_resource::render_put;
         mr->method_enum = http_method::put;
         mr->has_body = true;
     } else if (0 == strcmp(method, http_utils::http_method_delete)) {
-        mr->callback = &http_resource::render_DELETE;
+        mr->callback = &http_resource::render_delete;
         mr->method_enum = http_method::del;
         mr->has_body = true;
     } else if (0 == strcmp(method, http_utils::http_method_patch)) {
-        mr->callback = &http_resource::render_PATCH;
+        mr->callback = &http_resource::render_patch;
         mr->method_enum = http_method::patch;
         mr->has_body = true;
     } else if (0 == strcmp(method, http_utils::http_method_head)) {
-        mr->callback = &http_resource::render_HEAD;
+        mr->callback = &http_resource::render_head;
         mr->method_enum = http_method::head;
     } else if (0 == strcmp(method, http_utils::http_method_connect)) {
-        mr->callback = &http_resource::render_CONNECT;
+        mr->callback = &http_resource::render_connect;
         mr->method_enum = http_method::connect;
     } else if (0 == strcmp(method, http_utils::http_method_trace)) {
-        mr->callback = &http_resource::render_TRACE;
+        mr->callback = &http_resource::render_trace;
         mr->method_enum = http_method::trace;
     } else if (0 == strcmp(method, http_utils::http_method_options)) {
-        mr->callback = &http_resource::render_OPTIONS;
+        mr->callback = &http_resource::render_options;
         mr->method_enum = http_method::options;
     }
     // Else: mr->method_enum stays at the default (count_), so

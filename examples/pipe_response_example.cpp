@@ -33,7 +33,7 @@
 
 class pipe_resource : public httpserver::http_resource {
  public:
-     std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request&) {
+     std::shared_ptr<httpserver::http_response> render_get(const httpserver::http_request&) {
          int pipefd[2];
 #if defined(_WIN32) && !defined(__CYGWIN__)
          if (_pipe(pipefd, 4096, _O_BINARY) == -1) {

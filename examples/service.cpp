@@ -34,22 +34,22 @@ class service_resource: public httpserver::http_resource {
 
      ~service_resource();
 
-     std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request &req);
-     std::shared_ptr<httpserver::http_response> render_PUT(const httpserver::http_request &req);
-     std::shared_ptr<httpserver::http_response> render_POST(const httpserver::http_request &req);
+     std::shared_ptr<httpserver::http_response> render_get(const httpserver::http_request &req);
+     std::shared_ptr<httpserver::http_response> render_put(const httpserver::http_request &req);
+     std::shared_ptr<httpserver::http_response> render_post(const httpserver::http_request &req);
      std::shared_ptr<httpserver::http_response> render(const httpserver::http_request &req);
-     std::shared_ptr<httpserver::http_response> render_HEAD(const httpserver::http_request &req);
-     std::shared_ptr<httpserver::http_response> render_OPTIONS(const httpserver::http_request &req);
-     std::shared_ptr<httpserver::http_response> render_CONNECT(const httpserver::http_request &req);
-     std::shared_ptr<httpserver::http_response> render_DELETE(const httpserver::http_request &req);
+     std::shared_ptr<httpserver::http_response> render_head(const httpserver::http_request &req);
+     std::shared_ptr<httpserver::http_response> render_options(const httpserver::http_request &req);
+     std::shared_ptr<httpserver::http_response> render_connect(const httpserver::http_request &req);
+     std::shared_ptr<httpserver::http_response> render_delete(const httpserver::http_request &req);
 };
 
 service_resource::service_resource() { }
 
 service_resource::~service_resource() { }
 
-std::shared_ptr<httpserver::http_response> service_resource::render_GET(const httpserver::http_request &req) {
-    std::cout << "service_resource::render_GET()" << std::endl;
+std::shared_ptr<httpserver::http_response> service_resource::render_get(const httpserver::http_request &req) {
+    std::cout << "service_resource::render_get()" << std::endl;
 
     if (verbose) std::cout << req;
     auto res = std::make_shared<httpserver::http_response>(httpserver::http_response::string("GET response"));
@@ -60,8 +60,8 @@ std::shared_ptr<httpserver::http_response> service_resource::render_GET(const ht
 }
 
 
-std::shared_ptr<httpserver::http_response> service_resource::render_PUT(const httpserver::http_request &req) {
-    std::cout << "service_resource::render_PUT()" << std::endl;
+std::shared_ptr<httpserver::http_response> service_resource::render_put(const httpserver::http_request &req) {
+    std::cout << "service_resource::render_put()" << std::endl;
 
     if (verbose) std::cout << req;
 
@@ -72,8 +72,8 @@ std::shared_ptr<httpserver::http_response> service_resource::render_PUT(const ht
     return res;
 }
 
-std::shared_ptr<httpserver::http_response> service_resource::render_POST(const httpserver::http_request &req) {
-    std::cout << "service_resource::render_POST()" << std::endl;
+std::shared_ptr<httpserver::http_response> service_resource::render_post(const httpserver::http_request &req) {
+    std::cout << "service_resource::render_post()" << std::endl;
 
     if (verbose) std::cout << req;
 
@@ -96,8 +96,8 @@ std::shared_ptr<httpserver::http_response> service_resource::render(const httpse
     return res;
 }
 
-std::shared_ptr<httpserver::http_response> service_resource::render_HEAD(const httpserver::http_request &req) {
-    std::cout << "service_resource::render_HEAD()" << std::endl;
+std::shared_ptr<httpserver::http_response> service_resource::render_head(const httpserver::http_request &req) {
+    std::cout << "service_resource::render_head()" << std::endl;
 
     if (verbose) std::cout << req;
 
@@ -108,8 +108,8 @@ std::shared_ptr<httpserver::http_response> service_resource::render_HEAD(const h
     return res;
 }
 
-std::shared_ptr<httpserver::http_response> service_resource::render_OPTIONS(const httpserver::http_request &req) {
-    std::cout << "service_resource::render_OPTIONS()" << std::endl;
+std::shared_ptr<httpserver::http_response> service_resource::render_options(const httpserver::http_request &req) {
+    std::cout << "service_resource::render_options()" << std::endl;
 
     if (verbose) std::cout << req;
 
@@ -120,8 +120,8 @@ std::shared_ptr<httpserver::http_response> service_resource::render_OPTIONS(cons
     return res;
 }
 
-std::shared_ptr<httpserver::http_response> service_resource::render_CONNECT(const httpserver::http_request &req) {
-    std::cout << "service_resource::render_CONNECT()" << std::endl;
+std::shared_ptr<httpserver::http_response> service_resource::render_connect(const httpserver::http_request &req) {
+    std::cout << "service_resource::render_connect()" << std::endl;
 
     if (verbose) std::cout << req;
 
@@ -132,8 +132,8 @@ std::shared_ptr<httpserver::http_response> service_resource::render_CONNECT(cons
     return res;
 }
 
-std::shared_ptr<httpserver::http_response> service_resource::render_DELETE(const httpserver::http_request &req) {
-    std::cout << "service_resource::render_DELETE()" << std::endl;
+std::shared_ptr<httpserver::http_response> service_resource::render_delete(const httpserver::http_request &req) {
+    std::cout << "service_resource::render_delete()" << std::endl;
 
     if (verbose) std::cout << req;
 

@@ -58,7 +58,7 @@ static std::string generate_png_data() {
 
 class image_resource : public httpserver::http_resource {
  public:
-    std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request&) {
+    std::shared_ptr<httpserver::http_response> render_get(const httpserver::http_request&) {
         // Build binary content as a std::string. The string can contain any
         // bytes — it is not limited to printable characters or null-terminated
         // C strings. The size is tracked internally by std::string::size().
