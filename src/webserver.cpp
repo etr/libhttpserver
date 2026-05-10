@@ -668,8 +668,27 @@ void webserver::unregister_prefix(const string& path) {
 }
 
 void webserver::unregister_resource(const string& resource) {
-    unregister_path(resource);
-    unregister_prefix(resource);
+    // Build both endpoint keys before acquiring any lock.
+    detail::http_endpoint he_exact(resource, /*family=*/false, true, regex_checking);
+    detail::http_endpoint he_prefix(resource, /*family=*/true,  true, regex_checking);
+
+    // Hold a single write-lock across both erasures so no request thread can
+    // observe a partially-unregistered state (CWE-367 TOCTOU fix: the exact
+    // entry and the prefix entry are removed atomically).
+    std::unique_lock registered_resources_lock(impl_->registered_resources_mutex);
+
+    {
+        std::lock_guard<std::mutex> cache_lock(impl_->route_cache_mutex);
+        impl_->route_cache_list.clear();
+        impl_->route_cache_map.clear();
+    }
+
+    impl_->registered_resources.erase(he_exact);
+    impl_->registered_resources.erase(he_prefix);
+    impl_->registered_resources_regex.erase(he_exact);
+    impl_->registered_resources_regex.erase(he_prefix);
+    // The string-keyed fast-path map only holds exact (non-family) entries.
+    impl_->registered_resources_str.erase(he_exact.get_url_complete());
 }
 
 void webserver::ban_ip(const string& ip) {

@@ -286,6 +286,34 @@ LT_BEGIN_AUTO_TEST(webserver_register_path_prefix_suite,
     ws.stop();
 LT_END_AUTO_TEST(unregister_resource_alias_handles_both_kinds)
 
+// unregister_resource on a path registered as BOTH prefix and exact must
+// remove BOTH entries in a single call. After the call, neither the exact
+// URL nor any child URL should be served. This pins the atomicity contract:
+// the exact-match entry and the prefix entry are gone together so there is
+// no window in which one is present and the other is not.
+LT_BEGIN_AUTO_TEST(webserver_register_path_prefix_suite,
+                   unregister_resource_removes_both_path_and_prefix_registrations)
+    webserver ws = create_webserver(PORT + 7);
+    // Register the same path as both an exact handler and a prefix handler.
+    ws.register_path("/admin", std::make_shared<ok_resource>());
+    ws.register_prefix("/admin", std::make_shared<ok_resource>());
+    ws.start(false);
+
+    // Both must be reachable before unregister.
+    LT_CHECK_EQ(fetch("localhost:8187/admin").response_code, 200);
+    LT_CHECK_EQ(fetch("localhost:8187/admin/panel").response_code, 200);
+
+    // A single unregister_resource call must atomically remove both.
+    ws.unregister_resource("/admin");
+
+    // Exact URL must be gone.
+    LT_CHECK_EQ(fetch("localhost:8187/admin").response_code, 404);
+    // Child URL served by the prefix entry must also be gone.
+    LT_CHECK_EQ(fetch("localhost:8187/admin/panel").response_code, 404);
+
+    ws.stop();
+LT_END_AUTO_TEST(unregister_resource_removes_both_path_and_prefix_registrations)
+
 // The deprecated register_resource(path, ptr) forwarder must still compile
 // and behave like register_path (exact match, no longer-URL match).
 // Suppress the deprecation warning locally so the test binary still
