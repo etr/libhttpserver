@@ -249,6 +249,62 @@ void webserver::sweet_kill() {
 
 // ----- Resource registration --------------------------------------------
 
+// classify_route_tier: single source-of-truth for v2 tier placement.
+//
+// Given a non-prefix http_endpoint, returns which of three storage tiers
+// owns the route and, for the regex tier, the already-compiled std::regex
+// so callers need not compile it a second time.
+//
+// Tier rules (in priority order):
+//   radix  — parameterized path (url_pars non-empty); no regex needed.
+//   regex  — is_regex_compiled() true AND the literal url_complete does NOT
+//             match the compiled pattern (true metacharacters present).
+//   exact  — everything else: plain paths with regex_checking enabled
+//             (literal matches its own pattern, so the fast hash tier
+//             is equivalent), or regex_checking disabled entirely.
+//
+// Prefix routes (family == true) are NOT classified here; callers handle
+// them before invoking this helper.
+namespace {
+
+enum class route_tier_kind { exact, radix, regex_ };
+
+struct route_tier_result {
+    route_tier_kind kind = route_tier_kind::exact;
+    std::optional<std::regex> re;  // populated iff kind == regex_
+};
+
+static route_tier_result classify_route_tier(const detail::http_endpoint& idx) {
+    route_tier_result res;
+
+    if (!idx.get_url_pars().empty()) {
+        res.kind = route_tier_kind::radix;
+        return res;
+    }
+
+    if (idx.is_regex_compiled()) {
+        // Compile the normalized pattern once and run the self-match
+        // check. If the literal url_complete matches its own regex, the
+        // pattern is trivially ^/literal$ and the exact hash tier is
+        // faster and correct. Otherwise the path has meaningful regex
+        // metacharacters and belongs in the regex tier.
+        std::regex re(idx.get_url_normalized(),
+                      std::regex::extended | std::regex::icase);
+        if (std::regex_match(idx.get_url_complete(), re)) {
+            res.kind = route_tier_kind::exact;
+        } else {
+            res.kind = route_tier_kind::regex_;
+            res.re   = std::move(re);
+        }
+        return res;
+    }
+
+    res.kind = route_tier_kind::exact;
+    return res;
+}
+
+}  // namespace
+
 // TASK-024: register_path / register_prefix split. Both public methods
 // funnel into this private helper, which carries the validation and
 // insertion logic. Keeping the work in one place prevents drift between
@@ -288,27 +344,37 @@ void webserver::register_impl_(const std::string& resource,
     }
     registered_resources_lock.unlock();
 
-    // TASK-027: mirror into the v2 3-tier table. The classification:
+    // TASK-027: mirror into the v2 3-tier table. Tier placement via
+    // classify_route_tier() (single source-of-truth):
     //   - family=true  -> radix tree (prefix terminus).
-    //   - exact non-parameterized (!family && url_pars empty) ->
-    //                    exact_routes_ hash tier.
-    //   - parameterized exact (family=false, has {name} segments) ->
-    //                    radix tree (exact terminus, with wildcard nodes).
+    //   - radix tier   -> radix tree (exact terminus, wildcard nodes).
+    //   - regex tier   -> regex_routes_ (pre-compiled at registration time).
+    //   - exact tier   -> exact_routes_ hash map.
     {
         std::unique_lock table_lock(impl_->route_table_mutex_);
         detail::route_entry entry;
-        entry.methods = method_set{}.set_all();    // class resources support all methods at the tier level
+        entry.methods = method_set{}.set_all();
         entry.handler = res;
         entry.is_prefix = family;
 
         if (family) {
             impl_->param_and_prefix_routes_.insert(
                 idx.get_url_complete(), entry, /*is_prefix=*/true);
-        } else if (idx.get_url_pars().empty()) {
-            impl_->exact_routes_.emplace(idx.get_url_complete(), entry);
         } else {
-            impl_->param_and_prefix_routes_.insert(
-                idx.get_url_complete(), entry, /*is_prefix=*/false);
+            auto tier = classify_route_tier(idx);
+            switch (tier.kind) {
+            case route_tier_kind::radix:
+                impl_->param_and_prefix_routes_.insert(
+                    idx.get_url_complete(), entry, /*is_prefix=*/false);
+                break;
+            case route_tier_kind::regex_:
+                impl_->regex_routes_.push_back(
+                    {idx.get_url_complete(), std::move(*tier.re), entry});
+                break;
+            case route_tier_kind::exact:
+                impl_->exact_routes_.emplace(idx.get_url_complete(), entry);
+                break;
+            }
         }
     }
 
@@ -446,9 +512,12 @@ void webserver::on_methods_(method_set methods,
     // identical to class-resource registration. The methods bitmask
     // accumulates across calls when fresh==false (a subsequent on_post
     // on the same path adds the POST bit to the existing entry).
+    //
+    // classify_route_tier() is called only when fresh==true; on updates
+    // (fresh==false) the tier was already chosen at first-registration
+    // time and re-running the self-match would be redundant.
     {
         std::unique_lock table_lock(impl_->route_table_mutex_);
-        // Fetch-or-update the entry in the right tier.
         const std::string& key = idx.get_url_complete();
 
         auto upsert = [&](detail::route_entry& target) {
@@ -457,22 +526,9 @@ void webserver::on_methods_(method_set methods,
             target.is_prefix = false;
         };
 
-        if (idx.get_url_pars().empty()) {
-            // Exact tier.
-            auto it = impl_->exact_routes_.find(key);
-            if (it == impl_->exact_routes_.end()) {
-                detail::route_entry entry;
-                entry.methods = methods;
-                entry.handler = std::shared_ptr<http_resource>(shim);
-                entry.is_prefix = false;
-                impl_->exact_routes_.emplace(key, std::move(entry));
-            } else {
-                upsert(it->second);
-            }
-        } else {
-            // Parameterized: walk the radix tree, find existing or insert.
-            // The radix_tree::insert always replaces, so we read first,
-            // merge methods, then re-insert.
+        if (!idx.get_url_pars().empty()) {
+            // Radix tier: parameterized path. read-merge-reinsert because
+            // radix_tree::insert always overwrites the terminus.
             detail::radix_match<detail::route_entry> existing;
             detail::route_entry merged;
             if (impl_->param_and_prefix_routes_.find(key, existing)
@@ -484,6 +540,54 @@ void webserver::on_methods_(method_set methods,
             merged.is_prefix = false;
             impl_->param_and_prefix_routes_.insert(
                 key, std::move(merged), /*is_prefix=*/false);
+        } else if (fresh) {
+            // First registration on this path: classify and insert.
+            auto tier = classify_route_tier(idx);
+            switch (tier.kind) {
+            case route_tier_kind::radix:
+                // Unreachable: url_pars non-empty is handled above.
+                break;
+            case route_tier_kind::exact: {
+                detail::route_entry entry;
+                entry.methods   = methods;
+                entry.handler   = std::shared_ptr<http_resource>(shim);
+                entry.is_prefix = false;
+                impl_->exact_routes_.emplace(key, std::move(entry));
+                break;
+            }
+            case route_tier_kind::regex_: {
+                detail::route_entry entry;
+                entry.methods   = methods;
+                entry.handler   = std::shared_ptr<http_resource>(shim);
+                entry.is_prefix = false;
+                impl_->regex_routes_.push_back(
+                    {key, std::move(*tier.re), std::move(entry)});
+                break;
+            }
+            }
+        } else {
+            // Update path (fresh==false): the tier was fixed at first
+            // registration. Find the existing entry and merge methods.
+            //
+            // For the exact tier, a direct map lookup suffices.
+            // For the regex tier, walk the vector and match by shim identity
+            // (regex patterns are not repeated keys; pointer identity is the
+            // cheapest and most reliable discriminator).
+            std::shared_ptr<http_resource> shim_ptr(shim);
+
+            auto exact_it = impl_->exact_routes_.find(key);
+            if (exact_it != impl_->exact_routes_.end()) {
+                upsert(exact_it->second);
+            } else {
+                for (auto& rr : impl_->regex_routes_) {
+                    auto* sp = std::get_if<std::shared_ptr<http_resource>>(
+                        &rr.entry.handler);
+                    if (sp && *sp == shim_ptr) {
+                        upsert(rr.entry);
+                        break;
+                    }
+                }
+            }
         }
     }
 
@@ -915,10 +1019,18 @@ void webserver::unregister_impl_(const string& resource, bool family) {
         const std::string& key = he.get_url_complete();
         if (family) {
             impl_->param_and_prefix_routes_.remove(key, /*is_prefix=*/true);
-        } else if (he.get_url_pars().empty()) {
-            impl_->exact_routes_.erase(key);
-        } else {
+        } else if (!he.get_url_pars().empty()) {
             impl_->param_and_prefix_routes_.remove(key, /*is_prefix=*/false);
+        } else {
+            // Erase from exact tier; also sweep regex tier (url_complete key).
+            impl_->exact_routes_.erase(key);
+            impl_->regex_routes_.erase(
+                std::remove_if(impl_->regex_routes_.begin(),
+                               impl_->regex_routes_.end(),
+                               [&key](const detail::webserver_impl::regex_route& rr) {
+                                   return rr.url_complete == key;
+                               }),
+                impl_->regex_routes_.end());
         }
     }
     impl_->route_cache_v2.clear();
@@ -964,6 +1076,14 @@ void webserver::unregister_resource(const string& resource) {
         impl_->exact_routes_.erase(key);
         impl_->param_and_prefix_routes_.remove(key, /*is_prefix=*/false);
         impl_->param_and_prefix_routes_.remove(key, /*is_prefix=*/true);
+        // Also sweep the regex tier by url_complete.
+        impl_->regex_routes_.erase(
+            std::remove_if(impl_->regex_routes_.begin(),
+                           impl_->regex_routes_.end(),
+                           [&key](const detail::webserver_impl::regex_route& rr) {
+                               return rr.url_complete == key;
+                           }),
+            impl_->regex_routes_.end());
     }
     impl_->route_cache_v2.clear();
 }
@@ -1576,20 +1696,16 @@ webserver_impl::lookup_v2(http_method method, const std::string& path) {
             }
         }
 
-        // 2c. Regex tier — linear scan.
+        // 2c. Regex tier — linear scan over pre-compiled std::regex objects.
+        // Patterns were compiled once at registration time (in register_impl_
+        // and on_methods_), so no compilation cost is paid per lookup.
         if (!result.found) {
-            for (const auto& [pat, entry] : regex_routes_) {
-                try {
-                    std::regex re(pat);
-                    if (std::regex_match(path, re)) {
-                        result.found = true;
-                        result.tier = tier_hit::regex;
-                        result.entry = entry;
-                        break;
-                    }
-                } catch (const std::regex_error&) {
-                    // Invalid regex registered — should never reach here
-                    // because registration validates. Skip and continue.
+            for (const auto& rr : regex_routes_) {
+                if (std::regex_match(path, rr.compiled_re)) {
+                    result.found = true;
+                    result.tier = tier_hit::regex;
+                    result.entry = rr.entry;
+                    break;
                 }
             }
         }

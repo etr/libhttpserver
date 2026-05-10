@@ -49,6 +49,7 @@
 #include <memory>
 #include <memory_resource>
 #include <mutex>
+#include <regex>
 #include <set>
 #include <shared_mutex>
 #include <string>
@@ -229,7 +230,23 @@ class webserver_impl {
     std::shared_mutex route_table_mutex_;
     std::unordered_map<std::string, route_entry> exact_routes_;
     radix_tree<route_entry> param_and_prefix_routes_;
-    std::vector<std::pair<std::string, route_entry>> regex_routes_;
+    // Pre-compiled regex objects. Architecture §4.7 specifies this as a
+    // vector of (compiled std::regex, route_entry) pairs so that lookup_v2
+    // calls std::regex_match on an already-compiled object without paying
+    // the compilation cost on every cache miss. Compiled at registration
+    // time in register_impl_ / on_methods_ when idx.is_regex_compiled()
+    // is true, the path has no {name} wildcard segments (url_pars empty),
+    // and the literal url_complete does NOT match its own compiled regex
+    // (i.e., the path has meaningful regex metacharacters).
+    //
+    // url_complete is stored alongside the compiled regex to support
+    // O(n) removal in unregister_impl_ without a second map.
+    struct regex_route {
+        std::string url_complete;
+        std::regex compiled_re;
+        route_entry entry;
+    };
+    std::vector<regex_route> regex_routes_;
 
     // TASK-027 LRU front-end. 256 entries per architecture spec.
     route_cache route_cache_v2{ROUTE_CACHE_MAX_SIZE};

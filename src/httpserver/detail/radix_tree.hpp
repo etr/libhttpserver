@@ -18,10 +18,7 @@
      USA
 */
 
-// TASK-027: bespoke segment-trie storage for the parameterized + prefix
-// route tier. Each node represents one URL path segment; children are
-// keyed by the literal segment string, with a single optional wildcard
-// child carrying the parameter name (e.g. "{id}" -> wildcard_name_ = "id").
+// TASK-027: segment-trie for the parameterized + prefix route tier.
 //
 // The architecture spec (§4.7) commits only to the OUTER shape (three-tier
 // + cache); the radix-tree implementation choice is intentionally left

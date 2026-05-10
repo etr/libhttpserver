@@ -131,6 +131,85 @@ LT_BEGIN_AUTO_TEST(route_table_concurrency_suite,
     LT_CHECK(reader_ops.load() > 0);
 LT_END_AUTO_TEST(concurrent_register_and_lookup_no_data_race)
 
+// Cycle J: concurrent register/unregister of parameterised paths alongside
+// readers. Exercises the radix tree's wildcard_child_ node allocation and
+// deallocation paths under contention (DR-007 / DR-008). Writers use paths
+// like /dyn/{id}/wN so the radix tree must allocate and free wildcard nodes
+// concurrently with readers calling lookup_v2 on those same paths.
+LT_BEGIN_AUTO_TEST(route_table_concurrency_suite,
+                   concurrent_parameterized_register_and_lookup_no_data_race)
+    ht::webserver ws = ht::create_webserver(8080)
+                          .start_method(ht::http::http_utils::INTERNAL_SELECT);
+    auto& impl = *ht::webserver_test_access::impl(ws);
+
+    // Pre-register a stable set of parameterised paths so readers always
+    // have something to find regardless of writer timing.
+    for (int i = 0; i < 16; ++i) {
+        ws.register_path("/stable/{id}/item/" + std::to_string(i),
+                         std::make_shared<noop_resource>());
+    }
+
+    std::atomic<bool> stop{false};
+    std::atomic<int> writer_ops{0};
+    std::atomic<int> reader_ops{0};
+
+    constexpr int kWriters = 4;
+    constexpr int kReaders = 8;
+
+    std::vector<std::thread> threads;
+    threads.reserve(kWriters + kReaders);
+
+    // Writers: concurrently register / unregister parameterised paths with
+    // different writer indices so each writer owns a disjoint numeric prefix
+    // for the wildcard segment, exercising the radix tree's wildcard_child_
+    // allocation and deallocation path concurrently.
+    for (int w = 0; w < kWriters; ++w) {
+        threads.emplace_back([&, w] {
+            int counter = 0;
+            while (!stop.load(std::memory_order_relaxed)) {
+                std::string p = "/dyn/{id}/w" + std::to_string(w)
+                                + "/" + std::to_string(counter % 8);
+                try {
+                    ws.register_path(p, std::make_shared<noop_resource>());
+                    ws.unregister_path(p);
+                } catch (...) {
+                    // Duplicate-registration races are tolerated; the
+                    // lock-discipline gate is "no crash or deadlock".
+                }
+                ++counter;
+                writer_ops.fetch_add(1, std::memory_order_relaxed);
+            }
+        });
+    }
+
+    // Readers: lookup both the stable parameterised paths and the paths
+    // under concurrent mutation to exercise the shared_lock path on the
+    // radix tree's wildcard_child_ node.
+    for (int r = 0; r < kReaders; ++r) {
+        threads.emplace_back([&, r] {
+            int counter = 0;
+            while (!stop.load(std::memory_order_relaxed)) {
+                // Stable parameterised path — always found.
+                std::string p = "/stable/42/item/" + std::to_string(counter % 16);
+                (void)impl.lookup_v2(ht::http_method::get, p);
+                // Dynamic path — may or may not be registered at this instant.
+                std::string p2 = "/dyn/99/w" + std::to_string(r % kWriters)
+                                 + "/" + std::to_string(counter % 8);
+                (void)impl.lookup_v2(ht::http_method::get, p2);
+                ++counter;
+                reader_ops.fetch_add(1, std::memory_order_relaxed);
+            }
+        });
+    }
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    stop.store(true, std::memory_order_relaxed);
+    for (auto& t : threads) t.join();
+
+    LT_CHECK(writer_ops.load() > 0);
+    LT_CHECK(reader_ops.load() > 0);
+LT_END_AUTO_TEST(concurrent_parameterized_register_and_lookup_no_data_race)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

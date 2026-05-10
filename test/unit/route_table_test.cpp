@@ -157,6 +157,37 @@ LT_BEGIN_AUTO_TEST(route_table_suite, radix_tree_more_specific_exact_shadows_pre
     LT_CHECK(m.is_prefix_match);
 LT_END_AUTO_TEST(radix_tree_more_specific_exact_shadows_prefix)
 
+LT_BEGIN_AUTO_TEST(route_table_suite, radix_tree_matches_multiple_parameterized_segments)
+    htd::radix_tree<htd::route_entry> tree;
+    tree.insert("/a/{x}/b/{y}/c", make_entry(30));
+    htd::radix_match<htd::route_entry> m;
+    LT_CHECK(tree.find("/a/1/b/2/c", m));
+    LT_CHECK_EQ(m.captures.size(), static_cast<std::size_t>(2));
+    LT_CHECK_EQ(m.captures[0].first, std::string("x"));
+    LT_CHECK_EQ(m.captures[0].second, std::string("1"));
+    LT_CHECK_EQ(m.captures[1].first, std::string("y"));
+    LT_CHECK_EQ(m.captures[1].second, std::string("2"));
+    // Too short: missing trailing /c
+    LT_CHECK(!tree.find("/a/1/b/2", m));
+LT_END_AUTO_TEST(radix_tree_matches_multiple_parameterized_segments)
+
+LT_BEGIN_AUTO_TEST(route_table_suite, cache_duplicate_insert_replaces_in_place_and_keeps_size)
+    htd::route_cache cache(4);
+    htd::cache_value v1;
+    v1.entry = make_entry(70);
+    htd::cache_value v2;
+    v2.entry = make_entry(71);
+    // First insert: key A with value from entry 70.
+    cache.insert({ht::http_method::get, "/dup"}, v1);
+    LT_CHECK_EQ(cache.size(), static_cast<std::size_t>(1));
+    // Second insert with same key, different value.
+    cache.insert({ht::http_method::get, "/dup"}, v2);
+    // Size must stay 1 — replace in place, no new list node.
+    LT_CHECK_EQ(cache.size(), static_cast<std::size_t>(1));
+    htd::cache_value out;
+    LT_CHECK(cache.find({ht::http_method::get, "/dup"}, out));
+LT_END_AUTO_TEST(cache_duplicate_insert_replaces_in_place_and_keeps_size)
+
 LT_BEGIN_AUTO_TEST(route_table_suite, radix_tree_remove_exact_path)
     htd::radix_tree<htd::route_entry> tree;
     tree.insert("/users/42", make_entry(1));
