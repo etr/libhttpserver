@@ -8,10 +8,10 @@
 Run v1's full routing-test corpus against the new 3-tier table; treat any regression as a release-blocker.
 
 **Action Items:**
-- [ ] Inventory v1's existing routing tests (likely under `test/`); list every distinct routing pattern they cover (exact, parameterized with one segment, parameterized with multiple, prefix, regex, method-mismatched).
-- [ ] If any test was tightly coupled to v1's three-map internals, port it to the new public API; otherwise expect it to pass unchanged.
-- [ ] Run the full corpus against the new implementation and triage any failures: spec deviation (file ticket / fix architecture) vs. implementation bug (fix it).
-- [ ] Document the corpus as the v2.0 routing regression gate in `test/README` (or equivalent).
+- [x] Inventory v1's existing routing tests (likely under `test/`); list every distinct routing pattern they cover (exact, parameterized with one segment, parameterized with multiple, prefix, regex, method-mismatched).
+- [x] If any test was tightly coupled to v1's three-map internals, port it to the new public API; otherwise expect it to pass unchanged.
+- [x] Run the full corpus against the new implementation and triage any failures: spec deviation (file ticket / fix architecture) vs. implementation bug (fix it).
+- [x] Document the corpus as the v2.0 routing regression gate in `test/README` (or equivalent).
 
 **Dependencies:**
 - Blocked by: TASK-027
@@ -27,4 +27,4 @@ Run v1's full routing-test corpus against the new 3-tier table; treat any regres
 **Related Requirements:** PRD-HDL-REQ-002, PRD-HDL-REQ-004
 **Related Decisions:** AR-003 (release-blocker risk), §9 testing item 5
 
-**Status:** Not Started
+**Status:** Done

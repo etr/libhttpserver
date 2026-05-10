@@ -26,7 +26,7 @@ LDADD += -lcurl
 
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/ -DHTTPSERVER_COMPILATION
 METASOURCES = AUTO
-check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_const_getters http_request_tls_accessors webserver_register_smartptr webserver_register_path_prefix webserver_on_methods webserver_route route_table lookup_pipeline route_table_concurrency
+check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_const_getters http_request_tls_accessors webserver_register_smartptr webserver_register_path_prefix webserver_on_methods webserver_route route_table lookup_pipeline route_table_concurrency routing_regression
 
 MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
 
@@ -222,6 +222,18 @@ lookup_pipeline_LDADD = $(LDADD) -lmicrohttpd
 # microhttpd-typed members.
 route_table_concurrency_SOURCES = integ/route_table_concurrency.cpp
 route_table_concurrency_LDADD = $(LDADD) -lmicrohttpd
+
+# routing_regression: TASK-028. v1 routing-test corpus regression gate.
+# Drives the public webserver registration surface (register_path /
+# register_prefix / on_get / on_post / unregister_path / unregister_prefix)
+# and probes webserver_impl::lookup_v2 to assert that every routing
+# pattern in the v1 corpus resolves to the same handler / tier / captures
+# the v2 3-tier table is expected to produce after TASK-036 cuts dispatch
+# over. Documented as the v2.0 routing regression gate in
+# test/REGRESSION.md. Needs -lmicrohttpd because webserver's PIMPL impl
+# carries microhttpd-typed members.
+routing_regression_SOURCES = unit/routing_regression_test.cpp
+routing_regression_LDADD = $(LDADD) -lmicrohttpd
 
 noinst_HEADERS = littletest.hpp
 AM_CXXFLAGS += -Wall -fPIC -Wno-overloaded-virtual
