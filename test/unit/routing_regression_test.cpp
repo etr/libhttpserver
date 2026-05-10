@@ -211,6 +211,11 @@ LT_BEGIN_AUTO_TEST(routing_regression_suite,
 
     // v2 current behavior: the radix tier matches regardless of the
     // ([0-9]+) constraint. Documented divergence from v1.
+    //
+    // FIXME(TASK-036-prereq): when the radix tier learns per-segment
+    // regex constraints (PRD §3.7 future work, see REGRESSION.md
+    // section 3 "must land before TASK-036"), flip the two assertions
+    // below: `LT_CHECK(!non_numeric.found)` and remove the tier check.
     auto non_numeric = impl_of(ws).lookup_v2(ht::http_method::get,
                                              std::string("/items/abc"));
     LT_CHECK(non_numeric.found);
@@ -407,12 +412,15 @@ LT_BEGIN_AUTO_TEST(routing_regression_suite,
     auto r = impl_of(ws).lookup_v2(ht::http_method::get,
                                    std::string("/foo/bar/"));
     LT_CHECK(r.found);
-    // Whichever handler resolves, it must be one of the two registered
-    // shared_ptrs (i.e. the v2 lookup didn't manufacture a stranger).
+    // The v2 radix tree prefers exact children over wildcard children
+    // at each node. /foo/{var|([a-z]+)}/ anchors segment 0 on the
+    // literal "foo" (exact child), so the tree descends there first and
+    // never tries the wildcard root branch required by the second
+    // pattern. Structural precedence → first-registered wins here.
     auto* hp = std::get_if<std::shared_ptr<ht::http_resource>>(
         &r.entry.handler);
     LT_CHECK(hp != nullptr);
-    LT_CHECK(*hp == first || *hp == second);
+    LT_CHECK(*hp == first);
 LT_END_AUTO_TEST(overlapping_two_regex_routes_deterministic_first_wins)
 
 LT_BEGIN_AUTO_TEST(routing_regression_suite,
@@ -492,6 +500,78 @@ LT_BEGIN_AUTO_TEST(routing_regression_suite,
                                       std::string("/api/v1"));
     LT_CHECK(!miss.found);
 LT_END_AUTO_TEST(no_regex_checking_treats_metachars_as_literal)
+
+// ---------------------------------------------------------------------
+// Baseline miss (taxonomy row: unregistered).
+//
+// Verifies that lookup_v2 returns found=false and tier_hit::none for a
+// path that was never registered through any surface. Guards against a
+// hypothetical bug where a default-constructed entry is treated as
+// found.
+// ---------------------------------------------------------------------
+
+LT_BEGIN_AUTO_TEST(routing_regression_suite, unregistered_path_yields_miss)
+    ht::webserver ws = ht::create_webserver(8080)
+        .start_method(ht::http::http_utils::INTERNAL_SELECT);
+    // Register an unrelated path so the table is not completely empty,
+    // reducing the chance this is a vacuous pass.
+    ws.register_path("/other", std::make_shared<noop_resource>());
+
+    auto r = impl_of(ws).lookup_v2(ht::http_method::get,
+                                   std::string("/never-registered"));
+    LT_CHECK(!r.found);
+    LT_CHECK(r.tier == ht::detail::webserver_impl::tier_hit::none);
+LT_END_AUTO_TEST(unregistered_path_yields_miss)
+
+// ---------------------------------------------------------------------
+// Cache tier (taxonomy row: cache).
+//
+// (1) warm-cache: second lookup on the same path hits the LRU cache tier.
+// (2) cache-invalidation: after unregister_path the stale cache entry
+//     must not survive — lookup must miss.
+// ---------------------------------------------------------------------
+
+LT_BEGIN_AUTO_TEST(routing_regression_suite,
+                   second_lookup_same_path_hits_cache_tier)
+    ht::webserver ws = ht::create_webserver(8080)
+        .start_method(ht::http::http_utils::INTERNAL_SELECT);
+    ws.register_path("/cached", std::make_shared<noop_resource>());
+
+    // First lookup: populates the cache.
+    auto cold = impl_of(ws).lookup_v2(ht::http_method::get,
+                                      std::string("/cached"));
+    LT_CHECK(cold.found);
+    // First lookup resolves via a tier other than cache.
+    LT_CHECK(cold.tier != ht::detail::webserver_impl::tier_hit::cache);
+
+    // Second lookup for the same path: must come from the LRU cache.
+    auto warm = impl_of(ws).lookup_v2(ht::http_method::get,
+                                      std::string("/cached"));
+    LT_CHECK(warm.found);
+    LT_CHECK(warm.tier == ht::detail::webserver_impl::tier_hit::cache);
+LT_END_AUTO_TEST(second_lookup_same_path_hits_cache_tier)
+
+LT_BEGIN_AUTO_TEST(routing_regression_suite,
+                   unregister_invalidates_cache_entry)
+    ht::webserver ws = ht::create_webserver(8080)
+        .start_method(ht::http::http_utils::INTERNAL_SELECT);
+    ws.register_path("/volatile", std::make_shared<noop_resource>());
+
+    // Warm the cache.
+    auto before = impl_of(ws).lookup_v2(ht::http_method::get,
+                                        std::string("/volatile"));
+    LT_CHECK(before.found);
+
+    // Remove the registration — must also purge the cached entry.
+    ws.unregister_path("/volatile");
+
+    // A stale cache entry would return found=true with tier_hit::cache;
+    // correct behavior is a miss.
+    auto after = impl_of(ws).lookup_v2(ht::http_method::get,
+                                       std::string("/volatile"));
+    LT_CHECK(!after.found);
+    LT_CHECK(after.tier == ht::detail::webserver_impl::tier_hit::none);
+LT_END_AUTO_TEST(unregister_invalidates_cache_entry)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
