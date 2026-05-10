@@ -1,0 +1,139 @@
+/*
+     This file is part of libhttpserver
+     Copyright (C) 2011-2026 Sebastiano Merlino
+
+     This library is free software; you can redistribute it and/or
+     modify it under the terms of the GNU Lesser General Public
+     License as published by the Free Software Foundation; either
+     version 2.1 of the License, or (at your option) any later version.
+
+     This library is distributed in the hope that it will be useful,
+     but WITHOUT ANY WARRANTY; without even the implied warranty of
+     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+     Lesser General Public License for more details.
+
+     You should have received a copy of the GNU Lesser General Public
+     License along with this library; if not, write to the Free Software
+     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
+     USA
+*/
+
+// TASK-025: dispatch shim used by webserver::on_method_ to slot lambda
+// handlers into the existing v1-shaped route table.
+//
+// The shim is a sub-class of http_resource that holds one slot per
+// http_method enumerator. Its render_* virtuals look up the slot for
+// the dispatched method and invoke it. The shim starts with EVERY
+// method disallowed (`disallow_all()`); each on_* call enables exactly
+// the matching bit via `set_allowing(method, true)`. The existing
+// finalize_answer dispatch glue therefore returns 405 for unregistered
+// methods automatically — no edit to webserver.cpp's dispatch path is
+// needed.
+//
+// `final` is intentional: the conflict check in webserver::on_method_
+// uses dynamic_pointer_cast<lambda_resource>(...) to distinguish
+// lambda-owned routes from class-owned routes. A subclass would hide
+// in that test and break the invariant.
+//
+// Internal header — only reachable when compiling libhttpserver. NOT
+// included from the public umbrella <httpserver.hpp>.
+#if !defined(HTTPSERVER_COMPILATION)
+#error "lambda_resource.hpp is internal; only reachable when compiling libhttpserver."
+#endif
+
+#ifndef SRC_HTTPSERVER_DETAIL_LAMBDA_RESOURCE_HPP_
+#define SRC_HTTPSERVER_DETAIL_LAMBDA_RESOURCE_HPP_
+
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <utility>
+
+#include "httpserver/http_method.hpp"
+#include "httpserver/http_resource.hpp"
+#include "httpserver/detail/route_entry.hpp"
+
+namespace httpserver {
+class http_request;
+class http_response;
+}  // namespace httpserver
+
+namespace httpserver {
+namespace detail {
+
+// Tiny adapter that wraps a single lambda_handler as an http_resource
+// virtual override. We keep one slot per method enum and dispatch in
+// each render_* override.
+class lambda_resource final : public ::httpserver::http_resource {
+ public:
+    lambda_resource() {
+        // Lambda routes are opt-in per method (the default
+        // http_resource constructor enables every method via
+        // set_all()). on_* sets the matching bit when populating a slot.
+        disallow_all();
+    }
+
+    // Install (or replace) the slot for `method`. Caller must have
+    // already verified that no slot is currently set for `method`
+    // (webserver::on_method_ enforces this and throws on conflict).
+    void set_slot(http_method method, lambda_handler h) {
+        slots_[static_cast<std::size_t>(method)] = std::move(h);
+        set_allowing(method, true);
+    }
+
+    bool has_slot(http_method method) const noexcept {
+        return is_allowed(method);
+    }
+
+    std::shared_ptr<::httpserver::http_response>
+    render_get(const ::httpserver::http_request& r) override {
+        return invoke_(http_method::get, r);
+    }
+    std::shared_ptr<::httpserver::http_response>
+    render_post(const ::httpserver::http_request& r) override {
+        return invoke_(http_method::post, r);
+    }
+    std::shared_ptr<::httpserver::http_response>
+    render_put(const ::httpserver::http_request& r) override {
+        return invoke_(http_method::put, r);
+    }
+    std::shared_ptr<::httpserver::http_response>
+    render_delete(const ::httpserver::http_request& r) override {
+        return invoke_(http_method::del, r);
+    }
+    std::shared_ptr<::httpserver::http_response>
+    render_patch(const ::httpserver::http_request& r) override {
+        return invoke_(http_method::patch, r);
+    }
+    std::shared_ptr<::httpserver::http_response>
+    render_options(const ::httpserver::http_request& r) override {
+        return invoke_(http_method::options, r);
+    }
+    std::shared_ptr<::httpserver::http_response>
+    render_head(const ::httpserver::http_request& r) override {
+        return invoke_(http_method::head, r);
+    }
+
+ private:
+    std::shared_ptr<::httpserver::http_response>
+    invoke_(http_method m, const ::httpserver::http_request& r) {
+        auto& slot = slots_[static_cast<std::size_t>(m)];
+        if (!slot) {
+            // Reachable only if dispatch arrives for a method whose
+            // bit was set but whose slot was somehow cleared. The
+            // existing finalize_answer 405 path normally fires before
+            // we get here.
+            return ::httpserver::detail::empty_render(r);
+        }
+        return std::make_shared<::httpserver::http_response>(slot(r));
+    }
+
+    std::array<lambda_handler,
+               static_cast<std::size_t>(http_method::count_)> slots_{};
+};
+
+}  // namespace detail
+}  // namespace httpserver
+
+#endif  // SRC_HTTPSERVER_DETAIL_LAMBDA_RESOURCE_HPP_

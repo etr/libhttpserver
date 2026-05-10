@@ -92,6 +92,12 @@ fetch_result do_request(const std::string& url, const std::string& method,
     CURL* curl = curl_easy_init();
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, method.c_str());
+    if (method == "HEAD") {
+        // CURLOPT_NOBODY tells libcurl not to wait for a response body
+        // (HEAD responses carry headers only). Without this, curl_easy_perform
+        // hangs waiting for bytes that never arrive.
+        curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
+    }
     if (!body.empty()) {
         curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.c_str());
         curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE,
@@ -101,6 +107,7 @@ fetch_result do_request(const std::string& url, const std::string& method,
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &fr.body);
     curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_func);
     curl_easy_setopt(curl, CURLOPT_HEADERDATA, &fr);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 5L);
     curl_easy_perform(curl);
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &fr.response_code);
     curl_easy_cleanup(curl);

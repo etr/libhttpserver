@@ -60,6 +60,7 @@
 #include "httpserver/constants.hpp"
 #include "httpserver/create_webserver.hpp"
 #include "httpserver/detail/http_endpoint.hpp"
+#include "httpserver/detail/lambda_resource.hpp"
 #include "httpserver/detail/modded_request.hpp"
 #include "httpserver/http_request.hpp"
 #include "httpserver/http_resource.hpp"
@@ -303,6 +304,127 @@ void webserver::register_prefix(const std::string& path,
 void webserver::register_resource(const std::string& resource,
                                   std::shared_ptr<http_resource> res) {
     register_path(resource, std::move(res));
+}
+
+// TASK-025: lambda registration plumbing.
+//
+// All seven public on_* overloads forward to on_method_, which:
+//   1. Validates the handler and the path (single_resource constraints).
+//   2. Looks up any existing entry at the path. If it's a class-based
+//      http_resource, throw -- lambda and class registrations cannot
+//      share a path. If it's an existing lambda_resource shim, merge by
+//      checking the per-method slot is empty (else throw) and writing
+//      the new handler into that slot.
+//   3. If no entry exists, build a fresh lambda_resource shim and
+//      insert it into the same three storage maps used by
+//      register_impl_ (master ordered map; the str fast-path map iff
+//      exact non-parameterized; the regex map iff parameterized).
+//   4. Invalidate the LRU route cache.
+//
+// The dispatch path in finalize_answer is not modified: it already
+// looks up via shared_ptr<http_resource>, calls is_allowed(method)
+// gating the 405 path, then dispatches via the per-method member-
+// function pointer set in answer_to_connection. The lambda_resource
+// shim's render_* overrides invoke the stored slot.
+void webserver::on_method_(http_method method,
+                           const std::string& path,
+                           std::function<http_response(const http_request&)> handler) {
+    if (!handler) {
+        throw std::invalid_argument(
+            "The handler function passed to on_* must be non-empty");
+    }
+
+    // Same single-resource constraint as register_path: only "" or "/"
+    // is acceptable, and the matching mode must be exact (which on_* is).
+    if (single_resource && path != "" && path != "/") {
+        throw std::invalid_argument(
+            "When using a single_resource server, on_* requires the "
+            "path to be '' or '/'");
+    }
+
+    detail::http_endpoint idx(path, /*family=*/false,
+                              /*registration=*/true, regex_checking);
+
+    std::unique_lock registered_resources_lock(impl_->registered_resources_mutex);
+
+    auto it = impl_->registered_resources.find(idx);
+    std::shared_ptr<detail::lambda_resource> shim;
+    bool fresh = false;
+
+    if (it != impl_->registered_resources.end()) {
+        // Existing entry. Must be a lambda_resource shim, otherwise a
+        // class-based register_path/register_prefix has already taken
+        // this path -- lambda and class registrations cannot coexist
+        // on the same path.
+        shim = std::dynamic_pointer_cast<detail::lambda_resource>(it->second);
+        if (!shim) {
+            throw std::invalid_argument(
+                "A non-lambda http_resource is already registered at "
+                "this path; on_* cannot share a path with "
+                "register_path/register_prefix");
+        }
+        if (shim->has_slot(method)) {
+            throw std::invalid_argument(
+                "A handler is already registered for this method on "
+                "this path");
+        }
+    } else {
+        shim = std::make_shared<detail::lambda_resource>();
+        fresh = true;
+    }
+
+    shim->set_slot(method, std::move(handler));
+
+    if (fresh) {
+        impl_->registered_resources.insert({idx, shim});
+        bool is_exact = idx.get_url_pars().empty();
+        if (is_exact) {
+            impl_->registered_resources_str.insert(
+                {idx.get_url_complete(), shim});
+        }
+        if (idx.is_regex_compiled()) {
+            impl_->registered_resources_regex.insert({idx, shim});
+        }
+    }
+    registered_resources_lock.unlock();
+    impl_->invalidate_route_cache();
+}
+
+void webserver::on_get(const std::string& path,
+                       std::function<http_response(const http_request&)> handler) {
+    on_method_(http_method::get, path, std::move(handler));
+}
+
+void webserver::on_post(const std::string& path,
+                        std::function<http_response(const http_request&)> handler) {
+    on_method_(http_method::post, path, std::move(handler));
+}
+
+void webserver::on_put(const std::string& path,
+                       std::function<http_response(const http_request&)> handler) {
+    on_method_(http_method::put, path, std::move(handler));
+}
+
+void webserver::on_delete(const std::string& path,
+                          std::function<http_response(const http_request&)> handler) {
+    // The enum spelling is `del` because `delete` is a C++ keyword;
+    // the wire token is "DELETE" (see http_method::to_string).
+    on_method_(http_method::del, path, std::move(handler));
+}
+
+void webserver::on_patch(const std::string& path,
+                         std::function<http_response(const http_request&)> handler) {
+    on_method_(http_method::patch, path, std::move(handler));
+}
+
+void webserver::on_options(const std::string& path,
+                           std::function<http_response(const http_request&)> handler) {
+    on_method_(http_method::options, path, std::move(handler));
+}
+
+void webserver::on_head(const std::string& path,
+                        std::function<http_response(const http_request&)> handler) {
+    on_method_(http_method::head, path, std::move(handler));
 }
 
 #ifdef HAVE_WEBSOCKET
