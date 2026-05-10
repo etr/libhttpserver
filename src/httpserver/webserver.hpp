@@ -519,7 +519,27 @@ class webserver {
      // that cross the PIMPL boundary in both directions.
      friend class detail::webserver_impl;
      friend class http_response;
+#if defined(HTTPSERVER_COMPILATION)
+     // TASK-027: test-only hook so unit tests in test/unit/ can poke
+     // at the v2 route-table impl (lookup_v2, the three tier maps)
+     // without widening the public API. The pattern matches the SBO
+     // test access friend used by http_response. Gated on
+     // HTTPSERVER_COMPILATION so it never appears in installed headers.
+     friend struct webserver_test_access;
+#endif
 };
+
+#if defined(HTTPSERVER_COMPILATION)
+// Forward-declared friend giving test code (which compiles with
+// HTTPSERVER_COMPILATION via test/Makefile.am AM_CPPFLAGS) a thin
+// pointer to the otherwise-private impl_. Defined inline so any TU
+// including this header in COMPILATION mode can use it.
+struct webserver_test_access {
+    static detail::webserver_impl* impl(webserver& w) noexcept {
+        return w.impl_.get();
+    }
+};
+#endif
 
 }  // namespace httpserver
 #endif  // SRC_HTTPSERVER_WEBSERVER_HPP_

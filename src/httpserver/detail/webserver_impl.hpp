@@ -54,6 +54,7 @@
 #include <string>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 #ifdef HAVE_GNUTLS
 #include <gnutls/gnutls.h>
@@ -61,6 +62,9 @@
 
 #include "httpserver/http_utils.hpp"
 #include "httpserver/detail/http_endpoint.hpp"
+#include "httpserver/detail/radix_tree.hpp"
+#include "httpserver/detail/route_cache.hpp"
+#include "httpserver/detail/route_entry.hpp"
 
 #if MHD_VERSION < 0x00097002
 typedef int MHD_Result;
@@ -205,6 +209,53 @@ class webserver_impl {
     std::unordered_map<std::string,
         std::list<std::pair<std::string, route_cache_entry>>::iterator>
         route_cache_map;
+
+    // TASK-027: 3-tier route table (architecture §4.7).
+    //
+    // The three tiers below shadow the v1 maps above and are populated
+    // alongside them by every register_* / on_methods_ / unregister_*
+    // path. The lookup_v2() entry point walks this triple in order
+    //   1. exact_routes_           (hash, O(1))
+    //   2. param_and_prefix_routes_ (segment-trie, parameterized + prefix)
+    //   3. regex_routes_            (linear regex chain, fallback)
+    // fronted by the LRU cache `route_cache_v2`.
+    //
+    // **Lock order.** When both locks must be held, route_table_mutex_
+    // is acquired BEFORE route_cache_mutex_. The lookup pipeline never
+    // holds both at once: it takes a brief shared_lock on the table to
+    // walk the tiers, releases it, then takes route_cache_mutex_ to
+    // promote the hit. Registration takes a unique_lock on the table,
+    // releases it, then clears the cache.
+    std::shared_mutex route_table_mutex_;
+    std::unordered_map<std::string, route_entry> exact_routes_;
+    radix_tree<route_entry> param_and_prefix_routes_;
+    std::vector<std::pair<std::string, route_entry>> regex_routes_;
+
+    // TASK-027 LRU front-end. 256 entries per architecture spec.
+    route_cache route_cache_v2{ROUTE_CACHE_MAX_SIZE};
+
+    // tier_hit identifies which tier of the v2 route table answered a
+    // lookup. Returned alongside the route_entry copy from lookup_v2()
+    // so the dispatch site (and tests) can pin the lookup pipeline.
+    enum class tier_hit {
+        none,
+        cache,
+        exact,
+        radix,
+        regex
+    };
+
+    struct lookup_result {
+        bool found = false;
+        tier_hit tier = tier_hit::none;
+        route_entry entry{};
+        std::vector<std::pair<std::string, std::string>> captured_params;
+    };
+
+    // Walk the v2 route table for (method, path) per the lookup pipeline
+    // documented above. Returns lookup_result; populates `tier` even on
+    // miss (tier_hit::none) so callers can branch deterministically.
+    lookup_result lookup_v2(http_method method, const std::string& path);
 
     std::shared_mutex bans_mutex;
     std::set<http::ip_representation> bans;

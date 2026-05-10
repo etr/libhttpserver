@@ -15,7 +15,9 @@ A `route_entry` carries:
 
 **Cache:** an LRU cache (256 entries) sits in front of all three structures, keyed by full path (and method, for per-method-handler entries). After warm-up, hot paths bypass even the hash lookup.
 
-**Concurrency:** all three structures + cache are protected by a single `std::shared_mutex`. Registration grabs the writer lock; lookup grabs the reader lock. The LRU cache uses a separate `std::mutex` for its list/map pair (insertion/promotion mutate; reads under a shared_mutex would deadlock with the writer-on-full path — keep it simple with a plain mutex).
+**Concurrency:** all three structures are protected by a `std::shared_mutex` (`route_table_mutex_`). Registration grabs the writer lock; lookup grabs the reader lock. The LRU cache uses a separate `std::mutex` (`route_cache_mutex_`) for its list/map pair (insertion/promotion mutate; reads under a shared_mutex would deadlock with the writer-on-full path — keep it simple with a plain mutex).
+
+**Lock order:** `route_table_mutex_` is acquired BEFORE `route_cache_mutex_` whenever both are held. The lookup pipeline never holds both at once: it walks the tier chain under a shared lock on the table, releases that lock, then takes the cache mutex briefly to install/promote the hit. Registration takes the table writer lock, releases it, and only then clears the cache.
 
 **Future evolution:** if the radix tree starts to dominate lookup cost (measured), it can be replaced with a different data structure (compressed trie, perfect hash on a frozen route set) without touching the public API. v2.0 commits only to the *outer shape* (three-tier with cache), not the radix-tree implementation choice.
 

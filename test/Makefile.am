@@ -26,7 +26,7 @@ LDADD += -lcurl
 
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/ -DHTTPSERVER_COMPILATION
 METASOURCES = AUTO
-check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_const_getters http_request_tls_accessors webserver_register_smartptr webserver_register_path_prefix webserver_on_methods webserver_route
+check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_const_getters http_request_tls_accessors webserver_register_smartptr webserver_register_path_prefix webserver_on_methods webserver_route route_table lookup_pipeline route_table_concurrency
 
 MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
 
@@ -194,6 +194,34 @@ webserver_on_methods_SOURCES = unit/webserver_on_methods_test.cpp
 # through the regex tier. Default LDADD (libhttpserver + curl) is
 # sufficient.
 webserver_route_SOURCES = unit/webserver_route_test.cpp
+
+# route_table: TASK-027. Unit tests for the bespoke segment-trie
+# (detail::radix_tree<route_entry>) and the LRU route cache
+# (detail::route_cache). Exercises insert/find/remove on exact,
+# parameterized and prefix routes; cache key equality (method-distinct),
+# LRU eviction order, hit-promotion, and clear(). Default LDADD
+# (libhttpserver + curl) is sufficient.
+route_table_SOURCES = unit/route_table_test.cpp
+
+# lookup_pipeline: TASK-027 Cycle F. Drives the public webserver
+# registration surface (register_path / register_prefix) and probes the
+# impl-private lookup_v2() to pin the tier-order pipeline:
+# cache -> exact -> radix -> regex. Uses the webserver_test_access
+# friend gated on HTTPSERVER_COMPILATION (already supplied by AM_CPPFLAGS
+# in this Makefile). Needs -lmicrohttpd because webserver's PIMPL impl
+# carries microhttpd-typed members.
+lookup_pipeline_SOURCES = unit/lookup_pipeline_test.cpp
+lookup_pipeline_LDADD = $(LDADD) -lmicrohttpd
+
+# route_table_concurrency: TASK-027 Cycle I. Multi-thread stress test.
+# 4 writers + 16 readers for ~500ms, registering / unregistering /
+# looking up against the v2 3-tier table. Gate for the lock-order
+# discipline (table BEFORE cache). TSan is a documented manual rebuild
+# gate (see file header) — not added to CI matrix in this task.
+# Needs -lmicrohttpd because webserver's PIMPL impl carries
+# microhttpd-typed members.
+route_table_concurrency_SOURCES = integ/route_table_concurrency.cpp
+route_table_concurrency_LDADD = $(LDADD) -lmicrohttpd
 
 noinst_HEADERS = littletest.hpp
 AM_CXXFLAGS += -Wall -fPIC -Wno-overloaded-virtual

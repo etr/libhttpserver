@@ -50,7 +50,9 @@
 #include <iostream>
 #include <memory>
 #include <mutex>
+#include <regex>
 #include <set>
+#include <shared_mutex>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -285,6 +287,31 @@ void webserver::register_impl_(const std::string& resource,
         impl_->registered_resources_regex.insert({idx, res});
     }
     registered_resources_lock.unlock();
+
+    // TASK-027: mirror into the v2 3-tier table. The classification:
+    //   - family=true  -> radix tree (prefix terminus).
+    //   - exact non-parameterized (!family && url_pars empty) ->
+    //                    exact_routes_ hash tier.
+    //   - parameterized exact (family=false, has {name} segments) ->
+    //                    radix tree (exact terminus, with wildcard nodes).
+    {
+        std::unique_lock table_lock(impl_->route_table_mutex_);
+        detail::route_entry entry;
+        entry.methods = method_set{}.set_all();    // class resources support all methods at the tier level
+        entry.handler = res;
+        entry.is_prefix = family;
+
+        if (family) {
+            impl_->param_and_prefix_routes_.insert(
+                idx.get_url_complete(), entry, /*is_prefix=*/true);
+        } else if (idx.get_url_pars().empty()) {
+            impl_->exact_routes_.emplace(idx.get_url_complete(), entry);
+        } else {
+            impl_->param_and_prefix_routes_.insert(
+                idx.get_url_complete(), entry, /*is_prefix=*/false);
+        }
+    }
+
     impl_->invalidate_route_cache();
 }
 
@@ -332,7 +359,7 @@ void webserver::register_resource(const std::string& resource,
 void webserver::on_methods_(method_set methods,
                             const std::string& path,
                             std::function<http_response(const http_request&)> handler) {
-    if (methods.bits == 0u) {
+    if (methods.empty()) {
         throw std::invalid_argument(
             "route(method_set, ...) requires at least one method bit set");
     }
@@ -413,6 +440,53 @@ void webserver::on_methods_(method_set methods,
         }
     }
     registered_resources_lock.unlock();
+
+    // TASK-027: mirror into the v2 3-tier table. We store the
+    // lambda_resource shim via the shared_ptr arm so dispatch is
+    // identical to class-resource registration. The methods bitmask
+    // accumulates across calls when fresh==false (a subsequent on_post
+    // on the same path adds the POST bit to the existing entry).
+    {
+        std::unique_lock table_lock(impl_->route_table_mutex_);
+        // Fetch-or-update the entry in the right tier.
+        const std::string& key = idx.get_url_complete();
+
+        auto upsert = [&](detail::route_entry& target) {
+            target.methods = target.methods | methods;
+            target.handler = std::shared_ptr<http_resource>(shim);
+            target.is_prefix = false;
+        };
+
+        if (idx.get_url_pars().empty()) {
+            // Exact tier.
+            auto it = impl_->exact_routes_.find(key);
+            if (it == impl_->exact_routes_.end()) {
+                detail::route_entry entry;
+                entry.methods = methods;
+                entry.handler = std::shared_ptr<http_resource>(shim);
+                entry.is_prefix = false;
+                impl_->exact_routes_.emplace(key, std::move(entry));
+            } else {
+                upsert(it->second);
+            }
+        } else {
+            // Parameterized: walk the radix tree, find existing or insert.
+            // The radix_tree::insert always replaces, so we read first,
+            // merge methods, then re-insert.
+            detail::radix_match<detail::route_entry> existing;
+            detail::route_entry merged;
+            if (impl_->param_and_prefix_routes_.find(key, existing)
+                && existing.entry && !existing.is_prefix_match) {
+                merged = *existing.entry;
+            }
+            merged.methods = merged.methods | methods;
+            merged.handler = std::shared_ptr<http_resource>(shim);
+            merged.is_prefix = false;
+            impl_->param_and_prefix_routes_.insert(
+                key, std::move(merged), /*is_prefix=*/false);
+        }
+    }
+
     impl_->invalidate_route_cache();
 }
 
@@ -830,6 +904,24 @@ void webserver::unregister_impl_(const string& resource, bool family) {
     if (!family) {
         impl_->registered_resources_str.erase(he.get_url_complete());
     }
+
+    // TASK-027: mirror the erasure into the v2 3-tier table. Lock order:
+    // we already hold registered_resources_lock (v1 table); take
+    // route_table_mutex_ next, then route_cache_mutex_ via the
+    // route_cache::clear() helper. The discipline (table BEFORE cache)
+    // is consistent with register_impl_ and the documented invariant.
+    {
+        std::unique_lock table_lock(impl_->route_table_mutex_);
+        const std::string& key = he.get_url_complete();
+        if (family) {
+            impl_->param_and_prefix_routes_.remove(key, /*is_prefix=*/true);
+        } else if (he.get_url_pars().empty()) {
+            impl_->exact_routes_.erase(key);
+        } else {
+            impl_->param_and_prefix_routes_.remove(key, /*is_prefix=*/false);
+        }
+    }
+    impl_->route_cache_v2.clear();
 }
 
 void webserver::unregister_path(const string& path) {
@@ -862,6 +954,18 @@ void webserver::unregister_resource(const string& resource) {
     impl_->registered_resources_regex.erase(he_prefix);
     // The string-keyed fast-path map only holds exact (non-family) entries.
     impl_->registered_resources_str.erase(he_exact.get_url_complete());
+
+    // TASK-027: mirror into the v2 3-tier table. Erase under both
+    // classifications so a prior register_path AND register_prefix on
+    // the same path are both cleared atomically.
+    {
+        std::unique_lock table_lock(impl_->route_table_mutex_);
+        const std::string& key = he_exact.get_url_complete();
+        impl_->exact_routes_.erase(key);
+        impl_->param_and_prefix_routes_.remove(key, /*is_prefix=*/false);
+        impl_->param_and_prefix_routes_.remove(key, /*is_prefix=*/true);
+    }
+    impl_->route_cache_v2.clear();
 }
 
 void webserver::ban_ip(const string& ip) {
@@ -1408,9 +1512,98 @@ std::shared_ptr<http_response> webserver_impl::internal_error_page(detail::modde
 }
 
 void webserver_impl::invalidate_route_cache() {
-    std::lock_guard<std::mutex> lock(route_cache_mutex);
-    route_cache_list.clear();
-    route_cache_map.clear();
+    // Clear both the v1 and v2 caches. v1's cache is keyed on
+    // standardized_url only; v2's is keyed on (method, path). A
+    // registration may invalidate both, so clear both atomically.
+    {
+        std::lock_guard<std::mutex> lock(route_cache_mutex);
+        route_cache_list.clear();
+        route_cache_map.clear();
+    }
+    route_cache_v2.clear();
+}
+
+// TASK-027: 3-tier route lookup. Pipeline:
+//   1. cache lookup (cache mutex only) — return on hit, promoting LRU.
+//   2. on miss, take a shared_lock on route_table_mutex_:
+//      a. exact_routes_ (hash, O(1))
+//      b. param_and_prefix_routes_ (segment-trie)
+//      c. regex_routes_ (linear scan)
+//   3. on hit at any tier, drop the table lock and install into the
+//      cache (lock acquisition order: table BEFORE cache; we never hold
+//      both simultaneously — the table lock is released before the cache
+//      lock is taken).
+//
+// The method-set check (does the entry serve `method`?) lives at the
+// dispatch site, NOT here, because the existing 405 + Allow: header
+// path needs to see the entry even when no method bit matches.
+webserver_impl::lookup_result
+webserver_impl::lookup_v2(http_method method, const std::string& path) {
+    lookup_result result;
+
+    // Step 1: cache.
+    cache_key key{method, path};
+    cache_value cached;
+    if (route_cache_v2.find(key, cached)) {
+        result.found = true;
+        result.tier = tier_hit::cache;
+        result.entry = std::move(cached.entry);
+        result.captured_params = std::move(cached.captured_params);
+        return result;
+    }
+
+    // Step 2: walk the tiers under a shared lock.
+    {
+        std::shared_lock table_lock(route_table_mutex_);
+
+        // 2a. Exact tier — single hash probe.
+        auto exact_it = exact_routes_.find(path);
+        if (exact_it != exact_routes_.end()) {
+            result.found = true;
+            result.tier = tier_hit::exact;
+            result.entry = exact_it->second;
+            // exact tier carries no parameters by definition.
+        }
+
+        // 2b. Radix tier — segment-trie walk.
+        if (!result.found) {
+            radix_match<route_entry> rm;
+            if (param_and_prefix_routes_.find(path, rm) && rm.entry) {
+                result.found = true;
+                result.tier = tier_hit::radix;
+                result.entry = *rm.entry;
+                result.captured_params = std::move(rm.captures);
+            }
+        }
+
+        // 2c. Regex tier — linear scan.
+        if (!result.found) {
+            for (const auto& [pat, entry] : regex_routes_) {
+                try {
+                    std::regex re(pat);
+                    if (std::regex_match(path, re)) {
+                        result.found = true;
+                        result.tier = tier_hit::regex;
+                        result.entry = entry;
+                        break;
+                    }
+                } catch (const std::regex_error&) {
+                    // Invalid regex registered — should never reach here
+                    // because registration validates. Skip and continue.
+                }
+            }
+        }
+    }  // table_lock released.
+
+    // Step 3: install into cache (cache mutex only).
+    if (result.found) {
+        cache_value v;
+        v.entry = result.entry;
+        v.captured_params = result.captured_params;
+        route_cache_v2.insert(key, std::move(v));
+    }
+
+    return result;
 }
 
 }  // namespace detail
