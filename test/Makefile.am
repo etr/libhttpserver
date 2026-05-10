@@ -26,7 +26,7 @@ LDADD += -lcurl
 
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/ -DHTTPSERVER_COMPILATION
 METASOURCES = AUTO
-check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_const_getters http_request_tls_accessors webserver_register_smartptr webserver_register_path_prefix webserver_on_methods
+check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_const_getters http_request_tls_accessors webserver_register_smartptr webserver_register_path_prefix webserver_on_methods webserver_route
 
 MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
 
@@ -181,6 +181,19 @@ webserver_register_path_prefix_SOURCES = unit/webserver_register_path_prefix_tes
 # lambda-owned path throws. Default LDADD (libhttpserver + curl) is
 # sufficient.
 webserver_on_methods_SOURCES = unit/webserver_on_methods_test.cpp
+
+# webserver_route: TASK-026. Compile-time signature contract for the two
+# generic route() overloads (route(http_method, ...) and
+# route(method_set, ...)) plus runtime curl tests covering: GET/POST
+# dispatch, 405 + Allow on unregistered methods, the headline acceptance
+# test (load (method, path) pairs from a vector at runtime and dispatch),
+# method_set GET+HEAD serves both, method_set partial overlap with an
+# existing handler throws atomically (POST stays unregistered), empty
+# method_set throws, http_method::count_ sentinel throws, duplicate /
+# cross-overload conflicts with on_* throw, and parameterized paths bind
+# through the regex tier. Default LDADD (libhttpserver + curl) is
+# sufficient.
+webserver_route_SOURCES = unit/webserver_route_test.cpp
 
 noinst_HEADERS = littletest.hpp
 AM_CXXFLAGS += -Wall -fPIC -Wno-overloaded-virtual
