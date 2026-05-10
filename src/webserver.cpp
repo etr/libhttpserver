@@ -1657,12 +1657,37 @@ void webserver_impl::invalidate_route_cache() {
 // The method-set check (does the entry serve `method`?) lives at the
 // dispatch site, NOT here, because the existing 405 + Allow: header
 // path needs to see the entry even when no method bit matches.
+// Canonicalize a lookup path the same way http_endpoint canonicalizes a
+// registration path: strip a trailing '/' (unless the path IS just "/"),
+// prepend '/' if missing. Registration stores keys under url_complete,
+// which is produced by this same normalization (see http_endpoint.cpp
+// ll. 60-67) — so lookup must canonicalize too or "/foo" and "/foo/"
+// would never share an entry. Matches the v1 dispatch path, which
+// constructs a non-registration http_endpoint at lookup time and so
+// gets the same normalization for free.
+static std::string canonicalize_lookup_path(const std::string& path) {
+    if (path.empty()) {
+        return "/";
+    }
+    std::string out = path;
+    if (out.front() != '/') {
+        out.insert(out.begin(), '/');
+    }
+    if (out.size() > 1 && out.back() == '/') {
+        out.pop_back();
+    }
+    return out;
+}
+
 webserver_impl::lookup_result
 webserver_impl::lookup_v2(http_method method, const std::string& path) {
     lookup_result result;
 
-    // Step 1: cache.
-    cache_key key{method, path};
+    const std::string lookup_path = canonicalize_lookup_path(path);
+
+    // Step 1: cache. Cache under the canonical key so /foo and /foo/
+    // share an entry.
+    cache_key key{method, lookup_path};
     cache_value cached;
     if (route_cache_v2.find(key, cached)) {
         result.found = true;
@@ -1677,7 +1702,7 @@ webserver_impl::lookup_v2(http_method method, const std::string& path) {
         std::shared_lock table_lock(route_table_mutex_);
 
         // 2a. Exact tier — single hash probe.
-        auto exact_it = exact_routes_.find(path);
+        auto exact_it = exact_routes_.find(lookup_path);
         if (exact_it != exact_routes_.end()) {
             result.found = true;
             result.tier = tier_hit::exact;
@@ -1688,7 +1713,7 @@ webserver_impl::lookup_v2(http_method method, const std::string& path) {
         // 2b. Radix tier — segment-trie walk.
         if (!result.found) {
             radix_match<route_entry> rm;
-            if (param_and_prefix_routes_.find(path, rm) && rm.entry) {
+            if (param_and_prefix_routes_.find(lookup_path, rm) && rm.entry) {
                 result.found = true;
                 result.tier = tier_hit::radix;
                 result.entry = *rm.entry;
@@ -1701,7 +1726,7 @@ webserver_impl::lookup_v2(http_method method, const std::string& path) {
         // and on_methods_), so no compilation cost is paid per lookup.
         if (!result.found) {
             for (const auto& rr : regex_routes_) {
-                if (std::regex_match(path, rr.compiled_re)) {
+                if (std::regex_match(lookup_path, rr.compiled_re)) {
                     result.found = true;
                     result.tier = tier_hit::regex;
                     result.entry = rr.entry;
