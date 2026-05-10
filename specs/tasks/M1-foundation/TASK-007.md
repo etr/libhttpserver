@@ -26,7 +26,7 @@ Lock in the "no backend headers leak through `<httpserver.hpp>`" invariant with 
 **Related Requirements:** PRD-HDR-REQ-001..003
 **Related Decisions:** §9 testing item 1
 
-**Status:** Done (informational gate landed; full enforcement at TASK-020)
+**Status:** Done
 
 ---
 

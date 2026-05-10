@@ -27,4 +27,4 @@ Eliminate macro pollution from public headers by moving every `#define` constant
 **Related Requirements:** PRD-CFG-REQ-002
 **Related Decisions:** §4.9
 
-**Status:** Complete
+**Status:** Done

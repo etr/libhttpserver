@@ -28,4 +28,4 @@ Move `http_request`'s backend-coupled members (`MHD_Connection*`, raw GnuTLS han
 **Related Requirements:** PRD-HDR-REQ-001..004
 **Related Decisions:** DR-003b, §4.2
 
-**Status:** In Progress
+**Status:** Done
