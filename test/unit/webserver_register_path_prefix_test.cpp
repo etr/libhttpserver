@@ -79,7 +79,7 @@ class echo_id_resource : public http_resource {
 // Curl helper: GET url, return (response_code, body). Body is empty if curl
 // fails. The webserver must already be started.
 struct fetch_result {
-    long response_code;
+    long response_code;  // NOLINT(runtime/int) -- libcurl CURLINFO_RESPONSE_CODE writes a long
     std::string body;
 };
 

@@ -50,7 +50,7 @@ int main() {
         .start_method(httpserver::http::http_utils::EXTERNAL_SELECT);
 
     auto hr = std::make_shared<hello_resource>();
-    ws.register_resource("/hello", hr);
+    ws.register_path("/hello", hr);
     ws.start(false);
 
     std::cout << "Server running on port " << ws.get_bound_port() << std::endl;

@@ -31,7 +31,7 @@
 namespace {
 // TASK-023 test helper: wrap a stack-local http_resource& in a shared_ptr
 // with a no-op deleter. Preserves the "declare resource on the stack,
-// pass to register_resource" pattern after the API moved to smart pointers.
+// pass to register_path" pattern after the API moved to smart pointers.
 inline std::shared_ptr<httpserver::http_resource>
 as_shared(httpserver::http_resource& r) {
     return std::shared_ptr<httpserver::http_resource>(
@@ -83,7 +83,7 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, accept_default_ban_blocks)
     ws.start(false);
 
     ok_resource resource;
-    ws.register_resource("base", as_shared(resource));
+    ws.register_path("base", as_shared(resource));
 
     curl_global_init(CURL_GLOBAL_ALL);
 
@@ -138,7 +138,7 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, reject_default_allow_passes)
     ws.start(false);
 
     ok_resource resource;
-    ws.register_resource("base", as_shared(resource));
+    ws.register_path("base", as_shared(resource));
 
     curl_global_init(CURL_GLOBAL_ALL);
 
@@ -192,7 +192,7 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, accept_policy_allow_overrides_ban)
     ws.start(false);
 
     ok_resource resource;
-    ws.register_resource("base", as_shared(resource));
+    ws.register_path("base", as_shared(resource));
 
     curl_global_init(CURL_GLOBAL_ALL);
 
@@ -255,7 +255,7 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, reject_policy_allowed_then_banned)
     ws.start(false);
 
     ok_resource resource;
-    ws.register_resource("base", as_shared(resource));
+    ws.register_path("base", as_shared(resource));
 
     curl_global_init(CURL_GLOBAL_ALL);
 
@@ -311,7 +311,7 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, reject_policy_neither_allowed_nor_banned)
     ws.start(false);
 
     ok_resource resource;
-    ws.register_resource("base", as_shared(resource));
+    ws.register_path("base", as_shared(resource));
 
     curl_global_init(CURL_GLOBAL_ALL);
 
@@ -337,7 +337,7 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, ban_with_weight_comparison)
     ws.start(false);
 
     ok_resource resource;
-    ws.register_resource("base", as_shared(resource));
+    ws.register_path("base", as_shared(resource));
 
     curl_global_init(CURL_GLOBAL_ALL);
 
@@ -369,7 +369,7 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, allow_with_weight_comparison)
     ws.start(false);
 
     ok_resource resource;
-    ws.register_resource("base", as_shared(resource));
+    ws.register_path("base", as_shared(resource));
 
     curl_global_init(CURL_GLOBAL_ALL);
 
@@ -406,7 +406,7 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, ban_specific_then_wildcard)
     ws.start(false);
 
     ok_resource resource;
-    ws.register_resource("base", as_shared(resource));
+    ws.register_path("base", as_shared(resource));
 
     curl_global_init(CURL_GLOBAL_ALL);
 
@@ -438,7 +438,7 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, allow_specific_then_wildcard)
     ws.start(false);
 
     ok_resource resource;
-    ws.register_resource("base", as_shared(resource));
+    ws.register_path("base", as_shared(resource));
 
     curl_global_init(CURL_GLOBAL_ALL);
 

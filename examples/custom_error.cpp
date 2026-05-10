@@ -45,7 +45,7 @@ int main() {
     auto hwr = std::make_shared<hello_world_resource>();
     hwr->disallow_all();
     hwr->set_allowing(httpserver::http_method::get, true);
-    ws.register_resource("/hello", hwr);
+    ws.register_path("/hello", hwr);
     ws.start(true);
 
     return 0;

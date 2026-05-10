@@ -50,7 +50,7 @@ int main() {
     httpserver::webserver ws = httpserver::create_webserver(8080);
 
     auto ir = std::make_shared<iovec_resource>();
-    ws.register_resource("/data", ir);
+    ws.register_path("/data", ir);
     ws.start(true);
 
     return 0;

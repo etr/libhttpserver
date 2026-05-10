@@ -157,8 +157,8 @@ int main() {
     auto secure = std::make_shared<secure_resource>();
     auto info = std::make_shared<info_resource>();
 
-    ws.register_resource("/secure", secure);
-    ws.register_resource("/info", info);
+    ws.register_path("/secure", secure);
+    ws.register_path("/info", info);
 
     std::cout << "Server started. Press Ctrl+C to stop.\n\n";
     std::cout << "Test commands:\n";

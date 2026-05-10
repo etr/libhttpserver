@@ -104,7 +104,7 @@ int main(int argc, char** argv) {
         });
 
     auto fur = std::make_shared<file_upload_resource>();
-    ws.register_resource("/", fur);
+    ws.register_path("/", fur);
     ws.start(true);
 
     return 0;

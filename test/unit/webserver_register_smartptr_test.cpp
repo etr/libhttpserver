@@ -43,6 +43,12 @@
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
 
+// TASK-024: register_resource is now [[deprecated]] in favor of
+// register_path / register_prefix. This TU continues to exercise the
+// deprecated forwarder so its ownership semantics stay verified;
+// suppress the file-wide deprecation warning so -Werror still passes.
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
 using httpserver::create_webserver;
 using httpserver::http_request;
 using httpserver::http_resource;
@@ -109,23 +115,10 @@ static_assert(std::is_same_v<
               "register_resource(const string&, shared_ptr<http_resource>) "
               "must exist and return void");
 
-// (3) The bool-family parameter remains on both overloads so TASK-024
-//     can do the register_path/register_prefix split in one go without
-//     re-touching every call site twice.
-static_assert(std::is_same_v<
-                  decltype(std::declval<webserver&>().register_resource(
-                      std::declval<const std::string&>(),
-                      std::declval<std::unique_ptr<http_resource>>(),
-                      true)),
-                  void>,
-              "unique_ptr overload must accept a trailing bool family arg");
-static_assert(std::is_same_v<
-                  decltype(std::declval<webserver&>().register_resource(
-                      std::declval<const std::string&>(),
-                      std::declval<std::shared_ptr<http_resource>>(),
-                      true)),
-                  void>,
-              "shared_ptr overload must accept a trailing bool family arg");
+// (3) TASK-024 removed the trailing `bool family` parameter from both
+//     overloads. The bool-family overload is now pinned absent by the
+//     negative SFINAE in webserver_register_path_prefix_test.cpp; users
+//     that want prefix matching must call register_prefix() directly.
 
 // (4) Negative: the raw-pointer overload must be gone. SFINAE template
 //     specialization on a void_t of the call expression — if the call

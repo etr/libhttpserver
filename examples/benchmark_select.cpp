@@ -51,7 +51,7 @@ int main(int argc, char** argv) {
     hello->with_header("Server", "libhttpserver");
 
     auto hwr = std::make_shared<hello_world_resource>(hello);
-    ws.register_resource(PATH, hwr, false);
+    ws.register_path(PATH, hwr);
 
     ws.start(true);
 

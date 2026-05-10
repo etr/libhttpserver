@@ -246,18 +246,19 @@ void webserver::sweet_kill() {
 
 // ----- Resource registration --------------------------------------------
 
-// The unique_ptr overload is a templated inline shim defined in
-// webserver.hpp that funnels into this shared_ptr overload. Keeping the
-// validation/insertion logic in exactly one place prevents drift.
-void webserver::register_resource(const std::string& resource,
-                                  std::shared_ptr<http_resource> res,
-                                  bool family) {
+// TASK-024: register_path / register_prefix split. Both public methods
+// funnel into this private helper, which carries the validation and
+// insertion logic. Keeping the work in one place prevents drift between
+// the two registration kinds.
+void webserver::register_impl_(const std::string& resource,
+                               std::shared_ptr<http_resource> res,
+                               bool family) {
     if (res == nullptr) {
         throw std::invalid_argument("The http_resource pointer cannot be null");
     }
 
     if (single_resource && ((resource != "" && resource != "/") || !family)) {
-        throw std::invalid_argument("The resource should be '' or '/' and be marked as family when using a single_resource server");
+        throw std::invalid_argument("The resource should be '' or '/' and be registered via register_prefix when using a single_resource server");
     }
 
     detail::http_endpoint idx(resource, family, true, regex_checking);
@@ -284,6 +285,24 @@ void webserver::register_resource(const std::string& resource,
     }
     registered_resources_lock.unlock();
     impl_->invalidate_route_cache();
+}
+
+void webserver::register_path(const std::string& path,
+                              std::shared_ptr<http_resource> res) {
+    register_impl_(path, std::move(res), /*family=*/false);
+}
+
+void webserver::register_prefix(const std::string& path,
+                                std::shared_ptr<http_resource> res) {
+    register_impl_(path, std::move(res), /*family=*/true);
+}
+
+// Deprecated TASK-023-era forwarder. The 3-arg `bool family` overload is
+// gone; users that wanted prefix matching must migrate to
+// register_prefix.
+void webserver::register_resource(const std::string& resource,
+                                  std::shared_ptr<http_resource> res) {
+    register_path(resource, std::move(res));
 }
 
 #ifdef HAVE_WEBSOCKET
@@ -614,14 +633,16 @@ bool webserver::add_connection(int client_socket, const struct sockaddr* addr, u
                               static_cast<socklen_t>(addrlen)) == MHD_YES;
 }
 
-void webserver::unregister_resource(const string& resource) {
-    // family does not matter - it just checks the url_normalized anyhow
-    detail::http_endpoint he(resource, false, true, regex_checking);
+// TASK-024: erase a single registration of the requested kind (family).
+// Each kind keeps a distinct http_endpoint key (the family flag is part
+// of the endpoint's identity), so we must build the key with the right
+// flag or the erase silently misses. Caches are invalidated under the
+// registered_resources lock to prevent any thread from reading a
+// dangling resource pointer after the maps drop their refs.
+void webserver::unregister_impl_(const string& resource, bool family) {
+    detail::http_endpoint he(resource, family, true, regex_checking);
     std::unique_lock registered_resources_lock(impl_->registered_resources_mutex);
 
-    // Invalidate cache while holding registered_resources_mutex to prevent
-    // any thread from retrieving dangling resource pointers from the cache
-    // after we erase from the resource maps.
     {
         std::lock_guard<std::mutex> cache_lock(impl_->route_cache_mutex);
         impl_->route_cache_list.clear();
@@ -629,9 +650,26 @@ void webserver::unregister_resource(const string& resource) {
     }
 
     impl_->registered_resources.erase(he);
-    impl_->registered_resources.erase(he.get_url_complete());
-    impl_->registered_resources_str.erase(he.get_url_complete());
     impl_->registered_resources_regex.erase(he);
+    // The string-keyed fast-path map only ever holds exact (non-family)
+    // entries (see register_impl_). A prefix unregister has nothing to
+    // do here.
+    if (!family) {
+        impl_->registered_resources_str.erase(he.get_url_complete());
+    }
+}
+
+void webserver::unregister_path(const string& path) {
+    unregister_impl_(path, /*family=*/false);
+}
+
+void webserver::unregister_prefix(const string& path) {
+    unregister_impl_(path, /*family=*/true);
+}
+
+void webserver::unregister_resource(const string& resource) {
+    unregister_path(resource);
+    unregister_prefix(resource);
 }
 
 void webserver::ban_ip(const string& ip) {

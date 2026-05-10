@@ -41,7 +41,7 @@ int main() {
         .listen_backlog(128);
 
     auto hr = std::make_shared<hello_resource>();
-    ws.register_resource("/hello", hr);
+    ws.register_path("/hello", hr);
     ws.start(true);
 
     return 0;
