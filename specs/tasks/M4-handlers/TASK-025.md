@@ -28,4 +28,4 @@ Add the lambda-first handler model that lets a stateless endpoint be registered 
 **Related Requirements:** PRD-HDL-REQ-001, PRD-HDL-REQ-002
 **Related Decisions:** DR-004, §4.7
 
-**Status:** In Progress
+**Status:** Done

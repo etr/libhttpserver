@@ -390,6 +390,11 @@ void webserver::on_method_(http_method method,
     impl_->invalidate_route_cache();
 }
 
+// The seven named forwarders below are the only place that maps the
+// method name to its http_method enum constant. Each is a thin alias
+// for on_method_; all validation and insertion logic lives there.
+// on_delete uses http_method::del because `delete` is a C++ keyword;
+// the wire token is "DELETE" (see http_method::to_string).
 void webserver::on_get(const std::string& path,
                        std::function<http_response(const http_request&)> handler) {
     on_method_(http_method::get, path, std::move(handler));
@@ -407,8 +412,6 @@ void webserver::on_put(const std::string& path,
 
 void webserver::on_delete(const std::string& path,
                           std::function<http_response(const http_request&)> handler) {
-    // The enum spelling is `del` because `delete` is a C++ keyword;
-    // the wire token is "DELETE" (see http_method::to_string).
     on_method_(http_method::del, path, std::move(handler));
 }
 

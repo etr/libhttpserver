@@ -381,6 +381,137 @@ LT_BEGIN_AUTO_TEST(webserver_on_methods_suite,
     LT_CHECK(threw);
 LT_END_AUTO_TEST(on_get_then_register_path_with_class_throws)
 
+// Guard: on_get with an empty (default-constructed) std::function throws
+// std::invalid_argument. The `if (!handler)` branch on line 332 of
+// webserver.cpp must fire before any route-table mutation.
+LT_BEGIN_AUTO_TEST(webserver_on_methods_suite,
+                   on_get_empty_handler_throws_invalid_argument)
+    webserver ws = create_webserver(PORT + 8);
+    bool threw = false;
+    try {
+        ws.on_get("/", std::function<http_response(const http_request&)>{});
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK(threw);
+LT_END_AUTO_TEST(on_get_empty_handler_throws_invalid_argument)
+
+// Guard: on_get on a single_resource webserver with a path other than ""
+// or "/" throws std::invalid_argument.
+LT_BEGIN_AUTO_TEST(webserver_on_methods_suite,
+                   on_get_single_resource_non_root_path_throws)
+    webserver ws = create_webserver(PORT + 9).single_resource();
+    bool threw = false;
+    try {
+        ws.on_get("/some/path", [](const http_request&) {
+            return http_response::string("x");
+        });
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK(threw);
+LT_END_AUTO_TEST(on_get_single_resource_non_root_path_throws)
+
+// Mutual-exclusion: registering a class-based resource first, then
+// calling on_get on the same path, must also throw std::invalid_argument.
+// This is the reverse of on_get_then_register_path_with_class_throws.
+LT_BEGIN_AUTO_TEST(webserver_on_methods_suite,
+                   register_path_then_on_get_same_path_throws)
+    class my_resource : public http_resource {};
+
+    webserver ws = create_webserver(PORT + 10);
+    ws.register_path("/n", std::make_shared<my_resource>());
+
+    bool threw = false;
+    try {
+        ws.on_get("/n", [](const http_request&) {
+            return http_response::string("lambda");
+        });
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK(threw);
+LT_END_AUTO_TEST(register_path_then_on_get_same_path_throws)
+
+// Verify each on_* method routes correctly: individual per-method tests
+// so a failure in one method does not mask failures in others.
+LT_BEGIN_AUTO_TEST(webserver_on_methods_suite, on_get_dispatches_get)
+    webserver ws = create_webserver(PORT + 11);
+    ws.on_get("/all7", [](const http_request&) {
+        return http_response::string("get");
+    });
+    ws.start(false);
+    LT_CHECK_EQ(do_request("localhost:8201/all7", "GET").body,
+                std::string("get"));
+    ws.stop();
+LT_END_AUTO_TEST(on_get_dispatches_get)
+
+LT_BEGIN_AUTO_TEST(webserver_on_methods_suite, on_post_dispatches_post)
+    webserver ws = create_webserver(PORT + 12);
+    ws.on_post("/all7", [](const http_request&) {
+        return http_response::string("post");
+    });
+    ws.start(false);
+    LT_CHECK_EQ(do_request("localhost:8202/all7", "POST", "").body,
+                std::string("post"));
+    ws.stop();
+LT_END_AUTO_TEST(on_post_dispatches_post)
+
+LT_BEGIN_AUTO_TEST(webserver_on_methods_suite, on_put_dispatches_put)
+    webserver ws = create_webserver(PORT + 13);
+    ws.on_put("/all7", [](const http_request&) {
+        return http_response::string("put");
+    });
+    ws.start(false);
+    LT_CHECK_EQ(do_request("localhost:8203/all7", "PUT", "").body,
+                std::string("put"));
+    ws.stop();
+LT_END_AUTO_TEST(on_put_dispatches_put)
+
+LT_BEGIN_AUTO_TEST(webserver_on_methods_suite, on_delete_dispatches_delete)
+    webserver ws = create_webserver(PORT + 14);
+    ws.on_delete("/all7", [](const http_request&) {
+        return http_response::string("delete");
+    });
+    ws.start(false);
+    LT_CHECK_EQ(do_request("localhost:8204/all7", "DELETE").body,
+                std::string("delete"));
+    ws.stop();
+LT_END_AUTO_TEST(on_delete_dispatches_delete)
+
+LT_BEGIN_AUTO_TEST(webserver_on_methods_suite, on_patch_dispatches_patch)
+    webserver ws = create_webserver(PORT + 15);
+    ws.on_patch("/all7", [](const http_request&) {
+        return http_response::string("patch");
+    });
+    ws.start(false);
+    LT_CHECK_EQ(do_request("localhost:8205/all7", "PATCH", "").body,
+                std::string("patch"));
+    ws.stop();
+LT_END_AUTO_TEST(on_patch_dispatches_patch)
+
+LT_BEGIN_AUTO_TEST(webserver_on_methods_suite, on_options_dispatches_options)
+    webserver ws = create_webserver(PORT + 16);
+    ws.on_options("/all7", [](const http_request&) {
+        return http_response::string("options");
+    });
+    ws.start(false);
+    LT_CHECK_EQ(do_request("localhost:8206/all7", "OPTIONS").body,
+                std::string("options"));
+    ws.stop();
+LT_END_AUTO_TEST(on_options_dispatches_options)
+
+LT_BEGIN_AUTO_TEST(webserver_on_methods_suite, on_head_dispatches_head)
+    webserver ws = create_webserver(PORT + 17);
+    ws.on_head("/all7", [](const http_request&) {
+        return http_response::string("head");
+    });
+    ws.start(false);
+    // HEAD: curl strips body; just assert 200.
+    LT_CHECK_EQ(do_request("localhost:8207/all7", "HEAD").response_code, 200);
+    ws.stop();
+LT_END_AUTO_TEST(on_head_dispatches_head)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

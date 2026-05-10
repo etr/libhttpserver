@@ -45,6 +45,7 @@
 #define SRC_HTTPSERVER_DETAIL_LAMBDA_RESOURCE_HPP_
 
 #include <array>
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -86,6 +87,10 @@ class lambda_resource final : public ::httpserver::http_resource {
         return is_allowed(method);
     }
 
+    // These seven overrides are mechanical delegations to invoke_().
+    // Each differs only by the http_method enum constant forwarded.
+    // They are required by the http_resource base-class interface and
+    // cannot be collapsed further without changing that interface.
     std::shared_ptr<::httpserver::http_response>
     render_get(const ::httpserver::http_request& r) override {
         return invoke_(http_method::get, r);
@@ -119,13 +124,15 @@ class lambda_resource final : public ::httpserver::http_resource {
     std::shared_ptr<::httpserver::http_response>
     invoke_(http_method m, const ::httpserver::http_request& r) {
         auto& slot = slots_[static_cast<std::size_t>(m)];
-        if (!slot) {
-            // Reachable only if dispatch arrives for a method whose
-            // bit was set but whose slot was somehow cleared. The
-            // existing finalize_answer 405 path normally fires before
-            // we get here.
-            return ::httpserver::detail::empty_render(r);
-        }
+        // Invariant: set_slot stores the handler AND calls
+        // set_allowing(method, true); the finalize_answer 405 path fires
+        // before reaching invoke_ unless has_slot is true. A populated
+        // slot is therefore guaranteed here.
+        assert(slot);
+        // DR-004 contract: lambda_handler returns http_response by value.
+        // The make_shared here is the known cost of that ergonomic choice;
+        // slot(r) is already a prvalue so this uses move-construction with
+        // no extra copy. TASK-036 will address the dispatch cutover.
         return std::make_shared<::httpserver::http_response>(slot(r));
     }
 
