@@ -110,8 +110,8 @@ int main(int argc, char** argv) {
                               .generate_random_filename_on_upload()
                               .file_upload_target(httpserver::FILE_UPLOAD_DISK_ONLY);
 
-    file_upload_resource fur;
-    ws.register_resource("/", &fur);
+    auto fur = std::make_shared<file_upload_resource>();
+    ws.register_resource("/", fur);
     ws.start(true);
 
     return 0;

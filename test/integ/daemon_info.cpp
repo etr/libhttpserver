@@ -32,6 +32,18 @@
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
 
+
+namespace {
+// TASK-023 test helper: wrap a stack-local http_resource& in a shared_ptr
+// with a no-op deleter. Preserves the "declare resource on the stack,
+// pass to register_resource" pattern after the API moved to smart pointers.
+inline std::shared_ptr<httpserver::http_resource>
+as_shared(httpserver::http_resource& r) {
+    return std::shared_ptr<httpserver::http_resource>(
+        &r, [](httpserver::http_resource*){});
+}
+}  // namespace
+
 using std::shared_ptr;
 using std::string;
 using httpserver::http_resource;
@@ -73,7 +85,7 @@ LT_BEGIN_AUTO_TEST(daemon_info_suite, get_bound_port_explicit)
     webserver ws = create_webserver(PORT);
 
     simple_resource sr;
-    ws.register_resource("test", &sr);
+    ws.register_resource("test", as_shared(sr));
     ws.start(false);
 
     LT_CHECK_EQ(ws.get_bound_port(), PORT);
@@ -87,7 +99,7 @@ LT_BEGIN_AUTO_TEST(daemon_info_suite, basic_request_succeeds)
     webserver ws = create_webserver(PORT);
 
     simple_resource sr;
-    ws.register_resource("test", &sr);
+    ws.register_resource("test", as_shared(sr));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -112,7 +124,7 @@ LT_BEGIN_AUTO_TEST(daemon_info_suite, quiesce_does_not_crash)
     webserver ws = create_webserver(PORT);
 
     simple_resource sr;
-    ws.register_resource("test", &sr);
+    ws.register_resource("test", as_shared(sr));
     ws.start(false);
 
     // Verify it works before quiesce
@@ -199,7 +211,7 @@ LT_BEGIN_AUTO_TEST(daemon_info_suite, external_event_loop)
         .start_method(httpserver::http::http_utils::EXTERNAL_SELECT);
 
     simple_resource sr;
-    ws.register_resource("test", &sr);
+    ws.register_resource("test", as_shared(sr));
     ws.start(false);
 
     // Drive one request through the event loop manually

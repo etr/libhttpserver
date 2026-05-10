@@ -44,6 +44,18 @@
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
 
+
+namespace {
+// TASK-023 test helper: wrap a stack-local http_resource& in a shared_ptr
+// with a no-op deleter. Preserves the "declare resource on the stack,
+// pass to register_resource" pattern after the API moved to smart pointers.
+inline std::shared_ptr<httpserver::http_resource>
+as_shared(httpserver::http_resource& r) {
+    return std::shared_ptr<httpserver::http_resource>(
+        &r, [](httpserver::http_resource*){});
+}
+}  // namespace
+
 using std::shared_ptr;
 using std::string;
 
@@ -174,7 +186,7 @@ LT_END_SUITE(deferred_suite)
 
 LT_BEGIN_AUTO_TEST(deferred_suite, deferred_response_suite)
     deferred_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_resource("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     std::string s;
@@ -192,7 +204,7 @@ LT_END_AUTO_TEST(deferred_response_suite)
 
 LT_BEGIN_AUTO_TEST(deferred_suite, deferred_response_with_data)
     deferred_resource_with_data resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_resource("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     std::string s;
@@ -210,7 +222,7 @@ LT_END_AUTO_TEST(deferred_response_with_data)
 
 LT_BEGIN_AUTO_TEST(deferred_suite, deferred_response_empty_content)
     deferred_resource_empty_content resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_resource("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     std::string s;

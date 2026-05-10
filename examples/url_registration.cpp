@@ -50,16 +50,16 @@ class url_args_resource : public httpserver::http_resource {
 int main() {
     httpserver::webserver ws = httpserver::create_webserver(8080);
 
-    hello_world_resource hwr;
-    ws.register_resource("/hello", &hwr);
+    auto hwr = std::make_shared<hello_world_resource>();
+    ws.register_resource("/hello", hwr);
 
-    handling_multiple_resource hmr;
-    ws.register_resource("/family", &hmr, true);
-    ws.register_resource("/with_regex_[0-9]+", &hmr);
+    auto hmr = std::make_shared<handling_multiple_resource>();
+    ws.register_resource("/family", hmr, true);
+    ws.register_resource("/with_regex_[0-9]+", hmr);
 
-    url_args_resource uar;
-    ws.register_resource("/url/with/{arg1}/and/{arg2}", &uar);
-    ws.register_resource("/url/with/parametric/args/{arg1|[0-9]+}/and/{arg2|[A-Z]+}", &uar);
+    auto uar = std::make_shared<url_args_resource>();
+    ws.register_resource("/url/with/{arg1}/and/{arg2}", uar);
+    ws.register_resource("/url/with/parametric/args/{arg1|[0-9]+}/and/{arg2|[A-Z]+}", uar);
 
     ws.start(true);
 

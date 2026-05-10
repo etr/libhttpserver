@@ -154,11 +154,11 @@ int main() {
         .https_mem_cert("server_cert.pem")    // Server certificate
         .https_mem_trust("ca_cert.pem");      // CA certificate for verifying client certs
 
-    secure_resource secure;
-    info_resource info;
+    auto secure = std::make_shared<secure_resource>();
+    auto info = std::make_shared<info_resource>();
 
-    ws.register_resource("/secure", &secure);
-    ws.register_resource("/info", &info);
+    ws.register_resource("/secure", secure);
+    ws.register_resource("/info", info);
 
     std::cout << "Server started. Press Ctrl+C to stop.\n\n";
     std::cout << "Test commands:\n";

@@ -46,6 +46,18 @@
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
 
+
+namespace {
+// TASK-023 test helper: wrap a stack-local http_resource& in a shared_ptr
+// with a no-op deleter. Preserves the "declare resource on the stack,
+// pass to register_resource" pattern after the API moved to smart pointers.
+inline std::shared_ptr<httpserver::http_resource>
+as_shared(httpserver::http_resource& r) {
+    return std::shared_ptr<httpserver::http_resource>(
+        &r, [](httpserver::http_resource*){});
+}
+}  // namespace
+
 using std::shared_ptr;
 
 #ifdef HTTPSERVER_PORT
@@ -116,7 +128,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, start_stop)
     { // NOLINT (internal scope opening - not method start)
     httpserver::webserver ws = httpserver::create_webserver(PORT);
     ok_resource ok;
-    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.register_resource("base", as_shared(ok));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -138,7 +150,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, start_stop)
     {
     httpserver::webserver ws = httpserver::create_webserver(PORT).start_method(httpserver::http::http_utils::INTERNAL_SELECT);
     ok_resource ok;
-    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.register_resource("base", as_shared(ok));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -160,7 +172,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, start_stop)
     {
     httpserver::webserver ws = httpserver::create_webserver(PORT).start_method(httpserver::http::http_utils::THREAD_PER_CONNECTION);
     ok_resource ok;
-    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.register_resource("base", as_shared(ok));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -186,7 +198,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ipv6)
     { // NOLINT (internal scope opening - not method start)
     httpserver::webserver ws = httpserver::create_webserver(PORT).use_ipv6();
     ok_resource ok;
-    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.register_resource("base", as_shared(ok));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -211,7 +223,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, dual_stack)
     { // NOLINT (internal scope opening - not method start)
     httpserver::webserver ws = httpserver::create_webserver(PORT).use_dual_stack();
     ok_resource ok;
-    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.register_resource("base", as_shared(ok));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -237,7 +249,7 @@ LT_END_AUTO_TEST(dual_stack)
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, sweet_kill)
     httpserver::webserver ws = httpserver::create_webserver(PORT);
     ok_resource ok;
-    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.register_resource("base", as_shared(ok));
     ws.start(false);
 
     {
@@ -287,7 +299,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, disable_options)
         .no_ban_system()
         .no_post_process();
     ok_resource ok;
-    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.register_resource("base", as_shared(ok));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -315,7 +327,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, enable_options)
         .ban_system()
         .post_process();
     ok_resource ok;
-    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.register_resource("base", as_shared(ok));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -350,7 +362,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_socket)
 
     httpserver::webserver ws = httpserver::create_webserver(-1).bind_socket(fd);  // whatever port here doesn't matter
     ok_resource ok;
-    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.register_resource("base", as_shared(ok));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -372,7 +384,7 @@ LT_END_AUTO_TEST(custom_socket)
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, bind_address_string)
     httpserver::webserver ws = httpserver::create_webserver(PORT).bind_address("127.0.0.1");
     ok_resource ok;
-    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.register_resource("base", as_shared(ok));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -399,7 +411,7 @@ LT_END_AUTO_TEST(bind_address_string_invalid)
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, single_resource)
     httpserver::webserver ws = httpserver::create_webserver(PORT).single_resource();
     ok_resource ok;
-    LT_ASSERT_EQ(true, ws.register_resource("/", &ok, true));
+    ws.register_resource("/", as_shared(ok), true);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -421,8 +433,8 @@ LT_END_AUTO_TEST(single_resource)
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, single_resource_not_default_resource)
     httpserver::webserver ws = httpserver::create_webserver(PORT).single_resource();
     ok_resource ok;
-    LT_CHECK_THROW(ws.register_resource("/other", &ok, true));
-    LT_CHECK_THROW(ws.register_resource("/", &ok, false));
+    LT_CHECK_THROW(ws.register_resource("/other", as_shared(ok), true));
+    LT_CHECK_THROW(ws.register_resource("/", as_shared(ok), false));
     ws.start(false);
 
     ws.stop();
@@ -430,14 +442,16 @@ LT_END_AUTO_TEST(single_resource_not_default_resource)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, register_resource_nullptr_throws)
     httpserver::webserver ws = httpserver::create_webserver(PORT);
-    LT_CHECK_THROW(ws.register_resource("/test", nullptr));
+    // TASK-023: both smart-pointer overloads throw on null.
+    LT_CHECK_THROW(ws.register_resource("/test", std::shared_ptr<httpserver::http_resource>{}));
+    LT_CHECK_THROW(ws.register_resource("/test", std::unique_ptr<httpserver::http_resource>{}));
 LT_END_AUTO_TEST(register_resource_nullptr_throws)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, register_empty_resource_non_family)
     httpserver::webserver ws = httpserver::create_webserver(PORT);
     ok_resource ok;
     // Register empty resource with family=false
-    LT_CHECK_EQ(true, ws.register_resource("", &ok, false));
+    ws.register_resource("", as_shared(ok), false);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -460,7 +474,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, register_resource_with_url_params_non_fa
     httpserver::webserver ws = httpserver::create_webserver(PORT).regex_checking();
     ok_resource ok;
     // Register resource with URL parameters, non-family
-    LT_CHECK_EQ(true, ws.register_resource("/user/{id}", &ok, false));
+    ws.register_resource("/user/{id}", as_shared(ok), false);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -479,16 +493,17 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, register_resource_with_url_params_non_fa
     ws.stop();
 LT_END_AUTO_TEST(register_resource_with_url_params_non_family)
 
-LT_BEGIN_AUTO_TEST(ws_start_stop_suite, register_duplicate_resource_returns_false)
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, register_duplicate_resource_throws)
     httpserver::webserver ws = httpserver::create_webserver(PORT);
     ok_resource ok1, ok2;
-    // First registration should succeed
-    LT_CHECK_EQ(true, ws.register_resource("/duplicate", &ok1, false));
-    // Second registration of same path should fail (return false)
-    LT_CHECK_EQ(false, ws.register_resource("/duplicate", &ok2, false));
-    // But with family=true should succeed (different type of registration)
-    LT_CHECK_EQ(true, ws.register_resource("/duplicate", &ok2, true));
-LT_END_AUTO_TEST(register_duplicate_resource_returns_false)
+    // First registration should succeed.
+    ws.register_resource("/duplicate", as_shared(ok1), false);
+    // TASK-023: the second registration of the same path now throws
+    // std::invalid_argument (replaces v1's silent `return false`).
+    LT_CHECK_THROW(ws.register_resource("/duplicate", as_shared(ok2), false));
+    // But with family=true it succeeds (different type of registration).
+    ws.register_resource("/duplicate", as_shared(ok2), true);
+LT_END_AUTO_TEST(register_duplicate_resource_throws)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, thread_per_connection_fails_with_max_threads)
     { // NOLINT (internal scope opening - not method start)
@@ -518,7 +533,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, tuning_options)
         .nonce_nc_size(10);
 
     ok_resource ok;
-    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.register_resource("base", as_shared(ok));
     LT_CHECK_NOTHROW(ws.start(false));
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -544,7 +559,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_base)
         .https_mem_cert(ROOT "/cert.pem");
 
     ok_resource ok;
-    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.register_resource("base", as_shared(ok));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -574,7 +589,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_with_protocol_priorities)
         .https_priorities("NORMAL:-MD5");
 
     ok_resource ok;
-    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.register_resource("base", as_shared(ok));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -603,7 +618,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_with_trust)
         .https_mem_trust(ROOT "/test_root_ca.pem");
 
     ok_resource ok;
-    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.register_resource("base", as_shared(ok));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -627,8 +642,8 @@ LT_END_AUTO_TEST(ssl_with_trust)
 void* start_ws_blocking(void* par) {
     httpserver::webserver* ws = (httpserver::webserver*) par;
     ok_resource ok;
-    if (!ws->register_resource("base", &ok)) return PTHREAD_CANCELED;
     try {
+        ws->register_resource("base", as_shared(ok));
         ws->start(true);
     } catch (...) {
         return PTHREAD_CANCELED;
@@ -672,7 +687,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_error_resources)
         .method_not_allowed_resource(not_allowed_custom);
 
     ok_resource ok;
-    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.register_resource("base", as_shared(ok));
     ws.start(false);
 
     {
@@ -738,7 +753,7 @@ LT_END_AUTO_TEST(custom_error_resources)
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ipv6_webserver)
     httpserver::webserver ws = httpserver::create_webserver(PORT + 20).use_ipv6();
     ok_resource ok;
-    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.register_resource("base", as_shared(ok));
     try {
         ws.start(false);
     } catch (const std::exception& e) {
@@ -768,7 +783,7 @@ LT_END_AUTO_TEST(ipv6_webserver)
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, dual_stack_webserver)
     httpserver::webserver ws = httpserver::create_webserver(PORT + 21).use_dual_stack();
     ok_resource ok;
-    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.register_resource("base", as_shared(ok));
     try {
         ws.start(false);
     } catch (const std::exception& e) {
@@ -799,7 +814,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, bind_address_ipv4)
     int port = PORT + 22;
     httpserver::webserver ws = httpserver::create_webserver(port).bind_address("127.0.0.1");
     ok_resource ok;
-    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.register_resource("base", as_shared(ok));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -827,7 +842,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, bind_address_ipv6_string)
     try {
         httpserver::webserver ws = httpserver::create_webserver(port).bind_address("::1");
         ok_resource ok;
-        LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+        ws.register_resource("base", as_shared(ok));
         ws.start(false);
         if (ws.is_running()) {
             curl_global_init(CURL_GLOBAL_ALL);
@@ -867,7 +882,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, tls_session_on_non_tls_connection)
     int port = PORT + 25;
     httpserver::webserver ws = httpserver::create_webserver(port);  // No SSL
     tls_check_non_tls_resource tls_check;
-    LT_ASSERT_EQ(true, ws.register_resource("tls_check", &tls_check));
+    ws.register_resource("tls_check", as_shared(tls_check));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -893,7 +908,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, https_webserver)
         .https_mem_key(ROOT "/key.pem")
         .https_mem_cert(ROOT "/cert.pem");
     ok_resource ok;
-    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.register_resource("base", as_shared(ok));
     try {
         ws.start(false);
     } catch (const std::exception& e) {
@@ -928,7 +943,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, tls_session_getters)
         .https_mem_key(ROOT "/key.pem")
         .https_mem_cert(ROOT "/cert.pem");
     tls_info_resource tls_info;
-    LT_ASSERT_EQ(true, ws.register_resource("tls_info", &tls_info));
+    ws.register_resource("tls_info", as_shared(tls_info));
     try {
         ws.start(false);
     } catch (const std::exception& e) {
@@ -995,7 +1010,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_no_certificate)
         .https_mem_key(ROOT "/key.pem")
         .https_mem_cert(ROOT "/cert.pem");
     client_cert_info_resource cert_info;
-    LT_ASSERT_EQ(true, ws.register_resource("cert_info", &cert_info));
+    ws.register_resource("cert_info", as_shared(cert_info));
     try {
         ws.start(false);
     } catch (const std::exception& e) {
@@ -1030,7 +1045,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_with_certificate)
         .https_mem_cert(ROOT "/cert.pem")
         .https_mem_trust(ROOT "/client_cert.pem");  // Trust the client cert as CA
     client_cert_info_resource cert_info;
-    LT_ASSERT_EQ(true, ws.register_resource("cert_info", &cert_info));
+    ws.register_resource("cert_info", as_shared(cert_info));
     try {
         ws.start(false);
     } catch (const std::exception& e) {
@@ -1070,7 +1085,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_dn_extraction)
         .https_mem_cert(ROOT "/cert.pem")
         .https_mem_trust(ROOT "/client_cert.pem");
     client_cert_info_resource cert_info;
-    LT_ASSERT_EQ(true, ws.register_resource("cert_info", &cert_info));
+    ws.register_resource("cert_info", as_shared(cert_info));
     try {
         ws.start(false);
     } catch (const std::exception& e) {
@@ -1108,7 +1123,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_fingerprint)
         .https_mem_cert(ROOT "/cert.pem")
         .https_mem_trust(ROOT "/client_cert.pem");
     client_cert_info_resource cert_info;
-    LT_ASSERT_EQ(true, ws.register_resource("cert_info", &cert_info));
+    ws.register_resource("cert_info", as_shared(cert_info));
     try {
         ws.start(false);
     } catch (const std::exception& e) {
@@ -1151,7 +1166,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_no_cn)
         .https_mem_cert(ROOT "/cert.pem")
         .https_mem_trust(ROOT "/client_cert_no_cn.pem");
     client_cert_info_resource cert_info;
-    LT_ASSERT_EQ(true, ws.register_resource("cert_info", &cert_info));
+    ws.register_resource("cert_info", as_shared(cert_info));
     try {
         ws.start(false);
     } catch (const std::exception& e) {
@@ -1192,7 +1207,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_untrusted)
         .https_mem_cert(ROOT "/cert.pem")
         .https_mem_trust(ROOT "/client_cert.pem");  // Only trust the original client cert
     client_cert_info_resource cert_info;
-    LT_ASSERT_EQ(true, ws.register_resource("cert_info", &cert_info));
+    ws.register_resource("cert_info", as_shared(cert_info));
     try {
         ws.start(false);
     } catch (const std::exception& e) {
@@ -1241,7 +1256,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_accessors_known_values)
         .https_mem_cert(ROOT "/cert.pem")
         .https_mem_trust(ROOT "/client_cert.pem");
     client_cert_info_resource cert_info;
-    LT_ASSERT_EQ(true, ws.register_resource("cert_info", &cert_info));
+    ws.register_resource("cert_info", as_shared(cert_info));
     try {
         ws.start(false);
     } catch (const std::exception& e) {
@@ -1341,7 +1356,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, sni_callback_setup)
         .sni_callback(sni_cb);
 
     ok_resource ok;
-    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.register_resource("base", as_shared(ok));
     try {
         ws.start(false);
     } catch (const std::exception& e) {
@@ -1376,7 +1391,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, pedantic_mode)
     int port = PORT + 26;
     httpserver::webserver ws = httpserver::create_webserver(port).pedantic();
     ok_resource ok;
-    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.register_resource("base", as_shared(ok));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1403,7 +1418,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, digest_auth_random)
     httpserver::webserver ws = httpserver::create_webserver(port)
         .digest_auth_random("random_string_for_digest");
     ok_resource ok;
-    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.register_resource("base", as_shared(ok));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1460,7 +1475,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_handler_setup)
         .psk_cred_handler(test_psk_handler);
 
     ok_resource ok;
-    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.register_resource("base", as_shared(ok));
     try {
         ws.start(false);
     } catch (const std::exception& e) {
@@ -1487,7 +1502,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_handler_empty)
         .psk_cred_handler(empty_psk_handler);
 
     ok_resource ok;
-    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.register_resource("base", as_shared(ok));
     try {
         ws.start(false);
     } catch (const std::exception& e) {
@@ -1512,7 +1527,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_no_handler)
         .cred_type(httpserver::http::http_utils::PSK);
 
     ok_resource ok;
-    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.register_resource("base", as_shared(ok));
     try {
         ws.start(false);
     } catch (const std::exception& e) {
@@ -1546,7 +1561,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_connection_success)
             .https_priorities("NORMAL:+PSK:+DHE-PSK");
 
         ok_resource ok;
-        LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+        ws.register_resource("base", as_shared(ok));
 
         ws.start(false);
 
@@ -1593,7 +1608,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_connection_unknown_user)
             .https_priorities("NORMAL:+PSK:+DHE-PSK");
 
         ok_resource ok;
-        LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+        ws.register_resource("base", as_shared(ok));
 
         ws.start(false);
 
@@ -1636,7 +1651,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_connection_empty_handler)
             .https_priorities("NORMAL:+PSK:+DHE-PSK");
 
         ok_resource ok;
-        LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+        ws.register_resource("base", as_shared(ok));
 
         ws.start(false);
 
@@ -1679,7 +1694,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_connection_invalid_hex)
             .https_priorities("NORMAL:+PSK:+DHE-PSK");
 
         ok_resource ok;
-        LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+        ws.register_resource("base", as_shared(ok));
 
         ws.start(false);
 
@@ -1722,7 +1737,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_connection_no_handler)
             .https_priorities("NORMAL:+PSK:+DHE-PSK");
 
         ok_resource ok;
-        LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+        ws.register_resource("base", as_shared(ok));
 
         ws.start(false);
 
@@ -1755,7 +1770,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, max_threads_running)
         .max_threads(4);
 
     ok_resource ok;
-    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.register_resource("base", as_shared(ok));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1782,7 +1797,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, max_connections_running)
         .max_connections(100);
 
     ok_resource ok;
-    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.register_resource("base", as_shared(ok));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1809,7 +1824,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, memory_limit_running)
         .memory_limit(32 * 1024);  // 32KB memory limit
 
     ok_resource ok;
-    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.register_resource("base", as_shared(ok));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1836,7 +1851,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, per_ip_limit_running)
         .per_IP_connection_limit(5);
 
     ok_resource ok;
-    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.register_resource("base", as_shared(ok));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1863,7 +1878,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, thread_stack_size_running)
         .max_thread_stack_size(4 * 1024 * 1024);  // 4MB stack size
 
     ok_resource ok;
-    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.register_resource("base", as_shared(ok));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1890,7 +1905,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, deferred_mode_running)
         .deferred();
 
     ok_resource ok;
-    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.register_resource("base", as_shared(ok));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1917,7 +1932,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, debug_mode_running)
         .debug();
 
     ok_resource ok;
-    LT_ASSERT_EQ(true, ws.register_resource("base", &ok));
+    ws.register_resource("base", as_shared(ok));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);

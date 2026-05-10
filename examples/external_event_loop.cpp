@@ -49,8 +49,8 @@ int main() {
     httpserver::webserver ws = httpserver::create_webserver(8080)
         .start_method(httpserver::http::http_utils::EXTERNAL_SELECT);
 
-    hello_resource hr;
-    ws.register_resource("/hello", &hr);
+    auto hr = std::make_shared<hello_resource>();
+    ws.register_resource("/hello", hr);
     ws.start(false);
 
     std::cout << "Server running on port " << ws.get_bound_port() << std::endl;

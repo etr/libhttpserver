@@ -45,6 +45,18 @@
 #include "httpserver/string_utilities.hpp"
 #include "./littletest.hpp"
 
+
+namespace {
+// TASK-023 test helper: wrap a stack-local http_resource& in a shared_ptr
+// with a no-op deleter. Preserves the "declare resource on the stack,
+// pass to register_resource" pattern after the API moved to smart pointers.
+inline std::shared_ptr<httpserver::http_resource>
+as_shared(httpserver::http_resource& r) {
+    return std::shared_ptr<httpserver::http_resource>(
+        &r, [](httpserver::http_resource*){});
+}
+}  // namespace
+
 using std::string;
 using std::string_view;
 using std::map;
@@ -331,7 +343,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+    ws->register_resource("upload", as_shared(resource));
 
     auto res = send_file_to_webserver(false, false);
     LT_ASSERT_EQ(res.first, 0);
@@ -379,7 +391,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_via_put)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+    ws->register_resource("upload", as_shared(resource));
 
     auto ret = send_file_via_put();
     LT_CHECK_EQ(std::get<1>(ret), 0);
@@ -410,7 +422,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_additional_par
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+    ws->register_resource("upload", as_shared(resource));
 
     auto res = send_file_to_webserver(false, true);
     LT_ASSERT_EQ(res.first, 0);
@@ -463,7 +475,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_two_files)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+    ws->register_resource("upload", as_shared(resource));
 
     auto res = send_file_to_webserver(true, false);
     LT_ASSERT_EQ(res.first, 0);
@@ -531,7 +543,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_disk_only)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+    ws->register_resource("upload", as_shared(resource));
 
     auto res = send_file_to_webserver(false, false);
     LT_ASSERT_EQ(res.first, 0);
@@ -571,7 +583,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_only_incl_content)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+    ws->register_resource("upload", as_shared(resource));
 
     auto res = send_file_to_webserver(false, false);
     LT_ASSERT_EQ(res.first, 0);
@@ -601,7 +613,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_large_content)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+    ws->register_resource("upload", as_shared(resource));
 
     // Upload a large file to trigger the chunking behavior of MHD.
     std::string file_content;
@@ -638,7 +650,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_large_content_with_args)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+    ws->register_resource("upload", as_shared(resource));
 
     // Upload a large file to trigger the chunking behavior of MHD.
     // Include some additional args to make sure those are processed as well.
@@ -681,7 +693,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_only_excl_content)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+    ws->register_resource("upload", as_shared(resource));
 
     auto res = send_file_to_webserver(false, false);
     LT_ASSERT_EQ(res.first, 0);
@@ -724,7 +736,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_cleanup_callback_returns_true)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+    ws->register_resource("upload", as_shared(resource));
 
     auto res = send_file_to_webserver(false, false);
     LT_ASSERT_EQ(res.first, 0);
@@ -767,7 +779,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_cleanup_callback_returns_false)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+    ws->register_resource("upload", as_shared(resource));
 
     auto res = send_file_to_webserver(false, false);
     LT_ASSERT_EQ(res.first, 0);
@@ -808,7 +820,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_cleanup_callback_selective)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+    ws->register_resource("upload", as_shared(resource));
 
     // Upload two files
     auto res = send_file_to_webserver(true, false);
@@ -854,7 +866,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_cleanup_callback_throws)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+    ws->register_resource("upload", as_shared(resource));
 
     auto res = send_file_to_webserver(false, false);
     LT_ASSERT_EQ(res.first, 0);
@@ -882,7 +894,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_cleanup_no_callback_deletes)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+    ws->register_resource("upload", as_shared(resource));
 
     auto res = send_file_to_webserver(false, false);
     LT_ASSERT_EQ(res.first, 0);
@@ -911,7 +923,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_original_filename)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+    ws->register_resource("upload", as_shared(resource));
 
     auto res = send_file_to_webserver(false, false);
     LT_ASSERT_EQ(res.first, 0);
@@ -946,7 +958,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_with_content_type)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+    ws->register_resource("upload", as_shared(resource));
 
     // Send file with explicit content-type "text/plain"
     auto res = send_file_with_content_type(port, "text/plain");
@@ -1009,7 +1021,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_path_traversal_rejected)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+    ws->register_resource("upload", as_shared(resource));
 
     // Attempt path traversal with "../escape"
     send_file_with_traversal_name(port, "../escape");
@@ -1037,7 +1049,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_sanitize_keeps_basename)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+    ws->register_resource("upload", as_shared(resource));
 
     // Upload with a path-like filename — should strip to just "myfile.txt"
     auto res = send_file_with_traversal_name(port, "some/path/myfile.txt");

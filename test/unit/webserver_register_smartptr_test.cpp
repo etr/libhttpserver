@@ -38,6 +38,7 @@
 #include <stdexcept>
 #include <string>
 #include <type_traits>
+#include <utility>
 
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
@@ -126,18 +127,20 @@ static_assert(std::is_same_v<
                   void>,
               "shared_ptr overload must accept a trailing bool family arg");
 
-// (4) Negative: the raw-pointer overload must be gone. Use a SFINAE
-//     helper so this is observable as a compile-time bool.
-template <typename = void>
+// (4) Negative: the raw-pointer overload must be gone. SFINAE template
+//     specialization on a void_t of the call expression — if the call
+//     is well-formed for any overload, the partial specialization
+//     selects and ::value flips to true.
+template <typename, typename = void>
 struct has_raw_register_resource : std::false_type {};
 
-template <>
-struct has_raw_register_resource<std::void_t<
-    decltype(std::declval<webserver&>().register_resource(
+template <typename WS>
+struct has_raw_register_resource<WS, std::void_t<
+    decltype(std::declval<WS&>().register_resource(
         std::declval<const std::string&>(),
         std::declval<http_resource*>()))>> : std::true_type {};
 
-static_assert(!has_raw_register_resource<>::value,
+static_assert(!has_raw_register_resource<webserver>::value,
               "the raw-pointer register_resource overload must be removed");
 
 // ---- Runtime ownership tests ------------------------------------------

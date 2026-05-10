@@ -36,6 +36,18 @@
 #include "httpserver/string_utilities.hpp"
 #include "./littletest.hpp"
 
+
+namespace {
+// TASK-023 test helper: wrap a stack-local http_resource& in a shared_ptr
+// with a no-op deleter. Preserves the "declare resource on the stack,
+// pass to register_resource" pattern after the API moved to smart pointers.
+inline std::shared_ptr<httpserver::http_resource>
+as_shared(httpserver::http_resource& r) {
+    return std::shared_ptr<httpserver::http_resource>(
+        &r, [](httpserver::http_resource*){});
+}
+}  // namespace
+
 using std::string;
 using std::map;
 using std::shared_ptr;
@@ -411,9 +423,9 @@ LT_END_AUTO_TEST(server_runs)
 
 LT_BEGIN_AUTO_TEST(basic_suite, two_endpoints)
     ok_resource ok;
-    LT_ASSERT_EQ(true, ws->register_resource("OK", &ok));
+    ws->register_resource("OK", as_shared(ok));
     nok_resource nok;
-    LT_ASSERT_EQ(true, ws->register_resource("NOK", &nok));
+    ws->register_resource("NOK", as_shared(nok));
 
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
@@ -447,31 +459,33 @@ LT_END_AUTO_TEST(two_endpoints)
 
 LT_BEGIN_AUTO_TEST(basic_suite, duplicate_endpoints)
     ok_resource ok1, ok2;
-    LT_CHECK_EQ(true, ws->register_resource("OK", &ok1));
+    ws->register_resource("OK", as_shared(ok1));
 
-    // All of these collide and the registration fails
-    LT_CHECK_EQ(false, ws->register_resource("OK", &ok2));
-    LT_CHECK_EQ(false, ws->register_resource("/OK", &ok2));
-    LT_CHECK_EQ(false, ws->register_resource("/OK/", &ok2));
-    LT_CHECK_EQ(false, ws->register_resource("OK/", &ok2));
+    // TASK-023: the new void register_resource throws std::invalid_argument
+    // on duplicate registration (replaces v1's silent `return false`).
+    LT_CHECK_THROW(ws->register_resource("OK", as_shared(ok2)));
+    LT_CHECK_THROW(ws->register_resource("/OK", as_shared(ok2)));
+    LT_CHECK_THROW(ws->register_resource("/OK/", as_shared(ok2)));
+    LT_CHECK_THROW(ws->register_resource("OK/", as_shared(ok2)));
 
-    // Check how family interacts.
-    LT_CHECK_EQ(true, ws->register_resource("OK", &ok2, true));
+    // Check how family interacts: registering the same path with
+    // family=true is a different endpoint, so it should succeed.
+    ws->register_resource("OK", as_shared(ok2), true);
 
     // Check that switched case does the right thing, whatever that is here.
 #ifdef CASE_INSENSITIVE
-    LT_CHECK_EQ(false, ws->register_resource("ok", &ok2));
+    LT_CHECK_THROW(ws->register_resource("ok", as_shared(ok2)));
 #else
     // TODO(etr): this should be true.
     // However, http_endpoint::operator< is always case-insensitive
-    LT_CHECK_EQ(false, ws->register_resource("ok", &ok2));
+    LT_CHECK_THROW(ws->register_resource("ok", as_shared(ok2)));
 #endif
 LT_END_AUTO_TEST(duplicate_endpoints)
 
 LT_BEGIN_AUTO_TEST(basic_suite, family_endpoints)
     static_resource ok1("1"), ok2("2");
-    LT_CHECK_EQ(true, ws->register_resource("OK", &ok1));
-    LT_CHECK_EQ(true, ws->register_resource("OK", &ok2, true));
+    ws->register_resource("OK", as_shared(ok1));
+    ws->register_resource("OK", as_shared(ok2), true);
 
     curl_global_init(CURL_GLOBAL_ALL);
 
@@ -565,8 +579,8 @@ LT_END_AUTO_TEST(family_endpoints)
 LT_BEGIN_AUTO_TEST(basic_suite, overlapping_endpoints)
     // Setup two different resources that can both match the same URL.
     static_resource ok1("1"), ok2("2");
-    LT_CHECK_EQ(true, ws->register_resource("/foo/{var|([a-z]+)}/", &ok1));
-    LT_CHECK_EQ(true, ws->register_resource("/{var|([a-z]+)}/bar/", &ok2));
+    ws->register_resource("/foo/{var|([a-z]+)}/", as_shared(ok1));
+    ws->register_resource("/{var|([a-z]+)}/bar/", as_shared(ok2));
 
     curl_global_init(CURL_GLOBAL_ALL);
 
@@ -585,7 +599,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, overlapping_endpoints)
     }
 
     static_resource ok3("3");
-    LT_CHECK_EQ(true, ws->register_resource("/foo/bar/", &ok3));
+    ws->register_resource("/foo/bar/", as_shared(ok3));
 
     {
     // Check that an exact, non-RE match overrides both patterns.
@@ -605,7 +619,7 @@ LT_END_AUTO_TEST(overlapping_endpoints)
 
 LT_BEGIN_AUTO_TEST(basic_suite, read_body)
     simple_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_resource("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -622,7 +636,7 @@ LT_END_AUTO_TEST(read_body)
 
 LT_BEGIN_AUTO_TEST(basic_suite, read_long_body)
     long_content_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_resource("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -639,7 +653,7 @@ LT_END_AUTO_TEST(read_long_body)
 
 LT_BEGIN_AUTO_TEST(basic_suite, resource_setting_header)
     header_set_test_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_resource("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     map<string, string> ss;
@@ -660,7 +674,7 @@ LT_END_AUTO_TEST(resource_setting_header)
 
 LT_BEGIN_AUTO_TEST(basic_suite, resource_setting_cookie)
     cookie_set_test_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_resource("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -692,7 +706,7 @@ LT_END_AUTO_TEST(resource_setting_cookie)
 
 LT_BEGIN_AUTO_TEST(basic_suite, request_with_header)
     header_reading_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_resource("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -715,7 +729,7 @@ LT_END_AUTO_TEST(request_with_header)
 
 LT_BEGIN_AUTO_TEST(basic_suite, request_with_cookie)
     cookie_reading_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_resource("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -733,7 +747,7 @@ LT_END_AUTO_TEST(request_with_cookie)
 
 LT_BEGIN_AUTO_TEST(basic_suite, complete)
     complete_test_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_resource("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     {
@@ -796,7 +810,7 @@ LT_END_AUTO_TEST(complete)
 
 LT_BEGIN_AUTO_TEST(basic_suite, only_render)
     only_render_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_resource("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL* curl;
@@ -875,7 +889,7 @@ LT_END_AUTO_TEST(only_render)
 
 LT_BEGIN_AUTO_TEST(basic_suite, postprocessor)
     simple_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_resource("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -892,7 +906,7 @@ LT_END_AUTO_TEST(postprocessor)
 
 LT_BEGIN_AUTO_TEST(basic_suite, postprocessor_large_field_last_field)
     large_post_resource_last_value resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_resource("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -933,7 +947,7 @@ LT_END_AUTO_TEST(postprocessor_large_field_last_field)
 
 LT_BEGIN_AUTO_TEST(basic_suite, postprocessor_large_field_first_field)
     large_post_resource_first_value resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_resource("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -979,7 +993,7 @@ LT_END_AUTO_TEST(postprocessor_large_field_first_field)
 
 LT_BEGIN_AUTO_TEST(basic_suite, same_key_different_value)
     arg_value_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_resource("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -999,7 +1013,7 @@ LT_END_AUTO_TEST(same_key_different_value)
 
 LT_BEGIN_AUTO_TEST(basic_suite, same_key_different_value_plain_content)
     arg_value_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_resource("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -1020,7 +1034,7 @@ LT_END_AUTO_TEST(same_key_different_value_plain_content)
 
 LT_BEGIN_AUTO_TEST(basic_suite, empty_arg)
     simple_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_resource("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     CURL *curl = curl_easy_init();
     CURLcode res;
@@ -1036,7 +1050,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, empty_arg_value_at_end)
     // Test for issue #268: POST body keys without values at the end
     // are not processed when using application/x-www-form-urlencoded
     simple_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_resource("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     // Test case 1: arg2 has empty value at end (the bug case)
@@ -1090,7 +1104,7 @@ LT_END_AUTO_TEST(empty_arg_value_at_end)
 
 LT_BEGIN_AUTO_TEST(basic_suite, no_response)
     no_response_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_resource("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     CURL* curl = curl_easy_init();
@@ -1106,7 +1120,7 @@ LT_END_AUTO_TEST(no_response)
 
 LT_BEGIN_AUTO_TEST(basic_suite, empty_response)
     empty_response_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_resource("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     CURL* curl = curl_easy_init();
@@ -1122,7 +1136,7 @@ LT_END_AUTO_TEST(empty_response)
 
 LT_BEGIN_AUTO_TEST(basic_suite, regex_matching)
     simple_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("regex/matching/number/[0-9]+", &resource));
+    ws->register_resource("regex/matching/number/[0-9]+", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1140,7 +1154,7 @@ LT_END_AUTO_TEST(regex_matching)
 
 LT_BEGIN_AUTO_TEST(basic_suite, regex_matching_arg)
     args_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("this/captures/{arg}/passed/in/input", &resource));
+    ws->register_resource("this/captures/{arg}/passed/in/input", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1158,7 +1172,7 @@ LT_END_AUTO_TEST(regex_matching_arg)
 
 LT_BEGIN_AUTO_TEST(basic_suite, regex_matching_arg_with_url_pars)
     args_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("this/captures/{arg}/passed/in/input", &resource));
+    ws->register_resource("this/captures/{arg}/passed/in/input", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1176,7 +1190,7 @@ LT_END_AUTO_TEST(regex_matching_arg_with_url_pars)
 
 LT_BEGIN_AUTO_TEST(basic_suite, regex_matching_arg_custom)
     args_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("this/captures/numeric/{arg|([0-9]+)}/passed/in/input", &resource));
+    ws->register_resource("this/captures/numeric/{arg|([0-9]+)}/passed/in/input", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     {
@@ -1213,7 +1227,7 @@ LT_END_AUTO_TEST(regex_matching_arg_custom)
 
 LT_BEGIN_AUTO_TEST(basic_suite, querystring_processing)
     args_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("this/captures/args/passed/in/the/querystring", &resource));
+    ws->register_resource("this/captures/args/passed/in/the/querystring", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1231,7 +1245,7 @@ LT_END_AUTO_TEST(querystring_processing)
 
 LT_BEGIN_AUTO_TEST(basic_suite, full_arguments_processing)
     full_args_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("this/captures/args/passed/in/the/querystring", &resource));
+    ws->register_resource("this/captures/args/passed/in/the/querystring", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1249,7 +1263,7 @@ LT_END_AUTO_TEST(full_arguments_processing)
 
 LT_BEGIN_AUTO_TEST(basic_suite, querystring_query_processing)
     querystring_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("this/captures/args/passed/in/the/querystring", &resource));
+    ws->register_resource("this/captures/args/passed/in/the/querystring", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1267,7 +1281,7 @@ LT_END_AUTO_TEST(querystring_query_processing)
 
 LT_BEGIN_AUTO_TEST(basic_suite, register_unregister)
     simple_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_resource("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     {
@@ -1305,7 +1319,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, register_unregister)
     curl_easy_cleanup(curl);
     }
 
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_resource("base", as_shared(resource));
     {
     string s;
     CURL *curl = curl_easy_init();
@@ -1324,7 +1338,7 @@ LT_END_AUTO_TEST(register_unregister)
 #ifndef HTTPSERVER_NO_LOCAL_FS
 LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource)
     file_response_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_resource("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1342,7 +1356,7 @@ LT_END_AUTO_TEST(file_serving_resource)
 
 LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource_empty)
     file_response_resource_empty resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_resource("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1360,7 +1374,7 @@ LT_END_AUTO_TEST(file_serving_resource_empty)
 
 LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource_default_content_type)
     file_response_resource_default_content_type resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_resource("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     map<string, string> ss;
@@ -1379,7 +1393,7 @@ LT_END_AUTO_TEST(file_serving_resource_default_content_type)
 
 LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource_missing)
     file_response_resource_missing resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_resource("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1403,7 +1417,7 @@ LT_END_AUTO_TEST(file_serving_resource_missing)
 #ifndef HTTPSERVER_NO_LOCAL_FS
 LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource_dir)
     file_response_resource_dir resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_resource("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1427,7 +1441,7 @@ LT_END_AUTO_TEST(file_serving_resource_dir)
 
 LT_BEGIN_AUTO_TEST(basic_suite, exception_forces_500)
     exception_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_resource("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1450,7 +1464,7 @@ LT_END_AUTO_TEST(exception_forces_500)
 
 LT_BEGIN_AUTO_TEST(basic_suite, untyped_error_forces_500)
     error_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_resource("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1474,7 +1488,7 @@ LT_END_AUTO_TEST(untyped_error_forces_500)
 LT_BEGIN_AUTO_TEST(basic_suite, request_is_printable)
     stringstream ss;
     print_request_resource resource(&ss);
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_resource("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1509,7 +1523,7 @@ LT_END_AUTO_TEST(request_is_printable)
 LT_BEGIN_AUTO_TEST(basic_suite, response_is_printable)
     stringstream ss;
     print_response_resource resource(&ss);
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_resource("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1541,7 +1555,7 @@ LT_END_AUTO_TEST(response_is_printable)
 
 LT_BEGIN_AUTO_TEST(basic_suite, long_path_pieces)
     path_pieces_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("/settings", &resource, true));
+    ws->register_resource("/settings", as_shared(resource), true);
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1559,7 +1573,7 @@ LT_END_AUTO_TEST(long_path_pieces)
 
 LT_BEGIN_AUTO_TEST(basic_suite, url_with_regex_like_pieces)
     path_pieces_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("/settings", &resource, true));
+    ws->register_resource("/settings", as_shared(resource), true);
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1577,7 +1591,7 @@ LT_END_AUTO_TEST(url_with_regex_like_pieces)
 
 LT_BEGIN_AUTO_TEST(basic_suite, non_family_url_with_regex_like_pieces)
     ok_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("/settings", &resource));
+    ws->register_resource("/settings", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1599,7 +1613,7 @@ LT_END_AUTO_TEST(non_family_url_with_regex_like_pieces)
 
 LT_BEGIN_AUTO_TEST(basic_suite, regex_url_exact_match)
     ok_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("/foo/{v|[a-z]}/bar", &resource));
+    ws->register_resource("/foo/{v|[a-z]}/bar", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     {
@@ -1644,7 +1658,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, method_not_allowed_header)
     resource.disallow_all();
     resource.set_allowing(httpserver::http_method::post, true);
     resource.set_allowing(httpserver::http_method::head, true);
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_resource("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     map<string, string> ss;
@@ -1671,7 +1685,7 @@ LT_END_AUTO_TEST(method_not_allowed_header)
 
 LT_BEGIN_AUTO_TEST(basic_suite, request_info_getters)
     request_info_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("request_info", &resource));
+    ws->register_resource("request_info", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -1690,7 +1704,7 @@ LT_END_AUTO_TEST(request_info_getters)
 
 LT_BEGIN_AUTO_TEST(basic_suite, unregister_then_404)
     simple_resource res;
-    LT_ASSERT_EQ(true, ws->register_resource("temp", &res));
+    ws->register_resource("temp", as_shared(res));
     curl_global_init(CURL_GLOBAL_ALL);
 
     {
@@ -1737,7 +1751,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, thread_safety)
         int i = 0;
         while (!done) {
             ws->register_resource(
-                    std::string("/route") + std::to_string(++i), &resource);
+                    std::string("/route") + std::to_string(++i), as_shared(resource));
         }
     });
 
@@ -1769,7 +1783,7 @@ LT_END_AUTO_TEST(thread_safety)
 
 LT_BEGIN_AUTO_TEST(basic_suite, head_request)
     complete_test_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_resource("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -1789,7 +1803,7 @@ LT_END_AUTO_TEST(head_request)
 
 LT_BEGIN_AUTO_TEST(basic_suite, options_request)
     complete_test_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_resource("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     map<string, string> ss;
@@ -1812,7 +1826,7 @@ LT_END_AUTO_TEST(options_request)
 
 LT_BEGIN_AUTO_TEST(basic_suite, trace_request)
     complete_test_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_resource("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -1849,7 +1863,7 @@ LT_END_SUITE(content_limit_suite)
 
 LT_BEGIN_AUTO_TEST(content_limit_suite, content_exceeds_limit)
     content_limit_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("limit", &resource));
+    ws->register_resource("limit", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -1871,7 +1885,7 @@ LT_END_AUTO_TEST(content_exceeds_limit)
 
 LT_BEGIN_AUTO_TEST(content_limit_suite, content_within_limit)
     content_limit_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("limit", &resource));
+    ws->register_resource("limit", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -1893,7 +1907,7 @@ LT_END_AUTO_TEST(content_within_limit)
 
 LT_BEGIN_AUTO_TEST(basic_suite, get_args_flat)
     args_flat_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("args_flat", &resource));
+    ws->register_resource("args_flat", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -1911,7 +1925,7 @@ LT_END_AUTO_TEST(get_args_flat)
 
 LT_BEGIN_AUTO_TEST(basic_suite, only_render_head)
     only_render_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("only_render_head", &resource));
+    ws->register_resource("only_render_head", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -1930,7 +1944,7 @@ LT_END_AUTO_TEST(only_render_head)
 
 LT_BEGIN_AUTO_TEST(basic_suite, only_render_options)
     only_render_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("only_render_options", &resource));
+    ws->register_resource("only_render_options", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -1947,7 +1961,7 @@ LT_END_AUTO_TEST(only_render_options)
 
 LT_BEGIN_AUTO_TEST(basic_suite, only_render_trace)
     only_render_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("only_render_trace", &resource));
+    ws->register_resource("only_render_trace", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -1975,7 +1989,7 @@ class long_error_message_resource : public http_resource {
 
 LT_BEGIN_AUTO_TEST(basic_suite, long_error_message)
     long_error_message_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("longerror", &resource));
+    ws->register_resource("longerror", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1998,7 +2012,7 @@ LT_END_AUTO_TEST(long_error_message)
 // Test PATCH request on a resource that only implements render()
 LT_BEGIN_AUTO_TEST(basic_suite, only_render_patch)
     only_render_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("only_render_patch", &resource));
+    ws->register_resource("only_render_patch", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -2057,7 +2071,7 @@ class non_std_exception_resource : public http_resource {
 // regression coverage at a different injection point.)
 LT_BEGIN_AUTO_TEST(basic_suite, response_throws_invalid_argument)
     invalid_arg_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("invalid_arg", &resource));
+    ws->register_resource("invalid_arg", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -2079,7 +2093,7 @@ LT_END_AUTO_TEST(response_throws_invalid_argument)
 // Test response throwing std::runtime_error -> should get 500
 LT_BEGIN_AUTO_TEST(basic_suite, response_throws_runtime_error)
     runtime_error_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("runtime_err", &resource));
+    ws->register_resource("runtime_err", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -2101,7 +2115,7 @@ LT_END_AUTO_TEST(response_throws_runtime_error)
 // Test response throwing non-std exception -> should get 500
 LT_BEGIN_AUTO_TEST(basic_suite, response_throws_non_std_exception)
     non_std_exception_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("non_std_exc", &resource));
+    ws->register_resource("non_std_exc", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -2133,7 +2147,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, internal_error_handler_also_throws)
     webserver ws2 = create_webserver(PORT + 50)
         .internal_error_resource(throwing_internal_error_handler);
     runtime_error_resource resource;  // Resource that throws in get_raw_response
-    LT_ASSERT_EQ(true, ws2.register_resource("error_cascade", &resource));
+    ws2.register_resource("error_cascade", as_shared(resource));
     ws2.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -2161,7 +2175,7 @@ LT_END_AUTO_TEST(internal_error_handler_also_throws)
 LT_BEGIN_AUTO_TEST(basic_suite, tcp_nodelay_option)
     webserver ws2 = create_webserver(PORT + 51).tcp_nodelay();
     ok_resource resource;
-    LT_ASSERT_EQ(true, ws2.register_resource("nodelay_test", &resource));
+    ws2.register_resource("nodelay_test", as_shared(resource));
     ws2.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -2201,7 +2215,7 @@ class arg_echo_resource : public http_resource {
 LT_BEGIN_AUTO_TEST(basic_suite, custom_unescaper)
     webserver ws2 = create_webserver(PORT + 52).unescaper(my_custom_unescaper);
     arg_echo_resource resource;
-    LT_ASSERT_EQ(true, ws2.register_resource("echo", &resource));
+    ws2.register_resource("echo", as_shared(resource));
     ws2.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -2267,7 +2281,7 @@ class post_only_resource : public http_resource {
 LT_BEGIN_AUTO_TEST(basic_suite, custom_method_not_allowed_handler)
     webserver ws2 = create_webserver(PORT + 54).method_not_allowed_resource(my_custom_method_not_allowed);
     post_only_resource resource;
-    LT_ASSERT_EQ(true, ws2.register_resource("postonly", &resource));
+    ws2.register_resource("postonly", as_shared(resource));
     ws2.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -2306,7 +2320,7 @@ class requestor_cache_resource : public http_resource {
 LT_BEGIN_AUTO_TEST(basic_suite, requestor_info)
     webserver ws2 = create_webserver(PORT + 55);
     requestor_cache_resource resource;
-    LT_ASSERT_EQ(true, ws2.register_resource("reqinfo", &resource));
+    ws2.register_resource("reqinfo", as_shared(resource));
     ws2.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -2343,7 +2357,7 @@ class querystring_cache_resource : public http_resource {
 LT_BEGIN_AUTO_TEST(basic_suite, querystring_caching)
     webserver ws2 = create_webserver(PORT + 56);
     querystring_cache_resource resource;
-    LT_ASSERT_EQ(true, ws2.register_resource("qscache", &resource));
+    ws2.register_resource("qscache", as_shared(resource));
     ws2.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -2394,7 +2408,7 @@ class args_cache_resource : public http_resource {
 LT_BEGIN_AUTO_TEST(basic_suite, args_caching)
     webserver ws2 = create_webserver(PORT + 57);
     args_cache_resource resource;
-    LT_ASSERT_EQ(true, ws2.register_resource("argscache", &resource));
+    ws2.register_resource("argscache", as_shared(resource));
     ws2.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -2439,7 +2453,7 @@ class footer_test_resource : public http_resource {
 LT_BEGIN_AUTO_TEST(basic_suite, footer_access_no_trailers)
     webserver ws2 = create_webserver(PORT + 58);
     footer_test_resource resource;
-    LT_ASSERT_EQ(true, ws2.register_resource("footers", &resource));
+    ws2.register_resource("footers", as_shared(resource));
     ws2.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -2486,7 +2500,7 @@ class response_footer_resource : public http_resource {
 LT_BEGIN_AUTO_TEST(basic_suite, response_with_footers)
     webserver ws2 = create_webserver(PORT + 59);
     response_footer_resource resource;
-    LT_ASSERT_EQ(true, ws2.register_resource("resp_footers", &resource));
+    ws2.register_resource("resp_footers", as_shared(resource));
     ws2.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -2520,7 +2534,7 @@ class arg_not_found_resource : public http_resource {
 
 LT_BEGIN_AUTO_TEST(basic_suite, arg_not_found)
     arg_not_found_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("arg_not_found", &resource));
+    ws->register_resource("arg_not_found", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -2548,7 +2562,7 @@ class arg_flat_fallback_resource : public http_resource {
 
 LT_BEGIN_AUTO_TEST(basic_suite, arg_flat_fallback)
     arg_flat_fallback_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("arg_flat_fb", &resource));
+    ws->register_resource("arg_flat_fb", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -2577,7 +2591,7 @@ class path_piece_oob_resource : public http_resource {
 
 LT_BEGIN_AUTO_TEST(basic_suite, path_piece_out_of_bounds)
     path_piece_oob_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("path/piece/test", &resource));
+    ws->register_resource("path/piece/test", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -2604,7 +2618,7 @@ class empty_querystring_resource : public http_resource {
 
 LT_BEGIN_AUTO_TEST(basic_suite, empty_querystring)
     empty_querystring_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("empty_qs", &resource));
+    ws->register_resource("empty_qs", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -2663,7 +2677,7 @@ class auth_cache_resource : public http_resource {
 #ifdef HAVE_BAUTH
 LT_BEGIN_AUTO_TEST(basic_suite, auth_caching)
     auth_cache_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("auth_cache", &resource));
+    ws->register_resource("auth_cache", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -2684,7 +2698,7 @@ LT_END_AUTO_TEST(auth_caching)
 // This covers http_request.cpp lines 234 and 248 (arg_value == nullptr branches)
 LT_BEGIN_AUTO_TEST(basic_suite, null_value_query_param)
     null_value_query_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("null_val_query", &resource));
+    ws->register_resource("null_val_query", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -2706,7 +2720,7 @@ LT_END_AUTO_TEST(null_value_query_param)
 // Test PUT method on a resource that only implements render()
 LT_BEGIN_AUTO_TEST(basic_suite, only_render_put)
     only_render_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("only_render_put", &resource));
+    ws->register_resource("only_render_put", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -2724,7 +2738,7 @@ LT_END_AUTO_TEST(only_render_put)
 // Test DELETE method on a resource that only implements render()
 LT_BEGIN_AUTO_TEST(basic_suite, only_render_delete)
     only_render_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("only_render_delete", &resource));
+    ws->register_resource("only_render_delete", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -2742,7 +2756,7 @@ LT_END_AUTO_TEST(only_render_delete)
 // Test POST method on a resource that only implements render()
 LT_BEGIN_AUTO_TEST(basic_suite, only_render_post)
     only_render_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("only_render_post", &resource));
+    ws->register_resource("only_render_post", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -2762,7 +2776,7 @@ LT_END_AUTO_TEST(only_render_post)
 LT_BEGIN_AUTO_TEST(basic_suite, unregister_resource)
     webserver ws2 = create_webserver(PORT + 67);
     ok_resource resource;
-    LT_ASSERT_EQ(true, ws2.register_resource("test_unreg", &resource));
+    ws2.register_resource("test_unreg", as_shared(resource));
     ws2.start(false);
 
     // First verify resource works
@@ -2818,7 +2832,7 @@ class arg_flat_multi_resource : public http_resource {
 
 LT_BEGIN_AUTO_TEST(basic_suite, get_arg_flat_first_value)
     arg_flat_multi_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("arg_flat_first", &resource));
+    ws->register_resource("arg_flat_first", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -2859,7 +2873,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, log_access_callback)
     webserver ws2 = create_webserver(PORT + 70)
         .log_access(test_access_logger);
     ok_resource resource;
-    LT_ASSERT_EQ(true, ws2.register_resource("logtest", &resource));
+    ws2.register_resource("logtest", as_shared(resource));
     ws2.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -2889,7 +2903,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, single_resource_mode)
         .single_resource();
     ok_resource resource;
     // In single_resource mode, must register at "/" with family=true
-    LT_ASSERT_EQ(true, ws2.register_resource("/", &resource, true));
+    ws2.register_resource("/", as_shared(resource), true);
     ws2.start(false);
 
     // All paths should route to the single resource
@@ -2938,7 +2952,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, validator_builder)
     webserver ws2 = create_webserver(PORT + 72)
         .validator(test_validator_func);
     ok_resource resource;
-    LT_ASSERT_EQ(true, ws2.register_resource("test", &resource));
+    ws2.register_resource("test", as_shared(resource));
     ws2.start(false);
 
     // Just verify the server works with a validator set
@@ -2973,7 +2987,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, default_render_method)
     // (because empty_render returns response code -1)
     webserver ws2 = create_webserver(PORT + 73);
     empty_render_resource resource;
-    LT_ASSERT_EQ(true, ws2.register_resource("empty", &resource));
+    ws2.register_resource("empty", as_shared(resource));
     ws2.start(false);
 
     {
@@ -3010,7 +3024,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, render_fallthrough_to_base)
     // Test that render_get calls render() when not overridden
     webserver ws2 = create_webserver(PORT + 74);
     render_override_resource resource;
-    LT_ASSERT_EQ(true, ws2.register_resource("base", &resource));
+    ws2.register_resource("base", as_shared(resource));
     ws2.start(false);
 
     {
@@ -3042,7 +3056,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, all_methods_fallthrough_to_render)
     // So all method-specific calls should fall through to render()
     webserver ws2 = create_webserver(PORT + 75);
     render_override_resource resource;
-    LT_ASSERT_EQ(true, ws2.register_resource("fallthrough", &resource));
+    ws2.register_resource("fallthrough", as_shared(resource));
     ws2.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -3154,7 +3168,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, custom_internal_error_resource)
     webserver ws2 = create_webserver(PORT + 76)
         .internal_error_resource(custom_internal_error_handler);
     throwing_resource resource;
-    LT_ASSERT_EQ(true, ws2.register_resource("throw", &resource));
+    ws2.register_resource("throw", as_shared(resource));
     ws2.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -3190,7 +3204,7 @@ class arg_flat_resource : public http_resource {
 LT_BEGIN_AUTO_TEST(basic_suite, get_arg_flat_fallback)
     webserver ws2 = create_webserver(PORT + 77);
     arg_flat_resource resource;
-    LT_ASSERT_EQ(true, ws2.register_resource("argflat", &resource));
+    ws2.register_resource("argflat", as_shared(resource));
     ws2.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -3224,7 +3238,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, large_multipart_form_field)
     // to trigger the grow_last_arg path in http_request.cpp (line 544)
     webserver ws2 = create_webserver(PORT + 78);
     large_multipart_resource resource;
-    LT_ASSERT_EQ(true, ws2.register_resource("largemp", &resource));
+    ws2.register_resource("largemp", as_shared(resource));
     ws2.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -3285,7 +3299,7 @@ class client_cert_non_tls_resource : public http_resource {
 LT_BEGIN_AUTO_TEST(basic_suite, client_cert_methods_non_tls)
     webserver ws = create_webserver(PORT + 79);
     client_cert_non_tls_resource ccnr;
-    ws.register_resource("/cert_test", &ccnr);
+    ws.register_resource("/cert_test", as_shared(ccnr));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);

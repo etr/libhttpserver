@@ -50,8 +50,8 @@ int main(int argc, char** argv) {
     std::shared_ptr<httpserver::http_response> hello = std::shared_ptr<httpserver::http_response>(new httpserver::http_response(httpserver::http_response::string(BODY)));
     hello->with_header("Server", "libhttpserver");
 
-    hello_world_resource hwr(hello);
-    ws.register_resource(PATH, &hwr, false);
+    auto hwr = std::make_shared<hello_world_resource>(hello);
+    ws.register_resource(PATH, hwr, false);
 
     ws.start(true);
 

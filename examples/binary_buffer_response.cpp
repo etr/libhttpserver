@@ -73,8 +73,8 @@ class image_resource : public httpserver::http_resource {
 int main() {
     httpserver::webserver ws = httpserver::create_webserver(8080);
 
-    image_resource ir;
-    ws.register_resource("/image", &ir);
+    auto ir = std::make_shared<image_resource>();
+    ws.register_resource("/image", ir);
     ws.start(true);
 
     return 0;

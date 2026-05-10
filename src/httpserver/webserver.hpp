@@ -31,6 +31,8 @@
 
 #include <memory>
 #include <string>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 #include "httpserver/constants.hpp"
@@ -103,14 +105,55 @@ class webserver {
      **/
      bool is_running();
      /**
-      * Method used to register a resource with the webserver.
+      * Register a resource with the webserver, transferring ownership.
+      *
+      * The webserver takes sole ownership of the resource: it lives at
+      * least as long as the webserver, and its destructor runs when the
+      * webserver is destroyed (or when the route is later unregistered).
+      *
+      * Templated over the concrete derived type so that calls like
+      * `register_resource(path, std::make_unique<my_resource>())`
+      * resolve unambiguously without competing with the shared_ptr
+      * overload via an implicit unique-to-shared conversion.
+      *
+      * Throws std::invalid_argument if the resource pointer is null,
+      * if the path conflicts with single_resource mode, or if a
+      * resource is already registered at the same path.
+      *
       * @param resource The url pointing to the resource. This url could be also parametrized in the form /path/to/url/{par1}/and/{par2}
       *                 or a regular expression.
-      * @param http_resource http_resource pointer to register.
-      * @param family boolean indicating whether the resource is registered for the endpoint and its child or not.
-      * @return true if the resource was registered
+      * @param res unique_ptr to the http_resource (or any derived type); ownership is transferred to the webserver.
+      * @param family whether the resource is registered for the endpoint and all its children.
      **/
-     bool register_resource(const std::string& resource, http_resource* res, bool family = false);
+     template <typename T,
+               typename = std::enable_if_t<
+                   std::is_base_of_v<http_resource, T>>>
+     void register_resource(const std::string& resource,
+                            std::unique_ptr<T> res,
+                            bool family = false) {
+         register_resource(resource,
+                           std::shared_ptr<http_resource>(std::move(res)),
+                           family);
+     }
+
+     /**
+      * Register a resource with the webserver, sharing ownership.
+      *
+      * The caller and the webserver share ownership: the resource lives
+      * at least as long as the longer-lived of the two references.
+      *
+      * Throws std::invalid_argument if the resource pointer is null,
+      * if the path conflicts with single_resource mode, or if a
+      * resource is already registered at the same path.
+      *
+      * @param resource The url pointing to the resource. This url could be also parametrized in the form /path/to/url/{par1}/and/{par2}
+      *                 or a regular expression.
+      * @param res shared_ptr to the http_resource; the caller retains a reference.
+      * @param family whether the resource is registered for the endpoint and all its children.
+     **/
+     void register_resource(const std::string& resource,
+                            std::shared_ptr<http_resource> res,
+                            bool family = false);
 
      void unregister_resource(const std::string& resource);
      void ban_ip(const std::string& ip);

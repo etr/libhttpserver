@@ -40,8 +40,8 @@ int main() {
         .tcp_fastopen_queue_size(16)
         .listen_backlog(128);
 
-    hello_resource hr;
-    ws.register_resource("/hello", &hr);
+    auto hr = std::make_shared<hello_resource>();
+    ws.register_resource("/hello", hr);
     ws.start(true);
 
     return 0;

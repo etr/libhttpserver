@@ -49,8 +49,8 @@ class iovec_resource : public httpserver::http_resource {
 int main() {
     httpserver::webserver ws = httpserver::create_webserver(8080);
 
-    iovec_resource ir;
-    ws.register_resource("/data", &ir);
+    auto ir = std::make_shared<iovec_resource>();
+    ws.register_resource("/data", ir);
     ws.start(true);
 
     return 0;

@@ -203,8 +203,8 @@ int main(int argc, char **argv) {
     //
     // Create and register service resource available at /service
     //
-    service_resource res;
-    ws.register_resource("/service", &res, true);
+    auto res = std::make_shared<service_resource>();
+    ws.register_resource("/service", res, true);
 
     //
     // Start and block the webserver
