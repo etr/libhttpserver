@@ -29,6 +29,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#include <functional>
 #include <memory>
 #include <string>
 #include <type_traits>
@@ -36,6 +37,7 @@
 #include <vector>
 
 #include "httpserver/constants.hpp"
+#include "httpserver/http_method.hpp"
 #include "httpserver/http_utils.hpp"
 #include "httpserver/create_webserver.hpp"
 
@@ -185,6 +187,45 @@ class webserver {
      [[deprecated("use register_path() for exact match or register_prefix() for prefix match")]]
      void register_resource(const std::string& path,
                             std::shared_ptr<http_resource> res);
+
+     /**
+      * Register a lambda handler for HTTP GET on @p path.
+      *
+      * The seven on_* entry points (on_get, on_post, on_put, on_delete,
+      * on_patch, on_options, on_head) let stateless endpoints be
+      * registered without subclassing http_resource. Each accepts a
+      * std::function<http_response(const http_request&)>.
+      *
+      * Multiple on_* calls on the SAME path COMPOSE: each call adds the
+      * matching method bit to a single route entry. A second on_get on
+      * the same path -- or on_get after another on_* already covers GET
+      * on this path -- throws std::invalid_argument. Mixing class-based
+      * registration (register_path / register_prefix) and lambda
+      * registration on the same path also throws.
+      *
+      * @param path    URL path; may be parameterized as /foo/{id}.
+      * @param handler invoked per request; returns http_response by value.
+     **/
+     void on_get(const std::string& path,
+                 std::function<http_response(const http_request&)> handler);
+     /// @copydoc on_get(const std::string&, std::function<http_response(const http_request&)>)
+     void on_post(const std::string& path,
+                  std::function<http_response(const http_request&)> handler);
+     /// @copydoc on_get(const std::string&, std::function<http_response(const http_request&)>)
+     void on_put(const std::string& path,
+                 std::function<http_response(const http_request&)> handler);
+     /// @copydoc on_get(const std::string&, std::function<http_response(const http_request&)>)
+     void on_delete(const std::string& path,
+                    std::function<http_response(const http_request&)> handler);
+     /// @copydoc on_get(const std::string&, std::function<http_response(const http_request&)>)
+     void on_patch(const std::string& path,
+                   std::function<http_response(const http_request&)> handler);
+     /// @copydoc on_get(const std::string&, std::function<http_response(const http_request&)>)
+     void on_options(const std::string& path,
+                     std::function<http_response(const http_request&)> handler);
+     /// @copydoc on_get(const std::string&, std::function<http_response(const http_request&)>)
+     void on_head(const std::string& path,
+                  std::function<http_response(const http_request&)> handler);
 
      /**
       * Unregister an exact-match (register_path) registration.
@@ -391,6 +432,19 @@ class webserver {
      // TASK-024: shared unregistration helper. Erases a single
      // registration of the requested kind.
      void unregister_impl_(const std::string& path, bool family);
+
+     // TASK-025: shared lambda-registration helper. Builds-or-merges a
+     // hidden detail::lambda_resource shim at @p path, sets the @p method
+     // bit on it, and stores @p handler into that method's slot. All
+     // seven public on_* overloads forward to this single entry point so
+     // the merge-and-conflict logic lives in one place. Throws
+     // std::invalid_argument if @p handler is empty, if the path
+     // conflicts with single_resource mode, if a class-based resource
+     // is already registered at the path, or if a lambda is already
+     // registered for (method, path).
+     void on_method_(http_method method,
+                     const std::string& path,
+                     std::function<http_response(const http_request&)> handler);
 
      // PIMPL: backend-coupled state (MHD daemon, pthread mutexes, route
      // table, ban set, route cache, websocket registry, GnuTLS SNI cache,

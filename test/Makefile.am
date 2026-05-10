@@ -26,7 +26,7 @@ LDADD += -lcurl
 
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/ -DHTTPSERVER_COMPILATION
 METASOURCES = AUTO
-check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_const_getters http_request_tls_accessors webserver_register_smartptr webserver_register_path_prefix
+check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_const_getters http_request_tls_accessors webserver_register_smartptr webserver_register_path_prefix webserver_on_methods
 
 MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
 
@@ -167,6 +167,20 @@ webserver_register_smartptr_SOURCES = unit/webserver_register_smartptr_test.cpp
 # route after removal; the [[deprecated]] register_resource forwarder
 # still serves and behaves like register_path.
 webserver_register_path_prefix_SOURCES = unit/webserver_register_path_prefix_test.cpp
+
+# webserver_on_methods: TASK-025. Compile-time signature contract for
+# the seven on_* lambda registration overloads (on_get / on_post / on_put
+# / on_delete / on_patch / on_options / on_head) plus static_asserts on
+# the §4.7 detail::route_entry shape (method_set + variant<lambda_handler,
+# shared_ptr<http_resource>> + bool is_prefix). Runtime tests over real
+# curl round-trips: PRD §3.4 hello-world; per-method 405 + Allow header;
+# composition (on_get + on_post on the same path serve both); all seven
+# methods dispatch correctly; duplicate (method, path) registration
+# throws std::invalid_argument; merge-then-conflict still throws;
+# parameterized path binds {id}; class-resource registration on a
+# lambda-owned path throws. Default LDADD (libhttpserver + curl) is
+# sufficient.
+webserver_on_methods_SOURCES = unit/webserver_on_methods_test.cpp
 
 noinst_HEADERS = littletest.hpp
 AM_CXXFLAGS += -Wall -fPIC -Wno-overloaded-virtual

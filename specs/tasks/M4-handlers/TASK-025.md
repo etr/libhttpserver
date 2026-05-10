@@ -8,12 +8,12 @@
 Add the lambda-first handler model that lets a stateless endpoint be registered without subclassing.
 
 **Action Items:**
-- [ ] Add `webserver::on_get(const std::string& path, std::function<http_response(const http_request&)> handler);`.
-- [ ] Same for `on_post`, `on_put`, `on_delete`, `on_patch`, `on_options`, `on_head`.
-- [ ] Internally, each `on_*` builds a `route_entry` whose `method_set` carries exactly that one method, then registers it in the appropriate route-table tier (hash for exact, radix for parameterized).
-- [ ] Multiple `on_*` calls on the same path compose: each call adds the corresponding method bit; conflicting handlers on the same (method, path) pair throw `std::invalid_argument`.
-- [ ] Make sure the variant in `route_entry` can hold both `std::function<http_response(const http_request&)>` (lambda) and `std::shared_ptr<http_resource>` (class) — see §4.7.
-- [ ] Add a parallel `on_get` (etc.) that takes `(method_set methods, ...)` if useful, or defer that to TASK-026's generic `route()`.
+- [x] Add `webserver::on_get(const std::string& path, std::function<http_response(const http_request&)> handler);`.
+- [x] Same for `on_post`, `on_put`, `on_delete`, `on_patch`, `on_options`, `on_head`.
+- [x] Internally, each `on_*` builds a `route_entry` whose `method_set` carries exactly that one method, then registers it in the appropriate route-table tier (hash for exact, radix for parameterized). (TASK-025 ships the §4.7-shape `detail::route_entry` type plus the on_* entry points; storage is the existing v1 three-map shape via a hidden `detail::lambda_resource` shim. TASK-027 will plumb `route_entry` into the real 3-tier table.)
+- [x] Multiple `on_*` calls on the same path compose: each call adds the corresponding method bit; conflicting handlers on the same (method, path) pair throw `std::invalid_argument`.
+- [x] Make sure the variant in `route_entry` can hold both `std::function<http_response(const http_request&)>` (lambda) and `std::shared_ptr<http_resource>` (class) — see §4.7. (Pinned by `static_assert` in `test/unit/webserver_on_methods_test.cpp`.)
+- [ ] Add a parallel `on_get` (etc.) that takes `(method_set methods, ...)` if useful, or defer that to TASK-026's generic `route()`. (Deferred to TASK-026 per plan §4.3.)
 
 **Dependencies:**
 - Blocked by: TASK-005, TASK-009, TASK-014
@@ -28,4 +28,4 @@ Add the lambda-first handler model that lets a stateless endpoint be registered 
 **Related Requirements:** PRD-HDL-REQ-001, PRD-HDL-REQ-002
 **Related Decisions:** DR-004, §4.7
 
-**Status:** Not Started
+**Status:** Done
