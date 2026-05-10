@@ -18,19 +18,19 @@
      USA
 */
 
-// TASK-025: dispatch shim used by webserver::on_method_ to slot lambda
-// handlers into the existing v1-shaped route table.
+// TASK-025/TASK-026: dispatch shim used by webserver::on_methods_ to
+// slot lambda handlers into the existing v1-shaped route table.
 //
 // The shim is a sub-class of http_resource that holds one slot per
 // http_method enumerator. Its render_* virtuals look up the slot for
 // the dispatched method and invoke it. The shim starts with EVERY
-// method disallowed (`disallow_all()`); each on_* call enables exactly
-// the matching bit via `set_allowing(method, true)`. The existing
-// finalize_answer dispatch glue therefore returns 405 for unregistered
-// methods automatically — no edit to webserver.cpp's dispatch path is
-// needed.
+// method disallowed (`disallow_all()`); each on_*/route call enables
+// exactly the matching bits via `set_allowing(method, true)`. The
+// existing finalize_answer dispatch glue therefore returns 405 for
+// unregistered methods automatically — no edit to webserver.cpp's
+// dispatch path is needed.
 //
-// `final` is intentional: the conflict check in webserver::on_method_
+// `final` is intentional: the conflict check in webserver::on_methods_
 // uses dynamic_pointer_cast<lambda_resource>(...) to distinguish
 // lambda-owned routes from class-owned routes. A subclass would hide
 // in that test and break the invariant.
@@ -77,7 +77,7 @@ class lambda_resource final : public ::httpserver::http_resource {
 
     // Install (or replace) the slot for `method`. Caller must have
     // already verified that no slot is currently set for `method`
-    // (webserver::on_method_ enforces this and throws on conflict).
+    // (webserver::on_methods_ enforces this and throws on conflict).
     void set_slot(http_method method, lambda_handler h) {
         slots_[static_cast<std::size_t>(method)] = std::move(h);
         set_allowing(method, true);

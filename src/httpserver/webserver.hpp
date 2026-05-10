@@ -228,6 +228,59 @@ class webserver {
                   std::function<http_response(const http_request&)> handler);
 
      /**
+      * Generic table-driven lambda registration.
+      *
+      * `on_get`, `on_post`, ... are the preferred call-site form when
+      * the HTTP method is known statically; `route()` is the escape
+      * hatch for cases where the method is a runtime value
+      * (config-driven route tables, programmatic registration loops).
+      *
+      * Both forms share the same internal registration path: a single
+      * `route(http_method, path, h)` is exactly equivalent to the
+      * matching `on_*(path, h)`, and `route(method_set, path, h)` is
+      * exactly equivalent to one `on_*` call per set bit, applied
+      * atomically -- if any one of the bits would conflict with an
+      * existing registration, no slot is mutated and the call throws.
+      *
+      * Throws std::invalid_argument if @p handler is empty, if @p m
+      * is `http_method::count_` (sentinel), if the path conflicts
+      * with single_resource mode, if a class-based resource is
+      * already registered at the path, or if a lambda is already
+      * registered for any of the requested methods on this path.
+      *
+      * @param m       HTTP method to register the handler under.
+      * @param path    URL path; may be parameterized as /foo/{id}.
+      * @param handler invoked per request; returns http_response by value.
+     **/
+     void route(http_method m,
+                const std::string& path,
+                std::function<http_response(const http_request&)> handler);
+
+     /**
+      * Multi-method form of route(): register the same handler for
+      * every method bit set in @p methods, atomically (all-or-nothing).
+      *
+      * Useful when one handler should serve more than one method
+      * (e.g., GET and HEAD on the same path). Equivalent to one
+      * `on_*` call per set bit, but if any one of those would conflict
+      * with an existing registration, no slot is mutated and the call
+      * throws std::invalid_argument.
+      *
+      * Throws std::invalid_argument if @p methods is empty, if
+      * @p handler is empty, if the path conflicts with single_resource
+      * mode, if a class-based resource is already registered at the
+      * path, or if a lambda is already registered for any of the
+      * requested methods on this path.
+      *
+      * @param methods bitmask of methods to register the handler for.
+      * @param path    URL path; may be parameterized as /foo/{id}.
+      * @param handler invoked per request; returns http_response by value.
+     **/
+     void route(method_set methods,
+                const std::string& path,
+                std::function<http_response(const http_request&)> handler);
+
+     /**
       * Unregister an exact-match (register_path) registration.
       * No-op if no exact registration exists at @p path.
      **/
@@ -433,18 +486,23 @@ class webserver {
      // registration of the requested kind.
      void unregister_impl_(const std::string& path, bool family);
 
-     // TASK-025: shared lambda-registration helper. Builds-or-merges a
-     // hidden detail::lambda_resource shim at @p path, sets the @p method
-     // bit on it, and stores @p handler into that method's slot. All
-     // seven public on_* overloads forward to this single entry point so
-     // the merge-and-conflict logic lives in one place. Throws
-     // std::invalid_argument if @p handler is empty, if the path
-     // conflicts with single_resource mode, if a class-based resource
-     // is already registered at the path, or if a lambda is already
-     // registered for (method, path).
-     void on_method_(http_method method,
-                     const std::string& path,
-                     std::function<http_response(const http_request&)> handler);
+     // TASK-025/TASK-026: shared lambda-registration helper. Builds-or-
+     // merges a hidden detail::lambda_resource shim at @p path, sets every
+     // bit in @p methods on it, and stores @p handler into each of those
+     // method slots. All seven public on_* overloads and both public
+     // route() overloads forward to this single entry point so the
+     // merge-and-conflict logic lives in one place. Validation is
+     // atomic: if any requested method already has a slot on the path,
+     // no slot is mutated and the call throws -- callers therefore see
+     // either a fully-installed registration or no change at all.
+     // Throws std::invalid_argument if @p methods is empty, if @p
+     // handler is empty, if the path conflicts with single_resource
+     // mode, if a class-based resource is already registered at the
+     // path, or if a lambda is already registered for any requested
+     // (method, path).
+     void on_methods_(method_set methods,
+                      const std::string& path,
+                      std::function<http_response(const http_request&)> handler);
 
      // PIMPL: backend-coupled state (MHD daemon, pthread mutexes, route
      // table, ban set, route cache, websocket registry, GnuTLS SNI cache,

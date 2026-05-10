@@ -306,40 +306,48 @@ void webserver::register_resource(const std::string& resource,
     register_path(resource, std::move(res));
 }
 
-// TASK-025: lambda registration plumbing.
+// TASK-025/TASK-026: lambda registration plumbing.
 //
-// All seven public on_* overloads forward to on_method_, which:
-//   1. Validates the handler and the path (single_resource constraints).
+// All seven public on_* overloads and both public route() overloads
+// forward to on_methods_, which:
+//   1. Validates the handler, the method set (non-empty, no count_
+//      sentinel bit), and the path (single_resource constraints).
 //   2. Looks up any existing entry at the path. If it's a class-based
 //      http_resource, throw -- lambda and class registrations cannot
-//      share a path. If it's an existing lambda_resource shim, merge by
-//      checking the per-method slot is empty (else throw) and writing
-//      the new handler into that slot.
+//      share a path. If it's an existing lambda_resource shim, check
+//      that EVERY requested method slot is empty before mutating any
+//      of them (atomic all-or-nothing); otherwise throw.
 //   3. If no entry exists, build a fresh lambda_resource shim and
 //      insert it into the same three storage maps used by
 //      register_impl_ (master ordered map; the str fast-path map iff
 //      exact non-parameterized; the regex map iff parameterized).
-//   4. Invalidate the LRU route cache.
+//   4. Write @p handler into each requested method slot.
+//   5. Invalidate the LRU route cache.
 //
 // The dispatch path in finalize_answer is not modified: it already
 // looks up via shared_ptr<http_resource>, calls is_allowed(method)
 // gating the 405 path, then dispatches via the per-method member-
 // function pointer set in answer_to_connection. The lambda_resource
 // shim's render_* overrides invoke the stored slot.
-void webserver::on_method_(http_method method,
-                           const std::string& path,
-                           std::function<http_response(const http_request&)> handler) {
+void webserver::on_methods_(method_set methods,
+                            const std::string& path,
+                            std::function<http_response(const http_request&)> handler) {
+    if (methods.bits == 0u) {
+        throw std::invalid_argument(
+            "route(method_set, ...) requires at least one method bit set");
+    }
     if (!handler) {
         throw std::invalid_argument(
-            "The handler function passed to on_* must be non-empty");
+            "The handler function passed to on_*/route must be non-empty");
     }
 
     // Same single-resource constraint as register_path: only "" or "/"
-    // is acceptable, and the matching mode must be exact (which on_* is).
+    // is acceptable, and the matching mode must be exact (which on_*/
+    // route are).
     if (single_resource && path != "" && path != "/") {
         throw std::invalid_argument(
-            "When using a single_resource server, on_* requires the "
-            "path to be '' or '/'");
+            "When using a single_resource server, on_*/route requires "
+            "the path to be '' or '/'");
     }
 
     detail::http_endpoint idx(path, /*family=*/false,
@@ -360,20 +368,38 @@ void webserver::on_method_(http_method method,
         if (!shim) {
             throw std::invalid_argument(
                 "A non-lambda http_resource is already registered at "
-                "this path; on_* cannot share a path with "
+                "this path; on_*/route cannot share a path with "
                 "register_path/register_prefix");
         }
-        if (shim->has_slot(method)) {
-            throw std::invalid_argument(
-                "A handler is already registered for this method on "
-                "this path");
+        // Atomicity pre-check: every requested slot must be empty
+        // BEFORE we mutate any of them. Iterates in enum order (get,
+        // head, post, ...) matching the `Allow:` header serialization.
+        for (std::uint8_t i = 0;
+             i < static_cast<std::uint8_t>(http_method::count_);
+             ++i) {
+            auto m = static_cast<http_method>(i);
+            if (!methods.contains(m)) continue;
+            if (shim->has_slot(m)) {
+                throw std::invalid_argument(
+                    "A handler is already registered for one of the "
+                    "requested methods on this path");
+            }
         }
     } else {
         shim = std::make_shared<detail::lambda_resource>();
         fresh = true;
     }
 
-    shim->set_slot(method, std::move(handler));
+    // Commit phase: install the handler into every requested slot.
+    // The shared std::function copies cheaply (type-erased callable),
+    // so each slot owns its own copy.
+    for (std::uint8_t i = 0;
+         i < static_cast<std::uint8_t>(http_method::count_);
+         ++i) {
+        auto m = static_cast<http_method>(i);
+        if (!methods.contains(m)) continue;
+        shim->set_slot(m, handler);
+    }
 
     if (fresh) {
         impl_->registered_resources.insert({idx, shim});
@@ -392,42 +418,64 @@ void webserver::on_method_(http_method method,
 
 // The seven named forwarders below are the only place that maps the
 // method name to its http_method enum constant. Each is a thin alias
-// for on_method_; all validation and insertion logic lives there.
+// for on_methods_; all validation and insertion logic lives there.
 // on_delete uses http_method::del because `delete` is a C++ keyword;
 // the wire token is "DELETE" (see http_method::to_string).
 void webserver::on_get(const std::string& path,
                        std::function<http_response(const http_request&)> handler) {
-    on_method_(http_method::get, path, std::move(handler));
+    on_methods_(method_set{}.set(http_method::get), path, std::move(handler));
 }
 
 void webserver::on_post(const std::string& path,
                         std::function<http_response(const http_request&)> handler) {
-    on_method_(http_method::post, path, std::move(handler));
+    on_methods_(method_set{}.set(http_method::post), path, std::move(handler));
 }
 
 void webserver::on_put(const std::string& path,
                        std::function<http_response(const http_request&)> handler) {
-    on_method_(http_method::put, path, std::move(handler));
+    on_methods_(method_set{}.set(http_method::put), path, std::move(handler));
 }
 
 void webserver::on_delete(const std::string& path,
                           std::function<http_response(const http_request&)> handler) {
-    on_method_(http_method::del, path, std::move(handler));
+    on_methods_(method_set{}.set(http_method::del), path, std::move(handler));
 }
 
 void webserver::on_patch(const std::string& path,
                          std::function<http_response(const http_request&)> handler) {
-    on_method_(http_method::patch, path, std::move(handler));
+    on_methods_(method_set{}.set(http_method::patch), path, std::move(handler));
 }
 
 void webserver::on_options(const std::string& path,
                            std::function<http_response(const http_request&)> handler) {
-    on_method_(http_method::options, path, std::move(handler));
+    on_methods_(method_set{}.set(http_method::options), path, std::move(handler));
 }
 
 void webserver::on_head(const std::string& path,
                         std::function<http_response(const http_request&)> handler) {
-    on_method_(http_method::head, path, std::move(handler));
+    on_methods_(method_set{}.set(http_method::head), path, std::move(handler));
+}
+
+// TASK-026: generic table-driven entry points. The single-method form
+// rejects http_method::count_ explicitly because the public route()
+// overload accepts a runtime value (and so the sentinel is reachable);
+// the on_* forwarders never pass count_, so the on_methods_ helper
+// itself does not guard against it.
+void webserver::route(http_method m,
+                      const std::string& path,
+                      std::function<http_response(const http_request&)> handler) {
+    if (m == http_method::count_) {
+        throw std::invalid_argument(
+            "http_method::count_ is a sentinel and may not be "
+            "registered as a route");
+    }
+    on_methods_(method_set{}.set(m), path, std::move(handler));
+}
+
+void webserver::route(method_set methods,
+                      const std::string& path,
+                      std::function<http_response(const http_request&)> handler) {
+    on_methods_(methods, path, std::move(handler));
 }
 
 #ifdef HAVE_WEBSOCKET

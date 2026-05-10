@@ -8,10 +8,10 @@
 Provide the table-driven escape hatch for registering handlers when the HTTP method is a runtime value.
 
 **Action Items:**
-- [ ] Add `webserver::route(http_method m, const std::string& path, std::function<http_response(const http_request&)> handler);`.
-- [ ] Implementation dispatches to the same internal registration path used by `on_*`.
-- [ ] Document the call-site convention: `route()` is the escape hatch; `on_*` is preferred when the method is known statically.
-- [ ] Add `webserver::route(method_set methods, const std::string& path, handler)` if a single handler should serve multiple methods (e.g., GET and HEAD).
+- [x] Add `webserver::route(http_method m, const std::string& path, std::function<http_response(const http_request&)> handler);`.
+- [x] Implementation dispatches to the same internal registration path used by `on_*`.
+- [x] Document the call-site convention: `route()` is the escape hatch; `on_*` is preferred when the method is known statically.
+- [x] Add `webserver::route(method_set methods, const std::string& path, handler)` if a single handler should serve multiple methods (e.g., GET and HEAD).
 
 **Dependencies:**
 - Blocked by: TASK-005, TASK-025
@@ -26,4 +26,4 @@ Provide the table-driven escape hatch for registering handlers when the HTTP met
 **Related Requirements:** PRD-HDL-REQ-006
 **Related Decisions:** §4.7, OQ-003 resolution
 
-**Status:** Not Started
+**Status:** Done

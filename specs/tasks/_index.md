@@ -108,7 +108,7 @@ Nominally: **13 sequential tasks**, each S–XL. Most other tasks parallelize of
 | TASK-023 | Smart-pointer `register_resource` overloads | M4 | Done | TASK-014 |
 | TASK-024 | `register_path` and `register_prefix` (replace `bool family`) | M4 | Done | TASK-023 |
 | TASK-025 | Lambda handler entry points `on_*` | M4 | Done | TASK-005, TASK-009, TASK-014 |
-| TASK-026 | Generic `webserver::route(method, path, handler)` | M4 | Not Started | TASK-005, TASK-025 |
+| TASK-026 | Generic `webserver::route(method, path, handler)` | M4 | Done | TASK-005, TASK-025 |
 | TASK-027 | 3-tier route table with LRU cache | M5 | Not Started | TASK-005, TASK-014, TASK-021, TASK-024, TASK-025, TASK-026 |
 | TASK-028 | Routing-semantics regression gate | M5 | Not Started | TASK-027 |
 | TASK-029 | Naming consistency — `stop_and_wait`, `block_ip`/`unblock_ip` | M5 | Not Started | TASK-014 |
