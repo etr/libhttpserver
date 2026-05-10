@@ -65,7 +65,7 @@ int main() {
     httpserver::webserver ws = httpserver::create_webserver(8080);
 
     auto pr = std::make_shared<pipe_resource>();
-    ws.register_resource("/stream", pr);
+    ws.register_path("/stream", pr);
     ws.start(true);
 
     return 0;

@@ -51,15 +51,16 @@ int main() {
     httpserver::webserver ws = httpserver::create_webserver(8080);
 
     auto hwr = std::make_shared<hello_world_resource>();
-    ws.register_resource("/hello", hwr);
+    ws.register_path("/hello", hwr);
 
     auto hmr = std::make_shared<handling_multiple_resource>();
-    ws.register_resource("/family", hmr, true);
-    ws.register_resource("/with_regex_[0-9]+", hmr);
+    // Prefix-match: serves "/family" and any "/family/..." child URL.
+    ws.register_prefix("/family", hmr);
+    ws.register_path("/with_regex_[0-9]+", hmr);
 
     auto uar = std::make_shared<url_args_resource>();
-    ws.register_resource("/url/with/{arg1}/and/{arg2}", uar);
-    ws.register_resource("/url/with/parametric/args/{arg1|[0-9]+}/and/{arg2|[A-Z]+}", uar);
+    ws.register_path("/url/with/{arg1}/and/{arg2}", uar);
+    ws.register_path("/url/with/parametric/args/{arg1|[0-9]+}/and/{arg2|[A-Z]+}", uar);
 
     ws.start(true);
 

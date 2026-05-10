@@ -41,7 +41,7 @@
 namespace {
 // TASK-023 test helper: wrap a stack-local http_resource& in a shared_ptr
 // with a no-op deleter. Preserves the "declare resource on the stack,
-// pass to register_resource" pattern after the API moved to smart pointers.
+// pass to register_path" pattern after the API moved to smart pointers.
 inline std::shared_ptr<httpserver::http_resource>
 as_shared(httpserver::http_resource& r) {
     return std::shared_ptr<httpserver::http_resource>(
@@ -118,7 +118,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, base_auth)
     webserver ws = create_webserver(PORT);
 
     user_pass_resource user_pass;
-    ws.register_resource("base", as_shared(user_pass));
+    ws.register_path("base", as_shared(user_pass));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -143,7 +143,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, base_auth_fail)
     webserver ws = create_webserver(PORT);
 
     user_pass_resource user_pass;
-    ws.register_resource("base", as_shared(user_pass));
+    ws.register_path("base", as_shared(user_pass));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -240,7 +240,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth)
         .nonce_nc_size(300);
 
     digest_resource digest;
-    ws.register_resource("base", as_shared(digest));
+    ws.register_path("base", as_shared(digest));
     ws.start(false);
 
 #if defined(_WINDOWS)
@@ -292,7 +292,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_wrong_pass)
         .nonce_nc_size(300);
 
     digest_resource digest;
-    ws.register_resource("base", as_shared(digest));
+    ws.register_path("base", as_shared(digest));
     ws.start(false);
 
 #if defined(_WINDOWS)
@@ -336,7 +336,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5)
         .nonce_nc_size(300);
 
     digest_ha1_md5_resource digest_ha1;
-    ws.register_resource("base", as_shared(digest_ha1));
+    ws.register_path("base", as_shared(digest_ha1));
     ws.start(false);
 
 #if defined(_WINDOWS)
@@ -381,7 +381,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5_wrong_pass)
         .nonce_nc_size(300);
 
     digest_ha1_md5_resource digest_ha1;
-    ws.register_resource("base", as_shared(digest_ha1));
+    ws.register_path("base", as_shared(digest_ha1));
     ws.start(false);
 
 #if defined(_WINDOWS)
@@ -424,7 +424,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256)
         .nonce_nc_size(300);
 
     digest_ha1_sha256_resource digest_ha1;
-    ws.register_resource("base", as_shared(digest_ha1));
+    ws.register_path("base", as_shared(digest_ha1));
     ws.start(false);
 
 #if defined(_WINDOWS)
@@ -470,7 +470,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256_wrong_pass)
         .nonce_nc_size(300);
 
     digest_ha1_sha256_resource digest_ha1;
-    ws.register_resource("base", as_shared(digest_ha1));
+    ws.register_path("base", as_shared(digest_ha1));
     ws.start(false);
 
 #if defined(_WINDOWS)
@@ -538,7 +538,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_user_cache_no_auth)
         .nonce_nc_size(300);
 
     digest_user_cache_resource resource;
-    ws.register_resource("cache_test", as_shared(resource));
+    ws.register_path("cache_test", as_shared(resource));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -567,7 +567,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_user_cache_with_auth)
         .nonce_nc_size(300);
 
     digest_user_cache_resource resource;
-    ws.register_resource("cache_test", as_shared(resource));
+    ws.register_path("cache_test", as_shared(resource));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -621,7 +621,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, centralized_auth_fail)
         .auth_handler(centralized_auth_handler);
 
     simple_resource sr;
-    ws.register_resource("protected", as_shared(sr));
+    ws.register_path("protected", as_shared(sr));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -648,7 +648,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, centralized_auth_success)
         .auth_handler(centralized_auth_handler);
 
     simple_resource sr;
-    ws.register_resource("protected", as_shared(sr));
+    ws.register_path("protected", as_shared(sr));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -678,9 +678,9 @@ LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_paths)
         .auth_skip_paths({"/health", "/public/*"});
 
     simple_resource sr;
-    ws.register_resource("health", as_shared(sr));
-    ws.register_resource("public/info", as_shared(sr));
-    ws.register_resource("protected", as_shared(sr));
+    ws.register_path("health", as_shared(sr));
+    ws.register_path("public/info", as_shared(sr));
+    ws.register_path("protected", as_shared(sr));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -743,7 +743,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_paths_no_partial_match)
         .auth_skip_paths({"/public/*"});
 
     simple_resource sr;
-    ws.register_resource("publicinfo", as_shared(sr));
+    ws.register_path("publicinfo", as_shared(sr));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -773,7 +773,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_paths_deep_nested)
         .auth_skip_paths({"/api/v1/public/*"});
 
     simple_resource sr;
-    ws.register_resource("api/v1/public/users/list", as_shared(sr));
+    ws.register_path("api/v1/public/users/list", as_shared(sr));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -810,7 +810,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, centralized_auth_post_method)
         .auth_handler(centralized_auth_handler);
 
     post_resource pr;
-    ws.register_resource("data", as_shared(pr));
+    ws.register_path("data", as_shared(pr));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -858,7 +858,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, centralized_auth_wrong_credentials)
         .auth_handler(centralized_auth_handler);
 
     simple_resource sr;
-    ws.register_resource("protected", as_shared(sr));
+    ws.register_path("protected", as_shared(sr));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -905,7 +905,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, centralized_auth_not_found)
         .auth_handler(centralized_auth_handler);
 
     simple_resource sr;
-    ws.register_resource("exists", as_shared(sr));
+    ws.register_path("exists", as_shared(sr));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -934,7 +934,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, no_auth_handler_default)
     webserver ws = create_webserver(PORT);  // No auth_handler
 
     simple_resource sr;
-    ws.register_resource("open", as_shared(sr));
+    ws.register_path("open", as_shared(sr));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -965,10 +965,10 @@ LT_BEGIN_AUTO_TEST(authentication_suite, auth_multiple_skip_paths)
         .auth_skip_paths({"/health", "/metrics", "/status", "/public/*"});
 
     simple_resource sr;
-    ws.register_resource("health", as_shared(sr));
-    ws.register_resource("metrics", as_shared(sr));
-    ws.register_resource("status", as_shared(sr));
-    ws.register_resource("protected", as_shared(sr));
+    ws.register_path("health", as_shared(sr));
+    ws.register_path("metrics", as_shared(sr));
+    ws.register_path("status", as_shared(sr));
+    ws.register_path("protected", as_shared(sr));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1043,7 +1043,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_path_root)
         .auth_skip_paths({"/"});
 
     simple_resource sr;
-    ws.register_resource("/", as_shared(sr), true);
+    ws.register_prefix("/", as_shared(sr));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1074,9 +1074,9 @@ LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_path_wildcard)
         .auth_skip_paths({"/pub/*"});
 
     simple_resource sr;
-    ws.register_resource("pub/anything", as_shared(sr));
-    ws.register_resource("pub/nested/path", as_shared(sr));
-    ws.register_resource("private/secret", as_shared(sr));
+    ws.register_path("pub/anything", as_shared(sr));
+    ws.register_path("pub/nested/path", as_shared(sr));
+    ws.register_path("private/secret", as_shared(sr));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1136,7 +1136,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, auth_empty_skip_paths)
         .auth_skip_paths({});  // Empty skip paths
 
     simple_resource sr;
-    ws.register_resource("test", as_shared(sr));
+    ws.register_path("test", as_shared(sr));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1167,8 +1167,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_path_traversal_bypass)
         .auth_skip_paths({"/public/*"});
 
     simple_resource sr;
-    ws.register_resource("protected", as_shared(sr));
-    ws.register_resource("public/info", as_shared(sr));
+    ws.register_path("protected", as_shared(sr));
+    ws.register_path("public/info", as_shared(sr));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);

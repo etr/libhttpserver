@@ -46,7 +46,7 @@ int main() {
     httpserver::webserver ws = httpserver::create_webserver(8080);
 
     auto hwr = std::make_shared<digest_resource>();
-    ws.register_resource("/hello", hwr);
+    ws.register_path("/hello", hwr);
     ws.start(true);
 
     return 0;

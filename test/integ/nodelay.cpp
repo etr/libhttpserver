@@ -30,7 +30,7 @@
 namespace {
 // TASK-023 test helper: wrap a stack-local http_resource& in a shared_ptr
 // with a no-op deleter. Preserves the "declare resource on the stack,
-// pass to register_resource" pattern after the API moved to smart pointers.
+// pass to register_path" pattern after the API moved to smart pointers.
 inline std::shared_ptr<httpserver::http_resource>
 as_shared(httpserver::http_resource& r) {
     return std::shared_ptr<httpserver::http_resource>(
@@ -79,7 +79,7 @@ LT_END_SUITE(threaded_suite)
 
 LT_BEGIN_AUTO_TEST(threaded_suite, base)
     ok_resource resource;
-    ws->register_resource("base", as_shared(resource));
+    ws->register_path("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
     CURL* curl;

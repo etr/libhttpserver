@@ -46,7 +46,7 @@ int main() {
     httpserver::webserver ws = httpserver::create_webserver(8080);
 
     auto ncr = std::make_shared<no_content_resource>();
-    ws.register_resource("/items", ncr);
+    ws.register_path("/items", ncr);
     ws.start(true);
 
     return 0;

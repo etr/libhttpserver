@@ -63,8 +63,8 @@ int main() {
     auto hello = std::make_shared<hello_resource>();
     auto health = std::make_shared<health_resource>();
 
-    ws.register_resource("/api", hello);
-    ws.register_resource("/health", health);
+    ws.register_path("/api", hello);
+    ws.register_path("/health", health);
 
     ws.start(true);
 

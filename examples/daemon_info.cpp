@@ -35,7 +35,7 @@ int main() {
     httpserver::webserver ws = httpserver::create_webserver(0);
 
     auto hr = std::make_shared<hello_resource>();
-    ws.register_resource("/hello", hr);
+    ws.register_path("/hello", hr);
     ws.start(false);
 
     // Query daemon information

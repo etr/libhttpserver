@@ -8,12 +8,12 @@
 Make prefix-vs-exact matching a named API choice rather than a positional `bool` flag.
 
 **Action Items:**
-- [ ] Add `register_path(const std::string& path, std::unique_ptr<http_resource>);` and `(..., std::shared_ptr<http_resource>);` — exact-match registration.
-- [ ] Add `register_prefix(const std::string& path, std::unique_ptr<http_resource>);` and `(..., std::shared_ptr<http_resource>);` — prefix-match registration.
-- [ ] Document the distinction: `register_path("/users/{id}")` matches only the parameterized exact form; `register_prefix("/static/")` matches `/static/anything/here`.
-- [ ] `register_resource` (TASK-023) becomes either an alias for `register_path` or is kept as the umbrella entry point that internally calls one of the two — pick one and document.
-- [ ] Remove the `bool family` parameter from any surviving overload.
-- [ ] Update `unregister_resource(path)` to handle both registration kinds (or split into `unregister_path`/`unregister_prefix`).
+- [x] Add `register_path(const std::string& path, std::unique_ptr<http_resource>);` and `(..., std::shared_ptr<http_resource>);` — exact-match registration.
+- [x] Add `register_prefix(const std::string& path, std::unique_ptr<http_resource>);` and `(..., std::shared_ptr<http_resource>);` — prefix-match registration.
+- [x] Document the distinction: `register_path("/users/{id}")` matches only the parameterized exact form; `register_prefix("/static/")` matches `/static/anything/here`.
+- [x] `register_resource` (TASK-023) becomes either an alias for `register_path` or is kept as the umbrella entry point that internally calls one of the two — pick one and document. *(Decision: kept as a `[[deprecated]]` alias for `register_path`, documented in webserver.hpp; the 3-arg `bool family` overload is removed.)*
+- [x] Remove the `bool family` parameter from any surviving overload.
+- [x] Update `unregister_resource(path)` to handle both registration kinds (or split into `unregister_path`/`unregister_prefix`). *(Did both: split into `unregister_path` / `unregister_prefix`, kept `unregister_resource` as the kind-agnostic convenience.)*
 
 **Dependencies:**
 - Blocked by: TASK-023
@@ -28,4 +28,4 @@ Make prefix-vs-exact matching a named API choice rather than a positional `bool`
 **Related Requirements:** PRD-HDL-REQ-004
 **Related Decisions:** §4.7
 
-**Status:** Not Started
+**Status:** Done

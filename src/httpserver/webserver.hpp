@@ -105,57 +105,105 @@ class webserver {
      **/
      bool is_running();
      /**
-      * Register a resource with the webserver, transferring ownership.
+      * Register a resource for an exact (non-prefix) URL match.
       *
-      * The webserver takes sole ownership of the resource: it lives at
-      * least as long as the webserver, and its destructor runs when the
-      * webserver is destroyed (or when the route is later unregistered).
+      * The path matches only itself, including any parameterized form:
+      * `register_path("/users/{id}")` matches `/users/42` but NOT
+      * `/users/42/profile`.
       *
-      * Templated over the concrete derived type so that calls like
-      * `register_resource(path, std::make_unique<my_resource>())`
-      * resolve unambiguously without competing with the shared_ptr
-      * overload via an implicit unique-to-shared conversion.
+      * Templated unique_ptr<T> shim funnels into the shared_ptr overload
+      * exactly the way TASK-023's pattern does, so calls with derived
+      * types resolve unambiguously.
       *
       * Throws std::invalid_argument if the resource pointer is null,
-      * if the path conflicts with single_resource mode, or if a
-      * resource is already registered at the same path.
+      * if the path conflicts with single_resource mode (single_resource
+      * requires register_prefix), or if a resource is already
+      * registered at the same path.
       *
-      * @param resource The url pointing to the resource. This url could be also parametrized in the form /path/to/url/{par1}/and/{par2}
-      *                 or a regular expression.
-      * @param res unique_ptr to the http_resource (or any derived type); ownership is transferred to the webserver.
-      * @param family whether the resource is registered for the endpoint and all its children.
+      * @param path The url pointing to the resource. May be parameterized
+      *             in the form /path/to/url/{par1}/and/{par2} or a regex.
+      * @param res  unique_ptr to the http_resource (or any derived type);
+      *             ownership is transferred to the webserver.
      **/
      template <typename T,
                typename = std::enable_if_t<
                    std::is_base_of_v<http_resource, T>>>
-     void register_resource(const std::string& resource,
-                            std::unique_ptr<T> res,
-                            bool family = false) {
-         register_resource(resource,
-                           std::shared_ptr<http_resource>(std::move(res)),
-                           family);
+     void register_path(const std::string& path, std::unique_ptr<T> res) {
+         register_path(path,
+                       std::shared_ptr<http_resource>(std::move(res)));
      }
+     /// @copydoc register_path(const std::string&, std::unique_ptr<T>)
+     /// @param res shared_ptr to the http_resource; the caller retains a reference.
+     void register_path(const std::string& path,
+                        std::shared_ptr<http_resource> res);
 
      /**
-      * Register a resource with the webserver, sharing ownership.
+      * Register a resource for a prefix URL match (the path and all its
+      * children match).
       *
-      * The caller and the webserver share ownership: the resource lives
-      * at least as long as the longer-lived of the two references.
+      * `register_prefix("/static")` matches `/static`, `/static/x`,
+      * `/static/anything/here`, etc.
+      *
+      * Templated unique_ptr<T> shim funnels into the shared_ptr overload
+      * exactly the way TASK-023's pattern does.
       *
       * Throws std::invalid_argument if the resource pointer is null,
-      * if the path conflicts with single_resource mode, or if a
-      * resource is already registered at the same path.
+      * or if a resource is already registered at the same path.
       *
-      * @param resource The url pointing to the resource. This url could be also parametrized in the form /path/to/url/{par1}/and/{par2}
-      *                 or a regular expression.
-      * @param res shared_ptr to the http_resource; the caller retains a reference.
-      * @param family whether the resource is registered for the endpoint and all its children.
+      * @param path The url whose subtree this resource handles.
+      * @param res  unique_ptr to the http_resource (or any derived type).
      **/
-     void register_resource(const std::string& resource,
-                            std::shared_ptr<http_resource> res,
-                            bool family = false);
+     template <typename T,
+               typename = std::enable_if_t<
+                   std::is_base_of_v<http_resource, T>>>
+     void register_prefix(const std::string& path, std::unique_ptr<T> res) {
+         register_prefix(path,
+                         std::shared_ptr<http_resource>(std::move(res)));
+     }
+     /// @copydoc register_prefix(const std::string&, std::unique_ptr<T>)
+     /// @param res shared_ptr to the http_resource; the caller retains a reference.
+     void register_prefix(const std::string& path,
+                          std::shared_ptr<http_resource> res);
 
-     void unregister_resource(const std::string& resource);
+     /**
+      * Deprecated alias for register_path. Forwards to register_path so
+      * existing TASK-023-era call sites keep compiling. The 3-arg
+      * `bool family` overload from before TASK-024 has been removed --
+      * use register_prefix() for prefix matching instead.
+      *
+      * @param path The url pointing to the resource.
+      * @param res  unique_ptr to the http_resource (or any derived type).
+     **/
+     template <typename T,
+               typename = std::enable_if_t<
+                   std::is_base_of_v<http_resource, T>>>
+     [[deprecated("use register_path() for exact match or register_prefix() for prefix match")]]
+     void register_resource(const std::string& path, std::unique_ptr<T> res) {
+         register_path(path, std::move(res));
+     }
+     /// @copydoc register_resource(const std::string&, std::unique_ptr<T>)
+     [[deprecated("use register_path() for exact match or register_prefix() for prefix match")]]
+     void register_resource(const std::string& path,
+                            std::shared_ptr<http_resource> res);
+
+     /**
+      * Unregister an exact-match (register_path) registration.
+      * No-op if no exact registration exists at @p path.
+     **/
+     void unregister_path(const std::string& path);
+
+     /**
+      * Unregister a prefix-match (register_prefix) registration.
+      * No-op if no prefix registration exists at @p path.
+     **/
+     void unregister_prefix(const std::string& path);
+
+     /**
+      * Kind-agnostic convenience: erases either an exact or a prefix
+      * registration at @p path. Equivalent to calling unregister_path
+      * and unregister_prefix; idempotent.
+     **/
+     void unregister_resource(const std::string& path);
      void ban_ip(const std::string& ip);
      void allow_ip(const std::string& ip);
      void unban_ip(const std::string& ip);
@@ -331,6 +379,18 @@ class webserver {
      const std::string https_priorities_append;
      const bool no_alpn;
      const int client_discipline_level;
+
+     // TASK-024: shared registration helper. Both register_path and
+     // register_prefix funnel through here so the validation/insertion
+     // logic lives in one place. `family=true` is prefix-matching;
+     // `family=false` is exact-matching.
+     void register_impl_(const std::string& path,
+                         std::shared_ptr<http_resource> res,
+                         bool family);
+
+     // TASK-024: shared unregistration helper. Erases a single
+     // registration of the requested kind.
+     void unregister_impl_(const std::string& path, bool family);
 
      // PIMPL: backend-coupled state (MHD daemon, pthread mutexes, route
      // table, ban set, route cache, websocket registry, GnuTLS SNI cache,

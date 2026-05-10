@@ -90,7 +90,7 @@ int main() {
     httpserver::webserver ws = httpserver::create_webserver(8080);
 
     auto ar = std::make_shared<args_resource>();
-    ws.register_resource("/args", ar);
+    ws.register_path("/args", ar);
 
     std::cout << "Server running on http://localhost:8080/args\n";
     std::cout << "Try: http://localhost:8080/args?name=john&age=30\n";
