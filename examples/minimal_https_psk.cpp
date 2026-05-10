@@ -55,8 +55,8 @@ int main() {
         .psk_cred_handler(psk_handler)
         .https_priorities("NORMAL:-VERS-TLS-ALL:+VERS-TLS1.2:+PSK:+DHE-PSK");
 
-    hello_world_resource hwr;
-    ws.register_resource("/hello", &hwr);
+    auto hwr = std::make_shared<hello_world_resource>();
+    ws.register_resource("/hello", hwr);
     ws.start(true);
 
     return 0;

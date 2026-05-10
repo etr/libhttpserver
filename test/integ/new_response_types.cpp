@@ -33,6 +33,18 @@
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
 
+
+namespace {
+// TASK-023 test helper: wrap a stack-local http_resource& in a shared_ptr
+// with a no-op deleter. Preserves the "declare resource on the stack,
+// pass to register_resource" pattern after the API moved to smart pointers.
+inline std::shared_ptr<httpserver::http_resource>
+as_shared(httpserver::http_resource& r) {
+    return std::shared_ptr<httpserver::http_resource>(
+        &r, [](httpserver::http_resource*){});
+}
+}  // namespace
+
 using std::shared_ptr;
 using std::string;
 using std::vector;
@@ -112,9 +124,9 @@ static iovec_resource ir;
 LT_BEGIN_SUITE(response_types_suite)
     void set_up() {
         ws_ptr = new webserver(create_webserver(PORT));
-        ws_ptr->register_resource("empty", &er);
-        ws_ptr->register_resource("pipe", &pr);
-        ws_ptr->register_resource("iovec", &ir);
+        ws_ptr->register_resource("empty", as_shared(er));
+        ws_ptr->register_resource("pipe", as_shared(pr));
+        ws_ptr->register_resource("iovec", as_shared(ir));
         ws_ptr->start(false);
     }
     void tear_down() {

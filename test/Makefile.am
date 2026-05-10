@@ -26,7 +26,7 @@ LDADD += -lcurl
 
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/ -DHTTPSERVER_COMPILATION
 METASOURCES = AUTO
-check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_const_getters http_request_tls_accessors
+check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_const_getters http_request_tls_accessors webserver_register_smartptr
 
 MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
 
@@ -146,6 +146,15 @@ http_request_const_getters_LDADD =
 # compile test -- empty LDADD.
 http_request_tls_accessors_SOURCES = unit/http_request_tls_accessors_test.cpp
 http_request_tls_accessors_LDADD =
+
+# webserver_register_smartptr: TASK-023. Compile-time signature
+# assertions that the new unique_ptr/shared_ptr register_resource
+# overloads exist and the raw-pointer overload is gone, plus runtime
+# tests for ownership semantics (unique_ptr ownership transfer,
+# shared_ptr caller-retains-ref, throw-on-null, throw-on-duplicate).
+# Default LDADD (libhttpserver + curl) is sufficient; no microhttpd
+# direct link needed.
+webserver_register_smartptr_SOURCES = unit/webserver_register_smartptr_test.cpp
 
 noinst_HEADERS = littletest.hpp
 AM_CXXFLAGS += -Wall -fPIC -Wno-overloaded-virtual

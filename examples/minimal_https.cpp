@@ -35,8 +35,8 @@ int main() {
         .https_mem_key("key.pem")
         .https_mem_cert("cert.pem");
 
-    hello_world_resource hwr;
-    ws.register_resource("/hello", &hwr);
+    auto hwr = std::make_shared<hello_world_resource>();
+    ws.register_resource("/hello", hwr);
     ws.start(true);
 
     return 0;

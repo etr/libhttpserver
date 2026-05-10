@@ -42,10 +42,10 @@ int main() {
         .not_found_resource(not_found_custom)
         .method_not_allowed_resource(not_allowed_custom);
 
-    hello_world_resource hwr;
-    hwr.disallow_all();
-    hwr.set_allowing(httpserver::http_method::get, true);
-    ws.register_resource("/hello", &hwr);
+    auto hwr = std::make_shared<hello_world_resource>();
+    hwr->disallow_all();
+    hwr->set_allowing(httpserver::http_method::get, true);
+    ws.register_resource("/hello", hwr);
     ws.start(true);
 
     return 0;

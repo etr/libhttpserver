@@ -39,8 +39,8 @@ int main() {
     httpserver::webserver ws = httpserver::create_webserver(8080)
         .log_access(custom_access_log);
 
-    hello_world_resource hwr;
-    ws.register_resource("/hello", &hwr);
+    auto hwr = std::make_shared<hello_world_resource>();
+    ws.register_resource("/hello", hwr);
     ws.start(true);
 
     return 0;

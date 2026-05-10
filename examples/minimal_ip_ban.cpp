@@ -34,8 +34,8 @@ int main() {
 
     ws.allow_ip("127.0.0.1");
 
-    hello_world_resource hwr;
-    ws.register_resource("/hello", &hwr);
+    auto hwr = std::make_shared<hello_world_resource>();
+    ws.register_resource("/hello", hwr);
     ws.start(true);
 
     return 0;

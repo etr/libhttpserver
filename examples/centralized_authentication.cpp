@@ -60,11 +60,11 @@ int main() {
         .auth_handler(auth_handler)
         .auth_skip_paths({"/health", "/public/*"});
 
-    hello_resource hello;
-    health_resource health;
+    auto hello = std::make_shared<hello_resource>();
+    auto health = std::make_shared<health_resource>();
 
-    ws.register_resource("/api", &hello);
-    ws.register_resource("/health", &health);
+    ws.register_resource("/api", hello);
+    ws.register_resource("/health", health);
 
     ws.start(true);
 

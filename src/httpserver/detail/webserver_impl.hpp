@@ -179,14 +179,25 @@ class webserver_impl {
 
     bool running = false;
 
+    // TASK-023: route-table entries hold shared_ptr<http_resource>.
+    // The two public register_resource overloads (unique_ptr / shared_ptr)
+    // both funnel into the shared_ptr branch, so storage is always
+    // shared_ptr regardless of which overload the caller used. This also
+    // closes a latent dispatch race: a thread holding a shared_ptr copy
+    // for the duration of an in-flight call cannot be invalidated by a
+    // concurrent unregister_resource — the resource lives until the call
+    // returns and its shared_ptr drops.
     std::shared_mutex registered_resources_mutex;
-    std::map<detail::http_endpoint, ::httpserver::http_resource*> registered_resources;
-    std::map<std::string, ::httpserver::http_resource*>           registered_resources_str;
-    std::map<detail::http_endpoint, ::httpserver::http_resource*> registered_resources_regex;
+    std::map<detail::http_endpoint,
+             std::shared_ptr<::httpserver::http_resource>> registered_resources;
+    std::map<std::string,
+             std::shared_ptr<::httpserver::http_resource>> registered_resources_str;
+    std::map<detail::http_endpoint,
+             std::shared_ptr<::httpserver::http_resource>> registered_resources_regex;
 
     struct route_cache_entry {
         detail::http_endpoint matched_endpoint;
-        ::httpserver::http_resource* resource;
+        std::shared_ptr<::httpserver::http_resource> resource;
     };
     static constexpr size_t ROUTE_CACHE_MAX_SIZE = 256;
     std::mutex route_cache_mutex;

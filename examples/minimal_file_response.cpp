@@ -34,8 +34,8 @@ class file_response_resource : public httpserver::http_resource {
 int main() {
     httpserver::webserver ws = httpserver::create_webserver(8080);
 
-    file_response_resource hwr;
-    ws.register_resource("/hello", &hwr);
+    auto hwr = std::make_shared<file_response_resource>();
+    ws.register_resource("/hello", hwr);
     ws.start(true);
 
     return 0;

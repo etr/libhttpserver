@@ -103,8 +103,8 @@ int main(int argc, char** argv) {
             }
         });
 
-    file_upload_resource fur;
-    ws.register_resource("/", &fur);
+    auto fur = std::make_shared<file_upload_resource>();
+    ws.register_resource("/", fur);
     ws.start(true);
 
     return 0;

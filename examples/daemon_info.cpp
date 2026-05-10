@@ -34,8 +34,8 @@ int main() {
     // Use port 0 to let the OS assign an ephemeral port
     httpserver::webserver ws = httpserver::create_webserver(0);
 
-    hello_resource hr;
-    ws.register_resource("/hello", &hr);
+    auto hr = std::make_shared<hello_resource>();
+    ws.register_resource("/hello", hr);
     ws.start(false);
 
     // Query daemon information

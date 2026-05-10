@@ -246,8 +246,13 @@ void webserver::sweet_kill() {
 
 // ----- Resource registration --------------------------------------------
 
-bool webserver::register_resource(const std::string& resource, http_resource* hrm, bool family) {
-    if (hrm == nullptr) {
+// The unique_ptr overload is a templated inline shim defined in
+// webserver.hpp that funnels into this shared_ptr overload. Keeping the
+// validation/insertion logic in exactly one place prevents drift.
+void webserver::register_resource(const std::string& resource,
+                                  std::shared_ptr<http_resource> res,
+                                  bool family) {
+    if (res == nullptr) {
         throw std::invalid_argument("The http_resource pointer cannot be null");
     }
 
@@ -258,22 +263,27 @@ bool webserver::register_resource(const std::string& resource, http_resource* hr
     detail::http_endpoint idx(resource, family, true, regex_checking);
 
     std::unique_lock registered_resources_lock(impl_->registered_resources_mutex);
-    pair<map<detail::http_endpoint, http_resource*>::iterator, bool> result = impl_->registered_resources.insert(map<detail::http_endpoint, http_resource*>::value_type(idx, hrm));
+    auto result = impl_->registered_resources.insert({idx, res});
 
-    if (result.second) {
-        bool is_exact = !family && idx.get_url_pars().empty();
-        if (is_exact) {
-            impl_->registered_resources_str.insert(pair<string, http_resource*>(idx.get_url_complete(), result.first->second));
-        }
-        if (idx.is_regex_compiled()) {
-            impl_->registered_resources_regex.insert(map<detail::http_endpoint, http_resource*>::value_type(idx, hrm));
-        }
-        registered_resources_lock.unlock();
-        impl_->invalidate_route_cache();
-        return true;
+    if (!result.second) {
+        // TASK-023: v1 returned false on duplicate. The new void API
+        // throws so the caller cannot silently lose ownership of a
+        // moved-in unique_ptr (it was destroyed inside the conversion
+        // to shared_ptr above; throwing surfaces the failure).
+        throw std::invalid_argument(
+            "A resource is already registered at this path");
     }
 
-    return false;
+    bool is_exact = !family && idx.get_url_pars().empty();
+    if (is_exact) {
+        impl_->registered_resources_str.insert(
+            {idx.get_url_complete(), result.first->second});
+    }
+    if (idx.is_regex_compiled()) {
+        impl_->registered_resources_regex.insert({idx, res});
+    }
+    registered_resources_lock.unlock();
+    impl_->invalidate_route_cache();
 }
 
 #ifdef HAVE_WEBSOCKET
@@ -1388,9 +1398,12 @@ MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection, struct de
     }
 #endif  // HAVE_WEBSOCKET
 
-    map<string, http_resource*>::iterator fe;
+    map<string, std::shared_ptr<http_resource>>::iterator fe;
 
-    http_resource* hrm;
+    // TASK-023: hold a shared_ptr copy across dispatch. If a concurrent
+    // unregister_resource erases the route mid-call, the resource stays
+    // alive until our local shared_ptr drops at the end of finalize_answer.
+    std::shared_ptr<http_resource> hrm;
 
     bool found = false;
     struct MHD_Response* raw_response;
@@ -1426,7 +1439,7 @@ MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection, struct de
 
                     if (!found) {
                         // Cache miss — perform regex scan
-                        map<detail::http_endpoint, http_resource*>::iterator found_endpoint;
+                        map<detail::http_endpoint, std::shared_ptr<http_resource>>::iterator found_endpoint;
 
                         size_t len = 0;
                         size_t tot_len = 0;
@@ -1502,7 +1515,9 @@ MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection, struct de
                 mr->pp = nullptr;
             }
             if (hrm->is_allowed(mr->method_enum)) {
-                mr->dhrs = ((hrm)->*(mr->callback))(*mr->dhr);  // copy in memory (move in case)
+                // pointer-to-member dispatch via the shared_ptr's pointee.
+                // shared_ptr has no operator->*, so call as ((*ptr).*pmf)(...).
+                mr->dhrs = ((*hrm).*(mr->callback))(*mr->dhr);  // copy in memory (move in case)
                 if (mr->dhrs.get() == nullptr || mr->dhrs->get_status() == -1) {
                     mr->dhrs = internal_error_page(mr);
                 }
