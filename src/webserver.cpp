@@ -50,7 +50,9 @@
 #include <iostream>
 #include <memory>
 #include <mutex>
+#include <regex>
 #include <set>
+#include <shared_mutex>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -247,6 +249,62 @@ void webserver::sweet_kill() {
 
 // ----- Resource registration --------------------------------------------
 
+// classify_route_tier: single source-of-truth for v2 tier placement.
+//
+// Given a non-prefix http_endpoint, returns which of three storage tiers
+// owns the route and, for the regex tier, the already-compiled std::regex
+// so callers need not compile it a second time.
+//
+// Tier rules (in priority order):
+//   radix  — parameterized path (url_pars non-empty); no regex needed.
+//   regex  — is_regex_compiled() true AND the literal url_complete does NOT
+//             match the compiled pattern (true metacharacters present).
+//   exact  — everything else: plain paths with regex_checking enabled
+//             (literal matches its own pattern, so the fast hash tier
+//             is equivalent), or regex_checking disabled entirely.
+//
+// Prefix routes (family == true) are NOT classified here; callers handle
+// them before invoking this helper.
+namespace {
+
+enum class route_tier_kind { exact, radix, regex_ };
+
+struct route_tier_result {
+    route_tier_kind kind = route_tier_kind::exact;
+    std::optional<std::regex> re;  // populated iff kind == regex_
+};
+
+static route_tier_result classify_route_tier(const detail::http_endpoint& idx) {
+    route_tier_result res;
+
+    if (!idx.get_url_pars().empty()) {
+        res.kind = route_tier_kind::radix;
+        return res;
+    }
+
+    if (idx.is_regex_compiled()) {
+        // Compile the normalized pattern once and run the self-match
+        // check. If the literal url_complete matches its own regex, the
+        // pattern is trivially ^/literal$ and the exact hash tier is
+        // faster and correct. Otherwise the path has meaningful regex
+        // metacharacters and belongs in the regex tier.
+        std::regex re(idx.get_url_normalized(),
+                      std::regex::extended | std::regex::icase);
+        if (std::regex_match(idx.get_url_complete(), re)) {
+            res.kind = route_tier_kind::exact;
+        } else {
+            res.kind = route_tier_kind::regex_;
+            res.re   = std::move(re);
+        }
+        return res;
+    }
+
+    res.kind = route_tier_kind::exact;
+    return res;
+}
+
+}  // namespace
+
 // TASK-024: register_path / register_prefix split. Both public methods
 // funnel into this private helper, which carries the validation and
 // insertion logic. Keeping the work in one place prevents drift between
@@ -285,6 +343,41 @@ void webserver::register_impl_(const std::string& resource,
         impl_->registered_resources_regex.insert({idx, res});
     }
     registered_resources_lock.unlock();
+
+    // TASK-027: mirror into the v2 3-tier table. Tier placement via
+    // classify_route_tier() (single source-of-truth):
+    //   - family=true  -> radix tree (prefix terminus).
+    //   - radix tier   -> radix tree (exact terminus, wildcard nodes).
+    //   - regex tier   -> regex_routes_ (pre-compiled at registration time).
+    //   - exact tier   -> exact_routes_ hash map.
+    {
+        std::unique_lock table_lock(impl_->route_table_mutex_);
+        detail::route_entry entry;
+        entry.methods = method_set{}.set_all();
+        entry.handler = res;
+        entry.is_prefix = family;
+
+        if (family) {
+            impl_->param_and_prefix_routes_.insert(
+                idx.get_url_complete(), entry, /*is_prefix=*/true);
+        } else {
+            auto tier = classify_route_tier(idx);
+            switch (tier.kind) {
+            case route_tier_kind::radix:
+                impl_->param_and_prefix_routes_.insert(
+                    idx.get_url_complete(), entry, /*is_prefix=*/false);
+                break;
+            case route_tier_kind::regex_:
+                impl_->regex_routes_.push_back(
+                    {idx.get_url_complete(), std::move(*tier.re), entry});
+                break;
+            case route_tier_kind::exact:
+                impl_->exact_routes_.emplace(idx.get_url_complete(), entry);
+                break;
+            }
+        }
+    }
+
     impl_->invalidate_route_cache();
 }
 
@@ -332,7 +425,7 @@ void webserver::register_resource(const std::string& resource,
 void webserver::on_methods_(method_set methods,
                             const std::string& path,
                             std::function<http_response(const http_request&)> handler) {
-    if (methods.bits == 0u) {
+    if (methods.empty()) {
         throw std::invalid_argument(
             "route(method_set, ...) requires at least one method bit set");
     }
@@ -413,6 +506,91 @@ void webserver::on_methods_(method_set methods,
         }
     }
     registered_resources_lock.unlock();
+
+    // TASK-027: mirror into the v2 3-tier table. We store the
+    // lambda_resource shim via the shared_ptr arm so dispatch is
+    // identical to class-resource registration. The methods bitmask
+    // accumulates across calls when fresh==false (a subsequent on_post
+    // on the same path adds the POST bit to the existing entry).
+    //
+    // classify_route_tier() is called only when fresh==true; on updates
+    // (fresh==false) the tier was already chosen at first-registration
+    // time and re-running the self-match would be redundant.
+    {
+        std::unique_lock table_lock(impl_->route_table_mutex_);
+        const std::string& key = idx.get_url_complete();
+
+        auto upsert = [&](detail::route_entry& target) {
+            target.methods = target.methods | methods;
+            target.handler = std::shared_ptr<http_resource>(shim);
+            target.is_prefix = false;
+        };
+
+        if (!idx.get_url_pars().empty()) {
+            // Radix tier: parameterized path. read-merge-reinsert because
+            // radix_tree::insert always overwrites the terminus.
+            detail::radix_match<detail::route_entry> existing;
+            detail::route_entry merged;
+            if (impl_->param_and_prefix_routes_.find(key, existing)
+                && existing.entry && !existing.is_prefix_match) {
+                merged = *existing.entry;
+            }
+            merged.methods = merged.methods | methods;
+            merged.handler = std::shared_ptr<http_resource>(shim);
+            merged.is_prefix = false;
+            impl_->param_and_prefix_routes_.insert(
+                key, std::move(merged), /*is_prefix=*/false);
+        } else if (fresh) {
+            // First registration on this path: classify and insert.
+            auto tier = classify_route_tier(idx);
+            switch (tier.kind) {
+            case route_tier_kind::radix:
+                // Unreachable: url_pars non-empty is handled above.
+                break;
+            case route_tier_kind::exact: {
+                detail::route_entry entry;
+                entry.methods   = methods;
+                entry.handler   = std::shared_ptr<http_resource>(shim);
+                entry.is_prefix = false;
+                impl_->exact_routes_.emplace(key, std::move(entry));
+                break;
+            }
+            case route_tier_kind::regex_: {
+                detail::route_entry entry;
+                entry.methods   = methods;
+                entry.handler   = std::shared_ptr<http_resource>(shim);
+                entry.is_prefix = false;
+                impl_->regex_routes_.push_back(
+                    {key, std::move(*tier.re), std::move(entry)});
+                break;
+            }
+            }
+        } else {
+            // Update path (fresh==false): the tier was fixed at first
+            // registration. Find the existing entry and merge methods.
+            //
+            // For the exact tier, a direct map lookup suffices.
+            // For the regex tier, walk the vector and match by shim identity
+            // (regex patterns are not repeated keys; pointer identity is the
+            // cheapest and most reliable discriminator).
+            std::shared_ptr<http_resource> shim_ptr(shim);
+
+            auto exact_it = impl_->exact_routes_.find(key);
+            if (exact_it != impl_->exact_routes_.end()) {
+                upsert(exact_it->second);
+            } else {
+                for (auto& rr : impl_->regex_routes_) {
+                    auto* sp = std::get_if<std::shared_ptr<http_resource>>(
+                        &rr.entry.handler);
+                    if (sp && *sp == shim_ptr) {
+                        upsert(rr.entry);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
     impl_->invalidate_route_cache();
 }
 
@@ -830,6 +1008,32 @@ void webserver::unregister_impl_(const string& resource, bool family) {
     if (!family) {
         impl_->registered_resources_str.erase(he.get_url_complete());
     }
+
+    // TASK-027: mirror the erasure into the v2 3-tier table. Lock order:
+    // we already hold registered_resources_lock (v1 table); take
+    // route_table_mutex_ next, then route_cache_mutex_ via the
+    // route_cache::clear() helper. The discipline (table BEFORE cache)
+    // is consistent with register_impl_ and the documented invariant.
+    {
+        std::unique_lock table_lock(impl_->route_table_mutex_);
+        const std::string& key = he.get_url_complete();
+        if (family) {
+            impl_->param_and_prefix_routes_.remove(key, /*is_prefix=*/true);
+        } else if (!he.get_url_pars().empty()) {
+            impl_->param_and_prefix_routes_.remove(key, /*is_prefix=*/false);
+        } else {
+            // Erase from exact tier; also sweep regex tier (url_complete key).
+            impl_->exact_routes_.erase(key);
+            impl_->regex_routes_.erase(
+                std::remove_if(impl_->regex_routes_.begin(),
+                               impl_->regex_routes_.end(),
+                               [&key](const detail::webserver_impl::regex_route& rr) {
+                                   return rr.url_complete == key;
+                               }),
+                impl_->regex_routes_.end());
+        }
+    }
+    impl_->route_cache_v2.clear();
 }
 
 void webserver::unregister_path(const string& path) {
@@ -862,6 +1066,26 @@ void webserver::unregister_resource(const string& resource) {
     impl_->registered_resources_regex.erase(he_prefix);
     // The string-keyed fast-path map only holds exact (non-family) entries.
     impl_->registered_resources_str.erase(he_exact.get_url_complete());
+
+    // TASK-027: mirror into the v2 3-tier table. Erase under both
+    // classifications so a prior register_path AND register_prefix on
+    // the same path are both cleared atomically.
+    {
+        std::unique_lock table_lock(impl_->route_table_mutex_);
+        const std::string& key = he_exact.get_url_complete();
+        impl_->exact_routes_.erase(key);
+        impl_->param_and_prefix_routes_.remove(key, /*is_prefix=*/false);
+        impl_->param_and_prefix_routes_.remove(key, /*is_prefix=*/true);
+        // Also sweep the regex tier by url_complete.
+        impl_->regex_routes_.erase(
+            std::remove_if(impl_->regex_routes_.begin(),
+                           impl_->regex_routes_.end(),
+                           [&key](const detail::webserver_impl::regex_route& rr) {
+                               return rr.url_complete == key;
+                           }),
+            impl_->regex_routes_.end());
+    }
+    impl_->route_cache_v2.clear();
 }
 
 void webserver::ban_ip(const string& ip) {
@@ -1408,9 +1632,94 @@ std::shared_ptr<http_response> webserver_impl::internal_error_page(detail::modde
 }
 
 void webserver_impl::invalidate_route_cache() {
-    std::lock_guard<std::mutex> lock(route_cache_mutex);
-    route_cache_list.clear();
-    route_cache_map.clear();
+    // Clear both the v1 and v2 caches. v1's cache is keyed on
+    // standardized_url only; v2's is keyed on (method, path). A
+    // registration may invalidate both, so clear both atomically.
+    {
+        std::lock_guard<std::mutex> lock(route_cache_mutex);
+        route_cache_list.clear();
+        route_cache_map.clear();
+    }
+    route_cache_v2.clear();
+}
+
+// TASK-027: 3-tier route lookup. Pipeline:
+//   1. cache lookup (cache mutex only) — return on hit, promoting LRU.
+//   2. on miss, take a shared_lock on route_table_mutex_:
+//      a. exact_routes_ (hash, O(1))
+//      b. param_and_prefix_routes_ (segment-trie)
+//      c. regex_routes_ (linear scan)
+//   3. on hit at any tier, drop the table lock and install into the
+//      cache (lock acquisition order: table BEFORE cache; we never hold
+//      both simultaneously — the table lock is released before the cache
+//      lock is taken).
+//
+// The method-set check (does the entry serve `method`?) lives at the
+// dispatch site, NOT here, because the existing 405 + Allow: header
+// path needs to see the entry even when no method bit matches.
+webserver_impl::lookup_result
+webserver_impl::lookup_v2(http_method method, const std::string& path) {
+    lookup_result result;
+
+    // Step 1: cache.
+    cache_key key{method, path};
+    cache_value cached;
+    if (route_cache_v2.find(key, cached)) {
+        result.found = true;
+        result.tier = tier_hit::cache;
+        result.entry = std::move(cached.entry);
+        result.captured_params = std::move(cached.captured_params);
+        return result;
+    }
+
+    // Step 2: walk the tiers under a shared lock.
+    {
+        std::shared_lock table_lock(route_table_mutex_);
+
+        // 2a. Exact tier — single hash probe.
+        auto exact_it = exact_routes_.find(path);
+        if (exact_it != exact_routes_.end()) {
+            result.found = true;
+            result.tier = tier_hit::exact;
+            result.entry = exact_it->second;
+            // exact tier carries no parameters by definition.
+        }
+
+        // 2b. Radix tier — segment-trie walk.
+        if (!result.found) {
+            radix_match<route_entry> rm;
+            if (param_and_prefix_routes_.find(path, rm) && rm.entry) {
+                result.found = true;
+                result.tier = tier_hit::radix;
+                result.entry = *rm.entry;
+                result.captured_params = std::move(rm.captures);
+            }
+        }
+
+        // 2c. Regex tier — linear scan over pre-compiled std::regex objects.
+        // Patterns were compiled once at registration time (in register_impl_
+        // and on_methods_), so no compilation cost is paid per lookup.
+        if (!result.found) {
+            for (const auto& rr : regex_routes_) {
+                if (std::regex_match(path, rr.compiled_re)) {
+                    result.found = true;
+                    result.tier = tier_hit::regex;
+                    result.entry = rr.entry;
+                    break;
+                }
+            }
+        }
+    }  // table_lock released.
+
+    // Step 3: install into cache (cache mutex only).
+    if (result.found) {
+        cache_value v;
+        v.entry = result.entry;
+        v.captured_params = result.captured_params;
+        route_cache_v2.insert(key, std::move(v));
+    }
+
+    return result;
 }
 
 }  // namespace detail

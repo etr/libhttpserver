@@ -512,6 +512,45 @@ LT_BEGIN_AUTO_TEST(webserver_on_methods_suite, on_head_dispatches_head)
     ws.stop();
 LT_END_AUTO_TEST(on_head_dispatches_head)
 
+// Compose two on_* calls on a true regex-tier path (regex metacharacters,
+// no {name} params). The second call (on_post, fresh==false) must update
+// the existing regex-tier entry's methods bitmask without recompiling the
+// regex or double-inserting, and both methods must be served.
+//
+// This test guards the refactored classify_route_tier helper and the
+// fresh-gated update path (finding code-simplifier-iter2-1, -2).
+LT_BEGIN_AUTO_TEST(webserver_on_methods_suite,
+                   on_get_and_on_post_compose_on_true_regex_path)
+    webserver ws = create_webserver(PORT + 18);
+    // /api/v[0-9]+ contains regex metacharacters but no {name} params.
+    // With regex_checking=true (default) this is a "true regex" path:
+    // the compiled pattern matches /api/v1 but not the literal string
+    // /api/v[0-9]+ itself, so the route lands in the regex tier.
+    ws.on_get("/api/v[0-9]+", [](const http_request&) {
+        return http_response::string("get");
+    });
+    // Second registration on the same path -- this is the fresh==false
+    // update path in on_methods_ that previously recompiled std::regex.
+    ws.on_post("/api/v[0-9]+", [](const http_request&) {
+        return http_response::string("post");
+    });
+    ws.start(false);
+
+    fetch_result get_result = do_request("localhost:8208/api/v1", "GET");
+    LT_CHECK_EQ(get_result.response_code, 200);
+    LT_CHECK_EQ(get_result.body, std::string("get"));
+
+    fetch_result post_result = do_request("localhost:8208/api/v2", "POST", "");
+    LT_CHECK_EQ(post_result.response_code, 200);
+    LT_CHECK_EQ(post_result.body, std::string("post"));
+
+    // DELETE is not registered; must 405.
+    fetch_result del_result = do_request("localhost:8208/api/v3", "DELETE");
+    LT_CHECK_EQ(del_result.response_code, 405);
+
+    ws.stop();
+LT_END_AUTO_TEST(on_get_and_on_post_compose_on_true_regex_path)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

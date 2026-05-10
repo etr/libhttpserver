@@ -105,6 +105,14 @@ struct method_set {
         return *this;
     }
 
+    // TASK-027: convenience predicate for the route-table writer paths
+    // (on_methods_, route(method_set,...)). True iff no method bits are
+    // set. Constexpr noexcept so it works in the same constant-context
+    // gates as the rest of the method_set surface.
+    constexpr bool empty() const noexcept {
+        return bits == 0u;
+    }
+
     friend constexpr bool operator==(method_set, method_set) noexcept = default;
 };
 
