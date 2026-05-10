@@ -26,7 +26,7 @@ LDADD += -lcurl
 
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/ -DHTTPSERVER_COMPILATION
 METASOURCES = AUTO
-check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_const_getters http_request_tls_accessors webserver_register_smartptr
+check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_const_getters http_request_tls_accessors webserver_register_smartptr webserver_register_path_prefix
 
 MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
 
@@ -155,6 +155,18 @@ http_request_tls_accessors_LDADD =
 # Default LDADD (libhttpserver + curl) is sufficient; no microhttpd
 # direct link needed.
 webserver_register_smartptr_SOURCES = unit/webserver_register_smartptr_test.cpp
+
+# webserver_register_path_prefix: TASK-024. Compile-time signature
+# assertions that register_path / register_prefix exist with both
+# unique_ptr and shared_ptr overloads, that unregister_path /
+# unregister_prefix exist, and that the bool-family register_resource
+# overload has been removed (negative SFINAE pin for acceptance criterion
+# #1). Runtime tests: register_prefix matches a longer URL; register_path
+# does not; parameterized exact paths bind their args; unregister_path /
+# unregister_prefix / the umbrella unregister_resource alias all 404 the
+# route after removal; the [[deprecated]] register_resource forwarder
+# still serves and behaves like register_path.
+webserver_register_path_prefix_SOURCES = unit/webserver_register_path_prefix_test.cpp
 
 noinst_HEADERS = littletest.hpp
 AM_CXXFLAGS += -Wall -fPIC -Wno-overloaded-virtual
