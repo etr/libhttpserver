@@ -8,11 +8,11 @@
 Collapse synonyms to a single canonical verb per concept, per PRD §3.7.
 
 **Action Items:**
-- [ ] Rename `webserver::sweet_kill` → `webserver::stop_and_wait`. Remove the old name.
-- [ ] Add `webserver::block_ip(std::string_view ip)` and `webserver::unblock_ip(std::string_view ip)`.
-- [ ] Remove `ban_ip`, `unban_ip`, `allow_ip`, `disallow_ip` from the public API. The internal ban list remains; it's just exposed under one name pair.
-- [ ] Verify no `// NOLINT(runtime/explicit)` survives on related constructors (covered in TASK-030).
-- [ ] Verify `shoutCAST` is preserved as-is (only camelCase exception, per PRD §3.7).
+- [x] Rename `webserver::sweet_kill` → `webserver::stop_and_wait`. Remove the old name.
+- [x] Add `webserver::block_ip(std::string_view ip)` and `webserver::unblock_ip(std::string_view ip)`.
+- [x] Remove `ban_ip`, `unban_ip`, `allow_ip`, `disallow_ip` from the public API. The internal ban list remains; it's just exposed under one name pair.
+- [x] Verify no `// NOLINT(runtime/explicit)` survives on related constructors (covered in TASK-030).
+- [x] Verify `shoutCAST` is preserved as-is (only camelCase exception, per PRD §3.7).
 
 **Dependencies:**
 - Blocked by: TASK-014
@@ -29,4 +29,4 @@ Collapse synonyms to a single canonical verb per concept, per PRD §3.7.
 **Related Requirements:** PRD-NAM-REQ-001, PRD-NAM-REQ-002, PRD-NAM-REQ-005
 **Related Decisions:** §3.7, OQ-004, OQ-005
 
-**Status:** Not Started
+**Status:** Done
