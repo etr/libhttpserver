@@ -134,6 +134,12 @@ int main() {
     ++leaks;
 #endif
 
+    // `leaks` is incremented from inside #ifdef blocks whose macros (MHD_VERSION,
+    // _PTHREAD_H/_PTHREAD_H_, GNUTLS_GNUTLS_H, _SYS_SOCKET_H/_H_, _SYS_UIO_H/_H_)
+    // are platform/STL/config dependent. cppcheck statically assumes they are
+    // undefined and reports the comparison as always-false; the conditional is
+    // load-bearing for any platform where a forbidden header does leak.
+    // cppcheck-suppress knownConditionTrueFalse
     if (leaks > 0) {
         std::fprintf(stderr,
                      "header-hygiene FAIL: %d forbidden header(s) leaked through <httpserver.hpp>\n",

@@ -82,6 +82,10 @@ struct cache_key_hash {
 // replay parameter binding without re-walking the radix tree.
 struct cache_value {
     route_entry entry;
+    // Read in src/webserver.cpp at the cache-hit replay site
+    // (`result.captured_params = std::move(cached.captured_params)`); cppcheck
+    // analyses each TU in isolation and does not see the cross-TU read.
+    // cppcheck-suppress unusedStructMember
     std::vector<std::pair<std::string, std::string>> captured_params;
 };
 
