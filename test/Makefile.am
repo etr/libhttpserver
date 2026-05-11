@@ -26,7 +26,7 @@ LDADD += -lcurl
 
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/ -DHTTPSERVER_COMPILATION
 METASOURCES = AUTO
-check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver create_webserver_explicit new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_const_getters http_request_tls_accessors webserver_register_smartptr webserver_register_path_prefix webserver_on_methods webserver_route route_table lookup_pipeline route_table_concurrency routing_regression
+check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver create_webserver_explicit new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_const_getters http_request_tls_accessors webserver_register_smartptr webserver_register_path_prefix webserver_on_methods webserver_route route_table lookup_pipeline route_table_concurrency routing_regression threadsafety_stress
 
 MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
 
@@ -232,6 +232,20 @@ lookup_pipeline_LDADD = $(LDADD) -lmicrohttpd
 # microhttpd-typed members.
 route_table_concurrency_SOURCES = integ/route_table_concurrency.cpp
 route_table_concurrency_LDADD = $(LDADD) -lmicrohttpd
+
+# threadsafety_stress: TASK-032. DR-008 multi-thread contract gate.
+# Spawns 16 curl clients hitting an on_get handler that re-enters the
+# public webserver surface (register_path / unregister_path / block_ip /
+# unblock_ip) for HTTPSERVER_STRESS_SECONDS (default 60). The TSan-clean
+# rerun is the headline acceptance; the CI matrix `build-type: tsan`
+# entry in verify-build.yml picks this binary up via `make check`
+# without further wiring. A second sub-test reproduces the documented
+# stop()-from-handler deadlock; it is skipped by default and runs only
+# when HTTPSERVER_RUN_STOP_FROM_HANDLER=1.
+# Default LDADD (libhttpserver + curl) is sufficient — this test
+# touches only public webserver APIs and does not need a direct
+# microhttpd link.
+threadsafety_stress_SOURCES = integ/threadsafety_stress.cpp
 
 # routing_regression: TASK-028. v1 routing-test corpus regression gate.
 # Drives the public webserver registration surface (register_path /

@@ -109,7 +109,15 @@ class webserver {
      // create_webserver. Callers must direct-init: webserver ws{cw};
      explicit webserver(const create_webserver& params);
      /**
-      * Destructor of the class
+      * Destructor.
+      *
+      * Calls stop() unconditionally, which joins libmicrohttpd's
+      * worker threads. For the same reason as stop(), destroying a
+      * webserver from inside a handler thread deadlocks (or, on some
+      * libmicrohttpd versions, aborts with "Failed to join a thread.").
+      * Destroy the webserver from the thread that constructed it.
+      *
+      * See specs/architecture/11-decisions/DR-008.md and §5.1.
      **/
      ~webserver();
      // PIMPL-owned: copy/move would slice the backing impl object.
@@ -125,8 +133,22 @@ class webserver {
      **/
      bool start(bool blocking = false);
      /**
-      * Method used to stop the webserver.
-      * @return true if the webserver is stopped.
+      * Stop the webserver.
+      *
+      * Joins libmicrohttpd's worker threads before returning. Safe to
+      * call from any thread *except* a handler thread: stop() blocks
+      * until every worker (including the calling one) drains, so a
+      * call from inside a handler self-joins and deadlocks (or, on
+      * some libmicrohttpd versions, aborts with "Failed to join a
+      * thread."). This is the documented DR-008 contract — see
+      * specs/architecture/11-decisions/DR-008.md and §5.1.
+      *
+      * For the same reason, ~webserver() (which calls stop())
+      * deadlocks if it runs on a handler thread; destroy the
+      * webserver from the thread that constructed it.
+      *
+      * @return true if the daemon was running and is now stopped;
+      *         false if it was already stopped.
      **/
      bool stop();
      /**
