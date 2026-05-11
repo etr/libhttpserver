@@ -53,6 +53,7 @@
 #include <set>
 #include <shared_mutex>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -305,8 +306,43 @@ class webserver_impl {
     // owning webserver (via `parent`).
     std::shared_ptr<::httpserver::http_response> not_found_page(modded_request* mr) const;
     std::shared_ptr<::httpserver::http_response> method_not_allowed_page(modded_request* mr) const;
-    std::shared_ptr<::httpserver::http_response> internal_error_page(modded_request* mr,
-                                                       bool force_our = false) const;
+    // TASK-031: error-propagation entry point. @p msg carries the
+    // originating exception's text (e.what() for std::exception, the
+    // sentinel "unknown exception" for non-std throws, or a fixed
+    // internal-diagnostic string for the few non-handler-throw call
+    // sites that synthesise a 500 with no exception in flight).
+    //
+    // Behaviour matches DR-009:
+    //   - parent->internal_error_handler set, !force_our:
+    //       invoke it with (*mr->dhr, msg) and return the result.
+    //   - force_our=true: return a hardcoded 500 with an EMPTY body
+    //       (the "double-fault" fallback used when the user handler
+    //       itself threw).
+    //   - otherwise (no handler set, !force_our): return a default
+    //       500 whose body surfaces @p msg, so the unset-handler
+    //       default is informative.
+    //
+    // Throws nothing on its own; if parent->internal_error_handler
+    // throws, that exception propagates to the caller. Callers in the
+    // handler-throw path use run_internal_error_handler_safely() to
+    // contain that double-fault.
+    std::shared_ptr<::httpserver::http_response> internal_error_page(
+        modded_request* mr,
+        std::string_view msg,
+        bool force_our = false) const;
+
+    // TASK-031: log @p msg via parent->log_error if a logger is configured.
+    // Swallows any exception thrown by the logger -- dispatch must never
+    // re-enter the catch from inside its own catch.
+    void log_dispatch_error(std::string_view msg) const;
+
+    // TASK-031: invoke the user-supplied internal_error_handler safely.
+    // On success, returns the response it produced. If the user handler
+    // itself throws, logs generically via log_dispatch_error and returns
+    // a hardcoded empty-body 500.
+    std::shared_ptr<::httpserver::http_response>
+        run_internal_error_handler_safely(modded_request* mr,
+                                          std::string_view msg) const;
     bool should_skip_auth(const std::string& path) const;
     void invalidate_route_cache();
 

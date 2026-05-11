@@ -30,6 +30,7 @@
 #include <functional>
 #include <limits>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -43,10 +44,19 @@ namespace httpserver {
 class webserver;
 class http_request;
 
-// TASK-030 / PRD-NAM-REQ-003: the three error-page setters take a function-
-// shaped handler that returns http_response by value, matching the on_*
-// family (detail::lambda_handler) introduced in TASK-025.
+// TASK-030 / PRD-NAM-REQ-003: the not_found_handler and method_not_allowed_handler
+// setters take a function-shaped handler that returns http_response by value,
+// matching the on_* family (detail::lambda_handler) introduced in TASK-025.
 typedef std::function<http_response(const http_request&)> error_handler;
+
+// TASK-031 / DR-009 §5.2: internal_error_handler receives a second argument
+// carrying the originating exception's message — `e.what()` for
+// std::exception, the literal "unknown exception" for non-std throws. The
+// message is a non-owning view; callers MUST NOT capture it past the
+// handler's return (it points into either a caught std::exception's
+// internal storage or a fixed string literal owned by libhttpserver).
+typedef std::function<http_response(const http_request&, std::string_view message)> internal_error_handler_t;
+
 typedef std::function<bool(const std::string&)> validator_ptr;
 typedef std::function<void(const std::string&)> log_access_ptr;
 typedef std::function<void(const std::string&)> log_error_ptr;
@@ -380,7 +390,34 @@ class create_webserver {
          return *this;
      }
 
-     create_webserver& internal_error_handler(error_handler handler) {
+     /**
+      * Set the handler invoked when a registered request handler throws
+      * an uncaught exception.
+      *
+      * Per DR-009 / §5.2 (PRD-FLG-REQ-002), the dispatch path wraps every
+      * handler call in a two-branch try/catch and funnels here:
+      *
+      *  - `std::exception`        -> @p handler is invoked with
+      *                               `e.what()` as the message argument.
+      *  - non-std::exception      -> @p handler is invoked with the
+      *                               literal string `"unknown exception"`.
+      *  - @p handler unset        -> a default 500 with the message in
+      *                               the response body is sent and the
+      *                               event is logged via log_error.
+      *  - @p handler itself throws -> a hardcoded 500 with an EMPTY body
+      *                               is sent and the event is logged via
+      *                               log_error.
+      *
+      * `feature_unavailable` is a `std::runtime_error` subclass: it lands
+      * here with the default 500 status, not a special 503.
+      *
+      * Note: @p handler may be invoked concurrently from multiple MHD
+      * worker threads. It MUST be thread-safe.
+      *
+      * @param handler invoked with (request, message); returns the
+      *                http_response to send (status / headers / body).
+     **/
+     create_webserver& internal_error_handler(internal_error_handler_t handler) {
          _internal_error_handler = std::move(handler);
          return *this;
      }
@@ -528,7 +565,7 @@ class create_webserver {
      bool _tcp_nodelay = false;
      error_handler _not_found_handler = nullptr;
      error_handler _method_not_allowed_handler = nullptr;
-     error_handler _internal_error_handler = nullptr;
+     internal_error_handler_t _internal_error_handler = nullptr;
      file_cleanup_callback_ptr _file_cleanup_callback = nullptr;
      auth_handler_ptr _auth_handler = nullptr;
      std::vector<std::string> _auth_skip_paths;

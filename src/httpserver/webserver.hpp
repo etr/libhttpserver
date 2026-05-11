@@ -76,6 +76,32 @@ namespace httpserver {
 
 /**
  * Class representing the webserver. Main class of the apis.
+ *
+ * ### Handler error-propagation contract (DR-009 / §5.2 / PRD-FLG-REQ-002)
+ *
+ * Every registered request handler is invoked from the dispatch path under
+ * a two-branch try/catch. The contract:
+ *
+ *   1. The handler call is wrapped in
+ *      `try { ... } catch (const std::exception& e) { ... } catch (...) { ... }`.
+ *   2. On `std::exception`: the message is logged via the configured
+ *      `log_error` callback, then `internal_error_handler` is invoked with
+ *      `e.what()`. The response it returns is sent on the wire (default
+ *      500 with the message in the body when no handler is configured).
+ *   3. On non-`std::exception` (e.g. `throw 42`): same path with the
+ *      message replaced by the literal string `"unknown exception"`.
+ *   4. If `internal_error_handler` itself throws while servicing 2 or 3,
+ *      the failure is logged generically and a hardcoded 500 with an
+ *      EMPTY body is sent. No exception ever escapes into libmicrohttpd.
+ *   5. `feature_unavailable` (a `std::runtime_error` subclass) is NOT
+ *      mapped to a special status: it lands as a generic 500 like any
+ *      other `std::exception`.
+ *   6. The `log_error` callback may be invoked concurrently from multiple
+ *      MHD worker threads; user implementations MUST be thread-safe.
+ *
+ * The contract is the single source of truth for dispatch-time exception
+ * handling; resource implementations are encouraged to throw rather than
+ * synthesise an http_response with a 500 status.
 **/
 class webserver {
  public:
@@ -468,7 +494,7 @@ class webserver {
      const bool tcp_nodelay;
      const error_handler not_found_handler;
      const error_handler method_not_allowed_handler;
-     const error_handler internal_error_handler;
+     const internal_error_handler_t internal_error_handler;
      const file_cleanup_callback_ptr file_cleanup_callback;
      const auth_handler_ptr auth_handler;
      const std::vector<std::string> auth_skip_paths;

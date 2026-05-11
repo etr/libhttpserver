@@ -25,9 +25,11 @@
 #include <iostream>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <numeric>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -1405,7 +1407,12 @@ LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource_missing)
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
-    LT_CHECK_EQ(s, "Internal Error");
+    // TASK-031: default internal_error_page now surfaces the originating
+    // message in the body. file_body::materialize() returns nullptr for a
+    // missing file, which dispatch routes through internal_error_page
+    // with a fixed diagnostic message.
+    LT_CHECK_NEQ(s.find("materialize_response returned null"),
+                 std::string::npos);
 
     int64_t http_code = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
@@ -1429,7 +1436,10 @@ LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource_dir)
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
-    LT_CHECK_EQ(s, "Internal Error");
+    // TASK-031: see file_serving_resource_missing — dispatch reports the
+    // null-materialize diagnostic in the body.
+    LT_CHECK_NEQ(s.find("materialize_response returned null"),
+                 std::string::npos);
 
     int64_t http_code = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
@@ -1453,7 +1463,9 @@ LT_BEGIN_AUTO_TEST(basic_suite, exception_forces_500)
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
-    LT_CHECK_EQ(s, "Internal Error");
+    // TASK-031 / DR-009: std::domain_error's what() ("invalid") is forwarded
+    // to the default internal_error_page body.
+    LT_CHECK_NEQ(s.find("invalid"), std::string::npos);
 
     int64_t http_code = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
@@ -1476,7 +1488,9 @@ LT_BEGIN_AUTO_TEST(basic_suite, untyped_error_forces_500)
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
-    LT_CHECK_EQ(s, "Internal Error");
+    // TASK-031 / DR-009: non-std::exception throws (here: a char* literal)
+    // produce the sentinel message "unknown exception" in the default body.
+    LT_CHECK_NEQ(s.find("unknown exception"), std::string::npos);
 
     int64_t http_code = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
@@ -2136,7 +2150,8 @@ LT_END_AUTO_TEST(response_throws_non_std_exception)
 
 // Custom internal error handler that also throws an exception
 // This tests the outer catch block (lines 826-829 in webserver.cpp)
-http_response throwing_internal_error_handler(const http_request&) {
+// TASK-031: signature widened to (request, message) per DR-009 §5.2.
+http_response throwing_internal_error_handler(const http_request&, std::string_view) {
     throw std::runtime_error("Internal error handler also throws");
 }
 
@@ -3153,7 +3168,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, all_methods_fallthrough_to_render)
 LT_END_AUTO_TEST(all_methods_fallthrough_to_render)
 
 // Test internal_error_handler custom handler
-http_response custom_internal_error_handler(const http_request&) {
+// TASK-031: signature widened to (request, message) per DR-009 §5.2.
+http_response custom_internal_error_handler(const http_request&, std::string_view) {
     return http_response::string("Custom Internal Error").with_status(500);
 }
 
@@ -3329,6 +3345,336 @@ LT_BEGIN_AUTO_TEST(basic_suite, client_cert_methods_non_tls)
     ws.stop();
 LT_END_AUTO_TEST(client_cert_methods_non_tls)
 #endif  // HAVE_GNUTLS
+
+// ============================================================================
+// TASK-031: Handler error-propagation contract (DR-009 / §5.2 / PRD-FLG-REQ-002).
+//
+// The 6-point contract:
+//   1. Wrap handler invocation in a two-branch catch.
+//   2. On std::exception: log via error_logger, invoke internal_error_handler
+//      with e.what(), send the resulting response (default 500 if unset).
+//   3. On non-std::exception: same path, message "unknown exception".
+//   4. If internal_error_handler itself throws: log generically, send
+//      hardcoded 500 with empty body.
+//   5. feature_unavailable lands as a generic 500 (no special status mapping).
+//   6. Documented in webserver.hpp Doxygen.
+// ============================================================================
+
+namespace task031 {
+
+// Thread-safe capture struct: handlers / loggers run on MHD worker threads.
+struct captured_call {
+    std::mutex m;
+    std::string last_msg;
+    std::atomic<int> count{0};
+
+    std::string read_last_msg() {
+        std::lock_guard<std::mutex> g(m);
+        return last_msg;
+    }
+};
+
+class boom_resource : public http_resource {
+ public:
+     shared_ptr<http_response> render_get(const http_request&) {
+         throw std::runtime_error("boom");
+     }
+};
+
+class throw_int_resource : public http_resource {
+ public:
+     shared_ptr<http_response> render_get(const http_request&) {
+         throw 42;
+     }
+};
+
+class feature_unavailable_resource : public http_resource {
+ public:
+     shared_ptr<http_response> render_get(const http_request&) {
+         throw httpserver::feature_unavailable{"widget", "HAVE_WIDGET"};
+     }
+};
+
+}  // namespace task031
+
+// AC1.a: std::runtime_error("boom") yields a 500 whose default body contains
+// the message "boom" (no custom internal_error_handler wired).
+LT_BEGIN_AUTO_TEST(basic_suite, dr009_runtime_error_message_surfaces_in_default_body)
+    webserver ws2{create_webserver(PORT + 80)};
+    task031::boom_resource resource;
+    ws2.register_path("boom", as_shared(resource));
+    ws2.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    std::string url = "http://localhost:" + std::to_string(PORT + 80) + "/boom";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    CURLcode res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+
+    int64_t http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    LT_ASSERT_EQ(http_code, 500);
+    LT_CHECK_NEQ(s.find("boom"), std::string::npos);
+
+    curl_easy_cleanup(curl);
+    ws2.stop();
+LT_END_AUTO_TEST(dr009_runtime_error_message_surfaces_in_default_body)
+
+// AC1.b: std::runtime_error("boom") -> the captured message reaches the
+// user-wired internal_error_handler unchanged.
+LT_BEGIN_AUTO_TEST(basic_suite, dr009_runtime_error_message_passed_to_handler)
+    task031::captured_call cap;
+    auto handler = [&cap](const http_request&, std::string_view msg) {
+        {
+            std::lock_guard<std::mutex> g(cap.m);
+            cap.last_msg.assign(msg);
+        }
+        cap.count++;
+        return http_response::string("CAPTURED:" + std::string(msg))
+            .with_status(500);
+    };
+
+    webserver ws2{create_webserver(PORT + 81)
+        .internal_error_handler(handler)};
+    task031::boom_resource resource;
+    ws2.register_path("boom", as_shared(resource));
+    ws2.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    std::string url = "http://localhost:" + std::to_string(PORT + 81) + "/boom";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    CURLcode res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+
+    int64_t http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    LT_ASSERT_EQ(http_code, 500);
+    LT_CHECK_EQ(cap.read_last_msg(), "boom");
+    LT_CHECK_EQ(s, "CAPTURED:boom");
+
+    curl_easy_cleanup(curl);
+    ws2.stop();
+LT_END_AUTO_TEST(dr009_runtime_error_message_passed_to_handler)
+
+// AC1.c: std::runtime_error("boom") -> error_logger receives a record that
+// contains "boom" somewhere in its text.
+LT_BEGIN_AUTO_TEST(basic_suite, dr009_runtime_error_logged_via_error_logger)
+    task031::captured_call cap;
+    auto logger = [&cap](const std::string& msg) {
+        {
+            std::lock_guard<std::mutex> g(cap.m);
+            cap.last_msg.append(msg).append("\n");
+        }
+        cap.count++;
+    };
+
+    webserver ws2{create_webserver(PORT + 82).log_error(logger)};
+    task031::boom_resource resource;
+    ws2.register_path("boom", as_shared(resource));
+    ws2.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    std::string url = "http://localhost:" + std::to_string(PORT + 82) + "/boom";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    CURLcode res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+
+    int64_t http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    LT_ASSERT_EQ(http_code, 500);
+    std::string log_buf = cap.read_last_msg();
+    LT_CHECK_NEQ(log_buf.find("boom"), std::string::npos);
+
+    curl_easy_cleanup(curl);
+    ws2.stop();
+LT_END_AUTO_TEST(dr009_runtime_error_logged_via_error_logger)
+
+// AC2.a: throw 42 (non-std::exception) -> default body contains the
+// documented "unknown exception" sentinel string.
+LT_BEGIN_AUTO_TEST(basic_suite, dr009_non_std_exception_yields_unknown_exception_in_default_body)
+    webserver ws2{create_webserver(PORT + 83)};
+    task031::throw_int_resource resource;
+    ws2.register_path("non_std", as_shared(resource));
+    ws2.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    std::string url = "http://localhost:" + std::to_string(PORT + 83) + "/non_std";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    CURLcode res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+
+    int64_t http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    LT_ASSERT_EQ(http_code, 500);
+    LT_CHECK_NEQ(s.find("unknown exception"), std::string::npos);
+
+    curl_easy_cleanup(curl);
+    ws2.stop();
+LT_END_AUTO_TEST(dr009_non_std_exception_yields_unknown_exception_in_default_body)
+
+// AC2.b: throw 42 -> handler receives "unknown exception" as its message.
+LT_BEGIN_AUTO_TEST(basic_suite, dr009_non_std_exception_passes_unknown_exception_to_handler)
+    task031::captured_call cap;
+    auto handler = [&cap](const http_request&, std::string_view msg) {
+        {
+            std::lock_guard<std::mutex> g(cap.m);
+            cap.last_msg.assign(msg);
+        }
+        cap.count++;
+        return http_response::string("CAPTURED:" + std::string(msg))
+            .with_status(500);
+    };
+
+    webserver ws2{create_webserver(PORT + 84)
+        .internal_error_handler(handler)};
+    task031::throw_int_resource resource;
+    ws2.register_path("non_std", as_shared(resource));
+    ws2.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    std::string url = "http://localhost:" + std::to_string(PORT + 84) + "/non_std";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    CURLcode res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+
+    int64_t http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    LT_ASSERT_EQ(http_code, 500);
+    LT_CHECK_EQ(cap.read_last_msg(), "unknown exception");
+
+    curl_easy_cleanup(curl);
+    ws2.stop();
+LT_END_AUTO_TEST(dr009_non_std_exception_passes_unknown_exception_to_handler)
+
+// AC3.a: internal_error_handler itself throws -> empty-body 500.
+LT_BEGIN_AUTO_TEST(basic_suite, dr009_throwing_handler_yields_empty_body_500)
+    auto handler = [](const http_request&, std::string_view) -> http_response {
+        throw std::runtime_error("handler boom");
+    };
+
+    webserver ws2{create_webserver(PORT + 85)
+        .internal_error_handler(handler)};
+    task031::boom_resource resource;
+    ws2.register_path("boom", as_shared(resource));
+    ws2.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    std::string url = "http://localhost:" + std::to_string(PORT + 85) + "/boom";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    CURLcode res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+
+    int64_t http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    LT_ASSERT_EQ(http_code, 500);
+    LT_CHECK_EQ(s, "");
+
+    curl_easy_cleanup(curl);
+    ws2.stop();
+LT_END_AUTO_TEST(dr009_throwing_handler_yields_empty_body_500)
+
+// AC3.b: when internal_error_handler throws, error_logger sees a generic
+// "internal_error_handler threw" record so operators can diagnose the
+// double-fault.
+LT_BEGIN_AUTO_TEST(basic_suite, dr009_throwing_handler_logs_generically)
+    task031::captured_call cap;
+    auto logger = [&cap](const std::string& msg) {
+        {
+            std::lock_guard<std::mutex> g(cap.m);
+            cap.last_msg.append(msg).append("\n");
+        }
+        cap.count++;
+    };
+    auto handler = [](const http_request&, std::string_view) -> http_response {
+        throw std::runtime_error("handler boom");
+    };
+
+    webserver ws2{create_webserver(PORT + 86)
+        .internal_error_handler(handler)
+        .log_error(logger)};
+    task031::boom_resource resource;
+    ws2.register_path("boom", as_shared(resource));
+    ws2.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    std::string url = "http://localhost:" + std::to_string(PORT + 86) + "/boom";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    CURLcode res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+
+    std::string log_buf = cap.read_last_msg();
+    LT_CHECK_NEQ(log_buf.find("internal_error_handler threw"),
+                 std::string::npos);
+
+    curl_easy_cleanup(curl);
+    ws2.stop();
+LT_END_AUTO_TEST(dr009_throwing_handler_logs_generically)
+
+// AC4: feature_unavailable is a std::runtime_error; it lands as a generic
+// 500 with NO special status mapping. The default body surfaces its
+// what() text (which embeds the feature name and build flag).
+LT_BEGIN_AUTO_TEST(basic_suite, dr009_feature_unavailable_lands_as_generic_500)
+    webserver ws2{create_webserver(PORT + 87)};
+    task031::feature_unavailable_resource resource;
+    ws2.register_path("widget", as_shared(resource));
+    ws2.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    string s;
+    CURL *curl = curl_easy_init();
+    std::string url = "http://localhost:" + std::to_string(PORT + 87) + "/widget";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    CURLcode res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+
+    int64_t http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    LT_ASSERT_EQ(http_code, 500);
+    // The feature_unavailable's what() string is surfaced in the body.
+    LT_CHECK_NEQ(s.find("widget"), std::string::npos);
+    LT_CHECK_NEQ(s.find("HAVE_WIDGET"), std::string::npos);
+
+    curl_easy_cleanup(curl);
+    ws2.stop();
+LT_END_AUTO_TEST(dr009_feature_unavailable_lands_as_generic_500)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

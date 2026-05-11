@@ -28,6 +28,7 @@
 //       The legacy _resource-suffixed setters are removed entirely.
 
 #include <functional>
+#include <string_view>
 #include <type_traits>
 
 #include "./httpserver.hpp"
@@ -35,6 +36,10 @@
 
 namespace ht = httpserver;
 using error_handler_fn = std::function<ht::http_response(const ht::http_request&)>;
+// TASK-031 / DR-009 §5.2: internal_error_handler now takes a second
+// argument carrying the originating exception's message.
+using internal_error_handler_fn =
+    std::function<ht::http_response(const ht::http_request&, std::string_view)>;
 
 // (1a) Implicit conversion from create_webserver to webserver is forbidden.
 static_assert(!std::is_convertible_v<ht::create_webserver, ht::webserver>,
@@ -65,6 +70,15 @@ template <typename, typename = void>
 struct has_internal_error_handler : std::false_type {};
 template <typename CW>
 struct has_internal_error_handler<CW, std::void_t<
+    decltype(std::declval<CW&>().internal_error_handler(std::declval<internal_error_handler_fn>()))>>
+    : std::true_type {};
+
+// TASK-031: pin that the OLD single-arg signature is NOT accepted -- the
+// widening to (request, message) is a hard API change.
+template <typename, typename = void>
+struct accepts_old_internal_error_handler : std::false_type {};
+template <typename CW>
+struct accepts_old_internal_error_handler<CW, std::void_t<
     decltype(std::declval<CW&>().internal_error_handler(std::declval<error_handler_fn>()))>>
     : std::true_type {};
 
@@ -73,7 +87,10 @@ static_assert(has_not_found_handler<ht::create_webserver>::value,
 static_assert(has_method_not_allowed_handler<ht::create_webserver>::value,
               "create_webserver::method_not_allowed_handler(handler_fn) must exist");
 static_assert(has_internal_error_handler<ht::create_webserver>::value,
-              "create_webserver::internal_error_handler(handler_fn) must exist");
+              "create_webserver::internal_error_handler(request, message) must exist");
+static_assert(!accepts_old_internal_error_handler<ht::create_webserver>::value,
+              "create_webserver::internal_error_handler must reject the legacy "
+              "single-arg signature per TASK-031 / DR-009");
 
 // Negative: the legacy _resource-suffixed setters must be gone.
 template <typename T> struct always_void { using type = void; };
