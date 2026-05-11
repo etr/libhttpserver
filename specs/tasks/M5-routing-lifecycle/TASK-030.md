@@ -29,4 +29,4 @@ Distinguish function-handler setters from object-resource setters by suffix, and
 **Related Requirements:** PRD-NAM-REQ-003, PRD-NAM-REQ-004
 **Related Decisions:** §3.7, §4.1
 
-**Status:** Done
+**Status:** In Progress
