@@ -9,4 +9,5 @@
 # regression gate at test/REGRESSION.md). Same rationale as specs/.
 exclude_paths:
   - 'specs/**'
+  - 'test/*.md'
   - 'test/**/*.md'
