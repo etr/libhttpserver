@@ -112,7 +112,7 @@ Nominally: **13 sequential tasks**, each S–XL. Most other tasks parallelize of
 | TASK-027 | 3-tier route table with LRU cache | M5 | Done | TASK-005, TASK-014, TASK-021, TASK-024, TASK-025, TASK-026 |
 | TASK-028 | Routing-semantics regression gate | M5 | Done | TASK-027 |
 | TASK-029 | Naming consistency — `stop_and_wait`, `block_ip`/`unblock_ip` | M5 | Done | TASK-014 |
-| TASK-030 | `_handler` suffix renames + `explicit` constructor | M5 | In Progress | TASK-014 |
+| TASK-030 | `_handler` suffix renames + `explicit` constructor | M5 | Done | TASK-014 |
 | TASK-031 | Handler error-propagation contract (DR-009) | M5 | Not Started | TASK-027, TASK-030 |
 | TASK-032 | Thread-safety contract stress test (DR-008) | M5 | Not Started | TASK-027, TASK-031 |
 | TASK-033 | `create_webserver` builder cleanup | M5 | Not Started | TASK-006, TASK-014 |
