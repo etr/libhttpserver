@@ -151,7 +151,7 @@ LT_END_SUITE(webserver_register_smartptr_suite)
 //    ws.register_resource('/foo', std::move(r)); compiles and serves."
 LT_BEGIN_AUTO_TEST(webserver_register_smartptr_suite,
                    unique_ptr_overload_compiles_and_serves)
-    webserver ws = create_webserver(PORT);
+    webserver ws{create_webserver(PORT)};
     auto r = std::make_unique<ok_resource>();
     ws.register_resource("/foo", std::move(r));
     ws.start(false);
@@ -176,7 +176,7 @@ LT_BEGIN_AUTO_TEST(webserver_register_smartptr_suite,
                    unique_ptr_dtor_runs_on_webserver_destruction)
     LT_CHECK_EQ(counted_resource::dtor_count.load(), 0);
     {
-        webserver ws = create_webserver(PORT + 1);
+        webserver ws{create_webserver(PORT + 1)};
         ws.register_resource("/x", std::make_unique<counted_resource>());
         // No start/stop needed — registration alone must transfer
         // ownership; webserver destruction must run the dtor.
@@ -191,7 +191,7 @@ LT_BEGIN_AUTO_TEST(webserver_register_smartptr_suite,
     LT_CHECK_EQ(counted_resource::dtor_count.load(), 0);
     auto sp = std::make_shared<counted_resource>();
     {
-        webserver ws = create_webserver(PORT + 2);
+        webserver ws{create_webserver(PORT + 2)};
         ws.register_resource("/x", sp);
     }
     // Webserver destroyed; caller still holds a ref.
@@ -202,7 +202,7 @@ LT_END_AUTO_TEST(shared_ptr_caller_keeps_resource_alive)
 
 LT_BEGIN_AUTO_TEST(webserver_register_smartptr_suite,
                    null_unique_ptr_throws)
-    webserver ws = create_webserver(PORT + 3);
+    webserver ws{create_webserver(PORT + 3)};
     bool threw = false;
     try {
         ws.register_resource("/x", std::unique_ptr<http_resource>{});
@@ -214,7 +214,7 @@ LT_END_AUTO_TEST(null_unique_ptr_throws)
 
 LT_BEGIN_AUTO_TEST(webserver_register_smartptr_suite,
                    null_shared_ptr_throws)
-    webserver ws = create_webserver(PORT + 4);
+    webserver ws{create_webserver(PORT + 4)};
     bool threw = false;
     try {
         ws.register_resource("/x", std::shared_ptr<http_resource>{});
@@ -229,7 +229,7 @@ LT_END_AUTO_TEST(null_shared_ptr_throws)
 // throw-on-null behavior.
 LT_BEGIN_AUTO_TEST(webserver_register_smartptr_suite,
                    duplicate_registration_throws)
-    webserver ws = create_webserver(PORT + 5);
+    webserver ws{create_webserver(PORT + 5)};
     ws.register_resource("/dup", std::make_shared<ok_resource>());
     bool threw = false;
     try {

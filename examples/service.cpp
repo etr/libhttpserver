@@ -198,7 +198,7 @@ int main(int argc, char **argv) {
     //
     // Create webserver using the configured options
     //
-    httpserver::webserver ws = cw;
+    httpserver::webserver ws{cw};
 
     //
     // Create and register service resource available at /service

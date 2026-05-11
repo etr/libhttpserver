@@ -2136,7 +2136,7 @@ LT_END_AUTO_TEST(response_throws_non_std_exception)
 
 // Custom internal error handler that also throws an exception
 // This tests the outer catch block (lines 826-829 in webserver.cpp)
-shared_ptr<http_response> throwing_internal_error_handler(const http_request&) {
+http_response throwing_internal_error_handler(const http_request&) {
     throw std::runtime_error("Internal error handler also throws");
 }
 
@@ -2144,8 +2144,8 @@ shared_ptr<http_response> throwing_internal_error_handler(const http_request&) {
 // This triggers the outer catch block which uses force_our=true
 LT_BEGIN_AUTO_TEST(basic_suite, internal_error_handler_also_throws)
     // Create a separate webserver with throwing internal error handler
-    webserver ws2 = create_webserver(PORT + 50)
-        .internal_error_resource(throwing_internal_error_handler);
+    webserver ws2{create_webserver(PORT + 50)
+        .internal_error_handler(throwing_internal_error_handler)};
     runtime_error_resource resource;  // Resource that throws in get_raw_response
     ws2.register_path("error_cascade", as_shared(resource));
     ws2.start(false);
@@ -2173,7 +2173,7 @@ LT_END_AUTO_TEST(internal_error_handler_also_throws)
 
 // Test tcp_nodelay option
 LT_BEGIN_AUTO_TEST(basic_suite, tcp_nodelay_option)
-    webserver ws2 = create_webserver(PORT + 51).tcp_nodelay();
+    webserver ws2{create_webserver(PORT + 51).tcp_nodelay()};
     ok_resource resource;
     ws2.register_path("nodelay_test", as_shared(resource));
     ws2.start(false);
@@ -2213,7 +2213,7 @@ class arg_echo_resource : public http_resource {
 };
 
 LT_BEGIN_AUTO_TEST(basic_suite, custom_unescaper)
-    webserver ws2 = create_webserver(PORT + 52).unescaper(my_custom_unescaper);
+    webserver ws2{create_webserver(PORT + 52).unescaper(my_custom_unescaper)};
     arg_echo_resource resource;
     ws2.register_path("echo", as_shared(resource));
     ws2.start(false);
@@ -2236,12 +2236,12 @@ LT_BEGIN_AUTO_TEST(basic_suite, custom_unescaper)
 LT_END_AUTO_TEST(custom_unescaper)
 
 // Custom not_found handler
-shared_ptr<http_response> my_custom_not_found(const http_request&) {
-    return std::make_shared<http_response>(http_response::string("CUSTOM_404").with_status(404));
+http_response my_custom_not_found(const http_request&) {
+    return http_response::string("CUSTOM_404").with_status(404);
 }
 
 LT_BEGIN_AUTO_TEST(basic_suite, custom_not_found_handler)
-    webserver ws2 = create_webserver(PORT + 53).not_found_resource(my_custom_not_found);
+    webserver ws2{create_webserver(PORT + 53).not_found_handler(my_custom_not_found)};
     ws2.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -2262,8 +2262,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, custom_not_found_handler)
 LT_END_AUTO_TEST(custom_not_found_handler)
 
 // Custom method_not_allowed handler
-shared_ptr<http_response> my_custom_method_not_allowed(const http_request&) {
-    return std::make_shared<http_response>(http_response::string("CUSTOM_405").with_status(405));
+http_response my_custom_method_not_allowed(const http_request&) {
+    return http_response::string("CUSTOM_405").with_status(405);
 }
 
 // Resource that only allows POST
@@ -2279,7 +2279,7 @@ class post_only_resource : public http_resource {
 };
 
 LT_BEGIN_AUTO_TEST(basic_suite, custom_method_not_allowed_handler)
-    webserver ws2 = create_webserver(PORT + 54).method_not_allowed_resource(my_custom_method_not_allowed);
+    webserver ws2{create_webserver(PORT + 54).method_not_allowed_handler(my_custom_method_not_allowed)};
     post_only_resource resource;
     ws2.register_path("postonly", as_shared(resource));
     ws2.start(false);
@@ -2318,7 +2318,7 @@ class requestor_cache_resource : public http_resource {
 };
 
 LT_BEGIN_AUTO_TEST(basic_suite, requestor_info)
-    webserver ws2 = create_webserver(PORT + 55);
+    webserver ws2{create_webserver(PORT + 55)};
     requestor_cache_resource resource;
     ws2.register_path("reqinfo", as_shared(resource));
     ws2.start(false);
@@ -2355,7 +2355,7 @@ class querystring_cache_resource : public http_resource {
 };
 
 LT_BEGIN_AUTO_TEST(basic_suite, querystring_caching)
-    webserver ws2 = create_webserver(PORT + 56);
+    webserver ws2{create_webserver(PORT + 56)};
     querystring_cache_resource resource;
     ws2.register_path("qscache", as_shared(resource));
     ws2.start(false);
@@ -2406,7 +2406,7 @@ class args_cache_resource : public http_resource {
 };
 
 LT_BEGIN_AUTO_TEST(basic_suite, args_caching)
-    webserver ws2 = create_webserver(PORT + 57);
+    webserver ws2{create_webserver(PORT + 57)};
     args_cache_resource resource;
     ws2.register_path("argscache", as_shared(resource));
     ws2.start(false);
@@ -2451,7 +2451,7 @@ class footer_test_resource : public http_resource {
 };
 
 LT_BEGIN_AUTO_TEST(basic_suite, footer_access_no_trailers)
-    webserver ws2 = create_webserver(PORT + 58);
+    webserver ws2{create_webserver(PORT + 58)};
     footer_test_resource resource;
     ws2.register_path("footers", as_shared(resource));
     ws2.start(false);
@@ -2498,7 +2498,7 @@ class response_footer_resource : public http_resource {
 };
 
 LT_BEGIN_AUTO_TEST(basic_suite, response_with_footers)
-    webserver ws2 = create_webserver(PORT + 59);
+    webserver ws2{create_webserver(PORT + 59)};
     response_footer_resource resource;
     ws2.register_path("resp_footers", as_shared(resource));
     ws2.start(false);
@@ -2774,7 +2774,7 @@ LT_END_AUTO_TEST(only_render_post)
 
 // Test unregister_path functionality
 LT_BEGIN_AUTO_TEST(basic_suite, unregister_path)
-    webserver ws2 = create_webserver(PORT + 67);
+    webserver ws2{create_webserver(PORT + 67)};
     ok_resource resource;
     ws2.register_path("test_unreg", as_shared(resource));
     ws2.start(false);
@@ -2870,8 +2870,8 @@ void test_error_logger(const std::string& msg) {
 LT_BEGIN_AUTO_TEST(basic_suite, log_access_callback)
     LogCapture::access_log_msg().clear();
 
-    webserver ws2 = create_webserver(PORT + 70)
-        .log_access(test_access_logger);
+    webserver ws2{create_webserver(PORT + 70)
+        .log_access(test_access_logger)};
     ok_resource resource;
     ws2.register_path("logtest", as_shared(resource));
     ws2.start(false);
@@ -2899,8 +2899,8 @@ LT_END_AUTO_TEST(log_access_callback)
 
 // Test single_resource mode
 LT_BEGIN_AUTO_TEST(basic_suite, single_resource_mode)
-    webserver ws2 = create_webserver(PORT + 71)
-        .single_resource();
+    webserver ws2{create_webserver(PORT + 71)
+        .single_resource()};
     ok_resource resource;
     // In single_resource mode, must register at "/" with family=true
     ws2.register_prefix("/", as_shared(resource));
@@ -2949,8 +2949,8 @@ bool test_validator_func(const std::string& url) {
 
 LT_BEGIN_AUTO_TEST(basic_suite, validator_builder)
     // Test that the validator builder method works (for coverage of create_webserver.hpp)
-    webserver ws2 = create_webserver(PORT + 72)
-        .validator(test_validator_func);
+    webserver ws2{create_webserver(PORT + 72)
+        .validator(test_validator_func)};
     ok_resource resource;
     ws2.register_path("test", as_shared(resource));
     ws2.start(false);
@@ -2985,7 +2985,7 @@ class empty_render_resource : public http_resource {
 LT_BEGIN_AUTO_TEST(basic_suite, default_render_method)
     // Test that a resource with no render overrides triggers internal error
     // (because empty_render returns response code -1)
-    webserver ws2 = create_webserver(PORT + 73);
+    webserver ws2{create_webserver(PORT + 73)};
     empty_render_resource resource;
     ws2.register_path("empty", as_shared(resource));
     ws2.start(false);
@@ -3022,7 +3022,7 @@ class render_override_resource : public http_resource {
 
 LT_BEGIN_AUTO_TEST(basic_suite, render_fallthrough_to_base)
     // Test that render_get calls render() when not overridden
-    webserver ws2 = create_webserver(PORT + 74);
+    webserver ws2{create_webserver(PORT + 74)};
     render_override_resource resource;
     ws2.register_path("base", as_shared(resource));
     ws2.start(false);
@@ -3054,7 +3054,7 @@ LT_END_AUTO_TEST(render_fallthrough_to_base)
 LT_BEGIN_AUTO_TEST(basic_suite, all_methods_fallthrough_to_render)
     // render_override_resource only defines render(), not render_get/POST/etc.
     // So all method-specific calls should fall through to render()
-    webserver ws2 = create_webserver(PORT + 75);
+    webserver ws2{create_webserver(PORT + 75)};
     render_override_resource resource;
     ws2.register_path("fallthrough", as_shared(resource));
     ws2.start(false);
@@ -3152,9 +3152,9 @@ LT_BEGIN_AUTO_TEST(basic_suite, all_methods_fallthrough_to_render)
     ws2.stop();
 LT_END_AUTO_TEST(all_methods_fallthrough_to_render)
 
-// Test internal_error_resource custom handler
-shared_ptr<http_response> custom_internal_error_handler(const http_request&) {
-    return std::make_shared<http_response>(http_response::string("Custom Internal Error").with_status(500));
+// Test internal_error_handler custom handler
+http_response custom_internal_error_handler(const http_request&) {
+    return http_response::string("Custom Internal Error").with_status(500);
 }
 
 class throwing_resource : public http_resource {
@@ -3164,9 +3164,9 @@ class throwing_resource : public http_resource {
     }
 };
 
-LT_BEGIN_AUTO_TEST(basic_suite, custom_internal_error_resource)
-    webserver ws2 = create_webserver(PORT + 76)
-        .internal_error_resource(custom_internal_error_handler);
+LT_BEGIN_AUTO_TEST(basic_suite, builder_custom_internal_error_handler)
+    webserver ws2{create_webserver(PORT + 76)
+        .internal_error_handler(custom_internal_error_handler)};
     throwing_resource resource;
     ws2.register_path("throw", as_shared(resource));
     ws2.start(false);
@@ -3189,7 +3189,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, custom_internal_error_resource)
     curl_easy_cleanup(curl);
 
     ws2.stop();
-LT_END_AUTO_TEST(custom_internal_error_resource)
+LT_END_AUTO_TEST(builder_custom_internal_error_handler)
 
 // Test get_arg_flat fallback to MHD connection value
 class arg_flat_resource : public http_resource {
@@ -3202,7 +3202,7 @@ class arg_flat_resource : public http_resource {
 };
 
 LT_BEGIN_AUTO_TEST(basic_suite, get_arg_flat_fallback)
-    webserver ws2 = create_webserver(PORT + 77);
+    webserver ws2{create_webserver(PORT + 77)};
     arg_flat_resource resource;
     ws2.register_path("argflat", as_shared(resource));
     ws2.start(false);
@@ -3236,7 +3236,7 @@ class large_multipart_resource : public http_resource {
 LT_BEGIN_AUTO_TEST(basic_suite, large_multipart_form_field)
     // This test sends a large text field via multipart form-data
     // to trigger the grow_last_arg path in http_request.cpp (line 544)
-    webserver ws2 = create_webserver(PORT + 78);
+    webserver ws2{create_webserver(PORT + 78)};
     large_multipart_resource resource;
     ws2.register_path("largemp", as_shared(resource));
     ws2.start(false);
@@ -3297,7 +3297,7 @@ class client_cert_non_tls_resource : public http_resource {
 
 // Test that client certificate methods return appropriate values for non-TLS requests
 LT_BEGIN_AUTO_TEST(basic_suite, client_cert_methods_non_tls)
-    webserver ws = create_webserver(PORT + 79);
+    webserver ws{create_webserver(PORT + 79)};
     client_cert_non_tls_resource ccnr;
     ws.register_path("/cert_test", as_shared(ccnr));
     ws.start(false);

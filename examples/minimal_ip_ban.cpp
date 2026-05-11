@@ -33,7 +33,7 @@ class hello_world_resource : public httpserver::http_resource {
 // usable under the default ACCEPT policy. The historical allow_ip /
 // disallow_ip pair (under REJECT) was dropped from the public surface.
 int main() {
-    httpserver::webserver ws = httpserver::create_webserver(8080);
+    httpserver::webserver ws{httpserver::create_webserver(8080)};
 
     ws.block_ip("10.0.0.1");
 

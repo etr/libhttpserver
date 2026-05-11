@@ -49,11 +49,11 @@ class hello_world_resource : public httpserver::http_resource {
 };
 
 int main() {
-    httpserver::webserver ws = httpserver::create_webserver(8080)
+    httpserver::webserver ws{httpserver::create_webserver(8080)
         .use_ssl()
         .cred_type(httpserver::http::http_utils::PSK)
         .psk_cred_handler(psk_handler)
-        .https_priorities("NORMAL:-VERS-TLS-ALL:+VERS-TLS1.2:+PSK:+DHE-PSK");
+        .https_priorities("NORMAL:-VERS-TLS-ALL:+VERS-TLS1.2:+PSK:+DHE-PSK")};
 
     auto hwr = std::make_shared<hello_world_resource>();
     ws.register_path("/hello", hwr);

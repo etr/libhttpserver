@@ -207,35 +207,32 @@ LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_file_upload_dir)
     LT_CHECK_EQ(true, true);
 LT_END_AUTO_TEST(builder_file_upload_dir)
 
-// Test not_found_resource
-LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_not_found_resource)
+// Test not_found_handler
+LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_not_found_handler)
     auto not_found_handler = [](const http_request&) {
-        return std::make_shared<http_response>(
-            http_response::string("Custom 404").with_status(404));
+        return http_response::string("Custom 404").with_status(404);
     };
-    create_webserver cw = create_webserver(8080).not_found_resource(not_found_handler);
+    create_webserver cw = create_webserver(8080).not_found_handler(not_found_handler);
     LT_CHECK_EQ(true, true);
-LT_END_AUTO_TEST(builder_not_found_resource)
+LT_END_AUTO_TEST(builder_not_found_handler)
 
-// Test method_not_allowed_resource
-LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_method_not_allowed_resource)
+// Test method_not_allowed_handler
+LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_method_not_allowed_handler)
     auto method_not_allowed_handler = [](const http_request&) {
-        return std::make_shared<http_response>(
-            http_response::string("Custom 405").with_status(405));
+        return http_response::string("Custom 405").with_status(405);
     };
-    create_webserver cw = create_webserver(8080).method_not_allowed_resource(method_not_allowed_handler);
+    create_webserver cw = create_webserver(8080).method_not_allowed_handler(method_not_allowed_handler);
     LT_CHECK_EQ(true, true);
-LT_END_AUTO_TEST(builder_method_not_allowed_resource)
+LT_END_AUTO_TEST(builder_method_not_allowed_handler)
 
-// Test internal_error_resource
-LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_internal_error_resource)
+// Test internal_error_handler
+LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_internal_error_handler)
     auto internal_error_handler = [](const http_request&) {
-        return std::make_shared<http_response>(
-            http_response::string("Custom 500").with_status(500));
+        return http_response::string("Custom 500").with_status(500);
     };
-    create_webserver cw = create_webserver(8080).internal_error_resource(internal_error_handler);
+    create_webserver cw = create_webserver(8080).internal_error_handler(internal_error_handler);
     LT_CHECK_EQ(true, true);
-LT_END_AUTO_TEST(builder_internal_error_resource)
+LT_END_AUTO_TEST(builder_internal_error_handler)
 
 // Test start_method configurations
 LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_start_method)

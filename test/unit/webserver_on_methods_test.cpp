@@ -199,7 +199,7 @@ LT_END_SUITE(webserver_on_methods_suite)
 
 // PRD §3.4 acceptance: hello-world on_get returns 200 "hi".
 LT_BEGIN_AUTO_TEST(webserver_on_methods_suite, on_get_hello_world)
-    webserver ws = create_webserver(PORT);
+    webserver ws{create_webserver(PORT)};
     ws.on_get("/", [](const http_request&) {
         return http_response::string("hi");
     });
@@ -215,7 +215,7 @@ LT_END_AUTO_TEST(on_get_hello_world)
 // A lambda registered for GET only must 405 a POST and emit Allow: GET.
 LT_BEGIN_AUTO_TEST(webserver_on_methods_suite,
                    lambda_route_dispatches_only_for_registered_method)
-    webserver ws = create_webserver(PORT + 1);
+    webserver ws{create_webserver(PORT + 1)};
     ws.on_get("/x", [](const http_request&) {
         return http_response::string("g");
     });
@@ -235,7 +235,7 @@ LT_END_AUTO_TEST(lambda_route_dispatches_only_for_registered_method)
 // Multiple on_* on the same path compose: GET and POST both serve.
 LT_BEGIN_AUTO_TEST(webserver_on_methods_suite,
                    on_get_and_on_post_same_path_serve_both)
-    webserver ws = create_webserver(PORT + 2);
+    webserver ws{create_webserver(PORT + 2)};
     ws.on_get("/y", [](const http_request&) {
         return http_response::string("g");
     });
@@ -258,7 +258,7 @@ LT_END_AUTO_TEST(on_get_and_on_post_same_path_serve_both)
 // Each of the seven on_* overloads dispatches its own method.
 LT_BEGIN_AUTO_TEST(webserver_on_methods_suite,
                    all_seven_on_methods_serve_their_method)
-    webserver ws = create_webserver(PORT + 3);
+    webserver ws{create_webserver(PORT + 3)};
     ws.on_get("/all", [](const http_request&) {
         return http_response::string("get");
     });
@@ -303,7 +303,7 @@ LT_END_AUTO_TEST(all_seven_on_methods_serve_their_method)
 // Conflict: a second on_get on the same path throws.
 LT_BEGIN_AUTO_TEST(webserver_on_methods_suite,
                    duplicate_on_get_same_path_throws_invalid_argument)
-    webserver ws = create_webserver(PORT + 4);
+    webserver ws{create_webserver(PORT + 4)};
     ws.on_get("/z", [](const http_request&) {
         return http_response::string("first");
     });
@@ -324,7 +324,7 @@ LT_END_AUTO_TEST(duplicate_on_get_same_path_throws_invalid_argument)
 // succeeded, because GET is already covered for /w.
 LT_BEGIN_AUTO_TEST(webserver_on_methods_suite,
                    on_get_then_on_get_after_on_post_still_throws)
-    webserver ws = create_webserver(PORT + 5);
+    webserver ws{create_webserver(PORT + 5)};
     ws.on_get("/w", [](const http_request&) {
         return http_response::string("g1");
     });
@@ -346,7 +346,7 @@ LT_END_AUTO_TEST(on_get_then_on_get_after_on_post_still_throws)
 // Parameterized path goes through the regex tier; arg is bound from URL.
 LT_BEGIN_AUTO_TEST(webserver_on_methods_suite,
                    on_get_parameterized_path_binds_arg)
-    webserver ws = create_webserver(PORT + 6);
+    webserver ws{create_webserver(PORT + 6)};
     ws.on_get("/users/{id}", [](const http_request& req) {
         std::string body = "id=";
         body.append(req.get_arg("id"));
@@ -367,7 +367,7 @@ LT_BEGIN_AUTO_TEST(webserver_on_methods_suite,
                    on_get_then_register_path_with_class_throws)
     class my_resource : public http_resource {};
 
-    webserver ws = create_webserver(PORT + 7);
+    webserver ws{create_webserver(PORT + 7)};
     ws.on_get("/m", [](const http_request&) {
         return http_response::string("lambda");
     });
@@ -386,7 +386,7 @@ LT_END_AUTO_TEST(on_get_then_register_path_with_class_throws)
 // webserver.cpp must fire before any route-table mutation.
 LT_BEGIN_AUTO_TEST(webserver_on_methods_suite,
                    on_get_empty_handler_throws_invalid_argument)
-    webserver ws = create_webserver(PORT + 8);
+    webserver ws{create_webserver(PORT + 8)};
     bool threw = false;
     try {
         ws.on_get("/", std::function<http_response(const http_request&)>{});
@@ -400,7 +400,7 @@ LT_END_AUTO_TEST(on_get_empty_handler_throws_invalid_argument)
 // or "/" throws std::invalid_argument.
 LT_BEGIN_AUTO_TEST(webserver_on_methods_suite,
                    on_get_single_resource_non_root_path_throws)
-    webserver ws = create_webserver(PORT + 9).single_resource();
+    webserver ws{create_webserver(PORT + 9).single_resource()};
     bool threw = false;
     try {
         ws.on_get("/some/path", [](const http_request&) {
@@ -419,7 +419,7 @@ LT_BEGIN_AUTO_TEST(webserver_on_methods_suite,
                    register_path_then_on_get_same_path_throws)
     class my_resource : public http_resource {};
 
-    webserver ws = create_webserver(PORT + 10);
+    webserver ws{create_webserver(PORT + 10)};
     ws.register_path("/n", std::make_shared<my_resource>());
 
     bool threw = false;
@@ -436,7 +436,7 @@ LT_END_AUTO_TEST(register_path_then_on_get_same_path_throws)
 // Verify each on_* method routes correctly: individual per-method tests
 // so a failure in one method does not mask failures in others.
 LT_BEGIN_AUTO_TEST(webserver_on_methods_suite, on_get_dispatches_get)
-    webserver ws = create_webserver(PORT + 11);
+    webserver ws{create_webserver(PORT + 11)};
     ws.on_get("/all7", [](const http_request&) {
         return http_response::string("get");
     });
@@ -447,7 +447,7 @@ LT_BEGIN_AUTO_TEST(webserver_on_methods_suite, on_get_dispatches_get)
 LT_END_AUTO_TEST(on_get_dispatches_get)
 
 LT_BEGIN_AUTO_TEST(webserver_on_methods_suite, on_post_dispatches_post)
-    webserver ws = create_webserver(PORT + 12);
+    webserver ws{create_webserver(PORT + 12)};
     ws.on_post("/all7", [](const http_request&) {
         return http_response::string("post");
     });
@@ -458,7 +458,7 @@ LT_BEGIN_AUTO_TEST(webserver_on_methods_suite, on_post_dispatches_post)
 LT_END_AUTO_TEST(on_post_dispatches_post)
 
 LT_BEGIN_AUTO_TEST(webserver_on_methods_suite, on_put_dispatches_put)
-    webserver ws = create_webserver(PORT + 13);
+    webserver ws{create_webserver(PORT + 13)};
     ws.on_put("/all7", [](const http_request&) {
         return http_response::string("put");
     });
@@ -469,7 +469,7 @@ LT_BEGIN_AUTO_TEST(webserver_on_methods_suite, on_put_dispatches_put)
 LT_END_AUTO_TEST(on_put_dispatches_put)
 
 LT_BEGIN_AUTO_TEST(webserver_on_methods_suite, on_delete_dispatches_delete)
-    webserver ws = create_webserver(PORT + 14);
+    webserver ws{create_webserver(PORT + 14)};
     ws.on_delete("/all7", [](const http_request&) {
         return http_response::string("delete");
     });
@@ -480,7 +480,7 @@ LT_BEGIN_AUTO_TEST(webserver_on_methods_suite, on_delete_dispatches_delete)
 LT_END_AUTO_TEST(on_delete_dispatches_delete)
 
 LT_BEGIN_AUTO_TEST(webserver_on_methods_suite, on_patch_dispatches_patch)
-    webserver ws = create_webserver(PORT + 15);
+    webserver ws{create_webserver(PORT + 15)};
     ws.on_patch("/all7", [](const http_request&) {
         return http_response::string("patch");
     });
@@ -491,7 +491,7 @@ LT_BEGIN_AUTO_TEST(webserver_on_methods_suite, on_patch_dispatches_patch)
 LT_END_AUTO_TEST(on_patch_dispatches_patch)
 
 LT_BEGIN_AUTO_TEST(webserver_on_methods_suite, on_options_dispatches_options)
-    webserver ws = create_webserver(PORT + 16);
+    webserver ws{create_webserver(PORT + 16)};
     ws.on_options("/all7", [](const http_request&) {
         return http_response::string("options");
     });
@@ -502,7 +502,7 @@ LT_BEGIN_AUTO_TEST(webserver_on_methods_suite, on_options_dispatches_options)
 LT_END_AUTO_TEST(on_options_dispatches_options)
 
 LT_BEGIN_AUTO_TEST(webserver_on_methods_suite, on_head_dispatches_head)
-    webserver ws = create_webserver(PORT + 17);
+    webserver ws{create_webserver(PORT + 17)};
     ws.on_head("/all7", [](const http_request&) {
         return http_response::string("head");
     });
@@ -521,7 +521,7 @@ LT_END_AUTO_TEST(on_head_dispatches_head)
 // fresh-gated update path (finding code-simplifier-iter2-1, -2).
 LT_BEGIN_AUTO_TEST(webserver_on_methods_suite,
                    on_get_and_on_post_compose_on_true_regex_path)
-    webserver ws = create_webserver(PORT + 18);
+    webserver ws{create_webserver(PORT + 18)};
     // /api/v[0-9]+ contains regex metacharacters but no {name} params.
     // With regex_checking=true (default) this is a "true regex" path:
     // the compiled pattern matches /api/v1 but not the literal string

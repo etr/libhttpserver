@@ -62,7 +62,7 @@ class pipe_resource : public httpserver::http_resource {
 };  // NOLINT(readability/braces)
 
 int main() {
-    httpserver::webserver ws = httpserver::create_webserver(8080);
+    httpserver::webserver ws{httpserver::create_webserver(8080)};
 
     auto pr = std::make_shared<pipe_resource>();
     ws.register_path("/stream", pr);

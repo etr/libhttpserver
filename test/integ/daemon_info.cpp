@@ -82,7 +82,7 @@ LT_BEGIN_SUITE(daemon_info_suite)
 LT_END_SUITE(daemon_info_suite)
 
 LT_BEGIN_AUTO_TEST(daemon_info_suite, get_bound_port_explicit)
-    webserver ws = create_webserver(PORT);
+    webserver ws{create_webserver(PORT)};
 
     simple_resource sr;
     ws.register_path("test", as_shared(sr));
@@ -96,7 +96,7 @@ LT_BEGIN_AUTO_TEST(daemon_info_suite, get_bound_port_explicit)
 LT_END_AUTO_TEST(get_bound_port_explicit)
 
 LT_BEGIN_AUTO_TEST(daemon_info_suite, basic_request_succeeds)
-    webserver ws = create_webserver(PORT);
+    webserver ws{create_webserver(PORT)};
 
     simple_resource sr;
     ws.register_path("test", as_shared(sr));
@@ -121,7 +121,7 @@ LT_BEGIN_AUTO_TEST(daemon_info_suite, basic_request_succeeds)
 LT_END_AUTO_TEST(basic_request_succeeds)
 
 LT_BEGIN_AUTO_TEST(daemon_info_suite, quiesce_does_not_crash)
-    webserver ws = create_webserver(PORT);
+    webserver ws{create_webserver(PORT)};
 
     simple_resource sr;
     ws.register_path("test", as_shared(sr));
@@ -207,8 +207,8 @@ LT_BEGIN_AUTO_TEST(daemon_info_suite, external_event_loop)
     // Windows/MSYS2 builds it has been observed to make MHD_start_daemon
     // reject the configuration. The default thread-safe daemon still
     // supports being driven by MHD_run_wait from a single thread.
-    webserver ws = create_webserver(PORT)
-        .start_method(httpserver::http::http_utils::EXTERNAL_SELECT);
+    webserver ws{create_webserver(PORT)
+        .start_method(httpserver::http::http_utils::EXTERNAL_SELECT)};
 
     simple_resource sr;
     ws.register_path("test", as_shared(sr));

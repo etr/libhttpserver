@@ -8,13 +8,13 @@
 Distinguish function-handler setters from object-resource setters by suffix, and prevent surprising implicit conversions to `webserver`.
 
 **Action Items:**
-- [ ] Rename setters on `create_webserver` (or `webserver`, wherever they live):
+- [x] Rename setters on `create_webserver` (or `webserver`, wherever they live):
   - `not_found_resource` → `not_found_handler`
   - `method_not_allowed_resource` → `method_not_allowed_handler`
   - `internal_error_resource` → `internal_error_handler`
-- [ ] These setters take a function-shaped handler (`std::function<http_response(const http_request&)>`), matching the `_handler` suffix convention.
-- [ ] Mark `webserver(const create_webserver&)` constructor `explicit`; remove the `// NOLINT(runtime/explicit)` if present.
-- [ ] Remove old `_resource` names entirely (no compatibility shim).
+- [x] These setters take a function-shaped handler (`std::function<http_response(const http_request&)>`), matching the `_handler` suffix convention.
+- [x] Mark `webserver(const create_webserver&)` constructor `explicit`; remove the `// NOLINT(runtime/explicit)` if present.
+- [x] Remove old `_resource` names entirely (no compatibility shim).
 
 **Dependencies:**
 - Blocked by: TASK-014
@@ -29,4 +29,4 @@ Distinguish function-handler setters from object-resource setters by suffix, and
 **Related Requirements:** PRD-NAM-REQ-003, PRD-NAM-REQ-004
 **Related Decisions:** §3.7, §4.1
 
-**Status:** Not Started
+**Status:** Done

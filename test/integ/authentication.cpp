@@ -115,7 +115,7 @@ LT_END_SUITE(authentication_suite)
 
 #ifdef HAVE_BAUTH
 LT_BEGIN_AUTO_TEST(authentication_suite, base_auth)
-    webserver ws = create_webserver(PORT);
+    webserver ws{create_webserver(PORT)};
 
     user_pass_resource user_pass;
     ws.register_path("base", as_shared(user_pass));
@@ -140,7 +140,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, base_auth)
 LT_END_AUTO_TEST(base_auth)
 
 LT_BEGIN_AUTO_TEST(authentication_suite, base_auth_fail)
-    webserver ws = create_webserver(PORT);
+    webserver ws{create_webserver(PORT)};
 
     user_pass_resource user_pass;
     ws.register_path("base", as_shared(user_pass));
@@ -235,9 +235,9 @@ class digest_ha1_sha256_resource : public http_resource {
 // These tests now assert the v2 contract: the resource emits FAIL on the
 // initial request because curl's nonce roundtrip cannot complete.
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth)
-    webserver ws = create_webserver(PORT)
+    webserver ws{create_webserver(PORT)
         .digest_auth_random("myrandom")
-        .nonce_nc_size(300);
+        .nonce_nc_size(300)};
 
     digest_resource digest;
     ws.register_path("base", as_shared(digest));
@@ -287,9 +287,9 @@ LT_END_AUTO_TEST(digest_auth)
 // (MHD nonce/opaque state machine).  Until then it exercises a different
 // digest_resource instance only.
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_wrong_pass)
-    webserver ws = create_webserver(PORT)
+    webserver ws{create_webserver(PORT)
         .digest_auth_random("myrandom")
-        .nonce_nc_size(300);
+        .nonce_nc_size(300)};
 
     digest_resource digest;
     ws.register_path("base", as_shared(digest));
@@ -331,9 +331,9 @@ LT_END_AUTO_TEST(digest_auth_wrong_pass)
 // get_digested_user() always returns empty string (no nonce roundtrip).
 // This test becomes meaningful when full v2 digest support is added.
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5)
-    webserver ws = create_webserver(PORT)
+    webserver ws{create_webserver(PORT)
         .digest_auth_random("myrandom")
-        .nonce_nc_size(300);
+        .nonce_nc_size(300)};
 
     digest_ha1_md5_resource digest_ha1;
     ws.register_path("base", as_shared(digest_ha1));
@@ -376,9 +376,9 @@ LT_END_AUTO_TEST(digest_auth_with_ha1_md5)
 // from digest_auth_with_ha1_md5 under v2 — wrong-pass vs. correct-pass both
 // yield the same static 401 challenge. Becomes meaningful with full v2 digest.
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5_wrong_pass)
-    webserver ws = create_webserver(PORT)
+    webserver ws{create_webserver(PORT)
         .digest_auth_random("myrandom")
-        .nonce_nc_size(300);
+        .nonce_nc_size(300)};
 
     digest_ha1_md5_resource digest_ha1;
     ws.register_path("base", as_shared(digest_ha1));
@@ -419,9 +419,9 @@ LT_END_AUTO_TEST(digest_auth_with_ha1_md5_wrong_pass)
 // digest_auth under v2 — SHA-256 vs. MD5 path is unreachable (no nonce
 // roundtrip). Becomes meaningful when full v2 digest support is added.
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256)
-    webserver ws = create_webserver(PORT)
+    webserver ws{create_webserver(PORT)
         .digest_auth_random("myrandom")
-        .nonce_nc_size(300);
+        .nonce_nc_size(300)};
 
     digest_ha1_sha256_resource digest_ha1;
     ws.register_path("base", as_shared(digest_ha1));
@@ -465,9 +465,9 @@ LT_END_AUTO_TEST(digest_auth_with_ha1_sha256)
 // vs. correct-pass both yield the same static 401 challenge. Becomes
 // meaningful when full v2 digest support is added.
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256_wrong_pass)
-    webserver ws = create_webserver(PORT)
+    webserver ws{create_webserver(PORT)
         .digest_auth_random("myrandom")
-        .nonce_nc_size(300);
+        .nonce_nc_size(300)};
 
     digest_ha1_sha256_resource digest_ha1;
     ws.register_path("base", as_shared(digest_ha1));
@@ -533,9 +533,9 @@ class digest_user_cache_resource : public http_resource {
 
 // Test digested user caching when no digest auth is provided (nullptr branch)
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_user_cache_no_auth)
-    webserver ws = create_webserver(PORT)
+    webserver ws{create_webserver(PORT)
         .digest_auth_random("myrandom")
-        .nonce_nc_size(300);
+        .nonce_nc_size(300)};
 
     digest_user_cache_resource resource;
     ws.register_path("cache_test", as_shared(resource));
@@ -562,9 +562,9 @@ LT_END_AUTO_TEST(digest_user_cache_no_auth)
 
 // Test digested user caching with digest auth (cache hit with valid user)
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_user_cache_with_auth)
-    webserver ws = create_webserver(PORT)
+    webserver ws{create_webserver(PORT)
         .digest_auth_random("myrandom")
-        .nonce_nc_size(300);
+        .nonce_nc_size(300)};
 
     digest_user_cache_resource resource;
     ws.register_path("cache_test", as_shared(resource));
@@ -617,8 +617,8 @@ std::shared_ptr<http_response> centralized_auth_handler(const http_request& req)
 }
 
 LT_BEGIN_AUTO_TEST(authentication_suite, centralized_auth_fail)
-    webserver ws = create_webserver(PORT)
-        .auth_handler(centralized_auth_handler);
+    webserver ws{create_webserver(PORT)
+        .auth_handler(centralized_auth_handler)};
 
     simple_resource sr;
     ws.register_path("protected", as_shared(sr));
@@ -644,8 +644,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, centralized_auth_fail)
 LT_END_AUTO_TEST(centralized_auth_fail)
 
 LT_BEGIN_AUTO_TEST(authentication_suite, centralized_auth_success)
-    webserver ws = create_webserver(PORT)
-        .auth_handler(centralized_auth_handler);
+    webserver ws{create_webserver(PORT)
+        .auth_handler(centralized_auth_handler)};
 
     simple_resource sr;
     ws.register_path("protected", as_shared(sr));
@@ -673,9 +673,9 @@ LT_BEGIN_AUTO_TEST(authentication_suite, centralized_auth_success)
 LT_END_AUTO_TEST(centralized_auth_success)
 
 LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_paths)
-    webserver ws = create_webserver(PORT)
+    webserver ws{create_webserver(PORT)
         .auth_handler(centralized_auth_handler)
-        .auth_skip_paths({"/health", "/public/*"});
+        .auth_skip_paths({"/health", "/public/*"})};
 
     simple_resource sr;
     ws.register_path("health", as_shared(sr));
@@ -738,9 +738,9 @@ LT_END_AUTO_TEST(auth_skip_paths)
 // Test that wildcard doesn't match partial prefix
 // /publicinfo should NOT match /public/* (wildcard requires the slash)
 LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_paths_no_partial_match)
-    webserver ws = create_webserver(PORT)
+    webserver ws{create_webserver(PORT)
         .auth_handler(centralized_auth_handler)
-        .auth_skip_paths({"/public/*"});
+        .auth_skip_paths({"/public/*"})};
 
     simple_resource sr;
     ws.register_path("publicinfo", as_shared(sr));
@@ -768,9 +768,9 @@ LT_END_AUTO_TEST(auth_skip_paths_no_partial_match)
 
 // Test deeply nested wildcard paths
 LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_paths_deep_nested)
-    webserver ws = create_webserver(PORT)
+    webserver ws{create_webserver(PORT)
         .auth_handler(centralized_auth_handler)
-        .auth_skip_paths({"/api/v1/public/*"});
+        .auth_skip_paths({"/api/v1/public/*"})};
 
     simple_resource sr;
     ws.register_path("api/v1/public/users/list", as_shared(sr));
@@ -806,8 +806,8 @@ class post_resource : public http_resource {
 };
 
 LT_BEGIN_AUTO_TEST(authentication_suite, centralized_auth_post_method)
-    webserver ws = create_webserver(PORT)
-        .auth_handler(centralized_auth_handler);
+    webserver ws{create_webserver(PORT)
+        .auth_handler(centralized_auth_handler)};
 
     post_resource pr;
     ws.register_path("data", as_shared(pr));
@@ -854,8 +854,8 @@ LT_END_AUTO_TEST(centralized_auth_post_method)
 
 // Test wrong credentials (different from no credentials)
 LT_BEGIN_AUTO_TEST(authentication_suite, centralized_auth_wrong_credentials)
-    webserver ws = create_webserver(PORT)
-        .auth_handler(centralized_auth_handler);
+    webserver ws{create_webserver(PORT)
+        .auth_handler(centralized_auth_handler)};
 
     simple_resource sr;
     ws.register_path("protected", as_shared(sr));
@@ -901,8 +901,8 @@ LT_END_AUTO_TEST(centralized_auth_wrong_credentials)
 
 // Test that 404 is returned for non-existent resources (auth doesn't interfere)
 LT_BEGIN_AUTO_TEST(authentication_suite, centralized_auth_not_found)
-    webserver ws = create_webserver(PORT)
-        .auth_handler(centralized_auth_handler);
+    webserver ws{create_webserver(PORT)
+        .auth_handler(centralized_auth_handler)};
 
     simple_resource sr;
     ws.register_path("exists", as_shared(sr));
@@ -931,7 +931,7 @@ LT_END_AUTO_TEST(centralized_auth_not_found)
 
 // Test no auth handler (default behavior - no auth required)
 LT_BEGIN_AUTO_TEST(authentication_suite, no_auth_handler_default)
-    webserver ws = create_webserver(PORT);  // No auth_handler
+    webserver ws{create_webserver(PORT)};  // No auth_handler
 
     simple_resource sr;
     ws.register_path("open", as_shared(sr));
@@ -960,9 +960,9 @@ LT_END_AUTO_TEST(no_auth_handler_default)
 
 // Test multiple skip paths
 LT_BEGIN_AUTO_TEST(authentication_suite, auth_multiple_skip_paths)
-    webserver ws = create_webserver(PORT)
+    webserver ws{create_webserver(PORT)
         .auth_handler(centralized_auth_handler)
-        .auth_skip_paths({"/health", "/metrics", "/status", "/public/*"});
+        .auth_skip_paths({"/health", "/metrics", "/status", "/public/*"})};
 
     simple_resource sr;
     ws.register_path("health", as_shared(sr));
@@ -1038,9 +1038,9 @@ LT_END_AUTO_TEST(auth_multiple_skip_paths)
 
 // Test skip path for root "/"
 LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_path_root)
-    webserver ws = create_webserver(PORT)
+    webserver ws{create_webserver(PORT)
         .auth_handler(centralized_auth_handler)
-        .auth_skip_paths({"/"});
+        .auth_skip_paths({"/"})};
 
     simple_resource sr;
     ws.register_prefix("/", as_shared(sr));
@@ -1069,9 +1069,9 @@ LT_END_AUTO_TEST(auth_skip_path_root)
 
 // Test wildcard path matching "/pub/*"
 LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_path_wildcard)
-    webserver ws = create_webserver(PORT)
+    webserver ws{create_webserver(PORT)
         .auth_handler(centralized_auth_handler)
-        .auth_skip_paths({"/pub/*"});
+        .auth_skip_paths({"/pub/*"})};
 
     simple_resource sr;
     ws.register_path("pub/anything", as_shared(sr));
@@ -1131,9 +1131,9 @@ LT_END_AUTO_TEST(auth_skip_path_wildcard)
 
 // Test empty skip paths (should require auth for everything)
 LT_BEGIN_AUTO_TEST(authentication_suite, auth_empty_skip_paths)
-    webserver ws = create_webserver(PORT)
+    webserver ws{create_webserver(PORT)
         .auth_handler(centralized_auth_handler)
-        .auth_skip_paths({});  // Empty skip paths
+        .auth_skip_paths({})};  // Empty skip paths
 
     simple_resource sr;
     ws.register_path("test", as_shared(sr));
@@ -1162,9 +1162,9 @@ LT_END_AUTO_TEST(auth_empty_skip_paths)
 // Test that path traversal cannot bypass auth skip paths
 // Requesting /public/../protected should NOT skip auth
 LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_path_traversal_bypass)
-    webserver ws = create_webserver(PORT)
+    webserver ws{create_webserver(PORT)
         .auth_handler(centralized_auth_handler)
-        .auth_skip_paths({"/public/*"});
+        .auth_skip_paths({"/public/*"})};
 
     simple_resource sr;
     ws.register_path("protected", as_shared(sr));

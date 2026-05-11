@@ -87,7 +87,7 @@ class args_resource : public httpserver::http_resource {
 };
 
 int main() {
-    httpserver::webserver ws = httpserver::create_webserver(8080);
+    httpserver::webserver ws{httpserver::create_webserver(8080)};
 
     auto ar = std::make_shared<args_resource>();
     ws.register_path("/args", ar);

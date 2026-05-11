@@ -217,7 +217,7 @@ The most basic example of creating a server and handling a requests for the path
     };
 
     int main(int argc, char** argv) {
-        webserver ws = create_webserver(8080);
+        webserver ws{create_webserver(8080)};
 
         hello_world_resource hwr;
         ws.register_resource("/hello", &hwr);
@@ -256,7 +256,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
 ## Create and work with a webserver
 As you can see from the example above, creating a webserver with standard configuration is quite simple:
 ```cpp
-    webserver ws = create_webserver(8080);
+    webserver ws{create_webserver(8080)};
 ```
 The `create_webserver` class is a supporting _builder_ class that eases the building of a webserver through chained syntax.
 
@@ -311,9 +311,9 @@ For example, if your connection limit is “1”, a browser may open a first con
 ### Custom defaulted error messages
 libhttpserver allows to override internal error retrieving functions to provide custom messages to the HTTP client. There are only 3 cases in which implementing logic (an http_resource) cannot be invoked: (1) a not found resource, where the library is not being able to match the URL requested by the client to any implementing http_resource object; (2) a not allowed method, when the HTTP client is requesting a method explicitly marked as not allowed (more info [here](#allowing-and-disallowing-methods-on-a-resource)) by the implementation; (3) an exception being thrown.
 In all these 3 cases libhttpserver would provide a standard HTTP response to the client with the correct error code; respectively a `404`, a `405` and a `500`. The library allows its user to specify custom callbacks that will be called to replace the default behavior.
-* _.not_found_resource(**const  shared_ptr<http_response>(&ast;render_ptr)(const http_request&)** resource):_ Specifies a function to handle a request when no matching registered endpoint exist for the URL requested by the client.
-* _.method_not_allowed_resource(**const  shared_ptr<http_response>(&ast;render_ptr)(const http_request&)** resource):_ Specifies a function to handle a request that is asking for a method marked as not allowed on the matching http_resource.
-* _.internal_error_resource(**const  shared_ptr<http_response>(&ast;render_ptr)(const http_request&)** resource):_ Specifies a function to handle a request that is causing an uncaught exception during its execution. **REMEMBER:** is this callback is causing an exception itself, the standard default response from libhttpserver will be reported to the HTTP client.
+* _.not_found_handler(**std::function<http_response(const http_request&)>** handler):_ Specifies a function to handle a request when no matching registered endpoint exist for the URL requested by the client.
+* _.method_not_allowed_handler(**std::function<http_response(const http_request&)>** handler):_ Specifies a function to handle a request that is asking for a method marked as not allowed on the matching http_resource.
+* _.internal_error_handler(**std::function<http_response(const http_request&)>** handler):_ Specifies a function to handle a request that is causing an uncaught exception during its execution. **REMEMBER:** is this callback is causing an exception itself, the standard default response from libhttpserver will be reported to the HTTP client.
 
 #### Example of custom errors:
 ```cpp
@@ -321,12 +321,12 @@ In all these 3 cases libhttpserver would provide a standard HTTP response to the
 
       using namespace httpserver;
 
-      std::shared_ptr<http_response> not_found_custom(const http_request& req) {
-          return std::shared_ptr<string_response>(new string_response("Not found custom", 404, "text/plain"));
+      http_response not_found_custom(const http_request& req) {
+          return http_response::string("Not found custom").with_status(404);
       }
 
-      std::shared_ptr<http_response> not_allowed_custom(const http_request& req) {
-          return std::shared_ptr<string_response>(new string_response("Not allowed custom", 405, "text/plain"));
+      http_response not_allowed_custom(const http_request& req) {
+          return http_response::string("Not allowed custom").with_status(405);
       }
 
       class hello_world_resource : public http_resource {
@@ -337,9 +337,9 @@ In all these 3 cases libhttpserver would provide a standard HTTP response to the
       };
 
       int main(int argc, char** argv) {
-          webserver ws = create_webserver(8080)
-              .not_found_resource(not_found_custom)
-              .method_not_allowed_resource(not_allowed_custom);
+          webserver ws{create_webserver(8080)
+              .not_found_handler(not_found_custom)
+              .method_not_allowed_handler(not_allowed_custom)};
 
           hello_world_resource hwr;
           hwr.disallow_all();
@@ -383,8 +383,8 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
     };
 
     int main(int argc, char** argv) {
-        webserver ws = create_webserver(8080)
-            .log_access(custom_access_log);
+        webserver ws{create_webserver(8080)
+            .log_access(custom_access_log)};
 
         hello_world_resource hwr;
         ws.register_resource("/hello", &hwr);
@@ -435,10 +435,10 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
     };
 
     int main(int argc, char** argv) {
-        webserver ws = create_webserver(8080)
+        webserver ws{create_webserver(8080)
             .use_ssl()
             .https_mem_key("key.pem")
-            .https_mem_cert("cert.pem");
+            .https_mem_cert("cert.pem")};
 
         hello_world_resource hwr;
         ws.register_resource("/hello", &hwr);
@@ -485,11 +485,11 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
     };
 
     int main(int argc, char** argv) {
-        webserver ws = create_webserver(8080)
+        webserver ws{create_webserver(8080)
             .use_ssl()
             .cred_type(http::http_utils::PSK)
             .psk_cred_handler(psk_handler)
-            .https_priorities("NORMAL:-VERS-TLS-ALL:+VERS-TLS1.2:+PSK:+DHE-PSK");
+            .https_priorities("NORMAL:-VERS-TLS-ALL:+VERS-TLS1.2:+PSK:+DHE-PSK")};
 
         hello_world_resource hwr;
         ws.register_resource("/hello", &hwr);
@@ -520,7 +520,7 @@ You should calculate the value of NC_SIZE based on the number of connections per
 
 ### Examples of chaining syntax to create a webserver
 ```cpp
-    webserver ws = create_webserver(8080)
+    webserver ws{create_webserver(8080)
         .no_ssl()
         .no_ipv6()
         .no_debug()
@@ -530,14 +530,14 @@ You should calculate the value of NC_SIZE based on the number of connections per
         .no_comet()
         .no_regex_checking()
         .no_ban_system()
-        .no_post_process();
+        .no_post_process()};
 ```
 ##
 ```cpp
-    webserver ws = create_webserver(8080)
+    webserver ws{create_webserver(8080)
         .use_ssl()
         .https_mem_key("key.pem")
-        .https_mem_cert("cert.pem");
+        .https_mem_cert("cert.pem")};
 ```
 ### Starting and stopping a webserver
 Once a webserver is created, you can manage its execution through the following methods on the `webserver` class:
@@ -589,7 +589,7 @@ Given this, the `http_resource` class contains the following extensible methods 
     };
 
     int main(int argc, char** argv) {
-        webserver ws = create_webserver(8080);
+        webserver ws{create_webserver(8080)};
 
         hello_world_resource hwr;
         ws.register_resource("/hello", &hwr);
@@ -625,7 +625,7 @@ The base `http_resource` class has a set of methods that can be used to allow an
       };
 
       int main(int argc, char** argv) {
-          webserver ws = create_webserver(8080);
+          webserver ws{create_webserver(8080)};
 
           hello_world_resource hwr;
           hwr.disallow_all();
@@ -688,7 +688,7 @@ There are essentially four ways to specify an endpoint string:
       };
 
       int main(int argc, char** argv) {
-          webserver ws = create_webserver(8080);
+          webserver ws{create_webserver(8080)};
 
           hello_world_resource hwr;
           ws.register_resource("/hello", &hwr);
@@ -780,7 +780,7 @@ By default, uploaded files are automatically deleted when the request completes.
 using namespace httpserver;
 
 int main() {
-    webserver ws = create_webserver(8080)
+    webserver ws{create_webserver(8080)
         .file_upload_target(FILE_UPLOAD_DISK_ONLY)
         .file_upload_dir("/tmp/uploads")
         .file_cleanup_callback([](const std::string& key,
@@ -790,7 +790,7 @@ int main() {
             std::string dest = "/var/uploads/" + filename;
             std::rename(info.get_file_system_file_name().c_str(), dest.c_str());
             return false;  // Don't delete - we moved it
-        });
+        })};
 
     // ... register resources and start server
 }
@@ -823,7 +823,7 @@ Details on the `http_arg_value` structure.
     };
 
     int main(int argc, char** argv) {
-        webserver ws = create_webserver(8080);
+        webserver ws{create_webserver(8080)};
 
         hello_world_resource hwr;
         ws.register_resource("/hello", &hwr);
@@ -886,7 +886,7 @@ The `http_response` class offers an additional set of methods to "decorate" your
     };
 
     int main(int argc, char** argv) {
-        webserver ws = create_webserver(8080);
+        webserver ws{create_webserver(8080)};
 
         hello_world_resource hwr;
         ws.register_resource("/hello", &hwr);
@@ -923,7 +923,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
     };
 
     int main() {
-        webserver ws = create_webserver(8080);
+        webserver ws{create_webserver(8080)};
 
         image_resource ir;
         ws.register_resource("/image", &ir);
@@ -975,7 +975,7 @@ Examples of valid IPs include:
     };
 
     int main(int argc, char** argv) {
-        webserver ws = create_webserver(8080);
+        webserver ws{create_webserver(8080)};
 
         // Refuse connections from this address; everything else is accepted
         // by default. Use a range like "127.0.0.*" to block a wildcard.
@@ -1022,7 +1022,7 @@ Client certificate authentication uses a X.509 certificate from the client. This
     };
 
     int main(int argc, char** argv) {
-        webserver ws = create_webserver(8080);
+        webserver ws{create_webserver(8080)};
 
         user_pass_resource hwr;
         ws.register_resource("/hello", &hwr);
@@ -1078,7 +1078,7 @@ You can also use `check_digest_auth_digest` to verify against a pre-computed HA1
     };
 
     int main(int argc, char** argv) {
-        webserver ws = create_webserver(8080);
+        webserver ws{create_webserver(8080)};
 
         digest_resource hwr;
         ws.register_resource("/hello", &hwr);
@@ -1133,9 +1133,9 @@ libhttpserver provides a centralized authentication mechanism that runs a single
     }
 
     int main() {
-        webserver ws = create_webserver(8080)
+        webserver ws{create_webserver(8080)
             .auth_handler(my_auth_handler)
-            .auth_skip_paths({"/health", "/public/*"});
+            .auth_skip_paths({"/health", "/public/*"})};
 
         hello_resource hello;
         health_resource health;
@@ -1211,11 +1211,11 @@ To enable client certificate authentication, configure your webserver with:
     };
 
     int main() {
-        webserver ws = create_webserver(8443)
+        webserver ws{create_webserver(8443)
             .use_ssl()
             .https_mem_key("server_key.pem")
             .https_mem_cert("server_cert.pem")
-            .https_mem_trust("ca_cert.pem");  // CA for client certs
+            .https_mem_trust("ca_cert.pem")};  // CA for client certs
 
         secure_resource sr;
         ws.register_resource("/secure", &sr);
@@ -1273,11 +1273,11 @@ To use SNI with libhttpserver, configure an SNI callback that returns the certif
         certs["www.example.com"] = {load_file("www_cert.pem"), load_file("www_key.pem")};
         certs["api.example.com"] = {load_file("api_cert.pem"), load_file("api_key.pem")};
 
-        webserver ws = create_webserver(443)
+        webserver ws{create_webserver(443)
             .use_ssl()
             .https_mem_key("default_key.pem")    // Default certificate
             .https_mem_cert("default_cert.pem")
-            .sni_callback(sni_callback);         // SNI callback
+            .sni_callback(sni_callback)};         // SNI callback
 
         // ... register resources and start
         ws.start(true);
@@ -1325,7 +1325,7 @@ Register a WebSocket handler using `register_ws_resource`:
     };
 
     int main() {
-        webserver ws = create_webserver(8080);
+        webserver ws{create_webserver(8080)};
 
         echo_handler handler;
         ws.register_ws_resource("/ws", &handler);
@@ -1372,7 +1372,7 @@ When using the server without internal threading (e.g., with `no_listen_socket()
     };
 
     int main() {
-        webserver ws = create_webserver(0);  // Let the OS choose a port
+        webserver ws{create_webserver(0)};  // Let the OS choose a port
 
         hello_resource hr;
         ws.register_resource("/hello", &hr);
@@ -1414,7 +1414,7 @@ Additionally, the following utility methods are available:
     };
 
     int main(int argc, char** argv) {
-        webserver ws = create_webserver(8080);
+        webserver ws{create_webserver(8080)};
 
         file_response_resource hwr;
         ws.register_resource("/hello", &hwr);
@@ -1457,7 +1457,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
     };
     
     int main(int argc, char** argv) {
-        webserver ws = create_webserver(8080);
+        webserver ws{create_webserver(8080)};
     
         deferred_resource hwr;
         ws.register_resource("/hello", &hwr);
@@ -1515,7 +1515,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
     };
     
     int main(int argc, char** argv) {
-        webserver ws = create_webserver(8080);
+        webserver ws{create_webserver(8080)};
     
         deferred_resource hwr;
         ws.register_resource("/hello", &hwr);
@@ -1555,7 +1555,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
     };
 
     int main() {
-        webserver ws = create_webserver(8080);
+        webserver ws{create_webserver(8080)};
 
         no_content_resource ncr;
         ws.register_resource("/items", &ncr);
@@ -1592,7 +1592,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
     };
 
     int main() {
-        webserver ws = create_webserver(8080);
+        webserver ws{create_webserver(8080)};
 
         iovec_resource ir;
         ws.register_resource("/data", &ir);
@@ -1641,7 +1641,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
     };
 
     int main() {
-        webserver ws = create_webserver(8080);
+        webserver ws{create_webserver(8080)};
 
         pipe_resource pr;
         ws.register_resource("/stream", &pr);
@@ -1681,7 +1681,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
     };
 
     int main() {
-        webserver ws = create_webserver(8080);
+        webserver ws{create_webserver(8080)};
 
         echo_handler handler;
         ws.register_ws_resource("/ws", &handler);
@@ -1710,7 +1710,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
 
     int main() {
         // Use port 0 to let the OS assign an ephemeral port
-        webserver ws = create_webserver(0);
+        webserver ws{create_webserver(0)};
 
         hello_resource hr;
         ws.register_resource("/hello", &hr);
@@ -1755,7 +1755,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
     int main() {
         signal(SIGINT, signal_handler);
 
-        webserver ws = create_webserver(8080);
+        webserver ws{create_webserver(8080)};
 
         hello_resource hr;
         ws.register_resource("/hello", &hr);
@@ -1800,13 +1800,13 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
     int main() {
         // Create a high-performance server with turbo mode,
         // suppressed date headers, and a thread pool.
-        webserver ws = create_webserver(8080)
+        webserver ws{create_webserver(8080)
             .start_method(http::http_utils::INTERNAL_SELECT)
             .max_threads(4)
             .turbo()
             .suppress_date_header()
             .tcp_fastopen_queue_size(16)
-            .listen_backlog(128);
+            .listen_backlog(128)};
 
         hello_resource hr;
         ws.register_resource("/hello", &hr);

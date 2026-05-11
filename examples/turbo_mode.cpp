@@ -32,13 +32,13 @@ class hello_resource : public httpserver::http_resource {
 int main() {
     // Create a high-performance server with turbo mode,
     // suppressed date headers, and a thread pool.
-    httpserver::webserver ws = httpserver::create_webserver(8080)
+    httpserver::webserver ws{httpserver::create_webserver(8080)
         .start_method(httpserver::http::http_utils::INTERNAL_SELECT)
         .max_threads(4)
         .turbo()
         .suppress_date_header()
         .tcp_fastopen_queue_size(16)
-        .listen_backlog(128);
+        .listen_backlog(128)};
 
     auto hr = std::make_shared<hello_resource>();
     ws.register_path("/hello", hr);

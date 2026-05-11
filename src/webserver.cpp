@@ -211,9 +211,9 @@ webserver::webserver(const create_webserver& params):
     deferred_enabled(params._deferred_enabled),
     single_resource(params._single_resource),
     tcp_nodelay(params._tcp_nodelay),
-    not_found_resource(params._not_found_resource),
-    method_not_allowed_resource(params._method_not_allowed_resource),
-    internal_error_resource(params._internal_error_resource),
+    not_found_handler(params._not_found_handler),
+    method_not_allowed_handler(params._method_not_allowed_handler),
+    internal_error_handler(params._internal_error_handler),
     file_cleanup_callback(params._file_cleanup_callback),
     auth_handler(params._auth_handler),
     auth_skip_paths(params._auth_skip_paths),
@@ -1591,8 +1591,8 @@ void webserver_impl::upgrade_handler(void *cls, struct MHD_Connection* connectio
 namespace detail {
 
 std::shared_ptr<http_response> webserver_impl::not_found_page(detail::modded_request* mr) const {
-    if (parent->not_found_resource != nullptr) {
-        return parent->not_found_resource(*mr->dhr);
+    if (parent->not_found_handler != nullptr) {
+        return std::make_shared<http_response>(parent->not_found_handler(*mr->dhr));
     } else {
         return std::make_shared<http_response>(
             http_response::string(std::string{constants::NOT_FOUND_ERROR})
@@ -1601,8 +1601,8 @@ std::shared_ptr<http_response> webserver_impl::not_found_page(detail::modded_req
 }
 
 std::shared_ptr<http_response> webserver_impl::method_not_allowed_page(detail::modded_request* mr) const {
-    if (parent->method_not_allowed_resource != nullptr) {
-        return parent->method_not_allowed_resource(*mr->dhr);
+    if (parent->method_not_allowed_handler != nullptr) {
+        return std::make_shared<http_response>(parent->method_not_allowed_handler(*mr->dhr));
     } else {
         return std::make_shared<http_response>(
             http_response::string(std::string{constants::METHOD_ERROR})
@@ -1611,8 +1611,8 @@ std::shared_ptr<http_response> webserver_impl::method_not_allowed_page(detail::m
 }
 
 std::shared_ptr<http_response> webserver_impl::internal_error_page(detail::modded_request* mr, bool force_our) const {
-    if (parent->internal_error_resource != nullptr && !force_our) {
-        return parent->internal_error_resource(*mr->dhr);
+    if (parent->internal_error_handler != nullptr && !force_our) {
+        return std::make_shared<http_response>(parent->internal_error_handler(*mr->dhr));
     } else {
         return std::make_shared<http_response>(
             http_response::string(std::string{constants::GENERIC_ERROR})
@@ -2097,7 +2097,7 @@ MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection, struct de
                 }
             }
         } catch(...) {
-            // The user-supplied internal_error_resource may itself throw;
+            // The user-supplied internal_error_handler may itself throw;
             // fall back to the built-in error page in that case (force_our=true)
             // so we never let exceptions escape into libmicrohttpd.
             try {

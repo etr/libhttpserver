@@ -142,7 +142,7 @@ LT_END_SUITE(webserver_route_suite)
 
 // Single-method route(): GET serves a GET request.
 LT_BEGIN_AUTO_TEST(webserver_route_suite, route_get_serves_get_request)
-    webserver ws = create_webserver(PORT);
+    webserver ws{create_webserver(PORT)};
     ws.route(http_method::get, "/r", [](const http_request&) {
         return http_response::string("g");
     });
@@ -157,7 +157,7 @@ LT_END_AUTO_TEST(route_get_serves_get_request)
 
 // Single-method route(): POST serves a POST request.
 LT_BEGIN_AUTO_TEST(webserver_route_suite, route_post_serves_post_request)
-    webserver ws = create_webserver(PORT + 1);
+    webserver ws{create_webserver(PORT + 1)};
     ws.route(http_method::post, "/r", [](const http_request&) {
         return http_response::string("p");
     });
@@ -172,7 +172,7 @@ LT_END_AUTO_TEST(route_post_serves_post_request)
 
 // route(get) only allows GET; other methods get 405 with Allow: GET.
 LT_BEGIN_AUTO_TEST(webserver_route_suite, route_only_allows_registered_method)
-    webserver ws = create_webserver(PORT + 2);
+    webserver ws{create_webserver(PORT + 2)};
     ws.route(http_method::get, "/r", [](const http_request&) {
         return http_response::string("g");
     });
@@ -188,7 +188,7 @@ LT_END_AUTO_TEST(route_only_allows_registered_method)
 // THE acceptance criterion: load (method, path) pairs from a vector at
 // runtime and register each via route(); both routes serve correctly.
 LT_BEGIN_AUTO_TEST(webserver_route_suite, route_runtime_vector_dispatch)
-    webserver ws = create_webserver(PORT + 3);
+    webserver ws{create_webserver(PORT + 3)};
 
     std::vector<std::pair<http_method, std::string>> table = {
         {http_method::get,  "/a"},
@@ -217,7 +217,7 @@ LT_END_AUTO_TEST(route_runtime_vector_dispatch)
 // route(method_set{get, head}, ...): both methods serve.
 LT_BEGIN_AUTO_TEST(webserver_route_suite,
                    route_method_set_get_and_head_serve_both)
-    webserver ws = create_webserver(PORT + 4);
+    webserver ws{create_webserver(PORT + 4)};
     ws.route(method_set{}.set(http_method::get).set(http_method::head),
              "/c", [](const http_request&) {
                  return http_response::string("c");
@@ -238,7 +238,7 @@ LT_END_AUTO_TEST(route_method_set_get_and_head_serve_both)
 // and the Allow header lists exactly GET, HEAD (in enum order).
 LT_BEGIN_AUTO_TEST(webserver_route_suite,
                    route_method_set_serves_only_set_bits)
-    webserver ws = create_webserver(PORT + 5);
+    webserver ws{create_webserver(PORT + 5)};
     ws.route(method_set{}.set(http_method::get).set(http_method::head),
              "/c", [](const http_request&) {
                  return http_response::string("c");
@@ -260,7 +260,7 @@ LT_END_AUTO_TEST(route_method_set_serves_only_set_bits)
 // produced an empty set due to a bug).
 LT_BEGIN_AUTO_TEST(webserver_route_suite,
                    route_method_set_empty_throws_invalid_argument)
-    webserver ws = create_webserver(PORT + 6);
+    webserver ws{create_webserver(PORT + 6)};
     bool threw = false;
     try {
         ws.route(method_set{}, "/e", [](const http_request&) {
@@ -277,7 +277,7 @@ LT_END_AUTO_TEST(route_method_set_empty_throws_invalid_argument)
 // http_method, so this guard is now load-bearing.
 LT_BEGIN_AUTO_TEST(webserver_route_suite,
                    route_with_count_sentinel_throws_invalid_argument)
-    webserver ws = create_webserver(PORT + 7);
+    webserver ws{create_webserver(PORT + 7)};
     bool threw = false;
     try {
         ws.route(http_method::count_, "/s", [](const http_request&) {
@@ -292,7 +292,7 @@ LT_END_AUTO_TEST(route_with_count_sentinel_throws_invalid_argument)
 // Duplicate (method, path) registration via route() throws (delegates to
 // the on_* conflict path).
 LT_BEGIN_AUTO_TEST(webserver_route_suite, route_duplicate_method_path_throws)
-    webserver ws = create_webserver(PORT + 8);
+    webserver ws{create_webserver(PORT + 8)};
     ws.route(http_method::get, "/d", [](const http_request&) {
         return http_response::string("first");
     });
@@ -313,7 +313,7 @@ LT_END_AUTO_TEST(route_duplicate_method_path_throws)
 // detected from either entry point.
 LT_BEGIN_AUTO_TEST(webserver_route_suite,
                    route_then_on_get_same_path_throws)
-    webserver ws = create_webserver(PORT + 9);
+    webserver ws{create_webserver(PORT + 9)};
     ws.route(http_method::get, "/x", [](const http_request&) {
         return http_response::string("r");
     });
@@ -332,7 +332,7 @@ LT_END_AUTO_TEST(route_then_on_get_same_path_throws)
 // Reverse direction: on_get then route(get) must also throw.
 LT_BEGIN_AUTO_TEST(webserver_route_suite,
                    on_get_then_route_get_same_path_throws)
-    webserver ws = create_webserver(PORT + 10);
+    webserver ws{create_webserver(PORT + 10)};
     ws.on_get("/x", [](const http_request&) {
         return http_response::string("o");
     });
@@ -353,7 +353,7 @@ LT_END_AUTO_TEST(on_get_then_route_get_same_path_throws)
 // Pins all-or-nothing semantics for the method_set overload.
 LT_BEGIN_AUTO_TEST(webserver_route_suite,
                    route_method_set_partial_overlap_with_existing_throws_atomic)
-    webserver ws = create_webserver(PORT + 11);
+    webserver ws{create_webserver(PORT + 11)};
     ws.on_get("/p", [](const http_request&) {
         return http_response::string("g");
     });
@@ -385,7 +385,7 @@ LT_END_AUTO_TEST(route_method_set_partial_overlap_with_existing_throws_atomic)
 // binds {id}.
 LT_BEGIN_AUTO_TEST(webserver_route_suite,
                    route_method_set_parameterized_path_binds_arg)
-    webserver ws = create_webserver(PORT + 12);
+    webserver ws{create_webserver(PORT + 12)};
     ws.route(method_set{}.set(http_method::get).set(http_method::head),
              "/users/{id}", [](const http_request& req) {
                  std::string body = "id=";
@@ -404,7 +404,7 @@ LT_END_AUTO_TEST(route_method_set_parameterized_path_binds_arg)
 // Empty (default-constructed) std::function throws on either overload.
 LT_BEGIN_AUTO_TEST(webserver_route_suite,
                    route_empty_handler_throws_invalid_argument_single_method)
-    webserver ws = create_webserver(PORT + 13);
+    webserver ws{create_webserver(PORT + 13)};
     bool threw = false;
     try {
         ws.route(http_method::get, "/",
@@ -417,7 +417,7 @@ LT_END_AUTO_TEST(route_empty_handler_throws_invalid_argument_single_method)
 
 LT_BEGIN_AUTO_TEST(webserver_route_suite,
                    route_empty_handler_throws_invalid_argument_method_set)
-    webserver ws = create_webserver(PORT + 14);
+    webserver ws{create_webserver(PORT + 14)};
     bool threw = false;
     try {
         ws.route(method_set{}.set(http_method::get), "/",

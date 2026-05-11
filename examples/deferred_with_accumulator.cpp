@@ -81,7 +81,7 @@ class deferred_resource : public httpserver::http_resource {
 };
 
 int main() {
-    httpserver::webserver ws = httpserver::create_webserver(8080);
+    httpserver::webserver ws{httpserver::create_webserver(8080)};
 
     auto hwr = std::make_shared<deferred_resource>();
     ws.register_path("/hello", hwr);

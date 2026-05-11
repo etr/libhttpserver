@@ -55,13 +55,13 @@ inline constexpr int DEFAULT_WS_TIMEOUT = 180;
 // `#define DEFAULT_MASK_VALUE 0xFFFF`.
 inline constexpr std::uint16_t DEFAULT_MASK_VALUE = 0xFFFFu;
 
-// Default body for a 404 response when no not_found_resource is set on
+// Default body for a 404 response when no not_found_handler is set on
 // the webserver. Replaces v1 `#define NOT_FOUND_ERROR "Not Found"`.
 // std::string_view keeps storage non-allocating; call sites materialize
 // a std::string via the string_response constructor.
 inline constexpr std::string_view NOT_FOUND_ERROR = "Not Found";
 
-// Default body for a 405 response when no method_not_allowed_resource
+// Default body for a 405 response when no method_not_allowed_handler
 // is set. Replaces v1 `#define METHOD_ERROR "Method not Allowed"`.
 // The name is preserved (rather than renamed to METHOD_NOT_ALLOWED_ERROR)
 // to keep the migration mechanical — the namespacing is the API change,
@@ -74,7 +74,7 @@ inline constexpr std::string_view METHOD_ERROR = "Method not Allowed";
 // retained for v1 API parity per the v2.0 mechanical-migration policy.
 inline constexpr std::string_view NOT_METHOD_ERROR = "Method not Acceptable";
 
-// Default body for a 500 response when no internal_error_resource is
+// Default body for a 500 response when no internal_error_handler is
 // set. Replaces v1 `#define GENERIC_ERROR "Internal Error"`.
 inline constexpr std::string_view GENERIC_ERROR = "Internal Error";
 

@@ -80,8 +80,8 @@ LT_END_SUITE(routing_regression_suite)
 
 LT_BEGIN_AUTO_TEST(routing_regression_suite,
                    exact_path_hits_exact_tier_with_full_methods)
-    ht::webserver ws = ht::create_webserver(8080)
-        .start_method(ht::http::http_utils::INTERNAL_SELECT);
+    ht::webserver ws{ht::create_webserver(8080)
+        .start_method(ht::http::http_utils::INTERNAL_SELECT)};
     ws.register_path("/exact", std::make_shared<noop_resource>());
 
     auto r = impl_of(ws).lookup_v2(ht::http_method::get,
@@ -98,8 +98,8 @@ LT_END_AUTO_TEST(exact_path_hits_exact_tier_with_full_methods)
 LT_BEGIN_AUTO_TEST(routing_regression_suite, exact_path_root_only)
     // Mirrors http_endpoint_root_only — root-only registration should be
     // exact-tier and only match the root, not arbitrary paths.
-    ht::webserver ws = ht::create_webserver(8080)
-        .start_method(ht::http::http_utils::INTERNAL_SELECT);
+    ht::webserver ws{ht::create_webserver(8080)
+        .start_method(ht::http::http_utils::INTERNAL_SELECT)};
     ws.register_path("/", std::make_shared<noop_resource>());
 
     auto root = impl_of(ws).lookup_v2(ht::http_method::get,
@@ -118,8 +118,8 @@ LT_BEGIN_AUTO_TEST(routing_regression_suite,
     // Mirrors basic_suite::duplicate_endpoints — v1 normalizes "OK",
     // "/OK", "/OK/", "OK/" to the same canonical key. The v2 lookup
     // path must agree.
-    ht::webserver ws = ht::create_webserver(8080)
-        .start_method(ht::http::http_utils::INTERNAL_SELECT);
+    ht::webserver ws{ht::create_webserver(8080)
+        .start_method(ht::http::http_utils::INTERNAL_SELECT)};
     ws.register_path("/ok", std::make_shared<noop_resource>());
 
     // The radix tree's exact tier stores the canonical form. Both
@@ -143,8 +143,8 @@ LT_BEGIN_AUTO_TEST(routing_regression_suite,
     // surface (TASK-025). The route is GET-only, so methods should
     // contain GET and NOT contain POST. The radix tier carries the
     // capture for {id}.
-    ht::webserver ws = ht::create_webserver(8080)
-        .start_method(ht::http::http_utils::INTERNAL_SELECT);
+    ht::webserver ws{ht::create_webserver(8080)
+        .start_method(ht::http::http_utils::INTERNAL_SELECT)};
     ws.on_get("/users/{id}", noop_handler);
 
     auto r = impl_of(ws).lookup_v2(ht::http_method::get,
@@ -164,8 +164,8 @@ LT_BEGIN_AUTO_TEST(routing_regression_suite,
     // Mirrors http_endpoint_suite::http_endpoint_multiple_params via
     // the v2 lookup. The two {name} segments come out in the order
     // they appear in the registered pattern.
-    ht::webserver ws = ht::create_webserver(8080)
-        .start_method(ht::http::http_utils::INTERNAL_SELECT);
+    ht::webserver ws{ht::create_webserver(8080)
+        .start_method(ht::http::http_utils::INTERNAL_SELECT)};
     ws.register_path("/a/{x}/b/{y}/c",
                      std::make_shared<noop_resource>());
 
@@ -199,8 +199,8 @@ LT_BEGIN_AUTO_TEST(routing_regression_suite,
     // §3.7 future work, currently unscheduled), this test flips back
     // to the v1 semantics — assert `!miss.found` and the constraint
     // is honored.
-    ht::webserver ws = ht::create_webserver(8080)
-        .start_method(ht::http::http_utils::INTERNAL_SELECT);
+    ht::webserver ws{ht::create_webserver(8080)
+        .start_method(ht::http::http_utils::INTERNAL_SELECT)};
     ws.register_path("/items/{id|([0-9]+)}",
                      std::make_shared<noop_resource>());
 
@@ -231,8 +231,8 @@ LT_BEGIN_AUTO_TEST(routing_regression_suite,
                    prefix_serves_bare_and_subpaths)
     // Mirrors basic_suite::family_endpoints. A prefix registration
     // serves both the bare path and arbitrary subpaths under it.
-    ht::webserver ws = ht::create_webserver(8080)
-        .start_method(ht::http::http_utils::INTERNAL_SELECT);
+    ht::webserver ws{ht::create_webserver(8080)
+        .start_method(ht::http::http_utils::INTERNAL_SELECT)};
     ws.register_prefix("/static", std::make_shared<noop_resource>());
 
     auto bare = impl_of(ws).lookup_v2(ht::http_method::get,
@@ -253,8 +253,8 @@ LT_BEGIN_AUTO_TEST(routing_regression_suite,
     // Mirrors the "exact shadows prefix on the exact path, prefix
     // serves the rest" precedence relied on by family-style routes
     // with carve-outs.
-    ht::webserver ws = ht::create_webserver(8080)
-        .start_method(ht::http::http_utils::INTERNAL_SELECT);
+    ht::webserver ws{ht::create_webserver(8080)
+        .start_method(ht::http::http_utils::INTERNAL_SELECT)};
     auto prefix_res = std::make_shared<noop_resource>();
     auto exact_res = std::make_shared<noop_resource>();
     ws.register_prefix("/static", prefix_res);
@@ -284,8 +284,8 @@ LT_BEGIN_AUTO_TEST(routing_regression_suite,
     // Mirrors basic_suite::regex_matching. A path with regex
     // metacharacters and no {name} params goes through the regex
     // tier under the default regex_checking=true.
-    ht::webserver ws = ht::create_webserver(8080)
-        .start_method(ht::http::http_utils::INTERNAL_SELECT);
+    ht::webserver ws{ht::create_webserver(8080)
+        .start_method(ht::http::http_utils::INTERNAL_SELECT)};
     ws.register_path("/api/v[0-9]+",
                      std::make_shared<noop_resource>());
 
@@ -304,8 +304,8 @@ LT_BEGIN_AUTO_TEST(routing_regression_suite,
     // Mirrors basic_suite::register_unregister via the v2 lookup.
     // After unregister_path, lookup_v2 must miss (tier_hit::none) so
     // future dispatch will 404.
-    ht::webserver ws = ht::create_webserver(8080)
-        .start_method(ht::http::http_utils::INTERNAL_SELECT);
+    ht::webserver ws{ht::create_webserver(8080)
+        .start_method(ht::http::http_utils::INTERNAL_SELECT)};
     ws.register_path("/ephemeral", std::make_shared<noop_resource>());
 
     auto before = impl_of(ws).lookup_v2(ht::http_method::get,
@@ -325,8 +325,8 @@ LT_BEGIN_AUTO_TEST(routing_regression_suite,
                    prefix_register_then_unregister_then_lookup_misses)
     // Symmetric pin for the prefix half of register/unregister — the
     // v2 radix-tier prefix node must come out cleanly.
-    ht::webserver ws = ht::create_webserver(8080)
-        .start_method(ht::http::http_utils::INTERNAL_SELECT);
+    ht::webserver ws{ht::create_webserver(8080)
+        .start_method(ht::http::http_utils::INTERNAL_SELECT)};
     ws.register_prefix("/scratch", std::make_shared<noop_resource>());
 
     auto before = impl_of(ws).lookup_v2(
@@ -348,8 +348,8 @@ LT_END_AUTO_TEST(prefix_register_then_unregister_then_lookup_misses)
 
 LT_BEGIN_AUTO_TEST(routing_regression_suite,
                    on_get_only_method_yields_get_only_method_set)
-    ht::webserver ws = ht::create_webserver(8080)
-        .start_method(ht::http::http_utils::INTERNAL_SELECT);
+    ht::webserver ws{ht::create_webserver(8080)
+        .start_method(ht::http::http_utils::INTERNAL_SELECT)};
     ws.on_get("/g", noop_handler);
 
     // Looking up under GET: found, GET-only mask.
@@ -376,8 +376,8 @@ LT_BEGIN_AUTO_TEST(routing_regression_suite,
     // Mirrors webserver_on_methods_test merge-on-distinct-method
     // semantics — two on_* registrations on the same path compose
     // into one entry whose method_set carries both bits.
-    ht::webserver ws = ht::create_webserver(8080)
-        .start_method(ht::http::http_utils::INTERNAL_SELECT);
+    ht::webserver ws{ht::create_webserver(8080)
+        .start_method(ht::http::http_utils::INTERNAL_SELECT)};
     ws.on_get("/m", noop_handler);
     ws.on_post("/m", noop_handler);
 
@@ -402,8 +402,8 @@ LT_END_AUTO_TEST(on_get_then_on_post_same_path_merges_methods)
 
 LT_BEGIN_AUTO_TEST(routing_regression_suite,
                    overlapping_two_regex_routes_deterministic_first_wins)
-    ht::webserver ws = ht::create_webserver(8080)
-        .start_method(ht::http::http_utils::INTERNAL_SELECT);
+    ht::webserver ws{ht::create_webserver(8080)
+        .start_method(ht::http::http_utils::INTERNAL_SELECT)};
     auto first = std::make_shared<noop_resource>();
     auto second = std::make_shared<noop_resource>();
     ws.register_path("/foo/{var|([a-z]+)}/", first);
@@ -429,8 +429,8 @@ LT_BEGIN_AUTO_TEST(routing_regression_suite,
     // an exact-tier registration must beat a regex-tier registration
     // that also matches the path, because the lookup pipeline checks
     // exact before regex.
-    ht::webserver ws = ht::create_webserver(8080)
-        .start_method(ht::http::http_utils::INTERNAL_SELECT);
+    ht::webserver ws{ht::create_webserver(8080)
+        .start_method(ht::http::http_utils::INTERNAL_SELECT)};
     auto rx = std::make_shared<noop_resource>();
     auto exact = std::make_shared<noop_resource>();
     ws.register_path("/foo/{var|([a-z]+)}/", rx);
@@ -454,9 +454,9 @@ LT_BEGIN_AUTO_TEST(routing_regression_suite,
                    single_resource_mode_serves_any_subpath)
     // Mirrors basic_suite::single_resource_mode — under single_resource
     // mode, a single register_prefix("/") catches everything.
-    ht::webserver ws = ht::create_webserver(8080)
+    ht::webserver ws{ht::create_webserver(8080)
         .single_resource()
-        .start_method(ht::http::http_utils::INTERNAL_SELECT);
+        .start_method(ht::http::http_utils::INTERNAL_SELECT)};
     auto only = std::make_shared<noop_resource>();
     ws.register_prefix("/", only);
 
@@ -482,9 +482,9 @@ LT_BEGIN_AUTO_TEST(routing_regression_suite,
     // With no_regex_checking(), a path containing regex metacharacters
     // is registered as a literal exact path. The classifier must NOT
     // route it to the regex tier.
-    ht::webserver ws = ht::create_webserver(8080)
+    ht::webserver ws{ht::create_webserver(8080)
         .no_regex_checking()
-        .start_method(ht::http::http_utils::INTERNAL_SELECT);
+        .start_method(ht::http::http_utils::INTERNAL_SELECT)};
     ws.register_path("/api/v[0-9]+",
                      std::make_shared<noop_resource>());
 
@@ -511,8 +511,8 @@ LT_END_AUTO_TEST(no_regex_checking_treats_metachars_as_literal)
 // ---------------------------------------------------------------------
 
 LT_BEGIN_AUTO_TEST(routing_regression_suite, unregistered_path_yields_miss)
-    ht::webserver ws = ht::create_webserver(8080)
-        .start_method(ht::http::http_utils::INTERNAL_SELECT);
+    ht::webserver ws{ht::create_webserver(8080)
+        .start_method(ht::http::http_utils::INTERNAL_SELECT)};
     // Register an unrelated path so the table is not completely empty,
     // reducing the chance this is a vacuous pass.
     ws.register_path("/other", std::make_shared<noop_resource>());
@@ -533,8 +533,8 @@ LT_END_AUTO_TEST(unregistered_path_yields_miss)
 
 LT_BEGIN_AUTO_TEST(routing_regression_suite,
                    second_lookup_same_path_hits_cache_tier)
-    ht::webserver ws = ht::create_webserver(8080)
-        .start_method(ht::http::http_utils::INTERNAL_SELECT);
+    ht::webserver ws{ht::create_webserver(8080)
+        .start_method(ht::http::http_utils::INTERNAL_SELECT)};
     ws.register_path("/cached", std::make_shared<noop_resource>());
 
     // First lookup: populates the cache.
@@ -553,8 +553,8 @@ LT_END_AUTO_TEST(second_lookup_same_path_hits_cache_tier)
 
 LT_BEGIN_AUTO_TEST(routing_regression_suite,
                    unregister_invalidates_cache_entry)
-    ht::webserver ws = ht::create_webserver(8080)
-        .start_method(ht::http::http_utils::INTERNAL_SELECT);
+    ht::webserver ws{ht::create_webserver(8080)
+        .start_method(ht::http::http_utils::INTERNAL_SELECT)};
     ws.register_path("/volatile", std::make_shared<noop_resource>());
 
     // Warm the cache.
