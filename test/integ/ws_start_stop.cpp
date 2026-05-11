@@ -246,7 +246,7 @@ LT_END_AUTO_TEST(dual_stack)
 
 #endif
 
-LT_BEGIN_AUTO_TEST(ws_start_stop_suite, sweet_kill)
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, stop_and_wait)
     httpserver::webserver ws = httpserver::create_webserver(PORT);
     ok_resource ok;
     ws.register_path("base", as_shared(ok));
@@ -267,7 +267,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, sweet_kill)
     curl_easy_cleanup(curl);
     }
 
-    ws.sweet_kill();
+    ws.stop_and_wait();
 
     {
     curl_global_init(CURL_GLOBAL_ALL);
@@ -282,7 +282,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, sweet_kill)
     LT_ASSERT_EQ(res, 7);
     curl_easy_cleanup(curl);
     }
-LT_END_AUTO_TEST(sweet_kill)
+LT_END_AUTO_TEST(stop_and_wait)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, disable_options)
     httpserver::webserver ws = httpserver::create_webserver(PORT)

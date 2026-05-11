@@ -32,6 +32,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -298,10 +299,21 @@ class webserver {
       * and unregister_prefix; idempotent.
      **/
      void unregister_resource(const std::string& path);
-     void ban_ip(const std::string& ip);
-     void allow_ip(const std::string& ip);
-     void unban_ip(const std::string& ip);
-     void disallow_ip(const std::string& ip);
+
+     /**
+      * Add @p ip (or a range, e.g. "127.0.0.*") to the IP block list.
+      * Connections from a matching address are refused at the policy
+      * callback. Intended for use under the default ACCEPT policy.
+      * No-op semantics are preserved when the same IP is added twice;
+      * a more specific entry replaces a previously-recorded wildcard.
+     **/
+     void block_ip(std::string_view ip);
+
+     /**
+      * Remove @p ip from the IP block list. Idempotent: removing an IP
+      * that is not currently blocked is a no-op.
+     **/
+     void unblock_ip(std::string_view ip);
 
      log_access_ptr get_access_logger() const {
          return log_access;
@@ -320,9 +332,10 @@ class webserver {
      }
 
      /**
-      * Method used to kill the webserver waiting for it to terminate
+      * Stop the webserver and wait for in-flight handlers to complete
+      * before returning. Use stop() when no such guarantee is required.
      **/
-     void sweet_kill();
+     void stop_and_wait();
 
      /**
       * Run the webserver's event loop once (non-blocking).

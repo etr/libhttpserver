@@ -29,10 +29,13 @@ class hello_world_resource : public httpserver::http_resource {
      }
 };
 
+// TASK-029: The v2.0 public IP-control API is the pair block_ip / unblock_ip,
+// usable under the default ACCEPT policy. The historical allow_ip /
+// disallow_ip pair (under REJECT) was dropped from the public surface.
 int main() {
-    httpserver::webserver ws = httpserver::create_webserver(8080).default_policy(httpserver::http::http_utils::REJECT);
+    httpserver::webserver ws = httpserver::create_webserver(8080);
 
-    ws.allow_ip("127.0.0.1");
+    ws.block_ip("10.0.0.1");
 
     auto hwr = std::make_shared<hello_world_resource>();
     ws.register_path("/hello", hwr);
