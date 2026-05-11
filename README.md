@@ -275,31 +275,31 @@ For example, if your connection limit is “1”, a browser may open a first con
 * _.bind_address(**const std::string&** ip):_ Bind the server to a specific network interface by IP address string (e.g., `"127.0.0.1"` for localhost only, or `"192.168.1.100"` for a specific interface). Supports both IPv4 and IPv6 addresses. When an IPv6 address is provided, IPv6 mode is automatically enabled. Example: `create_webserver(8080).bind_address("127.0.0.1")`.
 * _.bind_socket(**int** socket_fd):_ Listen socket to use. Pass a listen socket for the daemon to use (systemd-style). If this option is used, the daemon will not open its own listen socket(s). The argument passed must be of type "int" and refer to an existing socket that has been bound to a port and is listening.
 * _.max_thread_stack_size(**int** stack_size):_ Maximum stack size for threads created by the library. Not specifying this option or using a value of zero means using the system default (which is likely to differ based on your platform). Default is `0 (system default)`.
-* _.use_ipv6() and .no_ipv6():_ Enable or disable the IPv6 protocol support (by default, libhttpserver will just support IPv4). If you specify this and the local platform does not support it, starting up the server will throw an exception. `off` by default.
-* _.use_dual_stack() and .no_dual_stack():_ Enable or disable the support for both IPv6 and IPv4 protocols at the same time (by default, libhttpserver will just support IPv4). If you specify this and the local platform does not support it, starting up the server will throw an exception. Note that this will mean that IPv4 addresses are returned in the IPv6-mapped format (the ’structsockaddrin6’ format will be used for IPv4 and IPv6). `off` by default.
-* _.pedantic() and .no_pedantic():_ Enables pedantic checks about the protocol (as opposed to as tolerant as possible). Specifically, at the moment, this flag causes the library to reject HTTP 1.1 connections without a `Host` header. This is required by the standard, but of course in violation of the “be as liberal as possible in what you accept” norm. It is recommended to turn this **off** if you are testing clients against the library, and **on** in production. `off` by default.
-* _.debug() and .no_debug():_ Enables debug messages from the library. `off` by default.
-* _.regex_checking() and .no_regex_checking():_ Enables pattern matching for endpoints. Read more [here](#registering-resources). `on` by default.
-* _.post_process() and .no_post_process():_ Enables/Disables the library to automatically parse the body of the http request as arguments if in querystring format. Read more [here](#parsing-requests). `on` by default.
-* _.put_processed_data_to_content() and .no_put_processed_data_to_content():_ Enables/Disables the library to copy parsed body data to the content or to only store it in the arguments map. `on` by default.
+* _.use_ipv6(**bool** enable = true):_ Enable or disable IPv6 protocol support (by default, libhttpserver supports only IPv4). If you enable this and the local platform does not support it, starting up the server will throw an exception. `off` by default. Pass `false` to disable explicitly.
+* _.use_dual_stack(**bool** enable = true):_ Enable or disable support for both IPv6 and IPv4 protocols at the same time (by default, libhttpserver supports only IPv4). If you enable this and the local platform does not support it, starting up the server will throw an exception. Note that this will mean that IPv4 addresses are returned in the IPv6-mapped format (the ’structsockaddrin6’ format will be used for IPv4 and IPv6). `off` by default.
+* _.pedantic(**bool** enable = true):_ Enables pedantic checks about the protocol (as opposed to as tolerant as possible). Specifically, at the moment, this flag causes the library to reject HTTP 1.1 connections without a `Host` header. This is required by the standard, but of course in violation of the "be as liberal as possible in what you accept" norm. It is recommended to turn this **off** if you are testing clients against the library, and **on** in production. `off` by default.
+* _.debug(**bool** enable = true):_ Enables debug messages from the library. `off` by default.
+* _.regex_checking(**bool** enable = true):_ Enables pattern matching for endpoints. Read more [here](#registering-resources). `on` by default.
+* _.post_process(**bool** enable = true):_ Enables/Disables the library to automatically parse the body of the http request as arguments if in querystring format. Read more [here](#parsing-requests). `on` by default.
+* _.put_processed_data_to_content(**bool** enable = true):_ Enables/Disables the library to copy parsed body data to the content or to only store it in the arguments map. `on` by default.
 * _.file_upload_target(**file_upload_target_T** file_upload_target):_ Controls, how the library stores uploaded files. Default value is `FILE_UPLOAD_MEMORY_ONLY`.
 	* `FILE_UPLOAD_MEMORY_ONLY`: The content of the file is only stored in memory. Depending on `put_processed_data_to_content` only as part of the arguments map or additionally in the content.
 	* `FILE_UPLOAD_DISK_ONLY`: The content of the file is stored only in the file system. The path is created from `file_upload_dir` and either a random name (if `generate_random_filename_on_upload` is true) or the actually uploaded file name.
 	* `FILE_UPLOAD_MEMORY_AND_DISK`: The content of the file is stored in memory and on the file system.
 * _.file_upload_dir(**const std::string&** file_upload_dir):_ Specifies the directory to store all uploaded files. Default value is `/tmp`.
-* _.generate_random_filename_on_upload() and .no_generate_random_filename_on_upload():_ Enables/Disables the library to generate a unique and unused filename to store the uploaded file to. Otherwise the actually uploaded file name is used. `off` by default.
+* _.generate_random_filename_on_upload(**bool** enable = true):_ Enables/Disables the library to generate a unique and unused filename to store the uploaded file to. Otherwise the actually uploaded file name is used. `off` by default.
 * _.file_cleanup_callback(**file_cleanup_callback_ptr** callback):_ Sets a callback function to control what happens to uploaded files when the request completes. By default (when no callback is set), all uploaded files are automatically deleted. The callback signature is `bool(const std::string& key, const std::string& filename, const http::file_info& info)` where `key` is the form field name, `filename` is the original uploaded filename, and `info` contains file metadata including the filesystem path. Return `true` to delete the file (default behavior) or `false` to keep it (e.g., after moving it to permanent storage). If the callback throws an exception, the file will be deleted as a safety measure.
-* _.deferred()_ and _.no_deferred():_ Enables/Disables the ability for the server to suspend and resume connections. Simply put, it enables/disables the ability to use `deferred_response`. Read more [here](#building-responses-to-requests). `on` by default.
-* _.single_resource() and .no_single_resource:_ Sets or unsets the server in single resource mode. This limits all endpoints to be served from a single resource. The resultant is that the webserver will process the request matching to the endpoint skipping any complex semantic. Because of this, the option is incompatible with `regex_checking` and requires the resource to be registered against an empty endpoint or the root endpoint (`"/"`). The resource will also have to be registered as family. (For more information on resource registration, read more [here](#registering-resources)). `off` by default.
-* _.no_listen_socket():_ Run the daemon without a listening socket. The server will not bind to any port on its own; instead, you must provide connections externally via `add_connection()`. Useful for integrating with an external accept loop or passing sockets from systemd or another process. `off` by default.
-* _.no_thread_safety():_ Disable internal thread-safety mechanisms. This can improve performance when you guarantee that only a single thread will access the daemon at a time. **Only use this if you are sure you do not need concurrent access.** `off` by default.
-* _.turbo():_ Enable turbo mode. This is a performance optimization that allows the daemon to skip certain internal operations. Requires the application to meet specific threading and response constraints — consult the libmicrohttpd documentation for details. `off` by default.
-* _.suppress_date_header():_ Suppress the automatic addition of a `Date:` header in responses. Useful for reproducible tests or when the application manages its own date headers. `off` by default.
+* _.deferred(**bool** enable = true):_ Enables/Disables the ability for the server to suspend and resume connections. Simply put, it enables/disables the ability to use `deferred_response`. Read more [here](#building-responses-to-requests). `on` by default.
+* _.single_resource(**bool** enable = true):_ Sets or unsets the server in single resource mode. This limits all endpoints to be served from a single resource. The resultant is that the webserver will process the request matching to the endpoint skipping any complex semantic. Because of this, the option is incompatible with `regex_checking` and requires the resource to be registered against an empty endpoint or the root endpoint (`"/"`). The resource will also have to be registered as family. (For more information on resource registration, read more [here](#registering-resources)). `off` by default.
+* _.listen_socket(**bool** enable = true):_ Run the daemon with (`true`) or without (`false`) a listening socket. When disabled, the server will not bind to any port on its own; instead, you must provide connections externally via `add_connection()`. Useful for integrating with an external accept loop or passing sockets from systemd or another process. `on` by default.
+* _.thread_safety(**bool** enable = true):_ Enable or disable internal thread-safety mechanisms. Disabling can improve performance when you guarantee that only a single thread will access the daemon at a time. **Only disable this if you are sure you do not need concurrent access.** `on` by default.
+* _.turbo(**bool** enable = true):_ Enable turbo mode. This is a performance optimization that allows the daemon to skip certain internal operations. Requires the application to meet specific threading and response constraints — consult the libmicrohttpd documentation for details. `off` by default.
+* _.suppress_date_header(**bool** enable = true):_ Suppress the automatic addition of a `Date:` header in responses. Useful for reproducible tests or when the application manages its own date headers. `off` by default.
 * _.listen_backlog(**int** backlog):_ Set the TCP listen backlog size. Higher values allow more pending connections in the kernel queue. Default is `0` (system default).
 * _.address_reuse(**int** reuse):_ Control address reuse (`SO_REUSEADDR`/`SO_REUSEPORT`). Pass `1` to enable, `-1` to disable. Default is `0` (system default).
 * _.connection_memory_increment(**size_t** increment):_ Increment size for per-connection memory allocation when the initial pool is exhausted. Default is `0` (system default, typically 1024 bytes).
 * _.tcp_fastopen_queue_size(**int** queue_size):_ Set the size of the TCP Fast Open queue. When set, enables TCP Fast Open with the specified queue depth. Default is `0` (disabled).
-* _.sigpipe_handled_by_app():_ Inform the daemon that the application is handling `SIGPIPE` on its own, so libmicrohttpd should not install a handler. `off` by default.
+* _.sigpipe_handled_by_app(**bool** enable = true):_ Inform the daemon that the application is handling `SIGPIPE` on its own, so libmicrohttpd should not install a handler. `off` by default.
 * _.client_discipline_level(**int** level):_ Controls how strictly the server enforces HTTP protocol compliance. Higher values make the server stricter with misbehaving clients. Default is `-1` (use libmicrohttpd default).
 
 ### Threading Models
@@ -402,7 +402,7 @@ You'll notice how, on the terminal runing your server, the logs will now be prin
 You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/custom_access_log.cpp).
 
 ### TLS/HTTPS
-* _.use_ssl() and .no_ssl():_ Determines whether to run in HTTPS-mode or not. If you set this as on and libhttpserver was compiled without SSL support, the library will throw an exception at start of the server. `off` by default.
+* _.use_ssl(**bool** enable = true):_ Determines whether to run in HTTPS-mode or not. If you set this as on and libhttpserver was compiled without SSL support, the library will throw an exception at start of the server. `off` by default.
 * _.cred_type(**const http::http_utils::cred_type_T&** cred_type):_ Daemon credentials type. Either certificate or anonymous. Acceptable values are:
 	* `NONE`: No credentials.
 	* `CERTIFICATE`: Certificate credential.
@@ -419,7 +419,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
 * _.https_mem_dhparams(**const std::string&** dhparams):_ String containing the Diffie-Hellman (DH) parameters in PEM format. This is used for DHE key exchange in TLS. If not specified, default DH parameters may be used.
 * _.https_key_password(**const std::string&** password):_ Password for the private key specified by `https_mem_key`, if the key file is encrypted.
 * _.https_priorities_append(**const std::string&** priorities):_ Additional GnuTLS priorities to append to the base priority string. Unlike `https_priorities()` which replaces the entire string, this appends to the default, making it easier to adjust specific cipher suites or algorithms.
-* _.no_alpn():_ Disable Application-Layer Protocol Negotiation (ALPN) for TLS connections. `off` by default.
+* _.alpn(**bool** enable = true):_ Enable or disable Application-Layer Protocol Negotiation (ALPN) for TLS connections. `on` by default.
 
 #### Minimal example using HTTPS
 ```cpp
@@ -508,12 +508,12 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
 
 ### IP Blacklisting/Whitelisting
 libhttpserver supports IP blacklisting and whitelisting as an internal feature. This section explains the startup options related with IP blacklisting/whitelisting. See the [specific section](#ip-blacklisting-and-whitelisting) to read more about the topic.
-* _.ban_system() and .no_ban_system:_ Can be used to enable/disable the ban system. `on` by default.
+* _.ban_system(**bool** enable = true):_ Can be used to enable/disable the ban system. `on` by default.
 * _.default_policy(**const http::http_utils::policy_T&** default_policy):_ Specifies what should be the default behavior when receiving a request. Possible values are `ACCEPT` and `REJECT`. Default is `ACCEPT`.
 
 ### Authentication Parameters
-* _.basic_auth() and .no_basic_auth:_ Can be used to enable/disable parsing of the basic authorization header sent by the client. `on` by default.
-* _.digest_auth() and .no_digest_auth:_ Can be used to enable/disable parsing of the digested authentication data sent by the client. `on` by default.
+* _.basic_auth(**bool** enable = true):_ Can be used to enable/disable parsing of the basic authorization header sent by the client. `on` by default.
+* _.digest_auth(**bool** enable = true):_ Can be used to enable/disable parsing of the digested authentication data sent by the client. `on` by default.
 * _.nonce_nc_size(**int** nonce_size):_ Size of an array of nonce and nonce counter map. This option represents the size (number of elements) of a map of a nonce and a nonce-counter. If this option is not specified, a default value of 4 will be used (which might be too small for servers handling many requests).
 You should calculate the value of NC_SIZE based on the number of connections per second multiplied by your expected session duration plus a factor of about two for hash table collisions. For example, if you expect 100 digest-authenticated connections per second and the average user to stay on your site for 5 minutes, then you likely need a value of about 60000. On the other hand, if you can only expect only 10 digest-authenticated connections per second, tolerate browsers getting a fresh nonce for each request and expect a HTTP request latency of 250 ms, then a value of about 5 should be fine.
 * _.digest_auth_random(**const std::string&** nonce_seed):_ Digest Authentication nonce’s seed. For security, you SHOULD provide a fresh random nonce when actually using Digest Authentication with libhttpserver in production.
@@ -521,16 +521,16 @@ You should calculate the value of NC_SIZE based on the number of connections per
 ### Examples of chaining syntax to create a webserver
 ```cpp
     webserver ws{create_webserver(8080)
-        .no_ssl()
-        .no_ipv6()
-        .no_debug()
-        .no_pedantic()
-        .no_basic_auth()
-        .no_digest_auth()
-        .no_comet()
-        .no_regex_checking()
-        .no_ban_system()
-        .no_post_process()};
+        .use_ssl(false)
+        .use_ipv6(false)
+        .debug(false)
+        .pedantic(false)
+        .basic_auth(false)
+        .digest_auth(false)
+        .deferred(false)
+        .regex_checking(false)
+        .ban_system(false)
+        .post_process(false)};
 ```
 ##
 ```cpp

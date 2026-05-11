@@ -284,18 +284,18 @@ LT_END_AUTO_TEST(stop_and_wait)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, disable_options)
     httpserver::webserver ws{httpserver::create_webserver(PORT)
-        .no_ssl()
-        .no_ipv6()
-        .no_debug()
-        .no_pedantic()
+        .use_ssl(false)
+        .use_ipv6(false)
+        .debug(false)
+        .pedantic(false)
 #ifdef HAVE_BAUTH
-        .no_basic_auth()
+        .basic_auth(false)
 #endif  // HAVE_BAUTH
-        .no_digest_auth()
-        .no_deferred()
-        .no_regex_checking()
-        .no_ban_system()
-        .no_post_process()};
+        .digest_auth(false)
+        .deferred(false)
+        .regex_checking(false)
+        .ban_system(false)
+        .post_process(false)};
     ok_resource ok;
     ws.register_path("base", as_shared(ok));
     ws.start(false);

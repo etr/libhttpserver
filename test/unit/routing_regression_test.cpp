@@ -479,11 +479,11 @@ LT_END_AUTO_TEST(single_resource_mode_serves_any_subpath)
 
 LT_BEGIN_AUTO_TEST(routing_regression_suite,
                    no_regex_checking_treats_metachars_as_literal)
-    // With no_regex_checking(), a path containing regex metacharacters
+    // With regex_checking(false), a path containing regex metacharacters
     // is registered as a literal exact path. The classifier must NOT
     // route it to the regex tier.
     ht::webserver ws{ht::create_webserver(8080)
-        .no_regex_checking()
+        .regex_checking(false)
         .start_method(ht::http::http_utils::INTERNAL_SELECT)};
     ws.register_path("/api/v[0-9]+",
                      std::make_shared<noop_resource>());

@@ -535,7 +535,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_disk_only)
     string upload_directory = ".";
 
     auto ws = std::make_unique<webserver>(create_webserver(PORT)
-                       .no_put_processed_data_to_content()
+                       .put_processed_data_to_content(false)
                        .file_upload_target(httpserver::FILE_UPLOAD_DISK_ONLY)
                        .file_upload_dir(upload_directory)
                        .generate_random_filename_on_upload());
@@ -687,7 +687,7 @@ LT_END_AUTO_TEST(file_upload_large_content_with_args)
 
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_only_excl_content)
     auto ws = std::make_unique<webserver>(create_webserver(PORT)
-                       .no_put_processed_data_to_content()
+                       .put_processed_data_to_content(false)
                        .file_upload_target(httpserver::FILE_UPLOAD_MEMORY_ONLY));
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);

@@ -19,6 +19,7 @@
 */
 
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -83,111 +84,143 @@ LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_per_IP_connection_limit)
     LT_CHECK_EQ(true, true);
 LT_END_AUTO_TEST(builder_per_IP_connection_limit)
 
-// Test use_ssl / no_ssl toggle
+// TASK-033 / PRD-CFG-REQ-001: every boolean flag setter takes a defaulted
+// `bool enable = true`. The tests below exercise both (true) and (false)
+// plus the default-arg form and confirm they all chain.
 LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_ssl_toggle)
     create_webserver cw1 = create_webserver(8080).use_ssl();
-    create_webserver cw2 = create_webserver(8080).no_ssl();
-    create_webserver cw3 = create_webserver(8080).use_ssl().no_ssl();
+    create_webserver cw2 = create_webserver(8080).use_ssl(false);
+    create_webserver cw3 = create_webserver(8080).use_ssl(true).use_ssl(false);
     LT_CHECK_EQ(true, true);
 LT_END_AUTO_TEST(builder_ssl_toggle)
 
-// Test use_ipv6 / no_ipv6 toggle
 LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_ipv6_toggle)
     create_webserver cw1 = create_webserver(8080).use_ipv6();
-    create_webserver cw2 = create_webserver(8080).no_ipv6();
-    create_webserver cw3 = create_webserver(8080).use_ipv6().no_ipv6();
+    create_webserver cw2 = create_webserver(8080).use_ipv6(false);
+    create_webserver cw3 = create_webserver(8080).use_ipv6(true).use_ipv6(false);
     LT_CHECK_EQ(true, true);
 LT_END_AUTO_TEST(builder_ipv6_toggle)
 
-// Test use_dual_stack / no_dual_stack toggle
 LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_dual_stack_toggle)
     create_webserver cw1 = create_webserver(8080).use_dual_stack();
-    create_webserver cw2 = create_webserver(8080).no_dual_stack();
+    create_webserver cw2 = create_webserver(8080).use_dual_stack(false);
     LT_CHECK_EQ(true, true);
 LT_END_AUTO_TEST(builder_dual_stack_toggle)
 
-// Test debug / no_debug toggle
 LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_debug_toggle)
     create_webserver cw1 = create_webserver(8080).debug();
-    create_webserver cw2 = create_webserver(8080).no_debug();
+    create_webserver cw2 = create_webserver(8080).debug(false);
     LT_CHECK_EQ(true, true);
 LT_END_AUTO_TEST(builder_debug_toggle)
 
-// Test pedantic / no_pedantic toggle
 LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_pedantic_toggle)
     create_webserver cw1 = create_webserver(8080).pedantic();
-    create_webserver cw2 = create_webserver(8080).no_pedantic();
+    create_webserver cw2 = create_webserver(8080).pedantic(false);
     LT_CHECK_EQ(true, true);
 LT_END_AUTO_TEST(builder_pedantic_toggle)
 
 #ifdef HAVE_BAUTH
-// Test basic_auth / no_basic_auth toggle
 LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_basic_auth_toggle)
     create_webserver cw1 = create_webserver(8080).basic_auth();
-    create_webserver cw2 = create_webserver(8080).no_basic_auth();
+    create_webserver cw2 = create_webserver(8080).basic_auth(false);
     LT_CHECK_EQ(true, true);
 LT_END_AUTO_TEST(builder_basic_auth_toggle)
 #endif  // HAVE_BAUTH
 
-// Test digest_auth / no_digest_auth toggle
 LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_digest_auth_toggle)
     create_webserver cw1 = create_webserver(8080).digest_auth();
-    create_webserver cw2 = create_webserver(8080).no_digest_auth();
+    create_webserver cw2 = create_webserver(8080).digest_auth(false);
     LT_CHECK_EQ(true, true);
 LT_END_AUTO_TEST(builder_digest_auth_toggle)
 
-// Test deferred / no_deferred toggle
 LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_deferred_toggle)
     create_webserver cw1 = create_webserver(8080).deferred();
-    create_webserver cw2 = create_webserver(8080).no_deferred();
+    create_webserver cw2 = create_webserver(8080).deferred(false);
     LT_CHECK_EQ(true, true);
 LT_END_AUTO_TEST(builder_deferred_toggle)
 
-// Test regex_checking / no_regex_checking toggle
 LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_regex_checking_toggle)
     create_webserver cw1 = create_webserver(8080).regex_checking();
-    create_webserver cw2 = create_webserver(8080).no_regex_checking();
+    create_webserver cw2 = create_webserver(8080).regex_checking(false);
     LT_CHECK_EQ(true, true);
 LT_END_AUTO_TEST(builder_regex_checking_toggle)
 
-// Test ban_system / no_ban_system toggle
 LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_ban_system_toggle)
     create_webserver cw1 = create_webserver(8080).ban_system();
-    create_webserver cw2 = create_webserver(8080).no_ban_system();
+    create_webserver cw2 = create_webserver(8080).ban_system(false);
     LT_CHECK_EQ(true, true);
 LT_END_AUTO_TEST(builder_ban_system_toggle)
 
-// Test post_process / no_post_process toggle
 LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_post_process_toggle)
     create_webserver cw1 = create_webserver(8080).post_process();
-    create_webserver cw2 = create_webserver(8080).no_post_process();
+    create_webserver cw2 = create_webserver(8080).post_process(false);
     LT_CHECK_EQ(true, true);
 LT_END_AUTO_TEST(builder_post_process_toggle)
 
-// Test put_processed_data_to_content toggle
 LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_put_processed_data_toggle)
     create_webserver cw1 = create_webserver(8080).put_processed_data_to_content();
-    create_webserver cw2 = create_webserver(8080).no_put_processed_data_to_content();
+    create_webserver cw2 = create_webserver(8080).put_processed_data_to_content(false);
     LT_CHECK_EQ(true, true);
 LT_END_AUTO_TEST(builder_put_processed_data_toggle)
 
-// Test single_resource / no_single_resource toggle
 LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_single_resource_toggle)
     create_webserver cw1 = create_webserver(8080).single_resource();
-    create_webserver cw2 = create_webserver(8080).no_single_resource();
+    create_webserver cw2 = create_webserver(8080).single_resource(false);
     LT_CHECK_EQ(true, true);
 LT_END_AUTO_TEST(builder_single_resource_toggle)
 
-// Test generate_random_filename_on_upload toggle
 LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_random_filename_toggle)
     create_webserver cw1 = create_webserver(8080).generate_random_filename_on_upload();
-    create_webserver cw2 = create_webserver(8080).no_generate_random_filename_on_upload();
+    create_webserver cw2 = create_webserver(8080).generate_random_filename_on_upload(false);
     LT_CHECK_EQ(true, true);
 LT_END_AUTO_TEST(builder_random_filename_toggle)
 
-// Test tcp_nodelay
+// TASK-033: setters renamed from no_listen_socket/no_thread_safety/no_alpn.
+// Polarity is inverted at the API surface: listen_socket(true) means
+// "have a listening socket", which maps to _no_listen_socket=false internally.
+LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_listen_socket_bool)
+    create_webserver cw1 = create_webserver(8080).listen_socket();
+    create_webserver cw2 = create_webserver(8080).listen_socket(false);
+    create_webserver cw3 = create_webserver(8080).listen_socket(false).listen_socket(true);
+    LT_CHECK_EQ(true, true);
+LT_END_AUTO_TEST(builder_listen_socket_bool)
+
+LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_thread_safety_bool)
+    create_webserver cw1 = create_webserver(8080).thread_safety();
+    create_webserver cw2 = create_webserver(8080).thread_safety(false);
+    LT_CHECK_EQ(true, true);
+LT_END_AUTO_TEST(builder_thread_safety_bool)
+
+LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_alpn_bool)
+    create_webserver cw1 = create_webserver(8080).alpn();
+    create_webserver cw2 = create_webserver(8080).alpn(false);
+    LT_CHECK_EQ(true, true);
+LT_END_AUTO_TEST(builder_alpn_bool)
+
+// Widened positive-only flags: tcp_nodelay, turbo, suppress_date_header,
+// sigpipe_handled_by_app all take bool enable = true (TASK-033).
+LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_turbo_bool)
+    create_webserver cw1 = create_webserver(8080).turbo();
+    create_webserver cw2 = create_webserver(8080).turbo(false);
+    LT_CHECK_EQ(true, true);
+LT_END_AUTO_TEST(builder_turbo_bool)
+
+LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_suppress_date_header_bool)
+    create_webserver cw1 = create_webserver(8080).suppress_date_header();
+    create_webserver cw2 = create_webserver(8080).suppress_date_header(false);
+    LT_CHECK_EQ(true, true);
+LT_END_AUTO_TEST(builder_suppress_date_header_bool)
+
+LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_sigpipe_handled_by_app_bool)
+    create_webserver cw1 = create_webserver(8080).sigpipe_handled_by_app();
+    create_webserver cw2 = create_webserver(8080).sigpipe_handled_by_app(false);
+    LT_CHECK_EQ(true, true);
+LT_END_AUTO_TEST(builder_sigpipe_handled_by_app_bool)
+
+// Test tcp_nodelay (widened to bool enable = true per TASK-033)
 LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_tcp_nodelay)
-    create_webserver cw = create_webserver(8080).tcp_nodelay();
+    create_webserver cw1 = create_webserver(8080).tcp_nodelay();
+    create_webserver cw2 = create_webserver(8080).tcp_nodelay(false);
     LT_CHECK_EQ(true, true);
 LT_END_AUTO_TEST(builder_tcp_nodelay)
 
@@ -467,6 +500,119 @@ LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_https_mem_trust_file)
     create_webserver cw = create_webserver(8080).https_mem_trust("../test/test_root_ca.pem");
     LT_CHECK_EQ(true, true);
 LT_END_AUTO_TEST(builder_https_mem_trust_file)
+
+// TASK-033 / PRD-CFG-REQ-003: port() rejects values that don't fit a uint16_t.
+// Test passes 70000 — must throw std::invalid_argument whose message names
+// "port" and the offending value.
+LT_BEGIN_AUTO_TEST(create_webserver_suite, port_out_of_range_throws)
+    bool threw = false;
+    std::string what_msg;
+    try {
+        create_webserver().port(70000);
+    } catch (const std::invalid_argument& e) {
+        threw = true;
+        what_msg = e.what();
+    }
+    LT_CHECK_EQ(threw, true);
+    LT_CHECK(what_msg.find("port") != std::string::npos);
+    LT_CHECK(what_msg.find("70000") != std::string::npos);
+LT_END_AUTO_TEST(port_out_of_range_throws)
+
+// Helper: assert that `op()` throws std::invalid_argument whose what()
+// contains `needle`. Used by the numeric-validation tests below.
+namespace {
+template <typename Fn>
+bool throws_invalid_argument_with(Fn&& op, const std::string& needle) {
+    try {
+        op();
+    } catch (const std::invalid_argument& e) {
+        return std::string(e.what()).find(needle) != std::string::npos;
+    } catch (...) {
+        return false;
+    }
+    return false;
+}
+}  // namespace
+
+LT_BEGIN_AUTO_TEST(create_webserver_suite, max_threads_negative_throws)
+    LT_CHECK(throws_invalid_argument_with(
+        []{ create_webserver().max_threads(-1); }, "max_threads"));
+LT_END_AUTO_TEST(max_threads_negative_throws)
+
+LT_BEGIN_AUTO_TEST(create_webserver_suite, max_connections_negative_throws)
+    LT_CHECK(throws_invalid_argument_with(
+        []{ create_webserver().max_connections(-1); }, "max_connections"));
+LT_END_AUTO_TEST(max_connections_negative_throws)
+
+LT_BEGIN_AUTO_TEST(create_webserver_suite, memory_limit_negative_throws)
+    LT_CHECK(throws_invalid_argument_with(
+        []{ create_webserver().memory_limit(-1); }, "memory_limit"));
+LT_END_AUTO_TEST(memory_limit_negative_throws)
+
+LT_BEGIN_AUTO_TEST(create_webserver_suite, connection_timeout_negative_throws)
+    LT_CHECK(throws_invalid_argument_with(
+        []{ create_webserver().connection_timeout(-1); }, "connection_timeout"));
+LT_END_AUTO_TEST(connection_timeout_negative_throws)
+
+LT_BEGIN_AUTO_TEST(create_webserver_suite, per_IP_connection_limit_negative_throws)
+    LT_CHECK(throws_invalid_argument_with(
+        []{ create_webserver().per_IP_connection_limit(-1); }, "per_IP_connection_limit"));
+LT_END_AUTO_TEST(per_IP_connection_limit_negative_throws)
+
+LT_BEGIN_AUTO_TEST(create_webserver_suite, max_thread_stack_size_negative_throws)
+    LT_CHECK(throws_invalid_argument_with(
+        []{ create_webserver().max_thread_stack_size(-1); }, "max_thread_stack_size"));
+LT_END_AUTO_TEST(max_thread_stack_size_negative_throws)
+
+LT_BEGIN_AUTO_TEST(create_webserver_suite, nonce_nc_size_negative_throws)
+    LT_CHECK(throws_invalid_argument_with(
+        []{ create_webserver().nonce_nc_size(-1); }, "nonce_nc_size"));
+LT_END_AUTO_TEST(nonce_nc_size_negative_throws)
+
+LT_BEGIN_AUTO_TEST(create_webserver_suite, listen_backlog_negative_throws)
+    LT_CHECK(throws_invalid_argument_with(
+        []{ create_webserver().listen_backlog(-1); }, "listen_backlog"));
+LT_END_AUTO_TEST(listen_backlog_negative_throws)
+
+LT_BEGIN_AUTO_TEST(create_webserver_suite, address_reuse_negative_throws)
+    LT_CHECK(throws_invalid_argument_with(
+        []{ create_webserver().address_reuse(-1); }, "address_reuse"));
+LT_END_AUTO_TEST(address_reuse_negative_throws)
+
+LT_BEGIN_AUTO_TEST(create_webserver_suite, tcp_fastopen_queue_size_negative_throws)
+    LT_CHECK(throws_invalid_argument_with(
+        []{ create_webserver().tcp_fastopen_queue_size(-1); }, "tcp_fastopen_queue_size"));
+LT_END_AUTO_TEST(tcp_fastopen_queue_size_negative_throws)
+
+LT_BEGIN_AUTO_TEST(create_webserver_suite, client_discipline_level_below_minus_one_throws)
+    LT_CHECK(throws_invalid_argument_with(
+        []{ create_webserver().client_discipline_level(-2); }, "client_discipline_level"));
+LT_END_AUTO_TEST(client_discipline_level_below_minus_one_throws)
+
+LT_BEGIN_AUTO_TEST(create_webserver_suite, client_discipline_level_minus_one_ok)
+    create_webserver cw = create_webserver().client_discipline_level(-1);
+    LT_CHECK_EQ(true, true);
+LT_END_AUTO_TEST(client_discipline_level_minus_one_ok)
+
+LT_BEGIN_AUTO_TEST(create_webserver_suite, file_upload_dir_empty_throws)
+    LT_CHECK(throws_invalid_argument_with(
+        []{ create_webserver().file_upload_dir(""); }, "file_upload_dir"));
+LT_END_AUTO_TEST(file_upload_dir_empty_throws)
+
+// TASK-033: bind_address(string) now prefixes the message with "bind_address".
+LT_BEGIN_AUTO_TEST(create_webserver_suite, bind_address_invalid_ip_throws_with_param_name)
+    LT_CHECK(throws_invalid_argument_with(
+        []{ create_webserver().bind_address(std::string("not.an.ip")); }, "bind_address"));
+LT_END_AUTO_TEST(bind_address_invalid_ip_throws_with_param_name)
+
+// Boundary check: port 65535 is accepted by both overloads, 65536 throws.
+LT_BEGIN_AUTO_TEST(create_webserver_suite, port_boundary_accept_and_reject)
+    LT_CHECK_NOTHROW(create_webserver().port(65535));
+    LT_CHECK(throws_invalid_argument_with(
+        []{ create_webserver().port(65536); }, "port"));
+    LT_CHECK(throws_invalid_argument_with(
+        []{ create_webserver().port(-1); }, "port"));
+LT_END_AUTO_TEST(port_boundary_accept_and_reject)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
