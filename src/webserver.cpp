@@ -1610,13 +1610,59 @@ std::shared_ptr<http_response> webserver_impl::method_not_allowed_page(detail::m
     }
 }
 
-std::shared_ptr<http_response> webserver_impl::internal_error_page(detail::modded_request* mr, bool force_our) const {
-    if (parent->internal_error_handler != nullptr && !force_our) {
-        return std::make_shared<http_response>(parent->internal_error_handler(*mr->dhr));
-    } else {
+std::shared_ptr<http_response> webserver_impl::internal_error_page(
+    detail::modded_request* mr,
+    std::string_view msg,
+    bool force_our) const {
+    // TASK-031 / DR-009 §5.2 point 4: the double-fault fallback. Used when
+    // the user-supplied internal_error_handler itself threw or when the
+    // belt-and-suspenders site after get_raw_response_with_fallback fires.
+    // The body is intentionally empty and the message is intentionally
+    // ignored.
+    if (force_our) {
         return std::make_shared<http_response>(
-            http_response::string(std::string{constants::GENERIC_ERROR})
+            http_response::empty()
                 .with_status(http_utils::http_internal_server_error));
+    }
+    // §5.2 point 2/3: invoke the user handler with the originating message.
+    if (parent->internal_error_handler != nullptr) {
+        return std::make_shared<http_response>(
+            parent->internal_error_handler(*mr->dhr, msg));
+    }
+    // No handler configured: surface the message in the default body so
+    // the unset-handler path is informative for debugging. Operators who
+    // need a fixed body can wire a constant-returning handler.
+    return std::make_shared<http_response>(
+        http_response::string(std::string{msg})
+            .with_status(http_utils::http_internal_server_error));
+}
+
+void webserver_impl::log_dispatch_error(std::string_view msg) const {
+    if (parent->log_error == nullptr) {
+        return;
+    }
+    // A misbehaving user logger must not poison the catch from inside the
+    // catch. Swallow any exception it throws; we have no recovery beyond
+    // dropping the log line.
+    try {
+        parent->log_error(std::string(msg));
+    } catch (...) {
+        // Intentionally suppressed.
+    }
+}
+
+std::shared_ptr<http_response>
+webserver_impl::run_internal_error_handler_safely(
+    detail::modded_request* mr,
+    std::string_view msg) const {
+    try {
+        return internal_error_page(mr, msg, /*force_our=*/false);
+    } catch (...) {
+        // §5.2 point 4: the user handler itself threw. Log generically
+        // and return an empty-body 500. No exception escapes from here.
+        log_dispatch_error("internal_error_handler threw; "
+                           "sending hardcoded empty-body 500");
+        return internal_error_page(mr, "", /*force_our=*/true);
     }
 }
 
@@ -1871,7 +1917,11 @@ struct MHD_Response* webserver_impl::get_raw_response_with_fallback(detail::modd
     try {
         struct MHD_Response* raw = materialize_response(mr->dhrs.get());
         if (raw == nullptr) {
-            mr->dhrs = internal_error_page(mr);
+            // TASK-031: no exception was thrown, but the body materializer
+            // returned null. Route through the safe internal-error path so
+            // a misbehaving user handler can't escape.
+            mr->dhrs = run_internal_error_handler_safely(
+                mr, "materialize_response returned null");
             raw = materialize_response(mr->dhrs.get());
         }
         return raw;
@@ -1882,9 +1932,19 @@ struct MHD_Response* webserver_impl::get_raw_response_with_fallback(detail::modd
         } catch(...) {
             return nullptr;
         }
-    } catch(...) {
+    } catch(const std::exception& e) {
+        log_dispatch_error(std::string("materialize threw: ") + e.what());
         try {
-            mr->dhrs = internal_error_page(mr);
+            mr->dhrs = run_internal_error_handler_safely(mr, e.what());
+            return materialize_response(mr->dhrs.get());
+        } catch(...) {
+            return nullptr;
+        }
+    } catch(...) {
+        log_dispatch_error("materialize threw unknown exception");
+        try {
+            mr->dhrs = run_internal_error_handler_safely(mr,
+                                                         "unknown exception");
             return materialize_response(mr->dhrs.get());
         } catch(...) {
             return nullptr;
@@ -2072,7 +2132,12 @@ MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection, struct de
                 // shared_ptr has no operator->*, so call as ((*ptr).*pmf)(...).
                 mr->dhrs = ((*hrm).*(mr->callback))(*mr->dhr);  // copy in memory (move in case)
                 if (mr->dhrs.get() == nullptr || mr->dhrs->get_status() == -1) {
-                    mr->dhrs = internal_error_page(mr);
+                    // TASK-031: no exception was thrown, but the handler
+                    // returned a null/invalid response. Route through the
+                    // safe internal-error path so a misbehaving user
+                    // handler can't escape into libmicrohttpd.
+                    mr->dhrs = run_internal_error_handler_safely(
+                        mr, "handler returned null response");
                 }
             } else {
                 mr->dhrs = method_not_allowed_page(mr);
@@ -2096,15 +2161,20 @@ MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection, struct de
                     mr->dhrs->with_header(http_utils::http_header_allow, header_value);
                 }
             }
-        } catch(...) {
-            // The user-supplied internal_error_handler may itself throw;
-            // fall back to the built-in error page in that case (force_our=true)
-            // so we never let exceptions escape into libmicrohttpd.
-            try {
-                mr->dhrs = internal_error_page(mr);
-            } catch(...) {
-                mr->dhrs = internal_error_page(mr, true);
-            }
+        } catch (const std::exception& e) {
+            // TASK-031 / DR-009 §5.2 point 2: handler threw std::exception.
+            // Log via error_logger, forward e.what() to internal_error_handler.
+            // run_internal_error_handler_safely contains a possible
+            // re-throw from the user handler (point 4).
+            log_dispatch_error(std::string("dispatch: handler threw "
+                                           "std::exception: ") + e.what());
+            mr->dhrs = run_internal_error_handler_safely(mr, e.what());
+        } catch (...) {
+            // §5.2 point 3: handler threw non-std::exception. Same flow
+            // as the std::exception arm but with the sentinel message.
+            log_dispatch_error("dispatch: handler threw unknown exception");
+            mr->dhrs = run_internal_error_handler_safely(mr,
+                                                         "unknown exception");
         }
     } else if (mr->dhrs == nullptr) {
         mr->dhrs = not_found_page(mr);
@@ -2112,7 +2182,10 @@ MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection, struct de
 
     raw_response = get_raw_response_with_fallback(mr);
     if (raw_response == nullptr) {
-        mr->dhrs = internal_error_page(mr, true);
+        // Belt-and-suspenders: even get_raw_response_with_fallback's
+        // own try/catch couldn't produce a response. Force the empty-body
+        // 500 fallback so MHD always has something to queue.
+        mr->dhrs = internal_error_page(mr, "", /*force_our=*/true);
         raw_response = materialize_response(mr->dhrs.get());
     }
     decorate_mhd_response(raw_response, *mr->dhrs);

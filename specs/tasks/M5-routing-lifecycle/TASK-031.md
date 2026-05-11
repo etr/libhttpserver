@@ -29,4 +29,4 @@ Implement the 6-point error-propagation contract from §5.2 / DR-009 in the disp
 **Related Requirements:** PRD-FLG-REQ-002 (sentinel/throw behavior)
 **Related Decisions:** DR-009, §5.2, AR-007
 
-**Status:** Not Started
+**Status:** In Progress

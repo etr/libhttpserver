@@ -20,6 +20,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -226,8 +227,9 @@ LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_method_not_allowed_handler)
 LT_END_AUTO_TEST(builder_method_not_allowed_handler)
 
 // Test internal_error_handler
+// TASK-031: signature widened to (request, message) per DR-009 §5.2.
 LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_internal_error_handler)
-    auto internal_error_handler = [](const http_request&) {
+    auto internal_error_handler = [](const http_request&, std::string_view) {
         return http_response::string("Custom 500").with_status(500);
     };
     create_webserver cw = create_webserver(8080).internal_error_handler(internal_error_handler);
