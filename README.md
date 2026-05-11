@@ -544,7 +544,7 @@ Once a webserver is created, you can manage its execution through the following 
 * _**void** webserver::start(**bool** blocking):_ Allows to start a server. If the `blocking` flag is passed as `true`, it will block the execution of the current thread until a call to stop on the same webserver object is performed.
 * _**void** webserver::stop():_ Allows to stop a server. It immediately stops it.
 * _**bool** webserver::is_running():_ Checks if a server is running
-* _**void** webserver::sweet_kill():_ Allows to stop a server. It doesn't guarantee an immediate halt to allow for thread termination and connection closure.
+* _**void** webserver::stop_and_wait():_ Stop the webserver and wait for in-flight handlers to complete before returning. Use `stop()` when no such guarantee is required.
 * _**int** webserver::quiesce():_ Quiesce the daemon: stop accepting new connections while letting in-flight requests complete. Returns the listen socket file descriptor (the caller can close it), or `-1` on error.
 * _**bool** webserver::run():_ Run the webserver's event loop once (non-blocking). For use with external event loops when the server is started without internal threading. Returns `true` on success.
 * _**bool** webserver::run_wait(**int32_t** millisec):_ Run the webserver's event loop, blocking until there is activity or the timeout expires. Pass `-1` for indefinite wait. Returns `true` on success.
@@ -946,10 +946,8 @@ libhttpserver provides natively a system to blacklist and whitelist IP addresses
 The system supports both IPV4 and IPV6 and manages them transparently. The only requirement is for ipv6 to be enabled on your server - you'll have to enable this by using the `use_ipv6` method on `create_webserver`.
 
 You can explicitly ban or allow an IP address using the following methods on the `webserver` class:
-* _**void** ban_ip(**const std::string&** ip):_ Adds one IP (or a range of IPs) to the list of the banned ones. Takes in input a `string` that contains the IP (or range of IPs) to ban. To use when the `default_policy` is `ACCEPT`.
-* _**void** allow_ip(**const std::string&** ip):_ Adds one IP (or a range of IPs) to the list of the allowed ones. Takes in input a `string` that contains the IP (or range of IPs) to allow.  To use when the `default_policy` is `REJECT`.
-* _**void** unban_ip(**const std::string&** ip):_ Removes one IP (or a range of IPs) from the list of the banned ones. Takes in input a `string` that contains the IP (or range of IPs) to remove from the list.  To use when the `default_policy` is `ACCEPT`.
-* _**void** disallow_ip(**const std::string&** ip):_ Removes one IP (or a range of IPs) from the list of the allowed ones. Takes in input a `string` that contains the IP (or range of IPs) to remove from the list.  To use when the `default_policy` is `REJECT`.
+* _**void** block_ip(**std::string_view** ip):_ Add one IP (or a range, e.g. `"127.0.0.*"`) to the block list. Connections from a matching address are refused at the policy callback. Intended for use under the default `ACCEPT` policy.
+* _**void** unblock_ip(**std::string_view** ip):_ Remove one IP (or a range) from the block list. Idempotent: removing an entry that is not currently blocked is a no-op.
 
 ### IP String Format
 The IP string format can represent both IPV4 and IPV6. Addresses will be normalized by the webserver to operate in the same sapce. Any valid IPV4 or IPV6 textual representation works.
@@ -977,10 +975,11 @@ Examples of valid IPs include:
     };
 
     int main(int argc, char** argv) {
-        webserver ws = create_webserver(8080)
-            .default_policy(http::http_utils::REJECT);
+        webserver ws = create_webserver(8080);
 
-        ws.allow_ip("127.0.0.1");
+        // Refuse connections from this address; everything else is accepted
+        // by default. Use a range like "127.0.0.*" to block a wildcard.
+        ws.block_ip("10.0.0.1");
 
         hello_world_resource hwr;
         ws.register_resource("/hello", &hwr);
@@ -1728,7 +1727,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
         std::cout << "HTTP 404 reason: "
                   << http::http_utils::reason_phrase(404) << std::endl;
 
-        ws.sweet_kill();
+        ws.stop_and_wait();
         return 0;
     }
 ```

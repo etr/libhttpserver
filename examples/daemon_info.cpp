@@ -53,7 +53,7 @@ int main() {
               << ". Press Ctrl+C to stop." << std::endl;
 
     // Block until interrupted
-    ws.sweet_kill();
+    ws.stop_and_wait();
 
     return 0;
 }

@@ -243,7 +243,7 @@ webserver::~webserver() {
     // when the unique_ptr is destroyed, after this body finishes.
 }
 
-void webserver::sweet_kill() {
+void webserver::stop_and_wait() {
     stop();
 }
 
@@ -1088,11 +1088,17 @@ void webserver::unregister_resource(const string& resource) {
     impl_->route_cache_v2.clear();
 }
 
-void webserver::ban_ip(const string& ip) {
+// TASK-029: The v2.0 public IP-control API is the pair block_ip / unblock_ip.
+// The historical ban_ip / unban_ip / allow_ip / disallow_ip quartet was
+// collapsed to a single name pair operating on the deny list. The internal
+// allowances set and the allow-list branch in policy_callback remain in
+// place so default_policy(REJECT) keeps working at the daemon level, but
+// they are no longer reachable from the public API.
+void webserver::block_ip(std::string_view ip) {
     std::unique_lock bans_lock(impl_->bans_mutex);
-    ip_representation t_ip(ip);
-    set<ip_representation>::iterator it = impl_->bans.find(t_ip);
-    if (it != impl_->bans.end() && (t_ip.weight() < (*it).weight())) {
+    ip_representation t_ip{std::string{ip}};
+    auto it = impl_->bans.find(t_ip);
+    if (it != impl_->bans.end() && (t_ip.weight() < it->weight())) {
         impl_->bans.erase(it);
         impl_->bans.insert(t_ip);
     } else {
@@ -1100,26 +1106,9 @@ void webserver::ban_ip(const string& ip) {
     }
 }
 
-void webserver::allow_ip(const string& ip) {
-    std::unique_lock allowances_lock(impl_->allowances_mutex);
-    ip_representation t_ip(ip);
-    set<ip_representation>::iterator it = impl_->allowances.find(t_ip);
-    if (it != impl_->allowances.end() && (t_ip.weight() < (*it).weight())) {
-        impl_->allowances.erase(it);
-        impl_->allowances.insert(t_ip);
-    } else {
-        impl_->allowances.insert(t_ip);
-    }
-}
-
-void webserver::unban_ip(const string& ip) {
+void webserver::unblock_ip(std::string_view ip) {
     std::unique_lock bans_lock(impl_->bans_mutex);
-    impl_->bans.erase(ip_representation(ip));
-}
-
-void webserver::disallow_ip(const string& ip) {
-    std::unique_lock allowances_lock(impl_->allowances_mutex);
-    impl_->allowances.erase(ip_representation(ip));
+    impl_->bans.erase(ip_representation{std::string{ip}});
 }
 
 namespace detail {
