@@ -104,11 +104,11 @@ int main(int argc, char** argv) {
     std::cout << "These files won't be deleted at termination" << std::endl;
     std::cout << "Please make sure, that the given directory exists and is writeable" << std::endl;
 
-    httpserver::webserver ws = httpserver::create_webserver(8080)
+    httpserver::webserver ws{httpserver::create_webserver(8080)
                               .no_put_processed_data_to_content()
                               .file_upload_dir(std::string(argv[1]))
                               .generate_random_filename_on_upload()
-                              .file_upload_target(httpserver::FILE_UPLOAD_DISK_ONLY);
+                              .file_upload_target(httpserver::FILE_UPLOAD_DISK_ONLY)};
 
     auto fur = std::make_shared<file_upload_resource>();
     ws.register_path("/", fur);

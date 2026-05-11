@@ -26,7 +26,7 @@ LDADD += -lcurl
 
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/ -DHTTPSERVER_COMPILATION
 METASOURCES = AUTO
-check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_const_getters http_request_tls_accessors webserver_register_smartptr webserver_register_path_prefix webserver_on_methods webserver_route route_table lookup_pipeline route_table_concurrency routing_regression
+check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver create_webserver_explicit new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_const_getters http_request_tls_accessors webserver_register_smartptr webserver_register_path_prefix webserver_on_methods webserver_route route_table lookup_pipeline route_table_concurrency routing_regression
 
 MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
 
@@ -44,6 +44,16 @@ nodelay_SOURCES = integ/nodelay.cpp
 http_resource_SOURCES = unit/http_resource_test.cpp
 http_response_SOURCES = unit/http_response_test.cpp
 create_webserver_SOURCES = unit/create_webserver_test.cpp
+# create_webserver_explicit: TASK-030 compile-time sentinel. Pins:
+#   (1) PRD-NAM-REQ-004: webserver(const create_webserver&) is explicit
+#       (negative is_convertible_v + positive is_constructible_v);
+#   (2) PRD-NAM-REQ-003: the three error-page setters carry the _handler
+#       suffix with std::function<http_response(const http_request&)>
+#       (positive SFINAE detectors) and the legacy _resource-suffixed
+#       setters are gone (negative SFINAE detectors).
+# Pure compile test -- empty LDADD.
+create_webserver_explicit_SOURCES = unit/create_webserver_explicit_test.cpp
+create_webserver_explicit_LDADD =
 new_response_types_SOURCES = integ/new_response_types.cpp
 daemon_info_SOURCES = integ/daemon_info.cpp
 uri_log_SOURCES = unit/uri_log_test.cpp

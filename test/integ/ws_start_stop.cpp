@@ -104,14 +104,12 @@ class tls_info_resource : public httpserver::http_resource {
 };
 #endif  // HAVE_GNUTLS
 
-shared_ptr<httpserver::http_response> not_found_custom(const httpserver::http_request&) {
-    return std::make_shared<httpserver::http_response>(
-        httpserver::http_response::string("Not found custom").with_status(404));
+httpserver::http_response not_found_custom(const httpserver::http_request&) {
+    return httpserver::http_response::string("Not found custom").with_status(404);
 }
 
-shared_ptr<httpserver::http_response> not_allowed_custom(const httpserver::http_request&) {
-    return std::make_shared<httpserver::http_response>(
-        httpserver::http_response::string("Not allowed custom").with_status(405));
+httpserver::http_response not_allowed_custom(const httpserver::http_request&) {
+    return httpserver::http_response::string("Not allowed custom").with_status(405);
 }
 
 LT_BEGIN_SUITE(ws_start_stop_suite)
@@ -126,7 +124,7 @@ LT_END_SUITE(ws_start_stop_suite)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, start_stop)
     { // NOLINT (internal scope opening - not method start)
-    httpserver::webserver ws = httpserver::create_webserver(PORT);
+    httpserver::webserver ws{httpserver::create_webserver(PORT)};
     ok_resource ok;
     ws.register_path("base", as_shared(ok));
     ws.start(false);
@@ -148,7 +146,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, start_stop)
     }
 
     {
-    httpserver::webserver ws = httpserver::create_webserver(PORT).start_method(httpserver::http::http_utils::INTERNAL_SELECT);
+    httpserver::webserver ws{httpserver::create_webserver(PORT).start_method(httpserver::http::http_utils::INTERNAL_SELECT)};
     ok_resource ok;
     ws.register_path("base", as_shared(ok));
     ws.start(false);
@@ -170,7 +168,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, start_stop)
     }
 
     {
-    httpserver::webserver ws = httpserver::create_webserver(PORT).start_method(httpserver::http::http_utils::THREAD_PER_CONNECTION);
+    httpserver::webserver ws{httpserver::create_webserver(PORT).start_method(httpserver::http::http_utils::THREAD_PER_CONNECTION)};
     ok_resource ok;
     ws.register_path("base", as_shared(ok));
     ws.start(false);
@@ -196,7 +194,7 @@ LT_END_AUTO_TEST(start_stop)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ipv6)
     { // NOLINT (internal scope opening - not method start)
-    httpserver::webserver ws = httpserver::create_webserver(PORT).use_ipv6();
+    httpserver::webserver ws{httpserver::create_webserver(PORT).use_ipv6()};
     ok_resource ok;
     ws.register_path("base", as_shared(ok));
     ws.start(false);
@@ -221,7 +219,7 @@ LT_END_AUTO_TEST(ipv6)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, dual_stack)
     { // NOLINT (internal scope opening - not method start)
-    httpserver::webserver ws = httpserver::create_webserver(PORT).use_dual_stack();
+    httpserver::webserver ws{httpserver::create_webserver(PORT).use_dual_stack()};
     ok_resource ok;
     ws.register_path("base", as_shared(ok));
     ws.start(false);
@@ -247,7 +245,7 @@ LT_END_AUTO_TEST(dual_stack)
 #endif
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, stop_and_wait)
-    httpserver::webserver ws = httpserver::create_webserver(PORT);
+    httpserver::webserver ws{httpserver::create_webserver(PORT)};
     ok_resource ok;
     ws.register_path("base", as_shared(ok));
     ws.start(false);
@@ -285,7 +283,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, stop_and_wait)
 LT_END_AUTO_TEST(stop_and_wait)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, disable_options)
-    httpserver::webserver ws = httpserver::create_webserver(PORT)
+    httpserver::webserver ws{httpserver::create_webserver(PORT)
         .no_ssl()
         .no_ipv6()
         .no_debug()
@@ -297,7 +295,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, disable_options)
         .no_deferred()
         .no_regex_checking()
         .no_ban_system()
-        .no_post_process();
+        .no_post_process()};
     ok_resource ok;
     ws.register_path("base", as_shared(ok));
     ws.start(false);
@@ -319,13 +317,13 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, disable_options)
 LT_END_AUTO_TEST(disable_options)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, enable_options)
-    httpserver::webserver ws = httpserver::create_webserver(PORT)
+    httpserver::webserver ws{httpserver::create_webserver(PORT)
         .debug()
         .pedantic()
         .deferred()
         .regex_checking()
         .ban_system()
-        .post_process();
+        .post_process()};
     ok_resource ok;
     ws.register_path("base", as_shared(ok));
     ws.start(false);
@@ -360,7 +358,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_socket)
     bind(fd, (struct sockaddr*) &address, sizeof(address));
     listen(fd, 10000);
 
-    httpserver::webserver ws = httpserver::create_webserver(-1).bind_socket(fd);  // whatever port here doesn't matter
+    httpserver::webserver ws{httpserver::create_webserver(-1).bind_socket(fd)};  // whatever port here doesn't matter
     ok_resource ok;
     ws.register_path("base", as_shared(ok));
     ws.start(false);
@@ -382,7 +380,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_socket)
 LT_END_AUTO_TEST(custom_socket)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, bind_address_string)
-    httpserver::webserver ws = httpserver::create_webserver(PORT).bind_address("127.0.0.1");
+    httpserver::webserver ws{httpserver::create_webserver(PORT).bind_address("127.0.0.1")};
     ok_resource ok;
     ws.register_path("base", as_shared(ok));
     ws.start(false);
@@ -409,7 +407,7 @@ LT_END_AUTO_TEST(bind_address_string_invalid)
 #endif
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, single_resource)
-    httpserver::webserver ws = httpserver::create_webserver(PORT).single_resource();
+    httpserver::webserver ws{httpserver::create_webserver(PORT).single_resource()};
     ok_resource ok;
     ws.register_prefix("/", as_shared(ok));
     ws.start(false);
@@ -431,7 +429,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, single_resource)
 LT_END_AUTO_TEST(single_resource)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, single_resource_not_default_resource)
-    httpserver::webserver ws = httpserver::create_webserver(PORT).single_resource();
+    httpserver::webserver ws{httpserver::create_webserver(PORT).single_resource()};
     ok_resource ok;
     LT_CHECK_THROW(ws.register_prefix("/other", as_shared(ok)));
     LT_CHECK_THROW(ws.register_path("/", as_shared(ok)));
@@ -441,14 +439,14 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, single_resource_not_default_resource)
 LT_END_AUTO_TEST(single_resource_not_default_resource)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, register_path_nullptr_throws)
-    httpserver::webserver ws = httpserver::create_webserver(PORT);
+    httpserver::webserver ws{httpserver::create_webserver(PORT)};
     // TASK-023: both smart-pointer overloads throw on null.
     LT_CHECK_THROW(ws.register_path("/test", std::shared_ptr<httpserver::http_resource>{}));
     LT_CHECK_THROW(ws.register_path("/test", std::unique_ptr<httpserver::http_resource>{}));
 LT_END_AUTO_TEST(register_path_nullptr_throws)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, register_empty_resource_non_family)
-    httpserver::webserver ws = httpserver::create_webserver(PORT);
+    httpserver::webserver ws{httpserver::create_webserver(PORT)};
     ok_resource ok;
     // Register empty resource as exact path (non-prefix)
     ws.register_path("", as_shared(ok));
@@ -471,7 +469,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, register_empty_resource_non_family)
 LT_END_AUTO_TEST(register_empty_resource_non_family)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, register_path_with_url_params_non_family)
-    httpserver::webserver ws = httpserver::create_webserver(PORT).regex_checking();
+    httpserver::webserver ws{httpserver::create_webserver(PORT).regex_checking()};
     ok_resource ok;
     // Register resource with URL parameters as exact path
     ws.register_path("/user/{id}", as_shared(ok));
@@ -494,7 +492,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, register_path_with_url_params_non_family
 LT_END_AUTO_TEST(register_path_with_url_params_non_family)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, register_duplicate_resource_throws)
-    httpserver::webserver ws = httpserver::create_webserver(PORT);
+    httpserver::webserver ws{httpserver::create_webserver(PORT)};
     ok_resource ok1, ok2;
     // First registration should succeed.
     ws.register_path("/duplicate", as_shared(ok1));
@@ -508,30 +506,30 @@ LT_END_AUTO_TEST(register_duplicate_resource_throws)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, thread_per_connection_fails_with_max_threads)
     { // NOLINT (internal scope opening - not method start)
-    httpserver::webserver ws = httpserver::create_webserver(PORT)
+    httpserver::webserver ws{httpserver::create_webserver(PORT)
         .start_method(httpserver::http::http_utils::THREAD_PER_CONNECTION)
-        .max_threads(5);
+        .max_threads(5)};
     LT_CHECK_THROW(ws.start(false));
     }
 LT_END_AUTO_TEST(thread_per_connection_fails_with_max_threads)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, thread_per_connection_fails_with_max_threads_stack_size)
     { // NOLINT (internal scope opening - not method start)
-    httpserver::webserver ws = httpserver::create_webserver(PORT)
+    httpserver::webserver ws{httpserver::create_webserver(PORT)
         .start_method(httpserver::http::http_utils::THREAD_PER_CONNECTION)
-        .max_thread_stack_size(4*1024*1024);
+        .max_thread_stack_size(4*1024*1024)};
     LT_CHECK_THROW(ws.start(false));
     }
 LT_END_AUTO_TEST(thread_per_connection_fails_with_max_threads_stack_size)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, tuning_options)
-    httpserver::webserver ws = httpserver::create_webserver(PORT)
+    httpserver::webserver ws{httpserver::create_webserver(PORT)
         .max_connections(10)
         .max_threads(10)
         .memory_limit(10000)
         .per_IP_connection_limit(10)
         .max_thread_stack_size(4*1024*1024)
-        .nonce_nc_size(10);
+        .nonce_nc_size(10)};
 
     ok_resource ok;
     ws.register_path("base", as_shared(ok));
@@ -554,10 +552,10 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, tuning_options)
 LT_END_AUTO_TEST(tuning_options)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_base)
-    httpserver::webserver ws = httpserver::create_webserver(PORT)
+    httpserver::webserver ws{httpserver::create_webserver(PORT)
         .use_ssl()
         .https_mem_key(ROOT "/key.pem")
-        .https_mem_cert(ROOT "/cert.pem");
+        .https_mem_cert(ROOT "/cert.pem")};
 
     ok_resource ok;
     ws.register_path("base", as_shared(ok));
@@ -583,11 +581,11 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_base)
 LT_END_AUTO_TEST(ssl_base)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_with_protocol_priorities)
-    httpserver::webserver ws = httpserver::create_webserver(PORT)
+    httpserver::webserver ws{httpserver::create_webserver(PORT)
         .use_ssl()
         .https_mem_key(ROOT "/key.pem")
         .https_mem_cert(ROOT "/cert.pem")
-        .https_priorities("NORMAL:-MD5");
+        .https_priorities("NORMAL:-MD5")};
 
     ok_resource ok;
     ws.register_path("base", as_shared(ok));
@@ -612,11 +610,11 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_with_protocol_priorities)
 LT_END_AUTO_TEST(ssl_with_protocol_priorities)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_with_trust)
-    httpserver::webserver ws = httpserver::create_webserver(PORT)
+    httpserver::webserver ws{httpserver::create_webserver(PORT)
         .use_ssl()
         .https_mem_key(ROOT "/key.pem")
         .https_mem_cert(ROOT "/cert.pem")
-        .https_mem_trust(ROOT "/test_root_ca.pem");
+        .https_mem_trust(ROOT "/test_root_ca.pem")};
 
     ok_resource ok;
     ws.register_path("base", as_shared(ok));
@@ -654,7 +652,7 @@ void* start_ws_blocking(void* par) {
 }
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, blocking_server)
-    httpserver::webserver ws = httpserver::create_webserver(PORT);
+    httpserver::webserver ws{httpserver::create_webserver(PORT)};
 
     pthread_t tid;
     pthread_create(&tid, nullptr, start_ws_blocking, reinterpret_cast<void*>(&ws));
@@ -683,9 +681,9 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, blocking_server)
 LT_END_AUTO_TEST(blocking_server)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_error_resources)
-    httpserver::webserver ws = httpserver::create_webserver(PORT)
-        .not_found_resource(not_found_custom)
-        .method_not_allowed_resource(not_allowed_custom);
+    httpserver::webserver ws{httpserver::create_webserver(PORT)
+        .not_found_handler(not_found_custom)
+        .method_not_allowed_handler(not_allowed_custom)};
 
     ok_resource ok;
     ws.register_path("base", as_shared(ok));
@@ -752,7 +750,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_error_resources)
 LT_END_AUTO_TEST(custom_error_resources)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ipv6_webserver)
-    httpserver::webserver ws = httpserver::create_webserver(PORT + 20).use_ipv6();
+    httpserver::webserver ws{httpserver::create_webserver(PORT + 20).use_ipv6()};
     ok_resource ok;
     ws.register_path("base", as_shared(ok));
     try {
@@ -782,7 +780,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ipv6_webserver)
 LT_END_AUTO_TEST(ipv6_webserver)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, dual_stack_webserver)
-    httpserver::webserver ws = httpserver::create_webserver(PORT + 21).use_dual_stack();
+    httpserver::webserver ws{httpserver::create_webserver(PORT + 21).use_dual_stack()};
     ok_resource ok;
     ws.register_path("base", as_shared(ok));
     try {
@@ -813,7 +811,7 @@ LT_END_AUTO_TEST(dual_stack_webserver)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, bind_address_ipv4)
     int port = PORT + 22;
-    httpserver::webserver ws = httpserver::create_webserver(port).bind_address("127.0.0.1");
+    httpserver::webserver ws{httpserver::create_webserver(port).bind_address("127.0.0.1")};
     ok_resource ok;
     ws.register_path("base", as_shared(ok));
     ws.start(false);
@@ -841,7 +839,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, bind_address_ipv6_string)
     // This tests the IPv6 branch in bind_address
     // Note: This may fail if IPv6 is not available on the system
     try {
-        httpserver::webserver ws = httpserver::create_webserver(port).bind_address("::1");
+        httpserver::webserver ws{httpserver::create_webserver(port).bind_address("::1")};
         ok_resource ok;
         ws.register_path("base", as_shared(ok));
         ws.start(false);
@@ -881,7 +879,7 @@ class tls_check_non_tls_resource : public httpserver::http_resource {
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, tls_session_on_non_tls_connection)
     int port = PORT + 25;
-    httpserver::webserver ws = httpserver::create_webserver(port);  // No SSL
+    httpserver::webserver ws{httpserver::create_webserver(port)};  // No SSL
     tls_check_non_tls_resource tls_check;
     ws.register_path("tls_check", as_shared(tls_check));
     ws.start(false);
@@ -904,10 +902,10 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, tls_session_on_non_tls_connection)
 LT_END_AUTO_TEST(tls_session_on_non_tls_connection)
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, https_webserver)
     int port = PORT + 23;
-    httpserver::webserver ws = httpserver::create_webserver(port)
+    httpserver::webserver ws{httpserver::create_webserver(port)
         .use_ssl()
         .https_mem_key(ROOT "/key.pem")
-        .https_mem_cert(ROOT "/cert.pem");
+        .https_mem_cert(ROOT "/cert.pem")};
     ok_resource ok;
     ws.register_path("base", as_shared(ok));
     try {
@@ -939,10 +937,10 @@ LT_END_AUTO_TEST(https_webserver)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, tls_session_getters)
     int port = PORT + 24;
-    httpserver::webserver ws = httpserver::create_webserver(port)
+    httpserver::webserver ws{httpserver::create_webserver(port)
         .use_ssl()
         .https_mem_key(ROOT "/key.pem")
-        .https_mem_cert(ROOT "/cert.pem");
+        .https_mem_cert(ROOT "/cert.pem")};
     tls_info_resource tls_info;
     ws.register_path("tls_info", as_shared(tls_info));
     try {
@@ -1006,10 +1004,10 @@ class client_cert_info_resource : public httpserver::http_resource {
 // Test client certificate methods without a client certificate (no mTLS)
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_no_certificate)
     int port = PORT + 46;
-    httpserver::webserver ws = httpserver::create_webserver(port)
+    httpserver::webserver ws{httpserver::create_webserver(port)
         .use_ssl()
         .https_mem_key(ROOT "/key.pem")
-        .https_mem_cert(ROOT "/cert.pem");
+        .https_mem_cert(ROOT "/cert.pem")};
     client_cert_info_resource cert_info;
     ws.register_path("cert_info", as_shared(cert_info));
     try {
@@ -1040,11 +1038,11 @@ LT_END_AUTO_TEST(client_cert_no_certificate)
 // Test client certificate methods with mTLS (client sends certificate)
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_with_certificate)
     int port = PORT + 47;
-    httpserver::webserver ws = httpserver::create_webserver(port)
+    httpserver::webserver ws{httpserver::create_webserver(port)
         .use_ssl()
         .https_mem_key(ROOT "/key.pem")
         .https_mem_cert(ROOT "/cert.pem")
-        .https_mem_trust(ROOT "/client_cert.pem");  // Trust the client cert as CA
+        .https_mem_trust(ROOT "/client_cert.pem")};  // Trust the client cert as CA
     client_cert_info_resource cert_info;
     ws.register_path("cert_info", as_shared(cert_info));
     try {
@@ -1080,11 +1078,11 @@ LT_END_AUTO_TEST(client_cert_with_certificate)
 // Test client certificate DN extraction
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_dn_extraction)
     int port = PORT + 48;
-    httpserver::webserver ws = httpserver::create_webserver(port)
+    httpserver::webserver ws{httpserver::create_webserver(port)
         .use_ssl()
         .https_mem_key(ROOT "/key.pem")
         .https_mem_cert(ROOT "/cert.pem")
-        .https_mem_trust(ROOT "/client_cert.pem");
+        .https_mem_trust(ROOT "/client_cert.pem")};
     client_cert_info_resource cert_info;
     ws.register_path("cert_info", as_shared(cert_info));
     try {
@@ -1118,11 +1116,11 @@ LT_END_AUTO_TEST(client_cert_dn_extraction)
 // Test client certificate fingerprint generation
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_fingerprint)
     int port = PORT + 49;
-    httpserver::webserver ws = httpserver::create_webserver(port)
+    httpserver::webserver ws{httpserver::create_webserver(port)
         .use_ssl()
         .https_mem_key(ROOT "/key.pem")
         .https_mem_cert(ROOT "/cert.pem")
-        .https_mem_trust(ROOT "/client_cert.pem");
+        .https_mem_trust(ROOT "/client_cert.pem")};
     client_cert_info_resource cert_info;
     ws.register_path("cert_info", as_shared(cert_info));
     try {
@@ -1161,11 +1159,11 @@ LT_END_AUTO_TEST(client_cert_fingerprint)
 // Test client certificate without CN field (covers cn_size == 0 branch)
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_no_cn)
     int port = PORT + 51;
-    httpserver::webserver ws = httpserver::create_webserver(port)
+    httpserver::webserver ws{httpserver::create_webserver(port)
         .use_ssl()
         .https_mem_key(ROOT "/key.pem")
         .https_mem_cert(ROOT "/cert.pem")
-        .https_mem_trust(ROOT "/client_cert_no_cn.pem");
+        .https_mem_trust(ROOT "/client_cert_no_cn.pem")};
     client_cert_info_resource cert_info;
     ws.register_path("cert_info", as_shared(cert_info));
     try {
@@ -1202,11 +1200,11 @@ LT_END_AUTO_TEST(client_cert_no_cn)
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_untrusted)
     int port = PORT + 52;
     // Don't add untrusted cert to trust store - verification should fail
-    httpserver::webserver ws = httpserver::create_webserver(port)
+    httpserver::webserver ws{httpserver::create_webserver(port)
         .use_ssl()
         .https_mem_key(ROOT "/key.pem")
         .https_mem_cert(ROOT "/cert.pem")
-        .https_mem_trust(ROOT "/client_cert.pem");  // Only trust the original client cert
+        .https_mem_trust(ROOT "/client_cert.pem")};  // Only trust the original client cert
     client_cert_info_resource cert_info;
     ws.register_path("cert_info", as_shared(cert_info));
     try {
@@ -1251,11 +1249,11 @@ LT_END_AUTO_TEST(client_cert_untrusted)
 //     the cert itself).
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_accessors_known_values)
     int port = PORT + 53;
-    httpserver::webserver ws = httpserver::create_webserver(port)
+    httpserver::webserver ws{httpserver::create_webserver(port)
         .use_ssl()
         .https_mem_key(ROOT "/key.pem")
         .https_mem_cert(ROOT "/cert.pem")
-        .https_mem_trust(ROOT "/client_cert.pem");
+        .https_mem_trust(ROOT "/client_cert.pem")};
     client_cert_info_resource cert_info;
     ws.register_path("cert_info", as_shared(cert_info));
     try {
@@ -1350,11 +1348,11 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, sni_callback_setup)
         return {"", ""};  // Use default cert
     };
 
-    httpserver::webserver ws = httpserver::create_webserver(port)
+    httpserver::webserver ws{httpserver::create_webserver(port)
         .use_ssl()
         .https_mem_key(ROOT "/key.pem")
         .https_mem_cert(ROOT "/cert.pem")
-        .sni_callback(sni_cb);
+        .sni_callback(sni_cb)};
 
     ok_resource ok;
     ws.register_path("base", as_shared(ok));
@@ -1390,7 +1388,7 @@ LT_END_AUTO_TEST(sni_callback_setup)
 // Test pedantic mode configuration
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, pedantic_mode)
     int port = PORT + 26;
-    httpserver::webserver ws = httpserver::create_webserver(port).pedantic();
+    httpserver::webserver ws{httpserver::create_webserver(port).pedantic()};
     ok_resource ok;
     ws.register_path("base", as_shared(ok));
     ws.start(false);
@@ -1416,8 +1414,8 @@ LT_END_AUTO_TEST(pedantic_mode)
 // Test digest_auth_random configuration
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, digest_auth_random)
     int port = PORT + 27;
-    httpserver::webserver ws = httpserver::create_webserver(port)
-        .digest_auth_random("random_string_for_digest");
+    httpserver::webserver ws{httpserver::create_webserver(port)
+        .digest_auth_random("random_string_for_digest")};
     ok_resource ok;
     ws.register_path("base", as_shared(ok));
     ws.start(false);
@@ -1468,12 +1466,12 @@ bool has_gnutls_cli() {
 // Test PSK credential handler setup
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_handler_setup)
     int port = PORT + 28;
-    httpserver::webserver ws = httpserver::create_webserver(port)
+    httpserver::webserver ws{httpserver::create_webserver(port)
         .use_ssl()
         .https_mem_key(ROOT "/key.pem")
         .https_mem_cert(ROOT "/cert.pem")
         .cred_type(httpserver::http::http_utils::PSK)
-        .psk_cred_handler(test_psk_handler);
+        .psk_cred_handler(test_psk_handler)};
 
     ok_resource ok;
     ws.register_path("base", as_shared(ok));
@@ -1495,12 +1493,12 @@ LT_END_AUTO_TEST(psk_handler_setup)
 // Test PSK with empty handler (error path)
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_handler_empty)
     int port = PORT + 29;
-    httpserver::webserver ws = httpserver::create_webserver(port)
+    httpserver::webserver ws{httpserver::create_webserver(port)
         .use_ssl()
         .https_mem_key(ROOT "/key.pem")
         .https_mem_cert(ROOT "/cert.pem")
         .cred_type(httpserver::http::http_utils::PSK)
-        .psk_cred_handler(empty_psk_handler);
+        .psk_cred_handler(empty_psk_handler)};
 
     ok_resource ok;
     ws.register_path("base", as_shared(ok));
@@ -1521,11 +1519,11 @@ LT_END_AUTO_TEST(psk_handler_empty)
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_no_handler)
     int port = PORT + 30;
     // Configure PSK mode but don't set a handler
-    httpserver::webserver ws = httpserver::create_webserver(port)
+    httpserver::webserver ws{httpserver::create_webserver(port)
         .use_ssl()
         .https_mem_key(ROOT "/key.pem")
         .https_mem_cert(ROOT "/cert.pem")
-        .cred_type(httpserver::http::http_utils::PSK);
+        .cred_type(httpserver::http::http_utils::PSK)};
 
     ok_resource ok;
     ws.register_path("base", as_shared(ok));
@@ -1553,13 +1551,13 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_connection_success)
 
     int port = PORT + 41;
     try {
-        httpserver::webserver ws = httpserver::create_webserver(port)
+        httpserver::webserver ws{httpserver::create_webserver(port)
             .use_ssl()
             .https_mem_key(ROOT "/key.pem")
             .https_mem_cert(ROOT "/cert.pem")
             .cred_type(httpserver::http::http_utils::PSK)
             .psk_cred_handler(test_psk_handler)
-            .https_priorities("NORMAL:+PSK:+DHE-PSK");
+            .https_priorities("NORMAL:+PSK:+DHE-PSK")};
 
         ok_resource ok;
         ws.register_path("base", as_shared(ok));
@@ -1600,13 +1598,13 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_connection_unknown_user)
 
     int port = PORT + 42;
     try {
-        httpserver::webserver ws = httpserver::create_webserver(port)
+        httpserver::webserver ws{httpserver::create_webserver(port)
             .use_ssl()
             .https_mem_key(ROOT "/key.pem")
             .https_mem_cert(ROOT "/cert.pem")
             .cred_type(httpserver::http::http_utils::PSK)
             .psk_cred_handler(test_psk_handler)
-            .https_priorities("NORMAL:+PSK:+DHE-PSK");
+            .https_priorities("NORMAL:+PSK:+DHE-PSK")};
 
         ok_resource ok;
         ws.register_path("base", as_shared(ok));
@@ -1643,13 +1641,13 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_connection_empty_handler)
 
     int port = PORT + 43;
     try {
-        httpserver::webserver ws = httpserver::create_webserver(port)
+        httpserver::webserver ws{httpserver::create_webserver(port)
             .use_ssl()
             .https_mem_key(ROOT "/key.pem")
             .https_mem_cert(ROOT "/cert.pem")
             .cred_type(httpserver::http::http_utils::PSK)
             .psk_cred_handler(empty_psk_handler)
-            .https_priorities("NORMAL:+PSK:+DHE-PSK");
+            .https_priorities("NORMAL:+PSK:+DHE-PSK")};
 
         ok_resource ok;
         ws.register_path("base", as_shared(ok));
@@ -1686,13 +1684,13 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_connection_invalid_hex)
 
     int port = PORT + 44;
     try {
-        httpserver::webserver ws = httpserver::create_webserver(port)
+        httpserver::webserver ws{httpserver::create_webserver(port)
             .use_ssl()
             .https_mem_key(ROOT "/key.pem")
             .https_mem_cert(ROOT "/cert.pem")
             .cred_type(httpserver::http::http_utils::PSK)
             .psk_cred_handler(invalid_hex_psk_handler)
-            .https_priorities("NORMAL:+PSK:+DHE-PSK");
+            .https_priorities("NORMAL:+PSK:+DHE-PSK")};
 
         ok_resource ok;
         ws.register_path("base", as_shared(ok));
@@ -1729,13 +1727,13 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_connection_no_handler)
 
     int port = PORT + 45;
     try {
-        httpserver::webserver ws = httpserver::create_webserver(port)
+        httpserver::webserver ws{httpserver::create_webserver(port)
             .use_ssl()
             .https_mem_key(ROOT "/key.pem")
             .https_mem_cert(ROOT "/cert.pem")
             .cred_type(httpserver::http::http_utils::PSK)
             // Note: NOT setting psk_cred_handler - handler is nullptr
-            .https_priorities("NORMAL:+PSK:+DHE-PSK");
+            .https_priorities("NORMAL:+PSK:+DHE-PSK")};
 
         ok_resource ok;
         ws.register_path("base", as_shared(ok));
@@ -1767,8 +1765,8 @@ LT_END_AUTO_TEST(psk_connection_no_handler)
 // Test max_threads configuration with a running server
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, max_threads_running)
     int port = PORT + 34;
-    httpserver::webserver ws = httpserver::create_webserver(port)
-        .max_threads(4);
+    httpserver::webserver ws{httpserver::create_webserver(port)
+        .max_threads(4)};
 
     ok_resource ok;
     ws.register_path("base", as_shared(ok));
@@ -1794,8 +1792,8 @@ LT_END_AUTO_TEST(max_threads_running)
 // Test max_connections configuration
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, max_connections_running)
     int port = PORT + 35;
-    httpserver::webserver ws = httpserver::create_webserver(port)
-        .max_connections(100);
+    httpserver::webserver ws{httpserver::create_webserver(port)
+        .max_connections(100)};
 
     ok_resource ok;
     ws.register_path("base", as_shared(ok));
@@ -1821,8 +1819,8 @@ LT_END_AUTO_TEST(max_connections_running)
 // Test memory_limit configuration
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, memory_limit_running)
     int port = PORT + 36;
-    httpserver::webserver ws = httpserver::create_webserver(port)
-        .memory_limit(32 * 1024);  // 32KB memory limit
+    httpserver::webserver ws{httpserver::create_webserver(port)
+        .memory_limit(32 * 1024)};  // 32KB memory limit
 
     ok_resource ok;
     ws.register_path("base", as_shared(ok));
@@ -1848,8 +1846,8 @@ LT_END_AUTO_TEST(memory_limit_running)
 // Test per_IP_connection_limit configuration
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, per_ip_limit_running)
     int port = PORT + 37;
-    httpserver::webserver ws = httpserver::create_webserver(port)
-        .per_IP_connection_limit(5);
+    httpserver::webserver ws{httpserver::create_webserver(port)
+        .per_IP_connection_limit(5)};
 
     ok_resource ok;
     ws.register_path("base", as_shared(ok));
@@ -1875,8 +1873,8 @@ LT_END_AUTO_TEST(per_ip_limit_running)
 // Test max_thread_stack_size configuration (covers line 257 branch)
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, thread_stack_size_running)
     int port = PORT + 38;
-    httpserver::webserver ws = httpserver::create_webserver(port)
-        .max_thread_stack_size(4 * 1024 * 1024);  // 4MB stack size
+    httpserver::webserver ws{httpserver::create_webserver(port)
+        .max_thread_stack_size(4 * 1024 * 1024)};  // 4MB stack size
 
     ok_resource ok;
     ws.register_path("base", as_shared(ok));
@@ -1902,8 +1900,8 @@ LT_END_AUTO_TEST(thread_stack_size_running)
 // Test deferred mode
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, deferred_mode_running)
     int port = PORT + 39;
-    httpserver::webserver ws = httpserver::create_webserver(port)
-        .deferred();
+    httpserver::webserver ws{httpserver::create_webserver(port)
+        .deferred()};
 
     ok_resource ok;
     ws.register_path("base", as_shared(ok));
@@ -1929,8 +1927,8 @@ LT_END_AUTO_TEST(deferred_mode_running)
 // Test debug mode with actual request
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, debug_mode_running)
     int port = PORT + 40;
-    httpserver::webserver ws = httpserver::create_webserver(port)
-        .debug();
+    httpserver::webserver ws{httpserver::create_webserver(port)
+        .debug()};
 
     ok_resource ok;
     ws.register_path("base", as_shared(ok));

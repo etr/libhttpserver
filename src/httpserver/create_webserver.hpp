@@ -30,6 +30,7 @@
 #include <functional>
 #include <limits>
 #include <string>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -42,7 +43,10 @@ namespace httpserver {
 class webserver;
 class http_request;
 
-typedef std::function<std::shared_ptr<http_response>(const http_request&)> render_ptr;
+// TASK-030 / PRD-NAM-REQ-003: the three error-page setters take a function-
+// shaped handler that returns http_response by value, matching the on_*
+// family (detail::lambda_handler) introduced in TASK-025.
+typedef std::function<http_response(const http_request&)> error_handler;
 typedef std::function<bool(const std::string&)> validator_ptr;
 typedef std::function<void(const std::string&)> log_access_ptr;
 typedef std::function<void(const std::string&)> log_error_ptr;
@@ -366,18 +370,18 @@ class create_webserver {
          return *this;
      }
 
-     create_webserver& not_found_resource(render_ptr not_found_resource) {
-         _not_found_resource = not_found_resource;
+     create_webserver& not_found_handler(error_handler handler) {
+         _not_found_handler = std::move(handler);
          return *this;
      }
 
-     create_webserver& method_not_allowed_resource(render_ptr method_not_allowed_resource) {
-         _method_not_allowed_resource = method_not_allowed_resource;
+     create_webserver& method_not_allowed_handler(error_handler handler) {
+         _method_not_allowed_handler = std::move(handler);
          return *this;
      }
 
-     create_webserver& internal_error_resource(render_ptr internal_error_resource) {
-         _internal_error_resource = internal_error_resource;
+     create_webserver& internal_error_handler(error_handler handler) {
+         _internal_error_handler = std::move(handler);
          return *this;
      }
 
@@ -522,9 +526,9 @@ class create_webserver {
      bool _deferred_enabled = false;
      bool _single_resource = false;
      bool _tcp_nodelay = false;
-     render_ptr _not_found_resource = nullptr;
-     render_ptr _method_not_allowed_resource = nullptr;
-     render_ptr _internal_error_resource = nullptr;
+     error_handler _not_found_handler = nullptr;
+     error_handler _method_not_allowed_handler = nullptr;
+     error_handler _internal_error_handler = nullptr;
      file_cleanup_callback_ptr _file_cleanup_callback = nullptr;
      auth_handler_ptr _auth_handler = nullptr;
      std::vector<std::string> _auth_skip_paths;

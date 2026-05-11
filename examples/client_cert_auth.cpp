@@ -148,11 +148,11 @@ int main() {
     std::cout << "  /secure - Requires valid client certificate\n\n";
 
     // Create webserver with SSL and client certificate trust store
-    httpserver::webserver ws = httpserver::create_webserver(8443)
+    httpserver::webserver ws{httpserver::create_webserver(8443)
         .use_ssl()
         .https_mem_key("server_key.pem")      // Server private key
         .https_mem_cert("server_cert.pem")    // Server certificate
-        .https_mem_trust("ca_cert.pem");      // CA certificate for verifying client certs
+        .https_mem_trust("ca_cert.pem")};      // CA certificate for verifying client certs
 
     auto secure = std::make_shared<secure_resource>();
     auto info = std::make_shared<info_resource>();

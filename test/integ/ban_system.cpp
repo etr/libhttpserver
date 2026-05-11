@@ -88,7 +88,7 @@ LT_END_SUITE(ban_system_suite)
 // allow_ip / disallow_ip symbols.
 
 LT_BEGIN_AUTO_TEST(ban_system_suite, accept_default_block_blocks)
-    webserver ws = create_webserver(PORT).default_policy(http_utils::ACCEPT);
+    webserver ws{create_webserver(PORT).default_policy(http_utils::ACCEPT)};
     ws.start(false);
 
     ok_resource resource;
@@ -146,7 +146,7 @@ LT_END_AUTO_TEST(accept_default_block_blocks)
 // Tests default REJECT behavior — drives policy_callback's default path
 // without touching the (now-private) allow list.
 LT_BEGIN_AUTO_TEST(ban_system_suite, reject_policy_neither_allowed_nor_blocked)
-    webserver ws = create_webserver(PORT).default_policy(http_utils::REJECT);
+    webserver ws{create_webserver(PORT).default_policy(http_utils::REJECT)};
     ws.start(false);
 
     ok_resource resource;
@@ -172,7 +172,7 @@ LT_END_AUTO_TEST(reject_policy_neither_allowed_nor_blocked)
 // Test block_ip with wildcard then more specific IP.
 // Drives the weight comparison branch in block_ip.
 LT_BEGIN_AUTO_TEST(ban_system_suite, block_with_weight_comparison)
-    webserver ws = create_webserver(PORT).default_policy(http_utils::ACCEPT);
+    webserver ws{create_webserver(PORT).default_policy(http_utils::ACCEPT)};
     ws.start(false);
 
     ok_resource resource;
@@ -206,7 +206,7 @@ LT_END_AUTO_TEST(block_with_weight_comparison)
 // higher). Drives the t_ip.weight() < (*it).weight() erase-and-insert
 // branch in block_ip.
 LT_BEGIN_AUTO_TEST(ban_system_suite, block_specific_then_wildcard)
-    webserver ws = create_webserver(PORT).default_policy(http_utils::ACCEPT);
+    webserver ws{create_webserver(PORT).default_policy(http_utils::ACCEPT)};
     ws.start(false);
 
     ok_resource resource;

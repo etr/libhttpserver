@@ -36,8 +36,8 @@ class hello_world_resource : public httpserver::http_resource {
 };
 
 int main() {
-    httpserver::webserver ws = httpserver::create_webserver(8080)
-        .log_access(custom_access_log);
+    httpserver::webserver ws{httpserver::create_webserver(8080)
+        .log_access(custom_access_log)};
 
     auto hwr = std::make_shared<hello_world_resource>();
     ws.register_path("/hello", hwr);

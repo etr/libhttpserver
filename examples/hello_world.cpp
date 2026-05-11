@@ -45,7 +45,7 @@ std::shared_ptr<httpserver::http_response> hello_world_resource::render(const ht
 
 int main() {
     // It is possible to create a webserver passing a great number of parameters. In this case we are just passing the port and the number of thread running.
-    httpserver::webserver ws = httpserver::create_webserver(8080).start_method(httpserver::http::http_utils::INTERNAL_SELECT).max_threads(5);
+    httpserver::webserver ws{httpserver::create_webserver(8080).start_method(httpserver::http::http_utils::INTERNAL_SELECT).max_threads(5)};
 
     auto hwr = std::make_shared<hello_world_resource>();
     // This way we are registering the hello_world_resource to answer for the endpoint

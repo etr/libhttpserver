@@ -46,8 +46,8 @@ int main() {
     // added for a small perf gain when the daemon is only ever touched from
     // a single thread, but it is omitted here for portability (some MHD
     // builds, notably Windows/MSYS2, reject that combination at start).
-    httpserver::webserver ws = httpserver::create_webserver(8080)
-        .start_method(httpserver::http::http_utils::EXTERNAL_SELECT);
+    httpserver::webserver ws{httpserver::create_webserver(8080)
+        .start_method(httpserver::http::http_utils::EXTERNAL_SELECT)};
 
     auto hr = std::make_shared<hello_resource>();
     ws.register_path("/hello", hr);

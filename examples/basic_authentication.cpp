@@ -36,7 +36,7 @@ class user_pass_resource : public httpserver::http_resource {
 };
 
 int main() {
-    httpserver::webserver ws = httpserver::create_webserver(8080);
+    httpserver::webserver ws{httpserver::create_webserver(8080)};
 
     auto hwr = std::make_shared<user_pass_resource>();
     ws.register_path("/hello", hwr);

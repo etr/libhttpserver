@@ -190,7 +190,7 @@ LT_END_SUITE(webserver_register_path_prefix_suite)
 // the resource and serve its body.
 LT_BEGIN_AUTO_TEST(webserver_register_path_prefix_suite,
                    register_prefix_matches_longer_path)
-    webserver ws = create_webserver(PORT);
+    webserver ws{create_webserver(PORT)};
     ws.register_prefix("/static", std::make_shared<ok_resource>());
     ws.start(false);
 
@@ -204,7 +204,7 @@ LT_END_AUTO_TEST(register_prefix_matches_longer_path)
 // register_path: a longer URL must NOT match (404).
 LT_BEGIN_AUTO_TEST(webserver_register_path_prefix_suite,
                    register_path_does_not_match_longer_path)
-    webserver ws = create_webserver(PORT + 1);
+    webserver ws{create_webserver(PORT + 1)};
     ws.register_path("/static", std::make_shared<ok_resource>());
     ws.start(false);
 
@@ -217,7 +217,7 @@ LT_END_AUTO_TEST(register_path_does_not_match_longer_path)
 // register_path: parameterized exact path matches and binds the {id} arg.
 LT_BEGIN_AUTO_TEST(webserver_register_path_prefix_suite,
                    register_path_parameterized_matches_exact)
-    webserver ws = create_webserver(PORT + 2);
+    webserver ws{create_webserver(PORT + 2)};
     ws.register_path("/users/{id}", std::make_shared<echo_id_resource>());
     ws.start(false);
 
@@ -231,7 +231,7 @@ LT_END_AUTO_TEST(register_path_parameterized_matches_exact)
 // unregister_prefix removes only a prefix registration; subsequent GET 404s.
 LT_BEGIN_AUTO_TEST(webserver_register_path_prefix_suite,
                    register_prefix_then_unregister_prefix_404s)
-    webserver ws = create_webserver(PORT + 3);
+    webserver ws{create_webserver(PORT + 3)};
     ws.register_prefix("/static", std::make_shared<ok_resource>());
     ws.start(false);
 
@@ -249,7 +249,7 @@ LT_END_AUTO_TEST(register_prefix_then_unregister_prefix_404s)
 // unregister_path removes only an exact registration; subsequent GET 404s.
 LT_BEGIN_AUTO_TEST(webserver_register_path_prefix_suite,
                    register_path_then_unregister_path_404s)
-    webserver ws = create_webserver(PORT + 4);
+    webserver ws{create_webserver(PORT + 4)};
     ws.register_path("/foo", std::make_shared<ok_resource>());
     ws.start(false);
 
@@ -269,7 +269,7 @@ LT_END_AUTO_TEST(register_path_then_unregister_path_404s)
 // assertion well-defined.
 LT_BEGIN_AUTO_TEST(webserver_register_path_prefix_suite,
                    unregister_resource_alias_handles_both_kinds)
-    webserver ws = create_webserver(PORT + 5);
+    webserver ws{create_webserver(PORT + 5)};
     ws.register_prefix("/p", std::make_shared<ok_resource>());
     ws.register_path("/x", std::make_shared<ok_resource>());
     ws.start(false);
@@ -293,7 +293,7 @@ LT_END_AUTO_TEST(unregister_resource_alias_handles_both_kinds)
 // no window in which one is present and the other is not.
 LT_BEGIN_AUTO_TEST(webserver_register_path_prefix_suite,
                    unregister_resource_removes_both_path_and_prefix_registrations)
-    webserver ws = create_webserver(PORT + 7);
+    webserver ws{create_webserver(PORT + 7)};
     // Register the same path as both an exact handler and a prefix handler.
     ws.register_path("/admin", std::make_shared<ok_resource>());
     ws.register_prefix("/admin", std::make_shared<ok_resource>());
@@ -320,7 +320,7 @@ LT_END_AUTO_TEST(unregister_resource_removes_both_path_and_prefix_registrations)
 // builds with -Werror.
 LT_BEGIN_AUTO_TEST(webserver_register_path_prefix_suite,
                    register_resource_deprecated_forwarder_behaves_like_register_path)
-    webserver ws = create_webserver(PORT + 6);
+    webserver ws{create_webserver(PORT + 6)};
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     ws.register_resource("/d", std::make_shared<ok_resource>());

@@ -79,8 +79,9 @@ namespace httpserver {
 **/
 class webserver {
  public:
-     // Keeping this non explicit on purpose to easy construction through builder class.
-     webserver(const create_webserver& params);  // NOLINT(runtime/explicit)
+     // PRD-NAM-REQ-004: explicit to forbid implicit conversion from
+     // create_webserver. Callers must direct-init: webserver ws{cw};
+     explicit webserver(const create_webserver& params);
      /**
       * Destructor of the class
      **/
@@ -465,9 +466,9 @@ class webserver {
      const bool deferred_enabled;
      const bool single_resource;
      const bool tcp_nodelay;
-     const render_ptr not_found_resource;
-     const render_ptr method_not_allowed_resource;
-     const render_ptr internal_error_resource;
+     const error_handler not_found_handler;
+     const error_handler method_not_allowed_handler;
+     const error_handler internal_error_handler;
      const file_cleanup_callback_ptr file_cleanup_callback;
      const auth_handler_ptr auth_handler;
      const std::vector<std::string> auth_skip_paths;

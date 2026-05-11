@@ -82,7 +82,7 @@ int main(int argc, char** argv) {
     std::cout << std::endl;
     std::cout << "Open http://localhost:8080 in your browser to upload files." << std::endl;
 
-    httpserver::webserver ws = httpserver::create_webserver(8080)
+    httpserver::webserver ws{httpserver::create_webserver(8080)
         .file_upload_target(httpserver::FILE_UPLOAD_DISK_ONLY)
         .file_upload_dir(temp_dir)
         .generate_random_filename_on_upload()
@@ -101,7 +101,7 @@ int main(int argc, char** argv) {
                 std::cerr << "Failed to move " << filename << ", will be deleted" << std::endl;
                 return true;  // Delete the temp file on failure
             }
-        });
+        })};
 
     auto fur = std::make_shared<file_upload_resource>();
     ws.register_path("/", fur);

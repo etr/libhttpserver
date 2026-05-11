@@ -42,7 +42,7 @@ class echo_handler : public httpserver::websocket_handler {
 };
 
 int main() {
-    httpserver::webserver ws = httpserver::create_webserver(8080);
+    httpserver::webserver ws{httpserver::create_webserver(8080)};
 
     echo_handler handler;
     ws.register_ws_resource("/ws", &handler);

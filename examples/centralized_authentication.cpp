@@ -56,9 +56,9 @@ int main() {
     // Create webserver with centralized authentication
     // - auth_handler: called before every resource's render method
     // - auth_skip_paths: paths that bypass authentication
-    webserver ws = create_webserver(8080)
+    webserver ws{create_webserver(8080)
         .auth_handler(auth_handler)
-        .auth_skip_paths({"/health", "/public/*"});
+        .auth_skip_paths({"/health", "/public/*"})};
 
     auto hello = std::make_shared<hello_resource>();
     auto health = std::make_shared<health_resource>();
