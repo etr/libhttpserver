@@ -606,6 +606,67 @@ LT_BEGIN_AUTO_TEST(create_webserver_suite, port_boundary_accept_and_reject)
         []{ create_webserver().port(-1); }, "-1"));
 LT_END_AUTO_TEST(port_boundary_accept_and_reject)
 
+// TASK-034 cycle C: on a HAVE_GNUTLS-off build, calling
+// webserver(create_webserver{...}.use_ssl(true)) must throw
+// feature_unavailable whose what() names both the feature and the flag.
+// The setter itself must still chain without throwing (consistent with
+// the existing builder_ssl_toggle test above).
+#ifndef HAVE_GNUTLS
+LT_BEGIN_AUTO_TEST(create_webserver_suite,
+                   use_ssl_true_throws_feature_unavailable_when_no_tls)
+    bool caught = false;
+    std::string msg;
+    try {
+        httpserver::webserver ws{
+            create_webserver(8080).use_ssl(true)
+        };
+        (void)ws;
+    } catch (const httpserver::feature_unavailable& e) {
+        caught = true;
+        msg = e.what();
+    }
+    LT_CHECK(caught);
+    LT_CHECK(msg.find("tls") != std::string::npos);
+    LT_CHECK(msg.find("HAVE_GNUTLS") != std::string::npos);
+LT_END_AUTO_TEST(use_ssl_true_throws_feature_unavailable_when_no_tls)
+
+LT_BEGIN_AUTO_TEST(create_webserver_suite,
+                   use_ssl_false_does_not_throw_when_no_tls)
+    LT_CHECK_NOTHROW(httpserver::webserver{create_webserver(8081).use_ssl(false)});
+LT_END_AUTO_TEST(use_ssl_false_does_not_throw_when_no_tls)
+
+LT_BEGIN_AUTO_TEST(create_webserver_suite,
+                   use_ssl_setter_does_not_throw_when_no_tls)
+    // The setter is fluent; only construction validates.
+    LT_CHECK_NOTHROW(create_webserver(8082).use_ssl(true).use_ssl(false));
+LT_END_AUTO_TEST(use_ssl_setter_does_not_throw_when_no_tls)
+#endif  // !HAVE_GNUTLS
+
+#ifndef HAVE_BAUTH
+LT_BEGIN_AUTO_TEST(create_webserver_suite,
+                   basic_auth_true_throws_feature_unavailable_when_no_bauth)
+    bool caught = false;
+    std::string msg;
+    try {
+        httpserver::webserver ws{
+            create_webserver(8083).basic_auth(true)
+        };
+        (void)ws;
+    } catch (const httpserver::feature_unavailable& e) {
+        caught = true;
+        msg = e.what();
+    }
+    LT_CHECK(caught);
+    LT_CHECK(msg.find("basic_auth") != std::string::npos);
+    LT_CHECK(msg.find("HAVE_BAUTH") != std::string::npos);
+LT_END_AUTO_TEST(basic_auth_true_throws_feature_unavailable_when_no_bauth)
+
+LT_BEGIN_AUTO_TEST(create_webserver_suite,
+                   basic_auth_false_does_not_throw_when_no_bauth)
+    LT_CHECK_NOTHROW(httpserver::webserver{create_webserver(8084).basic_auth(false)});
+LT_END_AUTO_TEST(basic_auth_false_does_not_throw_when_no_bauth)
+#endif  // !HAVE_BAUTH
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

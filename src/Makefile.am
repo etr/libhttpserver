@@ -19,17 +19,18 @@
 AM_CPPFLAGS = -I../ -I$(srcdir)/httpserver/ -DHTTPSERVER_COMPILATION
 METASOURCES = AUTO
 lib_LTLIBRARIES = libhttpserver.la
-libhttpserver_la_SOURCES = string_utilities.cpp webserver.cpp http_utils.cpp file_info.cpp http_request.cpp http_response.cpp http_resource.cpp create_webserver.cpp create_test_request.cpp detail/http_endpoint.cpp detail/body.cpp
+# TASK-034 / PRD-FLG-REQ-001: websocket_handler.cpp is built and
+# websocket_handler.hpp is installed unconditionally so the public
+# surface is identical across HAVE_WEBSOCKET-on and HAVE_WEBSOCKET-off
+# builds. The WS-off branch in websocket_handler.cpp provides stub
+# definitions (every member throws feature_unavailable except is_valid()
+# which returns false).
+libhttpserver_la_SOURCES = string_utilities.cpp webserver.cpp http_utils.cpp file_info.cpp http_request.cpp http_response.cpp http_resource.cpp create_webserver.cpp create_test_request.cpp websocket_handler.cpp detail/http_endpoint.cpp detail/body.cpp
 # noinst_HEADERS: shipped in the tarball but NEVER installed under $prefix/include.
 # Detail headers (httpserver/detail/*.hpp) live here so they cannot leak to
 # downstream consumers — the public surface comes in through <httpserver.hpp>.
 noinst_HEADERS = httpserver/string_utilities.hpp httpserver/detail/modded_request.hpp httpserver/detail/http_endpoint.hpp httpserver/detail/body.hpp httpserver/detail/webserver_impl.hpp httpserver/detail/http_request_impl.hpp httpserver/detail/route_entry.hpp httpserver/detail/lambda_resource.hpp httpserver/detail/radix_tree.hpp httpserver/detail/route_cache.hpp gettext.h
-nobase_include_HEADERS = httpserver.hpp httpserver/body_kind.hpp httpserver/constants.hpp httpserver/create_webserver.hpp httpserver/create_test_request.hpp httpserver/webserver.hpp httpserver/http_utils.hpp httpserver/file_info.hpp httpserver/http_request.hpp httpserver/http_response.hpp httpserver/http_resource.hpp httpserver/feature_unavailable.hpp httpserver/iovec_entry.hpp httpserver/http_arg_value.hpp httpserver/http_method.hpp
-
-if HAVE_WEBSOCKET
-libhttpserver_la_SOURCES += websocket_handler.cpp
-nobase_include_HEADERS += httpserver/websocket_handler.hpp
-endif
+nobase_include_HEADERS = httpserver.hpp httpserver/body_kind.hpp httpserver/constants.hpp httpserver/create_webserver.hpp httpserver/create_test_request.hpp httpserver/webserver.hpp httpserver/websocket_handler.hpp httpserver/http_utils.hpp httpserver/file_info.hpp httpserver/http_request.hpp httpserver/http_response.hpp httpserver/http_resource.hpp httpserver/feature_unavailable.hpp httpserver/iovec_entry.hpp httpserver/http_arg_value.hpp httpserver/http_method.hpp
 
 AM_CXXFLAGS += -fPIC -Wall
 

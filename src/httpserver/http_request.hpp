@@ -135,35 +135,38 @@ class http_request {
  public:
      static const char EMPTY[];
 
-#ifdef HAVE_BAUTH
      /**
       * Method used to get the username eventually passed through basic authentication.
       * @return string representation of the username.
       * @note The returned view is only valid within the handler's call frame.
       *       Copy into std::string if the value must outlast the handler.
+      * @note (TASK-034 / PRD-FLG-REQ-001) Declared unconditionally.
+      *       When HAVE_BAUTH is undefined the implementation returns an
+      *       empty std::string_view sentinel (architecture spec §7).
      **/
      std::string_view get_user() const;
-#endif  // HAVE_BAUTH
 
-#ifdef HAVE_DAUTH
      /**
       * Method used to get the username extracted from a digest authentication.
       * @return the username.
       * @note The returned view is only valid within the handler's call frame.
       *       Copy into std::string if the value must outlast the handler.
+      * @note (TASK-034 / PRD-FLG-REQ-001) Declared unconditionally.
+      *       When HAVE_DAUTH is undefined the implementation returns an
+      *       empty std::string_view sentinel (architecture spec §7).
      **/
      std::string_view get_digested_user() const;
-#endif  // HAVE_DAUTH
 
-#ifdef HAVE_BAUTH
      /**
       * Method used to get the password eventually passed through basic authentication.
       * @return string representation of the password.
       * @note The returned view is only valid within the handler's call frame.
       *       Copy into std::string if the value must outlast the handler.
+      * @note (TASK-034 / PRD-FLG-REQ-001) Declared unconditionally.
+      *       When HAVE_BAUTH is undefined the implementation returns an
+      *       empty std::string_view sentinel (architecture spec §7).
      **/
      std::string_view get_pass() const;
-#endif  // HAVE_BAUTH
 
      /**
       * Method used to get the path requested.
@@ -342,10 +345,11 @@ class http_request {
 
      // ---------------------------------------------------------------
      // TASK-019: high-level GnuTLS accessors. Declared unconditionally
-     // (no #ifdef HAVE_GNUTLS gate) so the public surface is identical
-     // in TLS-enabled and TLS-disabled builds. When HAVE_GNUTLS is off
-     // at build time the implementations return empty / false / -1
-     // sentinels without throwing (per architecture spec §7).
+     // (no build-flag preprocessor gate) so the public surface is
+     // identical in TLS-enabled and TLS-disabled builds. When the
+     // library is built without GnuTLS the implementations return
+     // empty / false / -1 sentinels without throwing (architecture
+     // spec §7).
      // ---------------------------------------------------------------
 
      /**
@@ -440,7 +444,14 @@ class http_request {
      **/
      uint16_t get_requestor_port() const;
 
-#ifdef HAVE_DAUTH
+     /**
+      * Digest-authenticate the current request against (@p realm, @p password).
+      *
+      * (TASK-034 / PRD-FLG-REQ-001) Declared unconditionally. When the
+      * library was built without HAVE_DAUTH the implementation returns
+      * the sentinel `digest_auth_result::WRONG_HEADER` (architecture
+      * spec §7 "returns a sentinel result") without touching MHD.
+      **/
      http::http_utils::digest_auth_result check_digest_auth(
          const std::string& realm,
          const std::string& password,
@@ -448,6 +459,9 @@ class http_request {
          uint32_t max_nc = 0,
          http::http_utils::digest_algorithm algo = http::http_utils::digest_algorithm::SHA256) const;
 
+     /// @copydoc check_digest_auth
+     /// @param userdigest pre-computed digest of the username/realm/password.
+     /// @param userdigest_size size of @p userdigest in bytes.
      http::http_utils::digest_auth_result check_digest_auth_digest(
          const std::string& realm,
          const void* userdigest,
@@ -455,7 +469,6 @@ class http_request {
          unsigned int nonce_timeout = 0,
          uint32_t max_nc = 0,
          http::http_utils::digest_algorithm algo = http::http_utils::digest_algorithm::SHA256) const;
-#endif  // HAVE_DAUTH
 
      friend std::ostream &operator<< (std::ostream &os, http_request &r);
 

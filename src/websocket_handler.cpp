@@ -18,9 +18,10 @@
      USA
 */
 
-#ifdef HAVE_WEBSOCKET
-
 #include "httpserver/websocket_handler.hpp"
+#include "httpserver/feature_unavailable.hpp"
+
+#ifdef HAVE_WEBSOCKET
 
 #include <microhttpd.h>
 #include <microhttpd_ws.h>
@@ -140,6 +141,66 @@ void websocket_handler::on_ping(websocket_session& session, std::string_view pay
 
 void websocket_handler::on_close(websocket_session&, uint16_t, const std::string&) {
 }
+
+}  // namespace httpserver
+
+#else   // !HAVE_WEBSOCKET
+
+// TASK-034: WebSocket compiled out. The class declarations are public
+// and unconditional (PRD-FLG-REQ-001), so we still need out-of-line
+// definitions for every member function or the link step will fail.
+// The policy (architecture spec §7):
+//   - constructors/destructor are no-ops (the session never holds a live
+//     handle anyway);
+//   - is_valid() returns false;
+//   - every send_*/close call throws feature_unavailable;
+//   - websocket_handler's defaulted virtual hooks are no-ops.
+//
+// Calling code is expected to first consult webserver::features().websocket
+// and avoid this path entirely on disabled builds.
+
+#include <cstddef>
+#include <cstdint>
+#include <string>
+#include <string_view>
+
+namespace httpserver {
+
+websocket_session::websocket_session(std::intptr_t sock,
+                                     struct MHD_UpgradeResponseHandle* urh,
+                                     struct MHD_WebSocketStream* ws_stream)
+    : sock(sock), urh(urh), ws_stream(ws_stream), valid(false) {}
+
+websocket_session::~websocket_session() = default;
+
+void websocket_session::send_text(const std::string&) {
+    throw feature_unavailable("websocket", "HAVE_WEBSOCKET");
+}
+
+void websocket_session::send_binary(const void*, size_t) {
+    throw feature_unavailable("websocket", "HAVE_WEBSOCKET");
+}
+
+void websocket_session::send_ping(const std::string&) {
+    throw feature_unavailable("websocket", "HAVE_WEBSOCKET");
+}
+
+void websocket_session::send_pong(const std::string&) {
+    throw feature_unavailable("websocket", "HAVE_WEBSOCKET");
+}
+
+void websocket_session::close(uint16_t, const std::string&) {
+    throw feature_unavailable("websocket", "HAVE_WEBSOCKET");
+}
+
+bool websocket_session::is_valid() const {
+    return false;
+}
+
+void websocket_handler::on_open(websocket_session&) {}
+void websocket_handler::on_binary(websocket_session&, const void*, size_t) {}
+void websocket_handler::on_ping(websocket_session&, std::string_view) {}
+void websocket_handler::on_close(websocket_session&, uint16_t, const std::string&) {}
 
 }  // namespace httpserver
 

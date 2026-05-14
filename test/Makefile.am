@@ -26,7 +26,7 @@ LDADD += -lcurl
 
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/ -DHTTPSERVER_COMPILATION
 METASOURCES = AUTO
-check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver create_webserver_explicit new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_const_getters http_request_tls_accessors webserver_register_smartptr webserver_register_path_prefix webserver_on_methods webserver_route route_table lookup_pipeline route_table_concurrency routing_regression threadsafety_stress
+check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver create_webserver_explicit new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_const_getters http_request_tls_accessors webserver_register_smartptr webserver_register_path_prefix webserver_on_methods webserver_route route_table lookup_pipeline route_table_concurrency routing_regression threadsafety_stress webserver_features webserver_ws_unavailable consumer_fixture
 
 MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
 
@@ -258,6 +258,29 @@ threadsafety_stress_SOURCES = integ/threadsafety_stress.cpp
 # carries microhttpd-typed members.
 routing_regression_SOURCES = unit/routing_regression_test.cpp
 routing_regression_LDADD = $(LDADD) -lmicrohttpd
+
+# webserver_features: TASK-034. Pins the public contract of
+# webserver::features() (PRD-FLG-REQ-003): nested `struct features` with
+# four bool fields in documented order; the static call is noexcept; the
+# fields match the HAVE_* state the library was built with. The test TU
+# is compiled with the same AM_CXXFLAGS as the library so its #ifdef
+# HAVE_* probes are in lockstep with libhttpserver's. Default LDADD is
+# sufficient.
+webserver_features_SOURCES = unit/webserver_features_test.cpp
+
+# webserver_ws_unavailable: TASK-034. On HAVE_WEBSOCKET-off builds,
+# pins that webserver::register_ws_resource(...) throws
+# feature_unavailable whose what() names both "websocket" and
+# "HAVE_WEBSOCKET". On HAVE_WEBSOCKET-on builds the suite is empty
+# (the integ-level ws_start_stop test owns the success path).
+webserver_ws_unavailable_SOURCES = unit/webserver_ws_unavailable_test.cpp
+
+# consumer_fixture: TASK-034 / AC #2. Compile-and-link gate proving that
+# a single consumer source file referencing every previously
+# HAVE_*-gated public symbol compiles unchanged in every build
+# configuration (HAVE_BAUTH/DAUTH/GNUTLS/WEBSOCKET on or off). main()
+# returns 0; the test is "pass" purely by virtue of the binary existing.
+consumer_fixture_SOURCES = consumer_fixture.cpp
 
 noinst_HEADERS = littletest.hpp
 AM_CXXFLAGS += -Wall -fPIC -Wno-overloaded-virtual

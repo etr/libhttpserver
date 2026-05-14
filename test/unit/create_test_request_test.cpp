@@ -147,17 +147,35 @@ LT_BEGIN_AUTO_TEST(create_test_request_suite, build_content)
     LT_CHECK_EQ(std::string(req.get_content()), std::string("{\"key\":\"value\"}"));
 LT_END_AUTO_TEST(build_content)
 
-#ifdef HAVE_BAUTH
-// Test basic auth
+// TASK-034: setters are unconditional. On a HAVE_BAUTH-on build the
+// values land in the http_request impl and get_user / get_pass echo
+// them; on a HAVE_BAUTH-off build the same builder chain compiles and
+// runs, but get_user / get_pass return the sentinel empty view (§7).
 LT_BEGIN_AUTO_TEST(create_test_request_suite, build_basic_auth)
     auto req = create_test_request()
         .user("admin")
         .pass("secret")
         .build();
+#ifdef HAVE_BAUTH
     LT_CHECK_EQ(std::string(req.get_user()), std::string("admin"));
     LT_CHECK_EQ(std::string(req.get_pass()), std::string("secret"));
+#else
+    LT_CHECK(req.get_user().empty());
+    LT_CHECK(req.get_pass().empty());
+#endif
 LT_END_AUTO_TEST(build_basic_auth)
-#endif  // HAVE_BAUTH
+
+// TASK-034: same shape for digested_user.
+LT_BEGIN_AUTO_TEST(create_test_request_suite, build_digested_user)
+    auto req = create_test_request()
+        .digested_user("admin")
+        .build();
+#ifdef HAVE_DAUTH
+    LT_CHECK_EQ(std::string(req.get_digested_user()), std::string("admin"));
+#else
+    LT_CHECK(req.get_digested_user().empty());
+#endif
+LT_END_AUTO_TEST(build_digested_user)
 
 // Test requestor
 LT_BEGIN_AUTO_TEST(create_test_request_suite, build_requestor)
@@ -176,13 +194,20 @@ LT_BEGIN_AUTO_TEST(create_test_request_suite, build_default_requestor)
     LT_CHECK_EQ(req.get_requestor_port(), static_cast<uint16_t>(0));
 LT_END_AUTO_TEST(build_default_requestor)
 
-#ifdef HAVE_GNUTLS
-// Test TLS enabled flag
+// TASK-034: tls_enabled() setter is unconditional. On HAVE_GNUTLS-on
+// builds has_tls_session() echoes the recorded flag; on HAVE_GNUTLS-off
+// builds the flag is silently dropped (has_tls_session() always returns
+// false — already true since TASK-019). The contract being pinned here
+// is that the *setter* is callable in both modes.
 LT_BEGIN_AUTO_TEST(create_test_request_suite, build_tls_enabled)
     auto req = create_test_request()
         .tls_enabled()
         .build();
+#ifdef HAVE_GNUTLS
     LT_CHECK_EQ(req.has_tls_session(), true);
+#else
+    LT_CHECK_EQ(req.has_tls_session(), false);
+#endif
 LT_END_AUTO_TEST(build_tls_enabled)
 
 // Test TLS not enabled by default
@@ -191,6 +216,7 @@ LT_BEGIN_AUTO_TEST(create_test_request_suite, build_no_tls)
     LT_CHECK_EQ(req.has_tls_session(), false);
 LT_END_AUTO_TEST(build_no_tls)
 
+#ifdef HAVE_GNUTLS
 // TASK-019: even with tls_enabled() set on the test builder, no peer
 // certificate is attached (the test-request path has no live MHD
 // connection from which to extract one). All cert getters must return
@@ -290,10 +316,8 @@ LT_BEGIN_AUTO_TEST(create_test_request_suite, full_chain)
         .arg("key1", "val1")
         .arg("key2", "val2")
         .querystring("?key1=val1&key2=val2")
-#ifdef HAVE_BAUTH
         .user("testuser")
         .pass("testpass")
-#endif
         .requestor("10.0.0.1")
         .requestor_port(9090)
         .build();
@@ -312,6 +336,10 @@ LT_BEGIN_AUTO_TEST(create_test_request_suite, full_chain)
 #ifdef HAVE_BAUTH
     LT_CHECK_EQ(std::string(req.get_user()), std::string("testuser"));
     LT_CHECK_EQ(std::string(req.get_pass()), std::string("testpass"));
+#else
+    // TASK-034 §7: on HAVE_BAUTH-off builds the accessors return empty.
+    LT_CHECK(req.get_user().empty());
+    LT_CHECK(req.get_pass().empty());
 #endif
     LT_CHECK_EQ(std::string(req.get_requestor()), std::string("10.0.0.1"));
     LT_CHECK_EQ(req.get_requestor_port(), static_cast<uint16_t>(9090));
