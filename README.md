@@ -550,7 +550,7 @@ Once a webserver is created, you can manage its execution through the following 
 * _**bool** webserver::run_wait(**int32_t** millisec):_ Run the webserver's event loop, blocking until there is activity or the timeout expires. Pass `-1` for indefinite wait. Returns `true` on success.
 * _**bool** webserver::get_fdset(**fd_set&ast;** read_fd_set, **fd_set&ast;** write_fd_set, **fd_set&ast;** except_fd_set, **int&ast;** max_fd):_ Get the file descriptor sets for `select()`-based external event loop integration. Returns `true` on success.
 * _**bool** webserver::get_timeout(**uint64_t&ast;** timeout):_ Get the timeout (in milliseconds) until the next daemon action is needed. Returns `true` if a timeout was set, `false` if no timeout is needed.
-* _**bool** webserver::add_connection(**int** client_socket, **const struct sockaddr&ast;** addr, **socklen_t** addrlen):_ Add an externally-accepted socket connection to the daemon. Useful with `no_listen_socket()`. Returns `true` on success.
+* _**bool** webserver::add_connection(**int** client_socket, **const struct sockaddr&ast;** addr, **socklen_t** addrlen):_ Add an externally-accepted socket connection to the daemon. Useful with `listen_socket(false)`. Returns `true` on success.
 * _**int** webserver::get_listen_fd():_ Get the listen socket file descriptor, or `-1` if not available.
 * _**unsigned int** webserver::get_active_connections():_ Get the number of currently active connections.
 * _**uint16_t** webserver::get_bound_port():_ Get the actual port the daemon is bound to. Particularly useful when port `0` was specified to let the OS choose an ephemeral port.
@@ -941,7 +941,7 @@ You can also check the complete example on [github](https://github.com/etr/libht
 [Back to TOC](#table-of-contents)
 
 ## IP Blacklisting and Whitelisting
-libhttpserver provides natively a system to blacklist and whitelist IP addresses. To enable/disable the system, it is possible to use the `ban_system` and `no_ban_system` methods on the `create_webserver` class. In the same way, you can specify what you want to be your "default behavior" (allow by default or disallow by default) by using the `default_policy` method (see [here](#create-and-work-with-a-webserver)).
+libhttpserver provides natively a system to blacklist and whitelist IP addresses. To enable/disable the system, it is possible to use the `ban_system(bool enable = true)` method on the `create_webserver` class (`ban_system(false)` to disable). In the same way, you can specify what you want to be your "default behavior" (allow by default or disallow by default) by using the `default_policy` method (see [here](#create-and-work-with-a-webserver)).
 
 The system supports both IPV4 and IPV6 and manages them transparently. The only requirement is for ipv6 to be enabled on your server - you'll have to enable this by using the `use_ipv6` method on `create_webserver`.
 
@@ -999,11 +999,11 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
 ## Authentication
 libhttpserver support three types of client authentication.
 
-Basic authentication uses a simple authentication method based on BASE64 algorithm. Username and password are exchanged in clear between the client and the server, so this method must only be used for non-sensitive content or when the session is protected with https. When using basic authentication libhttpserver will have access to the clear password, possibly allowing to create a chained authentication toward an external authentication server. You can enable/disable support for Basic authentication through the `basic_auth` and `no_basic_auth` methods of the `create_webserver` class.
+Basic authentication uses a simple authentication method based on BASE64 algorithm. Username and password are exchanged in clear between the client and the server, so this method must only be used for non-sensitive content or when the session is protected with https. When using basic authentication libhttpserver will have access to the clear password, possibly allowing to create a chained authentication toward an external authentication server. You can enable/disable support for Basic authentication through the `basic_auth(bool enable = true)` method of the `create_webserver` class (`basic_auth(false)` to disable).
 
-Digest authentication uses a one-way authentication method based on hash algorithms (MD5, SHA-256, or SHA-512/256). Only the hash will transit over the network, hence protecting the user password. The nonce will prevent replay attacks. This method is appropriate for general use, especially when https is not used to encrypt the session. SHA-256 is the default algorithm; SHA-512/256 is also available for stronger security. You can enable/disable support for Digest authentication through the `digest_auth` and `no_digest_auth` methods of the `create_webserver` class.
+Digest authentication uses a one-way authentication method based on hash algorithms (MD5, SHA-256, or SHA-512/256). Only the hash will transit over the network, hence protecting the user password. The nonce will prevent replay attacks. This method is appropriate for general use, especially when https is not used to encrypt the session. SHA-256 is the default algorithm; SHA-512/256 is also available for stronger security. You can enable/disable support for Digest authentication through the `digest_auth(bool enable = true)` method of the `create_webserver` class (`digest_auth(false)` to disable).
 
-Client certificate authentication uses a X.509 certificate from the client. This is the strongest authentication mechanism but it requires the use of HTTPS. Client certificate authentication can be used simultaneously with Basic or Digest Authentication in order to provide a two levels authentication (like for instance separate machine and user authentication). You can enable/disable support for Certificate authentication through the `use_ssl` and `no_ssl` methods of the `create_webserver` class.
+Client certificate authentication uses a X.509 certificate from the client. This is the strongest authentication mechanism but it requires the use of HTTPS. Client certificate authentication can be used simultaneously with Basic or Digest Authentication in order to provide a two levels authentication (like for instance separate machine and user authentication). You can enable/disable support for Certificate authentication through the `use_ssl(bool enable = true)` method of the `create_webserver` class (`use_ssl(false)` to disable).
 
 ### Using Basic Authentication
 ```cpp
@@ -1349,7 +1349,7 @@ libhttpserver exposes several methods for integrating with external event loops 
 * _**unsigned int** webserver::get_active_connections():_ Returns the number of currently active connections.
 
 ### External event loop integration
-When using the server without internal threading (e.g., with `no_listen_socket()` or a single-threaded design), you can drive the event loop yourself:
+When using the server without internal threading (e.g., with `listen_socket(false)` or a single-threaded design), you can drive the event loop yourself:
 * _**bool** webserver::run():_ Process pending events once and return immediately.
 * _**bool** webserver::run_wait(**int32_t** millisec):_ Block until events are available or the timeout expires.
 * _**bool** webserver::get_fdset(...):_ Retrieve file descriptor sets for use with `select()`.
