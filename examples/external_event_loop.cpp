@@ -42,10 +42,10 @@ int main() {
     signal(SIGINT, signal_handler);
 
     // EXTERNAL_SELECT runs MHD without an internal polling thread; the
-    // application drives it via run_wait() below. no_thread_safety() can be
-    // added for a small perf gain when the daemon is only ever touched from
-    // a single thread, but it is omitted here for portability (some MHD
-    // builds, notably Windows/MSYS2, reject that combination at start).
+    // application drives it via run_wait() below. thread_safety(false) can
+    // be added for a small perf gain when the daemon is only ever touched
+    // from a single thread, but it is omitted here for portability (some
+    // MHD builds, notably Windows/MSYS2, reject that combination at start).
     httpserver::webserver ws{httpserver::create_webserver(8080)
         .start_method(httpserver::http::http_utils::EXTERNAL_SELECT)};
 

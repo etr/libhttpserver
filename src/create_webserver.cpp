@@ -62,7 +62,7 @@ create_webserver& create_webserver::bind_address(const std::string& ip) {
         return *this;
     }
 
-    throw std::invalid_argument("Invalid IP address: " + ip);
+    throw std::invalid_argument("bind_address: invalid IP address: " + ip);
 }
 
 }  // namespace httpserver
