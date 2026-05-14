@@ -453,6 +453,47 @@ LT_BEGIN_AUTO_TEST(create_test_request_suite, getters_return_string_view_correct
     LT_CHECK_EQ(std::string(r.get_arg_flat("q")),     std::string("q-value"));
 LT_END_AUTO_TEST(getters_return_string_view_correct_value)
 
+// security-reviewer-iter1-2 / CWE-476: check_digest_auth and
+// check_digest_auth_digest must not dereference a null connection_ when called
+// on a test request (connection_ == nullptr). The documented contract is to
+// return WRONG_HEADER — the same sentinel returned on HAVE_DAUTH-off builds
+// and by the existing HAVE_DAUTH-off else branch. This test is guarded on
+// HAVE_DAUTH because the off-path already returns WRONG_HEADER unconditionally,
+// so the null-pointer path being guarded is the HAVE_DAUTH-on branch.
+#ifdef HAVE_DAUTH
+LT_BEGIN_AUTO_TEST(create_test_request_suite,
+                   check_digest_auth_on_test_request_returns_wrong_header)
+    auto req = create_test_request()
+        .digested_user("admin")
+        .build();
+    // connection_ is null on the test-request path. Without the null guard
+    // this call passes nullptr to MHD_digest_auth_check3 — UB / crash.
+    // With the guard it must return WRONG_HEADER instead.
+    using DAR = httpserver::http::http_utils::digest_auth_result;
+    using DA  = httpserver::http::http_utils::digest_algorithm;
+    DAR result = req.check_digest_auth(
+        "realm", "password", /*nonce_timeout=*/300, /*max_nc=*/1000,
+        DA::MD5);
+    LT_CHECK_EQ(static_cast<int>(result),
+                static_cast<int>(DAR::WRONG_HEADER));
+LT_END_AUTO_TEST(check_digest_auth_on_test_request_returns_wrong_header)
+
+LT_BEGIN_AUTO_TEST(create_test_request_suite,
+                   check_digest_auth_digest_on_test_request_returns_wrong_header)
+    auto req = create_test_request()
+        .digested_user("admin")
+        .build();
+    const char dummy_digest[32] = {};
+    using DAR = httpserver::http::http_utils::digest_auth_result;
+    using DA  = httpserver::http::http_utils::digest_algorithm;
+    DAR result = req.check_digest_auth_digest(
+        "realm", dummy_digest, sizeof(dummy_digest),
+        /*nonce_timeout=*/300, /*max_nc=*/1000, DA::MD5);
+    LT_CHECK_EQ(static_cast<int>(result),
+                static_cast<int>(DAR::WRONG_HEADER));
+LT_END_AUTO_TEST(check_digest_auth_digest_on_test_request_returns_wrong_header)
+#endif  // HAVE_DAUTH
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

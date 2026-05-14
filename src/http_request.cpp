@@ -751,6 +751,14 @@ http::http_utils::digest_auth_result http_request::check_digest_auth(
     uint32_t max_nc,
     http::http_utils::digest_algorithm algo) const {
 #ifdef HAVE_DAUTH
+    // CWE-476 guard: test-request path sets connection_ to nullptr.
+    // Passing nullptr to MHD_digest_auth_check3 is undefined behaviour;
+    // return the same WRONG_HEADER sentinel used on the HAVE_DAUTH-off
+    // path and by get_digested_user() when connection_ is null.
+    if (impl_->connection_ == nullptr) {
+        return http::http_utils::digest_auth_result::WRONG_HEADER;
+    }
+
     std::string_view digested_user = get_digested_user();
 
     enum MHD_DigestAuthResult result = MHD_digest_auth_check3(
@@ -786,6 +794,11 @@ http::http_utils::digest_auth_result http_request::check_digest_auth_digest(
     uint32_t max_nc,
     http::http_utils::digest_algorithm algo) const {
 #ifdef HAVE_DAUTH
+    // CWE-476 guard: same null-connection guard as check_digest_auth.
+    if (impl_->connection_ == nullptr) {
+        return http::http_utils::digest_auth_result::WRONG_HEADER;
+    }
+
     std::string_view digested_user = get_digested_user();
 
     enum MHD_DigestAuthResult result = MHD_digest_auth_check_digest3(

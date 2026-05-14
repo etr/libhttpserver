@@ -211,16 +211,18 @@ class create_webserver {
      std::string _digest_auth_random = "";
      int _nonce_nc_size = 0;
      http::http_utils::policy_T _default_policy = http::http_utils::ACCEPT;
-     // TASK-034: stored unconditionally. The default value is computed
-     // by basic_auth_default() in create_webserver.cpp, where the
-     // basic-auth build flag is reachable — that keeps the public
-     // header free of build-flag preprocessor gates (PRD-FLG-REQ-001)
-     // while preserving the historical default (true on basic-auth-on
-     // builds; false on basic-auth-off so an unmodified builder
-     // doesn't trip the feature_unavailable throw at construction time).
+     // TASK-034: stored unconditionally. The default values are computed
+     // by basic_auth_default() and digest_auth_default() in
+     // create_webserver.cpp, where the HAVE_BAUTH / HAVE_DAUTH build
+     // flags are reachable — that keeps the public header free of
+     // build-flag preprocessor gates (PRD-FLG-REQ-001) while preserving
+     // the historical defaults (true on the respective auth-on builds;
+     // false on auth-off builds so an unmodified builder doesn't trip
+     // the feature_unavailable throw at construction time).
      static bool basic_auth_default() noexcept;
+     static bool digest_auth_default() noexcept;
      bool _basic_auth_enabled = basic_auth_default();
-     bool _digest_auth_enabled = true;
+     bool _digest_auth_enabled = digest_auth_default();
      bool _regex_checking = true;
      bool _ban_system_enabled = true;
      bool _post_process_enabled = true;

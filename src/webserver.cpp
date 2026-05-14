@@ -255,6 +255,15 @@ webserver::webserver(const create_webserver& params):
             throw feature_unavailable("basic_auth", "HAVE_BAUTH");
         }
 #endif
+#ifndef HAVE_DAUTH
+        // security-reviewer-iter1-1 / CWE-287: symmetric guard for digest
+        // auth. Without this a HAVE_DAUTH-off build silently accepts
+        // digest_auth_enabled=true and the request handler returns
+        // WRONG_HEADER, making the authentication gate a silent no-op.
+        if (digest_auth_enabled) {
+            throw feature_unavailable("digest_auth", "HAVE_DAUTH");
+        }
+#endif
         ignore_sigpipe();
         impl_->bind_socket = params._bind_socket;
 }

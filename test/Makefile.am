@@ -26,7 +26,7 @@ LDADD += -lcurl
 
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/ -DHTTPSERVER_COMPILATION
 METASOURCES = AUTO
-check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver create_webserver_explicit new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_const_getters http_request_tls_accessors webserver_register_smartptr webserver_register_path_prefix webserver_on_methods webserver_route route_table lookup_pipeline route_table_concurrency routing_regression threadsafety_stress webserver_features webserver_ws_unavailable consumer_fixture
+check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver create_webserver_explicit new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_const_getters http_request_tls_accessors webserver_register_smartptr webserver_register_path_prefix webserver_on_methods webserver_route route_table lookup_pipeline route_table_concurrency routing_regression threadsafety_stress webserver_features webserver_ws_unavailable webserver_dauth_unavailable consumer_fixture
 
 MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
 
@@ -274,6 +274,13 @@ webserver_features_SOURCES = unit/webserver_features_test.cpp
 # "HAVE_WEBSOCKET". On HAVE_WEBSOCKET-on builds the suite is empty
 # (the integ-level ws_start_stop test owns the success path).
 webserver_ws_unavailable_SOURCES = unit/webserver_ws_unavailable_test.cpp
+
+# webserver_dauth_unavailable: security-reviewer-iter1-1 / TASK-034.
+# On HAVE_DAUTH-off builds, pins that webserver(create_webserver(port).digest_auth(true))
+# throws feature_unavailable naming "digest_auth" and "HAVE_DAUTH", and that a
+# default-constructed webserver does NOT throw (digest_auth_default() returns false
+# on HAVE_DAUTH-off). On HAVE_DAUTH-on builds the suite is empty.
+webserver_dauth_unavailable_SOURCES = unit/webserver_dauth_unavailable_test.cpp
 
 # consumer_fixture: TASK-034 / AC #2. Compile-and-link gate proving that
 # a single consumer source file referencing every previously

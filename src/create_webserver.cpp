@@ -51,6 +51,19 @@ bool create_webserver::basic_auth_default() noexcept {
 #endif
 }
 
+// security-reviewer-iter1-1 / PRD-FLG-REQ-001: same pattern as
+// basic_auth_default(). Returns true on HAVE_DAUTH-on builds
+// (preserving historical behaviour) and false on HAVE_DAUTH-off builds
+// so that an unmodified builder doesn't trip the feature_unavailable
+// throw added to webserver::webserver() for HAVE_DAUTH-off builds.
+bool create_webserver::digest_auth_default() noexcept {
+#ifdef HAVE_DAUTH
+    return true;
+#else
+    return false;
+#endif
+}
+
 create_webserver& create_webserver::bind_address(const std::string& ip) {
     _bind_address_storage = std::make_shared<struct sockaddr_storage>();
     std::memset(_bind_address_storage.get(), 0, sizeof(struct sockaddr_storage));
