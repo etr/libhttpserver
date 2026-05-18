@@ -25,8 +25,8 @@
 
 class hello_world_resource : public httpserver::http_resource {
  public:
-     std::shared_ptr<httpserver::http_response> render(const httpserver::http_request& req) {
-         return std::shared_ptr<httpserver::http_response>(new httpserver::http_response(httpserver::http_response::string("Hello: " + std::string(req.get_arg("name")))));
+     httpserver::http_response render(const httpserver::http_request& req) {
+         return httpserver::http_response::string("Hello: " + std::string(req.get_arg("name")));
      }
 };
 

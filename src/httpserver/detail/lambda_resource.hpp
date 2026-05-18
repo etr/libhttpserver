@@ -48,16 +48,15 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
-#include <memory>
 #include <utility>
 
 #include "httpserver/http_method.hpp"
 #include "httpserver/http_resource.hpp"
+#include "httpserver/http_response.hpp"
 #include "httpserver/detail/route_entry.hpp"
 
 namespace httpserver {
 class http_request;
-class http_response;
 }  // namespace httpserver
 
 namespace httpserver {
@@ -91,37 +90,37 @@ class lambda_resource final : public ::httpserver::http_resource {
     // Each differs only by the http_method enum constant forwarded.
     // They are required by the http_resource base-class interface and
     // cannot be collapsed further without changing that interface.
-    std::shared_ptr<::httpserver::http_response>
+    ::httpserver::http_response
     render_get(const ::httpserver::http_request& r) override {
         return invoke_(http_method::get, r);
     }
-    std::shared_ptr<::httpserver::http_response>
+    ::httpserver::http_response
     render_post(const ::httpserver::http_request& r) override {
         return invoke_(http_method::post, r);
     }
-    std::shared_ptr<::httpserver::http_response>
+    ::httpserver::http_response
     render_put(const ::httpserver::http_request& r) override {
         return invoke_(http_method::put, r);
     }
-    std::shared_ptr<::httpserver::http_response>
+    ::httpserver::http_response
     render_delete(const ::httpserver::http_request& r) override {
         return invoke_(http_method::del, r);
     }
-    std::shared_ptr<::httpserver::http_response>
+    ::httpserver::http_response
     render_patch(const ::httpserver::http_request& r) override {
         return invoke_(http_method::patch, r);
     }
-    std::shared_ptr<::httpserver::http_response>
+    ::httpserver::http_response
     render_options(const ::httpserver::http_request& r) override {
         return invoke_(http_method::options, r);
     }
-    std::shared_ptr<::httpserver::http_response>
+    ::httpserver::http_response
     render_head(const ::httpserver::http_request& r) override {
         return invoke_(http_method::head, r);
     }
 
  private:
-    std::shared_ptr<::httpserver::http_response>
+    ::httpserver::http_response
     invoke_(http_method m, const ::httpserver::http_request& r) {
         auto& slot = slots_[static_cast<std::size_t>(m)];
         // Invariant: set_slot stores the handler AND calls
@@ -129,11 +128,12 @@ class lambda_resource final : public ::httpserver::http_resource {
         // before reaching invoke_ unless has_slot is true. A populated
         // slot is therefore guaranteed here.
         assert(slot);
-        // DR-004 contract: lambda_handler returns http_response by value.
-        // The make_shared here is the known cost of that ergonomic choice;
-        // slot(r) is already a prvalue so this uses move-construction with
-        // no extra copy. TASK-036 will address the dispatch cutover.
-        return std::make_shared<::httpserver::http_response>(slot(r));
+        // TASK-036: lambda_handler returns http_response by value; the
+        // dispatch path in webserver_impl::finalize_answer moves the
+        // returned value into modded_request::response_ — the single
+        // anchor that keeps deferred-body producers alive until
+        // request_completed (DR-010, §5.3).
+        return slot(r);
     }
 
     std::array<lambda_handler,

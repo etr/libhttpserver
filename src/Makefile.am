@@ -25,7 +25,7 @@ lib_LTLIBRARIES = libhttpserver.la
 # builds. The WS-off branch in websocket_handler.cpp provides stub
 # definitions (every member throws feature_unavailable except is_valid()
 # which returns false).
-libhttpserver_la_SOURCES = string_utilities.cpp webserver.cpp http_utils.cpp file_info.cpp http_request.cpp http_response.cpp http_resource.cpp create_webserver.cpp create_test_request.cpp websocket_handler.cpp detail/http_endpoint.cpp detail/body.cpp
+libhttpserver_la_SOURCES = string_utilities.cpp webserver.cpp http_utils.cpp file_info.cpp http_request.cpp http_response.cpp create_webserver.cpp create_test_request.cpp websocket_handler.cpp detail/http_endpoint.cpp detail/body.cpp
 # noinst_HEADERS: shipped in the tarball but NEVER installed under $prefix/include.
 # Detail headers (httpserver/detail/*.hpp) live here so they cannot leak to
 # downstream consumers — the public surface comes in through <httpserver.hpp>.

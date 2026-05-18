@@ -35,7 +35,7 @@
 
 class args_resource : public httpserver::http_resource {
  public:
-    std::shared_ptr<httpserver::http_response> render(const httpserver::http_request& req) {
+    httpserver::http_response render(const httpserver::http_request& req) {
         std::stringstream response_body;
 
         response_body << "=== Using get_args() (supports multiple values per key) ===\n\n";
@@ -82,7 +82,7 @@ class args_resource : public httpserver::http_resource {
             response_body << "name (via get_arg_flat): " << name_flat << "\n";
         }
 
-        return std::make_shared<httpserver::http_response>(httpserver::http_response::string(response_body.str()));
+        return httpserver::http_response::string(response_body.str());
     }
 };
 

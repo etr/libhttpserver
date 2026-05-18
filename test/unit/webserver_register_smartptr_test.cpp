@@ -66,8 +66,8 @@ size_t writefunc(void* ptr, size_t size, size_t nmemb, std::string* s) {
 
 class ok_resource : public http_resource {
  public:
-     std::shared_ptr<http_response> render_get(const http_request&) override {
-         return std::make_shared<http_response>(http_response::string("OK"));
+     http_response render_get(const http_request&) override {
+         return http_response::string("OK");
      }
 };
 
@@ -80,8 +80,8 @@ class counted_resource : public http_resource {
      counted_resource() = default;
      ~counted_resource() override { ++dtor_count; }
 
-     std::shared_ptr<http_response> render_get(const http_request&) override {
-         return std::make_shared<http_response>(http_response::string("OK"));
+     http_response render_get(const http_request&) override {
+         return http_response::string("OK");
      }
 };
 

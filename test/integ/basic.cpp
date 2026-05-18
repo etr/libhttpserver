@@ -80,40 +80,40 @@ size_t headerfunc(void *ptr, size_t size, size_t nmemb, map<string, string>* ss)
 
 class simple_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request&) {
-         return std::make_shared<http_response>(http_response::string("OK"));
+     http_response render_get(const http_request&) {
+         return http_response::string("OK");
      }
-     shared_ptr<http_response> render_post(const http_request& req) {
-         return std::make_shared<http_response>(http_response::string(std::string(req.get_arg("arg1")) + std::string(req.get_arg("arg2"))));
+     http_response render_post(const http_request& req) {
+         return http_response::string(std::string(req.get_arg("arg1")) + std::string(req.get_arg("arg2")));
      }
 };
 
 class large_post_resource_last_value : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request&) {
-         return std::make_shared<http_response>(http_response::string("OK"));
+     http_response render_get(const http_request&) {
+         return http_response::string("OK");
      }
-     shared_ptr<http_response> render_post(const http_request& req) {
-         return std::make_shared<http_response>(http_response::string(std::string(req.get_arg("arg1").get_all_values().back())));
+     http_response render_post(const http_request& req) {
+         return http_response::string(std::string(req.get_arg("arg1").get_all_values().back()));
      }
 };
 
 class large_post_resource_first_value : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request&) {
-         return std::make_shared<http_response>(http_response::string("OK"));
+     http_response render_get(const http_request&) {
+         return http_response::string("OK");
      }
-     shared_ptr<http_response> render_post(const http_request& req) {
-         return std::make_shared<http_response>(http_response::string(std::string(req.get_arg("arg1").get_all_values().front())));
+     http_response render_post(const http_request& req) {
+         return http_response::string(std::string(req.get_arg("arg1").get_all_values().front()));
      }
 };
 
 class arg_value_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request&) {
-         return std::make_shared<http_response>(http_response::string("OK"));
+     http_response render_get(const http_request&) {
+         return http_response::string("OK");
      }
-     shared_ptr<http_response> render_post(const http_request& req) {
+     http_response render_post(const http_request& req) {
          auto const arg_value = req.get_arg("arg").get_all_values();
          for (auto const & a : arg_value) {
             std::cerr << a << std::endl;
@@ -121,148 +121,145 @@ class arg_value_resource : public http_resource {
          std::string all_values = std::accumulate(std::next(arg_value.begin()), arg_value.end(), std::string(arg_value[0]), [](std::string a, std::string_view in) {
             return std::move(a) + std::string(in);
          });
-         return std::make_shared<http_response>(http_response::string(all_values));
+         return http_response::string(all_values);
      }
 };
 
 class args_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request& req) {
-         return std::make_shared<http_response>(http_response::string(std::string(req.get_arg("arg")) + std::string(req.get_arg("arg2"))));
+     http_response render_get(const http_request& req) {
+         return http_response::string(std::string(req.get_arg("arg")) + std::string(req.get_arg("arg2")));
      }
 };
 
 class args_flat_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request& req) {
+     http_response render_get(const http_request& req) {
          auto args = req.get_args_flat();
          stringstream ss;
          for (const auto& [key, value] : args) {
              ss << key << "=" << value << ";";
          }
-         return std::make_shared<http_response>(http_response::string(ss.str()));
+         return http_response::string(ss.str());
      }
 };
 
 class long_content_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request&) {
-         return std::make_shared<http_response>(http_response::string(lorem_ipsum));
+     http_response render_get(const http_request&) {
+         return http_response::string(lorem_ipsum);
      }
 };
 
 class header_set_test_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request&) {
-         auto hrb = std::make_shared<http_response>(http_response::string("OK"));
-         hrb->with_header("KEY", "VALUE");
-         return hrb;
+     http_response render_get(const http_request&) override {
+         return http_response::string("OK")
+                    .with_header("KEY", "VALUE");
      }
 };
 
 class cookie_set_test_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request&) {
-         auto hrb = std::make_shared<http_response>(http_response::string("OK"));
-         hrb->with_cookie("MyCookie", "CookieValue");
-         return hrb;
+     http_response render_get(const http_request&) override {
+         return http_response::string("OK")
+                    .with_cookie("MyCookie", "CookieValue");
      }
 };
 
 class cookie_reading_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request& req) {
-         return std::make_shared<http_response>(http_response::string(std::string(req.get_cookie("name"))));
+     http_response render_get(const http_request& req) {
+         return http_response::string(std::string(req.get_cookie("name")));
      }
 };
 
 class header_reading_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request& req) {
-         return std::make_shared<http_response>(http_response::string(std::string(req.get_header("MyHeader"))));
+     http_response render_get(const http_request& req) {
+         return http_response::string(std::string(req.get_header("MyHeader")));
      }
 };
 
 class full_args_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request& req) {
-         return std::make_shared<http_response>(http_response::string(std::string(req.get_args().at("arg"))));
+     http_response render_get(const http_request& req) {
+         return http_response::string(std::string(req.get_args().at("arg")));
      }
 };
 
 class querystring_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request& req) {
-         return std::make_shared<http_response>(http_response::string(std::string(req.get_querystring())));
+     http_response render_get(const http_request& req) {
+         return http_response::string(std::string(req.get_querystring()));
      }
 };
 
 class path_pieces_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request& req) {
+     http_response render_get(const http_request& req) {
          stringstream ss;
          for (unsigned int i = 0; i < req.get_path_pieces().size(); i++) {
              ss << req.get_path_piece(i) << ",";
          }
-         return std::make_shared<http_response>(http_response::string(ss.str()));
+         return http_response::string(ss.str());
      }
 };
 
 class complete_test_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request&) {
-         return std::make_shared<http_response>(http_response::string("OK"));
+     http_response render_get(const http_request&) {
+         return http_response::string("OK");
      }
 
-     shared_ptr<http_response> render_post(const http_request&) {
-         return std::make_shared<http_response>(http_response::string("OK"));
+     http_response render_post(const http_request&) {
+         return http_response::string("OK");
      }
 
-     shared_ptr<http_response> render_put(const http_request&) {
-         return std::make_shared<http_response>(http_response::string("OK"));
+     http_response render_put(const http_request&) {
+         return http_response::string("OK");
      }
 
-     shared_ptr<http_response> render_delete(const http_request&) {
-         return std::make_shared<http_response>(http_response::string("OK"));
+     http_response render_delete(const http_request&) {
+         return http_response::string("OK");
      }
 
-     shared_ptr<http_response> render_patch(const http_request&) {
-         return std::make_shared<http_response>(http_response::string("OK"));
+     http_response render_patch(const http_request&) {
+         return http_response::string("OK");
      }
 
-     shared_ptr<http_response> render_head(const http_request&) {
-         return std::make_shared<http_response>(http_response::string(""));
+     http_response render_head(const http_request&) {
+         return http_response::string("");
      }
 
-     shared_ptr<http_response> render_options(const http_request&) {
-         auto resp = std::make_shared<http_response>(http_response::string(""));
-         resp->with_header("Allow", "GET, POST, PUT, DELETE, HEAD, OPTIONS");
-         return resp;
+     http_response render_options(const http_request&) {
+         return http_response::string("")
+                    .with_header("Allow", "GET, POST, PUT, DELETE, HEAD, OPTIONS");
      }
 
-     shared_ptr<http_response> render_trace(const http_request&) {
-         return std::make_shared<http_response>(http_response::string("TRACE OK", "message/http"));
+     http_response render_trace(const http_request&) {
+         return http_response::string("TRACE OK", "message/http");
      }
 };
 
 class only_render_resource : public http_resource {
  public:
-     shared_ptr<http_response> render(const http_request&) {
-         return std::make_shared<http_response>(http_response::string("OK"));
+     http_response render(const http_request&) {
+         return http_response::string("OK");
      }
 };
 
 class ok_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request&) {
-         return std::make_shared<http_response>(http_response::string("OK"));
+     http_response render_get(const http_request&) {
+         return http_response::string("OK");
      }
 };
 
 class nok_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request&) {
-         return std::make_shared<http_response>(http_response::string("NOK"));
+     http_response render_get(const http_request&) {
+         return http_response::string("NOK");
      }
 };
 
@@ -270,8 +267,8 @@ class static_resource : public http_resource {
  public:
      explicit static_resource(std::string r) : resp(std::move(r)) {}
 
-     shared_ptr<http_response> render_get(const http_request&) {
-         return std::make_shared<http_response>(http_response::string(resp));
+     http_response render_get(const http_request&) {
+         return http_response::string(resp);
      }
 
      std::string resp;
@@ -279,67 +276,75 @@ class static_resource : public http_resource {
 
 class no_response_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request&) {
-         return std::make_shared<http_response>();
+     // TASK-036: v1 returned shared_ptr<http_response>(nullptr) — the
+     // dispatch path treated that as "no response, route to 500". v2's
+     // equivalent is the default-constructed sentinel (status_code_ == -1).
+     http_response render_get(const http_request&) override {
+         return http_response{};
      }
 };
 
 class empty_response_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request&) {
-         return shared_ptr<http_response>(nullptr);
+     http_response render_get(const http_request&) override {
+         // TASK-036: handler-returned "empty" response in v2 is the
+         // default-constructed http_response (status_code_ == -1 sentinel).
+         // The dispatch path recognises the sentinel and routes through
+         // internal_error_page — same 500 behaviour the v1 null-pointer
+         // arm produced.
+         return http_response{};
      }
 };
 
 #ifndef HTTPSERVER_NO_LOCAL_FS
 class file_response_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request&) {
-         return std::make_shared<http_response>(http_response::file("test_content").with_header("Content-Type", "text/plain"));
+     http_response render_get(const http_request&) {
+         return http_response::file("test_content").with_header("Content-Type", "text/plain");
      }
 };
 
 class file_response_resource_empty : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request&) {
-         return std::make_shared<http_response>(http_response::file("test_content_empty").with_header("Content-Type", "text/plain"));
+     http_response render_get(const http_request&) {
+         return http_response::file("test_content_empty").with_header("Content-Type", "text/plain");
      }
 };
 
 class file_response_resource_default_content_type : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request&) {
-         return std::make_shared<http_response>(http_response::file("test_content"));
+     http_response render_get(const http_request&) {
+         return http_response::file("test_content");
      }
 };
 #endif  // HTTPSERVER_NO_LOCAL_FS
 
 class file_response_resource_missing : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request&) {
-         return std::make_shared<http_response>(http_response::file("missing"));
+     http_response render_get(const http_request&) {
+         return http_response::file("missing");
      }
 };
 
 #ifndef HTTPSERVER_NO_LOCAL_FS
 class file_response_resource_dir : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request&) {
-         return std::make_shared<http_response>(http_response::file("integ"));
+     http_response render_get(const http_request&) {
+         return http_response::file("integ");
      }
 };
 #endif  // HTTPSERVER_NO_LOCAL_FS
 
 class exception_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request&) {
+     http_response render_get(const http_request&) {
          throw std::domain_error("invalid");
      }
 };
 
 class error_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request&) {
+     http_response render_get(const http_request&) {
          throw "invalid";
      }
 };
@@ -348,9 +353,9 @@ class print_request_resource : public http_resource {
  public:
      explicit print_request_resource(stringstream* ss) : ss(ss) {}
 
-     shared_ptr<http_response> render_get(const http_request& req) {
+     http_response render_get(const http_request& req) {
          (*ss) << req;
-         return std::make_shared<http_response>(http_response::string("OK"));
+         return http_response::string("OK");
      }
 
  private:
@@ -361,14 +366,13 @@ class print_response_resource : public http_resource {
  public:
      explicit print_response_resource(stringstream* ss) : ss(ss) {}
 
-     shared_ptr<http_response> render_get(const http_request&) {
-         auto hresp = std::make_shared<http_response>(http_response::string("OK"));
+     http_response render_get(const http_request&) override {
+         auto hresp = http_response::string("OK")
+                          .with_header("MyResponseHeader", "MyResponseHeaderValue")
+                          .with_footer("MyResponseFooter", "MyResponseFooterValue")
+                          .with_cookie("MyResponseCookie", "MyResponseCookieValue");
 
-         hresp->with_header("MyResponseHeader", "MyResponseHeaderValue");
-         hresp->with_footer("MyResponseFooter", "MyResponseFooterValue");
-         hresp->with_cookie("MyResponseCookie", "MyResponseCookieValue");
-
-         (*ss) << *hresp;
+         (*ss) << hresp;
 
          return hresp;
      }
@@ -379,19 +383,19 @@ class print_response_resource : public http_resource {
 
 class request_info_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request& req) {
+     http_response render_get(const http_request& req) {
          stringstream ss;
          ss << "requestor=" << req.get_requestor()
             << "&port=" << req.get_requestor_port()
             << "&version=" << req.get_version();
-         return std::make_shared<http_response>(http_response::string(ss.str()));
+         return http_response::string(ss.str());
      }
 };
 
 class content_limit_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_post(const http_request& req) {
-         return std::make_shared<http_response>(http_response::string(req.content_too_large() ? "TOO_LARGE" : "OK"));
+     http_response render_post(const http_request& req) {
+         return http_response::string(req.content_too_large() ? "TOO_LARGE" : "OK");
      }
 };
 
@@ -1993,7 +1997,7 @@ LT_END_AUTO_TEST(only_render_trace)
 // Test for long error log message (triggers resize branch)
 class long_error_message_resource : public http_resource {
  public:
-    shared_ptr<http_response> render_get(const http_request&) {
+    http_response render_get(const http_request&) {
         // Generate an error with a message longer than 80 characters
         throw std::runtime_error(
             "This is a very long error message that exceeds the default buffer "
@@ -2056,7 +2060,7 @@ LT_END_AUTO_TEST(only_render_patch)
 // Resource that throws std::invalid_argument from render()
 class invalid_arg_resource : public http_resource {
  public:
-    shared_ptr<http_response> render_get(const http_request&) {
+    http_response render_get(const http_request&) {
         throw std::invalid_argument("Resource not found");
     }
 };
@@ -2064,7 +2068,7 @@ class invalid_arg_resource : public http_resource {
 // Resource that throws std::runtime_error from render()
 class runtime_error_resource : public http_resource {
  public:
-    shared_ptr<http_response> render_get(const http_request&) {
+    http_response render_get(const http_request&) {
         throw std::runtime_error("Internal error in response");
     }
 };
@@ -2072,7 +2076,7 @@ class runtime_error_resource : public http_resource {
 // Resource that throws a non-std exception from render()
 class non_std_exception_resource : public http_resource {
  public:
-    shared_ptr<http_response> render_get(const http_request&) {
+    http_response render_get(const http_request&) {
         throw 42;  // Throws an int, not a std::exception
     }
 };
@@ -2221,9 +2225,9 @@ void my_custom_unescaper(std::string& s) {
 // Resource that returns the query string argument
 class arg_echo_resource : public http_resource {
  public:
-    shared_ptr<http_response> render_get(const http_request& req) {
+    http_response render_get(const http_request& req) {
         std::string arg = std::string(req.get_arg_flat("key"));
-        return std::make_shared<http_response>(http_response::string(arg));
+        return http_response::string(arg);
     }
 };
 
@@ -2288,8 +2292,8 @@ class post_only_resource : public http_resource {
         disallow_all();
         set_allowing(httpserver::http_method::post, true);
     }
-    shared_ptr<http_response> render_post(const http_request&) {
-        return std::make_shared<http_response>(http_response::string("POST_OK"));
+    http_response render_post(const http_request&) {
+        return http_response::string("POST_OK");
     }
 };
 
@@ -2319,7 +2323,7 @@ LT_END_AUTO_TEST(custom_method_not_allowed_handler)
 // Resource that tests requestor info caching
 class requestor_cache_resource : public http_resource {
  public:
-    shared_ptr<http_response> render_get(const http_request& req) {
+    http_response render_get(const http_request& req) {
         // Test requestor IP and port
         std::string ip = std::string(req.get_requestor());
         uint16_t port = req.get_requestor_port();
@@ -2328,7 +2332,7 @@ class requestor_cache_resource : public http_resource {
         std::string ip2 = std::string(req.get_requestor());
 
         std::string response = "IP:" + ip + ",PORT:" + std::to_string(port);
-        return std::make_shared<http_response>(http_response::string(response));
+        return http_response::string(response);
     }
 };
 
@@ -2360,12 +2364,12 @@ LT_END_AUTO_TEST(requestor_info)
 // Resource that tests querystring caching
 class querystring_cache_resource : public http_resource {
  public:
-    shared_ptr<http_response> render_get(const http_request& req) {
+    http_response render_get(const http_request& req) {
         // Call get_querystring twice to test caching
         std::string qs1 = std::string(req.get_querystring());
         std::string qs2 = std::string(req.get_querystring());  // Should hit cache
 
-        return std::make_shared<http_response>(http_response::string(qs1));
+        return http_response::string(qs1);
     }
 };
 
@@ -2397,7 +2401,7 @@ LT_END_AUTO_TEST(querystring_caching)
 // Resource that tests args caching
 class args_cache_resource : public http_resource {
  public:
-    shared_ptr<http_response> render_get(const http_request& req) {
+    http_response render_get(const http_request& req) {
         // Call get_args twice to test caching. TASK-017: returns const&
         // aliasing the impl-owned cache; both binds should be the same
         // address. We don't read args1/args2 here -- the test for caching
@@ -2416,7 +2420,7 @@ class args_cache_resource : public http_resource {
         for (const auto& [key, val] : flat) {
             response += std::string(key) + "=" + std::string(val) + ";";
         }
-        return std::make_shared<http_response>(http_response::string(response));
+        return http_response::string(response);
     }
 };
 
@@ -2447,7 +2451,7 @@ LT_END_AUTO_TEST(args_caching)
 // Resource that tests footer/trailer access
 class footer_test_resource : public http_resource {
  public:
-    shared_ptr<http_response> render_post(const http_request& req) {
+    http_response render_post(const http_request& req) {
         // Test get_footers() - returns empty map for non-chunked requests.
         // TASK-017: now returns const& aliasing impl-owned storage.
         const auto& footers = req.get_footers();
@@ -2461,7 +2465,7 @@ class footer_test_resource : public http_resource {
             response += ",X-Test-Trailer=" + std::string(footer_val);
         }
 
-        return std::make_shared<http_response>(http_response::string(response));
+        return http_response::string(response);
     }
 };
 
@@ -2493,18 +2497,17 @@ LT_END_AUTO_TEST(footer_access_no_trailers)
 // Resource that returns a response with footers (trailers)
 class response_footer_resource : public http_resource {
  public:
-    shared_ptr<http_response> render_get(const http_request&) {
-        auto response = std::make_shared<http_response>(http_response::string("body content"));
-        // Add a footer to the response
-        response->with_footer("X-Checksum", "abc123");
-        response->with_footer("X-Processing-Time", "42ms");
+    http_response render_get(const http_request&) override {
+        auto response = http_response::string("body content")
+                            .with_footer("X-Checksum", "abc123")
+                            .with_footer("X-Processing-Time", "42ms");
 
         // Test get_footer and get_footers on response. The returned
         // string_view points into the response's storage; we only
         // read it before returning so the response (and thus the
         // backing string) outlives any read.
-        auto checksum = response->get_footer("X-Checksum");
-        auto all_footers = response->get_footers();
+        auto checksum = response.get_footer("X-Checksum");
+        auto all_footers = response.get_footers();
         (void)checksum;
         (void)all_footers;
 
@@ -2538,12 +2541,12 @@ LT_END_AUTO_TEST(response_with_footers)
 // Resource that tests get_arg with non-existent key
 class arg_not_found_resource : public http_resource {
  public:
-    shared_ptr<http_response> render_get(const http_request& req) {
+    http_response render_get(const http_request& req) {
         // Get an arg that doesn't exist - should return empty http_arg_value
         auto missing_arg = req.get_arg("nonexistent_key");
         // http_arg_value.get_all_values() should return empty vector
         std::string result = missing_arg.get_all_values().empty() ? "EMPTY" : "HAS_VALUES";
-        return std::make_shared<http_response>(http_response::string(result));
+        return http_response::string(result);
     }
 };
 
@@ -2567,11 +2570,11 @@ LT_END_AUTO_TEST(arg_not_found)
 // Resource that tests get_arg_flat fallback to connection value
 class arg_flat_fallback_resource : public http_resource {
  public:
-    shared_ptr<http_response> render_get(const http_request& req) {
+    http_response render_get(const http_request& req) {
         // Test get_arg_flat with a key that exists in GET args but not in unescaped_args
         // This tests the fallback branch in get_arg_flat
         std::string val = std::string(req.get_arg_flat("qparam"));
-        return std::make_shared<http_response>(http_response::string(val));
+        return http_response::string(val);
     }
 };
 
@@ -2595,12 +2598,12 @@ LT_END_AUTO_TEST(arg_flat_fallback)
 // Resource that tests get_path_piece with out of bounds index
 class path_piece_oob_resource : public http_resource {
  public:
-    shared_ptr<http_response> render_get(const http_request& req) {
+    http_response render_get(const http_request& req) {
         // Get path piece at an index that's out of bounds
         std::string piece = req.get_path_piece(100);  // Way beyond the path pieces
         // Should return empty string
         std::string result = piece.empty() ? "OOB_EMPTY" : piece;
-        return std::make_shared<http_response>(http_response::string(result));
+        return http_response::string(result);
     }
 };
 
@@ -2624,10 +2627,10 @@ LT_END_AUTO_TEST(path_piece_out_of_bounds)
 // Resource that tests empty querystring
 class empty_querystring_resource : public http_resource {
  public:
-    shared_ptr<http_response> render_get(const http_request& req) {
+    http_response render_get(const http_request& req) {
         std::string qs = std::string(req.get_querystring());
         std::string result = qs.empty() ? "NO_QS" : qs;
-        return std::make_shared<http_response>(http_response::string(result));
+        return http_response::string(result);
     }
 };
 
@@ -2653,7 +2656,7 @@ LT_END_AUTO_TEST(empty_querystring)
 // Covers http_request.cpp lines 234 and 248 (arg_value == nullptr branches)
 class null_value_query_resource : public http_resource {
  public:
-    shared_ptr<http_response> render_get(const http_request& req) {
+    http_response render_get(const http_request& req) {
         // Test getting an argument that was passed without a value (e.g., ?keyonly)
         auto keyonly_arg = req.get_arg("keyonly");
         auto normal_arg = req.get_arg("normal");
@@ -2668,7 +2671,7 @@ class null_value_query_resource : public http_resource {
                             std::string(normal_arg.get_all_values()[0]));
         ss << ",qs=" << (qs.find("keyonly") != string::npos ? "HAS_KEYONLY" : "NO_KEYONLY");
 
-        return std::make_shared<http_response>(http_response::string(ss.str()));
+        return http_response::string(ss.str());
     }
 };
 
@@ -2676,7 +2679,7 @@ class null_value_query_resource : public http_resource {
 // Resource that tests auth caching (get_user/get_pass called multiple times)
 class auth_cache_resource : public http_resource {
  public:
-    shared_ptr<http_response> render_get(const http_request& req) {
+    http_response render_get(const http_request& req) {
         // Call get_user and get_pass multiple times to test caching
         std::string user1 = std::string(req.get_user());
         std::string pass1 = std::string(req.get_pass());
@@ -2684,7 +2687,7 @@ class auth_cache_resource : public http_resource {
         std::string pass2 = std::string(req.get_pass());  // Should hit cache
 
         std::string result = user1.empty() ? "NO_AUTH" : ("USER:" + user1);
-        return std::make_shared<http_response>(http_response::string(result));
+        return http_response::string(result);
     }
 };
 #endif  // HAVE_BAUTH
@@ -2838,10 +2841,10 @@ LT_END_AUTO_TEST(unregister_path)
 // Resource that tests get_arg_flat() returning first value for multi-value arg
 class arg_flat_multi_resource : public http_resource {
  public:
-    shared_ptr<http_response> render_get(const http_request& req) {
+    http_response render_get(const http_request& req) {
         // get_arg_flat should return the first value even for multi-value args
         std::string flat_val = std::string(req.get_arg_flat("key"));
-        return std::make_shared<http_response>(http_response::string("flat=" + flat_val));
+        return http_response::string("flat=" + flat_val);
     }
 };
 
@@ -3030,8 +3033,8 @@ LT_END_AUTO_TEST(default_render_method)
 // Test resource that overrides only render() (not render_get)
 class render_override_resource : public http_resource {
  public:
-    shared_ptr<http_response> render(const http_request&) {
-        return std::make_shared<http_response>(http_response::string("base_render"));
+    http_response render(const http_request&) {
+        return http_response::string("base_render");
     }
 };
 
@@ -3175,7 +3178,7 @@ http_response custom_internal_error_handler(const http_request&, std::string_vie
 
 class throwing_resource : public http_resource {
  public:
-    shared_ptr<http_response> render_get(const http_request&) {
+    http_response render_get(const http_request&) {
         throw std::runtime_error("Intentional test exception");
     }
 };
@@ -3210,10 +3213,10 @@ LT_END_AUTO_TEST(builder_custom_internal_error_handler)
 // Test get_arg_flat fallback to MHD connection value
 class arg_flat_resource : public http_resource {
  public:
-    shared_ptr<http_response> render_get(const http_request& req) {
+    http_response render_get(const http_request& req) {
         // get_arg_flat should fall back to MHD connection value for query params
         std::string result = std::string(req.get_arg_flat("q"));
-        return std::make_shared<http_response>(http_response::string(result));
+        return http_response::string(result);
     }
 };
 
@@ -3243,9 +3246,9 @@ LT_END_AUTO_TEST(get_arg_flat_fallback)
 // Test large multipart form field that triggers grow_last_arg path
 class large_multipart_resource : public http_resource {
  public:
-    shared_ptr<http_response> render_post(const http_request& req) {
+    http_response render_post(const http_request& req) {
         std::string result = std::string(req.get_arg("large_field"));
-        return std::make_shared<http_response>(http_response::string(std::to_string(result.size())));
+        return http_response::string(std::to_string(result.size()));
     }
 };
 
@@ -3292,7 +3295,7 @@ LT_END_AUTO_TEST(large_multipart_form_field)
 // Resource that tests client certificate methods on non-TLS requests
 class client_cert_non_tls_resource : public http_resource {
  public:
-    shared_ptr<http_response> render_get(const http_request& req) {
+    http_response render_get(const http_request& req) {
         std::string result;
         // All these should return false/empty since this is not a TLS connection
         // TASK-019: the four cert-string accessors return string_view.
@@ -3307,7 +3310,7 @@ class client_cert_non_tls_resource : public http_resource {
         result += "fingerprint:" + std::string(req.get_client_cert_fingerprint_sha256()) + ";";
         result += "not_before:" + std::to_string(req.get_client_cert_not_before()) + ";";
         result += "not_after:" + std::to_string(req.get_client_cert_not_after());
-        return std::make_shared<http_response>(http_response::string(result));
+        return http_response::string(result);
     }
 };
 
@@ -3376,21 +3379,21 @@ struct captured_call {
 
 class boom_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request&) {
+     http_response render_get(const http_request&) {
          throw std::runtime_error("boom");
      }
 };
 
 class throw_int_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request&) {
+     http_response render_get(const http_request&) {
          throw 42;
      }
 };
 
 class feature_unavailable_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request&) {
+     http_response render_get(const http_request&) {
          throw httpserver::feature_unavailable{"widget", "HAVE_WIDGET"};
      }
 };

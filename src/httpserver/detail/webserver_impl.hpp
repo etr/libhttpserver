@@ -311,8 +311,11 @@ class webserver_impl {
     // Dispatch helpers (formerly methods on webserver). Each of these
     // touches both backend state on this impl and const config on the
     // owning webserver (via `parent`).
-    std::shared_ptr<::httpserver::http_response> not_found_page(modded_request* mr) const;
-    std::shared_ptr<::httpserver::http_response> method_not_allowed_page(modded_request* mr) const;
+    //
+    // TASK-036: synth-response helpers return http_response by value;
+    // the dispatch path moves into modded_request::response_ (DR-010).
+    ::httpserver::http_response not_found_page(modded_request* mr) const;
+    ::httpserver::http_response method_not_allowed_page(modded_request* mr) const;
     // TASK-031: error-propagation entry point. @p msg carries the
     // originating exception's text (e.what() for std::exception, the
     // sentinel "unknown exception" for non-std throws, or a fixed
@@ -333,7 +336,7 @@ class webserver_impl {
     // throws, that exception propagates to the caller. Callers in the
     // handler-throw path use run_internal_error_handler_safely() to
     // contain that double-fault.
-    std::shared_ptr<::httpserver::http_response> internal_error_page(
+    ::httpserver::http_response internal_error_page(
         modded_request* mr,
         std::string_view msg,
         bool force_our = false) const;
@@ -347,7 +350,7 @@ class webserver_impl {
     // On success, returns the response it produced. If the user handler
     // itself throws, logs generically via log_dispatch_error and returns
     // a hardcoded empty-body 500.
-    std::shared_ptr<::httpserver::http_response>
+    ::httpserver::http_response
         run_internal_error_handler_safely(modded_request* mr,
                                           std::string_view msg) const;
     bool should_skip_auth(const std::string& path) const;

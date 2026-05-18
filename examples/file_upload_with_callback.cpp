@@ -27,7 +27,7 @@
 
 class file_upload_resource : public httpserver::http_resource {
  public:
-     std::shared_ptr<httpserver::http_response> render_get(const httpserver::http_request&) {
+     httpserver::http_response render_get(const httpserver::http_request&) {
          std::string get_response = "<html>\n";
          get_response += "  <body>\n";
          get_response += "    <h1>File Upload with Cleanup Callback Demo</h1>\n";
@@ -40,10 +40,10 @@ class file_upload_resource : public httpserver::http_resource {
          get_response += "  </body>\n";
          get_response += "</html>\n";
 
-         return std::shared_ptr<httpserver::http_response>(new httpserver::http_response(httpserver::http_response::string(get_response, "text/html")));
+         return httpserver::http_response::string(get_response, "text/html");
      }
 
-     std::shared_ptr<httpserver::http_response> render_post(const httpserver::http_request& req) {
+     httpserver::http_response render_post(const httpserver::http_request& req) {
         std::string post_response = "<html>\n";
         post_response += "<body>\n";
         post_response += "  <h1>Upload Complete</h1>\n";
@@ -60,7 +60,7 @@ class file_upload_resource : public httpserver::http_resource {
         post_response += "  </ul>\n";
         post_response += "  <a href=\"/\">Upload more</a>\n";
         post_response += "</body>\n</html>";
-        return std::shared_ptr<httpserver::http_response>(new httpserver::http_response(httpserver::http_response::string(post_response, "text/html").with_status(201)));
+        return httpserver::http_response::string(post_response, "text/html").with_status(201);
     }
 };
 

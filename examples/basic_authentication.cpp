@@ -25,13 +25,13 @@
 
 class user_pass_resource : public httpserver::http_resource {
  public:
-     std::shared_ptr<httpserver::http_response> render_get(const httpserver::http_request& req) {
+     httpserver::http_response render_get(const httpserver::http_request& req) {
          if (req.get_user() != "myuser" || req.get_pass() != "mypass") {
-             return std::make_shared<httpserver::http_response>(
-                 httpserver::http_response::unauthorized("Basic", "test@example.com", "FAIL"));
+             return
+                 httpserver::http_response::unauthorized("Basic", "test@example.com", "FAIL");
          }
 
-         return std::shared_ptr<httpserver::http_response>(new httpserver::http_response(httpserver::http_response::string(std::string(req.get_user()) + " " + std::string(req.get_pass()))));
+         return httpserver::http_response::string(std::string(req.get_user()) + " " + std::string(req.get_pass()));
      }
 };
 

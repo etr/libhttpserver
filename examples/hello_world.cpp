@@ -26,13 +26,13 @@
 
 class hello_world_resource : public httpserver::http_resource {
  public:
-     std::shared_ptr<httpserver::http_response> render(const httpserver::http_request&);
+     httpserver::http_response render(const httpserver::http_request&);
      void set_some_data(const std::string &s) {data = s;}
      std::string data;
 };
 
 // Using the render method you are able to catch each type of request you receive
-std::shared_ptr<httpserver::http_response> hello_world_resource::render(const httpserver::http_request& req) {
+httpserver::http_response hello_world_resource::render(const httpserver::http_request& req) {
     // It is possible to store data inside the resource object that can be altered through the requests
     std::cout << "Data was: " << data << std::endl;
     std::string_view datapar = req.get_arg("data");
@@ -40,7 +40,7 @@ std::shared_ptr<httpserver::http_response> hello_world_resource::render(const ht
     std::cout << "Now data is:" << data << std::endl;
 
     // It is possible to send a response initializing an http_string_response that reads the content to send in response from a string.
-    return std::shared_ptr<httpserver::http_response>(new httpserver::http_response(httpserver::http_response::string("Hello World!!!")));
+    return httpserver::http_response::string("Hello World!!!");
 }
 
 int main() {

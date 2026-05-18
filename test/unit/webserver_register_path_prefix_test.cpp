@@ -62,17 +62,17 @@ size_t writefunc(void* ptr, size_t size, size_t nmemb, std::string* s) {
 
 class ok_resource : public http_resource {
  public:
-     std::shared_ptr<http_response> render_get(const http_request&) override {
-         return std::make_shared<http_response>(http_response::string("OK"));
+     http_response render_get(const http_request&) override {
+         return http_response::string("OK");
      }
 };
 
 class echo_id_resource : public http_resource {
  public:
-     std::shared_ptr<http_response> render_get(const http_request& req) override {
+     http_response render_get(const http_request& req) override {
          std::string body = "id=";
          body.append(req.get_arg("id"));
-         return std::make_shared<http_response>(http_response::string(body));
+         return http_response::string(body);
      }
 };
 

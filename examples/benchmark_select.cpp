@@ -28,16 +28,12 @@
 
 class hello_world_resource : public httpserver::http_resource {
  public:
-     explicit hello_world_resource(const std::shared_ptr<httpserver::http_response>& resp):
-         resp(resp) {
+     // TASK-036: http_response is a movable value type; build it
+     // per-request rather than caching a shared instance.
+     httpserver::http_response render(const httpserver::http_request&) override {
+         return httpserver::http_response::string(BODY)
+                    .with_header("Server", "libhttpserver");
      }
-
-     std::shared_ptr<httpserver::http_response> render(const httpserver::http_request&) {
-         return resp;
-     }
-
- private:
-     std::shared_ptr<httpserver::http_response> resp;
 };
 
 int main(int argc, char** argv) {
@@ -47,10 +43,7 @@ int main(int argc, char** argv) {
         .start_method(httpserver::http::http_utils::INTERNAL_SELECT)
         .max_threads(atoi(argv[2]))};
 
-    std::shared_ptr<httpserver::http_response> hello = std::shared_ptr<httpserver::http_response>(new httpserver::http_response(httpserver::http_response::string(BODY)));
-    hello->with_header("Server", "libhttpserver");
-
-    auto hwr = std::make_shared<hello_world_resource>(hello);
+    auto hwr = std::make_shared<hello_world_resource>();
     ws.register_path(PATH, hwr);
 
     ws.start(true);
