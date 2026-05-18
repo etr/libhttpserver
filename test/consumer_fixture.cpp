@@ -32,6 +32,7 @@
 // The point is the compile + link, exercised in CI by TASK-037.
 
 #include <cstddef>
+#include <memory>
 #include <string>
 
 #include "./httpserver.hpp"
@@ -69,13 +70,25 @@ void touch_features() {
 }
 
 void touch_ws(httpserver::webserver& ws) {
-    httpserver::websocket_handler* h = nullptr;
+    // TASK-035: exercise all three new public entry points. On
+    // HAVE_WEBSOCKET-off builds each throws feature_unavailable; on
+    // HAVE_WEBSOCKET-on builds the smart-ptr overloads throw
+    // std::invalid_argument on the null inputs (and unregister_ws_resource
+    // is a no-op on a missing path). Either way, the call sites must
+    // compile, which is the whole point of this consumer-fixture TU.
     try {
-        ws.register_ws_resource("/ws", h);
+        ws.register_ws_resource(
+            "/ws", std::unique_ptr<httpserver::websocket_handler>{});
     } catch (...) {
-        // Throws on HAVE_WEBSOCKET-off builds (feature_unavailable);
-        // also throws on HAVE_WEBSOCKET-on builds because h is null.
-        // Either way, the call site must compile.
+    }
+    try {
+        ws.register_ws_resource(
+            "/ws", std::shared_ptr<httpserver::websocket_handler>{});
+    } catch (...) {
+    }
+    try {
+        ws.unregister_ws_resource("/ws");
+    } catch (...) {
     }
 }
 

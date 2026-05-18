@@ -8,11 +8,11 @@
 Mirror the `register_resource` ownership pattern for WebSocket handlers; remove the raw-pointer overload.
 
 **Action Items:**
-- [ ] Add `register_ws_resource(const std::string& path, std::unique_ptr<websocket_handler>);` and `(..., std::shared_ptr<websocket_handler>);`.
-- [ ] Add `unregister_ws_resource(const std::string& path);` (registration drops; handler destructor runs when last reference goes away).
-- [ ] Remove the raw-pointer overload `register_ws_resource(string, websocket_handler*)`.
-- [ ] On a `--disable-websocket` build, both overloads throw `feature_unavailable` (consistent with TASK-034).
-- [ ] Update any v1 examples or tests using the raw-pointer form.
+- [x] Add `register_ws_resource(const std::string& path, std::unique_ptr<websocket_handler>);` and `(..., std::shared_ptr<websocket_handler>);`.
+- [x] Add `unregister_ws_resource(const std::string& path);` (registration drops; handler destructor runs when last reference goes away).
+- [x] Remove the raw-pointer overload `register_ws_resource(string, websocket_handler*)`.
+- [x] On a `--disable-websocket` build, both overloads throw `feature_unavailable` (consistent with TASK-034).
+- [x] Update any v1 examples or tests using the raw-pointer form.
 
 **Dependencies:**
 - Blocked by: TASK-014, TASK-034
@@ -28,4 +28,4 @@ Mirror the `register_resource` ownership pattern for WebSocket handlers; remove 
 **Related Requirements:** PRD-HDL-REQ-003, PRD-HDL-REQ-005, PRD-FLG-REQ-002
 **Related Decisions:** §4.5, DR-010
 
-**Status:** Not Started
+**Status:** Done
