@@ -19,6 +19,7 @@
 */
 
 #include <iostream>
+#include <memory>
 #include <string>
 #include <string_view>
 
@@ -44,8 +45,10 @@ class echo_handler : public httpserver::websocket_handler {
 int main() {
     httpserver::webserver ws{httpserver::create_webserver(8080)};
 
-    echo_handler handler;
-    ws.register_ws_resource("/ws", &handler);
+    // TASK-035: smart-pointer ownership. The webserver takes ownership
+    // of the echo_handler via unique_ptr; its dtor runs when the
+    // webserver is destroyed.
+    ws.register_ws_resource("/ws", std::make_unique<echo_handler>());
     ws.start(true);
 
     return 0;

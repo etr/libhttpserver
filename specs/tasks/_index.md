@@ -117,7 +117,7 @@ Nominally: **13 sequential tasks**, each S–XL. Most other tasks parallelize of
 | TASK-032 | Thread-safety contract stress test (DR-008) | M5 | Done | TASK-027, TASK-031 |
 | TASK-033 | `create_webserver` builder cleanup | M5 | Done | TASK-006, TASK-014 |
 | TASK-034 | Build-flag-independent public API + `webserver::features()` | M5 | Done | TASK-003, TASK-019, TASK-033 |
-| TASK-035 | Smart-pointer `register_ws_resource` overloads | M5 | Not Started | TASK-014, TASK-034 |
+| TASK-035 | Smart-pointer `register_ws_resource` overloads | M5 | Done | TASK-014, TASK-034 |
 | TASK-036 | Handler return-by-value dispatch cutover | M5 | Not Started | TASK-022, TASK-025, TASK-027, TASK-031 |
 | TASK-037 | CI test for build-flag invariance | M6 | Not Started | TASK-034 |
 | TASK-038 | Sanitizer-clean tests for `http_response` move semantics | M6 | Not Started | TASK-009, TASK-036 |

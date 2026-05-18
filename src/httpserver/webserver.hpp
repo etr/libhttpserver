@@ -494,14 +494,56 @@ class webserver {
      static features features() noexcept;
 
      /**
-      * Register a websocket handler for @p resource (PRD-FLG-REQ-001 / §7).
+      * Register a websocket handler for @p resource (PRD-HDL-REQ-003 /
+      * PRD-HDL-REQ-005 / DR-010; PRD-FLG-REQ-001 / §7).
       *
       * Declared unconditionally so the public surface is identical in
       * HAVE_WEBSOCKET-on and HAVE_WEBSOCKET-off builds. When the library
       * was built without HAVE_WEBSOCKET this call throws
       * feature_unavailable("websocket", "HAVE_WEBSOCKET").
+      *
+      * TASK-035: this is the smart-pointer-ownership replacement for the
+      * v1 raw-pointer overload. The templated unique_ptr<T> shim mirrors
+      * TASK-023's pattern so callers can pass `std::make_unique<my_ws>()`
+      * without an explicit base cast; it funnels into the shared_ptr
+      * overload below.
+      *
+      * Throws std::invalid_argument if the handler is null or if a
+      * handler is already registered at the same path (mirrors the rest
+      * of the v2.0 registration surface).
+      *
+      * @param resource The url at which to register the handler.
+      * @param handler  unique_ptr to the websocket_handler (or any
+      *                 derived type); ownership is transferred to the
+      *                 webserver.
       **/
-     bool register_ws_resource(const std::string& resource, websocket_handler* handler);
+     template <typename T,
+               typename = std::enable_if_t<
+                   std::is_base_of_v<websocket_handler, T>>>
+     void register_ws_resource(const std::string& resource,
+                               std::unique_ptr<T> handler) {
+         register_ws_resource(
+             resource,
+             std::shared_ptr<websocket_handler>(std::move(handler)));
+     }
+     /// @copydoc register_ws_resource(const std::string&, std::unique_ptr<T>)
+     /// @param handler shared_ptr to the websocket_handler; the caller
+     ///                retains a reference.
+     void register_ws_resource(const std::string& resource,
+                               std::shared_ptr<websocket_handler> handler);
+
+     /**
+      * Drop the websocket handler registered at @p resource (PRD-HDL-REQ-003).
+      *
+      * No-op if no handler is registered at the path (mirrors the
+      * semantics of unregister_path). The handler's destructor runs
+      * when the last shared_ptr reference goes away -- the webserver
+      * always holds one reference until this call (or destruction)
+      * drops it.
+      *
+      * Throws feature_unavailable on a HAVE_WEBSOCKET-off build.
+      **/
+     void unregister_ws_resource(const std::string& resource);
 
  private:
      const uint16_t port;

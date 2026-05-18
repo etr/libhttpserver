@@ -725,19 +725,40 @@ void webserver::route(method_set methods,
     on_methods_(methods, path, std::move(handler));
 }
 
-bool webserver::register_ws_resource(const std::string& resource, websocket_handler* handler) {
+// TASK-035: canonical smart-pointer overload. The templated unique_ptr
+// shim in webserver.hpp constructs a shared_ptr from the unique_ptr and
+// forwards here, so this is the single funnel for both ownership shapes.
+void webserver::register_ws_resource(const std::string& resource,
+                                     std::shared_ptr<websocket_handler> handler) {
 #ifdef HAVE_WEBSOCKET
-    if (handler == nullptr) {
+    if (!handler) {
         throw std::invalid_argument("The websocket_handler pointer cannot be null");
     }
+    std::string key = http_utils::standardize_url(resource);
     std::unique_lock lock(impl_->registered_resources_mutex);
-    impl_->registered_ws_handlers[http_utils::standardize_url(resource)] = handler;
-    return true;
+    auto result = impl_->registered_ws_handlers.emplace(std::move(key),
+                                                        std::move(handler));
+    if (!result.second) {
+        // Mirror TASK-023's throw-on-duplicate. v1's operator[]-based
+        // insert silently overwrote; v2.0 surfaces the collision.
+        throw std::invalid_argument(
+            "A websocket_handler is already registered at this path");
+    }
 #else
-    // TASK-034 §7: WebSocket compiled out — fail loudly at the public
+    // TASK-034 §7: WebSocket compiled out -- fail loudly at the public
     // entry point so callers can catch feature_unavailable.
     (void)resource;
     (void)handler;
+    throw feature_unavailable("websocket", "HAVE_WEBSOCKET");
+#endif
+}
+
+void webserver::unregister_ws_resource(const std::string& resource) {
+#ifdef HAVE_WEBSOCKET
+    std::unique_lock lock(impl_->registered_resources_mutex);
+    impl_->registered_ws_handlers.erase(http_utils::standardize_url(resource));
+#else
+    (void)resource;
     throw feature_unavailable("websocket", "HAVE_WEBSOCKET");
 #endif
 }
@@ -1625,9 +1646,13 @@ void webserver_impl::upgrade_handler(void *cls, struct MHD_Connection* connectio
     std::ignore = connection;
     std::ignore = req_cls;
 
-    ws_upgrade_data* data = static_cast<ws_upgrade_data*>(cls);
-    websocket_handler* handler = data->handler;
-    delete data;
+    // TASK-035: own ws_upgrade_data via unique_ptr for the duration of
+    // the session. The shared_ptr<websocket_handler> inside `data`
+    // keeps the handler alive across this upgrade callback even if a
+    // concurrent unregister_ws_resource drops the registration in the
+    // owning webserver.
+    std::unique_ptr<ws_upgrade_data> data(static_cast<ws_upgrade_data*>(cls));
+    websocket_handler* handler = data->handler.get();
 
     // Create a WebSocket stream for this connection
     struct MHD_WebSocketStream* ws_stream = nullptr;
@@ -1657,7 +1682,8 @@ void webserver_impl::upgrade_handler(void *cls, struct MHD_Connection* connectio
                                 buf, static_cast<size_t>(got));
     }
 
-    // Session destructor will free ws_stream and close urh
+    // Session destructor will free ws_stream and close urh.
+    // `data` (and its shared_ptr handler reference) goes out of scope here.
 }
 
 }  // namespace detail
@@ -2061,10 +2087,14 @@ MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection, struct de
             std::shared_lock lock(registered_resources_mutex);
             auto ws_it = registered_ws_handlers.find(mr->standardized_url);
             if (ws_it != registered_ws_handlers.end()) {
-                websocket_handler* handler = ws_it->second;
+                // TASK-035: take a shared_ptr copy under the shared lock
+                // so the handler is kept alive across the MHD upgrade
+                // callback even if unregister_ws_resource erases the
+                // slot mid-upgrade.
+                std::shared_ptr<websocket_handler> handler_sp = ws_it->second;
                 lock.unlock();
 
-                ws_upgrade_data* data = new ws_upgrade_data{this, handler};
+                ws_upgrade_data* data = new ws_upgrade_data{this, std::move(handler_sp)};
                 struct MHD_Response* response = MHD_create_response_for_upgrade(&webserver_impl::upgrade_handler, data);
                 if (response != nullptr) {
                     // Add required WebSocket response headers

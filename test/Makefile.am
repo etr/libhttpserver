@@ -26,7 +26,7 @@ LDADD += -lcurl
 
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/ -DHTTPSERVER_COMPILATION
 METASOURCES = AUTO
-check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver create_webserver_explicit new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_const_getters http_request_tls_accessors webserver_register_smartptr webserver_register_path_prefix webserver_on_methods webserver_route route_table lookup_pipeline route_table_concurrency routing_regression threadsafety_stress webserver_features webserver_ws_unavailable webserver_dauth_unavailable consumer_fixture
+check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver create_webserver_explicit new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_const_getters http_request_tls_accessors webserver_register_smartptr webserver_register_path_prefix webserver_on_methods webserver_route route_table lookup_pipeline route_table_concurrency routing_regression threadsafety_stress webserver_features webserver_ws_unavailable webserver_register_ws_smartptr webserver_dauth_unavailable consumer_fixture
 
 MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
 
@@ -268,12 +268,28 @@ routing_regression_LDADD = $(LDADD) -lmicrohttpd
 # sufficient.
 webserver_features_SOURCES = unit/webserver_features_test.cpp
 
-# webserver_ws_unavailable: TASK-034. On HAVE_WEBSOCKET-off builds,
-# pins that webserver::register_ws_resource(...) throws
-# feature_unavailable whose what() names both "websocket" and
-# "HAVE_WEBSOCKET". On HAVE_WEBSOCKET-on builds the suite is empty
-# (the integ-level ws_start_stop test owns the success path).
+# webserver_ws_unavailable: TASK-034 / TASK-035. On HAVE_WEBSOCKET-off
+# builds, pins that all three public WebSocket entry points
+# (register_ws_resource(unique_ptr), register_ws_resource(shared_ptr),
+# unregister_ws_resource) throw feature_unavailable whose what() names
+# both "websocket" and "HAVE_WEBSOCKET". On HAVE_WEBSOCKET-on builds the
+# suite is empty (the integ-level ws_start_stop test owns the success
+# path; the smartptr ownership semantics live in
+# webserver_register_ws_smartptr).
 webserver_ws_unavailable_SOURCES = unit/webserver_ws_unavailable_test.cpp
+
+# webserver_register_ws_smartptr: TASK-035. Compile-time signature
+# assertions that the new unique_ptr/shared_ptr register_ws_resource
+# overloads exist, the raw-pointer overload is gone, and
+# unregister_ws_resource exists. On HAVE_WEBSOCKET-on builds the
+# runtime suite mirrors webserver_register_smartptr (unique_ptr
+# ownership transfer, shared_ptr caller-retains-ref, throw-on-null,
+# throw-on-duplicate, unregister drops the slot). On HAVE_WEBSOCKET-off
+# builds only the compile-time contract is exercised; the
+# feature_unavailable throw-site contract lives in
+# webserver_ws_unavailable. Default LDADD (libhttpserver + curl) is
+# sufficient.
+webserver_register_ws_smartptr_SOURCES = unit/webserver_register_ws_smartptr_test.cpp
 
 # webserver_dauth_unavailable: security-reviewer-iter1-1 / TASK-034.
 # On HAVE_DAUTH-off builds, pins that webserver(create_webserver(port).digest_auth(true))

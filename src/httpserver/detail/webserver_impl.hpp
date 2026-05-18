@@ -282,11 +282,18 @@ class webserver_impl {
     std::set<http::ip_representation> allowances;
 
 #ifdef HAVE_WEBSOCKET
-    std::map<std::string, ::httpserver::websocket_handler*> registered_ws_handlers;
+    // TASK-035: shared_ptr storage mirrors the registered_resources map
+    // type and lets the dispatch path (finalize_answer) take a shared_ptr
+    // copy under the shared lock that keeps the handler alive across an
+    // MHD upgrade callback, even if unregister_ws_resource races to drop
+    // the registration mid-upgrade. The webserver always holds one
+    // reference until the slot is erased.
+    std::map<std::string, std::shared_ptr<::httpserver::websocket_handler>>
+        registered_ws_handlers;
 
     struct ws_upgrade_data {
         webserver_impl* impl;
-        ::httpserver::websocket_handler* handler;
+        std::shared_ptr<::httpserver::websocket_handler> handler;
     };
 
     static void upgrade_handler(void *cls, struct MHD_Connection* connection,
