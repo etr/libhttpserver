@@ -63,9 +63,12 @@ struct sockaddr_storage;
 namespace httpserver {
 class http_resource;
 class http_response;
-#ifdef HAVE_WEBSOCKET
+// TASK-034: forward-declared unconditionally so the public surface of
+// webserver is identical in HAVE_WEBSOCKET-on and HAVE_WEBSOCKET-off
+// builds (PRD-FLG-REQ-001). When HAVE_WEBSOCKET is undefined the
+// class definition in websocket_handler.hpp is still included via the
+// umbrella header; member-function bodies live in src/websocket_handler.cpp.
 class websocket_handler;
-#endif  // HAVE_WEBSOCKET
 namespace detail {
 struct modded_request;
 class webserver_impl;
@@ -466,9 +469,39 @@ class webserver {
      **/
      uint16_t get_bound_port() const;
 
-#ifdef HAVE_WEBSOCKET
+     /**
+      * Reports build-time feature availability (PRD-FLG-REQ-003).
+      *
+      * The four boolean fields of the returned struct reflect the
+      * HAVE_BAUTH / HAVE_DAUTH / HAVE_GNUTLS / HAVE_WEBSOCKET macros at
+      * the time libhttpserver was compiled. Use this at runtime to
+      * decide whether to register a feature-dependent handler or to
+      * surface the configuration to the operator.
+      *
+      * The values are determined at library build time (not consumer
+      * build time): linking against a TLS-disabled libhttpserver always
+      * reports `tls == false`, even when the consumer TU was compiled
+      * with HAVE_GNUTLS defined.
+      *
+      * Safe to call before start() and from any thread; never throws.
+      **/
+     struct features {
+         bool basic_auth;
+         bool digest_auth;
+         bool tls;
+         bool websocket;
+     };
+     static features features() noexcept;
+
+     /**
+      * Register a websocket handler for @p resource (PRD-FLG-REQ-001 / §7).
+      *
+      * Declared unconditionally so the public surface is identical in
+      * HAVE_WEBSOCKET-on and HAVE_WEBSOCKET-off builds. When the library
+      * was built without HAVE_WEBSOCKET this call throws
+      * feature_unavailable("websocket", "HAVE_WEBSOCKET").
+      **/
      bool register_ws_resource(const std::string& resource, websocket_handler* handler);
-#endif  // HAVE_WEBSOCKET
 
  private:
      const uint16_t port;
@@ -500,9 +533,9 @@ class webserver {
      const std::string digest_auth_random;
      const int nonce_nc_size;
      const http::http_utils::policy_T default_policy;
-#ifdef HAVE_BAUTH
+     // TASK-034: stored unconditionally. webserver(create_webserver const&)
+     // throws feature_unavailable when this is true but HAVE_BAUTH is off.
      const bool basic_auth_enabled;
-#endif  // HAVE_BAUTH
      const bool digest_auth_enabled;
      const bool regex_checking;
      const bool ban_system_enabled;

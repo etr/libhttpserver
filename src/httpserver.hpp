@@ -39,9 +39,11 @@
 #include "httpserver/iovec_entry.hpp"
 #include "httpserver/file_info.hpp"
 #include "httpserver/webserver.hpp"
-#ifdef HAVE_WEBSOCKET
+// TASK-034: included unconditionally. websocket_handler.hpp is safe to
+// include in both HAVE_WEBSOCKET-on and HAVE_WEBSOCKET-off builds; the
+// member-function bodies in src/websocket_handler.cpp handle the
+// disabled-build sentinel behaviour (PRD-FLG-REQ-001).
 #include "httpserver/websocket_handler.hpp"
-#endif  // HAVE_WEBSOCKET
 
 #undef _HTTPSERVER_HPP_INSIDE_
 

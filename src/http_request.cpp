@@ -744,13 +744,21 @@ const std::string http_request::get_path_piece(int index) const {
     return EMPTY;
 }
 
-#ifdef HAVE_DAUTH
 http::http_utils::digest_auth_result http_request::check_digest_auth(
     const std::string& realm,
     const std::string& password,
     unsigned int nonce_timeout,
     uint32_t max_nc,
     http::http_utils::digest_algorithm algo) const {
+#ifdef HAVE_DAUTH
+    // CWE-476 guard: test-request path sets connection_ to nullptr.
+    // Passing nullptr to MHD_digest_auth_check3 is undefined behaviour;
+    // return the same WRONG_HEADER sentinel used on the HAVE_DAUTH-off
+    // path and by get_digested_user() when connection_ is null.
+    if (impl_->connection_ == nullptr) {
+        return http::http_utils::digest_auth_result::WRONG_HEADER;
+    }
+
     std::string_view digested_user = get_digested_user();
 
     enum MHD_DigestAuthResult result = MHD_digest_auth_check3(
@@ -764,6 +772,18 @@ http::http_utils::digest_auth_result http_request::check_digest_auth(
         static_cast<MHD_DigestAuthMultiAlgo3>(algo));
 
     return static_cast<http::http_utils::digest_auth_result>(result);
+#else
+    // TASK-034 §7 sentinel: DAUTH disabled at build time -> the
+    // call is documented to "return a sentinel result". WRONG_HEADER
+    // is the most explicit "this request was never authenticated"
+    // terminal value of the digest_auth_result enum.
+    (void)realm;
+    (void)password;
+    (void)nonce_timeout;
+    (void)max_nc;
+    (void)algo;
+    return http::http_utils::digest_auth_result::WRONG_HEADER;
+#endif
 }
 
 http::http_utils::digest_auth_result http_request::check_digest_auth_digest(
@@ -773,6 +793,12 @@ http::http_utils::digest_auth_result http_request::check_digest_auth_digest(
     unsigned int nonce_timeout,
     uint32_t max_nc,
     http::http_utils::digest_algorithm algo) const {
+#ifdef HAVE_DAUTH
+    // CWE-476 guard: same null-connection guard as check_digest_auth.
+    if (impl_->connection_ == nullptr) {
+        return http::http_utils::digest_auth_result::WRONG_HEADER;
+    }
+
     std::string_view digested_user = get_digested_user();
 
     enum MHD_DigestAuthResult result = MHD_digest_auth_check_digest3(
@@ -787,8 +813,16 @@ http::http_utils::digest_auth_result http_request::check_digest_auth_digest(
         static_cast<MHD_DigestAuthMultiAlgo3>(algo));
 
     return static_cast<http::http_utils::digest_auth_result>(result);
+#else
+    (void)realm;
+    (void)userdigest;
+    (void)userdigest_size;
+    (void)nonce_timeout;
+    (void)max_nc;
+    (void)algo;
+    return http::http_utils::digest_auth_result::WRONG_HEADER;
+#endif
 }
-#endif  // HAVE_DAUTH
 
 std::string_view http_request::get_header(std::string_view key) const {
     return impl_->get_connection_value(key, MHD_HEADER_KIND);
@@ -886,26 +920,33 @@ std::string_view http_request::get_querystring() const noexcept {
     return impl_->querystring;
 }
 
-#ifdef HAVE_BAUTH
 std::string_view http_request::get_user() const {
+#ifdef HAVE_BAUTH
     if (!impl_->username.empty()) {
         return impl_->username;
     }
     impl_->fetch_user_pass();
     return impl_->username;
+#else
+    // TASK-034 §7 sentinel: BAUTH disabled at build time -> empty view.
+    return std::string_view{};
+#endif
 }
 
 std::string_view http_request::get_pass() const {
+#ifdef HAVE_BAUTH
     if (!impl_->password.empty()) {
         return impl_->password;
     }
     impl_->fetch_user_pass();
     return impl_->password;
+#else
+    return std::string_view{};
+#endif
 }
-#endif  // HAVE_BAUTH
 
-#ifdef HAVE_DAUTH
 std::string_view http_request::get_digested_user() const {
+#ifdef HAVE_DAUTH
     if (!impl_->digested_user.empty()) {
         return impl_->digested_user;
     }
@@ -926,8 +967,11 @@ std::string_view http_request::get_digested_user() const {
     }
 
     return impl_->digested_user;
+#else
+    // TASK-034 §7 sentinel: DAUTH disabled at build time -> empty view.
+    return std::string_view{};
+#endif
 }
-#endif  // HAVE_DAUTH
 
 // ----------------------------------------------------------------------
 // TASK-019: high-level GnuTLS accessors. Public surface is unconditional
@@ -1104,9 +1148,10 @@ void http_request::set_file_cleanup_callback(file_cleanup_callback_ptr callback)
 
 std::ostream& operator<< (std::ostream& os, const http_request& r) {
     os << r.get_method() << " Request [";
-#ifdef HAVE_BAUTH
+    // TASK-034: get_user/get_pass are unconditional; they return empty
+    // on HAVE_BAUTH-off builds, so the dump prints two empty quoted
+    // strings in that case (harmless).
     os << "user:\"" << r.get_user() << "\" pass:\"" << r.get_pass() << "\"";
-#endif  // HAVE_BAUTH
     os << "] path:\"" << r.get_path() << "\"" << std::endl;
 
     http::dump_header_map(os, "Headers", r.get_headers());

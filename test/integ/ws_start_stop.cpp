@@ -551,6 +551,11 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, tuning_options)
     ws.stop();
 LT_END_AUTO_TEST(tuning_options)
 
+// TASK-034: use_ssl(true) on a HAVE_GNUTLS-off build now throws
+// feature_unavailable at webserver construction (PRD-FLG-REQ-001 / §7).
+// The TLS round-trip integ tests below only make sense when the library
+// was built with TLS support, so gate them on HAVE_GNUTLS.
+#ifdef HAVE_GNUTLS
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_base)
     httpserver::webserver ws{httpserver::create_webserver(PORT)
         .use_ssl()
@@ -637,6 +642,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_with_trust)
 
     ws.stop();
 LT_END_AUTO_TEST(ssl_with_trust)
+#endif  // HAVE_GNUTLS
 
 void* start_ws_blocking(void* par) {
     httpserver::webserver* ws = (httpserver::webserver*) par;

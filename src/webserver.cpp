@@ -35,9 +35,11 @@
 
 #include <errno.h>
 #include <microhttpd.h>
+// TASK-034: <microhttpd_ws.h> remains gated (only the upgrade trampolines
+// need it). The public websocket_handler header is unconditional and is
+// included below with the other project headers.
 #ifdef HAVE_WEBSOCKET
 #include <microhttpd_ws.h>
-#include "httpserver/websocket_handler.hpp"
 #endif  // HAVE_WEBSOCKET
 #include <signal.h>
 #include <stdint.h>
@@ -61,6 +63,11 @@
 
 #include "httpserver/constants.hpp"
 #include "httpserver/create_webserver.hpp"
+// TASK-034: feature_unavailable + websocket_handler are public headers
+// included unconditionally so the public surface is identical across
+// HAVE_WEBSOCKET-on and HAVE_WEBSOCKET-off builds.
+#include "httpserver/feature_unavailable.hpp"
+#include "httpserver/websocket_handler.hpp"
 #include "httpserver/detail/http_endpoint.hpp"
 #include "httpserver/detail/lambda_resource.hpp"
 #include "httpserver/detail/modded_request.hpp"
@@ -197,9 +204,9 @@ webserver::webserver(const create_webserver& params):
     digest_auth_random(params._digest_auth_random),
     nonce_nc_size(params._nonce_nc_size),
     default_policy(params._default_policy),
-#ifdef HAVE_BAUTH
+    // TASK-034: stored unconditionally; the ctor body below throws
+    // feature_unavailable if this is true on a HAVE_BAUTH-off build.
     basic_auth_enabled(params._basic_auth_enabled),
-#endif  // HAVE_BAUTH
     digest_auth_enabled(params._digest_auth_enabled),
     regex_checking(params._regex_checking),
     ban_system_enabled(params._ban_system_enabled),
@@ -233,8 +240,70 @@ webserver::webserver(const create_webserver& params):
     no_alpn(params._no_alpn),
     client_discipline_level(params._client_discipline_level),
     impl_(std::make_unique<detail::webserver_impl>(this)) {
+        // TASK-034 §7: any feature the builder asked for that the
+        // library was not compiled with must fail loudly here. Throwing
+        // from the ctor body (after the member-initialiser list) lets
+        // the just-constructed impl_ unique_ptr destroy itself cleanly
+        // — no MHD daemon is running yet.
+#ifndef HAVE_GNUTLS
+        if (use_ssl) {
+            throw feature_unavailable("tls", "HAVE_GNUTLS");
+        }
+#endif
+#ifndef HAVE_BAUTH
+        if (basic_auth_enabled) {
+            throw feature_unavailable("basic_auth", "HAVE_BAUTH");
+        }
+#endif
+#ifndef HAVE_DAUTH
+        // security-reviewer-iter1-1 / CWE-287: symmetric guard for digest
+        // auth. Without this a HAVE_DAUTH-off build silently accepts
+        // digest_auth_enabled=true and the request handler returns
+        // WRONG_HEADER, making the authentication gate a silent no-op.
+        if (digest_auth_enabled) {
+            throw feature_unavailable("digest_auth", "HAVE_DAUTH");
+        }
+#endif
         ignore_sigpipe();
         impl_->bind_socket = params._bind_socket;
+}
+
+// TASK-034: build-time feature reporting (PRD-FLG-REQ-003). The body
+// lives in this TU rather than in the header so consumers see whatever
+// HAVE_* the library was built with — not whatever HAVE_* their own TU
+// happens to define.
+//
+// The struct-tag spelling `struct webserver::features` disambiguates the
+// return type from the function name (both spelled `features`). The
+// returned aggregate uses the same elaborated form for the same reason.
+struct webserver::features webserver::features() noexcept {
+    // The aggregate-init braces below are spelled without the type name
+    // because `features` would name-collide with the surrounding member
+    // function. `return {a,b,c,d};` uses the function's declared return
+    // type (resolved via the elaborated-type-specifier above), avoiding
+    // the ambiguity entirely.
+    return {
+#ifdef HAVE_BAUTH
+        /*basic_auth =*/ true,
+#else
+        /*basic_auth =*/ false,
+#endif
+#ifdef HAVE_DAUTH
+        /*digest_auth =*/ true,
+#else
+        /*digest_auth =*/ false,
+#endif
+#ifdef HAVE_GNUTLS
+        /*tls =*/ true,
+#else
+        /*tls =*/ false,
+#endif
+#ifdef HAVE_WEBSOCKET
+        /*websocket =*/ true,
+#else
+        /*websocket =*/ false,
+#endif
+    };
 }
 
 webserver::~webserver() {
@@ -656,16 +725,22 @@ void webserver::route(method_set methods,
     on_methods_(methods, path, std::move(handler));
 }
 
-#ifdef HAVE_WEBSOCKET
 bool webserver::register_ws_resource(const std::string& resource, websocket_handler* handler) {
+#ifdef HAVE_WEBSOCKET
     if (handler == nullptr) {
         throw std::invalid_argument("The websocket_handler pointer cannot be null");
     }
     std::unique_lock lock(impl_->registered_resources_mutex);
     impl_->registered_ws_handlers[http_utils::standardize_url(resource)] = handler;
     return true;
+#else
+    // TASK-034 §7: WebSocket compiled out — fail loudly at the public
+    // entry point so callers can catch feature_unavailable.
+    (void)resource;
+    (void)handler;
+    throw feature_unavailable("websocket", "HAVE_WEBSOCKET");
+#endif
 }
-#endif  // HAVE_WEBSOCKET
 
 bool webserver::start(bool blocking) {
     struct {
