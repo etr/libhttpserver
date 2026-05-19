@@ -1,7 +1,7 @@
 # libhttpserver v2.0 — Task Plan
 
 **Status:** Draft 1
-**Last updated:** 2026-04-30
+**Last updated:** 2026-05-18
 **Owner:** Sebastiano Merlino
 **Inputs:** [specs/product_specs.md](../product_specs.md), [specs/architecture/](../architecture/)
 
@@ -120,7 +120,7 @@ Nominally: **13 sequential tasks**, each S–XL. Most other tasks parallelize of
 | TASK-035 | Smart-pointer `register_ws_resource` overloads | M5 | Done | TASK-014, TASK-034 |
 | TASK-036 | Handler return-by-value dispatch cutover | M5 | Done | TASK-022, TASK-025, TASK-027, TASK-031 |
 | TASK-037 | CI test for build-flag invariance | M6 | Done | TASK-034 |
-| TASK-038 | Sanitizer-clean tests for `http_response` move semantics | M6 | Not Started | TASK-009, TASK-036 |
+| TASK-038 | Sanitizer-clean tests for `http_response` move semantics | M6 | Done | TASK-009, TASK-036 |
 | TASK-039 | Performance acceptance (`get_headers`, `sizeof(http_resource)`) | M6 | Not Started | TASK-017, TASK-018, TASK-021 |
 | TASK-040 | Rewrite `examples/` | M6 | Not Started | TASK-025, TASK-036 |
 | TASK-041 | Rewrite `README.md` | M6 | Not Started | TASK-031, TASK-032, TASK-040 |

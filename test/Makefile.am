@@ -26,7 +26,7 @@ LDADD += -lcurl
 
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/ -DHTTPSERVER_COMPILATION
 METASOURCES = AUTO
-check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver create_webserver_explicit new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_const_getters http_request_tls_accessors webserver_register_smartptr webserver_register_path_prefix webserver_on_methods webserver_route route_table lookup_pipeline route_table_concurrency routing_regression threadsafety_stress webserver_features webserver_ws_unavailable webserver_register_ws_smartptr webserver_dauth_unavailable consumer_fixture
+check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver create_webserver_explicit new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories http_response_move_sanitizer webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_const_getters http_request_tls_accessors webserver_register_smartptr webserver_register_path_prefix webserver_on_methods webserver_route route_table lookup_pipeline route_table_concurrency routing_regression threadsafety_stress webserver_features webserver_ws_unavailable webserver_register_ws_smartptr webserver_dauth_unavailable consumer_fixture
 
 MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
 
@@ -103,6 +103,19 @@ http_response_sbo_LDADD = $(LDADD) -lmicrohttpd
 # http_response_sbo.
 http_response_factories_SOURCES = unit/http_response_factories_test.cpp
 http_response_factories_LDADD = $(LDADD) -lmicrohttpd
+
+# http_response_move_sanitizer: TASK-038 unit test that pins
+# sanitizer-clean (ASan + UBSan) http_response move semantics. Covers the
+# four move-assign cases and both move-ctor cases via factory-built
+# responses, drives the heap-fallback branch with a synthetic >64 B body
+# subclass (fat_body) reached through the same friend hook the SBO test
+# uses, and pins the moved-from invariant contract (destructible,
+# accessor-safe, re-assignable). Picked up by the asan / ubsan matrix
+# entries in .github/workflows/verify-build.yml via $(check_PROGRAMS).
+# Needs -lmicrohttpd because the TU subclasses detail::body whose
+# materialize() returns MHD_Response*.
+http_response_move_sanitizer_SOURCES = unit/http_response_move_sanitizer_test.cpp
+http_response_move_sanitizer_LDADD = $(LDADD) -lmicrohttpd
 
 # webserver_pimpl: TASK-014 sentinel. Compile-time assertions that the
 # PIMPL split has happened: <microhttpd.h>/<pthread.h> no longer leak

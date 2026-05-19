@@ -653,11 +653,17 @@ jobs:
     - name: Run libhttpserver configure
       run: |
         # Set memory check flags. They need to stay in step as env variables don't propagate across steps.
-        if [ "$BUILD_TYPE" = "asan" ]; then export CFLAGS='-fsanitize=address'; export CXXLAGS='-fsanitize=address'; export LDFLAGS='-fsanitize=address'; fi
-        if [ "$BUILD_TYPE" = "msan" ]; then export CFLAGS='-fsanitize=memory'; export CXXLAGS='-fsanitize=memory'; export LDFLAGS='-fsanitize=memory'; fi
-        if [ "$BUILD_TYPE" = "lsan" ]; then export CFLAGS='-fsanitize=leak'; export CXXLAGS='-fsanitize=leak'; export LDFLAGS='-fsanitize=leak'; fi
-        if [ "$BUILD_TYPE" = "tsan" ]; then export CFLAGS='-fsanitize=thread'; export CXXLAGS='-fsanitize=thread'; export LDFLAGS='-fsanitize=thread'; fi
-        if [ "$BUILD_TYPE" = "ubsan" ]; then export export CFLAGS='-fsanitize=undefined'; export CXXLAGS='-fsanitize=undefined'; export LDFLAGS='-fsanitize=undefined'; fi
+        # TASK-038: CXXFLAGS (NOT CXXLAGS) is the autoconf-recognized var
+        # that gets passed to the C++ compiler. A long-standing typo left
+        # C++ TUs uninstrumented under asan/msan/lsan/tsan/ubsan — the
+        # runtime libs were linked but the code itself was compiled
+        # without -fsanitize=..., so the sanitizers were no-ops on the
+        # library. The fix is a single missing 'F' per line.
+        if [ "$BUILD_TYPE" = "asan" ]; then export CFLAGS='-fsanitize=address'; export CXXFLAGS='-fsanitize=address'; export LDFLAGS='-fsanitize=address'; fi
+        if [ "$BUILD_TYPE" = "msan" ]; then export CFLAGS='-fsanitize=memory'; export CXXFLAGS='-fsanitize=memory'; export LDFLAGS='-fsanitize=memory'; fi
+        if [ "$BUILD_TYPE" = "lsan" ]; then export CFLAGS='-fsanitize=leak'; export CXXFLAGS='-fsanitize=leak'; export LDFLAGS='-fsanitize=leak'; fi
+        if [ "$BUILD_TYPE" = "tsan" ]; then export CFLAGS='-fsanitize=thread'; export CXXFLAGS='-fsanitize=thread'; export LDFLAGS='-fsanitize=thread'; fi
+        if [ "$BUILD_TYPE" = "ubsan" ]; then export CFLAGS='-fsanitize=undefined'; export CXXFLAGS='-fsanitize=undefined'; export LDFLAGS='-fsanitize=undefined'; fi
 
         # Additional flags on mac. They need to stay in step as env variables don't propagate across steps.
         if [ "${{ matrix.os }}" = "macos-latest" ]; then
