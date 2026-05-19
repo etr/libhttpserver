@@ -21,6 +21,16 @@
 // digest_authentication.cpp - per-request HTTP Digest auth check inside
 // a lambda handler. The two `unauthorized` returns are intentionally
 // indistinguishable to the client to avoid leaking nonce-state info.
+//
+// NOTE: SHA-256 is used here (RFC 7616). MD5-based Digest auth is broken
+// (trivially cracked by offline dictionary attacks against the HA1 hash) and
+// must not be used in new deployments. Use SHA-256 or stronger.
+//
+// The 300-second nonce lifetime balances usability (clients can retry without
+// re-authenticating) against replay-attack window. Shorten for higher security.
+//
+// NOTE: Credentials are hardcoded here for illustration only. In production,
+// load them from environment variables or a secrets store.
 
 #include <httpserver.hpp>
 
@@ -35,7 +45,7 @@ int main() {
         }
         auto result = req.check_digest_auth(
             "test@example.com", "mypass", 300, 0,
-            http_utils::digest_algorithm::MD5);
+            http_utils::digest_algorithm::SHA256);
         if (result != http_utils::digest_auth_result::OK) {
             return httpserver::http_response::unauthorized(
                 "Digest", "test@example.com", "FAIL");

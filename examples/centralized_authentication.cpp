@@ -22,15 +22,34 @@
 // that runs before every request. The handler returns nullptr to
 // accept, or an http_response to reject. auth_skip_paths lists routes
 // that bypass auth entirely.
+//
+// SECURITY NOTE: Credentials MUST NOT be hardcoded in source code (CWE-798).
+// This example loads AUTH_USER and AUTH_PASS from environment variables.
+// Set them before running:
+//   export AUTH_USER=myuser
+//   export AUTH_PASS=mysecretpassword
+//   ./centralized_authentication
 
+#include <cstdlib>
+#include <iostream>
 #include <memory>
+#include <string>
 
 #include <httpserver.hpp>
 
 // Returns nullptr to allow the request, or an http_response to reject it.
 std::shared_ptr<httpserver::http_response> auth_handler(
         const httpserver::http_request& req) {
-    if (req.get_user() != "admin" || req.get_pass() != "secret") {
+    const char* expected_user = std::getenv("AUTH_USER");
+    const char* expected_pass = std::getenv("AUTH_PASS");
+    if (!expected_user || !expected_pass) {
+        std::cerr << "centralized_authentication: AUTH_USER and AUTH_PASS "
+                     "environment variables must be set.\n";
+        return std::make_shared<httpserver::http_response>(
+            httpserver::http_response::string("Server configuration error")
+                .with_status(500));
+    }
+    if (req.get_user() != expected_user || req.get_pass() != expected_pass) {
         return std::make_shared<httpserver::http_response>(
             httpserver::http_response::unauthorized(
                 "Basic", "MyRealm", "Unauthorized"));
@@ -55,14 +74,15 @@ int main() {
 }
 
 // Usage:
-//   # Start the server
+//   # Set credentials and start the server
+//   export AUTH_USER=myuser AUTH_PASS=mysecretpassword
 //   ./centralized_authentication
 //
 //   # Without auth - should get 401 Unauthorized
 //   curl -v http://localhost:8080/api
 //
 //   # With valid auth - should get 200 OK
-//   curl -u admin:secret http://localhost:8080/api
+//   curl -u myuser:mysecretpassword http://localhost:8080/api
 //
 //   # Health endpoint (skip path) - works without auth
 //   curl http://localhost:8080/health

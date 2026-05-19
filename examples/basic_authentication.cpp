@@ -21,6 +21,10 @@
 // basic_authentication.cpp - per-request HTTP Basic auth check inside a
 // lambda handler. For centralized auth that intercepts every request,
 // see centralized_authentication.cpp.
+//
+// NOTE: Credentials are hardcoded here for illustration only. In production,
+// load expected values from environment variables or a secrets store — never
+// from source code. Never reflect the password in the response body.
 
 #include <string>
 
@@ -34,8 +38,9 @@ int main() {
             return httpserver::http_response::unauthorized(
                 "Basic", "test@example.com", "FAIL");
         }
+        // Only echo the username — never reflect the password back to the client.
         return httpserver::http_response::string(
-            std::string(req.get_user()) + " " + std::string(req.get_pass()));
+            "Hello, " + std::string(req.get_user()) + "!");
     });
 
     ws.start(true);

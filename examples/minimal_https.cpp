@@ -20,14 +20,23 @@
 
 // minimal_https.cpp - enable HTTPS via the use_ssl / https_mem_key /
 // https_mem_cert chain on create_webserver.
+//
+// The https_priorities call sets an explicit GnuTLS cipher-priority string
+// that allows TLS 1.2 and TLS 1.3 with safe renegotiation. Without it,
+// GnuTLS may fall back to TLS 1.0/1.1 depending on the system configuration.
+// Port 8443 is used (convention for HTTPS on non-privileged ports).
 
 #include <httpserver.hpp>
 
 int main() {
-    httpserver::webserver ws{httpserver::create_webserver(8080)
+    httpserver::webserver ws{httpserver::create_webserver(8443)
                                  .use_ssl()
                                  .https_mem_key("key.pem")
-                                 .https_mem_cert("cert.pem")};
+                                 .https_mem_cert("cert.pem")
+                                 .https_priorities(
+                                     "NORMAL:-VERS-TLS-ALL"
+                                     ":+VERS-TLS1.2:+VERS-TLS1.3"
+                                     ":%SAFE_RENEGOTIATION")};
 
     ws.on_get("/hello", [](const httpserver::http_request&) {
         return httpserver::http_response::string("Hello, World!");

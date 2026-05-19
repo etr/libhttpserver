@@ -20,7 +20,8 @@
 # absent, minimal_https_psk when gnutls is absent, etc.). The skip list is
 # computed by reading config.h from the build dir.
 #
-# Exits non-zero on the first compile failure.
+# Reports all compile failures before exiting non-zero, rather than stopping
+# at the first failure, so a single CI run surfaces all broken examples.
 
 set -u
 
@@ -78,6 +79,9 @@ if [ -f "$TOP_MAKEFILE" ]; then
     esac
 fi
 
+# should_skip() mirrors the conditional noinst_PROGRAMS blocks in
+# examples/Makefile.am. When a new conditionally-compiled example is added
+# or renamed there, update this function to match — they must stay in sync.
 should_skip() {
     local base="$1"
     case "$base" in
@@ -101,6 +105,8 @@ should_skip() {
 
 ok=0
 skipped=0
+failed=0
+failed_list=""
 for src in "$REPO_ROOT"/examples/*.cpp; do
     base="$(basename "$src" .cpp)"
     if should_skip "$base"; then
@@ -119,6 +125,8 @@ for src in "$REPO_ROOT"/examples/*.cpp; do
     fi
 
     out="$(mktemp -t "${base}.XXXXXX")"
+    # The installed prefix must appear before Homebrew paths so that the
+    # freshly-installed headers win over any stale system/Homebrew copies.
     # shellcheck disable=SC2086
     if ! "$CXX" -std=c++20 $CXXFLAGS_EXTRA $extra_defines \
             -I"$INCLUDE" $EXTRA_INC \
@@ -130,12 +138,28 @@ for src in "$REPO_ROOT"/examples/*.cpp; do
         echo "--- $base: COMPILE/LINK FAILED ---" >&2
         cat "${out}.err" >&2
         rm -f "$out" "${out}.err"
-        fail "$base failed to build against installed headers"
+        failed=$((failed + 1))
+        failed_list="$failed_list $base"
+        continue
     fi
     rm -f "$out" "${out}.err"
     ok=$((ok + 1))
     log "ok:      $base"
 done
 
-log "summary: $ok built, $skipped skipped"
+log "summary: $ok built, $skipped skipped, $failed failed"
+# Guard 1: no .cpp files found at all — broken glob or empty directory.
+if [ "$ok" -eq 0 ] && [ "$skipped" -eq 0 ] && [ "$failed" -eq 0 ]; then
+    fail "no .cpp files found in examples/ — check glob expansion or examples directory"
+fi
+# Guard 2: every example was skipped but none compiled — AM_CXXFLAGS detection
+# may have silently failed (e.g., continuation lines, changed variable casing).
+# Fail loudly so the false-all-skip case surfaces as an error, not a silent pass.
+if [ "$ok" -eq 0 ] && [ "$skipped" -gt 0 ]; then
+    fail "no examples were compiled — feature-flag detection may have failed; check $TOP_MAKEFILE for AM_CXXFLAGS"
+fi
+if [ "$failed" -gt 0 ]; then
+    echo "verify-installed-examples: FAIL: the following examples failed to build:$failed_list" >&2
+    exit 1
+fi
 exit 0

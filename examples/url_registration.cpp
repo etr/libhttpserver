@@ -53,14 +53,22 @@ int main() {
     ws.register_prefix("/family", echo);       // /family and /family/*
     ws.register_path("/with_regex_[0-9]+", echo);
 
-    // Parametric segments, with and without per-segment regex constraints.
-    ws.on_get("/url/with/{arg1}/and/{arg2}",
+    // Parametric segments with per-segment regex constraints (preferred form).
+    // The regex restricts arg1 to digits and arg2 to uppercase ASCII, so the
+    // router rejects invalid input before the handler is even invoked.
+    ws.on_get("/url/with/parametric/args/{arg1|[0-9]+}/and/{arg2|[A-Z]+}",
               [](const httpserver::http_request& req) {
         return httpserver::http_response::string(
             "ARGS: " + std::string(req.get_arg("arg1"))
             + " and " + std::string(req.get_arg("arg2")));
     });
-    ws.on_get("/url/with/parametric/args/{arg1|[0-9]+}/and/{arg2|[A-Z]+}",
+
+    // Unconstrained parametric segments (accepts any bytes in the URL slot).
+    // SECURITY NOTE: with no per-segment constraint the handler receives
+    // arbitrary input. Validate or sanitize before using in HTML, SQL, or
+    // system calls — raw reflection into an HTML response is reflected XSS
+    // (CWE-79); passing directly to a shell or DB is injection (CWE-89/78).
+    ws.on_get("/url/with/{arg1}/and/{arg2}",
               [](const httpserver::http_request& req) {
         return httpserver::http_response::string(
             "ARGS: " + std::string(req.get_arg("arg1"))

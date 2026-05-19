@@ -13,6 +13,10 @@
 #      render_post, and registers itself via register_path with
 #      std::make_unique.
 #
+#   3. Every program listed in examples/Makefile.am noinst_PROGRAMS has a
+#      corresponding .cpp source file on disk. This catches renames or
+#      deletions that would silently break `make examples`.
+#
 # LOC counting rule (TASK-040 plan D2):
 #   The LOC count is the number of non-empty, non-comment lines from the
 #   first non-comment line to EOF, after stripping any leading /* ... */
@@ -25,6 +29,7 @@ set -u
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 HELLO="$REPO_ROOT/examples/hello_world.cpp"
 SHARED="$REPO_ROOT/examples/shared_state.cpp"
+MAKEFILE_AM="$REPO_ROOT/examples/Makefile.am"
 
 fail() {
     echo "check-examples: FAIL: $*" >&2
@@ -101,5 +106,73 @@ grep -Eq '\brender_post\b' "$SHARED" \
 grep -Eq 'register_path[[:space:]]*\(.*std::make_unique' "$SHARED" \
     || fail "examples/shared_state.cpp must register via register_path with std::make_unique"
 
-echo "check-examples: OK (hello_world.cpp = $loc LOC; shared_state.cpp asserted)"
+# ---- Makefile.am coverage ---------------------------------------------------
+# Two-directional check:
+#   (a) Every program listed in noinst_PROGRAMS must have a .cpp source file.
+#   (b) Every .cpp in examples/ must be listed in noinst_PROGRAMS or be an
+#       explicitly acknowledged non-program artifact.
+#
+# KNOWN_ARTIFACTS: .cpp files that are intentionally not in noinst_PROGRAMS.
+# client_cert_auth.cpp ships as a documentation artifact; it depends on extra
+# GnuTLS APIs not part of the public libhttpserver consumer surface and is
+# excluded from the build by design. Mirror the comment in
+# scripts/verify-installed-examples.sh lines 96-101.
+KNOWN_ARTIFACTS="client_cert_auth"
+
+[ -f "$MAKEFILE_AM" ] || fail "examples/Makefile.am does not exist"
+
+# Extract all tokens from noinst_PROGRAMS lines (handles = and +=).
+# Strip the variable name and assignment operator, then collect program names.
+# Use awk for portability (avoids sed \s and \? which differ between GNU/BSD).
+programs="$(awk '/^[[:space:]]*noinst_PROGRAMS[[:space:]]*(=|\+=)/ {
+    sub(/^[[:space:]]*noinst_PROGRAMS[[:space:]]*(=|\+=)[[:space:]]*/, "")
+    gsub(/\\$/, "")
+    print
+}' "$MAKEFILE_AM")"
+
+# (a) Makefile.am → disk: every listed program must have a .cpp file.
+missing=0
+for prog in $programs; do
+    src="$REPO_ROOT/examples/${prog}.cpp"
+    if [ ! -f "$src" ]; then
+        echo "check-examples: FAIL: noinst_PROGRAMS lists '$prog' but examples/${prog}.cpp does not exist" >&2
+        missing=$((missing + 1))
+    fi
+done
+if [ "$missing" -gt 0 ]; then
+    fail "$missing program(s) listed in Makefile.am noinst_PROGRAMS have no .cpp source"
+fi
+
+# (b) disk → Makefile.am: every .cpp must be in noinst_PROGRAMS or KNOWN_ARTIFACTS.
+unlisted=0
+for src in "$REPO_ROOT"/examples/*.cpp; do
+    base="$(basename "$src" .cpp)"
+    # Check if in noinst_PROGRAMS.
+    found=0
+    for prog in $programs; do
+        if [ "$prog" = "$base" ]; then
+            found=1
+            break
+        fi
+    done
+    if [ "$found" -eq 0 ]; then
+        # Check if in KNOWN_ARTIFACTS allowlist.
+        in_artifacts=0
+        for artifact in $KNOWN_ARTIFACTS; do
+            if [ "$artifact" = "$base" ]; then
+                in_artifacts=1
+                break
+            fi
+        done
+        if [ "$in_artifacts" -eq 0 ]; then
+            echo "check-examples: FAIL: examples/${base}.cpp is on disk but not listed in noinst_PROGRAMS or KNOWN_ARTIFACTS" >&2
+            unlisted=$((unlisted + 1))
+        fi
+    fi
+done
+if [ "$unlisted" -gt 0 ]; then
+    fail "$unlisted .cpp file(s) in examples/ are not listed in Makefile.am noinst_PROGRAMS — add them or add to KNOWN_ARTIFACTS"
+fi
+
+echo "check-examples: OK (hello_world.cpp = $loc LOC; shared_state.cpp asserted; Makefile.am coverage verified bidirectionally)"
 exit 0
