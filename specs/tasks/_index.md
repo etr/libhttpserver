@@ -119,7 +119,7 @@ Nominally: **13 sequential tasks**, each S–XL. Most other tasks parallelize of
 | TASK-034 | Build-flag-independent public API + `webserver::features()` | M5 | Done | TASK-003, TASK-019, TASK-033 |
 | TASK-035 | Smart-pointer `register_ws_resource` overloads | M5 | Done | TASK-014, TASK-034 |
 | TASK-036 | Handler return-by-value dispatch cutover | M5 | Done | TASK-022, TASK-025, TASK-027, TASK-031 |
-| TASK-037 | CI test for build-flag invariance | M6 | Not Started | TASK-034 |
+| TASK-037 | CI test for build-flag invariance | M6 | Done | TASK-034 |
 | TASK-038 | Sanitizer-clean tests for `http_response` move semantics | M6 | Not Started | TASK-009, TASK-036 |
 | TASK-039 | Performance acceptance (`get_headers`, `sizeof(http_resource)`) | M6 | Not Started | TASK-017, TASK-018, TASK-021 |
 | TASK-040 | Rewrite `examples/` | M6 | Not Started | TASK-025, TASK-036 |

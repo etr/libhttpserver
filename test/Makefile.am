@@ -298,11 +298,18 @@ webserver_register_ws_smartptr_SOURCES = unit/webserver_register_ws_smartptr_tes
 # on HAVE_DAUTH-off). On HAVE_DAUTH-on builds the suite is empty.
 webserver_dauth_unavailable_SOURCES = unit/webserver_dauth_unavailable_test.cpp
 
-# consumer_fixture: TASK-034 / AC #2. Compile-and-link gate proving that
-# a single consumer source file referencing every previously
-# HAVE_*-gated public symbol compiles unchanged in every build
-# configuration (HAVE_BAUTH/DAUTH/GNUTLS/WEBSOCKET on or off). main()
-# returns 0; the test is "pass" purely by virtue of the binary existing.
+# consumer_fixture: TASK-034 / AC #2 + TASK-037 CI matrix gate
+# (PRD-FLG-REQ-001 / arch §9 testing item 2). Compile-and-link gate
+# proving that a single consumer source file referencing every
+# previously HAVE_*-gated public symbol compiles unchanged in every
+# build configuration (HAVE_BAUTH/DAUTH/GNUTLS/WEBSOCKET on or off).
+# main() returns 0; the test is "pass" purely by virtue of the binary
+# existing. TASK-037 wires two GitHub Actions matrix entries
+# (flag-invariance-on / flag-invariance-off in
+# .github/workflows/verify-build.yml) that exercise this fixture in
+# both the all-features-on and all-features-off lanes; an intentional
+# regression that re-introduces #ifdef HAVE_* around a public method
+# breaks the off lane (verified locally during TASK-037 cycle R).
 consumer_fixture_SOURCES = consumer_fixture.cpp
 
 noinst_HEADERS = littletest.hpp

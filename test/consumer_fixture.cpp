@@ -18,7 +18,7 @@
      USA
 */
 
-// TASK-034 cycle F: compile-only consumer fixture.
+// TASK-034 cycle F + TASK-037: compile-only consumer fixture.
 //
 // A single .cpp file that touches every public symbol whose declaration
 // was previously guarded by #ifdef HAVE_* in the public headers. It MUST
@@ -29,7 +29,15 @@
 // same for the other three flags).
 //
 // Runtime behaviour is irrelevant here: main() returns 0 immediately.
-// The point is the compile + link, exercised in CI by TASK-037.
+// The point is the compile + link, exercised in CI by the TASK-037
+// build-flag-invariance matrix entries (.github/workflows/verify-build.yml).
+// TASK-037 extends the original fixture to also pin (a) every remaining
+// TLS cert accessor declared in http_request.hpp, (b) the DAUTH-gated
+// check_digest_auth() declaration via a member-function pointer (without
+// invoking it on a TLS-off build), and (c) the positive-`true` form of
+// the use_ssl / basic_auth / digest_auth setters on create_webserver,
+// again via member-function-pointer references so the fixture remains
+// constructor-safe in every HAVE_* combination.
 
 #include <cstddef>
 #include <memory>
@@ -59,6 +67,56 @@ void touch_request_accessors(const httpserver::http_request& req) {
     (void)req.has_tls_session();
     using ddr = httpserver::http::http_utils::digest_auth_result;
     (void)sizeof(ddr);
+
+    // TASK-037: pin every remaining TLS cert accessor declared in
+    // http_request.hpp. These were #ifdef HAVE_GNUTLS-gated before
+    // TASK-019. Calling them on a TLS-off build returns the documented
+    // sentinel (empty string / false / 0) without touching gnutls.
+    (void)req.get_client_cert_issuer_dn();
+    (void)req.get_client_cert_cn();
+    (void)req.get_client_cert_fingerprint_sha256();
+    (void)req.has_client_certificate();
+    (void)req.is_client_cert_verified();
+    (void)req.get_client_cert_not_before();
+    (void)req.get_client_cert_not_after();
+
+    // TASK-037: pin the DAUTH-gated check_digest_auth() declaration via
+    // a member-function pointer rather than a call: taking the address
+    // proves the symbol is declared unconditionally and resolves at link
+    // time, without invoking a method that would throw on a build
+    // without HAVE_DAUTH. Pinning *both* overloads (string-password and
+    // pre-computed-digest) covers the full DAUTH surface that TASK-034
+    // unconditionalised.
+    using check_pw_t = httpserver::http::http_utils::digest_auth_result
+        (httpserver::http_request::*)(
+            const std::string&, const std::string&, unsigned int, uint32_t,
+            httpserver::http::http_utils::digest_algorithm) const;
+    check_pw_t cd_pw = &httpserver::http_request::check_digest_auth;
+    (void)cd_pw;
+    using check_digest_t = httpserver::http::http_utils::digest_auth_result
+        (httpserver::http_request::*)(
+            const std::string&, const void*, size_t, unsigned int, uint32_t,
+            httpserver::http::http_utils::digest_algorithm) const;
+    check_digest_t cd_dg = &httpserver::http_request::check_digest_auth_digest;
+    (void)cd_dg;
+}
+
+// TASK-037: pin the *positive*-`true` form of the three feature-flag
+// setters on create_webserver. Calling these with `true` on a build
+// without the corresponding HAVE_* would, at runtime, refuse to set the
+// flag or throw -- but the *compile* must succeed unconditionally, which
+// is what the build-flag-invariance gate asserts. A member-function-
+// pointer reference resolves at link time and proves the declaration is
+// unconditional without forcing the runtime path.
+void touch_create_webserver_setters() {
+    using cw_setter = httpserver::create_webserver& (
+        httpserver::create_webserver::*)(bool);
+    cw_setter s_ssl = &httpserver::create_webserver::use_ssl;
+    cw_setter s_bauth = &httpserver::create_webserver::basic_auth;
+    cw_setter s_dauth = &httpserver::create_webserver::digest_auth;
+    (void)s_ssl;
+    (void)s_bauth;
+    (void)s_dauth;
 }
 
 void touch_features() {
@@ -108,5 +166,6 @@ int main() {
     (void)&fixture::touch_features;
     (void)&fixture::touch_ws;
     (void)&fixture::build_test_req;
+    (void)&fixture::touch_create_webserver_setters;  // TASK-037
     return 0;
 }
