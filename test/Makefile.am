@@ -343,4 +343,57 @@ TESTS = $(check_PROGRAMS)
 
 @VALGRIND_CHECK_RULES@
 VALGRIND_SUPPRESSIONS_FILES = libhttpserver.supp
-EXTRA_DIST = libhttpserver.supp
+EXTRA_DIST = libhttpserver.supp \
+             PERFORMANCE.md \
+             v1_baseline/README.md \
+             v1_baseline/v1_constants.hpp \
+             v1_baseline/measure_v1_sizes.cpp \
+             v1_baseline/measure_v1_get_headers.cpp
+
+# TASK-039 -- Performance acceptance gates.
+#
+# Bench binaries verify the two PRD §3.6 numeric acceptance criteria:
+#   * bench_get_headers              -> PRD-REQ-REQ-001 (>=10x speedup on get_headers)
+#   * bench_sizeof_http_resource     -> PRD-REQ-REQ-003 (sizeof(http_resource) shrink)
+#
+# They live in EXTRA_PROGRAMS (not check_PROGRAMS), so:
+#   - `make all`   does NOT build them.
+#   - `make check` does NOT run them.
+#   - `make bench` (the rule below) builds and runs both explicitly.
+#
+# Rationale (per TASK-039 plan §2 D4 / D6):
+#   - Sanitizer runs of `make check` would distort the ratio; bench
+#     belongs out of band on a quiet release-mode host.
+#   - The bench is noise-sensitive and should not gate per-commit CI.
+#     Release-readiness is gated on `make bench` succeeding once on
+#     a controlled host (TASK-040+ runbook).
+#
+# How to add a new bench:
+#   1. Append the program name to bench_targets below.
+#   2. Add a `<name>_SOURCES = ...` line.
+#   3. Add a `<name>_LDADD = ...` line if it needs more than the
+#      default empty LDADD.
+#   4. Run `make bench` from the build directory.
+bench_targets = bench_sizeof_http_resource bench_get_headers
+EXTRA_PROGRAMS = $(bench_targets)
+
+# bench_sizeof_http_resource: pure compile-time static_assert. Empty
+# LDADD: no symbols from libhttpserver are referenced at run time.
+bench_sizeof_http_resource_SOURCES = bench_sizeof_http_resource.cpp
+bench_sizeof_http_resource_LDADD =
+
+# bench_get_headers: warms the get_headers() cache on an
+# http_request built via create_test_request, then times 10x1M
+# iterations. Compares the median ns/call to the v1 baseline.
+# Needs -lmicrohttpd because create_test_request transitively
+# constructs an http_request whose impl includes <microhttpd.h>.
+bench_get_headers_SOURCES = bench_get_headers.cpp
+bench_get_headers_LDADD = $(LDADD) -lmicrohttpd
+
+bench: $(bench_targets)
+	@for p in $(bench_targets); do \
+	    echo "=== Running bench: $$p ==="; \
+	    ./$$p || exit $$?; \
+	done
+
+.PHONY: bench

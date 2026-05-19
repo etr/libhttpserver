@@ -298,6 +298,15 @@ check-local: check-headers
 
 .PHONY: check-headers check-install-layout check-hygiene
 
+# TASK-039: top-level convenience rule that descends into test/ to
+# build and run the bench binaries (see test/Makefile.am and
+# test/PERFORMANCE.md). NOT wired into `make check`; release-mode
+# only.
+bench:
+	$(MAKE) -C test bench
+
+.PHONY: bench
+
 MOSTLYCLEANFILES = $(DX_CLEANFILES) *.gcda *.gcno *.gcov
 DISTCLEANFILES = DIST_REVISION
 
