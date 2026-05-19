@@ -12,7 +12,7 @@
 #       block_ip/unblock_ip, stop_and_wait, features(), feature_unavailable, ...).
 #   A4. The Threading and Error-propagation sections cite their architecture sources
 #       (DR-008/§5.1 and DR-009/§5.2) and mention the load-bearing details
-#       (stop_and_wait deadlock; internal_error_handler + feature_unavailable).
+#       (stop() deadlock per DR-008; internal_error_handler + feature_unavailable).
 #   A5. The eleven structural sections from TASK-041 exist (case-insensitive H2 match).
 #   A6. Cross-links to examples/ and RELEASE_NOTES.md exist.
 #
@@ -23,7 +23,7 @@
 #
 # Exits non-zero on the first violation.
 
-set -u
+set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 README="$REPO_ROOT/README.md"
@@ -153,8 +153,8 @@ fi
 if ! echo "$thread_body" | grep -qE '(DR-008|§[[:space:]]*5\.1|specs/architecture/05-cross-cutting\.md|specs/architecture/11-decisions/DR-008)'; then
     fail "A4: Threading section must cite DR-008 or §5.1"
 fi
-if ! echo "$thread_body" | grep -qE '\bstop_and_wait\b'; then
-    fail "A4: Threading section must mention stop_and_wait (the stop-from-handler deadlock)"
+if ! echo "$thread_body" | grep -qE '\bstop\(\)'; then
+    fail "A4: Threading section must mention stop() (the stop-from-handler deadlock, per DR-008)"
 fi
 if ! echo "$thread_body" | grep -qiE 'deadlock'; then
     fail "A4: Threading section must mention the deadlock contract"
@@ -217,6 +217,28 @@ if ! grep -qE '\]\(RELEASE_NOTES\.md' "$README"; then
     fail "A6: README.md must contain at least one Markdown link to RELEASE_NOTES.md"
 fi
 
+# ---- A6b: relative Markdown links resolve to existing files -----------------
+# Extract Markdown link targets of the form ](<target>) where the target
+# looks like a file path (no spaces, no C++ keywords). Skip http/https URLs
+# and in-page anchors (#...). Verify each relative target exists on disk.
+broken_links=()
+while IFS= read -r target; do
+    case "$target" in
+        http://*|https://*) continue ;;         # absolute URLs — not checked
+        \#*)                continue ;;         # in-page anchors — not checked
+        RELEASE_NOTES.md)   continue ;;         # created by TASK-042, not yet present
+    esac
+    if [ ! -e "$REPO_ROOT/$target" ]; then
+        broken_links+=("$target")
+    fi
+done < <(grep -oE '\]\([^) ]+\)' "$README" | sed 's/^](//;s/)$//')
+
+if [ "${#broken_links[@]}" -gt 0 ]; then
+    echo "check-readme: FAIL: A6b: README.md contains relative links to non-existent files:" >&2
+    for lnk in "${broken_links[@]}"; do echo "  $lnk" >&2; done
+    exit 1
+fi
+
 # ---- Markdown sanity --------------------------------------------------------
 # (S1) Balanced ``` fences (count of ``` lines must be even).
 fence_count="$(grep -cE '^```' "$README" || true)"
@@ -231,16 +253,12 @@ if [ "$h1_count" -ne 1 ]; then
 fi
 
 # (S3) No literal tab characters inside fenced code blocks.
-if awk '
+awk '
     BEGIN { in_block = 0; bad = 0 }
     /^```/ { in_block = !in_block; next }
     in_block && /\t/ { print NR": "$0; bad = 1 }
     END { exit bad }
-' "$README" >&2; then
-    :
-else
-    fail "S3: fenced code blocks in README.md contain tab characters (must use spaces)"
-fi
+' "$README" >&2 || fail "S3: fenced code blocks in README.md contain tab characters (must use spaces)"
 
 # ---- Optional: markdownlint advisory ----------------------------------------
 if command -v markdownlint >/dev/null 2>&1; then

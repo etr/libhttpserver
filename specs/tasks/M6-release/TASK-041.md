@@ -8,8 +8,8 @@
 Replace v1's README with a v2.0-only document that introduces the new API surface, threading contract, error-propagation contract, and feature-availability behavior.
 
 **Action Items:**
-- [ ] Top-of-README: 10-line "Hello, world" snippet (the same one as `examples/hello_world.cpp`).
-- [ ] Sections:
+- [x] Top-of-README: 10-line "Hello, world" snippet (the same one as `examples/hello_world.cpp`).
+- [x] Sections:
   - Build / install (C++20 floor; RHEL 9 `gcc-toolset-14` note)
   - Hello world — lambda form
   - Class-form handlers (when to reach for `http_resource`)
@@ -21,8 +21,8 @@ Replace v1's README with a v2.0-only document that introduces the new API surfac
   - Feature availability — `features()`, `feature_unavailable`, build-flag mapping table
   - WebSocket
   - Migrating from v1 (one-paragraph pointer to RELEASE_NOTES.md)
-- [ ] Cross-link to `examples/` and `RELEASE_NOTES.md`.
-- [ ] Remove every v1-era reference (raw pointers, `no_*` setters, `sweet_kill`, `*_response` subclasses).
+- [x] Cross-link to `examples/` and `RELEASE_NOTES.md`.
+- [x] Remove every v1-era reference (raw pointers, `no_*` setters, `sweet_kill`, `*_response` subclasses).
 
 **Dependencies:**
 - Blocked by: TASK-031, TASK-032, TASK-040
@@ -37,4 +37,4 @@ Replace v1's README with a v2.0-only document that introduces the new API surfac
 **Related Requirements:** PRD §2 documentation NFR
 **Related Decisions:** §13 documentation deliverable, AR-006, AR-007
 
-**Status:** Not Started
+**Status:** Done

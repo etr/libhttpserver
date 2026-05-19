@@ -267,11 +267,13 @@ Distilled from `specs/architecture/05-cross-cutting.md` §5.1 and DR-008
 (`specs/architecture/11-decisions/DR-008.md`):
 
 1. **Public methods on `webserver` are thread-safe and re-entrant from
-   inside a handler.** Two exceptions: `stop_and_wait()` and `~webserver()`
+   inside a handler.** Two exceptions: `stop()` and `~webserver()`
    **deadlock** if invoked from a handler thread, because they wait for
-   that very thread to drain. Stop the server from a different thread, or
-   signal an external stop loop. (`stop_and_wait` is the v2 spelling for
-   the v1 "kill" routine.)
+   that very thread to drain. `stop_and_wait()` delegates to `stop()` and
+   carries the same deadlock risk. Stop the server from a different thread,
+   or signal an external stop loop. v2 provides both `stop()` (signal and
+   return) and `stop_and_wait()` (signal and drain until all in-flight
+   handlers finish).
 2. **Handlers run concurrently on libmicrohttpd worker threads.** The same
    lambda or `http_resource` instance is invoked from many threads at once.
    Any state you share — counters, caches, file handles — must be
@@ -290,9 +292,11 @@ Distilled from `specs/architecture/05-cross-cutting.md` §5.2 and DR-009
 (`specs/architecture/11-decisions/DR-009.md`):
 
 1. **A handler that throws `std::exception` is caught.** The library logs
-   the exception via the configured `error_logger` and invokes
-   `internal_error_handler(request, e.what())`. The handler's return value
-   is sent to the client (default: HTTP 500).
+   the exception via the configured `log_error` callback and invokes
+   `internal_error_handler(request, e.what())`. The response returned by
+   `internal_error_handler` is sent to the client; if no custom
+   `internal_error_handler` is configured, a hardcoded HTTP 500 with empty
+   body is sent.
 2. **A handler that throws something other than `std::exception`** is also
    caught, with `"unknown exception"` substituted for the message.
 3. **Library-internal failures during dispatch** (allocation, body
