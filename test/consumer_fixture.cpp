@@ -108,6 +108,12 @@ void touch_request_accessors(const httpserver::http_request& req) {
 // is what the build-flag-invariance gate asserts. A member-function-
 // pointer reference resolves at link time and proves the declaration is
 // unconditional without forcing the runtime path.
+//
+// Also call each TLS credential-material setter with a safe no-op value.
+// These were already unconditional before TASK-034 (no HAVE_GNUTLS guard
+// in create_webserver.hpp), but touching them here means any future
+// regression that re-introduces such a guard would be caught by the
+// flag-invariance CI gate.
 void touch_create_webserver_setters() {
     using cw_setter = httpserver::create_webserver& (
         httpserver::create_webserver::*)(bool);
@@ -117,6 +123,17 @@ void touch_create_webserver_setters() {
     (void)s_ssl;
     (void)s_bauth;
     (void)s_dauth;
+
+    // TLS credential-material setters (always unconditional in the public API).
+    httpserver::create_webserver cw{8080};
+    cw.raw_https_mem_key("");
+    cw.raw_https_mem_cert("");
+    cw.raw_https_mem_trust("");
+    cw.https_priorities("");
+    cw.https_mem_dhparams("");
+    cw.cred_type(httpserver::http::http_utils::NONE);
+    cw.psk_cred_handler([](const std::string&) { return std::string{}; });
+    (void)cw;
 }
 
 void touch_features() {

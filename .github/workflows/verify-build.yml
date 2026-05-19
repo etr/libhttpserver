@@ -9,6 +9,11 @@ on:
   schedule:
     - cron: '0 0 * * 0'
 
+# Restrict every job's GITHUB_TOKEN to read-only by default.
+# Jobs that need broader access should override at the job level.
+permissions:
+  contents: read
+
 jobs:
   verify:
     name: Verify
@@ -525,6 +530,7 @@ jobs:
     - name: Build libmicrohttpd dependency (if not cached)
       run: |
         curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-1.0.3.tar.gz -o libmicrohttpd-1.0.3.tar.gz ;
+        echo "7816b57aae199cf5c3645e8770e1be5f0a4dfafbcb24b3772173dc4ee634126a  libmicrohttpd-1.0.3.tar.gz" | sha256sum -c ;
         tar -xzf libmicrohttpd-1.0.3.tar.gz ;
         cd libmicrohttpd-1.0.3 ;
         ./configure --disable-examples ;
@@ -536,6 +542,7 @@ jobs:
     - name: Build libmicrohttpd without digest auth (no-dauth test)
       run: |
         curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-1.0.3.tar.gz -o libmicrohttpd-1.0.3.tar.gz ;
+        echo "7816b57aae199cf5c3645e8770e1be5f0a4dfafbcb24b3772173dc4ee634126a  libmicrohttpd-1.0.3.tar.gz" | sha256sum -c ;
         tar -xzf libmicrohttpd-1.0.3.tar.gz ;
         cd libmicrohttpd-1.0.3 ;
         ./configure --disable-examples --disable-dauth ;
@@ -545,6 +552,7 @@ jobs:
     - name: Build libmicrohttpd with all features off (TASK-037 flag-invariance-off lane)
       run: |
         curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-1.0.3.tar.gz -o libmicrohttpd-1.0.3.tar.gz ;
+        echo "7816b57aae199cf5c3645e8770e1be5f0a4dfafbcb24b3772173dc4ee634126a  libmicrohttpd-1.0.3.tar.gz" | sha256sum -c ;
         tar -xzf libmicrohttpd-1.0.3.tar.gz ;
         cd libmicrohttpd-1.0.3 ;
         ./configure --disable-examples --disable-bauth --disable-dauth --disable-websockets ;
@@ -595,6 +603,7 @@ jobs:
       if: ${{ matrix.os-type == 'windows' }}
       run: |
         curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-1.0.3.tar.gz -o libmicrohttpd-1.0.3.tar.gz
+        echo "7816b57aae199cf5c3645e8770e1be5f0a4dfafbcb24b3772173dc4ee634126a  libmicrohttpd-1.0.3.tar.gz" | sha256sum -c
         tar -xzf libmicrohttpd-1.0.3.tar.gz
         cd libmicrohttpd-1.0.3
         ./configure --disable-examples --enable-poll=no
@@ -612,6 +621,7 @@ jobs:
     - name: Cross-compile libmicrohttpd for ARM
       run: |
         curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-1.0.3.tar.gz -o libmicrohttpd-1.0.3.tar.gz
+        echo "7816b57aae199cf5c3645e8770e1be5f0a4dfafbcb24b3772173dc4ee634126a  libmicrohttpd-1.0.3.tar.gz" | sha256sum -c
         tar -xzf libmicrohttpd-1.0.3.tar.gz
         mv libmicrohttpd-1.0.3 libmicrohttpd-1.0.3-${{ matrix.build-type }}
         cd libmicrohttpd-1.0.3-${{ matrix.build-type }}
@@ -755,7 +765,7 @@ jobs:
       # invariance assertion.
       run: |
         cd build ;
-        make consumer_fixture ;
+        make -C test consumer_fixture ;
       if: ${{ matrix.build-type == 'flag-invariance-on' || matrix.build-type == 'flag-invariance-off' }}
 
     - name: Run tests
