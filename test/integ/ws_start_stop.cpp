@@ -83,8 +83,8 @@ size_t writefunc(void *ptr, size_t size, size_t nmemb, std::string *s) {
 
 class ok_resource : public httpserver::http_resource {
  public:
-     shared_ptr<httpserver::http_response> render_get(const httpserver::http_request&) {
-         return std::make_shared<httpserver::http_response>(httpserver::http_response::string("OK"));
+     httpserver::http_response render_get(const httpserver::http_request&) {
+         return httpserver::http_response::string("OK");
      }
 };
 
@@ -96,10 +96,10 @@ class ok_resource : public httpserver::http_resource {
 // "TLS_SESSION_PRESENT").
 class tls_info_resource : public httpserver::http_resource {
  public:
-     shared_ptr<httpserver::http_response> render_get(const httpserver::http_request& req) {
+     httpserver::http_response render_get(const httpserver::http_request& req) {
          std::string response = req.has_tls_session() ? "TLS_SESSION_PRESENT"
                                                       : "NO_TLS_SESSION";
-         return std::make_shared<httpserver::http_response>(httpserver::http_response::string(response));
+         return httpserver::http_response::string(response);
      }
 };
 #endif  // HAVE_GNUTLS
@@ -876,10 +876,10 @@ LT_END_AUTO_TEST(bind_address_ipv6_string)
 // Test TLS session getters on non-TLS connection (should return false/nullptr)
 class tls_check_non_tls_resource : public httpserver::http_resource {
  public:
-     std::shared_ptr<httpserver::http_response> render_get(const httpserver::http_request& req) {
+     httpserver::http_response render_get(const httpserver::http_request& req) {
          // On non-TLS connection, has_tls_session should return false
          std::string response = req.has_tls_session() ? "HAS_TLS" : "NO_TLS";
-         return std::make_shared<httpserver::http_response>(httpserver::http_response::string(response));
+         return httpserver::http_response::string(response);
      }
 };
 
@@ -977,7 +977,7 @@ LT_END_AUTO_TEST(tls_session_getters)
 // Resource that extracts client certificate info
 class client_cert_info_resource : public httpserver::http_resource {
  public:
-     std::shared_ptr<httpserver::http_response> render_get(const httpserver::http_request& req) {
+     httpserver::http_response render_get(const httpserver::http_request& req) {
          std::string response;
          if (req.has_client_certificate()) {
              response = "HAS_CLIENT_CERT";
@@ -1003,7 +1003,7 @@ class client_cert_info_resource : public httpserver::http_resource {
          } else {
              response = "NO_CLIENT_CERT";
          }
-         return std::make_shared<httpserver::http_response>(httpserver::http_response::string(response));
+         return httpserver::http_response::string(response);
      }
 };
 

@@ -1691,27 +1691,23 @@ void webserver_impl::upgrade_handler(void *cls, struct MHD_Connection* connectio
 
 namespace detail {
 
-std::shared_ptr<http_response> webserver_impl::not_found_page(detail::modded_request* mr) const {
+http_response webserver_impl::not_found_page(detail::modded_request* mr) const {
     if (parent->not_found_handler != nullptr) {
-        return std::make_shared<http_response>(parent->not_found_handler(*mr->dhr));
-    } else {
-        return std::make_shared<http_response>(
-            http_response::string(std::string{constants::NOT_FOUND_ERROR})
-                .with_status(http_utils::http_not_found));
+        return parent->not_found_handler(*mr->dhr);
     }
+    return http_response::string(std::string{constants::NOT_FOUND_ERROR})
+        .with_status(http_utils::http_not_found);
 }
 
-std::shared_ptr<http_response> webserver_impl::method_not_allowed_page(detail::modded_request* mr) const {
+http_response webserver_impl::method_not_allowed_page(detail::modded_request* mr) const {
     if (parent->method_not_allowed_handler != nullptr) {
-        return std::make_shared<http_response>(parent->method_not_allowed_handler(*mr->dhr));
-    } else {
-        return std::make_shared<http_response>(
-            http_response::string(std::string{constants::METHOD_ERROR})
-                .with_status(http_utils::http_method_not_allowed));
+        return parent->method_not_allowed_handler(*mr->dhr);
     }
+    return http_response::string(std::string{constants::METHOD_ERROR})
+        .with_status(http_utils::http_method_not_allowed);
 }
 
-std::shared_ptr<http_response> webserver_impl::internal_error_page(
+http_response webserver_impl::internal_error_page(
     detail::modded_request* mr,
     std::string_view msg,
     bool force_our) const {
@@ -1721,21 +1717,18 @@ std::shared_ptr<http_response> webserver_impl::internal_error_page(
     // The body is intentionally empty and the message is intentionally
     // ignored.
     if (force_our) {
-        return std::make_shared<http_response>(
-            http_response::empty()
-                .with_status(http_utils::http_internal_server_error));
+        return http_response::empty()
+            .with_status(http_utils::http_internal_server_error);
     }
     // §5.2 point 2/3: invoke the user handler with the originating message.
     if (parent->internal_error_handler != nullptr) {
-        return std::make_shared<http_response>(
-            parent->internal_error_handler(*mr->dhr, msg));
+        return parent->internal_error_handler(*mr->dhr, msg);
     }
     // No handler configured: surface the message in the default body so
     // the unset-handler path is informative for debugging. Operators who
     // need a fixed body can wire a constant-returning handler.
-    return std::make_shared<http_response>(
-        http_response::string(std::string{msg})
-            .with_status(http_utils::http_internal_server_error));
+    return http_response::string(std::string{msg})
+        .with_status(http_utils::http_internal_server_error);
 }
 
 void webserver_impl::log_dispatch_error(std::string_view msg) const {
@@ -1752,7 +1745,7 @@ void webserver_impl::log_dispatch_error(std::string_view msg) const {
     }
 }
 
-std::shared_ptr<http_response>
+http_response
 webserver_impl::run_internal_error_handler_safely(
     detail::modded_request* mr,
     std::string_view msg) const {
@@ -2015,38 +2008,45 @@ void webserver_impl::decorate_mhd_response(MHD_Response* response,
 }
 
 struct MHD_Response* webserver_impl::get_raw_response_with_fallback(detail::modded_request* mr) {
+    // TASK-036 / DR-010: every assignment into mr->response_ uses
+    // emplace(std::move(...)); the optional owns the value and the
+    // deferred-body trampoline keeps a pointer into it for the lifetime
+    // of the modded_request.
+    auto materialize_current = [&]() -> struct MHD_Response* {
+        return materialize_response(mr->response_ ? &*mr->response_ : nullptr);
+    };
     try {
-        struct MHD_Response* raw = materialize_response(mr->dhrs.get());
+        struct MHD_Response* raw = materialize_current();
         if (raw == nullptr) {
             // TASK-031: no exception was thrown, but the body materializer
             // returned null. Route through the safe internal-error path so
             // a misbehaving user handler can't escape.
-            mr->dhrs = run_internal_error_handler_safely(
-                mr, "materialize_response returned null");
-            raw = materialize_response(mr->dhrs.get());
+            mr->response_.emplace(run_internal_error_handler_safely(
+                mr, "materialize_response returned null"));
+            raw = materialize_current();
         }
         return raw;
     } catch(const std::invalid_argument&) {
         try {
-            mr->dhrs = not_found_page(mr);
-            return materialize_response(mr->dhrs.get());
+            mr->response_.emplace(not_found_page(mr));
+            return materialize_current();
         } catch(...) {
             return nullptr;
         }
     } catch(const std::exception& e) {
         log_dispatch_error(std::string("materialize threw: ") + e.what());
         try {
-            mr->dhrs = run_internal_error_handler_safely(mr, e.what());
-            return materialize_response(mr->dhrs.get());
+            mr->response_.emplace(run_internal_error_handler_safely(mr, e.what()));
+            return materialize_current();
         } catch(...) {
             return nullptr;
         }
     } catch(...) {
         log_dispatch_error("materialize threw unknown exception");
         try {
-            mr->dhrs = run_internal_error_handler_safely(mr,
-                                                         "unknown exception");
-            return materialize_response(mr->dhrs.get());
+            mr->response_.emplace(run_internal_error_handler_safely(mr,
+                                                         "unknown exception"));
+            return materialize_current();
         } catch(...) {
             return nullptr;
         }
@@ -2218,9 +2218,15 @@ MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection, struct de
     if (found && parent->auth_handler != nullptr) {
         std::string path(mr->dhr->get_path());
         if (!should_skip_auth(path)) {
+            // TASK-036 boundary: auth_handler_ptr is intentionally NOT
+            // touched by this task (PRD-AUTH out of scope). It still
+            // returns a shared_ptr<http_response>; when set it acts as
+            // a poor man's optional. Move the pointee into the
+            // by-value slot so the dispatch path is uniform from here
+            // on. The shared_ptr drops at end of scope.
             std::shared_ptr<http_response> auth_response = parent->auth_handler(*mr->dhr);
             if (auth_response != nullptr) {
-                mr->dhrs = auth_response;
+                mr->response_.emplace(std::move(*auth_response));
                 found = false;  // Skip resource rendering, go directly to response
             }
         }
@@ -2233,19 +2239,23 @@ MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection, struct de
                 mr->pp = nullptr;
             }
             if (hrm->is_allowed(mr->method_enum)) {
-                // pointer-to-member dispatch via the shared_ptr's pointee.
+                // TASK-036: pointer-to-member dispatch returns
+                // http_response by value (DR-004); the prvalue is
+                // moved into the per-connection optional anchor.
                 // shared_ptr has no operator->*, so call as ((*ptr).*pmf)(...).
-                mr->dhrs = ((*hrm).*(mr->callback))(*mr->dhr);  // copy in memory (move in case)
-                if (mr->dhrs.get() == nullptr || mr->dhrs->get_status() == -1) {
+                mr->response_.emplace(((*hrm).*(mr->callback))(*mr->dhr));
+                if (mr->response_->get_status() == -1) {
                     // TASK-031: no exception was thrown, but the handler
-                    // returned a null/invalid response. Route through the
-                    // safe internal-error path so a misbehaving user
-                    // handler can't escape into libmicrohttpd.
-                    mr->dhrs = run_internal_error_handler_safely(
-                        mr, "handler returned null response");
+                    // returned the default-sentinel response. Route through
+                    // the safe internal-error path so a misbehaving user
+                    // handler can't escape into libmicrohttpd. (The "null
+                    // response" arm from v1 is now structurally impossible:
+                    // the optional always holds a value at this point.)
+                    mr->response_.emplace(run_internal_error_handler_safely(
+                        mr, "handler returned null response"));
                 }
             } else {
-                mr->dhrs = method_not_allowed_page(mr);
+                mr->response_.emplace(method_not_allowed_page(mr));
 
                 // TASK-021: serialize the allow-mask in enum-declaration
                 // order (GET, HEAD, POST, PUT, DELETE, CONNECT, OPTIONS,
@@ -2263,7 +2273,7 @@ MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection, struct de
                     }
                 }
                 if (!header_value.empty()) {
-                    mr->dhrs->with_header(http_utils::http_header_allow, header_value);
+                    mr->response_->with_header(http_utils::http_header_allow, header_value);
                 }
             }
         } catch (const std::exception& e) {
@@ -2273,16 +2283,16 @@ MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection, struct de
             // re-throw from the user handler (point 4).
             log_dispatch_error(std::string("dispatch: handler threw "
                                            "std::exception: ") + e.what());
-            mr->dhrs = run_internal_error_handler_safely(mr, e.what());
+            mr->response_.emplace(run_internal_error_handler_safely(mr, e.what()));
         } catch (...) {
             // §5.2 point 3: handler threw non-std::exception. Same flow
             // as the std::exception arm but with the sentinel message.
             log_dispatch_error("dispatch: handler threw unknown exception");
-            mr->dhrs = run_internal_error_handler_safely(mr,
-                                                         "unknown exception");
+            mr->response_.emplace(run_internal_error_handler_safely(mr,
+                                                         "unknown exception"));
         }
-    } else if (mr->dhrs == nullptr) {
-        mr->dhrs = not_found_page(mr);
+    } else if (!mr->response_) {
+        mr->response_.emplace(not_found_page(mr));
     }
 
     raw_response = get_raw_response_with_fallback(mr);
@@ -2290,11 +2300,11 @@ MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection, struct de
         // Belt-and-suspenders: even get_raw_response_with_fallback's
         // own try/catch couldn't produce a response. Force the empty-body
         // 500 fallback so MHD always has something to queue.
-        mr->dhrs = internal_error_page(mr, "", /*force_our=*/true);
-        raw_response = materialize_response(mr->dhrs.get());
+        mr->response_.emplace(internal_error_page(mr, "", /*force_our=*/true));
+        raw_response = materialize_response(&*mr->response_);
     }
-    decorate_mhd_response(raw_response, *mr->dhrs);
-    to_ret = MHD_queue_response(connection, mr->dhrs->get_status(), raw_response);
+    decorate_mhd_response(raw_response, *mr->response_);
+    to_ret = MHD_queue_response(connection, mr->response_->get_status(), raw_response);
     MHD_destroy_response(raw_response);
     return (MHD_Result) to_ret;
 }

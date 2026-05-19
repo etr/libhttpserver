@@ -25,25 +25,24 @@
 
 class hello_world_resource : public httpserver::http_resource {
  public:
-     std::shared_ptr<httpserver::http_response> render(const httpserver::http_request&) {
-         return std::shared_ptr<httpserver::http_response>(new httpserver::http_response(httpserver::http_response::string("Hello, World!")));
+     httpserver::http_response render(const httpserver::http_request&) {
+         return httpserver::http_response::string("Hello, World!");
      }
 };
 
 class handling_multiple_resource : public httpserver::http_resource {
  public:
-     std::shared_ptr<httpserver::http_response> render(const httpserver::http_request& req) {
-         return std::shared_ptr<httpserver::http_response>(new httpserver::http_response(httpserver::http_response::string("Your URL: " + std::string(req.get_path()))));
+     httpserver::http_response render(const httpserver::http_request& req) {
+         return httpserver::http_response::string("Your URL: " + std::string(req.get_path()));
      }
 };
 
 class url_args_resource : public httpserver::http_resource {
  public:
-     std::shared_ptr<httpserver::http_response> render(const httpserver::http_request& req) {
+     httpserver::http_response render(const httpserver::http_request& req) {
          std::string body = "ARGS: " + std::string(req.get_arg("arg1"))
              + " and " + std::string(req.get_arg("arg2"));
-         return std::shared_ptr<httpserver::http_response>(
-             new httpserver::http_response(httpserver::http_response::string(body)));
+         return httpserver::http_response::string(body);
      }
 };
 

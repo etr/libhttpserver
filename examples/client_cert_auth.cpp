@@ -67,10 +67,10 @@ std::set<std::string> allowed_fingerprints;
 // Resource that requires client certificate authentication
 class secure_resource : public httpserver::http_resource {
  public:
-    std::shared_ptr<httpserver::http_response> render_get(const httpserver::http_request& req) {
+    httpserver::http_response render_get(const httpserver::http_request& req) {
         // Check if client provided a certificate
         if (!req.has_client_certificate()) {
-            return std::make_shared<httpserver::http_response>(httpserver::http_response::string("Client certificate required").with_status(httpserver::http::http_utils::http_unauthorized));
+            return httpserver::http_response::string("Client certificate required").with_status(httpserver::http::http_utils::http_unauthorized);
         }
 
         // Get certificate information. TASK-019: the four string-typed
@@ -85,13 +85,13 @@ class secure_resource : public httpserver::http_resource {
 
         // Check if certificate is verified by our CA
         if (!verified) {
-            return std::make_shared<httpserver::http_response>(httpserver::http_response::string("Certificate not verified by trusted CA").with_status(httpserver::http::http_utils::http_forbidden));
+            return httpserver::http_response::string("Certificate not verified by trusted CA").with_status(httpserver::http::http_utils::http_forbidden);
         }
 
         // Optional: Check fingerprint against allowlist
         if (!allowed_fingerprints.empty() &&
             allowed_fingerprints.find(fingerprint) == allowed_fingerprints.end()) {
-            return std::make_shared<httpserver::http_response>(httpserver::http_response::string("Certificate not in allowlist").with_status(httpserver::http::http_utils::http_forbidden));
+            return httpserver::http_response::string("Certificate not in allowlist").with_status(httpserver::http::http_utils::http_forbidden);
         }
 
         // Check certificate validity times. TASK-019 narrows the
@@ -101,11 +101,11 @@ class secure_resource : public httpserver::http_resource {
         std::int64_t not_after = req.get_client_cert_not_after();
 
         if (now < not_before) {
-            return std::make_shared<httpserver::http_response>(httpserver::http_response::string("Certificate not yet valid").with_status(httpserver::http::http_utils::http_forbidden));
+            return httpserver::http_response::string("Certificate not yet valid").with_status(httpserver::http::http_utils::http_forbidden);
         }
 
         if (now > not_after) {
-            return std::make_shared<httpserver::http_response>(httpserver::http_response::string("Certificate has expired").with_status(httpserver::http::http_utils::http_forbidden));
+            return httpserver::http_response::string("Certificate has expired").with_status(httpserver::http::http_utils::http_forbidden);
         }
 
         // Build response with certificate info
@@ -116,14 +116,14 @@ class secure_resource : public httpserver::http_resource {
         response += "  Fingerprint (SHA-256): " + fingerprint + "\n";
         response += "  Verified: " + std::string(verified ? "Yes" : "No") + "\n";
 
-        return std::make_shared<httpserver::http_response>(httpserver::http_response::string(response));
+        return httpserver::http_response::string(response);
     }
 };
 
 // Public resource that shows certificate info but doesn't require it
 class info_resource : public httpserver::http_resource {
  public:
-    std::shared_ptr<httpserver::http_response> render_get(const httpserver::http_request& req) {
+    httpserver::http_response render_get(const httpserver::http_request& req) {
         std::string response;
 
         if (req.has_client_certificate()) {
@@ -137,7 +137,7 @@ class info_resource : public httpserver::http_resource {
             response += "Use --cert and --key with curl to provide one.\n";
         }
 
-        return std::make_shared<httpserver::http_response>(httpserver::http_response::string(response));
+        return httpserver::http_response::string(response);
     }
 };
 

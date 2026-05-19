@@ -25,18 +25,28 @@
 #ifndef SRC_HTTPSERVER_HTTP_RESOURCE_HPP_
 #define SRC_HTTPSERVER_HTTP_RESOURCE_HPP_
 
-#include <memory>
-
+// TASK-036: render_* virtuals now return http_response by value; the
+// inline defaults call render(req) and forward the prvalue, which
+// requires http_response to be a complete type at every override site.
+// Hard-include is the simplest correct shape (the umbrella already
+// reaches both headers).
 #include "httpserver/http_method.hpp"
+#include "httpserver/http_response.hpp"
 
 namespace httpserver { class http_request; }
-namespace httpserver { class http_response; }
 namespace httpserver { class webserver; }
 namespace httpserver { namespace detail { class webserver_impl; } }
 
 namespace httpserver {
 
-namespace detail { std::shared_ptr<http_response> empty_render(const http_request& r); }
+// TASK-036 / DR-004 / PRD-RSP-REQ-007: render_* virtuals return
+// http_response by value. The webserver dispatch path moves the value
+// into mr->response_ (an std::optional<http_response> living on the
+// per-connection modded_request, see §5.3) and keeps it alive until
+// MHD fires request_completed. The default render() returns a
+// default-constructed http_response whose status_code_ == -1 is the
+// v1-compatible sentinel for "handler did not produce a response"; the
+// dispatch path routes the sentinel through the internal-error handler.
 
 /**
  * Class representing a callable http resource.
@@ -53,8 +63,13 @@ class http_resource {
       * @param req Request passed through http
       * @return A http_response object
      **/
-     virtual std::shared_ptr<http_response> render(const http_request& req) {
-         return detail::empty_render(req);
+     virtual http_response render(const http_request& /*req*/) {
+         // TASK-036: default-constructed http_response carries
+         // status_code_ == -1 — the v1-compatible "handler did not
+         // produce a response" sentinel that finalize_answer recognises
+         // and routes through internal_error_page (see
+         // test/integ/basic.cpp::default_render_method).
+         return http_response{};
      }
 
      /**
@@ -62,7 +77,7 @@ class http_resource {
       * @param req Request passed through http
       * @return A http_response object
      **/
-     virtual std::shared_ptr<http_response> render_get(const http_request& req) {
+     virtual http_response render_get(const http_request& req) {
          return render(req);
      }
 
@@ -71,7 +86,7 @@ class http_resource {
       * @param req Request passed through http
       * @return A http_response object
      **/
-     virtual std::shared_ptr<http_response> render_post(const http_request& req) {
+     virtual http_response render_post(const http_request& req) {
          return render(req);
      }
 
@@ -80,7 +95,7 @@ class http_resource {
       * @param req Request passed through http
       * @return A http_response object
      **/
-     virtual std::shared_ptr<http_response> render_put(const http_request& req) {
+     virtual http_response render_put(const http_request& req) {
          return render(req);
      }
 
@@ -89,7 +104,7 @@ class http_resource {
       * @param req Request passed through http
       * @return A http_response object
      **/
-     virtual std::shared_ptr<http_response> render_head(const http_request& req) {
+     virtual http_response render_head(const http_request& req) {
          return render(req);
      }
 
@@ -98,7 +113,7 @@ class http_resource {
       * @param req Request passed through http
       * @return A http_response object
      **/
-     virtual std::shared_ptr<http_response> render_delete(const http_request& req) {
+     virtual http_response render_delete(const http_request& req) {
          return render(req);
      }
 
@@ -107,7 +122,7 @@ class http_resource {
       * @param req Request passed through http
       * @return A http_response object
      **/
-     virtual std::shared_ptr<http_response> render_trace(const http_request& req) {
+     virtual http_response render_trace(const http_request& req) {
          return render(req);
      }
 
@@ -116,7 +131,7 @@ class http_resource {
       * @param req Request passed through http
       * @return A http_response object
      **/
-     virtual std::shared_ptr<http_response> render_options(const http_request& req) {
+     virtual http_response render_options(const http_request& req) {
          return render(req);
      }
 
@@ -125,7 +140,7 @@ class http_resource {
       * @param req Request passed through http
       * @return A http_response object
      **/
-     virtual std::shared_ptr<http_response> render_patch(const http_request& req) {
+     virtual http_response render_patch(const http_request& req) {
          return render(req);
      }
 
@@ -134,7 +149,7 @@ class http_resource {
       * @param req Request passed through http
       * @return A http_response object
      **/
-     virtual std::shared_ptr<http_response> render_connect(const http_request& req) {
+     virtual http_response render_connect(const http_request& req) {
          return render(req);
      }
 

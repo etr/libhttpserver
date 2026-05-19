@@ -278,10 +278,10 @@ LT_END_AUTO_TEST(empty_getters_no_crash)
 // End-to-end: build request, call render, inspect response
 class greeting_resource : public http_resource {
  public:
-    std::shared_ptr<http_response> render_get(const http_request& req) override {
+    http_response render_get(const http_request& req) override {
         std::string name(req.get_arg_flat("name"));
         if (name.empty()) name = "World";
-        return std::make_shared<http_response>(http_response::string("Hello, " + name));
+        return http_response::string("Hello, " + name);
     }
 };
 
@@ -291,13 +291,13 @@ LT_BEGIN_AUTO_TEST(create_test_request_suite, render_with_test_request)
         .path("/greet")
         .arg("name", "Alice")
         .build();
+    // TASK-036: render_get returns http_response by value.
     auto resp = resource.render_get(req);
-    LT_ASSERT(resp != nullptr);
     // Verify the response body kind is string.
-    LT_CHECK_EQ(static_cast<int>(resp->kind()),
+    LT_CHECK_EQ(static_cast<int>(resp.kind()),
                 static_cast<int>(httpserver::body_kind::string));
     // Verify the response body content reflects the arg.
-    auto* sb = dynamic_cast<httpserver::detail::string_body*>(SBO::body_ptr(*resp));
+    auto* sb = dynamic_cast<httpserver::detail::string_body*>(SBO::body_ptr(resp));
     LT_ASSERT(sb != nullptr);
     LT_CHECK_EQ(sb->get_content(), std::string("Hello, Alice"));
 LT_END_AUTO_TEST(render_with_test_request)

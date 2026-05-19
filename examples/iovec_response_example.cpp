@@ -33,16 +33,16 @@ static const char kPart3[] = "\"footer\": \"end\"}";
 
 class iovec_resource : public httpserver::http_resource {
  public:
-     std::shared_ptr<httpserver::http_response> render_get(const httpserver::http_request&) {
+     httpserver::http_response render_get(const httpserver::http_request&) {
          // Build a response from multiple separate buffers without copying
          std::vector<httpserver::iovec_entry> parts = {
              { kPart1, sizeof(kPart1) - 1 },
              { kPart2, sizeof(kPart2) - 1 },
              { kPart3, sizeof(kPart3) - 1 },
          };
-         return std::make_shared<httpserver::http_response>(
+         return
              httpserver::http_response::iovec(parts)
-                 .with_header("Content-Type", "application/json"));
+                 .with_header("Content-Type", "application/json");
      }
 };
 

@@ -30,8 +30,8 @@ void custom_access_log(const std::string& url) {
 
 class hello_world_resource : public httpserver::http_resource {
  public:
-     std::shared_ptr<httpserver::http_response> render(const httpserver::http_request&) {
-         return std::shared_ptr<httpserver::http_response>(new httpserver::http_response(httpserver::http_response::string("Hello, World!")));
+     httpserver::http_response render(const httpserver::http_request&) {
+         return httpserver::http_response::string("Hello, World!");
      }
 };
 

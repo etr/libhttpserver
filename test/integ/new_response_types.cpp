@@ -72,27 +72,27 @@ size_t writefunc(void *ptr, size_t size, size_t nmemb, string *s) {
 
 class empty_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request&) {
-         return std::make_shared<http_response>(http_response::empty());
+     http_response render_get(const http_request&) {
+         return http_response::empty();
      }
 };
 
 class pipe_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request&) {
+     http_response render_get(const http_request&) {
          int pipefd[2];
 #if defined(_WIN32) && !defined(__CYGWIN__)
          if (_pipe(pipefd, 4096, _O_BINARY) != 0) {
 #else
          if (pipe(pipefd) != 0) {
 #endif
-             return std::make_shared<http_response>(
-                 http_response::empty().with_status(500));
+             return
+                 http_response::empty().with_status(500);
          }
          const char* msg = "hello from pipe";
          write(pipefd[1], msg, strlen(msg));
          close(pipefd[1]);
-         return std::make_shared<http_response>(http_response::pipe(pipefd[0]));
+         return http_response::pipe(pipefd[0]);
      }
 };  // NOLINT(readability/braces)
 
@@ -104,15 +104,15 @@ static const char kWorld[] = "World";
 
 class iovec_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request&) {
+     http_response render_get(const http_request&) {
          std::vector<iovec_entry> parts = {
              { kHello, sizeof(kHello) - 1 },
              { kSpace, sizeof(kSpace) - 1 },
              { kWorld, sizeof(kWorld) - 1 },
          };
-         return std::make_shared<http_response>(
+         return
              http_response::iovec(parts)
-                 .with_header("Content-Type", "text/plain"));
+                 .with_header("Content-Type", "text/plain");
      }
 };
 

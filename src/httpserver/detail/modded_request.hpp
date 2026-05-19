@@ -29,10 +29,12 @@
 
 #include <string>
 #include <memory>
+#include <optional>
 #include <fstream>
 
 #include "httpserver/http_method.hpp"
 #include "httpserver/http_request.hpp"
+#include "httpserver/http_response.hpp"
 
 namespace httpserver {
 
@@ -44,7 +46,9 @@ struct modded_request {
     std::string standardized_url;
     webserver* ws = nullptr;
 
-    std::shared_ptr<http_response> (httpserver::http_resource::*callback)(const httpserver::http_request&);
+    // TASK-036: pointer-to-member dispatch slot; render_* now return
+    // http_response by value (PRD-RSP-REQ-007 / DR-004).
+    http_response (httpserver::http_resource::*callback)(const httpserver::http_request&);
 
     // TASK-021: enum form of the wire method, decoded once at the
     // dispatch boundary in webserver_impl::answer_to_connection. Used
@@ -55,7 +59,16 @@ struct modded_request {
     httpserver::http_method method_enum = httpserver::http_method::count_;
 
     std::unique_ptr<http_request> dhr = nullptr;
-    std::shared_ptr<http_response> dhrs;
+    // TASK-036 / DR-010 / §5.3: the response value lives here for the
+    // full lifetime of the connection. The dispatch path moves the
+    // handler's prvalue into this optional via emplace(); MHD's deferred
+    // trampoline keeps a `cls` pointer into the deferred_body that lives
+    // inside this http_response's SBO buffer. The optional is destroyed
+    // by ~modded_request() in webserver_impl::request_completed, after
+    // MHD has finished invoking the trampoline — so the captured
+    // producer's state is released exactly once and exactly when DR-010
+    // requires.
+    std::optional<http_response> response_;
     bool has_body = false;
 
     std::string upload_key;

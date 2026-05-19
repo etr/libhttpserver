@@ -69,8 +69,8 @@ size_t writefunc(void *ptr, size_t size, size_t nmemb, string *s) {
 
 class simple_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request&) {
-         return std::make_shared<http_response>(http_response::string("OK"));
+     http_response render_get(const http_request&) {
+         return http_response::string("OK");
      }
 };
 

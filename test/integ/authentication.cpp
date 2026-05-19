@@ -76,11 +76,11 @@ size_t writefunc(void *ptr, size_t size, size_t nmemb, std::string *s) {
 #ifdef HAVE_BAUTH
 class user_pass_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request& req) {
+     http_response render_get(const http_request& req) {
          if (req.get_user() != "myuser" || req.get_pass() != "mypass") {
-             return std::make_shared<http_response>(http_response::unauthorized("Basic", "examplerealm", "FAIL"));
+             return http_response::unauthorized("Basic", "examplerealm", "FAIL");
          }
-         return std::make_shared<http_response>(http_response::string(std::string(req.get_user()) + " " + std::string(req.get_pass())));
+         return http_response::string(std::string(req.get_user()) + " " + std::string(req.get_pass()));
      }
 };
 #endif  // HAVE_BAUTH
@@ -88,19 +88,19 @@ class user_pass_resource : public http_resource {
 #ifdef HAVE_DAUTH
 class digest_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request& req) {
+     http_response render_get(const http_request& req) {
          using httpserver::http::http_utils;
          if (req.get_digested_user() == "") {
-             return std::make_shared<http_response>(http_response::unauthorized("Digest", "examplerealm", "FAIL"));
+             return http_response::unauthorized("Digest", "examplerealm", "FAIL");
          } else {
              auto result = req.check_digest_auth("examplerealm", "mypass", 300, 0, http_utils::digest_algorithm::MD5);
              if (result == http_utils::digest_auth_result::NONCE_STALE) {
-                 return std::make_shared<http_response>(http_response::unauthorized("Digest", "examplerealm", "FAIL"));
+                 return http_response::unauthorized("Digest", "examplerealm", "FAIL");
              } else if (result != http_utils::digest_auth_result::OK) {
-                 return std::make_shared<http_response>(http_response::unauthorized("Digest", "examplerealm", "FAIL"));
+                 return http_response::unauthorized("Digest", "examplerealm", "FAIL");
              }
          }
-         return std::make_shared<http_response>(http_response::string("SUCCESS"));
+         return http_response::string("SUCCESS");
      }
 };
 #endif  // HAVE_DAUTH
@@ -191,39 +191,39 @@ static const unsigned char PRECOMPUTED_HA1_SHA256[32] = {
 
 class digest_ha1_md5_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request& req) {
+     http_response render_get(const http_request& req) {
          using httpserver::http::http_utils;
          if (req.get_digested_user() == "") {
-             return std::make_shared<http_response>(http_response::unauthorized("Digest", "examplerealm", "FAIL"));
+             return http_response::unauthorized("Digest", "examplerealm", "FAIL");
          }
          auto result = req.check_digest_auth_digest("examplerealm", PRECOMPUTED_HA1_MD5,
                  http_utils::md5_digest_size, 300, 0,
                  http_utils::digest_algorithm::MD5);
          if (result == http_utils::digest_auth_result::NONCE_STALE) {
-             return std::make_shared<http_response>(http_response::unauthorized("Digest", "examplerealm", "FAIL"));
+             return http_response::unauthorized("Digest", "examplerealm", "FAIL");
          } else if (result != http_utils::digest_auth_result::OK) {
-             return std::make_shared<http_response>(http_response::unauthorized("Digest", "examplerealm", "FAIL"));
+             return http_response::unauthorized("Digest", "examplerealm", "FAIL");
          }
-         return std::make_shared<http_response>(http_response::string("SUCCESS"));
+         return http_response::string("SUCCESS");
      }
 };
 
 class digest_ha1_sha256_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request& req) {
+     http_response render_get(const http_request& req) {
          using httpserver::http::http_utils;
          if (req.get_digested_user() == "") {
-             return std::make_shared<http_response>(http_response::unauthorized("Digest", "examplerealm", "FAIL"));
+             return http_response::unauthorized("Digest", "examplerealm", "FAIL");
          }
          auto result = req.check_digest_auth_digest("examplerealm", PRECOMPUTED_HA1_SHA256,
                  http_utils::sha256_digest_size, 300, 0,
                  http_utils::digest_algorithm::SHA256);
          if (result == http_utils::digest_auth_result::NONCE_STALE) {
-             return std::make_shared<http_response>(http_response::unauthorized("Digest", "examplerealm", "FAIL"));
+             return http_response::unauthorized("Digest", "examplerealm", "FAIL");
          } else if (result != http_utils::digest_auth_result::OK) {
-             return std::make_shared<http_response>(http_response::unauthorized("Digest", "examplerealm", "FAIL"));
+             return http_response::unauthorized("Digest", "examplerealm", "FAIL");
          }
-         return std::make_shared<http_response>(http_response::string("SUCCESS"));
+         return http_response::string("SUCCESS");
      }
 };
 
@@ -508,14 +508,14 @@ LT_END_AUTO_TEST(digest_auth_with_ha1_sha256_wrong_pass)
 // Covers http_request.cpp lines 293-295 (cache hit) and 300 (nullptr branch)
 class digest_user_cache_resource : public http_resource {
  public:
-    shared_ptr<http_response> render_get(const http_request& req) {
+    http_response render_get(const http_request& req) {
         using httpserver::http::http_utils;
         // First call - will populate cache (line 300 nullptr or non-null branch)
         std::string user1 = std::string(req.get_digested_user());
 
         if (user1.empty()) {
             // No digest auth provided - send a 401 challenge so curl can retry
-            return std::make_shared<http_response>(http_response::unauthorized("Digest", "testrealm", "FAIL"));
+            return http_response::unauthorized("Digest", "testrealm", "FAIL");
         }
 
         // Second call - should hit cache (lines 293-295)
@@ -523,11 +523,11 @@ class digest_user_cache_resource : public http_resource {
 
         // Verify caching works correctly (both calls return same value)
         if (user1 != user2) {
-            return std::make_shared<http_response>(http_response::string("CACHE_MISMATCH").with_status(500));
+            return http_response::string("CACHE_MISMATCH").with_status(500);
         }
 
         // Return the digested user (tests cache hit with valid user)
-        return std::make_shared<http_response>(http_response::string("USER:" + user1));
+        return http_response::string("USER:" + user1);
     }
 };
 
@@ -603,15 +603,16 @@ LT_END_AUTO_TEST(digest_user_cache_with_auth)
 // Simple resource for centralized auth tests
 class simple_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request&) {
-         return std::make_shared<http_response>(http_response::string("SUCCESS"));
+     http_response render_get(const http_request&) {
+         return http_response::string("SUCCESS");
      }
 };
 
 // Centralized authentication handler
 std::shared_ptr<http_response> centralized_auth_handler(const http_request& req) {
     if (req.get_user() != "admin" || req.get_pass() != "secret") {
-        return std::make_shared<http_response>(http_response::unauthorized("Basic", "testrealm", "Unauthorized"));
+        return std::make_shared<http_response>(
+            http_response::unauthorized("Basic", "testrealm", "Unauthorized"));
     }
     return nullptr;  // Allow request
 }
@@ -800,8 +801,8 @@ LT_END_AUTO_TEST(auth_skip_paths_deep_nested)
 // Test POST method with centralized auth
 class post_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_post(const http_request&) {
-         return std::make_shared<http_response>(http_response::string("POST_SUCCESS"));
+     http_response render_post(const http_request&) {
+         return http_response::string("POST_SUCCESS");
      }
 };
 

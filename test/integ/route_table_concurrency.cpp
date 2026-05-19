@@ -46,8 +46,8 @@ namespace ht = httpserver;
 
 class noop_resource : public ht::http_resource {
  public:
-    std::shared_ptr<ht::http_response> render_get(const ht::http_request&) override {
-        return std::make_shared<ht::http_response>(ht::http_response::string("ok"));
+    ht::http_response render_get(const ht::http_request&) override {
+        return ht::http_response::string("ok");
     }
 };
 

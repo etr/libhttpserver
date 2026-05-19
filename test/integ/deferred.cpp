@@ -35,11 +35,15 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
+#include <utility>
 #include <cstring>
 #include <memory>
 #include <string>
+#include <thread>
 
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
@@ -110,9 +114,9 @@ ssize_t test_callback_with_data(shared_ptr<test_data> closure_data, char* buf, s
 // once before delegating to the typed callback.
 class deferred_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request&) {
+     http_response render_get(const http_request&) {
          std::string initial = "cycle callback response";
-         return std::make_shared<http_response>(http_response::deferred(
+         return http_response::deferred(
              [initial, served = false](std::uint64_t,
                                        char* buf,
                                        std::size_t max) mutable -> ssize_t {
@@ -123,17 +127,17 @@ class deferred_resource : public http_resource {
                      return n;
                  }
                  return test_callback(nullptr, buf, max);
-             }));
+             });
      }
 };
 
 class deferred_resource_with_data : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request&) {
+     http_response render_get(const http_request&) {
          auto internal_info = std::make_shared<test_data>();
          internal_info->value = 42;
          std::string initial = "cycle callback response";
-         return std::make_shared<http_response>(http_response::deferred(
+         return http_response::deferred(
              [internal_info, initial,
               served = false](std::uint64_t,
                               char* buf,
@@ -145,17 +149,17 @@ class deferred_resource_with_data : public http_resource {
                      return n;
                  }
                  return test_callback_with_data(internal_info, buf, max);
-             }));
+             });
      }
 };
 
 class deferred_resource_empty_content : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request&) {
-         return std::make_shared<http_response>(http_response::deferred(
+     http_response render_get(const http_request&) {
+         return http_response::deferred(
              [](std::uint64_t, char* buf, std::size_t max) -> ssize_t {
                  return test_callback(nullptr, buf, max);
-             }));
+             });
      }
 };
 
@@ -237,6 +241,192 @@ LT_BEGIN_AUTO_TEST(deferred_suite, deferred_response_empty_content)
     LT_CHECK_EQ(s, "testtest");
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(deferred_response_empty_content)
+
+// ---------------------------------------------------------------------------
+// TASK-036 acceptance tests: handler return-by-value dispatch cutover.
+//
+// AC-1: lambda registered via on_get returning http_response by value
+//       produces 200 with body "hi".
+// AC-2: class subclassing http_resource with `http_response render_get(...)
+//       override` produces 200.
+// AC-3: deferred response's producer callable lives until request_completed
+//       fires — verified by a destruction-tracking sentinel in the
+//       producer's captures and a sync wait on ws->stop() (which drains MHD
+//       and runs request_completed for every pending connection).
+// ---------------------------------------------------------------------------
+
+namespace {
+// Sentinel whose destructor flips an atomic; the destructor runs when the
+// http_response (and its deferred_body) is destroyed inside
+// ~modded_request() — which fires from webserver_impl::request_completed.
+//
+// move_constructor leaves the source's pointer null so the moved-from
+// temporary's destructor is a no-op. Otherwise std::make_shared's
+// in-place copy/move of the temporary {&destroyed} aggregate would fire
+// the destructor on the source temporary at the end of the full
+// expression, flipping `destroyed` to true BEFORE the lambda even runs.
+struct destruction_sentinel {
+    std::atomic<bool>* destroyed;
+    explicit destruction_sentinel(std::atomic<bool>* d) : destroyed(d) {}
+    destruction_sentinel(const destruction_sentinel&) = delete;
+    destruction_sentinel& operator=(const destruction_sentinel&) = delete;
+    destruction_sentinel(destruction_sentinel&& o) noexcept
+        : destroyed(std::exchange(o.destroyed, nullptr)) {}
+    destruction_sentinel& operator=(destruction_sentinel&& o) noexcept {
+        destroyed = std::exchange(o.destroyed, nullptr);
+        return *this;
+    }
+    ~destruction_sentinel() {
+        if (destroyed) destroyed->store(true);
+    }
+};
+
+class by_value_class_resource : public http_resource {
+ public:
+    http_response render_get(const http_request&) override {
+        return http_response::string("class-hi");
+    }
+};
+}  // namespace
+
+LT_BEGIN_AUTO_TEST(deferred_suite, on_get_lambda_returns_value)
+    // AC-1: lambda returns http_response by value (DR-004) and the dispatch
+    // path moves the prvalue into mr->response_.
+    ws->on_get("/by_value", [](const http_request&) {
+        return http_response::string("hi");
+    });
+    curl_global_init(CURL_GLOBAL_ALL);
+
+    std::string body;
+    CURL* curl = curl_easy_init();
+    curl_easy_setopt(curl, CURLOPT_URL,
+                     "localhost:" PORT_STRING "/by_value");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &body);
+    CURLcode res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    int64_t http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    LT_CHECK_EQ(http_code, 200);
+    LT_CHECK_EQ(body, "hi");
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(on_get_lambda_returns_value)
+
+LT_BEGIN_AUTO_TEST(deferred_suite, class_render_get_returns_value)
+    // AC-2: http_resource subclass with `http_response render_get(...)
+    // override` works end-to-end.
+    by_value_class_resource resource;
+    ws->register_path("class_path", as_shared(resource));
+    curl_global_init(CURL_GLOBAL_ALL);
+
+    std::string body;
+    CURL* curl = curl_easy_init();
+    curl_easy_setopt(curl, CURLOPT_URL,
+                     "localhost:" PORT_STRING "/class_path");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &body);
+    CURLcode res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    int64_t http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    LT_CHECK_EQ(http_code, 200);
+    LT_CHECK_EQ(body, "class-hi");
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(class_render_get_returns_value)
+
+LT_BEGIN_AUTO_TEST(deferred_suite, deferred_producer_destroyed_in_request_completed)
+    // AC-3 / DR-010: the http_response (and its deferred_body's captured
+    // producer state) must outlive every MHD trampoline invocation and be
+    // destroyed only when request_completed fires. We pin the contract by
+    // capturing a shared_ptr<destruction_sentinel> inside the producer's
+    // captures, then asserting the sentinel was destroyed after the server
+    // is fully drained.
+    std::atomic<bool> destroyed{false};
+    std::atomic<int> producer_calls{0};
+
+    // CRITICAL: the OUTER on_get lambda is stored long-term inside the
+    // registered lambda_resource. Anything it captures lives until the
+    // webserver itself is destroyed. So the outer lambda captures
+    // NOTHING but the atomic references — it allocates the
+    // destruction_sentinel inline (via make_shared) inside the INNER
+    // (producer) lambda's init-capture. The inner lambda's capture lives
+    // inside the http_response (and its deferred_body) anchored on
+    // mr->response_, so the sentinel is released exactly when
+    // ~modded_request fires from request_completed (DR-010). shared_ptr
+    // is required (not unique_ptr) because std::function — used as both
+    // lambda_handler and deferred_body::producer_type — requires its
+    // target to be CopyConstructible.
+    ws->on_get("/lifetime", [&producer_calls, &destroyed](
+                                const http_request&) {
+        return http_response::deferred(
+            [sentinel = std::make_shared<destruction_sentinel>(&destroyed),
+             &producer_calls, &destroyed, served = 0](
+                std::uint64_t, char* buf, std::size_t max) mutable -> ssize_t {
+                // Defensive: the producer should never run after the
+                // sentinel is destroyed; if it did, this read would be
+                // undefined behaviour (we'd be reading a destroyed atomic
+                // through the captured sentinel pointer). Assert via a
+                // separate side-channel.
+                if (destroyed.load()) {
+                    // Would be UB anyway, but flag the regression.
+                    return -1;
+                }
+                producer_calls.fetch_add(1);
+                if (served >= 2) {
+                    return -1;  // MHD_CONTENT_READER_END_OF_STREAM
+                }
+                const char* payload = "ok";
+                std::size_t n = std::min<std::size_t>(2, max);
+                std::memcpy(buf, payload, n);
+                ++served;
+                return static_cast<ssize_t>(n);
+            });
+    });
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string body;
+    CURL* curl = curl_easy_init();
+    curl_easy_setopt(curl, CURLOPT_URL,
+                     "localhost:" PORT_STRING "/lifetime");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &body);
+    // Force HTTP/1.0 (no keep-alive) so MHD closes the connection as
+    // soon as curl finishes reading the body. That makes request_completed
+    // fire deterministically before ws->stop() — without relying on the
+    // keep-alive timeout.
+    curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_0);
+    CURLcode res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    int64_t http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    LT_CHECK_EQ(http_code, 200);
+    LT_CHECK_EQ(body, "okok");
+    curl_easy_cleanup(curl);
+
+    // Sanity: producer ran at least twice (one chunk + EOS).
+    LT_CHECK(producer_calls.load() >= 2);
+
+    // Force MHD to fire request_completed for every pending connection.
+    // MHD_stop_daemon (called by webserver::stop) joins the internal
+    // threads and drains the request_completed queue. After stop()
+    // returns, the modded_request (and its optional<http_response>
+    // holding our deferred_body, holding the inner-lambda's
+    // make_unique<destruction_sentinel>) MUST be gone. tear_down() will
+    // call stop() again — idempotent on an already-stopped server (see
+    // webserver::stop's running guard).
+    ws->stop();
+    // request_completed may run on a worker thread that completes a
+    // hair after stop() returns to us. Poll briefly for the destruction
+    // signal — bounded so a true regression (body anchor leaked past
+    // request_completed) fails fast instead of hanging.
+    for (int i = 0; i < 100 && !destroyed.load(); ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    LT_CHECK_EQ(destroyed.load(), true);
+LT_END_AUTO_TEST(deferred_producer_destroyed_in_request_completed)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

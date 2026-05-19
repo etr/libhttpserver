@@ -35,8 +35,8 @@ using httpserver::method_set;
 
 class simple_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_get(const http_request&) override {
-         return std::make_shared<http_response>(http_response::string("OK"));
+     http_response render_get(const http_request&) override {
+         return http_response::string("OK");
      }
 };
 
@@ -49,6 +49,61 @@ class simple_resource : public http_resource {
 // observable now.
 static_assert(sizeof(http_resource) <= 32,
               "http_resource should be vptr + method_set padding");
+
+// TASK-036 acceptance: render_* virtuals return http_response by value.
+// Pins PRD-RSP-REQ-007 / DR-004 / DR-010 at compile time so any future
+// regression to shared_ptr<http_response> fails to compile rather than
+// silently restoring the v1 dispatch shape.
+static_assert(std::is_same_v<
+                  decltype(std::declval<http_resource&>().render(
+                      std::declval<const http_request&>())),
+                  http_response>,
+              "http_resource::render must return http_response by value (TASK-036)");
+static_assert(std::is_same_v<
+                  decltype(std::declval<http_resource&>().render_get(
+                      std::declval<const http_request&>())),
+                  http_response>,
+              "http_resource::render_get must return http_response by value (TASK-036)");
+static_assert(std::is_same_v<
+                  decltype(std::declval<http_resource&>().render_post(
+                      std::declval<const http_request&>())),
+                  http_response>,
+              "http_resource::render_post must return http_response by value (TASK-036)");
+static_assert(std::is_same_v<
+                  decltype(std::declval<http_resource&>().render_put(
+                      std::declval<const http_request&>())),
+                  http_response>,
+              "http_resource::render_put must return http_response by value (TASK-036)");
+static_assert(std::is_same_v<
+                  decltype(std::declval<http_resource&>().render_head(
+                      std::declval<const http_request&>())),
+                  http_response>,
+              "http_resource::render_head must return http_response by value (TASK-036)");
+static_assert(std::is_same_v<
+                  decltype(std::declval<http_resource&>().render_delete(
+                      std::declval<const http_request&>())),
+                  http_response>,
+              "http_resource::render_delete must return http_response by value (TASK-036)");
+static_assert(std::is_same_v<
+                  decltype(std::declval<http_resource&>().render_trace(
+                      std::declval<const http_request&>())),
+                  http_response>,
+              "http_resource::render_trace must return http_response by value (TASK-036)");
+static_assert(std::is_same_v<
+                  decltype(std::declval<http_resource&>().render_options(
+                      std::declval<const http_request&>())),
+                  http_response>,
+              "http_resource::render_options must return http_response by value (TASK-036)");
+static_assert(std::is_same_v<
+                  decltype(std::declval<http_resource&>().render_patch(
+                      std::declval<const http_request&>())),
+                  http_response>,
+              "http_resource::render_patch must return http_response by value (TASK-036)");
+static_assert(std::is_same_v<
+                  decltype(std::declval<http_resource&>().render_connect(
+                      std::declval<const http_request&>())),
+                  http_response>,
+              "http_resource::render_connect must return http_response by value (TASK-036)");
 
 // Const-noexcept acceptance criteria pinned at compile time: both
 // query members must be callable on a const reference and must be
@@ -116,8 +171,8 @@ LT_END_AUTO_TEST(set_allowing_disable)
 // Test resource that only overrides render() method
 class render_only_resource : public http_resource {
  public:
-    shared_ptr<http_response> render(const http_request&) {
-        return std::make_shared<http_response>(http_response::string("render called"));
+    http_response render(const http_request&) override {
+        return http_response::string("render called");
     }
 };
 
