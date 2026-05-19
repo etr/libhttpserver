@@ -25,18 +25,33 @@
 #ifndef SRC_HTTPSERVER_WEBSOCKET_HANDLER_HPP_
 #define SRC_HTTPSERVER_WEBSOCKET_HANDLER_HPP_
 
-#ifdef HAVE_WEBSOCKET
-
-#include <microhttpd.h>
-#include <microhttpd_ws.h>
+// TASK-020 / TASK-034: <microhttpd.h> and <microhttpd_ws.h> are
+// deliberately NOT included from this public header. The class below
+// uses two MHD-defined struct types only by pointer (forward-declared
+// at file scope below) and `MHD_socket` (an integer typedef -- `int`
+// on POSIX, `SOCKET` (`UINT_PTR`) on Windows). Because typedef-names
+// cannot be forward-declared, the public surface uses `std::intptr_t`
+// -- which is at least as wide as `MHD_socket` on every platform we
+// support. A static_assert in src/websocket_handler.cpp pins that
+// invariant where <microhttpd.h> is reachable.
+//
+// TASK-034: the public declarations below are now visible
+// unconditionally (PRD-FLG-REQ-001). Method bodies live in
+// src/websocket_handler.cpp; on HAVE_WEBSOCKET-off builds the
+// definitions in that TU either throw feature_unavailable or are no-ops
+// (see the file for the per-method policy).
 #include <cstddef>
 #include <cstdint>
 #include <string>
 #include <string_view>
 
+struct MHD_UpgradeResponseHandle;
+struct MHD_WebSocketStream;
+
 namespace httpserver {
 
 class http_request;
+namespace detail { class webserver_impl; }
 
 class websocket_session {
  public:
@@ -48,19 +63,24 @@ class websocket_session {
      bool is_valid() const;
 
  private:
-     websocket_session(MHD_socket sock, struct MHD_UpgradeResponseHandle* urh,
+     // `sock` carries an MHD_socket value; the public-header type is
+     // std::intptr_t so this header does not need <microhttpd.h>.
+     // src/websocket_handler.cpp casts back to MHD_socket at the
+     // boundary and static_asserts the underlying-width invariant.
+     websocket_session(std::intptr_t sock, struct MHD_UpgradeResponseHandle* urh,
                        struct MHD_WebSocketStream* ws_stream);
      ~websocket_session();
 
      websocket_session(const websocket_session&) = delete;
      websocket_session& operator=(const websocket_session&) = delete;
 
-     MHD_socket sock;
+     std::intptr_t sock;
      struct MHD_UpgradeResponseHandle* urh;
      struct MHD_WebSocketStream* ws_stream;
      bool valid;
 
      friend class webserver;
+     friend class detail::webserver_impl;  // TASK-014: PIMPL upgrade path
 };
 
 class websocket_handler {
@@ -69,15 +89,16 @@ class websocket_handler {
 
      virtual void on_open(websocket_session& session);
      virtual void on_message(websocket_session& session, std::string_view msg) = 0;
-     virtual void on_binary(websocket_session& session, const void* data, size_t len);
-     virtual void on_ping(websocket_session& session, std::string_view payload);
+     // TASK-034 incidental cleanup: the previous header had on_binary and
+     // on_ping declared twice (identical signatures, never spotted because
+     // identical-redeclaration is legal). Removing the duplicates lets the
+     // class compile on HAVE_WEBSOCKET-off builds where the header is now
+     // always included via the umbrella.
      virtual void on_binary(websocket_session& session, const void* data, size_t len);
      virtual void on_ping(websocket_session& session, std::string_view payload);
      virtual void on_close(websocket_session& session, uint16_t code, const std::string& reason);
 };
 
 }  // namespace httpserver
-
-#endif  // HAVE_WEBSOCKET
 
 #endif  // SRC_HTTPSERVER_WEBSOCKET_HANDLER_HPP_

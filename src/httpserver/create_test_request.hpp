@@ -83,7 +83,10 @@ class create_test_request {
         return *this;
     }
 
-#ifdef HAVE_BAUTH
+    // TASK-034: setters are unconditional. On HAVE_BAUTH-off /
+    // HAVE_DAUTH-off builds the values are silently dropped on .build()
+    // (matching the sentinel-empty contract of the corresponding
+    // http_request accessors).
     create_test_request& user(const std::string& user) {
         _user = user;
         return *this;
@@ -93,14 +96,11 @@ class create_test_request {
         _pass = pass;
         return *this;
     }
-#endif  // HAVE_BAUTH
 
-#ifdef HAVE_DAUTH
     create_test_request& digested_user(const std::string& digested_user) {
         _digested_user = digested_user;
         return *this;
     }
-#endif  // HAVE_DAUTH
 
     create_test_request& requestor(const std::string& requestor) {
         _requestor = requestor;
@@ -112,12 +112,13 @@ class create_test_request {
         return *this;
     }
 
-#ifdef HAVE_GNUTLS
+    // TASK-034: setter is unconditional. On HAVE_GNUTLS-off builds the
+    // value is silently dropped (has_tls_session() returns false
+    // regardless — TASK-019 sentinel contract).
     create_test_request& tls_enabled(bool enabled = true) {
         _tls_enabled = enabled;
         return *this;
     }
-#endif  // HAVE_GNUTLS
 
     http_request build();
 
@@ -131,18 +132,16 @@ class create_test_request {
     http::header_map _cookies;
     std::map<std::string, std::vector<std::string>, http::arg_comparator> _args;
     std::string _querystring;
-#ifdef HAVE_BAUTH
+    // TASK-034: fields stored unconditionally. On HAVE_*-off builds the
+    // values are populated by the setters but silently dropped during
+    // .build() propagation, matching the sentinel-empty contract on
+    // the http_request accessor side.
     std::string _user;
     std::string _pass;
-#endif  // HAVE_BAUTH
-#ifdef HAVE_DAUTH
     std::string _digested_user;
-#endif  // HAVE_DAUTH
     std::string _requestor = "127.0.0.1";
     uint16_t _requestor_port = 0;
-#ifdef HAVE_GNUTLS
     bool _tls_enabled = false;
-#endif  // HAVE_GNUTLS
 };
 
 }  // namespace httpserver

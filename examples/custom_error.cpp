@@ -22,30 +22,30 @@
 
 #include <httpserver.hpp>
 
-std::shared_ptr<httpserver::http_response> not_found_custom(const httpserver::http_request&) {
-    return std::shared_ptr<httpserver::string_response>(new httpserver::string_response("Not found custom", 404, "text/plain"));
+httpserver::http_response not_found_custom(const httpserver::http_request&) {
+    return httpserver::http_response::string("Not found custom").with_status(404);
 }
 
-std::shared_ptr<httpserver::http_response> not_allowed_custom(const httpserver::http_request&) {
-    return std::shared_ptr<httpserver::string_response>(new httpserver::string_response("Not allowed custom", 405, "text/plain"));
+httpserver::http_response not_allowed_custom(const httpserver::http_request&) {
+    return httpserver::http_response::string("Not allowed custom").with_status(405);
 }
 
 class hello_world_resource : public httpserver::http_resource {
  public:
-     std::shared_ptr<httpserver::http_response> render(const httpserver::http_request&) {
-         return std::shared_ptr<httpserver::http_response>(new httpserver::string_response("Hello, World!"));
+     httpserver::http_response render(const httpserver::http_request&) {
+         return httpserver::http_response::string("Hello, World!");
      }
 };
 
 int main() {
-    httpserver::webserver ws = httpserver::create_webserver(8080)
-        .not_found_resource(not_found_custom)
-        .method_not_allowed_resource(not_allowed_custom);
+    httpserver::webserver ws{httpserver::create_webserver(8080)
+        .not_found_handler(not_found_custom)
+        .method_not_allowed_handler(not_allowed_custom)};
 
-    hello_world_resource hwr;
-    hwr.disallow_all();
-    hwr.set_allowing("GET", true);
-    ws.register_resource("/hello", &hwr);
+    auto hwr = std::make_shared<hello_world_resource>();
+    hwr->disallow_all();
+    hwr->set_allowing(httpserver::http_method::get, true);
+    ws.register_path("/hello", hwr);
     ws.start(true);
 
     return 0;

@@ -24,6 +24,7 @@
 #else
 #include <unistd.h>
 #endif
+#include <microhttpd.h>  // TASK-020: MHD_FEATURE_* enumerators (no longer reachable transitively via httpserver/http_utils.hpp)
 #include <cstring>
 #include <memory>
 #include <string>
@@ -31,12 +32,23 @@
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
 
+
+namespace {
+// TASK-023 test helper: wrap a stack-local http_resource& in a shared_ptr
+// with a no-op deleter. Preserves the "declare resource on the stack,
+// pass to register_path" pattern after the API moved to smart pointers.
+inline std::shared_ptr<httpserver::http_resource>
+as_shared(httpserver::http_resource& r) {
+    return std::shared_ptr<httpserver::http_resource>(
+        &r, [](httpserver::http_resource*){});
+}
+}  // namespace
+
 using std::shared_ptr;
 using std::string;
 using httpserver::http_resource;
 using httpserver::http_request;
 using httpserver::http_response;
-using httpserver::string_response;
 using httpserver::webserver;
 using httpserver::create_webserver;
 
@@ -57,8 +69,8 @@ size_t writefunc(void *ptr, size_t size, size_t nmemb, string *s) {
 
 class simple_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_GET(const http_request&) {
-         return std::make_shared<string_response>("OK", 200, "text/plain");
+     http_response render_get(const http_request&) {
+         return http_response::string("OK");
      }
 };
 
@@ -70,10 +82,10 @@ LT_BEGIN_SUITE(daemon_info_suite)
 LT_END_SUITE(daemon_info_suite)
 
 LT_BEGIN_AUTO_TEST(daemon_info_suite, get_bound_port_explicit)
-    webserver ws = create_webserver(PORT);
+    webserver ws{create_webserver(PORT)};
 
     simple_resource sr;
-    ws.register_resource("test", &sr);
+    ws.register_path("test", as_shared(sr));
     ws.start(false);
 
     LT_CHECK_EQ(ws.get_bound_port(), PORT);
@@ -84,10 +96,10 @@ LT_BEGIN_AUTO_TEST(daemon_info_suite, get_bound_port_explicit)
 LT_END_AUTO_TEST(get_bound_port_explicit)
 
 LT_BEGIN_AUTO_TEST(daemon_info_suite, basic_request_succeeds)
-    webserver ws = create_webserver(PORT);
+    webserver ws{create_webserver(PORT)};
 
     simple_resource sr;
-    ws.register_resource("test", &sr);
+    ws.register_path("test", as_shared(sr));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -109,10 +121,10 @@ LT_BEGIN_AUTO_TEST(daemon_info_suite, basic_request_succeeds)
 LT_END_AUTO_TEST(basic_request_succeeds)
 
 LT_BEGIN_AUTO_TEST(daemon_info_suite, quiesce_does_not_crash)
-    webserver ws = create_webserver(PORT);
+    webserver ws{create_webserver(PORT)};
 
     simple_resource sr;
-    ws.register_resource("test", &sr);
+    ws.register_path("test", as_shared(sr));
     ws.start(false);
 
     // Verify it works before quiesce
@@ -195,11 +207,11 @@ LT_BEGIN_AUTO_TEST(daemon_info_suite, external_event_loop)
     // Windows/MSYS2 builds it has been observed to make MHD_start_daemon
     // reject the configuration. The default thread-safe daemon still
     // supports being driven by MHD_run_wait from a single thread.
-    webserver ws = create_webserver(PORT)
-        .start_method(httpserver::http::http_utils::EXTERNAL_SELECT);
+    webserver ws{create_webserver(PORT)
+        .start_method(httpserver::http::http_utils::EXTERNAL_SELECT)};
 
     simple_resource sr;
-    ws.register_resource("test", &sr);
+    ws.register_path("test", as_shared(sr));
     ws.start(false);
 
     // Drive one request through the event loop manually

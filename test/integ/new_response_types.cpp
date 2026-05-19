@@ -33,15 +33,25 @@
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
 
+
+namespace {
+// TASK-023 test helper: wrap a stack-local http_resource& in a shared_ptr
+// with a no-op deleter. Preserves the "declare resource on the stack,
+// pass to register_path" pattern after the API moved to smart pointers.
+inline std::shared_ptr<httpserver::http_resource>
+as_shared(httpserver::http_resource& r) {
+    return std::shared_ptr<httpserver::http_resource>(
+        &r, [](httpserver::http_resource*){});
+}
+}  // namespace
+
 using std::shared_ptr;
 using std::string;
 using std::vector;
 using httpserver::http_resource;
 using httpserver::http_request;
 using httpserver::http_response;
-using httpserver::empty_response;
-using httpserver::pipe_response;
-using httpserver::iovec_response;
+using httpserver::iovec_entry;
 using httpserver::webserver;
 using httpserver::create_webserver;
 
@@ -62,34 +72,47 @@ size_t writefunc(void *ptr, size_t size, size_t nmemb, string *s) {
 
 class empty_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_GET(const http_request&) {
-         return std::make_shared<empty_response>(204);
+     http_response render_get(const http_request&) {
+         return http_response::empty();
      }
 };
 
 class pipe_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_GET(const http_request&) {
+     http_response render_get(const http_request&) {
          int pipefd[2];
 #if defined(_WIN32) && !defined(__CYGWIN__)
          if (_pipe(pipefd, 4096, _O_BINARY) != 0) {
 #else
          if (pipe(pipefd) != 0) {
 #endif
-             return std::make_shared<empty_response>(500);
+             return
+                 http_response::empty().with_status(500);
          }
          const char* msg = "hello from pipe";
          write(pipefd[1], msg, strlen(msg));
          close(pipefd[1]);
-         return std::make_shared<pipe_response>(pipefd[0], 200);
+         return http_response::pipe(pipefd[0]);
      }
 };  // NOLINT(readability/braces)
 
+// v2 iovec uses borrowed buffers. The static parts must outlive the response;
+// here they live for the program's duration as static storage.
+static const char kHello[] = "Hello";
+static const char kSpace[] = " ";
+static const char kWorld[] = "World";
+
 class iovec_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_GET(const http_request&) {
-         vector<string> parts = {"Hello", " ", "World"};
-         return std::make_shared<iovec_response>(parts, 200, "text/plain");
+     http_response render_get(const http_request&) {
+         std::vector<iovec_entry> parts = {
+             { kHello, sizeof(kHello) - 1 },
+             { kSpace, sizeof(kSpace) - 1 },
+             { kWorld, sizeof(kWorld) - 1 },
+         };
+         return
+             http_response::iovec(parts)
+                 .with_header("Content-Type", "text/plain");
      }
 };
 
@@ -101,9 +124,9 @@ static iovec_resource ir;
 LT_BEGIN_SUITE(response_types_suite)
     void set_up() {
         ws_ptr = new webserver(create_webserver(PORT));
-        ws_ptr->register_resource("empty", &er);
-        ws_ptr->register_resource("pipe", &pr);
-        ws_ptr->register_resource("iovec", &ir);
+        ws_ptr->register_path("empty", as_shared(er));
+        ws_ptr->register_path("pipe", as_shared(pr));
+        ws_ptr->register_path("iovec", as_shared(ir));
         ws_ptr->start(false);
     }
     void tear_down() {

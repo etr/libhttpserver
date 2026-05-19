@@ -1,7 +1,8 @@
 ## Cent OS 7 / RHEL 7
 
-CentOS 7 has a lower version of gcc (4.8.7) that is barely C++11 capable and this library
-needs a better compiler.  We recommend at least gcc 5+
+CentOS 7's stock gcc (4.8.7) is far too old: this library requires a C++20 compiler
+(gcc >= 10 or clang >= 13).
 
-We recommend installing devtoolset-8
-https://www.softwarecollections.org/en/scls/rhscl/devtoolset-8/
+Install gcc-toolset-14 (or newer) from the RHEL/CentOS Software Collections and
+`source /opt/rh/gcc-toolset-14/enable` before configuring. The same workaround applies
+to RHEL 9 systems whose stock gcc-11 lacks some C++20 library features.

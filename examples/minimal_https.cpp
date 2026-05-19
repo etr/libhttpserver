@@ -24,19 +24,19 @@
 
 class hello_world_resource : public httpserver::http_resource {
  public:
-     std::shared_ptr<httpserver::http_response> render(const httpserver::http_request&) {
-         return std::shared_ptr<httpserver::http_response>(new httpserver::string_response("Hello, World!"));
+     httpserver::http_response render(const httpserver::http_request&) {
+         return httpserver::http_response::string("Hello, World!");
      }
 };
 
 int main() {
-    httpserver::webserver ws = httpserver::create_webserver(8080)
+    httpserver::webserver ws{httpserver::create_webserver(8080)
         .use_ssl()
         .https_mem_key("key.pem")
-        .https_mem_cert("cert.pem");
+        .https_mem_cert("cert.pem")};
 
-    hello_world_resource hwr;
-    ws.register_resource("/hello", &hwr);
+    auto hwr = std::make_shared<hello_world_resource>();
+    ws.register_path("/hello", hwr);
     ws.start(true);
 
     return 0;

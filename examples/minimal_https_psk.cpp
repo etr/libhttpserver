@@ -42,21 +42,20 @@ std::string psk_handler(const std::string& username) {
 
 class hello_world_resource : public httpserver::http_resource {
  public:
-    std::shared_ptr<httpserver::http_response> render(const httpserver::http_request&) {
-        return std::shared_ptr<httpserver::http_response>(
-            new httpserver::string_response("Hello, World (via TLS-PSK)!"));
+    httpserver::http_response render(const httpserver::http_request&) {
+        return httpserver::http_response::string("Hello, World (via TLS-PSK)!");
     }
 };
 
 int main() {
-    httpserver::webserver ws = httpserver::create_webserver(8080)
+    httpserver::webserver ws{httpserver::create_webserver(8080)
         .use_ssl()
         .cred_type(httpserver::http::http_utils::PSK)
         .psk_cred_handler(psk_handler)
-        .https_priorities("NORMAL:-VERS-TLS-ALL:+VERS-TLS1.2:+PSK:+DHE-PSK");
+        .https_priorities("NORMAL:-VERS-TLS-ALL:+VERS-TLS1.2:+PSK:+DHE-PSK")};
 
-    hello_world_resource hwr;
-    ws.register_resource("/hello", &hwr);
+    auto hwr = std::make_shared<hello_world_resource>();
+    ws.register_path("/hello", hwr);
     ws.start(true);
 
     return 0;

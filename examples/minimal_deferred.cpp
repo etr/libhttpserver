@@ -18,6 +18,8 @@
      USA
 */
 
+#include <algorithm>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <memory>
@@ -42,16 +44,29 @@ ssize_t test_callback(std::shared_ptr<void> closure_data, char* buf, size_t max)
 
 class deferred_resource : public httpserver::http_resource {
  public:
-     std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request&) {
-         return std::shared_ptr<httpserver::deferred_response<void> >(new httpserver::deferred_response<void>(test_callback, nullptr, "cycle callback response"));
+     httpserver::http_response render_get(const httpserver::http_request&) {
+         std::string initial = "cycle callback response";
+         return
+             httpserver::http_response::deferred(
+                 [initial,
+                  served = false](std::uint64_t, char* buf,
+                                  std::size_t max) mutable -> ssize_t {
+                     if (!served) {
+                         served = true;
+                         std::size_t n = std::min(initial.size(), max);
+                         memcpy(buf, initial.data(), n);
+                         return n;
+                     }
+                     return test_callback(nullptr, buf, max);
+                 });
      }
 };
 
 int main() {
-    httpserver::webserver ws = httpserver::create_webserver(8080);
+    httpserver::webserver ws{httpserver::create_webserver(8080)};
 
-    deferred_resource hwr;
-    ws.register_resource("/hello", &hwr);
+    auto hwr = std::make_shared<deferred_resource>();
+    ws.register_path("/hello", hwr);
     ws.start(true);
 
     return 0;

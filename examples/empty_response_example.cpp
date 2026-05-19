@@ -18,33 +18,33 @@
      USA
 */
 
+#include <microhttpd.h>
+
 #include <memory>
 
 #include <httpserver.hpp>
 
 class no_content_resource : public httpserver::http_resource {
  public:
-     std::shared_ptr<httpserver::http_response> render_DELETE(const httpserver::http_request&) {
+     httpserver::http_response render_delete(const httpserver::http_request&) {
          // Return a 204 No Content response with no body
-         return std::make_shared<httpserver::empty_response>(
-                 httpserver::http::http_utils::http_no_content);
+         return
+             httpserver::http_response::empty();
      }
 
-     std::shared_ptr<httpserver::http_response> render_HEAD(const httpserver::http_request&) {
+     httpserver::http_response render_head(const httpserver::http_request&) {
          // Return a HEAD-only response with headers but no body
-         auto response = std::make_shared<httpserver::empty_response>(
-                 httpserver::http::http_utils::http_ok,
-                 httpserver::empty_response::HEAD_ONLY);
-         response->with_header("X-Total-Count", "42");
-         return response;
+         return httpserver::http_response::empty(MHD_RF_HEAD_ONLY_RESPONSE)
+                    .with_status(httpserver::http::http_utils::http_ok)
+                    .with_header("X-Total-Count", "42");
      }
 };
 
 int main() {
-    httpserver::webserver ws = httpserver::create_webserver(8080);
+    httpserver::webserver ws{httpserver::create_webserver(8080)};
 
-    no_content_resource ncr;
-    ws.register_resource("/items", &ncr);
+    auto ncr = std::make_shared<no_content_resource>();
+    ws.register_path("/items", ncr);
     ws.start(true);
 
     return 0;

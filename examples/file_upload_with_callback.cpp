@@ -27,7 +27,7 @@
 
 class file_upload_resource : public httpserver::http_resource {
  public:
-     std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request&) {
+     httpserver::http_response render_get(const httpserver::http_request&) {
          std::string get_response = "<html>\n";
          get_response += "  <body>\n";
          get_response += "    <h1>File Upload with Cleanup Callback Demo</h1>\n";
@@ -40,10 +40,10 @@ class file_upload_resource : public httpserver::http_resource {
          get_response += "  </body>\n";
          get_response += "</html>\n";
 
-         return std::shared_ptr<httpserver::http_response>(new httpserver::string_response(get_response, 200, "text/html"));
+         return httpserver::http_response::string(get_response, "text/html");
      }
 
-     std::shared_ptr<httpserver::http_response> render_POST(const httpserver::http_request& req) {
+     httpserver::http_response render_post(const httpserver::http_request& req) {
         std::string post_response = "<html>\n";
         post_response += "<body>\n";
         post_response += "  <h1>Upload Complete</h1>\n";
@@ -60,7 +60,7 @@ class file_upload_resource : public httpserver::http_resource {
         post_response += "  </ul>\n";
         post_response += "  <a href=\"/\">Upload more</a>\n";
         post_response += "</body>\n</html>";
-        return std::shared_ptr<httpserver::http_response>(new httpserver::string_response(post_response, 201, "text/html"));
+        return httpserver::http_response::string(post_response, "text/html").with_status(201);
     }
 };
 
@@ -82,7 +82,7 @@ int main(int argc, char** argv) {
     std::cout << std::endl;
     std::cout << "Open http://localhost:8080 in your browser to upload files." << std::endl;
 
-    httpserver::webserver ws = httpserver::create_webserver(8080)
+    httpserver::webserver ws{httpserver::create_webserver(8080)
         .file_upload_target(httpserver::FILE_UPLOAD_DISK_ONLY)
         .file_upload_dir(temp_dir)
         .generate_random_filename_on_upload()
@@ -101,10 +101,10 @@ int main(int argc, char** argv) {
                 std::cerr << "Failed to move " << filename << ", will be deleted" << std::endl;
                 return true;  // Delete the temp file on failure
             }
-        });
+        })};
 
-    file_upload_resource fur;
-    ws.register_resource("/", &fur);
+    auto fur = std::make_shared<file_upload_resource>();
+    ws.register_path("/", fur);
     ws.start(true);
 
     return 0;

@@ -24,20 +24,20 @@
 
 class hello_world_resource : public httpserver::http_resource {
  public:
-     std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request&) {
-         return std::shared_ptr<httpserver::http_response>(new httpserver::string_response("GET: Hello, World!"));
+     httpserver::http_response render_get(const httpserver::http_request&) {
+         return httpserver::http_response::string("GET: Hello, World!");
      }
 
-     std::shared_ptr<httpserver::http_response> render(const httpserver::http_request&) {
-         return std::shared_ptr<httpserver::http_response>(new httpserver::string_response("OTHER: Hello, World!"));
+     httpserver::http_response render(const httpserver::http_request&) {
+         return httpserver::http_response::string("OTHER: Hello, World!");
      }
 };
 
 int main() {
-    httpserver::webserver ws = httpserver::create_webserver(8080);
+    httpserver::webserver ws{httpserver::create_webserver(8080)};
 
-    hello_world_resource hwr;
-    ws.register_resource("/hello", &hwr);
+    auto hwr = std::make_shared<hello_world_resource>();
+    ws.register_path("/hello", hwr);
     ws.start(true);
 
     return 0;

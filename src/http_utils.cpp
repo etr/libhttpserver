@@ -20,6 +20,14 @@
 
 #include "httpserver/http_utils.hpp"
 
+// TASK-020: <microhttpd.h> is no longer pulled in transitively by
+// <httpserver/http_utils.hpp>. Include it directly here so the
+// MHD_*-using bodies below still compile. <sys/socket.h> likewise
+// must be requested explicitly: it provides struct sockaddr's full
+// definition for the implementations of get_ip_str / get_port /
+// ip_representation::ip_representation that take a `struct sockaddr*`.
+#include <microhttpd.h>
+
 #if defined(_WIN32) && !defined(__CYGWIN__)
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -48,6 +56,7 @@
 #include <utility>
 #include <vector>
 
+#include "httpserver/constants.hpp"
 #include "httpserver/string_utilities.hpp"
 
 #pragma GCC diagnostic ignored "-Warray-bounds"
@@ -373,12 +382,12 @@ ip_representation::ip_representation(const struct sockaddr* ip) {
             pieces[i] = (reinterpret_cast<const u_char*>(sin_addr6_pt))[i];
         }
     }
-    mask = DEFAULT_MASK_VALUE;
+    mask = constants::DEFAULT_MASK_VALUE;
 }
 
 ip_representation::ip_representation(const std::string& ip) {
     std::vector<std::string> parts;
-    mask = DEFAULT_MASK_VALUE;
+    mask = constants::DEFAULT_MASK_VALUE;
     std::fill(pieces, pieces + 16, 0);
     if (ip.find(':') != std::string::npos) {  // IPV6
         ip_version = http_utils::IPV6;
@@ -580,13 +589,87 @@ const char* http_utils::reason_phrase(unsigned int status_code) {
     return MHD_get_reason_phrase_for(status_code);
 }
 
-bool http_utils::is_feature_supported(enum MHD_FEATURE feature) {
-    return MHD_is_feature_supported(feature) == MHD_YES;
+bool http_utils::is_feature_supported(int feature) {
+    return MHD_is_feature_supported(static_cast<enum MHD_FEATURE>(feature)) == MHD_YES;
 }
 
 const char* http_utils::get_mhd_version() {
     return MHD_get_version();
 }
+
+// TASK-020: pin start_method_T to libmicrohttpd's MHD_FLAG enum and
+// digest_algorithm / digest_auth_result to MHD_DigestAuthAlgo3 /
+// MHD_DigestAuthResult. The public-header values are hard-coded so the
+// umbrella does not transitively include <microhttpd.h>; these asserts
+// guard against an upstream renumber by failing the build at the right
+// place rather than silently mis-routing start-mode selection or
+// digest-auth result codes.
+static_assert(
+    static_cast<int>(http_utils::INTERNAL_SELECT)
+        == (MHD_USE_SELECT_INTERNALLY | MHD_USE_AUTO),
+    "start_method_T::INTERNAL_SELECT diverged from MHD_USE_SELECT_INTERNALLY|MHD_USE_AUTO");
+static_assert(
+    static_cast<int>(http_utils::THREAD_PER_CONNECTION)
+        == (MHD_USE_THREAD_PER_CONNECTION | MHD_USE_AUTO),
+    "start_method_T::THREAD_PER_CONNECTION diverged from MHD_USE_THREAD_PER_CONNECTION|MHD_USE_AUTO");
+static_assert(
+    static_cast<int>(http_utils::EXTERNAL_SELECT) == MHD_USE_AUTO,
+    "start_method_T::EXTERNAL_SELECT diverged from MHD_USE_AUTO");
+
+#ifdef HAVE_DAUTH
+static_assert(
+    static_cast<int>(http_utils::digest_algorithm::MD5)
+        == static_cast<int>(MHD_DIGEST_AUTH_ALGO3_MD5),
+    "digest_algorithm::MD5 diverged from MHD_DIGEST_AUTH_ALGO3_MD5");
+static_assert(
+    static_cast<int>(http_utils::digest_algorithm::SHA256)
+        == static_cast<int>(MHD_DIGEST_AUTH_ALGO3_SHA256),
+    "digest_algorithm::SHA256 diverged from MHD_DIGEST_AUTH_ALGO3_SHA256");
+static_assert(
+    static_cast<int>(http_utils::digest_algorithm::SHA512_256)
+        == static_cast<int>(MHD_DIGEST_AUTH_ALGO3_SHA512_256),
+    "digest_algorithm::SHA512_256 diverged from MHD_DIGEST_AUTH_ALGO3_SHA512_256");
+
+static_assert(
+    static_cast<int>(http_utils::digest_auth_result::OK) == MHD_DAUTH_OK,
+    "digest_auth_result::OK diverged from MHD_DAUTH_OK");
+static_assert(
+    static_cast<int>(http_utils::digest_auth_result::GENERIC_ERROR) == MHD_DAUTH_ERROR,
+    "digest_auth_result::GENERIC_ERROR diverged from MHD_DAUTH_ERROR");
+static_assert(
+    static_cast<int>(http_utils::digest_auth_result::WRONG_HEADER) == MHD_DAUTH_WRONG_HEADER,
+    "digest_auth_result::WRONG_HEADER diverged from MHD_DAUTH_WRONG_HEADER");
+static_assert(
+    static_cast<int>(http_utils::digest_auth_result::WRONG_USERNAME) == MHD_DAUTH_WRONG_USERNAME,
+    "digest_auth_result::WRONG_USERNAME diverged from MHD_DAUTH_WRONG_USERNAME");
+static_assert(
+    static_cast<int>(http_utils::digest_auth_result::WRONG_REALM) == MHD_DAUTH_WRONG_REALM,
+    "digest_auth_result::WRONG_REALM diverged from MHD_DAUTH_WRONG_REALM");
+static_assert(
+    static_cast<int>(http_utils::digest_auth_result::WRONG_URI) == MHD_DAUTH_WRONG_URI,
+    "digest_auth_result::WRONG_URI diverged from MHD_DAUTH_WRONG_URI");
+static_assert(
+    static_cast<int>(http_utils::digest_auth_result::WRONG_QOP) == MHD_DAUTH_WRONG_QOP,
+    "digest_auth_result::WRONG_QOP diverged from MHD_DAUTH_WRONG_QOP");
+static_assert(
+    static_cast<int>(http_utils::digest_auth_result::WRONG_ALGO) == MHD_DAUTH_WRONG_ALGO,
+    "digest_auth_result::WRONG_ALGO diverged from MHD_DAUTH_WRONG_ALGO");
+static_assert(
+    static_cast<int>(http_utils::digest_auth_result::TOO_LARGE) == MHD_DAUTH_TOO_LARGE,
+    "digest_auth_result::TOO_LARGE diverged from MHD_DAUTH_TOO_LARGE");
+static_assert(
+    static_cast<int>(http_utils::digest_auth_result::NONCE_STALE) == MHD_DAUTH_NONCE_STALE,
+    "digest_auth_result::NONCE_STALE diverged from MHD_DAUTH_NONCE_STALE");
+static_assert(
+    static_cast<int>(http_utils::digest_auth_result::NONCE_OTHER_COND) == MHD_DAUTH_NONCE_OTHER_COND,
+    "digest_auth_result::NONCE_OTHER_COND diverged from MHD_DAUTH_NONCE_OTHER_COND");
+static_assert(
+    static_cast<int>(http_utils::digest_auth_result::NONCE_WRONG) == MHD_DAUTH_NONCE_WRONG,
+    "digest_auth_result::NONCE_WRONG diverged from MHD_DAUTH_NONCE_WRONG");
+static_assert(
+    static_cast<int>(http_utils::digest_auth_result::RESPONSE_WRONG) == MHD_DAUTH_RESPONSE_WRONG,
+    "digest_auth_result::RESPONSE_WRONG diverged from MHD_DAUTH_RESPONSE_WRONG");
+#endif  // HAVE_DAUTH
 
 }  // namespace http
 }  // namespace httpserver

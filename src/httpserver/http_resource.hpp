@@ -25,24 +25,28 @@
 #ifndef SRC_HTTPSERVER_HTTP_RESOURCE_HPP_
 #define SRC_HTTPSERVER_HTTP_RESOURCE_HPP_
 
-#ifdef DEBUG
-#include <iostream>
-#endif
-
-#include <map>
-#include <memory>
-#include <string>
-#include <utility>
-#include <vector>
+// TASK-036: render_* virtuals now return http_response by value; the
+// inline defaults call render(req) and forward the prvalue, which
+// requires http_response to be a complete type at every override site.
+// Hard-include is the simplest correct shape (the umbrella already
+// reaches both headers).
+#include "httpserver/http_method.hpp"
+#include "httpserver/http_response.hpp"
 
 namespace httpserver { class http_request; }
-namespace httpserver { class http_response; }
+namespace httpserver { class webserver; }
+namespace httpserver { namespace detail { class webserver_impl; } }
 
 namespace httpserver {
 
-namespace details { std::shared_ptr<http_response> empty_render(const http_request& r); }
-
-void resource_init(std::map<std::string, bool>* res);
+// TASK-036 / DR-004 / PRD-RSP-REQ-007: render_* virtuals return
+// http_response by value. The webserver dispatch path moves the value
+// into mr->response_ (an std::optional<http_response> living on the
+// per-connection modded_request, see §5.3) and keeps it alive until
+// MHD fires request_completed. The default render() returns a
+// default-constructed http_response whose status_code_ == -1 is the
+// v1-compatible sentinel for "handler did not produce a response"; the
+// dispatch path routes the sentinel through the internal-error handler.
 
 /**
  * Class representing a callable http resource.
@@ -59,8 +63,13 @@ class http_resource {
       * @param req Request passed through http
       * @return A http_response object
      **/
-     virtual std::shared_ptr<http_response> render(const http_request& req) {
-         return details::empty_render(req);
+     virtual http_response render(const http_request& /*req*/) {
+         // TASK-036: default-constructed http_response carries
+         // status_code_ == -1 — the v1-compatible "handler did not
+         // produce a response" sentinel that finalize_answer recognises
+         // and routes through internal_error_page (see
+         // test/integ/basic.cpp::default_render_method).
+         return http_response{};
      }
 
      /**
@@ -68,7 +77,7 @@ class http_resource {
       * @param req Request passed through http
       * @return A http_response object
      **/
-     virtual std::shared_ptr<http_response> render_GET(const http_request& req) {
+     virtual http_response render_get(const http_request& req) {
          return render(req);
      }
 
@@ -77,7 +86,7 @@ class http_resource {
       * @param req Request passed through http
       * @return A http_response object
      **/
-     virtual std::shared_ptr<http_response> render_POST(const http_request& req) {
+     virtual http_response render_post(const http_request& req) {
          return render(req);
      }
 
@@ -86,7 +95,7 @@ class http_resource {
       * @param req Request passed through http
       * @return A http_response object
      **/
-     virtual std::shared_ptr<http_response> render_PUT(const http_request& req) {
+     virtual http_response render_put(const http_request& req) {
          return render(req);
      }
 
@@ -95,7 +104,7 @@ class http_resource {
       * @param req Request passed through http
       * @return A http_response object
      **/
-     virtual std::shared_ptr<http_response> render_HEAD(const http_request& req) {
+     virtual http_response render_head(const http_request& req) {
          return render(req);
      }
 
@@ -104,7 +113,7 @@ class http_resource {
       * @param req Request passed through http
       * @return A http_response object
      **/
-     virtual std::shared_ptr<http_response> render_DELETE(const http_request& req) {
+     virtual http_response render_delete(const http_request& req) {
          return render(req);
      }
 
@@ -113,7 +122,7 @@ class http_resource {
       * @param req Request passed through http
       * @return A http_response object
      **/
-     virtual std::shared_ptr<http_response> render_TRACE(const http_request& req) {
+     virtual http_response render_trace(const http_request& req) {
          return render(req);
      }
 
@@ -122,7 +131,7 @@ class http_resource {
       * @param req Request passed through http
       * @return A http_response object
      **/
-     virtual std::shared_ptr<http_response> render_OPTIONS(const http_request& req) {
+     virtual http_response render_options(const http_request& req) {
          return render(req);
      }
 
@@ -131,7 +140,7 @@ class http_resource {
       * @param req Request passed through http
       * @return A http_response object
      **/
-     virtual std::shared_ptr<http_response> render_PATCH(const http_request& req) {
+     virtual http_response render_patch(const http_request& req) {
          return render(req);
      }
 
@@ -140,86 +149,68 @@ class http_resource {
       * @param req Request passed through http
       * @return A http_response object
      **/
-     virtual std::shared_ptr<http_response> render_CONNECT(const http_request& req) {
+     virtual http_response render_connect(const http_request& req) {
          return render(req);
      }
 
      /**
-      * Method used to set if a specific method is allowed or not on this request
-      * @param method method to set permission on
-      * @param allowed boolean indicating if the method is allowed or not
+      * Toggle whether a specific http_method is allowed on this resource.
+      * @param method enum identifying the method (no string lookup)
+      * @param allow true to enable the method, false to disable it
      **/
-     void set_allowing(const std::string& method, bool allowed) {
-         if (method_state.count(method)) {
-             method_state[method] = allowed;
-         }
-     }
-
-     /**
-      * Method used to implicitly allow all methods
-     **/
-     void allow_all() {
-         std::map<std::string, bool>::iterator it;
-         for (it=method_state.begin(); it != method_state.end(); ++it) {
-             method_state[(*it).first] = true;
-         }
-     }
-
-     /**
-      * Method used to implicitly disallow all methods
-     **/
-     void disallow_all() {
-         std::map<std::string, bool>::iterator it;
-         for (it=method_state.begin(); it != method_state.end(); ++it) {
-             method_state[(*it).first] = false;
-         }
-     }
-
-     /**
-      * Method used to discover if an http method is allowed or not for this resource
-      * @param method Method to discover allowings
-      * @return true if the method is allowed
-     **/
-     bool is_allowed(const std::string& method) {
-         if (method_state.count(method)) {
-             return method_state[method];
+     void set_allowing(http_method method, bool allow) noexcept {
+         if (method == http_method::count_) return;  // sentinel; never settable
+         if (allow) {
+             methods_allowed_.set(method);
          } else {
-#ifdef DEBUG
-             std::map<std::string, bool>::iterator it;
-             for (it = method_state.begin(); it != method_state.end(); ++it) {
-                 std::cout << (*it).first << " -> " << (*it).second << std::endl;
-             }
-#endif  // DEBUG
-             return false;
+             methods_allowed_.clear(method);
          }
      }
 
      /**
-      * Method used to return a list of currently allowed HTTP methods for this resource
-      * @return vector of strings
+      * Allow every defined http_method on this resource.
      **/
-     std::vector<std::string> get_allowed_methods() {
-         std::vector<std::string> allowed_methods;
+     void allow_all() noexcept {
+         methods_allowed_.set_all();
+     }
 
-         for (auto it = method_state.cbegin(); it != method_state.cend(); ++it) {
-             if ( (*it).second ) {
-                 allowed_methods.push_back((*it).first);
-             }
-         }
+     /**
+      * Disallow every http_method on this resource.
+     **/
+     void disallow_all() noexcept {
+         methods_allowed_.clear_all();
+     }
 
-         return allowed_methods;
+     /**
+      * Test whether `method` is allowed on this resource. Const-noexcept
+      * because the answer is a single bitmask test on a trivial member;
+      * no string lookup, no allocation.
+      * @param method enum identifying the method to query
+      * @return true if the method is currently allowed
+     **/
+     bool is_allowed(http_method method) const noexcept {
+         return methods_allowed_.contains(method);
+     }
+
+     /**
+      * Return the full allow-mask by value. The returned method_set is
+      * trivially copyable (sizeof == 4) so by-value is the natural ABI.
+     **/
+     method_set get_allowed_methods() const noexcept {
+         return methods_allowed_;
      }
 
  protected:
      /**
-      * Constructor of the class
+      * Constructor of the class. The default state allows every defined
+      * http_method, matching the v1 behaviour where `resource_init`
+      * marked all nine methods true.
      **/
-     http_resource() {
-         resource_init(&method_state);
-     }
+     http_resource() = default;
 
      /**
-      * Copy constructor
+      * Copy / move special members are trivial — the only data member
+      * is method_set (a 32-bit aggregate).
      **/
      http_resource(const http_resource& b) = default;
      http_resource(http_resource&& b) noexcept = default;
@@ -228,9 +219,20 @@ class http_resource {
 
  private:
      friend class webserver;
-     friend void resource_init(std::map<std::string, bool>* res);
-     std::map<std::string, bool> method_state;
+     friend class detail::webserver_impl;  // TASK-014: dispatch helpers
+
+     // Default-allow every valid method. method_set::set_all() is
+     // constexpr, so the chained call is a constant expression and the
+     // default member initialiser stays well-formed.
+     method_set methods_allowed_ = method_set{}.set_all();
 };
+
+// TASK-021 acceptance: http_resource is now a vptr plus a 32-bit
+// method_set plus padding. The cap below leaves headroom for one
+// future small member (e.g. an arena tag) without re-invalidating
+// PRD-REQ-REQ-002 / PRD-REQ-REQ-003.
+static_assert(sizeof(http_resource) <= sizeof(void*) + sizeof(method_set) * 2,
+              "http_resource should be approximately vptr + method_set");
 
 }  // namespace httpserver
 #endif  // SRC_HTTPSERVER_HTTP_RESOURCE_HPP_

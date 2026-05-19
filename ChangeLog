@@ -1,5 +1,10 @@
 Version 0.20.0
 
+	Raised minimum C++ standard to C++20. Build now requires gcc >= 10
+		or clang >= 13 (Apple Clang from Xcode 15+). Updated
+		AX_CXX_COMPILE_STDCXX macro (m4/ax_cxx_compile_stdcxx.m4) to
+		serial 25 to support C++20 detection. Pruned CI matrix rows
+		(gcc-9, clang-11, clang-12) that lack full C++20 support.
 	Raised minimum libmicrohttpd requirement to 1.0.0.
 	Migrated Basic Auth to v3 API (MHD_basic_auth_get_username_password3,
 		MHD_queue_basic_auth_required_response3) with UTF-8 support.
@@ -20,6 +25,16 @@ Version 0.20.0
 		suppress_date_header.
 	Added WebSocket support (conditional on HAVE_WEBSOCKET):
 		websocket_handler, websocket_session, register_ws_resource().
+	TASK-035: replaced the raw-pointer
+		register_ws_resource(string, websocket_handler*) overload with
+		smart-pointer overloads register_ws_resource(string,
+		unique_ptr<websocket_handler>) and register_ws_resource(string,
+		shared_ptr<websocket_handler>); added unregister_ws_resource(string).
+		Mirrors the TASK-023 register_resource ownership model and is
+		consistent with DR-010 / PRD-HDL-REQ-003 / PRD-HDL-REQ-005.
+		Duplicate registrations now throw std::invalid_argument
+		(previously a silent overwrite). On HAVE_WEBSOCKET-off builds
+		all three entry points throw feature_unavailable.
 	Added utility functions: reason_phrase(), is_feature_supported(),
 		get_mhd_version().
 	Added example and documentation for serving binary data from memory

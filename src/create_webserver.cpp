@@ -39,6 +39,31 @@
 
 namespace httpserver {
 
+// TASK-034 / PRD-FLG-REQ-001: defined here (not as a default member
+// initializer in the header) so the public header carries no
+// #ifdef HAVE_BAUTH. The library was compiled with the right
+// HAVE_BAUTH state; the consumer TU's HAVE_BAUTH is irrelevant.
+bool create_webserver::basic_auth_default() noexcept {
+#ifdef HAVE_BAUTH
+    return true;
+#else
+    return false;
+#endif
+}
+
+// security-reviewer-iter1-1 / PRD-FLG-REQ-001: same pattern as
+// basic_auth_default(). Returns true on HAVE_DAUTH-on builds
+// (preserving historical behaviour) and false on HAVE_DAUTH-off builds
+// so that an unmodified builder doesn't trip the feature_unavailable
+// throw added to webserver::webserver() for HAVE_DAUTH-off builds.
+bool create_webserver::digest_auth_default() noexcept {
+#ifdef HAVE_DAUTH
+    return true;
+#else
+    return false;
+#endif
+}
+
 create_webserver& create_webserver::bind_address(const std::string& ip) {
     _bind_address_storage = std::make_shared<struct sockaddr_storage>();
     std::memset(_bind_address_storage.get(), 0, sizeof(struct sockaddr_storage));
@@ -62,7 +87,7 @@ create_webserver& create_webserver::bind_address(const std::string& ip) {
         return *this;
     }
 
-    throw std::invalid_argument("Invalid IP address: " + ip);
+    throw std::invalid_argument("bind_address: invalid IP address: " + ip);
 }
 
 }  // namespace httpserver

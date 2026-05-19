@@ -34,114 +34,114 @@ class service_resource: public httpserver::http_resource {
 
      ~service_resource();
 
-     std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request &req);
-     std::shared_ptr<httpserver::http_response> render_PUT(const httpserver::http_request &req);
-     std::shared_ptr<httpserver::http_response> render_POST(const httpserver::http_request &req);
-     std::shared_ptr<httpserver::http_response> render(const httpserver::http_request &req);
-     std::shared_ptr<httpserver::http_response> render_HEAD(const httpserver::http_request &req);
-     std::shared_ptr<httpserver::http_response> render_OPTIONS(const httpserver::http_request &req);
-     std::shared_ptr<httpserver::http_response> render_CONNECT(const httpserver::http_request &req);
-     std::shared_ptr<httpserver::http_response> render_DELETE(const httpserver::http_request &req);
+     httpserver::http_response render_get(const httpserver::http_request &req);
+     httpserver::http_response render_put(const httpserver::http_request &req);
+     httpserver::http_response render_post(const httpserver::http_request &req);
+     httpserver::http_response render(const httpserver::http_request &req);
+     httpserver::http_response render_head(const httpserver::http_request &req);
+     httpserver::http_response render_options(const httpserver::http_request &req);
+     httpserver::http_response render_connect(const httpserver::http_request &req);
+     httpserver::http_response render_delete(const httpserver::http_request &req);
 };
 
 service_resource::service_resource() { }
 
 service_resource::~service_resource() { }
 
-std::shared_ptr<httpserver::http_response> service_resource::render_GET(const httpserver::http_request &req) {
-    std::cout << "service_resource::render_GET()" << std::endl;
+httpserver::http_response service_resource::render_get(const httpserver::http_request &req) {
+    std::cout << "service_resource::render_get()" << std::endl;
 
     if (verbose) std::cout << req;
-    httpserver::string_response* res = new httpserver::string_response("GET response", 200);
+    auto res = httpserver::http_response::string("GET response");
 
-    if (verbose) std::cout << *res;
+    if (verbose) std::cout << res;
 
-    return std::shared_ptr<httpserver::http_response>(res);
+    return res;
 }
 
 
-std::shared_ptr<httpserver::http_response> service_resource::render_PUT(const httpserver::http_request &req) {
-    std::cout << "service_resource::render_PUT()" << std::endl;
+httpserver::http_response service_resource::render_put(const httpserver::http_request &req) {
+    std::cout << "service_resource::render_put()" << std::endl;
 
     if (verbose) std::cout << req;
 
-    httpserver::string_response* res = new httpserver::string_response("PUT response", 200);
+    auto res = httpserver::http_response::string("PUT response");
 
-    if (verbose) std::cout << *res;
+    if (verbose) std::cout << res;
 
-    return std::shared_ptr<httpserver::http_response>(res);
+    return res;
 }
 
-std::shared_ptr<httpserver::http_response> service_resource::render_POST(const httpserver::http_request &req) {
-    std::cout << "service_resource::render_POST()" << std::endl;
+httpserver::http_response service_resource::render_post(const httpserver::http_request &req) {
+    std::cout << "service_resource::render_post()" << std::endl;
 
     if (verbose) std::cout << req;
 
-    httpserver::string_response* res = new httpserver::string_response("POST response", 200);
+    auto res = httpserver::http_response::string("POST response");
 
-    if (verbose) std::cout << *res;
+    if (verbose) std::cout << res;
 
-    return std::shared_ptr<httpserver::http_response>(res);
+    return res;
 }
 
-std::shared_ptr<httpserver::http_response> service_resource::render(const httpserver::http_request &req) {
+httpserver::http_response service_resource::render(const httpserver::http_request &req) {
     std::cout << "service_resource::render()" << std::endl;
 
     if (verbose) std::cout << req;
 
-    httpserver::string_response* res = new httpserver::string_response("generic response", 200);
+    auto res = httpserver::http_response::string("generic response");
 
-    if (verbose) std::cout << *res;
+    if (verbose) std::cout << res;
 
-    return std::shared_ptr<httpserver::http_response>(res);
+    return res;
 }
 
-std::shared_ptr<httpserver::http_response> service_resource::render_HEAD(const httpserver::http_request &req) {
-    std::cout << "service_resource::render_HEAD()" << std::endl;
+httpserver::http_response service_resource::render_head(const httpserver::http_request &req) {
+    std::cout << "service_resource::render_head()" << std::endl;
 
     if (verbose) std::cout << req;
 
-    httpserver::string_response* res = new httpserver::string_response("HEAD response", 200);
+    auto res = httpserver::http_response::string("HEAD response");
 
-    if (verbose) std::cout << *res;
+    if (verbose) std::cout << res;
 
-    return std::shared_ptr<httpserver::http_response>(res);
+    return res;
 }
 
-std::shared_ptr<httpserver::http_response> service_resource::render_OPTIONS(const httpserver::http_request &req) {
-    std::cout << "service_resource::render_OPTIONS()" << std::endl;
+httpserver::http_response service_resource::render_options(const httpserver::http_request &req) {
+    std::cout << "service_resource::render_options()" << std::endl;
 
     if (verbose) std::cout << req;
 
-    httpserver::string_response* res = new httpserver::string_response("OPTIONS response", 200);
+    auto res = httpserver::http_response::string("OPTIONS response");
 
-    if (verbose) std::cout << *res;
+    if (verbose) std::cout << res;
 
-    return std::shared_ptr<httpserver::http_response>(res);
+    return res;
 }
 
-std::shared_ptr<httpserver::http_response> service_resource::render_CONNECT(const httpserver::http_request &req) {
-    std::cout << "service_resource::render_CONNECT()" << std::endl;
+httpserver::http_response service_resource::render_connect(const httpserver::http_request &req) {
+    std::cout << "service_resource::render_connect()" << std::endl;
 
     if (verbose) std::cout << req;
 
-    httpserver::string_response* res = new httpserver::string_response("CONNECT response", 200);
+    auto res = httpserver::http_response::string("CONNECT response");
 
-    if (verbose) std::cout << *res;
+    if (verbose) std::cout << res;
 
-    return std::shared_ptr<httpserver::http_response>(res);
+    return res;
 }
 
-std::shared_ptr<httpserver::http_response> service_resource::render_DELETE(const httpserver::http_request &req) {
-    std::cout << "service_resource::render_DELETE()" << std::endl;
+httpserver::http_response service_resource::render_delete(const httpserver::http_request &req) {
+    std::cout << "service_resource::render_delete()" << std::endl;
 
     if (verbose) std::cout << req;
 
-    httpserver::string_response* res = new httpserver::string_response("DELETE response", 200);
+    auto res = httpserver::http_response::string("DELETE response");
 
-    if (verbose) std::cout << *res;
+    if (verbose) std::cout << res;
 
-    return std::shared_ptr<httpserver::http_response>(res);
+    return res;
 }
 
 void usage() {
@@ -198,13 +198,13 @@ int main(int argc, char **argv) {
     //
     // Create webserver using the configured options
     //
-    httpserver::webserver ws = cw;
+    httpserver::webserver ws{cw};
 
     //
     // Create and register service resource available at /service
     //
-    service_resource res;
-    ws.register_resource("/service", &res, true);
+    auto res = std::make_shared<service_resource>();
+    ws.register_prefix("/service", res);
 
     //
     // Start and block the webserver

@@ -25,17 +25,17 @@
 
 class hello_resource : public httpserver::http_resource {
  public:
-     std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request&) {
-         return std::make_shared<httpserver::string_response>("Hello, World!");
+     httpserver::http_response render_get(const httpserver::http_request&) {
+         return httpserver::http_response::string("Hello, World!");
      }
 };
 
 int main() {
     // Use port 0 to let the OS assign an ephemeral port
-    httpserver::webserver ws = httpserver::create_webserver(0);
+    httpserver::webserver ws{httpserver::create_webserver(0)};
 
-    hello_resource hr;
-    ws.register_resource("/hello", &hr);
+    auto hr = std::make_shared<hello_resource>();
+    ws.register_path("/hello", hr);
     ws.start(false);
 
     // Query daemon information
@@ -53,7 +53,7 @@ int main() {
               << ". Press Ctrl+C to stop." << std::endl;
 
     // Block until interrupted
-    ws.sweet_kill();
+    ws.stop_and_wait();
 
     return 0;
 }

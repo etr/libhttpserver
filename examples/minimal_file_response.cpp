@@ -24,16 +24,18 @@
 
 class file_response_resource : public httpserver::http_resource {
  public:
-     std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request&) {
-         return std::shared_ptr<httpserver::file_response>(new httpserver::file_response("test_content", 200, "text/plain"));
+     httpserver::http_response render_get(const httpserver::http_request&) {
+         return
+             httpserver::http_response::file("test_content")
+                 .with_header("Content-Type", "text/plain");
      }
 };
 
 int main() {
-    httpserver::webserver ws = httpserver::create_webserver(8080);
+    httpserver::webserver ws{httpserver::create_webserver(8080)};
 
-    file_response_resource hwr;
-    ws.register_resource("/hello", &hwr);
+    auto hwr = std::make_shared<file_response_resource>();
+    ws.register_path("/hello", hwr);
     ws.start(true);
 
     return 0;

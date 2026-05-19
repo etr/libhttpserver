@@ -25,38 +25,41 @@
 
 class hello_world_resource : public httpserver::http_resource {
  public:
-     std::shared_ptr<httpserver::http_response> render(const httpserver::http_request&) {
-         return std::shared_ptr<httpserver::http_response>(new httpserver::string_response("Hello, World!"));
+     httpserver::http_response render(const httpserver::http_request&) {
+         return httpserver::http_response::string("Hello, World!");
      }
 };
 
 class handling_multiple_resource : public httpserver::http_resource {
  public:
-     std::shared_ptr<httpserver::http_response> render(const httpserver::http_request& req) {
-         return std::shared_ptr<httpserver::http_response>(new httpserver::string_response("Your URL: " + std::string(req.get_path())));
+     httpserver::http_response render(const httpserver::http_request& req) {
+         return httpserver::http_response::string("Your URL: " + std::string(req.get_path()));
      }
 };
 
 class url_args_resource : public httpserver::http_resource {
  public:
-     std::shared_ptr<httpserver::http_response> render(const httpserver::http_request& req) {
-         return std::shared_ptr<httpserver::http_response>(new httpserver::string_response("ARGS: " + std::string(req.get_arg("arg1")) + " and " + std::string(req.get_arg("arg2"))));
+     httpserver::http_response render(const httpserver::http_request& req) {
+         std::string body = "ARGS: " + std::string(req.get_arg("arg1"))
+             + " and " + std::string(req.get_arg("arg2"));
+         return httpserver::http_response::string(body);
      }
 };
 
 int main() {
-    httpserver::webserver ws = httpserver::create_webserver(8080);
+    httpserver::webserver ws{httpserver::create_webserver(8080)};
 
-    hello_world_resource hwr;
-    ws.register_resource("/hello", &hwr);
+    auto hwr = std::make_shared<hello_world_resource>();
+    ws.register_path("/hello", hwr);
 
-    handling_multiple_resource hmr;
-    ws.register_resource("/family", &hmr, true);
-    ws.register_resource("/with_regex_[0-9]+", &hmr);
+    auto hmr = std::make_shared<handling_multiple_resource>();
+    // Prefix-match: serves "/family" and any "/family/..." child URL.
+    ws.register_prefix("/family", hmr);
+    ws.register_path("/with_regex_[0-9]+", hmr);
 
-    url_args_resource uar;
-    ws.register_resource("/url/with/{arg1}/and/{arg2}", &uar);
-    ws.register_resource("/url/with/parametric/args/{arg1|[0-9]+}/and/{arg2|[A-Z]+}", &uar);
+    auto uar = std::make_shared<url_args_resource>();
+    ws.register_path("/url/with/{arg1}/and/{arg2}", uar);
+    ws.register_path("/url/with/parametric/args/{arg1|[0-9]+}/and/{arg2|[A-Z]+}", uar);
 
     ws.start(true);
 

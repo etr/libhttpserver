@@ -58,7 +58,7 @@ static std::string generate_png_data() {
 
 class image_resource : public httpserver::http_resource {
  public:
-    std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request&) {
+    httpserver::http_response render_get(const httpserver::http_request&) {
         // Build binary content as a std::string. The string can contain any
         // bytes — it is not limited to printable characters or null-terminated
         // C strings. The size is tracked internally by std::string::size().
@@ -66,16 +66,15 @@ class image_resource : public httpserver::http_resource {
 
         // Use string_response with the appropriate content type. The response
         // will send the exact bytes contained in the string.
-        return std::make_shared<httpserver::string_response>(
-                std::move(image_data), 200, "image/png");
+        return httpserver::http_response::string(std::move(image_data), "image/png");
     }
 };
 
 int main() {
-    httpserver::webserver ws = httpserver::create_webserver(8080);
+    httpserver::webserver ws{httpserver::create_webserver(8080)};
 
-    image_resource ir;
-    ws.register_resource("/image", &ir);
+    auto ir = std::make_shared<image_resource>();
+    ws.register_path("/image", ir);
     ws.start(true);
 
     return 0;

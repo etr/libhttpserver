@@ -26,13 +26,13 @@
 
 class hello_world_resource : public httpserver::http_resource {
  public:
-     std::shared_ptr<httpserver::http_response> render(const httpserver::http_request&);
+     httpserver::http_response render(const httpserver::http_request&);
      void set_some_data(const std::string &s) {data = s;}
      std::string data;
 };
 
 // Using the render method you are able to catch each type of request you receive
-std::shared_ptr<httpserver::http_response> hello_world_resource::render(const httpserver::http_request& req) {
+httpserver::http_response hello_world_resource::render(const httpserver::http_request& req) {
     // It is possible to store data inside the resource object that can be altered through the requests
     std::cout << "Data was: " << data << std::endl;
     std::string_view datapar = req.get_arg("data");
@@ -40,19 +40,19 @@ std::shared_ptr<httpserver::http_response> hello_world_resource::render(const ht
     std::cout << "Now data is:" << data << std::endl;
 
     // It is possible to send a response initializing an http_string_response that reads the content to send in response from a string.
-    return std::shared_ptr<httpserver::http_response>(new httpserver::string_response("Hello World!!!", 200));
+    return httpserver::http_response::string("Hello World!!!");
 }
 
 int main() {
     // It is possible to create a webserver passing a great number of parameters. In this case we are just passing the port and the number of thread running.
-    httpserver::webserver ws = httpserver::create_webserver(8080).start_method(httpserver::http::http_utils::INTERNAL_SELECT).max_threads(5);
+    httpserver::webserver ws{httpserver::create_webserver(8080).start_method(httpserver::http::http_utils::INTERNAL_SELECT).max_threads(5)};
 
-    hello_world_resource hwr;
+    auto hwr = std::make_shared<hello_world_resource>();
     // This way we are registering the hello_world_resource to answer for the endpoint
-    // "/hello". The requested method is called (if the request is a GET we call the render_GET
+    // "/hello". The requested method is called (if the request is a GET we call the render_get
     // method. In case that the specific render method is not implemented, the generic "render"
     // method is called.
-    ws.register_resource("/hello", &hwr, true);
+    ws.register_prefix("/hello", hwr);
 
     // This way we are putting the created webserver in listen. We pass true in order to have
     // a blocking call; if we want the call to be non-blocking we can just pass false to the method.

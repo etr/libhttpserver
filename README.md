@@ -87,11 +87,13 @@ Additionally, clients can specify resource limits on the overall number of conne
 libhttpserver can be used without any dependencies aside from libmicrohttpd.
 
 The minimum versions required are:
-* g++ >= 5.5.0 or clang-3.6
-* C++17 or newer
+* g++ >= 10 or clang >= 13 (Apple Clang from Xcode 15+)
+* C++20 or newer
 * libmicrohttpd >= 1.0.0
 * [Optionally]: for TLS (HTTPS) support, you'll need [libgnutls](http://www.gnutls.org/).
 * [Optionally]: to compile the code-reference, you'll need [doxygen](http://www.doxygen.nl/).
+
+On RHEL 9 (and derivatives), the stock GCC 11 is too old for some C++20 library features the build relies on; install the `gcc-toolset-14` package and `source /opt/rh/gcc-toolset-14/enable` before configuring.
 
 Additionally, for MinGW on windows you will need:
 * libwinpthread (For MinGW-w64, if you use thread model posix then you have this)
@@ -215,7 +217,7 @@ The most basic example of creating a server and handling a requests for the path
     };
 
     int main(int argc, char** argv) {
-        webserver ws = create_webserver(8080);
+        webserver ws{create_webserver(8080)};
 
         hello_world_resource hwr;
         ws.register_resource("/hello", &hwr);
@@ -254,7 +256,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
 ## Create and work with a webserver
 As you can see from the example above, creating a webserver with standard configuration is quite simple:
 ```cpp
-    webserver ws = create_webserver(8080);
+    webserver ws{create_webserver(8080)};
 ```
 The `create_webserver` class is a supporting _builder_ class that eases the building of a webserver through chained syntax.
 
@@ -273,31 +275,31 @@ For example, if your connection limit is “1”, a browser may open a first con
 * _.bind_address(**const std::string&** ip):_ Bind the server to a specific network interface by IP address string (e.g., `"127.0.0.1"` for localhost only, or `"192.168.1.100"` for a specific interface). Supports both IPv4 and IPv6 addresses. When an IPv6 address is provided, IPv6 mode is automatically enabled. Example: `create_webserver(8080).bind_address("127.0.0.1")`.
 * _.bind_socket(**int** socket_fd):_ Listen socket to use. Pass a listen socket for the daemon to use (systemd-style). If this option is used, the daemon will not open its own listen socket(s). The argument passed must be of type "int" and refer to an existing socket that has been bound to a port and is listening.
 * _.max_thread_stack_size(**int** stack_size):_ Maximum stack size for threads created by the library. Not specifying this option or using a value of zero means using the system default (which is likely to differ based on your platform). Default is `0 (system default)`.
-* _.use_ipv6() and .no_ipv6():_ Enable or disable the IPv6 protocol support (by default, libhttpserver will just support IPv4). If you specify this and the local platform does not support it, starting up the server will throw an exception. `off` by default.
-* _.use_dual_stack() and .no_dual_stack():_ Enable or disable the support for both IPv6 and IPv4 protocols at the same time (by default, libhttpserver will just support IPv4). If you specify this and the local platform does not support it, starting up the server will throw an exception. Note that this will mean that IPv4 addresses are returned in the IPv6-mapped format (the ’structsockaddrin6’ format will be used for IPv4 and IPv6). `off` by default.
-* _.pedantic() and .no_pedantic():_ Enables pedantic checks about the protocol (as opposed to as tolerant as possible). Specifically, at the moment, this flag causes the library to reject HTTP 1.1 connections without a `Host` header. This is required by the standard, but of course in violation of the “be as liberal as possible in what you accept” norm. It is recommended to turn this **off** if you are testing clients against the library, and **on** in production. `off` by default.
-* _.debug() and .no_debug():_ Enables debug messages from the library. `off` by default.
-* _.regex_checking() and .no_regex_checking():_ Enables pattern matching for endpoints. Read more [here](#registering-resources). `on` by default.
-* _.post_process() and .no_post_process():_ Enables/Disables the library to automatically parse the body of the http request as arguments if in querystring format. Read more [here](#parsing-requests). `on` by default.
-* _.put_processed_data_to_content() and .no_put_processed_data_to_content():_ Enables/Disables the library to copy parsed body data to the content or to only store it in the arguments map. `on` by default.
+* _.use_ipv6(**bool** enable = true):_ Enable or disable IPv6 protocol support (by default, libhttpserver supports only IPv4). If you enable this and the local platform does not support it, starting up the server will throw an exception. `off` by default. Pass `false` to disable explicitly.
+* _.use_dual_stack(**bool** enable = true):_ Enable or disable support for both IPv6 and IPv4 protocols at the same time (by default, libhttpserver supports only IPv4). If you enable this and the local platform does not support it, starting up the server will throw an exception. Note that this will mean that IPv4 addresses are returned in the IPv6-mapped format (the ’structsockaddrin6’ format will be used for IPv4 and IPv6). `off` by default.
+* _.pedantic(**bool** enable = true):_ Enables pedantic checks about the protocol (as opposed to as tolerant as possible). Specifically, at the moment, this flag causes the library to reject HTTP 1.1 connections without a `Host` header. This is required by the standard, but of course in violation of the "be as liberal as possible in what you accept" norm. It is recommended to turn this **off** if you are testing clients against the library, and **on** in production. `off` by default.
+* _.debug(**bool** enable = true):_ Enables debug messages from the library. `off` by default.
+* _.regex_checking(**bool** enable = true):_ Enables pattern matching for endpoints. Read more [here](#registering-resources). `on` by default.
+* _.post_process(**bool** enable = true):_ Enables/Disables the library to automatically parse the body of the http request as arguments if in querystring format. Read more [here](#parsing-requests). `on` by default.
+* _.put_processed_data_to_content(**bool** enable = true):_ Enables/Disables the library to copy parsed body data to the content or to only store it in the arguments map. `on` by default.
 * _.file_upload_target(**file_upload_target_T** file_upload_target):_ Controls, how the library stores uploaded files. Default value is `FILE_UPLOAD_MEMORY_ONLY`.
 	* `FILE_UPLOAD_MEMORY_ONLY`: The content of the file is only stored in memory. Depending on `put_processed_data_to_content` only as part of the arguments map or additionally in the content.
 	* `FILE_UPLOAD_DISK_ONLY`: The content of the file is stored only in the file system. The path is created from `file_upload_dir` and either a random name (if `generate_random_filename_on_upload` is true) or the actually uploaded file name.
 	* `FILE_UPLOAD_MEMORY_AND_DISK`: The content of the file is stored in memory and on the file system.
 * _.file_upload_dir(**const std::string&** file_upload_dir):_ Specifies the directory to store all uploaded files. Default value is `/tmp`.
-* _.generate_random_filename_on_upload() and .no_generate_random_filename_on_upload():_ Enables/Disables the library to generate a unique and unused filename to store the uploaded file to. Otherwise the actually uploaded file name is used. `off` by default.
+* _.generate_random_filename_on_upload(**bool** enable = true):_ Enables/Disables the library to generate a unique and unused filename to store the uploaded file to. Otherwise the actually uploaded file name is used. `off` by default.
 * _.file_cleanup_callback(**file_cleanup_callback_ptr** callback):_ Sets a callback function to control what happens to uploaded files when the request completes. By default (when no callback is set), all uploaded files are automatically deleted. The callback signature is `bool(const std::string& key, const std::string& filename, const http::file_info& info)` where `key` is the form field name, `filename` is the original uploaded filename, and `info` contains file metadata including the filesystem path. Return `true` to delete the file (default behavior) or `false` to keep it (e.g., after moving it to permanent storage). If the callback throws an exception, the file will be deleted as a safety measure.
-* _.deferred()_ and _.no_deferred():_ Enables/Disables the ability for the server to suspend and resume connections. Simply put, it enables/disables the ability to use `deferred_response`. Read more [here](#building-responses-to-requests). `on` by default.
-* _.single_resource() and .no_single_resource:_ Sets or unsets the server in single resource mode. This limits all endpoints to be served from a single resource. The resultant is that the webserver will process the request matching to the endpoint skipping any complex semantic. Because of this, the option is incompatible with `regex_checking` and requires the resource to be registered against an empty endpoint or the root endpoint (`"/"`). The resource will also have to be registered as family. (For more information on resource registration, read more [here](#registering-resources)). `off` by default.
-* _.no_listen_socket():_ Run the daemon without a listening socket. The server will not bind to any port on its own; instead, you must provide connections externally via `add_connection()`. Useful for integrating with an external accept loop or passing sockets from systemd or another process. `off` by default.
-* _.no_thread_safety():_ Disable internal thread-safety mechanisms. This can improve performance when you guarantee that only a single thread will access the daemon at a time. **Only use this if you are sure you do not need concurrent access.** `off` by default.
-* _.turbo():_ Enable turbo mode. This is a performance optimization that allows the daemon to skip certain internal operations. Requires the application to meet specific threading and response constraints — consult the libmicrohttpd documentation for details. `off` by default.
-* _.suppress_date_header():_ Suppress the automatic addition of a `Date:` header in responses. Useful for reproducible tests or when the application manages its own date headers. `off` by default.
+* _.deferred(**bool** enable = true):_ Enables/Disables the ability for the server to suspend and resume connections. Simply put, it enables/disables the ability to use `deferred_response`. Read more [here](#building-responses-to-requests). `on` by default.
+* _.single_resource(**bool** enable = true):_ Sets or unsets the server in single resource mode. This limits all endpoints to be served from a single resource. The resultant is that the webserver will process the request matching to the endpoint skipping any complex semantic. Because of this, the option is incompatible with `regex_checking` and requires the resource to be registered against an empty endpoint or the root endpoint (`"/"`). The resource will also have to be registered as family. (For more information on resource registration, read more [here](#registering-resources)). `off` by default.
+* _.listen_socket(**bool** enable = true):_ Run the daemon with (`true`) or without (`false`) a listening socket. When disabled, the server will not bind to any port on its own; instead, you must provide connections externally via `add_connection()`. Useful for integrating with an external accept loop or passing sockets from systemd or another process. `on` by default.
+* _.thread_safety(**bool** enable = true):_ Enable or disable internal thread-safety mechanisms. Disabling can improve performance when you guarantee that only a single thread will access the daemon at a time. **Only disable this if you are sure you do not need concurrent access.** `on` by default.
+* _.turbo(**bool** enable = true):_ Enable turbo mode. This is a performance optimization that allows the daemon to skip certain internal operations. Requires the application to meet specific threading and response constraints — consult the libmicrohttpd documentation for details. `off` by default.
+* _.suppress_date_header(**bool** enable = true):_ Suppress the automatic addition of a `Date:` header in responses. Useful for reproducible tests or when the application manages its own date headers. `off` by default.
 * _.listen_backlog(**int** backlog):_ Set the TCP listen backlog size. Higher values allow more pending connections in the kernel queue. Default is `0` (system default).
 * _.address_reuse(**int** reuse):_ Control address reuse (`SO_REUSEADDR`/`SO_REUSEPORT`). Pass `1` to enable, `-1` to disable. Default is `0` (system default).
 * _.connection_memory_increment(**size_t** increment):_ Increment size for per-connection memory allocation when the initial pool is exhausted. Default is `0` (system default, typically 1024 bytes).
 * _.tcp_fastopen_queue_size(**int** queue_size):_ Set the size of the TCP Fast Open queue. When set, enables TCP Fast Open with the specified queue depth. Default is `0` (disabled).
-* _.sigpipe_handled_by_app():_ Inform the daemon that the application is handling `SIGPIPE` on its own, so libmicrohttpd should not install a handler. `off` by default.
+* _.sigpipe_handled_by_app(**bool** enable = true):_ Inform the daemon that the application is handling `SIGPIPE` on its own, so libmicrohttpd should not install a handler. `off` by default.
 * _.client_discipline_level(**int** level):_ Controls how strictly the server enforces HTTP protocol compliance. Higher values make the server stricter with misbehaving clients. Default is `-1` (use libmicrohttpd default).
 
 ### Threading Models
@@ -309,9 +311,9 @@ For example, if your connection limit is “1”, a browser may open a first con
 ### Custom defaulted error messages
 libhttpserver allows to override internal error retrieving functions to provide custom messages to the HTTP client. There are only 3 cases in which implementing logic (an http_resource) cannot be invoked: (1) a not found resource, where the library is not being able to match the URL requested by the client to any implementing http_resource object; (2) a not allowed method, when the HTTP client is requesting a method explicitly marked as not allowed (more info [here](#allowing-and-disallowing-methods-on-a-resource)) by the implementation; (3) an exception being thrown.
 In all these 3 cases libhttpserver would provide a standard HTTP response to the client with the correct error code; respectively a `404`, a `405` and a `500`. The library allows its user to specify custom callbacks that will be called to replace the default behavior.
-* _.not_found_resource(**const  shared_ptr<http_response>(&ast;render_ptr)(const http_request&)** resource):_ Specifies a function to handle a request when no matching registered endpoint exist for the URL requested by the client.
-* _.method_not_allowed_resource(**const  shared_ptr<http_response>(&ast;render_ptr)(const http_request&)** resource):_ Specifies a function to handle a request that is asking for a method marked as not allowed on the matching http_resource.
-* _.internal_error_resource(**const  shared_ptr<http_response>(&ast;render_ptr)(const http_request&)** resource):_ Specifies a function to handle a request that is causing an uncaught exception during its execution. **REMEMBER:** is this callback is causing an exception itself, the standard default response from libhttpserver will be reported to the HTTP client.
+* _.not_found_handler(**std::function<http_response(const http_request&)>** handler):_ Specifies a function to handle a request when no matching registered endpoint exist for the URL requested by the client.
+* _.method_not_allowed_handler(**std::function<http_response(const http_request&)>** handler):_ Specifies a function to handle a request that is asking for a method marked as not allowed on the matching http_resource.
+* _.internal_error_handler(**std::function<http_response(const http_request&)>** handler):_ Specifies a function to handle a request that is causing an uncaught exception during its execution. **REMEMBER:** is this callback is causing an exception itself, the standard default response from libhttpserver will be reported to the HTTP client.
 
 #### Example of custom errors:
 ```cpp
@@ -319,12 +321,12 @@ In all these 3 cases libhttpserver would provide a standard HTTP response to the
 
       using namespace httpserver;
 
-      std::shared_ptr<http_response> not_found_custom(const http_request& req) {
-          return std::shared_ptr<string_response>(new string_response("Not found custom", 404, "text/plain"));
+      http_response not_found_custom(const http_request& req) {
+          return http_response::string("Not found custom").with_status(404);
       }
 
-      std::shared_ptr<http_response> not_allowed_custom(const http_request& req) {
-          return std::shared_ptr<string_response>(new string_response("Not allowed custom", 405, "text/plain"));
+      http_response not_allowed_custom(const http_request& req) {
+          return http_response::string("Not allowed custom").with_status(405);
       }
 
       class hello_world_resource : public http_resource {
@@ -335,9 +337,9 @@ In all these 3 cases libhttpserver would provide a standard HTTP response to the
       };
 
       int main(int argc, char** argv) {
-          webserver ws = create_webserver(8080)
-              .not_found_resource(not_found_custom)
-              .method_not_allowed_resource(not_allowed_custom);
+          webserver ws{create_webserver(8080)
+              .not_found_handler(not_found_custom)
+              .method_not_allowed_handler(not_allowed_custom)};
 
           hello_world_resource hwr;
           hwr.disallow_all();
@@ -381,8 +383,8 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
     };
 
     int main(int argc, char** argv) {
-        webserver ws = create_webserver(8080)
-            .log_access(custom_access_log);
+        webserver ws{create_webserver(8080)
+            .log_access(custom_access_log)};
 
         hello_world_resource hwr;
         ws.register_resource("/hello", &hwr);
@@ -400,7 +402,7 @@ You'll notice how, on the terminal runing your server, the logs will now be prin
 You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/custom_access_log.cpp).
 
 ### TLS/HTTPS
-* _.use_ssl() and .no_ssl():_ Determines whether to run in HTTPS-mode or not. If you set this as on and libhttpserver was compiled without SSL support, the library will throw an exception at start of the server. `off` by default.
+* _.use_ssl(**bool** enable = true):_ Determines whether to run in HTTPS-mode or not. If you set this as on and libhttpserver was compiled without SSL support, the library will throw an exception at start of the server. `off` by default.
 * _.cred_type(**const http::http_utils::cred_type_T&** cred_type):_ Daemon credentials type. Either certificate or anonymous. Acceptable values are:
 	* `NONE`: No credentials.
 	* `CERTIFICATE`: Certificate credential.
@@ -417,7 +419,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
 * _.https_mem_dhparams(**const std::string&** dhparams):_ String containing the Diffie-Hellman (DH) parameters in PEM format. This is used for DHE key exchange in TLS. If not specified, default DH parameters may be used.
 * _.https_key_password(**const std::string&** password):_ Password for the private key specified by `https_mem_key`, if the key file is encrypted.
 * _.https_priorities_append(**const std::string&** priorities):_ Additional GnuTLS priorities to append to the base priority string. Unlike `https_priorities()` which replaces the entire string, this appends to the default, making it easier to adjust specific cipher suites or algorithms.
-* _.no_alpn():_ Disable Application-Layer Protocol Negotiation (ALPN) for TLS connections. `off` by default.
+* _.alpn(**bool** enable = true):_ Enable or disable Application-Layer Protocol Negotiation (ALPN) for TLS connections. `on` by default.
 
 #### Minimal example using HTTPS
 ```cpp
@@ -433,10 +435,10 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
     };
 
     int main(int argc, char** argv) {
-        webserver ws = create_webserver(8080)
+        webserver ws{create_webserver(8080)
             .use_ssl()
             .https_mem_key("key.pem")
-            .https_mem_cert("cert.pem");
+            .https_mem_cert("cert.pem")};
 
         hello_world_resource hwr;
         ws.register_resource("/hello", &hwr);
@@ -483,11 +485,11 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
     };
 
     int main(int argc, char** argv) {
-        webserver ws = create_webserver(8080)
+        webserver ws{create_webserver(8080)
             .use_ssl()
             .cred_type(http::http_utils::PSK)
             .psk_cred_handler(psk_handler)
-            .https_priorities("NORMAL:-VERS-TLS-ALL:+VERS-TLS1.2:+PSK:+DHE-PSK");
+            .https_priorities("NORMAL:-VERS-TLS-ALL:+VERS-TLS1.2:+PSK:+DHE-PSK")};
 
         hello_world_resource hwr;
         ws.register_resource("/hello", &hwr);
@@ -506,49 +508,49 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
 
 ### IP Blacklisting/Whitelisting
 libhttpserver supports IP blacklisting and whitelisting as an internal feature. This section explains the startup options related with IP blacklisting/whitelisting. See the [specific section](#ip-blacklisting-and-whitelisting) to read more about the topic.
-* _.ban_system() and .no_ban_system:_ Can be used to enable/disable the ban system. `on` by default.
+* _.ban_system(**bool** enable = true):_ Can be used to enable/disable the ban system. `on` by default.
 * _.default_policy(**const http::http_utils::policy_T&** default_policy):_ Specifies what should be the default behavior when receiving a request. Possible values are `ACCEPT` and `REJECT`. Default is `ACCEPT`.
 
 ### Authentication Parameters
-* _.basic_auth() and .no_basic_auth:_ Can be used to enable/disable parsing of the basic authorization header sent by the client. `on` by default.
-* _.digest_auth() and .no_digest_auth:_ Can be used to enable/disable parsing of the digested authentication data sent by the client. `on` by default.
+* _.basic_auth(**bool** enable = true):_ Can be used to enable/disable parsing of the basic authorization header sent by the client. `on` by default.
+* _.digest_auth(**bool** enable = true):_ Can be used to enable/disable parsing of the digested authentication data sent by the client. `on` by default.
 * _.nonce_nc_size(**int** nonce_size):_ Size of an array of nonce and nonce counter map. This option represents the size (number of elements) of a map of a nonce and a nonce-counter. If this option is not specified, a default value of 4 will be used (which might be too small for servers handling many requests).
 You should calculate the value of NC_SIZE based on the number of connections per second multiplied by your expected session duration plus a factor of about two for hash table collisions. For example, if you expect 100 digest-authenticated connections per second and the average user to stay on your site for 5 minutes, then you likely need a value of about 60000. On the other hand, if you can only expect only 10 digest-authenticated connections per second, tolerate browsers getting a fresh nonce for each request and expect a HTTP request latency of 250 ms, then a value of about 5 should be fine.
 * _.digest_auth_random(**const std::string&** nonce_seed):_ Digest Authentication nonce’s seed. For security, you SHOULD provide a fresh random nonce when actually using Digest Authentication with libhttpserver in production.
 
 ### Examples of chaining syntax to create a webserver
 ```cpp
-    webserver ws = create_webserver(8080)
-        .no_ssl()
-        .no_ipv6()
-        .no_debug()
-        .no_pedantic()
-        .no_basic_auth()
-        .no_digest_auth()
-        .no_comet()
-        .no_regex_checking()
-        .no_ban_system()
-        .no_post_process();
+    webserver ws{create_webserver(8080)
+        .use_ssl(false)
+        .use_ipv6(false)
+        .debug(false)
+        .pedantic(false)
+        .basic_auth(false)
+        .digest_auth(false)
+        .deferred(false)
+        .regex_checking(false)
+        .ban_system(false)
+        .post_process(false)};
 ```
 ##
 ```cpp
-    webserver ws = create_webserver(8080)
+    webserver ws{create_webserver(8080)
         .use_ssl()
         .https_mem_key("key.pem")
-        .https_mem_cert("cert.pem");
+        .https_mem_cert("cert.pem")};
 ```
 ### Starting and stopping a webserver
 Once a webserver is created, you can manage its execution through the following methods on the `webserver` class:
 * _**void** webserver::start(**bool** blocking):_ Allows to start a server. If the `blocking` flag is passed as `true`, it will block the execution of the current thread until a call to stop on the same webserver object is performed.
 * _**void** webserver::stop():_ Allows to stop a server. It immediately stops it.
 * _**bool** webserver::is_running():_ Checks if a server is running
-* _**void** webserver::sweet_kill():_ Allows to stop a server. It doesn't guarantee an immediate halt to allow for thread termination and connection closure.
+* _**void** webserver::stop_and_wait():_ Stop the webserver and wait for in-flight handlers to complete before returning. Use `stop()` when no such guarantee is required.
 * _**int** webserver::quiesce():_ Quiesce the daemon: stop accepting new connections while letting in-flight requests complete. Returns the listen socket file descriptor (the caller can close it), or `-1` on error.
 * _**bool** webserver::run():_ Run the webserver's event loop once (non-blocking). For use with external event loops when the server is started without internal threading. Returns `true` on success.
 * _**bool** webserver::run_wait(**int32_t** millisec):_ Run the webserver's event loop, blocking until there is activity or the timeout expires. Pass `-1` for indefinite wait. Returns `true` on success.
 * _**bool** webserver::get_fdset(**fd_set&ast;** read_fd_set, **fd_set&ast;** write_fd_set, **fd_set&ast;** except_fd_set, **int&ast;** max_fd):_ Get the file descriptor sets for `select()`-based external event loop integration. Returns `true` on success.
 * _**bool** webserver::get_timeout(**uint64_t&ast;** timeout):_ Get the timeout (in milliseconds) until the next daemon action is needed. Returns `true` if a timeout was set, `false` if no timeout is needed.
-* _**bool** webserver::add_connection(**int** client_socket, **const struct sockaddr&ast;** addr, **socklen_t** addrlen):_ Add an externally-accepted socket connection to the daemon. Useful with `no_listen_socket()`. Returns `true` on success.
+* _**bool** webserver::add_connection(**int** client_socket, **const struct sockaddr&ast;** addr, **socklen_t** addrlen):_ Add an externally-accepted socket connection to the daemon. Useful with `listen_socket(false)`. Returns `true` on success.
 * _**int** webserver::get_listen_fd():_ Get the listen socket file descriptor, or `-1` if not available.
 * _**unsigned int** webserver::get_active_connections():_ Get the number of currently active connections.
 * _**uint16_t** webserver::get_bound_port():_ Get the actual port the daemon is bound to. Particularly useful when port `0` was specified to let the OS choose an ephemeral port.
@@ -559,14 +561,14 @@ Once a webserver is created, you can manage its execution through the following 
 The `http_resource` class represents a logical collection of HTTP methods that will be associated to a URL when registered on the webserver. The class is **designed for extension** and it is where most of your code should ideally live. When the webserver matches a request against a resource (see: [resource registration](#registering-resources)), the method correspondent to the one in the request (GET, POST, etc..) (see below) is called on the resource.
 
 Given this, the `http_resource` class contains the following extensible methods (also called `handlers` or `render methods`):
-* _**std::shared_ptr<http_response>** http_resource::render_GET(**const http_request&** req):_ Invoked on an HTTP GET request.
-* _**std::shared_ptr<http_response>** http_resource::render_POST(**const http_request&** req):_ Invoked on an HTTP POST request.
-* _**std::shared_ptr<http_response>** http_resource::render_PUT(**const http_request&** req):_ Invoked on an HTTP PUT request.
-* _**std::shared_ptr<http_response>** http_resource::render_HEAD(**const http_request&** req):_ Invoked on an HTTP HEAD request.
-* _**std::shared_ptr<http_response>** http_resource::render_DELETE(**const http_request&** req):_ Invoked on an HTTP DELETE request.
-* _**std::shared_ptr<http_response>** http_resource::render_TRACE(**const http_request&** req):_ Invoked on an HTTP TRACE request.
-* _**std::shared_ptr<http_response>** http_resource::render_OPTIONS(**const http_request&** req):_ Invoked on an HTTP OPTIONS request.
-* _**std::shared_ptr<http_response>** http_resource::render_CONNECT(**const http_request&** req):_ Invoked on an HTTP CONNECT request.
+* _**std::shared_ptr<http_response>** http_resource::render_get(**const http_request&** req):_ Invoked on an HTTP GET request.
+* _**std::shared_ptr<http_response>** http_resource::render_post(**const http_request&** req):_ Invoked on an HTTP POST request.
+* _**std::shared_ptr<http_response>** http_resource::render_put(**const http_request&** req):_ Invoked on an HTTP PUT request.
+* _**std::shared_ptr<http_response>** http_resource::render_head(**const http_request&** req):_ Invoked on an HTTP HEAD request.
+* _**std::shared_ptr<http_response>** http_resource::render_delete(**const http_request&** req):_ Invoked on an HTTP DELETE request.
+* _**std::shared_ptr<http_response>** http_resource::render_trace(**const http_request&** req):_ Invoked on an HTTP TRACE request.
+* _**std::shared_ptr<http_response>** http_resource::render_options(**const http_request&** req):_ Invoked on an HTTP OPTIONS request.
+* _**std::shared_ptr<http_response>** http_resource::render_connect(**const http_request&** req):_ Invoked on an HTTP CONNECT request.
 * _**std::shared_ptr<http_response>** http_resource::render(**const http_request&** req):_ Invoked as a backup method if the matching method is not implemented. It can be used whenever you want all the invocations on a URL to activate the same behavior regardless of the HTTP method requested. The default implementation of the `render` method returns an empty response with a `404`.
 
 #### Example of implementation of render methods
@@ -577,7 +579,7 @@ Given this, the `http_resource` class contains the following extensible methods 
 
     class hello_world_resource : public http_resource {
     public:
-        std::shared_ptr<http_response> render_GET(const http_request&) {
+        std::shared_ptr<http_response> render_get(const http_request&) {
             return std::shared_ptr<http_response>(new string_response("GET: Hello, World!"));
         }
 
@@ -587,7 +589,7 @@ Given this, the `http_resource` class contains the following extensible methods 
     };
 
     int main(int argc, char** argv) {
-        webserver ws = create_webserver(8080);
+        webserver ws{create_webserver(8080)};
 
         hello_world_resource hwr;
         ws.register_resource("/hello", &hwr);
@@ -623,7 +625,7 @@ The base `http_resource` class has a set of methods that can be used to allow an
       };
 
       int main(int argc, char** argv) {
-          webserver ws = create_webserver(8080);
+          webserver ws{create_webserver(8080)};
 
           hello_world_resource hwr;
           hwr.disallow_all();
@@ -686,7 +688,7 @@ There are essentially four ways to specify an endpoint string:
       };
 
       int main(int argc, char** argv) {
-          webserver ws = create_webserver(8080);
+          webserver ws{create_webserver(8080)};
 
           hello_world_resource hwr;
           ws.register_resource("/hello", &hwr);
@@ -778,7 +780,7 @@ By default, uploaded files are automatically deleted when the request completes.
 using namespace httpserver;
 
 int main() {
-    webserver ws = create_webserver(8080)
+    webserver ws{create_webserver(8080)
         .file_upload_target(FILE_UPLOAD_DISK_ONLY)
         .file_upload_dir("/tmp/uploads")
         .file_cleanup_callback([](const std::string& key,
@@ -788,7 +790,7 @@ int main() {
             std::string dest = "/var/uploads/" + filename;
             std::rename(info.get_file_system_file_name().c_str(), dest.c_str());
             return false;  // Don't delete - we moved it
-        });
+        })};
 
     // ... register resources and start server
 }
@@ -821,7 +823,7 @@ Details on the `http_arg_value` structure.
     };
 
     int main(int argc, char** argv) {
-        webserver ws = create_webserver(8080);
+        webserver ws{create_webserver(8080)};
 
         hello_world_resource hwr;
         ws.register_resource("/hello", &hwr);
@@ -884,7 +886,7 @@ The `http_response` class offers an additional set of methods to "decorate" your
     };
 
     int main(int argc, char** argv) {
-        webserver ws = create_webserver(8080);
+        webserver ws{create_webserver(8080)};
 
         hello_world_resource hwr;
         ws.register_resource("/hello", &hwr);
@@ -911,7 +913,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
 
     class image_resource : public http_resource {
     public:
-        std::shared_ptr<http_response> render_GET(const http_request&) {
+        std::shared_ptr<http_response> render_get(const http_request&) {
             // binary_data could come from a camera capture, image library, etc.
             std::string binary_data = get_image_bytes_from_camera();
 
@@ -921,7 +923,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
     };
 
     int main() {
-        webserver ws = create_webserver(8080);
+        webserver ws{create_webserver(8080)};
 
         image_resource ir;
         ws.register_resource("/image", &ir);
@@ -939,15 +941,13 @@ You can also check the complete example on [github](https://github.com/etr/libht
 [Back to TOC](#table-of-contents)
 
 ## IP Blacklisting and Whitelisting
-libhttpserver provides natively a system to blacklist and whitelist IP addresses. To enable/disable the system, it is possible to use the `ban_system` and `no_ban_system` methods on the `create_webserver` class. In the same way, you can specify what you want to be your "default behavior" (allow by default or disallow by default) by using the `default_policy` method (see [here](#create-and-work-with-a-webserver)).
+libhttpserver provides natively a system to blacklist and whitelist IP addresses. To enable/disable the system, it is possible to use the `ban_system(bool enable = true)` method on the `create_webserver` class (`ban_system(false)` to disable). In the same way, you can specify what you want to be your "default behavior" (allow by default or disallow by default) by using the `default_policy` method (see [here](#create-and-work-with-a-webserver)).
 
 The system supports both IPV4 and IPV6 and manages them transparently. The only requirement is for ipv6 to be enabled on your server - you'll have to enable this by using the `use_ipv6` method on `create_webserver`.
 
 You can explicitly ban or allow an IP address using the following methods on the `webserver` class:
-* _**void** ban_ip(**const std::string&** ip):_ Adds one IP (or a range of IPs) to the list of the banned ones. Takes in input a `string` that contains the IP (or range of IPs) to ban. To use when the `default_policy` is `ACCEPT`.
-* _**void** allow_ip(**const std::string&** ip):_ Adds one IP (or a range of IPs) to the list of the allowed ones. Takes in input a `string` that contains the IP (or range of IPs) to allow.  To use when the `default_policy` is `REJECT`.
-* _**void** unban_ip(**const std::string&** ip):_ Removes one IP (or a range of IPs) from the list of the banned ones. Takes in input a `string` that contains the IP (or range of IPs) to remove from the list.  To use when the `default_policy` is `ACCEPT`.
-* _**void** disallow_ip(**const std::string&** ip):_ Removes one IP (or a range of IPs) from the list of the allowed ones. Takes in input a `string` that contains the IP (or range of IPs) to remove from the list.  To use when the `default_policy` is `REJECT`.
+* _**void** block_ip(**std::string_view** ip):_ Add one IP (or a range, e.g. `"127.0.0.*"`) to the block list. Connections from a matching address are refused at the policy callback. Intended for use under the default `ACCEPT` policy.
+* _**void** unblock_ip(**std::string_view** ip):_ Remove one IP (or a range) from the block list. Idempotent: removing an entry that is not currently blocked is a no-op.
 
 ### IP String Format
 The IP string format can represent both IPV4 and IPV6. Addresses will be normalized by the webserver to operate in the same sapce. Any valid IPV4 or IPV6 textual representation works.
@@ -975,10 +975,11 @@ Examples of valid IPs include:
     };
 
     int main(int argc, char** argv) {
-        webserver ws = create_webserver(8080)
-            .default_policy(http::http_utils::REJECT);
+        webserver ws{create_webserver(8080)};
 
-        ws.allow_ip("127.0.0.1");
+        // Refuse connections from this address; everything else is accepted
+        // by default. Use a range like "127.0.0.*" to block a wildcard.
+        ws.block_ip("10.0.0.1");
 
         hello_world_resource hwr;
         ws.register_resource("/hello", &hwr);
@@ -998,11 +999,11 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
 ## Authentication
 libhttpserver support three types of client authentication.
 
-Basic authentication uses a simple authentication method based on BASE64 algorithm. Username and password are exchanged in clear between the client and the server, so this method must only be used for non-sensitive content or when the session is protected with https. When using basic authentication libhttpserver will have access to the clear password, possibly allowing to create a chained authentication toward an external authentication server. You can enable/disable support for Basic authentication through the `basic_auth` and `no_basic_auth` methods of the `create_webserver` class.
+Basic authentication uses a simple authentication method based on BASE64 algorithm. Username and password are exchanged in clear between the client and the server, so this method must only be used for non-sensitive content or when the session is protected with https. When using basic authentication libhttpserver will have access to the clear password, possibly allowing to create a chained authentication toward an external authentication server. You can enable/disable support for Basic authentication through the `basic_auth(bool enable = true)` method of the `create_webserver` class (`basic_auth(false)` to disable).
 
-Digest authentication uses a one-way authentication method based on hash algorithms (MD5, SHA-256, or SHA-512/256). Only the hash will transit over the network, hence protecting the user password. The nonce will prevent replay attacks. This method is appropriate for general use, especially when https is not used to encrypt the session. SHA-256 is the default algorithm; SHA-512/256 is also available for stronger security. You can enable/disable support for Digest authentication through the `digest_auth` and `no_digest_auth` methods of the `create_webserver` class.
+Digest authentication uses a one-way authentication method based on hash algorithms (MD5, SHA-256, or SHA-512/256). Only the hash will transit over the network, hence protecting the user password. The nonce will prevent replay attacks. This method is appropriate for general use, especially when https is not used to encrypt the session. SHA-256 is the default algorithm; SHA-512/256 is also available for stronger security. You can enable/disable support for Digest authentication through the `digest_auth(bool enable = true)` method of the `create_webserver` class (`digest_auth(false)` to disable).
 
-Client certificate authentication uses a X.509 certificate from the client. This is the strongest authentication mechanism but it requires the use of HTTPS. Client certificate authentication can be used simultaneously with Basic or Digest Authentication in order to provide a two levels authentication (like for instance separate machine and user authentication). You can enable/disable support for Certificate authentication through the `use_ssl` and `no_ssl` methods of the `create_webserver` class.
+Client certificate authentication uses a X.509 certificate from the client. This is the strongest authentication mechanism but it requires the use of HTTPS. Client certificate authentication can be used simultaneously with Basic or Digest Authentication in order to provide a two levels authentication (like for instance separate machine and user authentication). You can enable/disable support for Certificate authentication through the `use_ssl(bool enable = true)` method of the `create_webserver` class (`use_ssl(false)` to disable).
 
 ### Using Basic Authentication
 ```cpp
@@ -1012,7 +1013,7 @@ Client certificate authentication uses a X.509 certificate from the client. This
 
     class user_pass_resource : public httpserver::http_resource {
     public:
-        std::shared_ptr<http_response> render_GET(const http_request& req) {
+        std::shared_ptr<http_response> render_get(const http_request& req) {
             if (req.get_user() != "myuser" || req.get_pass() != "mypass") {
                 return std::shared_ptr<basic_auth_fail_response>(new basic_auth_fail_response("FAIL", "test@example.com"));
             }
@@ -1021,7 +1022,7 @@ Client certificate authentication uses a X.509 certificate from the client. This
     };
 
     int main(int argc, char** argv) {
-        webserver ws = create_webserver(8080);
+        webserver ws{create_webserver(8080)};
 
         user_pass_resource hwr;
         ws.register_resource("/hello", &hwr);
@@ -1058,7 +1059,7 @@ You can also use `check_digest_auth_digest` to verify against a pre-computed HA1
 
     class digest_resource : public httpserver::http_resource {
     public:
-        std::shared_ptr<http_response> render_GET(const http_request& req) {
+        std::shared_ptr<http_response> render_get(const http_request& req) {
             if (req.get_digested_user() == "") {
                 return std::make_shared<digest_auth_fail_response>("FAIL", "test@example.com", MY_OPAQUE, true,
                     http_utils::http_ok, http_utils::text_plain, http_utils::digest_algorithm::MD5);
@@ -1077,7 +1078,7 @@ You can also use `check_digest_auth_digest` to verify against a pre-computed HA1
     };
 
     int main(int argc, char** argv) {
-        webserver ws = create_webserver(8080);
+        webserver ws{create_webserver(8080)};
 
         digest_resource hwr;
         ws.register_resource("/hello", &hwr);
@@ -1110,14 +1111,14 @@ libhttpserver provides a centralized authentication mechanism that runs a single
     // Resources no longer need authentication logic
     class hello_resource : public http_resource {
     public:
-        std::shared_ptr<http_response> render_GET(const http_request&) {
+        std::shared_ptr<http_response> render_get(const http_request&) {
             return std::make_shared<string_response>("Hello, authenticated user!", 200, "text/plain");
         }
     };
 
     class health_resource : public http_resource {
     public:
-        std::shared_ptr<http_response> render_GET(const http_request&) {
+        std::shared_ptr<http_response> render_get(const http_request&) {
             return std::make_shared<string_response>("OK", 200, "text/plain");
         }
     };
@@ -1132,9 +1133,9 @@ libhttpserver provides a centralized authentication mechanism that runs a single
     }
 
     int main() {
-        webserver ws = create_webserver(8080)
+        webserver ws{create_webserver(8080)
             .auth_handler(my_auth_handler)
-            .auth_skip_paths({"/health", "/public/*"});
+            .auth_skip_paths({"/health", "/public/*"})};
 
         hello_resource hello;
         health_resource health;
@@ -1183,7 +1184,7 @@ To enable client certificate authentication, configure your webserver with:
 
     class secure_resource : public http_resource {
     public:
-        std::shared_ptr<http_response> render_GET(const http_request& req) {
+        std::shared_ptr<http_response> render_get(const http_request& req) {
             // Check if client provided a certificate
             if (!req.has_client_certificate()) {
                 return std::make_shared<string_response>(
@@ -1210,11 +1211,11 @@ To enable client certificate authentication, configure your webserver with:
     };
 
     int main() {
-        webserver ws = create_webserver(8443)
+        webserver ws{create_webserver(8443)
             .use_ssl()
             .https_mem_key("server_key.pem")
             .https_mem_cert("server_cert.pem")
-            .https_mem_trust("ca_cert.pem");  // CA for client certs
+            .https_mem_trust("ca_cert.pem")};  // CA for client certs
 
         secure_resource sr;
         ws.register_resource("/secure", &sr);
@@ -1272,11 +1273,11 @@ To use SNI with libhttpserver, configure an SNI callback that returns the certif
         certs["www.example.com"] = {load_file("www_cert.pem"), load_file("www_key.pem")};
         certs["api.example.com"] = {load_file("api_cert.pem"), load_file("api_key.pem")};
 
-        webserver ws = create_webserver(443)
+        webserver ws{create_webserver(443)
             .use_ssl()
             .https_mem_key("default_key.pem")    // Default certificate
             .https_mem_cert("default_cert.pem")
-            .sni_callback(sni_callback);         // SNI callback
+            .sni_callback(sni_callback)};         // SNI callback
 
         // ... register resources and start
         ws.start(true);
@@ -1324,7 +1325,7 @@ Register a WebSocket handler using `register_ws_resource`:
     };
 
     int main() {
-        webserver ws = create_webserver(8080);
+        webserver ws{create_webserver(8080)};
 
         echo_handler handler;
         ws.register_ws_resource("/ws", &handler);
@@ -1348,7 +1349,7 @@ libhttpserver exposes several methods for integrating with external event loops 
 * _**unsigned int** webserver::get_active_connections():_ Returns the number of currently active connections.
 
 ### External event loop integration
-When using the server without internal threading (e.g., with `no_listen_socket()` or a single-threaded design), you can drive the event loop yourself:
+When using the server without internal threading (e.g., with `listen_socket(false)` or a single-threaded design), you can drive the event loop yourself:
 * _**bool** webserver::run():_ Process pending events once and return immediately.
 * _**bool** webserver::run_wait(**int32_t** millisec):_ Block until events are available or the timeout expires.
 * _**bool** webserver::get_fdset(...):_ Retrieve file descriptor sets for use with `select()`.
@@ -1371,7 +1372,7 @@ When using the server without internal threading (e.g., with `no_listen_socket()
     };
 
     int main() {
-        webserver ws = create_webserver(0);  // Let the OS choose a port
+        webserver ws{create_webserver(0)};  // Let the OS choose a port
 
         hello_resource hr;
         ws.register_resource("/hello", &hr);
@@ -1407,13 +1408,13 @@ Additionally, the following utility methods are available:
 
     class file_response_resource : public http_resource {
     public:
-        std::shared_ptr<http_response> render_GET(const http_request& req) {
+        std::shared_ptr<http_response> render_get(const http_request& req) {
             return std::shared_ptr<file_response>(new file_response("test_content", 200, "text/plain"));
         }
     };
 
     int main(int argc, char** argv) {
-        webserver ws = create_webserver(8080);
+        webserver ws{create_webserver(8080)};
 
         file_response_resource hwr;
         ws.register_resource("/hello", &hwr);
@@ -1450,13 +1451,13 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
     
     class deferred_resource : public http_resource {
         public:
-            std::shared_ptr<http_response> render_GET(const http_request& req) {
+            std::shared_ptr<http_response> render_get(const http_request& req) {
                 return std::shared_ptr<deferred_response<void> >(new deferred_response<void>(test_callback, nullptr, "cycle callback response"));
             }
     };
     
     int main(int argc, char** argv) {
-        webserver ws = create_webserver(8080);
+        webserver ws{create_webserver(8080)};
     
         deferred_resource hwr;
         ws.register_resource("/hello", &hwr);
@@ -1507,14 +1508,14 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
     
     class deferred_resource : public http_resource {
         public:
-            std::shared_ptr<http_response> render_GET(const http_request& req) {
+            std::shared_ptr<http_response> render_get(const http_request& req) {
                 std::shared_ptr<std::atomic<int> > closure_data(new std::atomic<int>(counter++));
                 return std::shared_ptr<deferred_response<std::atomic<int> > >(new deferred_response<std::atomic<int> >(test_callback, closure_data, "cycle callback response"));
             }
     };
     
     int main(int argc, char** argv) {
-        webserver ws = create_webserver(8080);
+        webserver ws{create_webserver(8080)};
     
         deferred_resource hwr;
         ws.register_resource("/hello", &hwr);
@@ -1537,13 +1538,13 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
 
     class no_content_resource : public http_resource {
     public:
-        std::shared_ptr<http_response> render_DELETE(const http_request&) {
+        std::shared_ptr<http_response> render_delete(const http_request&) {
             // Return a 204 No Content response with no body
             return std::make_shared<empty_response>(
                     http::http_utils::http_no_content);
         }
 
-        std::shared_ptr<http_response> render_HEAD(const http_request&) {
+        std::shared_ptr<http_response> render_head(const http_request&) {
             // Return a HEAD-only response with headers but no body
             auto response = std::make_shared<empty_response>(
                     http::http_utils::http_ok,
@@ -1554,7 +1555,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
     };
 
     int main() {
-        webserver ws = create_webserver(8080);
+        webserver ws{create_webserver(8080)};
 
         no_content_resource ncr;
         ws.register_resource("/items", &ncr);
@@ -1578,7 +1579,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
 
     class iovec_resource : public http_resource {
     public:
-        std::shared_ptr<http_response> render_GET(const http_request&) {
+        std::shared_ptr<http_response> render_get(const http_request&) {
             // Build a response from multiple separate buffers without copying
             std::vector<std::string> parts;
             parts.push_back("{\"header\": \"value\", ");
@@ -1591,7 +1592,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
     };
 
     int main() {
-        webserver ws = create_webserver(8080);
+        webserver ws{create_webserver(8080)};
 
         iovec_resource ir;
         ws.register_resource("/data", &ir);
@@ -1617,7 +1618,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
 
     class pipe_resource : public http_resource {
     public:
-        std::shared_ptr<http_response> render_GET(const http_request&) {
+        std::shared_ptr<http_response> render_get(const http_request&) {
             int pipefd[2];
             if (pipe(pipefd) == -1) {
                 return std::make_shared<string_response>("pipe failed", 500);
@@ -1640,7 +1641,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
     };
 
     int main() {
-        webserver ws = create_webserver(8080);
+        webserver ws{create_webserver(8080)};
 
         pipe_resource pr;
         ws.register_resource("/stream", &pr);
@@ -1680,7 +1681,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
     };
 
     int main() {
-        webserver ws = create_webserver(8080);
+        webserver ws{create_webserver(8080)};
 
         echo_handler handler;
         ws.register_ws_resource("/ws", &handler);
@@ -1702,14 +1703,14 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
 
     class hello_resource : public http_resource {
     public:
-        std::shared_ptr<http_response> render_GET(const http_request&) {
+        std::shared_ptr<http_response> render_get(const http_request&) {
             return std::make_shared<string_response>("Hello, World!");
         }
     };
 
     int main() {
         // Use port 0 to let the OS assign an ephemeral port
-        webserver ws = create_webserver(0);
+        webserver ws{create_webserver(0)};
 
         hello_resource hr;
         ws.register_resource("/hello", &hr);
@@ -1726,7 +1727,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
         std::cout << "HTTP 404 reason: "
                   << http::http_utils::reason_phrase(404) << std::endl;
 
-        ws.sweet_kill();
+        ws.stop_and_wait();
         return 0;
     }
 ```
@@ -1746,7 +1747,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
 
     class hello_resource : public http_resource {
     public:
-        std::shared_ptr<http_response> render_GET(const http_request&) {
+        std::shared_ptr<http_response> render_get(const http_request&) {
             return std::make_shared<string_response>("Hello from external event loop!");
         }
     };
@@ -1754,7 +1755,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
     int main() {
         signal(SIGINT, signal_handler);
 
-        webserver ws = create_webserver(8080);
+        webserver ws{create_webserver(8080)};
 
         hello_resource hr;
         ws.register_resource("/hello", &hr);
@@ -1791,7 +1792,7 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
 
     class hello_resource : public http_resource {
     public:
-        std::shared_ptr<http_response> render_GET(const http_request&) {
+        std::shared_ptr<http_response> render_get(const http_request&) {
             return std::make_shared<string_response>("Hello, turbo world!");
         }
     };
@@ -1799,13 +1800,13 @@ You can also check this example on [github](https://github.com/etr/libhttpserver
     int main() {
         // Create a high-performance server with turbo mode,
         // suppressed date headers, and a thread pool.
-        webserver ws = create_webserver(8080)
+        webserver ws{create_webserver(8080)
             .start_method(http::http_utils::INTERNAL_SELECT)
             .max_threads(4)
             .turbo()
             .suppress_date_header()
             .tcp_fastopen_queue_size(16)
-            .listen_backlog(128);
+            .listen_backlog(128)};
 
         hello_resource hr;
         ws.register_resource("/hello", &hr);

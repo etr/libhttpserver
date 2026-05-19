@@ -30,17 +30,17 @@ void custom_access_log(const std::string& url) {
 
 class hello_world_resource : public httpserver::http_resource {
  public:
-     std::shared_ptr<httpserver::http_response> render(const httpserver::http_request&) {
-         return std::shared_ptr<httpserver::http_response>(new httpserver::string_response("Hello, World!"));
+     httpserver::http_response render(const httpserver::http_request&) {
+         return httpserver::http_response::string("Hello, World!");
      }
 };
 
 int main() {
-    httpserver::webserver ws = httpserver::create_webserver(8080)
-        .log_access(custom_access_log);
+    httpserver::webserver ws{httpserver::create_webserver(8080)
+        .log_access(custom_access_log)};
 
-    hello_world_resource hwr;
-    ws.register_resource("/hello", &hwr);
+    auto hwr = std::make_shared<hello_world_resource>();
+    ws.register_path("/hello", hwr);
     ws.start(true);
 
     return 0;

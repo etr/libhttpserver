@@ -60,3 +60,5 @@ libtool
 .worktrees
 .claude
 CLAUDE.md
+.groundwork-plans/
+.DS_Store

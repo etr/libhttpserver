@@ -24,24 +24,24 @@
 
 class hello_resource : public httpserver::http_resource {
  public:
-     std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request&) {
-         return std::make_shared<httpserver::string_response>("Hello, turbo world!");
+     httpserver::http_response render_get(const httpserver::http_request&) {
+         return httpserver::http_response::string("Hello, turbo world!");
      }
 };
 
 int main() {
     // Create a high-performance server with turbo mode,
     // suppressed date headers, and a thread pool.
-    httpserver::webserver ws = httpserver::create_webserver(8080)
+    httpserver::webserver ws{httpserver::create_webserver(8080)
         .start_method(httpserver::http::http_utils::INTERNAL_SELECT)
         .max_threads(4)
         .turbo()
         .suppress_date_header()
         .tcp_fastopen_queue_size(16)
-        .listen_backlog(128);
+        .listen_backlog(128)};
 
-    hello_resource hr;
-    ws.register_resource("/hello", &hr);
+    auto hr = std::make_shared<hello_resource>();
+    ws.register_path("/hello", hr);
     ws.start(true);
 
     return 0;

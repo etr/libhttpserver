@@ -21,18 +21,19 @@
 #include <string>
 
 #include "./httpserver.hpp"
-#include "httpserver/details/modded_request.hpp"
+#include "httpserver/detail/modded_request.hpp"
+#include "httpserver/detail/webserver_impl.hpp"
 
 #include "./littletest.hpp"
 
-// uri_log is the MHD URI-log callback defined in src/webserver.cpp. It is
-// exported from the library but has no public header, so we re-declare its
-// signature here. MHD_Connection is opaque to this test - we only ever pass
-// nullptr, mirroring how MHD itself may invoke the callback before the
-// connection is fully initialised.
-namespace httpserver {
-void* uri_log(void* cls, const char* uri, struct MHD_Connection* con);
-}  // namespace httpserver
+// uri_log is the MHD URI-log callback defined as a static member of
+// webserver_impl in src/webserver.cpp (TASK-014: it moved from a free
+// function in httpserver:: to a static member of detail::webserver_impl
+// when the PIMPL split landed). The class declaration is reachable
+// through httpserver/detail/webserver_impl.hpp under HTTPSERVER_COMPILATION.
+static void* uri_log(void* cls, const char* uri, struct MHD_Connection* con) {
+    return httpserver::detail::webserver_impl::uri_log(cls, uri, con);
+}
 
 LT_BEGIN_SUITE(uri_log_suite)
     void set_up() {
@@ -50,10 +51,10 @@ LT_END_SUITE(uri_log_suite)
 // std::terminate because the throw escapes a C callback.
 LT_BEGIN_AUTO_TEST(uri_log_suite, null_uri_does_not_throw)
     void* raw = nullptr;
-    LT_CHECK_NOTHROW(raw = httpserver::uri_log(nullptr, nullptr, nullptr));
+    LT_CHECK_NOTHROW(raw = uri_log(nullptr, nullptr, nullptr));
     LT_CHECK(raw != nullptr);
 
-    auto* mr = static_cast<httpserver::details::modded_request*>(raw);
+    auto* mr = static_cast<httpserver::detail::modded_request*>(raw);
     LT_CHECK_EQ(mr->complete_uri, std::string(""));
     delete mr;
 LT_END_AUTO_TEST(null_uri_does_not_throw)
@@ -61,10 +62,10 @@ LT_END_AUTO_TEST(null_uri_does_not_throw)
 // Sanity check that the happy path still records the URI as before.
 LT_BEGIN_AUTO_TEST(uri_log_suite, valid_uri_is_stored)
     const char* uri = "/some/path?with=query";
-    void* raw = httpserver::uri_log(nullptr, uri, nullptr);
+    void* raw = uri_log(nullptr, uri, nullptr);
     LT_CHECK(raw != nullptr);
 
-    auto* mr = static_cast<httpserver::details::modded_request*>(raw);
+    auto* mr = static_cast<httpserver::detail::modded_request*>(raw);
     LT_CHECK_EQ(mr->complete_uri, std::string(uri));
     delete mr;
 LT_END_AUTO_TEST(valid_uri_is_stored)
@@ -73,10 +74,10 @@ LT_END_AUTO_TEST(valid_uri_is_stored)
 // observable state the null-uri path now produces, so route matching falls
 // through to a 404 in both cases.
 LT_BEGIN_AUTO_TEST(uri_log_suite, empty_uri_is_stored)
-    void* raw = httpserver::uri_log(nullptr, "", nullptr);
+    void* raw = uri_log(nullptr, "", nullptr);
     LT_CHECK(raw != nullptr);
 
-    auto* mr = static_cast<httpserver::details::modded_request*>(raw);
+    auto* mr = static_cast<httpserver::detail::modded_request*>(raw);
     LT_CHECK_EQ(mr->complete_uri, std::string(""));
     delete mr;
 LT_END_AUTO_TEST(empty_uri_is_stored)

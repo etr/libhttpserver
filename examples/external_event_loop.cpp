@@ -33,8 +33,8 @@ void signal_handler(int) {
 
 class hello_resource : public httpserver::http_resource {
  public:
-     std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request&) {
-         return std::make_shared<httpserver::string_response>("Hello from external event loop!");
+     httpserver::http_response render_get(const httpserver::http_request&) {
+         return httpserver::http_response::string("Hello from external event loop!");
      }
 };
 
@@ -42,15 +42,15 @@ int main() {
     signal(SIGINT, signal_handler);
 
     // EXTERNAL_SELECT runs MHD without an internal polling thread; the
-    // application drives it via run_wait() below. no_thread_safety() can be
-    // added for a small perf gain when the daemon is only ever touched from
-    // a single thread, but it is omitted here for portability (some MHD
-    // builds, notably Windows/MSYS2, reject that combination at start).
-    httpserver::webserver ws = httpserver::create_webserver(8080)
-        .start_method(httpserver::http::http_utils::EXTERNAL_SELECT);
+    // application drives it via run_wait() below. thread_safety(false) can
+    // be added for a small perf gain when the daemon is only ever touched
+    // from a single thread, but it is omitted here for portability (some
+    // MHD builds, notably Windows/MSYS2, reject that combination at start).
+    httpserver::webserver ws{httpserver::create_webserver(8080)
+        .start_method(httpserver::http::http_utils::EXTERNAL_SELECT)};
 
-    hello_resource hr;
-    ws.register_resource("/hello", &hr);
+    auto hr = std::make_shared<hello_resource>();
+    ws.register_path("/hello", hr);
     ws.start(false);
 
     std::cout << "Server running on port " << ws.get_bound_port() << std::endl;
