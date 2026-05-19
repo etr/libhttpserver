@@ -1,6 +1,6 @@
 /*
      This file is part of libhttpserver
-     Copyright (C) 2011-2019 Sebastiano Merlino
+     Copyright (C) 2011-2025 Sebastiano Merlino
 
      This library is free software; you can redistribute it and/or
      modify it under the terms of the GNU Lesser General Public
@@ -18,27 +18,23 @@
      USA
 */
 
+// daemon_info.cpp - introspect the running daemon (bound port, listen FD,
+// active connections, etc.) after start(false). Port 0 lets the OS pick
+// an ephemeral port so multiple instances can coexist.
+
 #include <iostream>
-#include <memory>
 
 #include <httpserver.hpp>
 
-class hello_resource : public httpserver::http_resource {
- public:
-     httpserver::http_response render_get(const httpserver::http_request&) {
-         return httpserver::http_response::string("Hello, World!");
-     }
-};
-
 int main() {
-    // Use port 0 to let the OS assign an ephemeral port
     httpserver::webserver ws{httpserver::create_webserver(0)};
 
-    auto hr = std::make_shared<hello_resource>();
-    ws.register_path("/hello", hr);
+    ws.on_get("/hello", [](const httpserver::http_request&) {
+        return httpserver::http_response::string("Hello, World!");
+    });
+
     ws.start(false);
 
-    // Query daemon information
     std::cout << "libmicrohttpd version: "
               << httpserver::http::http_utils::get_mhd_version() << std::endl;
     std::cout << "Bound port: " << ws.get_bound_port() << std::endl;
@@ -52,8 +48,6 @@ int main() {
     std::cout << "\nServer running on port " << ws.get_bound_port()
               << ". Press Ctrl+C to stop." << std::endl;
 
-    // Block until interrupted
     ws.stop_and_wait();
-
     return 0;
 }

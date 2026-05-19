@@ -1,6 +1,6 @@
 /*
      This file is part of libhttpserver
-     Copyright (C) 2011-2024 Sebastiano Merlino
+     Copyright (C) 2011-2025 Sebastiano Merlino
 
      This library is free software; you can redistribute it and/or
      modify it under the terms of the GNU Lesser General Public
@@ -18,45 +18,43 @@
      USA
 */
 
+// minimal_https_psk.cpp - TLS with pre-shared keys instead of certificates.
+// The PSK lookup callback is invoked once per handshake to resolve a
+// client-supplied identity into the shared secret.
+
 #include <map>
-#include <memory>
 #include <string>
 
 #include <httpserver.hpp>
 
-// Simple PSK database - in production, use secure storage
+// Simple PSK database - in production, use secure storage.
 std::map<std::string, std::string> psk_database = {
     {"client1", "0123456789abcdef0123456789abcdef"},
     {"client2", "fedcba9876543210fedcba9876543210"}
 };
 
-// PSK credential handler callback
-// Returns the hex-encoded PSK for the given username, or empty string if not found
+// PSK credential handler callback. Returns the hex-encoded PSK for the
+// given username, or an empty string for unknown identities.
 std::string psk_handler(const std::string& username) {
     auto it = psk_database.find(username);
     if (it != psk_database.end()) {
         return it->second;
     }
-    return "";  // Return empty string for unknown users
+    return "";
 }
 
-class hello_world_resource : public httpserver::http_resource {
- public:
-    httpserver::http_response render(const httpserver::http_request&) {
-        return httpserver::http_response::string("Hello, World (via TLS-PSK)!");
-    }
-};
-
 int main() {
-    httpserver::webserver ws{httpserver::create_webserver(8080)
-        .use_ssl()
-        .cred_type(httpserver::http::http_utils::PSK)
-        .psk_cred_handler(psk_handler)
-        .https_priorities("NORMAL:-VERS-TLS-ALL:+VERS-TLS1.2:+PSK:+DHE-PSK")};
+    httpserver::webserver ws{
+        httpserver::create_webserver(8080)
+            .use_ssl()
+            .cred_type(httpserver::http::http_utils::PSK)
+            .psk_cred_handler(psk_handler)
+            .https_priorities("NORMAL:-VERS-TLS-ALL:+VERS-TLS1.2:+PSK:+DHE-PSK")};
 
-    auto hwr = std::make_shared<hello_world_resource>();
-    ws.register_path("/hello", hwr);
+    ws.on_get("/hello", [](const httpserver::http_request&) {
+        return httpserver::http_response::string("Hello, World (via TLS-PSK)!");
+    });
+
     ws.start(true);
-
     return 0;
 }

@@ -1,6 +1,6 @@
 /*
      This file is part of libhttpserver
-     Copyright (C) 2011, 2012, 2013, 2014, 2015 Sebastiano Merlino
+     Copyright (C) 2011-2025 Sebastiano Merlino
 
      This library is free software; you can redistribute it and/or
      modify it under the terms of the GNU Lesser General Public
@@ -18,24 +18,20 @@
      USA
 */
 
-#include <memory>
+// setting_headers.cpp - attach a response header to a lambda handler using
+// the fluent with_header() setter, which is overloaded on both lvalue and
+// rvalue http_response.
 
 #include <httpserver.hpp>
-
-class hello_world_resource : public httpserver::http_resource {
- public:
-     httpserver::http_response render(const httpserver::http_request&) {
-         return httpserver::http_response::string("Hello, World!")
-                    .with_header("MyHeader", "MyValue");
-     }
-};
 
 int main() {
     httpserver::webserver ws{httpserver::create_webserver(8080)};
 
-    auto hwr = std::make_shared<hello_world_resource>();
-    ws.register_path("/hello", hwr);
-    ws.start(true);
+    ws.on_get("/hello", [](const httpserver::http_request&) {
+        return httpserver::http_response::string("Hello, World!")
+                   .with_header("MyHeader", "MyValue");
+    });
 
+    ws.start(true);
     return 0;
 }

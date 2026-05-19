@@ -1,6 +1,6 @@
 /*
      This file is part of libhttpserver
-     Copyright (C) 2011, 2012, 2013, 2014, 2015 Sebastiano Merlino
+     Copyright (C) 2011-2025 Sebastiano Merlino
 
      This library is free software; you can redistribute it and/or
      modify it under the terms of the GNU Lesser General Public
@@ -18,57 +18,39 @@
      USA
 */
 
+// centralized_authentication.cpp - install a server-wide auth_handler
+// that runs before every request. The handler returns nullptr to
+// accept, or an http_response to reject. auth_skip_paths lists routes
+// that bypass auth entirely.
+
 #include <memory>
-#include <string>
 
 #include <httpserver.hpp>
 
-using httpserver::http_request;
-using httpserver::http_response;
-using httpserver::http_resource;
-using httpserver::webserver;
-using httpserver::create_webserver;
-// Simple resource that doesn't need to handle auth itself
-class hello_resource : public http_resource {
- public:
-    http_response render_get(const http_request&) {
-        return http_response::string("Hello, authenticated user!");
-    }
-};
-
-class health_resource : public http_resource {
- public:
-    http_response render_get(const http_request&) {
-        return http_response::string("OK");
-    }
-};
-
-// Centralized authentication handler
-// Returns nullptr to allow the request, or an http_response to reject it
-std::shared_ptr<http_response> auth_handler(const http_request& req) {
+// Returns nullptr to allow the request, or an http_response to reject it.
+std::shared_ptr<httpserver::http_response> auth_handler(
+        const httpserver::http_request& req) {
     if (req.get_user() != "admin" || req.get_pass() != "secret") {
-        return std::make_shared<http_response>(
-            http_response::unauthorized("Basic", "MyRealm", "Unauthorized"));
+        return std::make_shared<httpserver::http_response>(
+            httpserver::http_response::unauthorized(
+                "Basic", "MyRealm", "Unauthorized"));
     }
-    return nullptr;  // Allow request
+    return nullptr;
 }
 
 int main() {
-    // Create webserver with centralized authentication
-    // - auth_handler: called before every resource's render method
-    // - auth_skip_paths: paths that bypass authentication
-    webserver ws{create_webserver(8080)
-        .auth_handler(auth_handler)
-        .auth_skip_paths({"/health", "/public/*"})};
+    httpserver::webserver ws{httpserver::create_webserver(8080)
+                                 .auth_handler(auth_handler)
+                                 .auth_skip_paths({"/health", "/public/*"})};
 
-    auto hello = std::make_shared<hello_resource>();
-    auto health = std::make_shared<health_resource>();
-
-    ws.register_path("/api", hello);
-    ws.register_path("/health", health);
+    ws.on_get("/api", [](const httpserver::http_request&) {
+        return httpserver::http_response::string("Hello, authenticated user!");
+    });
+    ws.on_get("/health", [](const httpserver::http_request&) {
+        return httpserver::http_response::string("OK");
+    });
 
     ws.start(true);
-
     return 0;
 }
 

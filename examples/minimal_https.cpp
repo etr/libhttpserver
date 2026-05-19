@@ -1,6 +1,6 @@
 /*
      This file is part of libhttpserver
-     Copyright (C) 2011, 2012, 2013, 2014, 2015 Sebastiano Merlino
+     Copyright (C) 2011-2025 Sebastiano Merlino
 
      This library is free software; you can redistribute it and/or
      modify it under the terms of the GNU Lesser General Public
@@ -18,26 +18,21 @@
      USA
 */
 
-#include <memory>
+// minimal_https.cpp - enable HTTPS via the use_ssl / https_mem_key /
+// https_mem_cert chain on create_webserver.
 
 #include <httpserver.hpp>
 
-class hello_world_resource : public httpserver::http_resource {
- public:
-     httpserver::http_response render(const httpserver::http_request&) {
-         return httpserver::http_response::string("Hello, World!");
-     }
-};
-
 int main() {
     httpserver::webserver ws{httpserver::create_webserver(8080)
-        .use_ssl()
-        .https_mem_key("key.pem")
-        .https_mem_cert("cert.pem")};
+                                 .use_ssl()
+                                 .https_mem_key("key.pem")
+                                 .https_mem_cert("cert.pem")};
 
-    auto hwr = std::make_shared<hello_world_resource>();
-    ws.register_path("/hello", hwr);
+    ws.on_get("/hello", [](const httpserver::http_request&) {
+        return httpserver::http_response::string("Hello, World!");
+    });
+
     ws.start(true);
-
     return 0;
 }

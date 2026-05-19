@@ -39,6 +39,7 @@ endif
 endif
 
 EXTRA_DIST = libhttpserver.pc.in $(DX_CONFIG) scripts/extract-release-notes.sh scripts/validate-version.sh \
+	scripts/check-examples.sh scripts/verify-installed-examples.sh \
 	test/headers/consumer_direct.cpp test/headers/consumer_detail.cpp test/headers/consumer_umbrella.cpp \
 	test/headers/consumer_post_umbrella.cpp \
 	test/headers/consumer_umbrella_no_backend.cpp
@@ -281,7 +282,7 @@ check-hygiene:
 # shared staged install to avoid paying two full `make install` costs on
 # every `make check`. Both sub-checks can still be invoked standalone (they
 # will do their own install when CHECK_*_SHARED is not set).
-check-local: check-headers
+check-local: check-headers check-examples
 	@echo "=== Shared staged install for check-install-layout and check-hygiene ==="
 	@rm -rf $(abs_top_builddir)/.shared-check-stage
 	@$(MAKE) $(AM_MAKEFLAGS) install DESTDIR=$(abs_top_builddir)/.shared-check-stage >check-shared-install.log 2>&1 || { \
@@ -296,7 +297,14 @@ check-local: check-headers
 	    CHECK_HYGIENE_SHARED=yes
 	@rm -rf $(abs_top_builddir)/.shared-check-stage
 
-.PHONY: check-headers check-install-layout check-hygiene
+# TASK-040: enforce static invariants on the two flagship examples
+# (hello_world.cpp <= 10 LOC, lambda-only; shared_state.cpp class+mutex).
+# Run as part of `make check` via check-local.
+check-examples:
+	@echo "=== check-examples: enforce TASK-040 invariants on examples/ ==="
+	@$(top_srcdir)/scripts/check-examples.sh
+
+.PHONY: check-headers check-install-layout check-hygiene check-examples
 
 # TASK-039: top-level convenience rule that descends into test/ to
 # build and run the bench binaries (see test/Makefile.am and

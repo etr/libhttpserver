@@ -1,6 +1,6 @@
 /*
      This file is part of libhttpserver
-     Copyright (C) 2011-2019 Sebastiano Merlino
+     Copyright (C) 2011-2025 Sebastiano Merlino
 
      This library is free software; you can redistribute it and/or
      modify it under the terms of the GNU Lesser General Public
@@ -18,6 +18,11 @@
      USA
 */
 
+// pipe_response_example.cpp - stream a response from the read end of a
+// pipe that a background thread writes into. The lambda owns the
+// short-lived pipe + writer; ownership of the read-end fd transfers
+// into the response.
+
 #if defined(_WIN32) && !defined(__CYGWIN__)
 #include <io.h>
 #include <fcntl.h>
@@ -26,47 +31,37 @@
 #endif
 
 #include <cstring>
-#include <memory>
 #include <thread>
 
 #include <httpserver.hpp>
 
-class pipe_resource : public httpserver::http_resource {
- public:
-     httpserver::http_response render_get(const httpserver::http_request&) {
-         int pipefd[2];
-#if defined(_WIN32) && !defined(__CYGWIN__)
-         if (_pipe(pipefd, 4096, _O_BINARY) == -1) {
-#else
-         if (pipe(pipefd) == -1) {
-#endif
-             return httpserver::http_response::string("pipe failed").with_status(500);
-         }
-
-         // Spawn a thread to write data into the pipe
-         std::thread writer([fd = pipefd[1]]() {
-             const char* messages[] = {"Hello ", "from ", "a pipe!\n"};
-             for (const char* msg : messages) {
-                 auto ret = write(fd, msg, strlen(msg));
-                 (void)ret;
-             }
-             close(fd);
-         });
-         writer.detach();
-
-         // Return the read end of the pipe as the response
-         return
-             httpserver::http_response::pipe(pipefd[0])
-                 .with_header("Content-Type", "text/plain");
-     }
-};  // NOLINT(readability/braces)
-
 int main() {
     httpserver::webserver ws{httpserver::create_webserver(8080)};
 
-    auto pr = std::make_shared<pipe_resource>();
-    ws.register_path("/stream", pr);
-    ws.start(true);
+    ws.on_get("/stream", [](const httpserver::http_request&) {
+        int pipefd[2];
+#if defined(_WIN32) && !defined(__CYGWIN__)
+        if (_pipe(pipefd, 4096, _O_BINARY) == -1) {
+#else
+        if (pipe(pipefd) == -1) {
+#endif
+            return httpserver::http_response::string("pipe failed").with_status(500);
+        }
 
+        std::thread writer([fd = pipefd[1]]() {
+            const char* messages[] = {"Hello ", "from ", "a pipe!\n"};
+            for (const char* msg : messages) {
+                auto ret = write(fd, msg, strlen(msg));
+                (void)ret;
+            }
+            close(fd);
+        });
+        writer.detach();
+
+        return httpserver::http_response::pipe(pipefd[0])
+                   .with_header("Content-Type", "text/plain");
+    });
+
+    ws.start(true);
     return 0;
 }
