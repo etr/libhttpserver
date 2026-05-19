@@ -149,7 +149,7 @@ header_view_map get_headerlike_values(struct MHD_Connection* conn,
 
 template <typename T>
 [[gnu::always_inline]] inline void do_not_optimize(T const& value) {
-    asm volatile("" : : "r,m"(value) : "memory");
+    asm volatile("" : : "r,m"(&value) : "memory");
 }
 
 int main() {

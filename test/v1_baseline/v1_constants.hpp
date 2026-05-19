@@ -48,18 +48,28 @@ namespace httpserver::v1_baseline {
 // sizeof(httpserver::http_resource) on `master`, captured by
 // test/v1_baseline/measure_v1_sizes.cpp.
 //
-// On libc++ (macOS) the layout is vptr (8) + std::map (24) = 32.
-// On libstdc++ (Linux) the layout would be vptr (8) + std::map (48) = 56.
-// We commit the libc++ value because that is the baseline-measurement
-// stdlib used by the maintainer's reference host (see PERFORMANCE.md);
-// the v2.0 check stays valid on libstdc++ because v2.0 shrinks even
-// more aggressively there (v1 grows faster than v2 between stdlibs).
+// Two baseline values are provided, selected at compile time by the
+// detected C++ standard library:
+//
+//   libc++   (macOS / Apple clang)  : vptr (8) + std::map (24) = 32
+//   libstdc++ (Linux / GCC)         : vptr (8) + std::map (48) = 56
+//
+// Using the correct per-stdlib baseline ensures the static_assert
+// algebra in bench_sizeof_http_resource.cpp holds on both platforms.
+#if defined(__GLIBCXX__)
+// libstdc++ (Linux): std::map is 48 bytes (node, allocator, comparator
+// each 16 bytes on 64-bit), vptr is 8 bytes.
+inline constexpr std::size_t V1_HTTP_RESOURCE_SIZEOF = 56;
+// sizeof(std::map<std::string, bool>) on a libstdc++ host.
+inline constexpr std::size_t V1_STD_MAP_STRING_BOOL_SIZEOF = 48;
+#else
+// libc++ (macOS / Apple clang) — the maintainer reference host.
+// std::map is 24 bytes (three-pointer representation), vptr is 8 bytes.
 inline constexpr std::size_t V1_HTTP_RESOURCE_SIZEOF = 32;
-
-// sizeof(std::map<std::string, bool>) on the same baseline host.
-// libc++ reports 24 (three pointers: __begin_node_, __pair1_->__value_,
-// __pair3_->__value_).
+// sizeof(std::map<std::string, bool>) on the libc++ baseline host.
+// Three pointers: __begin_node_, __pair1_->__value_, __pair3_->__value_.
 inline constexpr std::size_t V1_STD_MAP_STRING_BOOL_SIZEOF = 24;
+#endif
 
 // Median v1 ns/call for `http_request::get_headers()` against a
 // 16-header request. Captured by

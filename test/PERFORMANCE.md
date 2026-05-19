@@ -63,11 +63,14 @@ Concretely: on the maintainer reference host, `make bench` printed
   per request, and v2.0's improvement is in the steady-state cost.
 - **Warmup:** 10,000 iterations of `get_headers()` to populate the
   cache, warm the icache and branch predictor.
-- **Measurement:** 10 outer repetitions × 1,000,000 inner iterations.
+- **Measurement:** 11 outer repetitions × 1,000,000 inner iterations.
   Each outer rep is timed end-to-end with
   `std::chrono::steady_clock`. Per-call cost = elapsed_ns / 1,000,000.
-- **Reported number:** median over the 10 outer reps. Median (not
-  mean) for outlier robustness on shared CI runners.
+- **Reported number:** median over the 11 outer reps (`samples_ns[5]`,
+  the true middle element of an odd-length sorted array). Median (not
+  mean) for outlier robustness on shared CI runners. OUTER=11 (odd)
+  ensures `samples_ns[OUTER/2]` is the unambiguous middle element with
+  no tie-breaking needed.
 - **Sink:** each call's return reference is fed through
   `asm volatile("" : : "r,m"(&ref) : "memory")` to defeat
   dead-store elimination.

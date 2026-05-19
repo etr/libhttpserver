@@ -61,11 +61,15 @@ using httpserver::v1_baseline::V1_STD_MAP_STRING_BOOL_SIZEOF;
 // V1_STD_MAP_STRING_BOOL_SIZEOF <= V1_HTTP_RESOURCE_SIZEOF +
 // sizeof(method_set) * 2`.
 //
-// With macOS / libc++ baseline numbers (v1=32, map=24, v2=16,
-// method_set=4): `16 + 24 = 40 <= 32 + 8 = 40` (tight, passes).
+// The V1_* constants are selected at compile time by the detected
+// C++ standard library (libc++ vs. libstdc++) in v1_constants.hpp,
+// so the assertion is correct on both macOS and Linux:
 //
-// With Linux / libstdc++ baseline numbers (v1=56, map=48, v2=16,
-// method_set=4): `16 + 48 = 64 <= 56 + 8 = 64` (tight, passes).
+//   macOS / libc++  (v1=32, map=24, v2=16, method_set=4):
+//       `16 + 24 = 40 <= 32 + 8 = 40` (tight, passes).
+//
+//   Linux / libstdc++ (v1=56, map=48, v2=16, method_set=4):
+//       `16 + 48 = 64 <= 56 + 8 = 64` (tight, passes).
 //
 // If a future refactor reintroduces a per-resource heap container or
 // grows the bitmask storage, this assertion breaks at compile time.

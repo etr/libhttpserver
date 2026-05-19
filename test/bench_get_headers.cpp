@@ -24,9 +24,11 @@
 // v2.0's `get_headers()` returns a const reference to a memoised
 // `http::header_view_map`; first call populates the cache, all
 // subsequent calls are a branch + reference return. The bench warms
-// the cache up front, then times the hot path over 10 outer reps x
+// the cache up front, then times the hot path over 11 outer reps x
 // 1,000,000 inner iterations and compares the median ns/call to the
 // v1 baseline literal V1_GET_HEADERS_NS_PER_CALL.
+// OUTER=11 (odd) so samples_ns[OUTER/2] = samples_ns[5] is the true
+// median element with no tie-breaking required.
 //
 // On failure (ratio < 10x) the binary prints the diagnostic and
 // returns 1, failing `make bench`.
@@ -121,7 +123,7 @@ int main() {
     }
 
     using clock = std::chrono::steady_clock;
-    constexpr int OUTER = 10;
+    constexpr int OUTER = 11;
     constexpr int INNER = 1'000'000;
     std::vector<double> samples_ns;
     samples_ns.reserve(OUTER);
