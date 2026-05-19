@@ -8,11 +8,11 @@
 Verify the two PRD §3.6 numeric acceptance criteria with reproducible microbenchmarks.
 
 **Action Items:**
-- [ ] Write `test/bench_get_headers.cpp`: tight loop calling `req.get_headers()` on a request with 16 headers, measured under v1 (separate branch / vendored snapshot) and v2.0; report ratio.
-- [ ] Verify v2.0 is ≥10× faster (PRD §3.6 acceptance).
-- [ ] Add `static_assert(sizeof(http_resource) <= sizeof_v1_http_resource - sizeof(std::map<std::string, bool>));` (with a literal numeric upper bound matching the v1 baseline) — or a runtime assertion in a test. This is the verification step for the `sizeof(http_resource)` shrink criterion in TASK-021.
-- [ ] Document the methodology and v1 baseline values in `test/PERFORMANCE.md` so future regressions are caught.
-- [ ] Wire benchmarks into a `make bench` target (not part of `make check` so they don't slow normal CI).
+- [x] Write `test/bench_get_headers.cpp`: tight loop calling `req.get_headers()` on a request with 16 headers, measured under v1 (separate branch / vendored snapshot) and v2.0; report ratio.
+- [x] Verify v2.0 is ≥10× faster (PRD §3.6 acceptance).
+- [x] Add `static_assert(sizeof(http_resource) <= sizeof_v1_http_resource - sizeof(std::map<std::string, bool>));` (with a literal numeric upper bound matching the v1 baseline) — or a runtime assertion in a test. This is the verification step for the `sizeof(http_resource)` shrink criterion in TASK-021.
+- [x] Document the methodology and v1 baseline values in `test/PERFORMANCE.md` so future regressions are caught.
+- [x] Wire benchmarks into a `make bench` target (not part of `make check` so they don't slow normal CI).
 
 **Dependencies:**
 - Blocked by: TASK-017, TASK-018, TASK-021
@@ -28,4 +28,4 @@ Verify the two PRD §3.6 numeric acceptance criteria with reproducible microbenc
 **Related Requirements:** PRD-REQ-REQ-001, PRD-REQ-REQ-003 (numeric §3.6 acceptance criteria for these two requirements)
 **Related Decisions:** DR-006, §4.4
 
-**Status:** Not Started
+**Status:** Done
