@@ -9,6 +9,11 @@ on:
   schedule:
     - cron: '0 0 * * 0'
 
+# Restrict every job's GITHUB_TOKEN to read-only by default.
+# Jobs that need broader access should override at the job level.
+permissions:
+  contents: read
+
 jobs:
   verify:
     name: Verify
@@ -271,6 +276,43 @@ jobs:
             coverage: nocoverage
             linking: dynamic
             shell: bash
+          # TASK-037: build-flag invariance gate (HAVE_* all ON lane).
+          # PRD-FLG-REQ-001 / arch §9 testing item 2. The consumer_fixture
+          # binary (test/consumer_fixture.cpp) touches every public symbol
+          # whose declaration was previously #ifdef HAVE_* gated. It MUST
+          # compile + link in this configuration. Stock libmicrohttpd +
+          # gnutls; isolated as its own matrix entry so the build-flag
+          # invariance gate has a dedicated status check.
+          - test-group: extra
+            os: ubuntu-latest
+            os-type: ubuntu
+            build-type: flag-invariance-on
+            compiler-family: gcc
+            c-compiler: gcc
+            cc-compiler: g++
+            debug: nodebug
+            coverage: nocoverage
+            linking: dynamic
+            shell: bash
+          # TASK-037: build-flag invariance gate (HAVE_* all OFF lane).
+          # libmicrohttpd is rebuilt with --disable-bauth --disable-dauth
+          # --disable-websockets so libhttpserver auto-detects all three
+          # as off. The gnutls install step is gated off for this build-
+          # type so gnutls/gnutls.h is absent from the include search path
+          # and HAVE_GNUTLS auto-detects to off as well. The same
+          # consumer_fixture.cpp must compile + link without source changes,
+          # proving every flag-gated public declaration is unconditional.
+          - test-group: extra
+            os: ubuntu-latest
+            os-type: ubuntu
+            build-type: flag-invariance-off
+            compiler-family: gcc
+            c-compiler: gcc
+            cc-compiler: g++
+            debug: nodebug
+            coverage: nocoverage
+            linking: dynamic
+            shell: bash
           - test-group: basic
             os: windows-latest
             os-type: windows
@@ -470,7 +512,10 @@ jobs:
     - name: Setup gnutls dependency (only on linux)
       run: |
         sudo apt-get install libgnutls28-dev gnutls-bin ;
-      if: ${{ matrix.os-type == 'ubuntu' }}
+      # TASK-037: skip gnutls install on the flag-invariance-off lane so
+      # HAVE_GNUTLS auto-detects to off (the configure script just
+      # AC_CHECK_HEADER's gnutls/gnutls.h, no header == HAVE_GNUTLS=0).
+      if: ${{ matrix.os-type == 'ubuntu' && matrix.build-type != 'flag-invariance-off' }}
 
     - name: Fetch libmicrohttpd from cache
       id: cache-libmicrohttpd
@@ -478,25 +523,41 @@ jobs:
       with:
         path: libmicrohttpd-1.0.3
         key: ${{ matrix.os }}-${{ matrix.c-compiler }}-libmicrohttpd-1.0.3-pre-built-v2
-      if: ${{ matrix.os-type != 'windows' && matrix.build-type != 'no-dauth' && matrix.compiler-family != 'arm-cross' }}
+      # TASK-037: the flag-invariance-off lane rebuilds libmicrohttpd with
+      # every sub-feature disabled, so it must skip the stock cache fetch.
+      if: ${{ matrix.os-type != 'windows' && matrix.build-type != 'no-dauth' && matrix.build-type != 'flag-invariance-off' && matrix.compiler-family != 'arm-cross' }}
 
     - name: Build libmicrohttpd dependency (if not cached)
       run: |
         curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-1.0.3.tar.gz -o libmicrohttpd-1.0.3.tar.gz ;
+        echo "7816b57aae199cf5c3645e8770e1be5f0a4dfafbcb24b3772173dc4ee634126a  libmicrohttpd-1.0.3.tar.gz" | sha256sum -c ;
         tar -xzf libmicrohttpd-1.0.3.tar.gz ;
         cd libmicrohttpd-1.0.3 ;
         ./configure --disable-examples ;
         make ;
-      if: ${{ matrix.os-type != 'windows' && matrix.build-type != 'no-dauth' && matrix.compiler-family != 'arm-cross' && steps.cache-libmicrohttpd.outputs.cache-hit != 'true' }}
+      # TASK-037: as above -- flag-invariance-off has its own dedicated
+      # libmicrohttpd build step below.
+      if: ${{ matrix.os-type != 'windows' && matrix.build-type != 'no-dauth' && matrix.build-type != 'flag-invariance-off' && matrix.compiler-family != 'arm-cross' && steps.cache-libmicrohttpd.outputs.cache-hit != 'true' }}
 
     - name: Build libmicrohttpd without digest auth (no-dauth test)
       run: |
         curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-1.0.3.tar.gz -o libmicrohttpd-1.0.3.tar.gz ;
+        echo "7816b57aae199cf5c3645e8770e1be5f0a4dfafbcb24b3772173dc4ee634126a  libmicrohttpd-1.0.3.tar.gz" | sha256sum -c ;
         tar -xzf libmicrohttpd-1.0.3.tar.gz ;
         cd libmicrohttpd-1.0.3 ;
         ./configure --disable-examples --disable-dauth ;
         make ;
       if: ${{ matrix.build-type == 'no-dauth' }}
+
+    - name: Build libmicrohttpd with all features off (TASK-037 flag-invariance-off lane)
+      run: |
+        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-1.0.3.tar.gz -o libmicrohttpd-1.0.3.tar.gz ;
+        echo "7816b57aae199cf5c3645e8770e1be5f0a4dfafbcb24b3772173dc4ee634126a  libmicrohttpd-1.0.3.tar.gz" | sha256sum -c ;
+        tar -xzf libmicrohttpd-1.0.3.tar.gz ;
+        cd libmicrohttpd-1.0.3 ;
+        ./configure --disable-examples --disable-bauth --disable-dauth --disable-websockets ;
+        make ;
+      if: ${{ matrix.build-type == 'flag-invariance-off' }}
 
     - name: Install libmicrohttpd
       run: cd libmicrohttpd-1.0.3 ; sudo make install ;
@@ -512,10 +573,37 @@ jobs:
         echo "Verified: libmicrohttpd built without digest auth support" ;
       if: ${{ matrix.build-type == 'no-dauth' }}
 
+    - name: Verify libmicrohttpd built without bauth/dauth/websockets (TASK-037 flag-invariance-off lane)
+      # TASK-037 / PRD-FLG-REQ-001: belt-and-braces check that the bespoke
+      # libmicrohttpd build above actually stripped the symbols that drive
+      # libhttpserver's HAVE_BAUTH / HAVE_DAUTH / HAVE_WEBSOCKET
+      # auto-detection. If any of these slipped back in, the configure
+      # step would (correctly) flip the corresponding HAVE_* back on and
+      # the lane would no longer be exercising the flag-off invariant.
+      run: |
+        fail=0 ;
+        for sym in MHD_basic_auth_get_username_password3 MHD_digest_auth_check3 MHD_queue_auth_fail_response; do
+          if nm /usr/local/lib/libmicrohttpd.so 2>/dev/null | grep -q "$sym"; then
+            echo "ERROR: $sym present in libmicrohttpd (expected absent)" ;
+            fail=1 ;
+          else
+            echo "Verified: $sym absent from libmicrohttpd" ;
+          fi ;
+        done ;
+        if ls /usr/local/lib/libmicrohttpd_ws* >/dev/null 2>&1; then
+          echo "ERROR: libmicrohttpd_ws present (expected absent)" ;
+          fail=1 ;
+        else
+          echo "Verified: libmicrohttpd_ws not built/installed" ;
+        fi ;
+        if [ "$fail" -ne 0 ]; then exit 1; fi
+      if: ${{ matrix.build-type == 'flag-invariance-off' }}
+
     - name: Build and install libmicrohttpd (Windows)
       if: ${{ matrix.os-type == 'windows' }}
       run: |
         curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-1.0.3.tar.gz -o libmicrohttpd-1.0.3.tar.gz
+        echo "7816b57aae199cf5c3645e8770e1be5f0a4dfafbcb24b3772173dc4ee634126a  libmicrohttpd-1.0.3.tar.gz" | sha256sum -c
         tar -xzf libmicrohttpd-1.0.3.tar.gz
         cd libmicrohttpd-1.0.3
         ./configure --disable-examples --enable-poll=no
@@ -533,6 +621,7 @@ jobs:
     - name: Cross-compile libmicrohttpd for ARM
       run: |
         curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-1.0.3.tar.gz -o libmicrohttpd-1.0.3.tar.gz
+        echo "7816b57aae199cf5c3645e8770e1be5f0a4dfafbcb24b3772173dc4ee634126a  libmicrohttpd-1.0.3.tar.gz" | sha256sum -c
         tar -xzf libmicrohttpd-1.0.3.tar.gz
         mv libmicrohttpd-1.0.3 libmicrohttpd-1.0.3-${{ matrix.build-type }}
         cd libmicrohttpd-1.0.3-${{ matrix.build-type }}
@@ -614,6 +703,26 @@ jobs:
         fi
       if: ${{ matrix.build-type == 'no-dauth' }}
 
+    - name: Verify libhttpserver detected all features off (TASK-037 flag-invariance-off lane)
+      # TASK-037 / PRD-FLG-REQ-001 / arch §9 testing item 2. Asserts that
+      # configure auto-detected every HAVE_* feature as off in this lane;
+      # if any of them are 'yes', the lane wouldn't actually be exercising
+      # the flag-off invariant and we want the matrix to go red loudly.
+      run: |
+        cd build ;
+        fail=0 ;
+        for feat in "TLS Enabled" "Basic Auth" "Digest Auth" "WebSocket"; do
+          if grep -qE "^  ${feat}[[:space:]]*:[[:space:]]*no$" config.log; then
+            echo "Verified: ${feat} is off" ;
+          else
+            echo "ERROR: ${feat} is NOT off in this configuration" ;
+            grep "${feat}" config.log || echo "${feat} line not found" ;
+            fail=1 ;
+          fi ;
+        done ;
+        if [ "$fail" -ne 0 ]; then exit 1; fi
+      if: ${{ matrix.build-type == 'flag-invariance-off' }}
+
     - name: Print config.log
       shell: bash
       run: |
@@ -646,11 +755,27 @@ jobs:
           make ;
         fi
 
+    - name: Build consumer fixture (TASK-037 build-flag invariance gate)
+      # TASK-037 / PRD-FLG-REQ-001 / arch §9 testing item 2. The headline
+      # gate: the same test/consumer_fixture.cpp (which touches every
+      # previously HAVE_*-gated public symbol) must compile + link in
+      # both the all-features-on and all-features-off configurations.
+      # The matrix entries skip the broad `make check` / `cppcheck` steps
+      # below -- this single fixture compile + link is the build-flag-
+      # invariance assertion.
+      run: |
+        cd build ;
+        make -C test consumer_fixture ;
+      if: ${{ matrix.build-type == 'flag-invariance-on' || matrix.build-type == 'flag-invariance-off' }}
+
     - name: Run tests
       run: |
         cd build ;
         make check;
-      if: ${{ matrix.build-type != 'iwyu' && matrix.compiler-family != 'arm-cross' && matrix.build-type != 'header-hygiene' }}
+      # TASK-037: flag-invariance-{on,off} are compile/link-only gates, so
+      # skip the full `make check` (which spins up real servers and would
+      # crash on the OFF lane for the BAUTH/DAUTH/WS unit tests anyway).
+      if: ${{ matrix.build-type != 'iwyu' && matrix.compiler-family != 'arm-cross' && matrix.build-type != 'header-hygiene' && matrix.build-type != 'flag-invariance-on' && matrix.build-type != 'flag-invariance-off' }}
 
     - name: Run header-hygiene check
       # TASK-007: dedicated public-header hygiene gate. Runs the
@@ -689,7 +814,8 @@ jobs:
       run: |
         cd src/ ;
         cppcheck --error-exitcode=1 . ;
-      if: ${{ matrix.os-type == 'ubuntu' && matrix.compiler-family != 'arm-cross' }}
+      # TASK-037: flag-invariance lanes are minimal gates -- skip cppcheck.
+      if: ${{ matrix.os-type == 'ubuntu' && matrix.compiler-family != 'arm-cross' && matrix.build-type != 'flag-invariance-on' && matrix.build-type != 'flag-invariance-off' }}
 
     - name: Run performance tests (select)
       run: |
