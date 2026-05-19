@@ -1,6 +1,6 @@
 /*
      This file is part of libhttpserver
-     Copyright (C) 2011, 2012, 2013, 2014, 2015 Sebastiano Merlino
+     Copyright (C) 2011-2025 Sebastiano Merlino
 
      This library is free software; you can redistribute it and/or
      modify it under the terms of the GNU Lesser General Public
@@ -18,26 +18,30 @@
      USA
 */
 
-#include <memory>
+// minimal_https.cpp - enable HTTPS via the use_ssl / https_mem_key /
+// https_mem_cert chain on create_webserver.
+//
+// The https_priorities call sets an explicit GnuTLS cipher-priority string
+// that allows TLS 1.2 and TLS 1.3 with safe renegotiation. Without it,
+// GnuTLS may fall back to TLS 1.0/1.1 depending on the system configuration.
+// Port 8443 is used (convention for HTTPS on non-privileged ports).
 
 #include <httpserver.hpp>
 
-class hello_world_resource : public httpserver::http_resource {
- public:
-     httpserver::http_response render(const httpserver::http_request&) {
-         return httpserver::http_response::string("Hello, World!");
-     }
-};
-
 int main() {
-    httpserver::webserver ws{httpserver::create_webserver(8080)
-        .use_ssl()
-        .https_mem_key("key.pem")
-        .https_mem_cert("cert.pem")};
+    httpserver::webserver ws{httpserver::create_webserver(8443)
+                                 .use_ssl()
+                                 .https_mem_key("key.pem")
+                                 .https_mem_cert("cert.pem")
+                                 .https_priorities(
+                                     "NORMAL:-VERS-TLS-ALL"
+                                     ":+VERS-TLS1.2:+VERS-TLS1.3"
+                                     ":%SAFE_RENEGOTIATION")};
 
-    auto hwr = std::make_shared<hello_world_resource>();
-    ws.register_path("/hello", hwr);
+    ws.on_get("/hello", [](const httpserver::http_request&) {
+        return httpserver::http_response::string("Hello, World!");
+    });
+
     ws.start(true);
-
     return 0;
 }

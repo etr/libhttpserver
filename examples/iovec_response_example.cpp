@@ -1,6 +1,6 @@
 /*
      This file is part of libhttpserver
-     Copyright (C) 2011-2019 Sebastiano Merlino
+     Copyright (C) 2011-2025 Sebastiano Merlino
 
      This library is free software; you can redistribute it and/or
      modify it under the terms of the GNU Lesser General Public
@@ -18,40 +18,31 @@
      USA
 */
 
-#include <memory>
-#include <string>
-#include <utility>
+// iovec_response_example.cpp - build a response body from multiple
+// borrowed buffers without copying. The buffers must outlive the
+// response; static-lifetime literals satisfy that contract trivially.
+
 #include <vector>
 
 #include <httpserver.hpp>
 
-// v2's iovec body uses borrowed buffers — the data must outlive the response.
-// Static-lifetime literals satisfy that contract for this demo.
 static const char kPart1[] = "{\"header\": \"value\", ";
 static const char kPart2[] = "\"items\": [1, 2, 3], ";
 static const char kPart3[] = "\"footer\": \"end\"}";
 
-class iovec_resource : public httpserver::http_resource {
- public:
-     httpserver::http_response render_get(const httpserver::http_request&) {
-         // Build a response from multiple separate buffers without copying
-         std::vector<httpserver::iovec_entry> parts = {
-             { kPart1, sizeof(kPart1) - 1 },
-             { kPart2, sizeof(kPart2) - 1 },
-             { kPart3, sizeof(kPart3) - 1 },
-         };
-         return
-             httpserver::http_response::iovec(parts)
-                 .with_header("Content-Type", "application/json");
-     }
-};
-
 int main() {
     httpserver::webserver ws{httpserver::create_webserver(8080)};
 
-    auto ir = std::make_shared<iovec_resource>();
-    ws.register_path("/data", ir);
-    ws.start(true);
+    ws.on_get("/data", [](const httpserver::http_request&) {
+        std::vector<httpserver::iovec_entry> parts = {
+            { kPart1, sizeof(kPart1) - 1 },
+            { kPart2, sizeof(kPart2) - 1 },
+            { kPart3, sizeof(kPart3) - 1 },
+        };
+        return httpserver::http_response::iovec(parts)
+                   .with_header("Content-Type", "application/json");
+    });
 
+    ws.start(true);
     return 0;
 }

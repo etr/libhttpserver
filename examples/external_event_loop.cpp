@@ -1,6 +1,6 @@
 /*
      This file is part of libhttpserver
-     Copyright (C) 2011-2019 Sebastiano Merlino
+     Copyright (C) 2011-2025 Sebastiano Merlino
 
      This library is free software; you can redistribute it and/or
      modify it under the terms of the GNU Lesser General Public
@@ -18,10 +18,13 @@
      USA
 */
 
+// external_event_loop.cpp - run the daemon under EXTERNAL_SELECT and
+// drive it via run_wait() from the application's own loop. The
+// thread_safety(false) optimization is intentionally omitted for
+// portability (some MHD builds reject the combination at start).
+
 #include <csignal>
-#include <cstdint>
 #include <iostream>
-#include <memory>
 
 #include <httpserver.hpp>
 
@@ -31,43 +34,29 @@ void signal_handler(int) {
     running = false;
 }
 
-class hello_resource : public httpserver::http_resource {
- public:
-     httpserver::http_response render_get(const httpserver::http_request&) {
-         return httpserver::http_response::string("Hello from external event loop!");
-     }
-};
-
 int main() {
     signal(SIGINT, signal_handler);
 
-    // EXTERNAL_SELECT runs MHD without an internal polling thread; the
-    // application drives it via run_wait() below. thread_safety(false) can
-    // be added for a small perf gain when the daemon is only ever touched
-    // from a single thread, but it is omitted here for portability (some
-    // MHD builds, notably Windows/MSYS2, reject that combination at start).
     httpserver::webserver ws{httpserver::create_webserver(8080)
-        .start_method(httpserver::http::http_utils::EXTERNAL_SELECT)};
+                                 .start_method(httpserver::http::http_utils::EXTERNAL_SELECT)};
 
-    auto hr = std::make_shared<hello_resource>();
-    ws.register_path("/hello", hr);
+    ws.on_get("/hello", [](const httpserver::http_request&) {
+        return httpserver::http_response::string("Hello from external event loop!");
+    });
+
     ws.start(false);
 
     std::cout << "Server running on port " << ws.get_bound_port() << std::endl;
 
-    // Drive the event loop externally using run_wait
     while (running) {
-        // Block for up to 1000ms waiting for HTTP activity
         ws.run_wait(1000);
-
-        // You can do other work here between iterations
+        // Do other work between iterations as needed.
     }
 
     std::cout << "\nShutting down..." << std::endl;
 
-    // Graceful shutdown: stop accepting new connections first
+    // Graceful shutdown: stop accepting new connections first.
     ws.quiesce();
     ws.stop();
-
     return 0;
 }

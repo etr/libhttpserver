@@ -122,7 +122,7 @@ Nominally: **13 sequential tasks**, each S–XL. Most other tasks parallelize of
 | TASK-037 | CI test for build-flag invariance | M6 | Done | TASK-034 |
 | TASK-038 | Sanitizer-clean tests for `http_response` move semantics | M6 | Done | TASK-009, TASK-036 |
 | TASK-039 | Performance acceptance (`get_headers`, `sizeof(http_resource)`) | M6 | Done | TASK-017, TASK-018, TASK-021 |
-| TASK-040 | Rewrite `examples/` | M6 | Not Started | TASK-025, TASK-036 |
+| TASK-040 | Rewrite `examples/` | M6 | Done | TASK-025, TASK-036 |
 | TASK-041 | Rewrite `README.md` | M6 | Not Started | TASK-031, TASK-032, TASK-040 |
 | TASK-042 | Write `RELEASE_NOTES.md` for v2.0 | M6 | Not Started | TASK-041 |
 | TASK-043 | Doxygen / inline doc refresh | M6 | Not Started | TASK-031, TASK-034, TASK-041 |
