@@ -1,2838 +1,422 @@
-<!---
-Copyright (C)  2011-2019  Sebastiano Merlino.
-    Permission is granted to copy, distribute and/or modify this document
-    under the terms of the GNU Free Documentation License, Version 1.3
-    or any later version published by the Free Software Foundation;
-    with no Invariant Sections, no Front-Cover Texts, and no Back-Cover Texts.
-    A copy of the license is included in the section entitled "GNU
-    Free Documentation License".
--->
+# libhttpserver
 
-# The libhttpserver reference manual
 ![GA: Build Status](https://github.com/etr/libhttpserver/actions/workflows/verify-build.yml/badge.svg)
 [![codecov](https://codecov.io/gh/etr/libhttpserver/branch/master/graph/badge.svg)](https://codecov.io/gh/etr/libhttpserver)
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/1bd1e8c21f66400fb70e5a5ce357b525)](https://www.codacy.com/gh/etr/libhttpserver/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=etr/libhttpserver&amp;utm_campaign=Badge_Grade)
-[![Gitter chat](https://badges.gitter.im/etr/libhttpserver.png)](https://gitter.im/libhttpserver/community)
 
 [![ko-fi](https://www.ko-fi.com/img/donate_sm.png)](https://ko-fi.com/F1F5HY8B)
 
-## Tl;dr
-libhttpserver is a C++ library for building high performance RESTful web servers.
-libhttpserver is built upon  [libmicrohttpd](https://www.gnu.org/software/libmicrohttpd/) to provide a simple API for developers to create HTTP services in C++.
-
-**Features:**
-- HTTP 1.1 compatible request parser
-- RESTful oriented interface
-- Flexible handler API
-- Cross-platform compatible
-- Implementation is HTTP 1.1 compliant
-- Multiple threading models
-- Support for IPv6
-- Support for SHOUTcast
-- Support for incremental processing of POST data (optional)
-- Support for basic and digest authentication (optional)
-- Support for centralized authentication with path-based skip rules
-- Support for TLS (requires libgnutls, optional)
-- WebSocket support (requires libmicrohttpd built with WebSocket support, optional)
-- New response types: empty, iovec (scatter-gather), and pipe-based responses
-- External event loop integration (run/run_wait, fd sets, add_connection)
-- Daemon introspection (bound port, active connections, listen FD)
-- Turbo mode for high-performance scenarios
-- TCP Fast Open support
-- Enhanced digest authentication with SHA-256 and SHA-512/256 algorithms
-
-## Table of Contents
-* [Introduction](#introduction)
-* [Requirements](#requirements)
-* [Building](#building)
-* [Getting Started](#getting-started)
-* [Structures and classes type definition](#structures-and-classes-type-definition)
-* [Create and work with a webserver](#create-and-work-with-a-webserver)
-* [The resource object](#the-resource-object)
-* [Registering resources](#registering-resources)
-* [Parsing requests](#parsing-requests)
-* [Building responses to requests](#building-responses-to-requests)
-* [IP Blacklisting and Whitelisting](#ip-blacklisting-and-whitelisting)
-* [Authentication](#authentication)
-* [WebSocket Support](#websocket-support)
-* [Daemon Introspection and External Event Loops](#daemon-introspection-and-external-event-loops)
-* [HTTP Utils](#http-utils)
-* [Other Examples](#other-examples)
-
-#### Community
-* [Code of Conduct (on a separate page)](https://github.com/etr/libhttpserver/blob/master/CODE_OF_CONDUCT.md)
-* [Contributing (on a separate page)](https://github.com/etr/libhttpserver/blob/master/CONTRIBUTING.md) 
-
-#### Appendices
-* [Copying statement](#copying)
-* [GNU-LGPL](#GNU-lesser-general-public-license): The GNU Lesser General Public License says how you can copy and share almost all of libhttpserver.
-* [GNU-FDL](#GNU-free-documentation-license): The GNU Free Documentation License says how you can copy and share the documentation of libhttpserver.
-
-## Introduction
-libhttpserver is meant to constitute an easy system to build HTTP servers with REST fashion.
-libhttpserver is based on [libmicrohttpd](https://www.gnu.org/software/libmicrohttpd/) and, like this, it is a daemon library (parts of this documentation are, in fact, matching those of the wrapped library).
-The mission of this library is to support all possible HTTP features directly and with a simple semantic allowing then the user to concentrate only on his application and not on HTTP request handling details.
-
-The library is supposed to work transparently for the client Implementing the business logic and using the library itself to realize an interface.
-If the user wants it must be able to change every behavior of the library itself through the registration of callbacks.
-
-libhttpserver is able to decode certain body formats and automatically format them in object oriented fashion. This is true for query arguments and for *POST* and *PUT* requests bodies if *application/x-www-form-urlencoded* or *multipart/form-data* header are passed.
-
-All functions are guaranteed to be completely reentrant and thread-safe (unless differently specified).
-Additionally, clients can specify resource limits on the overall number of connections, number of connections per IP address and memory used per connection to avoid resource exhaustion.
-
-[Back to TOC](#table-of-contents)
-
-## Requirements
-libhttpserver can be used without any dependencies aside from libmicrohttpd.
-
-The minimum versions required are:
-* g++ >= 10 or clang >= 13 (Apple Clang from Xcode 15+)
-* C++20 or newer
-* libmicrohttpd >= 1.0.0
-* [Optionally]: for TLS (HTTPS) support, you'll need [libgnutls](http://www.gnutls.org/).
-* [Optionally]: to compile the code-reference, you'll need [doxygen](http://www.doxygen.nl/).
-
-On RHEL 9 (and derivatives), the stock GCC 11 is too old for some C++20 library features the build relies on; install the `gcc-toolset-14` package and `source /opt/rh/gcc-toolset-14/enable` before configuring.
-
-Additionally, for MinGW on windows you will need:
-* libwinpthread (For MinGW-w64, if you use thread model posix then you have this)
-
-For versions before 0.18.0, on MinGW, you will need:
-* libgnurx >= 2.5.1
-
-Furthermore, the testcases use [libcurl](http://curl.haxx.se/libcurl/) but you don't need it to compile the library.
-
-Please refer to the readme file for your particular distribution if there is one for important notes.
-
-[Back to TOC](#table-of-contents)
-
-## Building
-libhttpserver uses the standard system where the usual build process involves running
-> ./bootstrap  
-> mkdir build  
-> cd build  
-> \.\./configure  
-> make  
-> make install # (optionally to install on the system)
-
-[Back to TOC](#table-of-contents)
-
-### Optional parameters to configure script
-A complete list of parameters can be obtained running 'configure --help'.
-Here are listed the libhttpserver specific options (the canonical configure options are also supported).
-
-* _\-\-enable-same-directory-build:_ enable to compile in the same directory. This is heavily discouraged. (def=no)
-* _\-\-enable-debug:_ enable debug data generation. (def=no)
-* _\-\-disable-doxygen-doc:_ don't generate any doxygen documentation. Doxygen is automatically invoked if present on the system. Automatically disabled otherwise.
-* _\-\-enable-fastopen:_ enable use of TCP_FASTOPEN (def=yes)
-* _\-\-enable-static:_ enable use static linking (def=yes)
-
-[Back to TOC](#table-of-contents)
-
-### Building on Windows (MSYS2)
-
-MSYS2 provides multiple shell environments with different purposes. Understanding which shell to use is important:
-
-| Shell | Host Triplet | Runtime Dependency | Use Case |
-|-------|--------------|-------------------|----------|
-| **MinGW64** | `x86_64-w64-mingw32` | Native Windows | **Recommended** for native Windows apps |
-| **MSYS** | `x86_64-pc-msys` | msys-2.0.dll | POSIX-style apps, build tools |
-
-**Recommended: Use the MinGW64 shell** for building libhttpserver to produce native Windows binaries without additional runtime dependencies.
-
-#### Step-by-step build instructions
-
-1. Install [MSYS2](https://www.msys2.org/)
-
-2. Open the **MINGW64** shell (not the MSYS shell) from the Start Menu
-
-3. Install dependencies:
-```bash
-pacman -S --needed mingw-w64-x86_64-{gcc,libtool,make,pkg-config,doxygen,gnutls,curl} autotools
-```
-
-4. Build and install [libmicrohttpd](https://www.gnu.org/software/libmicrohttpd/) (>= 1.0.0)
-
-5. Build libhttpserver:
-```bash
-./bootstrap
-mkdir build && cd build
-../configure --disable-fastopen
-make
-make check  # run tests
-```
-
-**Important:** The `--disable-fastopen` flag is required on Windows as TCP_FASTOPEN is not supported.
-
-#### If you use the MSYS shell
-
-Building from the MSYS shell also works but the resulting binaries will depend on `msys-2.0.dll`. The configure script will display a warning when building in this environment. If you see:
-
-```
-configure: WARNING: Building from MSYS environment. Binaries will depend on msys-2.0.dll.
-```
-
-Consider switching to the MinGW64 shell for native Windows binaries.
-
-#### Library files on Windows
-
-When building with GCC-based toolchains (MSYS2/MinGW, Cygwin), the following library files are generated:
-
-| File | Purpose |
-|------|---------|
-| `libhttpserver.a` | Static library archive |
-| `libhttpserver.dll` | Shared library (DLL) |
-| `libhttpserver.dll.a` | Import library for linking against the DLL |
-| `libhttpserver.la` | Libtool archive (used by libtool during linking) |
-
-**Note about `.lib` files:** The `.dll.a` format is the import library format used by GCC toolchains. If you're looking for `.lib` files, those are the MSVC (Microsoft Visual C++) import library format and are only generated when building with the MSVC toolchain. The `.dll.a` file serves the same purpose as `.lib` but for GCC-based compilers.
-
-**Linking against libhttpserver:**
-
-Using pkg-config (recommended):
-```bash
-g++ myapp.cpp $(pkg-config --cflags --libs libhttpserver) -o myapp
-```
-
-Manual linking:
-```bash
-g++ myapp.cpp -I/mingw64/include -L/mingw64/lib -lhttpserver -lmicrohttpd -o myapp
-```
-
-[Back to TOC](#table-of-contents)
-
-## Getting Started
-The most basic example of creating a server and handling a requests for the path `/hello`:
-```cpp
-    #include <httpserver.hpp>
-
-    using namespace httpserver;
-
-    class hello_world_resource : public http_resource {
-    public:
-        std::shared_ptr<http_response> render(const http_request&) {
-            return std::shared_ptr<http_response>(new string_response("Hello, World!"));
-        }
-    };
-
-    int main(int argc, char** argv) {
-        webserver ws{create_webserver(8080)};
-
-        hello_world_resource hwr;
-        ws.register_resource("/hello", &hwr);
-        ws.start(true);
-        
-        return 0;
-    }
-```
-To test the above example, you could run the following command from a terminal:
-    
-    curl -XGET -v http://localhost:8080/hello
-
-You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/minimal_hello_world.cpp).
-
-[Back to TOC](#table-of-contents)
-
-## Structures and classes type definition
-* _webserver:_ Represents the daemon listening on a socket for HTTP traffic.
-	* _create_webserver:_ Builder class to support the creation of a webserver.
-* _http_resource:_ Represents the resource associated with a specific http endpoint.
-* _http_request:_ Represents the request received by the resource that process it.
-* _http_response:_ Represents the response sent by the server once the resource finished its work.
-	* _string_response:_ A simple string response.
-	* _file_response:_ A response getting content from a file.
-	* _basic_auth_fail_response:_ A failure in basic authentication.
-	* _digest_auth_fail_response:_ A failure in digest authentication.
-	* _deferred_response:_ A response getting content from a callback.
-	* _empty_response:_ A response with no body (e.g., for 204 No Content).
-	* _iovec_response:_ A scatter-gather response from multiple buffers.
-	* _pipe_response:_ A response that streams content from a pipe file descriptor.
-* _websocket_handler:_ Base class for handling WebSocket connections. Derive and implement `on_message()`.
-	* _websocket_session:_ Represents an active WebSocket connection with methods to send text, binary, ping/pong, and close frames.
-
-[Back to TOC](#table-of-contents)
-
-## Create and work with a webserver
-As you can see from the example above, creating a webserver with standard configuration is quite simple:
-```cpp
-    webserver ws{create_webserver(8080)};
-```
-The `create_webserver` class is a supporting _builder_ class that eases the building of a webserver through chained syntax.
-
-### Basic Startup Options
-
-In this section we will explore other basic options that you can use when configuring your server. More advanced options (custom callbacks, https support, etc...) will be discussed separately.
-
-* _.port(**int** port):_ The port at which the server will listen. This can also be passed to the consturctor of `create_webserver`. E.g. `create_webserver(8080)`.
-* _.max_connections(**int** max_conns):_ Maximum number of concurrent connections to accept. The default is `FD_SETSIZE - 4` (the maximum number of file descriptors supported by `select` minus four for `stdin`, `stdout`, `stderr` and the server socket). In other words, the default is as large as possible. Note that if you set a low connection limit, you can easily get into trouble with browsers doing request pipelining.
-For example, if your connection limit is “1”, a browser may open a first connection to access your “index.html” file, keep it open but use a second connection to retrieve CSS files, images and the like. In fact, modern browsers are typically by default configured for up to 15 parallel connections to a single server. If this happens, the library will refuse to even accept the second connection until the first connection is closed — which does not happen until timeout. As a result, the browser will fail to render the page and seem to hang. If you expect your server to operate close to the connection limit, you should first consider using a lower timeout value and also possibly add a “Connection: close” header to your response to ensure that request pipelining is not used and connections are closed immediately after the request has completed.
-* _.content_size_limit(**size_t** size_limit):_ Sets the maximum size of the content that a client can send over in a single block. The default is `-1 = unlimited`.
-* _.connection_timeout(**int** timeout):_ Determines after how many seconds of inactivity a connection should be timed out automatically. The default timeout is `180 seconds`.
-* _.memory_limit(**int** memory_limit):_ Maximum memory size per connection (followed by a `size_t`). The default is 32 kB (32*1024 bytes). Values above 128k are unlikely to result in much benefit, as half of the memory will be typically used for IO, and TCP buffers are unlikely to support window sizes above 64k on most systems.
-* _.per_IP_connection_limit(**int** connection_limit):_ Limit on the number of (concurrent) connections made to the server from the same IP address. Can be used to prevent one IP from taking over all of the allowed connections. If the same IP tries to establish more than the specified number of connections, they will be immediately rejected. The default is `0`, which means no limit on the number of connections from the same IP address.
-* _.bind_address(**const struct sockaddr*** address):_ Bind the server to a specific network interface by passing a pre-constructed `sockaddr` structure. This gives full control over the address configuration but requires manual socket address setup.
-* _.bind_address(**const std::string&** ip):_ Bind the server to a specific network interface by IP address string (e.g., `"127.0.0.1"` for localhost only, or `"192.168.1.100"` for a specific interface). Supports both IPv4 and IPv6 addresses. When an IPv6 address is provided, IPv6 mode is automatically enabled. Example: `create_webserver(8080).bind_address("127.0.0.1")`.
-* _.bind_socket(**int** socket_fd):_ Listen socket to use. Pass a listen socket for the daemon to use (systemd-style). If this option is used, the daemon will not open its own listen socket(s). The argument passed must be of type "int" and refer to an existing socket that has been bound to a port and is listening.
-* _.max_thread_stack_size(**int** stack_size):_ Maximum stack size for threads created by the library. Not specifying this option or using a value of zero means using the system default (which is likely to differ based on your platform). Default is `0 (system default)`.
-* _.use_ipv6(**bool** enable = true):_ Enable or disable IPv6 protocol support (by default, libhttpserver supports only IPv4). If you enable this and the local platform does not support it, starting up the server will throw an exception. `off` by default. Pass `false` to disable explicitly.
-* _.use_dual_stack(**bool** enable = true):_ Enable or disable support for both IPv6 and IPv4 protocols at the same time (by default, libhttpserver supports only IPv4). If you enable this and the local platform does not support it, starting up the server will throw an exception. Note that this will mean that IPv4 addresses are returned in the IPv6-mapped format (the ’structsockaddrin6’ format will be used for IPv4 and IPv6). `off` by default.
-* _.pedantic(**bool** enable = true):_ Enables pedantic checks about the protocol (as opposed to as tolerant as possible). Specifically, at the moment, this flag causes the library to reject HTTP 1.1 connections without a `Host` header. This is required by the standard, but of course in violation of the "be as liberal as possible in what you accept" norm. It is recommended to turn this **off** if you are testing clients against the library, and **on** in production. `off` by default.
-* _.debug(**bool** enable = true):_ Enables debug messages from the library. `off` by default.
-* _.regex_checking(**bool** enable = true):_ Enables pattern matching for endpoints. Read more [here](#registering-resources). `on` by default.
-* _.post_process(**bool** enable = true):_ Enables/Disables the library to automatically parse the body of the http request as arguments if in querystring format. Read more [here](#parsing-requests). `on` by default.
-* _.put_processed_data_to_content(**bool** enable = true):_ Enables/Disables the library to copy parsed body data to the content or to only store it in the arguments map. `on` by default.
-* _.file_upload_target(**file_upload_target_T** file_upload_target):_ Controls, how the library stores uploaded files. Default value is `FILE_UPLOAD_MEMORY_ONLY`.
-	* `FILE_UPLOAD_MEMORY_ONLY`: The content of the file is only stored in memory. Depending on `put_processed_data_to_content` only as part of the arguments map or additionally in the content.
-	* `FILE_UPLOAD_DISK_ONLY`: The content of the file is stored only in the file system. The path is created from `file_upload_dir` and either a random name (if `generate_random_filename_on_upload` is true) or the actually uploaded file name.
-	* `FILE_UPLOAD_MEMORY_AND_DISK`: The content of the file is stored in memory and on the file system.
-* _.file_upload_dir(**const std::string&** file_upload_dir):_ Specifies the directory to store all uploaded files. Default value is `/tmp`.
-* _.generate_random_filename_on_upload(**bool** enable = true):_ Enables/Disables the library to generate a unique and unused filename to store the uploaded file to. Otherwise the actually uploaded file name is used. `off` by default.
-* _.file_cleanup_callback(**file_cleanup_callback_ptr** callback):_ Sets a callback function to control what happens to uploaded files when the request completes. By default (when no callback is set), all uploaded files are automatically deleted. The callback signature is `bool(const std::string& key, const std::string& filename, const http::file_info& info)` where `key` is the form field name, `filename` is the original uploaded filename, and `info` contains file metadata including the filesystem path. Return `true` to delete the file (default behavior) or `false` to keep it (e.g., after moving it to permanent storage). If the callback throws an exception, the file will be deleted as a safety measure.
-* _.deferred(**bool** enable = true):_ Enables/Disables the ability for the server to suspend and resume connections. Simply put, it enables/disables the ability to use `deferred_response`. Read more [here](#building-responses-to-requests). `on` by default.
-* _.single_resource(**bool** enable = true):_ Sets or unsets the server in single resource mode. This limits all endpoints to be served from a single resource. The resultant is that the webserver will process the request matching to the endpoint skipping any complex semantic. Because of this, the option is incompatible with `regex_checking` and requires the resource to be registered against an empty endpoint or the root endpoint (`"/"`). The resource will also have to be registered as family. (For more information on resource registration, read more [here](#registering-resources)). `off` by default.
-* _.listen_socket(**bool** enable = true):_ Run the daemon with (`true`) or without (`false`) a listening socket. When disabled, the server will not bind to any port on its own; instead, you must provide connections externally via `add_connection()`. Useful for integrating with an external accept loop or passing sockets from systemd or another process. `on` by default.
-* _.thread_safety(**bool** enable = true):_ Enable or disable internal thread-safety mechanisms. Disabling can improve performance when you guarantee that only a single thread will access the daemon at a time. **Only disable this if you are sure you do not need concurrent access.** `on` by default.
-* _.turbo(**bool** enable = true):_ Enable turbo mode. This is a performance optimization that allows the daemon to skip certain internal operations. Requires the application to meet specific threading and response constraints — consult the libmicrohttpd documentation for details. `off` by default.
-* _.suppress_date_header(**bool** enable = true):_ Suppress the automatic addition of a `Date:` header in responses. Useful for reproducible tests or when the application manages its own date headers. `off` by default.
-* _.listen_backlog(**int** backlog):_ Set the TCP listen backlog size. Higher values allow more pending connections in the kernel queue. Default is `0` (system default).
-* _.address_reuse(**int** reuse):_ Control address reuse (`SO_REUSEADDR`/`SO_REUSEPORT`). Pass `1` to enable, `-1` to disable. Default is `0` (system default).
-* _.connection_memory_increment(**size_t** increment):_ Increment size for per-connection memory allocation when the initial pool is exhausted. Default is `0` (system default, typically 1024 bytes).
-* _.tcp_fastopen_queue_size(**int** queue_size):_ Set the size of the TCP Fast Open queue. When set, enables TCP Fast Open with the specified queue depth. Default is `0` (disabled).
-* _.sigpipe_handled_by_app(**bool** enable = true):_ Inform the daemon that the application is handling `SIGPIPE` on its own, so libmicrohttpd should not install a handler. `off` by default.
-* _.client_discipline_level(**int** level):_ Controls how strictly the server enforces HTTP protocol compliance. Higher values make the server stricter with misbehaving clients. Default is `-1` (use libmicrohttpd default).
-
-### Threading Models
-* _.start_method(**const http::http_utils::start_method_T&** start_method):_ libhttpserver can operate with two different threading models that can be selected through this method. Default value is `INTERNAL_SELECT`.
-	* `http::http_utils::INTERNAL_SELECT`: In this mode, libhttpserver uses only a single thread to handle listening on the port and processing of requests. This mode is preferable if spawning a thread for each connection would be costly. If the HTTP server is able to quickly produce responses without much computational overhead for each connection, this mode can be a great choice. Note that libhttpserver will still start a single thread for itself -- this way, the main program can continue with its operations after calling the start method. Naturally, if the HTTP server needs to interact with shared state in the main application, synchronization will be required. If such synchronization in code providing a response results in blocking, all HTTP server operations on all connections will stall. This mode is a bad choice if response data cannot always be provided instantly. The reason is that the code generating responses should not block (since that would block all other connections) and on the other hand, if response data is not available immediately, libhttpserver will start to busy wait on it. If you need to scale along the number of concurrent connection and scale on multiple thread you can specify a value for `max_threads` (see below) thus enabling a thread pool - this is different from `THREAD_PER_CONNECTION` below where a new thread is spawned for each connection. 
-	* `http::http_utils::THREAD_PER_CONNECTION`: In this mode, libhttpserver starts one thread to listen on the port for new connections and then spawns a new thread to handle each connection. This mode is great if the HTTP server has hardly any state that is shared between connections (no synchronization issues!) and may need to perform blocking operations (such as extensive IO or running of code) to handle an individual connection.
-* _.max_threads(**int** max_threads):_ A thread pool can be combined with the `INTERNAL_SELECT` mode to benefit implementations that require scalability. As said before, by default this mode only uses a single thread. When combined with the thread pool option, it is possible to handle multiple connections with multiple threads. Any value greater than one for this option will activate the use of the thread pool. In contrast to the `THREAD_PER_CONNECTION` mode (where each thread handles one and only one connection), threads in the pool can handle a large number of concurrent connections. Using `INTERNAL_SELECT` in combination with a thread pool is typically the most scalable (but also hardest to debug) mode of operation for libhttpserver. Default value is `1`. This option is incompatible with `THREAD_PER_CONNECTION`.
-
-### Custom defaulted error messages
-libhttpserver allows to override internal error retrieving functions to provide custom messages to the HTTP client. There are only 3 cases in which implementing logic (an http_resource) cannot be invoked: (1) a not found resource, where the library is not being able to match the URL requested by the client to any implementing http_resource object; (2) a not allowed method, when the HTTP client is requesting a method explicitly marked as not allowed (more info [here](#allowing-and-disallowing-methods-on-a-resource)) by the implementation; (3) an exception being thrown.
-In all these 3 cases libhttpserver would provide a standard HTTP response to the client with the correct error code; respectively a `404`, a `405` and a `500`. The library allows its user to specify custom callbacks that will be called to replace the default behavior.
-* _.not_found_handler(**std::function<http_response(const http_request&)>** handler):_ Specifies a function to handle a request when no matching registered endpoint exist for the URL requested by the client.
-* _.method_not_allowed_handler(**std::function<http_response(const http_request&)>** handler):_ Specifies a function to handle a request that is asking for a method marked as not allowed on the matching http_resource.
-* _.internal_error_handler(**std::function<http_response(const http_request&)>** handler):_ Specifies a function to handle a request that is causing an uncaught exception during its execution. **REMEMBER:** is this callback is causing an exception itself, the standard default response from libhttpserver will be reported to the HTTP client.
-
-#### Example of custom errors:
-```cpp
-      #include <httpserver.hpp>
-
-      using namespace httpserver;
-
-      http_response not_found_custom(const http_request& req) {
-          return http_response::string("Not found custom").with_status(404);
-      }
-
-      http_response not_allowed_custom(const http_request& req) {
-          return http_response::string("Not allowed custom").with_status(405);
-      }
-
-      class hello_world_resource : public http_resource {
-      public:
-          std::shared_ptr<http_response> render(const http_request&) {
-              return std::shared_ptr<http_response>(new string_response("Hello, World!"));
-          }
-      };
-
-      int main(int argc, char** argv) {
-          webserver ws{create_webserver(8080)
-              .not_found_handler(not_found_custom)
-              .method_not_allowed_handler(not_allowed_custom)};
-
-          hello_world_resource hwr;
-          hwr.disallow_all();
-          hwr.set_allowing("GET", true);
-          ws.register_resource("/hello", &hwr);
-          ws.start(true);
-
-          return 0;
-      }
-```
-To test the above example, you can run the following command from a terminal:
-    
-    curl -XGET -v http://localhost:8080/hello
-
-If you try to run either of the two following commands, you'll see your custom errors:
-* `curl -XGET -v http://localhost:8080/morning`: will return your custom `not found` error.
-* `curl -XPOST -v http://localhost:8080/hello`: will return your custom `not allowed` error.
-
-You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/custom_error.cpp).
-
-### Custom logging callbacks
-* _.log_access(**void(&ast;log_access_ptr)(const std::string&)** functor):_ Specifies a function used to log accesses (requests) to the server.
-* _.log_error(**void(&ast;log_error_ptr)(const std::string&)** functor):_ Specifies a function used to log errors generating from the server.
-
-#### Example of custom logging callback
-```cpp
-    #include <httpserver.hpp>
-    #include <iostream>
-
-    using namespace httpserver;
-
-    void custom_access_log(const std::string& url) {
-        std::cout << "ACCESSING: " << url << std::endl;
-    }
-
-    class hello_world_resource : public http_resource {
-    public:
-        std::shared_ptr<http_response> render(const http_request&) {
-            return std::shared_ptr<http_response>(new string_response("Hello, World!"));
-        }
-    };
-
-    int main(int argc, char** argv) {
-        webserver ws{create_webserver(8080)
-            .log_access(custom_access_log)};
-
-        hello_world_resource hwr;
-        ws.register_resource("/hello", &hwr);
-        ws.start(true);
-
-        return 0;
-    }
-```
-To test the above example, you can run the following command from a terminal:
-    
-    curl -XGET -v http://localhost:8080/hello
-
-You'll notice how, on the terminal runing your server, the logs will now be printed in output for each request received.
-
-You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/custom_access_log.cpp).
-
-### TLS/HTTPS
-* _.use_ssl(**bool** enable = true):_ Determines whether to run in HTTPS-mode or not. If you set this as on and libhttpserver was compiled without SSL support, the library will throw an exception at start of the server. `off` by default.
-* _.cred_type(**const http::http_utils::cred_type_T&** cred_type):_ Daemon credentials type. Either certificate or anonymous. Acceptable values are:
-	* `NONE`: No credentials.
-	* `CERTIFICATE`: Certificate credential.
-	* `ANON`: Anonymous credential.
-	* `SRP`: SRP credential.
-	* `PSK`: PSK credential.
-	* `IA`: IA credential.
-* _.https_mem_key(**const std::string&** filename):_ String representing the path to a file containing the private key to be used by the HTTPS daemon. This must be used in conjunction with `https_mem_cert`.
-* _.https_mem_cert(**const std::string&** filename):_ String representing the path to a file containing the certificate to be used by the HTTPS daemon. This must be used in conjunction with `https_mem_key`.
-* _.https_mem_trust(**const std::string&** filename):_ String representing the path to a file containing the CA certificate to be used by the HTTPS daemon to authenticate and trust clients certificates. The presence of this option activates the request of certificate to the client. The request to the client is marked optional, and it is the responsibility of the server to check the presence of the certificate if needed. Note that most browsers will only present a client certificate only if they have one matching the specified CA, not sending any certificate otherwise.
-* _.https_priorities(**const std::string&** priority_string):_ SSL/TLS protocol version and ciphers. Must be followed by a string specifying the SSL/TLS protocol versions and ciphers that are acceptable for the application. The string is passed unchanged to gnutls_priority_init. If this option is not specified, `"NORMAL"` is used.
-* _.psk_cred_handler(**psk_cred_handler_callback** handler):_ Sets a callback function for TLS-PSK (Pre-Shared Key) authentication. The callback receives a username and should return the corresponding hex-encoded PSK, or an empty string if the user is unknown. This option requires `use_ssl()`, `cred_type(http::http_utils::PSK)`, and an appropriate `https_priorities()` string that enables PSK cipher suites. PSK authentication allows TLS without certificates by using a shared secret key.
-* _.sni_callback(**sni_callback_t** callback):_ Sets a callback function for SNI (Server Name Indication) support. The callback receives the server name requested by the client and should return a `std::pair<std::string, std::string>` containing the PEM-encoded certificate and key for that server name. Return empty strings to use the default certificate. Requires libmicrohttpd 1.0.0+ with GnuTLS.
-* _.https_mem_dhparams(**const std::string&** dhparams):_ String containing the Diffie-Hellman (DH) parameters in PEM format. This is used for DHE key exchange in TLS. If not specified, default DH parameters may be used.
-* _.https_key_password(**const std::string&** password):_ Password for the private key specified by `https_mem_key`, if the key file is encrypted.
-* _.https_priorities_append(**const std::string&** priorities):_ Additional GnuTLS priorities to append to the base priority string. Unlike `https_priorities()` which replaces the entire string, this appends to the default, making it easier to adjust specific cipher suites or algorithms.
-* _.alpn(**bool** enable = true):_ Enable or disable Application-Layer Protocol Negotiation (ALPN) for TLS connections. `on` by default.
-
-#### Minimal example using HTTPS
-```cpp
-    #include <httpserver.hpp>
-
-    using namespace httpserver;
-
-    class hello_world_resource : public http_resource {
-    public:
-        std::shared_ptr<http_response> render(const http_request&) {
-            return std::shared_ptr<http_response>(new string_response("Hello, World!"));
-        }
-    };
-
-    int main(int argc, char** argv) {
-        webserver ws{create_webserver(8080)
-            .use_ssl()
-            .https_mem_key("key.pem")
-            .https_mem_cert("cert.pem")};
-
-        hello_world_resource hwr;
-        ws.register_resource("/hello", &hwr);
-        ws.start(true);
-
-        return 0;
-    }
-```
-To test the above example, you can run the following command from a terminal:
-    
-    curl -XGET -v -k 'https://localhost:8080/hello'
-
-You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/minimal_https.cpp).
-
-#### Minimal example using TLS-PSK
-```cpp
-    #include <httpserver.hpp>
-    #include <map>
-    #include <string>
-
-    using namespace httpserver;
-
-    // Simple PSK database - in production, use secure storage
-    std::map<std::string, std::string> psk_database = {
-        {"client1", "0123456789abcdef0123456789abcdef"},
-        {"client2", "fedcba9876543210fedcba9876543210"}
-    };
-
-    // PSK credential handler callback
-    std::string psk_handler(const std::string& username) {
-        auto it = psk_database.find(username);
-        if (it != psk_database.end()) {
-            return it->second;
-        }
-        return "";  // Return empty string for unknown users
-    }
-
-    class hello_world_resource : public http_resource {
-    public:
-        std::shared_ptr<http_response> render(const http_request&) {
-            return std::shared_ptr<http_response>(
-                new string_response("Hello, World (via TLS-PSK)!"));
-        }
-    };
-
-    int main(int argc, char** argv) {
-        webserver ws{create_webserver(8080)
-            .use_ssl()
-            .cred_type(http::http_utils::PSK)
-            .psk_cred_handler(psk_handler)
-            .https_priorities("NORMAL:-VERS-TLS-ALL:+VERS-TLS1.2:+PSK:+DHE-PSK")};
-
-        hello_world_resource hwr;
-        ws.register_resource("/hello", &hwr);
-        ws.start(true);
-
-        return 0;
-    }
-```
-To test the above example, you can run the following command from a terminal using gnutls-cli:
-
-    gnutls-cli --pskusername=client1 --pskkey=0123456789abcdef0123456789abcdef -p 8080 localhost
-
-Then type `GET /hello HTTP/1.1` followed by `Host: localhost` and two newlines.
-
-You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/minimal_https_psk.cpp).
-
-### IP Blacklisting/Whitelisting
-libhttpserver supports IP blacklisting and whitelisting as an internal feature. This section explains the startup options related with IP blacklisting/whitelisting. See the [specific section](#ip-blacklisting-and-whitelisting) to read more about the topic.
-* _.ban_system(**bool** enable = true):_ Can be used to enable/disable the ban system. `on` by default.
-* _.default_policy(**const http::http_utils::policy_T&** default_policy):_ Specifies what should be the default behavior when receiving a request. Possible values are `ACCEPT` and `REJECT`. Default is `ACCEPT`.
-
-### Authentication Parameters
-* _.basic_auth(**bool** enable = true):_ Can be used to enable/disable parsing of the basic authorization header sent by the client. `on` by default.
-* _.digest_auth(**bool** enable = true):_ Can be used to enable/disable parsing of the digested authentication data sent by the client. `on` by default.
-* _.nonce_nc_size(**int** nonce_size):_ Size of an array of nonce and nonce counter map. This option represents the size (number of elements) of a map of a nonce and a nonce-counter. If this option is not specified, a default value of 4 will be used (which might be too small for servers handling many requests).
-You should calculate the value of NC_SIZE based on the number of connections per second multiplied by your expected session duration plus a factor of about two for hash table collisions. For example, if you expect 100 digest-authenticated connections per second and the average user to stay on your site for 5 minutes, then you likely need a value of about 60000. On the other hand, if you can only expect only 10 digest-authenticated connections per second, tolerate browsers getting a fresh nonce for each request and expect a HTTP request latency of 250 ms, then a value of about 5 should be fine.
-* _.digest_auth_random(**const std::string&** nonce_seed):_ Digest Authentication nonce’s seed. For security, you SHOULD provide a fresh random nonce when actually using Digest Authentication with libhttpserver in production.
-
-### Examples of chaining syntax to create a webserver
-```cpp
-    webserver ws{create_webserver(8080)
-        .use_ssl(false)
-        .use_ipv6(false)
-        .debug(false)
-        .pedantic(false)
-        .basic_auth(false)
-        .digest_auth(false)
-        .deferred(false)
-        .regex_checking(false)
-        .ban_system(false)
-        .post_process(false)};
-```
-##
-```cpp
-    webserver ws{create_webserver(8080)
-        .use_ssl()
-        .https_mem_key("key.pem")
-        .https_mem_cert("cert.pem")};
-```
-### Starting and stopping a webserver
-Once a webserver is created, you can manage its execution through the following methods on the `webserver` class:
-* _**void** webserver::start(**bool** blocking):_ Allows to start a server. If the `blocking` flag is passed as `true`, it will block the execution of the current thread until a call to stop on the same webserver object is performed.
-* _**void** webserver::stop():_ Allows to stop a server. It immediately stops it.
-* _**bool** webserver::is_running():_ Checks if a server is running
-* _**void** webserver::stop_and_wait():_ Stop the webserver and wait for in-flight handlers to complete before returning. Use `stop()` when no such guarantee is required.
-* _**int** webserver::quiesce():_ Quiesce the daemon: stop accepting new connections while letting in-flight requests complete. Returns the listen socket file descriptor (the caller can close it), or `-1` on error.
-* _**bool** webserver::run():_ Run the webserver's event loop once (non-blocking). For use with external event loops when the server is started without internal threading. Returns `true` on success.
-* _**bool** webserver::run_wait(**int32_t** millisec):_ Run the webserver's event loop, blocking until there is activity or the timeout expires. Pass `-1` for indefinite wait. Returns `true` on success.
-* _**bool** webserver::get_fdset(**fd_set&ast;** read_fd_set, **fd_set&ast;** write_fd_set, **fd_set&ast;** except_fd_set, **int&ast;** max_fd):_ Get the file descriptor sets for `select()`-based external event loop integration. Returns `true` on success.
-* _**bool** webserver::get_timeout(**uint64_t&ast;** timeout):_ Get the timeout (in milliseconds) until the next daemon action is needed. Returns `true` if a timeout was set, `false` if no timeout is needed.
-* _**bool** webserver::add_connection(**int** client_socket, **const struct sockaddr&ast;** addr, **socklen_t** addrlen):_ Add an externally-accepted socket connection to the daemon. Useful with `listen_socket(false)`. Returns `true` on success.
-* _**int** webserver::get_listen_fd():_ Get the listen socket file descriptor, or `-1` if not available.
-* _**unsigned int** webserver::get_active_connections():_ Get the number of currently active connections.
-* _**uint16_t** webserver::get_bound_port():_ Get the actual port the daemon is bound to. Particularly useful when port `0` was specified to let the OS choose an ephemeral port.
-
-[Back to TOC](#table-of-contents)
-
-## The Resource Object
-The `http_resource` class represents a logical collection of HTTP methods that will be associated to a URL when registered on the webserver. The class is **designed for extension** and it is where most of your code should ideally live. When the webserver matches a request against a resource (see: [resource registration](#registering-resources)), the method correspondent to the one in the request (GET, POST, etc..) (see below) is called on the resource.
-
-Given this, the `http_resource` class contains the following extensible methods (also called `handlers` or `render methods`):
-* _**std::shared_ptr<http_response>** http_resource::render_get(**const http_request&** req):_ Invoked on an HTTP GET request.
-* _**std::shared_ptr<http_response>** http_resource::render_post(**const http_request&** req):_ Invoked on an HTTP POST request.
-* _**std::shared_ptr<http_response>** http_resource::render_put(**const http_request&** req):_ Invoked on an HTTP PUT request.
-* _**std::shared_ptr<http_response>** http_resource::render_head(**const http_request&** req):_ Invoked on an HTTP HEAD request.
-* _**std::shared_ptr<http_response>** http_resource::render_delete(**const http_request&** req):_ Invoked on an HTTP DELETE request.
-* _**std::shared_ptr<http_response>** http_resource::render_trace(**const http_request&** req):_ Invoked on an HTTP TRACE request.
-* _**std::shared_ptr<http_response>** http_resource::render_options(**const http_request&** req):_ Invoked on an HTTP OPTIONS request.
-* _**std::shared_ptr<http_response>** http_resource::render_connect(**const http_request&** req):_ Invoked on an HTTP CONNECT request.
-* _**std::shared_ptr<http_response>** http_resource::render(**const http_request&** req):_ Invoked as a backup method if the matching method is not implemented. It can be used whenever you want all the invocations on a URL to activate the same behavior regardless of the HTTP method requested. The default implementation of the `render` method returns an empty response with a `404`.
-
-#### Example of implementation of render methods
-```cpp
-    #include <httpserver.hpp>
-
-    using namespace httpserver;
-
-    class hello_world_resource : public http_resource {
-    public:
-        std::shared_ptr<http_response> render_get(const http_request&) {
-            return std::shared_ptr<http_response>(new string_response("GET: Hello, World!"));
-        }
-
-        std::shared_ptr<http_response> render(const http_request&) {
-            return std::shared_ptr<http_response>(new string_response("OTHER: Hello, World!"));
-        }
-    };
-
-    int main(int argc, char** argv) {
-        webserver ws{create_webserver(8080)};
-
-        hello_world_resource hwr;
-        ws.register_resource("/hello", &hwr);
-        ws.start(true);
-
-        return 0;
-    }
-```
-To test the above example, you can run the following commands from a terminal:
- * `curl -XGET -v http://localhost:8080/hello`: will return `GET: Hello, World!`.
- * `curl -XPOST -v http://localhost:8080/hello`: will return `OTHER: Hello, World!`. You can try requesting other methods beside `POST` to verify how the same message will be returned.
-
-You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/handlers.cpp).
-
-### Allowing and disallowing methods on a resource
-By default, all methods an a resource are allowed, meaning that an HTTP request with that method will be invoked. It is possible to mark methods as `not allowed` on a resource. When a method not allowed is requested on a resource, the default `method_not_allowed` method is invoked - the default can be overriden as explain in the section [Custom defaulted error messages](custom-defaulted-error-messages).
-The base `http_resource` class has a set of methods that can be used to allow and disallow HTTP methods.
-* _**void**  http_resource::set_allowing(**const std::string&** method, **bool** allowed):_ Used to allow or disallow a method. The `method` parameter is a string representing an HTTP method (GET, POST, PUT, etc...).
-* _**void**  http_resource::allow_all():_ Marks all HTTP methods as allowed.
-* _**void**  http_resource::disallow_all():_ Marks all HTTP methods as not allowed.
-
-#### Example of methods allowed/disallowed
-```cpp
-      #include <httpserver.hpp>
-
-      using namespace httpserver;
-
-      class hello_world_resource : public http_resource {
-      public:
-          std::shared_ptr<http_response> render(const http_request&) {
-              return std::shared_ptr<http_response>(new string_response("Hello, World!"));
-          }
-      };
-
-      int main(int argc, char** argv) {
-          webserver ws{create_webserver(8080)};
-
-          hello_world_resource hwr;
-          hwr.disallow_all();
-          hwr.set_allowing("GET", true);
-          ws.register_resource("/hello", &hwr);
-          ws.start(true);
-
-          return 0;
-      }
-```
-To test the above example, you can run the following command from a terminal:
-    
-    curl -XGET -v http://localhost:8080/hello
-
-If you try to run the following command, you'll see a `method_not_allowed` error:
-* `curl -XPOST -v http://localhost:8080/hello`.
-
-You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/allowing_disallowing_methods.cpp).
-
-[Back to TOC](#table-of-contents)
-
-## Registering resources
-Once you have created your resource and extended its methods, you'll have to register the resource on the webserver. Registering a resource will associate it with an endpoint and allows the webserver to route it.
-The `webserver` class offers a method to register a resource:
-* _**bool** register_resource(**const std::string&** endpoint, **http_resource&ast;** resource, **bool** family = `false`):_ Registers the `resource` to an `endpoint`. The endpoint is a string representing the path on your webserver from where you want your resource to be served from (e.g. `"/path/to/resource"`). The optional `family` parameter allows to register a resource as a "family" resource that will match any path nested into the one specified. For example, if family is set to `true` and endpoint is set to `"/path"`, the webserver will route to the resource not only the requests against  `"/path"` but also everything in its nested path `"/path/on/the/previous/one"`.
-
-### Specifying endpoints
-There are essentially four ways to specify an endpoint string:
-* **A simple path (e.g. `"/path/to/resource"`).** In this case, the webserver will try to match exactly the value of the endpoint.
-* **A regular exception.** In this case, the webserver will try to match the URL of the request with the regex passed. For example, if passing `"/path/as/decimal/[0-9]+`, requests on URLs like `"/path/as/decimal/5"` or `"/path/as/decimal/42"` will be matched; instead, URLs like `"/path/as/decimal/three"` will not.
-* **A parametrized path. (e.g. `"/path/to/resource/with/{arg1}/{arg2}/in/url"`)**. In this case, the webserver will match the argument with any value passed. In addition to this, the arguments will be passed to the resource as part of the arguments (readable from the `http_request::get_arg` method - see [here](#parsing-requests)). For example, if passing `"/path/to/resource/with/{arg1}/{arg2}/in/url"` will match any request on URL with any value in place of `{arg1}` and `{arg2}`. 
-* **A parametrized path with custom parameters.** This is the same of a normal parametrized path, but allows to specify a regular expression for the argument (e.g. `"/path/to/resource/with/{arg1|[0-9]+}/{arg2|[a-z]+}/in/url"`. In this case, the webserver will match the arguments with any value passed that satisfies the regex. In addition to this, as above, the arguments will be passed to the resource as part of the arguments (readable from the `http_request::get_arg` method - see [here](#parsing-requests)). For example, if passing `"/path/to/resource/with/{arg1|[0-9]+}/{arg2|[a-z]+}/in/url"` will match requests on URLs like `"/path/to/resource/with/10/AA/in/url"` but not like `""/path/to/resource/with/BB/10/in/url""`
-* Any of the above marked as `family`. Will match any request on URLs having path that is prefixed by the path passed. For example, if family is set to `true` and endpoint is set to `"/path"`, the webserver will route to the resource not only the requests against  `"/path"` but also everything in its nested path `"/path/on/the/previous/one"`.
-```cpp
-      #include <httpserver.hpp>
-
-      using namespace httpserver;
-
-      class hello_world_resource : public http_resource {
-      public:
-          std::shared_ptr<http_response> render(const http_request&) {
-              return std::shared_ptr<http_response>(new string_response("Hello, World!"));
-          }
-      };
-
-      class handling_multiple_resource : public http_resource {
-      public:
-          std::shared_ptr<http_response> render(const http_request& req) {
-              return std::shared_ptr<http_response>(new string_response("Your URL: " + req.get_path()));
-          }
-      };
-
-      class url_args_resource : public http_resource {
-      public:
-          std::shared_ptr<http_response> render(const http_request& req) {
-              std::string arg1(req.get_arg("arg1"));
-              std::string arg2(req.get_arg("arg2"));
-              return std::shared_ptr<http_response>(new string_response("ARGS: " + arg1 + " and " + arg2));
-          }
-      };
-
-      int main(int argc, char** argv) {
-          webserver ws{create_webserver(8080)};
-
-          hello_world_resource hwr;
-          ws.register_resource("/hello", &hwr);
-
-          handling_multiple_resource hmr;
-          ws.register_resource("/family", &hmr, true);
-          ws.register_resource("/with_regex_[0-9]+", &hmr);
-
-          url_args_resource uar;
-          ws.register_resource("/url/with/{arg1}/and/{arg2}", &uar);
-          ws.register_resource("/url/with/parametric/args/{arg1|[0-9]+}/and/{arg2|[A-Z]+}", &uar);
-
-          ws.start(true);
-
-          return 0;
-      }
-```
-To test the above example, you can run the following commands from a terminal:
-    
-* `curl -XGET -v http://localhost:8080/hello`: will return the `Hello, World!` message.
-* `curl -XGET -v http://localhost:8080/family`: will return the `Your URL: /family` message.
-* `curl -XGET -v http://localhost:8080/family/with/suffix`: will return the `Your URL: /family/with/suffix` message.
-* `curl -XGET -v http://localhost:8080/with_regex_10`: will return the `Your URL: /with_regex_10` message.
-* `curl -XGET -v http://localhost:8080/url/with/AA/and/BB`: will return the `ARGS: AA and BB` message. You can change `AA` and `BB` with any value and observe how the URL is still matched and parameters are read.
-* `curl -XGET -v http://localhost:8080/url/with/parametric/args/10/and/AA`: will return the `ARGS: 10 and AA` message. You can change `10` and `AA` with any value matching the regexes and observe how the URL is still matched and parameters are read.
-
-Conversely, you can observe how these URL will not be matched (al the following will give you a `not found` message):
-* `curl -XGET -v http://localhost:8080/with_regex_A`
-* `curl -XGET -v http://localhost:8080/url/with/parametric/args/AA/and/BB`
-
-You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/url_registration.cpp).
-
-[Back to TOC](#table-of-contents)
-
-## Parsing requests
-As seen in the documentation of [http_resource](#the-resource-object), every extensible method takes in input a `http_request` object. The webserver takes the responsibility to extract the data from the HTTP request on the network and does all the heavy lifting to build the instance of `http_request`.
-
-The `http_request` class has a set of methods you will have access to when implementing your handlers:
-* _**const std::string&** get_path() **const**:_ Returns the path as requested from the HTTP client.
-* _**const std::vector\<std::string\>&** get_path_pieces() **const**:_ Returns the components of the path requested by the HTTP client (each piece of the path split by `'/'`.
-* _**const std::string&** get_path_piece(int index) **const**:_ Returns one piece of the path requested by the HTTP client. The piece is selected through the `index` parameter (0-indexed). 
-* _**const std::string&** get_method() **const**:_ Returns the method requested by the HTTP client.
-* _**std::string_view** get_header(**std::string_view** key) **const**:_ Returns the header with name equal to `key` if present in the HTTP request. Returns an `empty string` otherwise.
-* _**std::string_view** get_cookie(**std::string_view** key) **const**:_ Returns the cookie with name equal to `key` if present in the HTTP request. Returns an `empty string` otherwise.
-* _**std::string_view** get_footer(**std::string_view** key) **const**:_ Returns the footer with name equal to `key` if present in the HTTP request (only for http 1.1 chunked encodings). Returns an `empty string` otherwise.
-* _**http_arg_value** get_arg(**std::string_view** key) **const**:_ Returns the argument with name equal to `key` if present in the HTTP request. Arguments can be (1) querystring parameters, (2) path argument (in case of parametric endpoint, (3) parameters parsed from the HTTP request body if the body is in `application/x-www-form-urlencoded` or `multipart/form-data` formats and the postprocessor is enabled in the webserver (enabled by default). Arguments are collected in a domain object that allows to collect multiple arguments with the same key while keeping the access transparent in the most common case of a single value provided per key.
-* _**std::string_view** get_arg_flat(**std::string_view** key) **const**_ Returns the argument in the same way as `get_arg` but as a string. If multiple values are provided with the same key, this method only returns the first value provided.
-* _**const std::map<std::string_view, std::string_view, http::header_comparator>** get_headers() **const**:_ Returns a map containing all the headers present in the HTTP request.
-* _**const std::map<std::string_view, std::string_view, http::header_comparator>** get_cookies() **const**:_ Returns a map containing all the cookies present in the HTTP request.
-* _**const std::map<std::string_view, std::string_view, http::header_comparator>** get_footers() **const**:_ Returns a map containing all the footers present in the HTTP request (only for http 1.1 chunked encodings).
-* _**const std::map<http_arg_value, std::string, http::arg_comparator>** get_args() **const**:_ Returns all the arguments present in the HTTP request. Arguments can be (1) querystring parameters, (2) path argument (in case of parametric endpoint, (3) parameters parsed from the HTTP request body if the body is in `application/x-www-form-urlencoded` or `multipart/form-data` formats and the postprocessor is enabled in the webserver (enabled by default). For each key, arguments are collected in a domain object that allows to collect multiple arguments with the same key while keeping the access transparent in the most common case of a single value provided per key.
-* _**const std::map<std::string, std::string, http::arg_comparator>** get_args_flat() **const**:_ Returns all the arguments as the `get_args` method but as strings. If multiple values are provided with the same key, this method will only return the first value provided.
-* _**const std::map<std::string, std::map<std::string, http::file_info>>** get_files() **const**:_ Returns information about all the uploaded files (if the files are stored to disk). This information includes the key (as identifier of the outer map), the original file name (as identifier of the inner map) and a class `file_info`, which includes the size of the file and the path to the file in the file system.
-* _**const std::string&** get_content() **const**:_ Returns the body of the HTTP request.
-* _**bool**  content_too_large() **const**:_ Returns `true` if the body length of the HTTP request sent by the client is longer than the max allowed on the server.
-* _**const std::string** get_querystring() **const**:_ Returns the `querystring` of the HTTP request.
-* _**const std::string&** get_version() **const**:_ Returns the HTTP version of the client request.
-* _**const std::string** get_requestor() **const**:_ Returns the IP from which the client is sending the request.
-* _**unsigned  short**  get_requestor_port() **const**:_ Returns the port from which the client is sending the request.
-* _**const std::string** get_user() **const**:_ Returns the `user` as self-identified through basic authentication. The content of the user header will be parsed only if basic authentication is enabled on the server (enabled by default).
-* _**const std::string** get_pass() **const**:_ Returns the `password` as self-identified through basic authentication. The content of the password header will be parsed only if basic authentication is enabled on the server (enabled by default).
-* _**const std::string** get_digested_user() **const**:_ Returns the `digested user` as self-identified through digest authentication. The content of the user header will be parsed only if digest authentication is enabled on the server (enabled by default).
-* _**bool** check_digest_auth(**const std::string&** realm, **const std::string&** password, **int** nonce_timeout, **bool*** reload_nonce) **const**:_ Allows to check the validity of the authentication token sent through digest authentication (if the provided values in the WWW-Authenticate header are valid and sound according to RFC2716). Takes in input the `realm` of validity of the authentication, the `password` as known to the server to compare against, the `nonce_timeout` to indicate how long the nonce is valid and `reload_nonce` a boolean that will be set by the method to indicate a nonce being reloaded. The method returns `true` if the authentication is valid, `false` otherwise.
-* _**bool** has_tls_session() **const**:_ Tests if there is an underlying TLS state of the current request.
-* _**gnutls_session_t** get_tls_session() **const**:_ Returns the underlying TLS state of the current request for inspection. (It is an error to call this if the state does not exist.)
-* _**bool** has_client_certificate() **const**:_ Returns `true` if the client presented a certificate during the TLS handshake. Requires GnuTLS support.
-* _**std::string** get_client_cert_dn() **const**:_ Returns the Distinguished Name (DN) from the client certificate's subject field (e.g., "CN=John Doe,O=Example Corp"). Returns empty string if no client certificate.
-* _**std::string** get_client_cert_issuer_dn() **const**:_ Returns the Distinguished Name of the certificate issuer. Returns empty string if no client certificate.
-* _**std::string** get_client_cert_cn() **const**:_ Returns the Common Name (CN) from the client certificate's subject. Returns empty string if no client certificate or no CN field.
-* _**bool** is_client_cert_verified() **const**:_ Returns `true` if the client certificate was verified against the trust store configured via `https_mem_trust()`. Returns `false` if verification failed or no TLS session.
-* _**std::string** get_client_cert_fingerprint_sha256() **const**:_ Returns the SHA-256 fingerprint of the client certificate as a lowercase hex string (64 characters). Returns empty string if no client certificate.
-* _**time_t** get_client_cert_not_before() **const**:_ Returns the start of the certificate validity period. Returns -1 if no client certificate.
-* _**time_t** get_client_cert_not_after() **const**:_ Returns the end of the certificate validity period. Returns -1 if no client certificate.
-
-Details on the `http::file_info` structure.
-
-* _**size_t** get_file_size() **const**:_ Returns the size of the file uploaded through the HTTP request.
-* _**const std::string** get_file_system_file_name() **const**:_ Returns the name of the file uploaded through the HTTP request as stored on the filesystem.
-* _**const std::string** get_content_type() **const**:_ Returns the content type of the file uploaded through the HTTP request.
-* _**const std::string** get_transfer_encoding() **const**:_ Returns the transfer encoding of the file uploaded through the HTTP request.
-
-#### Example of keeping uploaded files
-By default, uploaded files are automatically deleted when the request completes. To keep files (e.g., move them to permanent storage), use the `file_cleanup_callback`:
+libhttpserver is a C++20 library for building RESTful HTTP servers on top of
+[GNU libmicrohttpd](https://www.gnu.org/software/libmicrohttpd/). v2.0 is a
+lambda-first redesign: a working server is ten lines, handlers are
+`std::function`s, responses are value-typed, and every public method is
+thread-safe by contract.
+
+This README introduces the v2.0 API. It is not exhaustive: the headers under
+[`src/httpserver/`](src/httpserver/) and the [`examples/`](examples/) tree are
+the authoritative reference.
 
 ```cpp
+// libhttpserver hello-world example — the lambda form (PRD §3.4).
+// Compiles in ten lines including main(), with no http_resource subclass
+// and no raw-pointer ownership. Production code typically qualifies names
+// explicitly; the `using namespace` here is a one-off so this file can
+// document the shortest possible end-to-end demo. See shared_state.cpp
+// for the class-based pattern that is appropriate when handlers must
+// share mutable state.
 #include <httpserver.hpp>
-#include <cstdio>
-
-using namespace httpserver;
-
+using namespace httpserver;  // NOLINT(build/namespaces) - keep the demo at <=10 LOC
 int main() {
-    webserver ws{create_webserver(8080)
-        .file_upload_target(FILE_UPLOAD_DISK_ONLY)
-        .file_upload_dir("/tmp/uploads")
-        .file_cleanup_callback([](const std::string& key,
-                                  const std::string& filename,
-                                  const http::file_info& info) {
-            // Move file to permanent storage
-            std::string dest = "/var/uploads/" + filename;
-            std::rename(info.get_file_system_file_name().c_str(), dest.c_str());
-            return false;  // Don't delete - we moved it
-        })};
-
-    // ... register resources and start server
+    webserver ws{create_webserver(8080)};
+    ws.on_get("/hello", [](const http_request&) {
+        return http_response::string("Hello, World!");
+    });
+    ws.start(true);
 }
 ```
-To test file uploads, you can run the following command from a terminal:
 
-    curl -XPOST -F "file=@/path/to/your/file.txt" 'http://localhost:8080/upload'
-
-You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/file_upload_with_callback.cpp).
-
-Details on the `http_arg_value` structure.
-
-* _**std::string_view** get_flat_value() **const**:_ Returns only the first value provided for the key.
-* _**std::vector\<std::string_view\>** get_all_values() **const**:_ Returns all the values provided for the key.
-* _**operator** std::string() **const**:_ Converts the http_arg_value to a string with the same logic as `get_flat_value`.
-* _**operator** std::string_view() **const**:_ Converts the http_arg_value to a string_view with the same logic as `get_flat_value`.
-* _**operator** std::vector\<std::string\>() **const**:_ Converts the http_arg_value to a std::vector<std::string> with the same logic as `get_value`.
-
-#### Example of handler reading arguments from a request
-```cpp
-    #include <httpserver.hpp>
-
-    using namespace httpserver;
-
-    class hello_world_resource : public http_resource {
-    public:
-        std::shared_ptr<http_response> render(const http_request& req) {
-            return std::shared_ptr<http_response>(new string_response("Hello: " + std::string(req.get_arg("name"))));
-        }
-    };
-
-    int main(int argc, char** argv) {
-        webserver ws{create_webserver(8080)};
-
-        hello_world_resource hwr;
-        ws.register_resource("/hello", &hwr);
-        ws.start(true);
-
-        return 0;
-    }
-```
-To test the above example, you can run the following command from a terminal:
-    
-    curl -XGET -v "http://localhost:8080/hello?name=John"
-
-You will receive the message `Hello: John` in reply. Given that the body post processing is enabled, you can also run `curl -d "name=John" -X POST http://localhost:8080/hello` to obtain the same result.
-
-You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/hello_with_get_arg.cpp).
-
-[Back to TOC](#table-of-contents)
-
-## Building responses to requests
-As seen in the documentation of [http_resource](#the-resource-object), every extensible method returns in output a `http_response` object. The webserver takes the responsibility to convert the `http_response` object you create into a response on the network.
-
-There are 8 types of response that you can create - we will describe them here through their constructors:
-* _string_response(**const std::string&** content, **int** response_code = `200`, **const std::string&** content_type = `"text/plain"`):_ The most basic type of response. It uses the `content` string passed in construction as body of the HTTP response. The other two optional parameters are the `response_code` and the `content_type`. You can find constant definition for the various response codes within the [http_utils](https://github.com/etr/libhttpserver/blob/master/src/httpserver/http_utils.hpp) library file. Note that `std::string` can hold arbitrary binary data (including null bytes), so `string_response` is also the right choice for serving binary content such as images directly from memory — simply set an appropriate `content_type` (e.g., `"image/png"`).
-* _file_response(**const std::string&** filename, **int** response_code = `200`, **const std::string&** content_type = `"text/plain"`):_ Uses the `filename` passed in construction as pointer to a file on disk. The body of the HTTP response will be set using the content of the file. The file must be a regular file and exist on disk. Otherwise libhttpserver will return an error 500 (Internal Server Error). The other two optional parameters are the `response_code` and the `content_type`. You can find constant definition for the various response codes within the [http_utils](https://github.com/etr/libhttpserver/blob/master/src/httpserver/http_utils.hpp) library file.
-* _basic_auth_fail_response(**const std::string&** content, **const std::string&** realm = `""`, **bool** prefer_utf8 = `true`, **int** response_code = `200`, **const std::string&** content_type = `"text/plain"`):_ A response in return to a failure during basic authentication. It allows to specify a `content` string as a message to send back to the client. The `realm` parameter should contain your realm of authentication (if any). The `prefer_utf8` parameter controls whether UTF-8 encoding is preferred in the `WWW-Authenticate` header. The other two optional parameters are the `response_code` and the `content_type`. You can find constant definition for the various response codes within the [http_utils](https://github.com/etr/libhttpserver/blob/master/src/httpserver/http_utils.hpp) library file.
-* _digest_auth_fail_response(**const std::string&** content, **const std::string&** realm = `""`, **const std::string&** opaque = `""`, **bool** signal_stale = `false`, **int** response_code = `200`, **const std::string&** content_type = `"text/plain"`, **http::http_utils::digest_algorithm** algorithm = `SHA256`, **const std::string&** domain = `""`, **bool** userhash_support = `false`, **bool** prefer_utf8 = `true`):_ A response in return to a failure during digest authentication. It allows to specify a `content` string as a message to send back to the client. The `realm` parameter should contain your realm of authentication (if any). The `opaque` represents a value that gets passed to the client and expected to be passed again to the server as-is. The `signal_stale` parameter indicates whether to signal the client that its nonce is stale and should be refreshed (set to `true` when `check_digest_auth` returns `NONCE_STALE`). The `algorithm` selects the digest algorithm (`MD5`, `SHA256`, or `SHA512_256` — default is `SHA256`). The `domain` specifies the protection domain for digest authentication. The `userhash_support` enables RFC 7616 userhash support. The `prefer_utf8` controls whether UTF-8 encoding is preferred.
-* _deferred_response(**ssize_t(&ast;cycle_callback_ptr)(shared_ptr&lt;T&gt;, char&ast;, size_t)** cycle_callback, **const std::string&** content = `""`, **int** response_code = `200`, **const std::string&** content_type = `"text/plain"`):_ A response that obtains additional content from a callback executed in a deferred way. It leaves the client in pending state (returning a `100 CONTINUE` message) and suspends the connection. Besides the callback, optionally, you can provide a `content` parameter that sets the initial message sent immediately to the client. The other two optional parameters are the `response_code` and the `content_type`. You can find constant definition for the various response codes within the [http_utils](https://github.com/etr/libhttpserver/blob/master/src/httpserver/http_utils.hpp) library file. To use `deferred_response` you need to have the `deferred` option active on your webserver (enabled by default).
-	* The `cycle_callback_ptr` has this shape:
-		_**ssize_t** cycle_callback(**shared_ptr&lt;T&gt; closure_data, char&ast;** buf, **size_t** max_size)_.
-		You are supposed to implement a function in this shape and provide it to the `deferred_repsonse` method. The webserver will provide a `char*` to the function. It is responsibility of the function to allocate it and fill its content. The method is supposed to respect the `max_size` parameter passed in input. The function must return  a `ssize_t` value representing the actual size you filled the `buf` with. Any value different from `-1` will keep the resume the connection, deliver the content and suspend it again (with a `100 CONTINUE`). If the method returns `-1`, the webserver will complete the communication with the client and close the connection. You can also pass a `shared_ptr` pointing to a data object of your choice (this will be templetized with a class of your choice). The server will guarantee that this object is passed at each invocation of the method allowing the client code to use it as a memory buffer during computation.
-* _empty_response(**int** response_code = `204`, **int** flags = `NONE`):_ A response with no body. Ideal for `204 No Content` or `304 Not Modified` responses. The `flags` parameter supports the following values:
-	* `NONE`: No special flags (default).
-	* `HTTP_1_0_COMPATIBLE_STRICT`: Ensure strict HTTP 1.0 compatibility.
-	* `HTTP_1_0_SERVER`: Behave like an HTTP 1.0 server.
-	* `SEND_KEEP_ALIVE_HEADER`: Include a `Keep-Alive` header.
-	* `HEAD_ONLY`: Produce a response suitable for a HEAD request (headers only).
-* _iovec_response(**std::vector<std::string>** buffers, **int** response_code = `200`, **const std::string&** content_type = `"text/plain"`):_ A scatter-gather response that assembles its body from multiple string buffers. This allows you to efficiently compose a response from separate data segments without concatenating them first. The `buffers` are sent in order.
-* _pipe_response(**int** pipe_fd, **int** response_code = `200`, **const std::string&** content_type = `"application/octet-stream"`):_ A response that streams content from a pipe file descriptor. The daemon reads data from the pipe until EOF and sends it to the client. The pipe should be the read end of a `pipe()` call. This is useful for streaming output from subprocesses or other producers.
-
-### Setting additional properties of the response
-The `http_response` class offers an additional set of methods to "decorate" your responses. This set of methods is:
-* _**void**  with_header(**const std::string&** key, **const std::string&** value):_ Sets an HTTP header with name set to `key` and value set to `value`.
-* _**void**  with_footer(**const std::string&** key, **const std::string&** value):_ Sets an HTTP footer with name set to `key` and value set to `value`.
-* _**void**  with_cookie(**const std::string&** key, **const std::string&** value):_ Sets an HTTP cookie with name set to `key` and value set to `value` (only for http 1.1 chunked encodings). 
-* _**void**  shoutCAST():_ Mark the response as a `shoutCAST` one.
-
-### Example of response setting headers
-```cpp
-    #include <httpserver.hpp>
-
-    using namespace httpserver;
-
-    class hello_world_resource : public http_resource {
-    public:
-        std::shared_ptr<http_response> render(const http_request&) {
-            std::shared_ptr<http_response> response = std::shared_ptr<http_response>(new string_response("Hello, World!"));
-            response->with_header("MyHeader", "MyValue");
-            return response;
-        }
-    };
-
-    int main(int argc, char** argv) {
-        webserver ws{create_webserver(8080)};
-
-        hello_world_resource hwr;
-        ws.register_resource("/hello", &hwr);
-        ws.start(true);
-
-        return 0;
-    }
-```
-To test the above example, you could run the following command from a terminal:
-    
-    curl -XGET -v "http://localhost:8080/hello"
-
-You will receive the message custom header in reply.
-
-You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/setting_headers.cpp).
-
-### Serving binary data from memory
-`string_response` is not limited to text — it can serve arbitrary binary content directly from memory. This is useful when you have data in a buffer at runtime (e.g., from a camera, an image processing library, or a database) and want to serve it without writing to disk.
-
-```cpp
-    #include <httpserver.hpp>
-
-    using namespace httpserver;
-
-    class image_resource : public http_resource {
-    public:
-        std::shared_ptr<http_response> render_get(const http_request&) {
-            // binary_data could come from a camera capture, image library, etc.
-            std::string binary_data = get_image_bytes_from_camera();
-
-            return std::make_shared<string_response>(
-                    std::move(binary_data), 200, "image/jpeg");
-        }
-    };
-
-    int main() {
-        webserver ws{create_webserver(8080)};
-
-        image_resource ir;
-        ws.register_resource("/image", &ir);
-        ws.start(true);
-
-        return 0;
-    }
-```
-To test the above example, you could run the following command from a terminal:
-
-    curl -o image.jpg http://localhost:8080/image
-
-You can also check the complete example on [github](https://github.com/etr/libhttpserver/blob/master/examples/binary_buffer_response.cpp).
-
-[Back to TOC](#table-of-contents)
-
-## IP Blacklisting and Whitelisting
-libhttpserver provides natively a system to blacklist and whitelist IP addresses. To enable/disable the system, it is possible to use the `ban_system(bool enable = true)` method on the `create_webserver` class (`ban_system(false)` to disable). In the same way, you can specify what you want to be your "default behavior" (allow by default or disallow by default) by using the `default_policy` method (see [here](#create-and-work-with-a-webserver)).
-
-The system supports both IPV4 and IPV6 and manages them transparently. The only requirement is for ipv6 to be enabled on your server - you'll have to enable this by using the `use_ipv6` method on `create_webserver`.
-
-You can explicitly ban or allow an IP address using the following methods on the `webserver` class:
-* _**void** block_ip(**std::string_view** ip):_ Add one IP (or a range, e.g. `"127.0.0.*"`) to the block list. Connections from a matching address are refused at the policy callback. Intended for use under the default `ACCEPT` policy.
-* _**void** unblock_ip(**std::string_view** ip):_ Remove one IP (or a range) from the block list. Idempotent: removing an entry that is not currently blocked is a no-op.
-
-### IP String Format
-The IP string format can represent both IPV4 and IPV6. Addresses will be normalized by the webserver to operate in the same sapce. Any valid IPV4 or IPV6 textual representation works.
-It is also possible to specify ranges of IPs. To do so, omit the octect you want to express as a range and specify a `'*'` in its place.
-Examples of valid IPs include:
-* `"192.168.5.5"`: standard IPV4
-* `"192.168.*.*"`: range of IPV4 addresses. In the example, everything between `192.168.0.0` and `192.168.255.255`.
-* `"2001:db8:8714:3a90::12"`: standard IPV6 - clustered empty ranges are fully supported.
-* `"2001:db8:8714:3a90:*:*"`: range of IPV6 addresses.
-* `"::ffff:192.0.2.128"`: IPV4 IPs nested into IPV6.
-* `"::192.0.2.128"`: IPV4 IPs nested into IPV6 (without `'ffff'` prefix)
-* `"::ffff:192.0.*.*"`: ranges of IPV4 IPs nested into IPV6.
-
-#### Example of IP Whitelisting/Blacklisting
-```cpp
-    #include <httpserver.hpp>
-
-    using namespace httpserver;
-
-    class hello_world_resource : public http_resource {
-    public:
-        std::shared_ptr<http_response> render(const http_request&) {
-            return std::shared_ptr<http_response>(new string_response("Hello, World!"));
-        }
-    };
-
-    int main(int argc, char** argv) {
-        webserver ws{create_webserver(8080)};
-
-        // Refuse connections from this address; everything else is accepted
-        // by default. Use a range like "127.0.0.*" to block a wildcard.
-        ws.block_ip("10.0.0.1");
-
-        hello_world_resource hwr;
-        ws.register_resource("/hello", &hwr);
-        ws.start(true);
-
-        return 0;
-    }
-```
-To test the above example, you could run the following command from a terminal:
-    
-    curl -XGET -v "http://localhost:8080/hello"
-
-You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/minimal_ip_ban.cpp).
-
-[Back to TOC](#table-of-contents)
-
-## Authentication
-libhttpserver support three types of client authentication.
-
-Basic authentication uses a simple authentication method based on BASE64 algorithm. Username and password are exchanged in clear between the client and the server, so this method must only be used for non-sensitive content or when the session is protected with https. When using basic authentication libhttpserver will have access to the clear password, possibly allowing to create a chained authentication toward an external authentication server. You can enable/disable support for Basic authentication through the `basic_auth(bool enable = true)` method of the `create_webserver` class (`basic_auth(false)` to disable).
-
-Digest authentication uses a one-way authentication method based on hash algorithms (MD5, SHA-256, or SHA-512/256). Only the hash will transit over the network, hence protecting the user password. The nonce will prevent replay attacks. This method is appropriate for general use, especially when https is not used to encrypt the session. SHA-256 is the default algorithm; SHA-512/256 is also available for stronger security. You can enable/disable support for Digest authentication through the `digest_auth(bool enable = true)` method of the `create_webserver` class (`digest_auth(false)` to disable).
-
-Client certificate authentication uses a X.509 certificate from the client. This is the strongest authentication mechanism but it requires the use of HTTPS. Client certificate authentication can be used simultaneously with Basic or Digest Authentication in order to provide a two levels authentication (like for instance separate machine and user authentication). You can enable/disable support for Certificate authentication through the `use_ssl(bool enable = true)` method of the `create_webserver` class (`use_ssl(false)` to disable).
-
-### Using Basic Authentication
-```cpp
-    #include <httpserver.hpp>
-
-    using namespace httpserver;
-
-    class user_pass_resource : public httpserver::http_resource {
-    public:
-        std::shared_ptr<http_response> render_get(const http_request& req) {
-            if (req.get_user() != "myuser" || req.get_pass() != "mypass") {
-                return std::shared_ptr<basic_auth_fail_response>(new basic_auth_fail_response("FAIL", "test@example.com"));
-            }
-            return std::shared_ptr<string_response>(new string_response(req.get_user() + " " + req.get_pass(), 200, "text/plain"));
-        }
-    };
-
-    int main(int argc, char** argv) {
-        webserver ws{create_webserver(8080)};
-
-        user_pass_resource hwr;
-        ws.register_resource("/hello", &hwr);
-        ws.start(true);
-
-        return 0;
-    }
-```
-To test the above example, you can run the following command from a terminal:
-    
-    curl -XGET -v -u myuser:mypass "http://localhost:8080/hello"
-
-You will receive back the user and password you passed in input. Try to pass the wrong credentials to see the failure.
-
-You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/basic_authentication.cpp).
-
-### Using Digest Authentication
-
-The `check_digest_auth` method returns a `digest_auth_result` enum with fine-grained status codes:
-* `OK` — authentication succeeded.
-* `NONCE_STALE` — the nonce is stale; signal the client to retry with a fresh nonce by setting `signal_stale` to `true` in the response.
-* `WRONG_USERNAME`, `WRONG_REALM`, `WRONG_URI`, `WRONG_QOP`, `WRONG_ALGO`, `RESPONSE_WRONG` — specific reasons for authentication failure.
-* `WRONG_HEADER`, `TOO_LARGE`, `NONCE_WRONG`, `NONCE_OTHER_COND`, `ERROR` — other failure conditions.
-
-You can also use `check_digest_auth_digest` to verify against a pre-computed HA1 digest instead of a plaintext password.
-
-```cpp
-    #include <httpserver.hpp>
-
-    #define MY_OPAQUE "11733b200778ce33060f31c9af70a870ba96ddd4"
-
-    using namespace httpserver;
-    using http::http_utils;
-
-    class digest_resource : public httpserver::http_resource {
-    public:
-        std::shared_ptr<http_response> render_get(const http_request& req) {
-            if (req.get_digested_user() == "") {
-                return std::make_shared<digest_auth_fail_response>("FAIL", "test@example.com", MY_OPAQUE, true,
-                    http_utils::http_ok, http_utils::text_plain, http_utils::digest_algorithm::MD5);
-            } else {
-                auto result = req.check_digest_auth("test@example.com", "mypass", 300, 0, http_utils::digest_algorithm::MD5);
-                if (result == http_utils::digest_auth_result::NONCE_STALE) {
-                    return std::make_shared<digest_auth_fail_response>("FAIL", "test@example.com", MY_OPAQUE, true,
-                        http_utils::http_ok, http_utils::text_plain, http_utils::digest_algorithm::MD5);
-                } else if (result != http_utils::digest_auth_result::OK) {
-                    return std::make_shared<digest_auth_fail_response>("FAIL", "test@example.com", MY_OPAQUE, false,
-                        http_utils::http_ok, http_utils::text_plain, http_utils::digest_algorithm::MD5);
-                }
-            }
-            return std::make_shared<string_response>("SUCCESS", 200, "text/plain");
-        }
-    };
-
-    int main(int argc, char** argv) {
-        webserver ws{create_webserver(8080)};
-
-        digest_resource hwr;
-        ws.register_resource("/hello", &hwr);
-        ws.start(true);
-
-        return 0;
-    }
-```
-To test the above example, you can run the following command from a terminal:
-    
-    curl -XGET -v --digest --user myuser:mypass localhost:8080/hello
-
-You will receive a `SUCCESS` in response (observe the response message from the server in detail and you'll see the full interaction). Try to pass the wrong credentials or send a request without `digest` active to see the failure.
-
-You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/digest_authentication.cpp).
-
-### Using Centralized Authentication
-The examples above show authentication handled within each resource's `render_*` method. This approach requires duplicating authentication logic in every resource, which is error-prone and violates DRY (Don't Repeat Yourself) principles.
-
-libhttpserver provides a centralized authentication mechanism that runs a single authentication handler before any resource's render method is called. This allows you to:
-- Define authentication logic once for all resources
-- Automatically protect all endpoints by default
-- Specify paths that should bypass authentication (e.g., health checks, public APIs)
-
-```cpp
-    #include <httpserver.hpp>
-
-    using namespace httpserver;
-
-    // Resources no longer need authentication logic
-    class hello_resource : public http_resource {
-    public:
-        std::shared_ptr<http_response> render_get(const http_request&) {
-            return std::make_shared<string_response>("Hello, authenticated user!", 200, "text/plain");
-        }
-    };
-
-    class health_resource : public http_resource {
-    public:
-        std::shared_ptr<http_response> render_get(const http_request&) {
-            return std::make_shared<string_response>("OK", 200, "text/plain");
-        }
-    };
-
-    // Centralized authentication handler
-    // Return nullptr to allow the request, or an http_response to reject it
-    std::shared_ptr<http_response> my_auth_handler(const http_request& req) {
-        if (req.get_user() != "admin" || req.get_pass() != "secret") {
-            return std::make_shared<basic_auth_fail_response>("Unauthorized", "MyRealm");
-        }
-        return nullptr;  // Allow request to proceed to resource
-    }
-
-    int main() {
-        webserver ws{create_webserver(8080)
-            .auth_handler(my_auth_handler)
-            .auth_skip_paths({"/health", "/public/*"})};
-
-        hello_resource hello;
-        health_resource health;
-
-        ws.register_resource("/api", &hello);
-        ws.register_resource("/health", &health);
-
-        ws.start(true);
-        return 0;
-    }
+The block above is reproduced byte-for-byte from
+[`examples/hello_world.cpp`](examples/hello_world.cpp); a CI gate
+(`scripts/check-readme.sh`) enforces the byte-for-byte equality.
+
+## Table of contents
+
+* [Build / install](#build--install)
+* [Hello, world — lambda form](#hello-world--lambda-form)
+* [Class-form handlers](#class-form-handlers)
+* [Request](#request)
+* [Response](#response)
+* [Routing](#routing)
+* [Threading contract](#threading-contract)
+* [Error propagation](#error-propagation)
+* [Feature availability](#feature-availability)
+* [WebSocket](#websocket)
+* [Migrating from v1](#migrating-from-v1)
+* [Examples index](#examples-index)
+* [Community and license](#community-and-license)
+
+## Build / install
+
+**Compiler floor:** C++20. libhttpserver v2.0 will not build with a C++17
+compiler.
+
+Supported toolchains:
+
+| Platform | Toolchain | Notes |
+|---|---|---|
+| Debian 13 (trixie) | GCC 14.2 | Out-of-the-box |
+| RHEL 9 | `gcc-toolset-14` | Stock GCC 11 is too old; install the Red Hat toolset overlay |
+| RHEL 10 | GCC 14 | Out-of-the-box |
+| FreeBSD 14.x | base Clang 18+ | Out-of-the-box |
+| macOS | Homebrew GCC 15+ or current Apple Clang | Out-of-the-box |
+| vcpkg / Conan | GCC 13+ / Clang 16+ | Out-of-the-box |
+
+**Runtime dependencies:** [GNU libmicrohttpd](https://www.gnu.org/software/libmicrohttpd/)
+≥ 1.0.0. Optional: GnuTLS (TLS), libgcrypt (digest auth), libmicrohttpd built
+with WebSocket support.
+
+**Build:**
+
+```sh
+./bootstrap
+./configure
+make
+sudo make install
 ```
 
-The `auth_handler` callback is called for every request before the resource's render method. It receives the `http_request` and can:
-- Return `nullptr` to allow the request to proceed normally
-- Return an `http_response` (e.g., `basic_auth_fail_response` or `digest_auth_fail_response`) to reject the request
+`make check` runs the test suite (unit + integration). `make examples` builds
+every program under [`examples/`](examples/).
 
-The `auth_skip_paths` method accepts a vector of paths that should bypass authentication:
-- Exact matches: `"/health"` matches only `/health`
-- Wildcard suffixes: `"/public/*"` matches `/public/`, `/public/info`, `/public/docs/api`, etc.
+**ABI / packaging.** SOVERSION bumps from 1 to 2 in v2.0. Distributions
+package `libhttpserver2` parallel-installable with `libhttpserver1`. There is
+no inline namespace and no symbol-versioning script: v1.x is end-of-life on
+the day v2.0 ships, and code that needs both can link them side by side.
 
-To test the above example:
+## Hello, world — lambda form
 
-    # Without auth - returns 401 Unauthorized
-    curl -v http://localhost:8080/api
+The snippet at the top of this README is the entire program. Walking through
+it:
 
-    # With valid auth - returns 200 OK
-    curl -u admin:secret http://localhost:8080/api
+* `webserver ws{create_webserver(8080)};` — `create_webserver` is a fluent
+  builder for the server configuration; `webserver` is constructed by direct
+  initialization from it. `webserver` is non-copyable and non-movable; pass it
+  by reference once it exists.
+* `ws.on_get("/hello", [](const http_request&) { ... });` — register a
+  GET-only handler. The handler is a `std::function<http_response(const
+  http_request&)>`. There is no subclass, no `shared_ptr`, no raw pointer.
+* `return http_response::string("Hello, World!");` — `http_response` is a
+  value type. Factories on `http_response` build common shapes; the fluent
+  `with_*` mutators add headers, footers, cookies, and status. The response
+  is returned by value into the dispatcher.
+* `ws.start(true);` — `true` means *block this thread until the server is
+  stopped*. Pass `false` to start the listener and return immediately; later
+  call `stop_and_wait()` from another thread.
 
-    # Health endpoint (skip path) - works without auth
-    curl http://localhost:8080/health
+See [`examples/hello_world.cpp`](examples/hello_world.cpp) and
+[`examples/hello_with_get_arg.cpp`](examples/hello_with_get_arg.cpp) for the
+complete sources.
 
-You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/centralized_authentication.cpp).
+## Class-form handlers
 
-### Using Client Certificate Authentication (mTLS)
-Client certificate authentication (also known as mutual TLS or mTLS) provides strong authentication by requiring clients to present X.509 certificates during the TLS handshake. This is the most secure authentication method as it verifies client identity cryptographically.
-
-To enable client certificate authentication, configure your webserver with:
-1. `use_ssl()` - Enable TLS
-2. `https_mem_key()` and `https_mem_cert()` - Server certificate
-3. `https_mem_trust()` - CA certificate(s) to verify client certificates
-
-```cpp
-    #include <httpserver.hpp>
-
-    using namespace httpserver;
-
-    class secure_resource : public http_resource {
-    public:
-        std::shared_ptr<http_response> render_get(const http_request& req) {
-            // Check if client provided a certificate
-            if (!req.has_client_certificate()) {
-                return std::make_shared<string_response>(
-                    "Client certificate required", 401, "text/plain");
-            }
-
-            // Check if certificate is verified by our CA
-            if (!req.is_client_cert_verified()) {
-                return std::make_shared<string_response>(
-                    "Certificate not verified", 403, "text/plain");
-            }
-
-            // Extract certificate information
-            std::string cn = req.get_client_cert_cn();           // Common Name
-            std::string dn = req.get_client_cert_dn();           // Subject DN
-            std::string issuer = req.get_client_cert_issuer_dn(); // Issuer DN
-            std::string fingerprint = req.get_client_cert_fingerprint_sha256();
-            time_t not_before = req.get_client_cert_not_before();
-            time_t not_after = req.get_client_cert_not_after();
-
-            return std::make_shared<string_response>(
-                "Welcome, " + cn + "!", 200, "text/plain");
-        }
-    };
-
-    int main() {
-        webserver ws{create_webserver(8443)
-            .use_ssl()
-            .https_mem_key("server_key.pem")
-            .https_mem_cert("server_cert.pem")
-            .https_mem_trust("ca_cert.pem")};  // CA for client certs
-
-        secure_resource sr;
-        ws.register_resource("/secure", &sr);
-        ws.start(true);
-
-        return 0;
-    }
-```
-
-Available client certificate methods (require GnuTLS support):
-- `has_client_certificate()` - Check if client presented a certificate
-- `get_client_cert_dn()` - Get the subject Distinguished Name
-- `get_client_cert_issuer_dn()` - Get the issuer Distinguished Name
-- `get_client_cert_cn()` - Get the Common Name from the subject
-- `is_client_cert_verified()` - Check if the certificate chain is verified
-- `get_client_cert_fingerprint_sha256()` - Get hex-encoded SHA-256 fingerprint
-- `get_client_cert_not_before()` - Get certificate validity start time
-- `get_client_cert_not_after()` - Get certificate validity end time
-
-To test with curl:
-
-    # With client certificate
-    curl -k --cert client_cert.pem --key client_key.pem https://localhost:8443/secure
-
-    # Without client certificate (will be rejected)
-    curl -k https://localhost:8443/secure
-
-You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/client_cert_auth.cpp).
-
-### Server Name Indication (SNI) Callback
-SNI allows a server to host multiple TLS certificates on a single IP address. The client indicates which hostname it's connecting to during the TLS handshake, and the server can select the appropriate certificate.
-
-To use SNI with libhttpserver, configure an SNI callback that returns the certificate/key pair for each server name:
+Lambdas suffice when each HTTP method is independent. When several methods on
+one path share state — a counter, a cache, a mutex — derive from
+[`http_resource`](src/httpserver/http_resource.hpp) and register the subclass
+once:
 
 ```cpp
-    #include <httpserver.hpp>
-    #include <map>
-
-    using namespace httpserver;
-
-    // Map of server names to cert/key pairs
-    std::map<std::string, std::pair<std::string, std::string>> certs;
-
-    // SNI callback - returns (cert_pem, key_pem) for the requested server name
-    std::pair<std::string, std::string> sni_callback(const std::string& server_name) {
-        auto it = certs.find(server_name);
-        if (it != certs.end()) {
-            return it->second;
-        }
-        return {"", ""};  // Use default certificate
+class counter : public httpserver::http_resource {
+ public:
+    httpserver::http_response render_get(const httpserver::http_request&) override {
+        std::lock_guard lock{m_};
+        return httpserver::http_response::string(std::to_string(n_));
     }
-
-    int main() {
-        // Load certificates for different hostnames
-        certs["www.example.com"] = {load_file("www_cert.pem"), load_file("www_key.pem")};
-        certs["api.example.com"] = {load_file("api_cert.pem"), load_file("api_key.pem")};
-
-        webserver ws{create_webserver(443)
-            .use_ssl()
-            .https_mem_key("default_key.pem")    // Default certificate
-            .https_mem_cert("default_cert.pem")
-            .sni_callback(sni_callback)};         // SNI callback
-
-        // ... register resources and start
-        ws.start(true);
-        return 0;
+    httpserver::http_response render_post(const httpserver::http_request&) override {
+        std::lock_guard lock{m_};
+        ++n_;
+        return httpserver::http_response::string(std::to_string(n_));
     }
+ private:
+    std::mutex m_;
+    int n_ = 0;
+};
+
+// ...
+ws.register_path("/count", std::make_unique<counter>());
 ```
 
-Note: SNI support requires libmicrohttpd 1.0.0 or later compiled with GnuTLS.
+The virtual hooks are `render_get`, `render_post`, `render_put`,
+`render_delete`, `render_head`, `render_options`, `render_patch`,
+`render_connect`, and `render_trace` — all lowercase, all returning
+`http_response` by value. The `webserver` takes ownership of the resource
+via `std::unique_ptr`.
 
-[Back to TOC](#table-of-contents)
+See [`examples/shared_state.cpp`](examples/shared_state.cpp) for the
+canonical example.
 
-## WebSocket Support
+## Request
 
-libhttpserver provides WebSocket support when libmicrohttpd is built with WebSocket functionality. To use WebSockets, derive from the `websocket_handler` class and implement the `on_message()` method.
+`http_request` is read-only inside a handler. The accessors are designed
+around `std::string_view` so reading headers and arguments does not allocate:
 
-### The websocket_handler class
-The `websocket_handler` class provides the following virtual methods:
-* _**void** on_open(**websocket_session&** session):_ Called when a new WebSocket connection is established. Default implementation does nothing.
-* _**void** on_message(**websocket_session&** session, **std::string_view** msg):_ Called when a text message is received. **This is the only pure virtual method and must be implemented.**
-* _**void** on_binary(**websocket_session&** session, **const void&ast;** data, **size_t** len):_ Called when a binary message is received. Default implementation does nothing.
-* _**void** on_ping(**websocket_session&** session, **std::string_view** payload):_ Called when a ping frame is received. Default implementation sends a pong.
-* _**void** on_close(**websocket_session&** session, **uint16_t** code, **const std::string&** reason):_ Called when the WebSocket connection is closed. Default implementation does nothing.
+| Accessor | Returns | Notes |
+|---|---|---|
+| `get_path()` | `std::string_view` | The decoded path |
+| `get_method()` | `httpserver::http_method` | Strongly-typed enum; see [`http_method.hpp`](src/httpserver/http_method.hpp) |
+| `get_arg(name)` | `std::string_view` | First value for a query/form arg |
+| `get_arg_flat(name)` | `std::string_view` | Alias for `get_arg`; explicit "first value only" form |
+| `get_querystring()` | `std::string_view` | Raw query string (no decoding) |
+| `get_version()` | `std::string_view` | "HTTP/1.1", "HTTP/2", … |
+| `get_headers()` | `const map&` | All headers |
+| `get_args()` | `const map&` | All query/form arguments |
+| `get_path_pieces()` | `const vector&` | Split path components |
+| `get_files()` | `const map&` | Uploaded files (multipart) |
+| `get_user()` | `std::string_view` | Basic-auth user; empty when `HAVE_BAUTH` is off |
+| `get_pass()` | `std::string_view` | Basic-auth password; empty when `HAVE_BAUTH` is off |
+| `get_digested_user()` | `std::string_view` | Digest-auth user; empty when `HAVE_DAUTH` is off |
+| `get_client_cert_*()` | various | TLS-only; return empty / `-1` / `false` when `HAVE_GNUTLS` is off |
 
-### The websocket_session class
-The `websocket_session` class provides methods to interact with the client:
-* _**void** send_text(**const std::string&** msg):_ Send a text message.
-* _**void** send_binary(**const void&ast;** data, **size_t** len):_ Send a binary message.
-* _**void** send_ping(**const std::string&** payload = `""`):_ Send a ping frame.
-* _**void** send_pong(**const std::string&** payload = `""`):_ Send a pong frame.
-* _**void** close(**uint16_t** code = `1000`, **const std::string&** reason = `""`):_ Close the WebSocket connection.
-* _**bool** is_valid():_ Check if the session is still valid.
+**Lifetime contract.** Every `string_view` returned by `http_request` is
+valid for the duration of the handler invocation and no longer. Copy what
+you need to keep (e.g., into a `std::string`); do not hand a view to a
+deferred callback. The references returned by `get_headers()`, `get_args()`,
+`get_path_pieces()`, and `get_files()` follow the same rule.
 
-### Registering WebSocket resources
-Register a WebSocket handler using `register_ws_resource`:
+**Method enum.** `http_method` (declared in
+[`http_method.hpp`](src/httpserver/http_method.hpp)) covers the canonical
+HTTP methods. `method_set` is a bitset used by atomic multi-method
+registration (see [Routing](#routing)).
+
+## Response
+
+`http_response` is a value type — move-only, returned by value, never
+`shared_ptr`-wrapped. There is no class hierarchy of body subclasses; the
+body shape is a runtime detail of one type.
+
+**Factories:**
+
+| Factory | Body shape |
+|---|---|
+| `http_response::string(body)` | An in-memory string (small bodies live inline via SBO) |
+| `http_response::file(path)` | Stream a file from disk |
+| `http_response::iovec(entries)` | Scatter-gather over a vector of `iovec_entry` (zero-copy) |
+| `http_response::pipe(fd)` | Stream from a pipe / FIFO |
+| `http_response::empty()` | Empty body |
+| `http_response::deferred(producer)` | Body produced incrementally by a callback |
+| `http_response::unauthorized(realm)` | 401 with the proper `WWW-Authenticate` header |
+
+**Fluent mutation.** Every `http_response` exposes `with_status`,
+`with_header`, `with_footer`, and `with_cookie` returning `*this` by value
+so calls can chain:
+
 ```cpp
-    #include <httpserver.hpp>
-
-    using namespace httpserver;
-
-    class echo_handler : public websocket_handler {
-    public:
-        void on_message(websocket_session& session, std::string_view msg) override {
-            session.send_text("Echo: " + std::string(msg));
-        }
-    };
-
-    int main() {
-        webserver ws{create_webserver(8080)};
-
-        echo_handler handler;
-        ws.register_ws_resource("/ws", &handler);
-        ws.start(true);
-
-        return 0;
-    }
+return httpserver::http_response::string("hi")
+    .with_header("X-Trace-Id", trace_id)
+    .with_status(201);
 ```
 
-Note: WebSocket support requires libmicrohttpd 1.0.0 or later built with WebSocket support enabled.
+**Building error responses by value.** There is no throw-as-status idiom.
+To return a 404 from a handler, build it explicitly:
 
-[Back to TOC](#table-of-contents)
-
-## Daemon Introspection and External Event Loops
-
-libhttpserver exposes several methods for integrating with external event loops and for querying daemon state at runtime.
-
-### Daemon introspection
-* _**uint16_t** webserver::get_bound_port():_ Returns the actual port the daemon is bound to. This is especially useful when you pass port `0` to let the operating system choose an ephemeral port.
-* _**int** webserver::get_listen_fd():_ Returns the listen socket file descriptor, or `-1` if not available.
-* _**unsigned int** webserver::get_active_connections():_ Returns the number of currently active connections.
-
-### External event loop integration
-When using the server without internal threading (e.g., with `listen_socket(false)` or a single-threaded design), you can drive the event loop yourself:
-* _**bool** webserver::run():_ Process pending events once and return immediately.
-* _**bool** webserver::run_wait(**int32_t** millisec):_ Block until events are available or the timeout expires.
-* _**bool** webserver::get_fdset(...):_ Retrieve file descriptor sets for use with `select()`.
-* _**bool** webserver::get_timeout(**uint64_t&ast;** timeout):_ Get the maximum time to wait before calling `run()` again.
-* _**bool** webserver::add_connection(**int** socket, **const sockaddr&ast;** addr, **socklen_t** len):_ Hand off an externally-accepted connection to the daemon.
-* _**int** webserver::quiesce():_ Stop accepting new connections while allowing in-flight requests to complete. Returns the listen socket FD.
-
-### Example: querying the bound port
 ```cpp
-    #include <httpserver.hpp>
-    #include <iostream>
-
-    using namespace httpserver;
-
-    class hello_resource : public http_resource {
-    public:
-        std::shared_ptr<http_response> render(const http_request&) {
-            return std::make_shared<string_response>("Hello!");
-        }
-    };
-
-    int main() {
-        webserver ws{create_webserver(0)};  // Let the OS choose a port
-
-        hello_resource hr;
-        ws.register_resource("/hello", &hr);
-        ws.start(false);
-
-        std::cout << "Listening on port: " << ws.get_bound_port() << std::endl;
-        std::cout << "Active connections: " << ws.get_active_connections() << std::endl;
-
-        ws.stop();
-        return 0;
-    }
+if (!found) {
+    return httpserver::http_response::empty().with_status(404);
+}
 ```
 
-[Back to TOC](#table-of-contents)
+See [`examples/setting_headers.cpp`](examples/setting_headers.cpp),
+[`examples/iovec_response_example.cpp`](examples/iovec_response_example.cpp),
+[`examples/minimal_file_response.cpp`](examples/minimal_file_response.cpp),
+and
+[`examples/pipe_response_example.cpp`](examples/pipe_response_example.cpp)
+for working programs.
 
-## HTTP Utils
-libhttpserver provides a set of constants to help you develop your HTTP server. It would be redundant to list them here; so, please, consult the list directly [here](https://github.com/etr/libhttpserver/blob/master/src/httpserver/http_utils.hpp).
+## Routing
 
-Additionally, the following utility methods are available:
-* _**static const char&ast;** http_utils::reason_phrase(**unsigned int** status_code):_ Returns the standard HTTP reason phrase for a given status code (e.g., `"OK"` for 200, `"Not Found"` for 404).
-* _**static bool** http_utils::is_feature_supported(**int** feature):_ Checks whether a specific libmicrohttpd feature is supported on the current system. Feature constants are defined by the MHD_FEATURE enum.
-* _**static const char&ast;** http_utils::get_mhd_version():_ Returns the version string of the underlying libmicrohttpd library.
+The `webserver` exposes three families of registration entry points:
 
-[Back to TOC](#table-of-contents)
+**Per-method, exact path.** `on_get`, `on_post`, `on_put`, `on_delete`,
+`on_head`, `on_options`, `on_patch`, `on_connect`, `on_trace` each take a
+path and a lambda. Re-registering the same `(method, path)` pair throws.
 
-## Other Examples
+**Atomic multi-method.** `route(http_method::GET | http_method::HEAD,
+"/info", handler)` registers the handler under several methods in a single
+critical section; either every slot is registered, or none of them are.
+`route(http_method::GET, "/info", handler)` is the single-method form and
+overlaps with `on_get`. A `method_set` is the bitwise-or of `http_method`
+values.
 
-#### Example of returning a response from a file
+**Resource registration.** `register_path("/foo", std::make_unique<R>())`
+registers an `http_resource` subclass at an exact path;
+`register_prefix("/foo/", std::make_unique<R>())` registers it for the
+subtree starting at `/foo/`. Parameterized paths use brace syntax:
+`register_path("/users/{id}", ...)`; an optional per-segment regex
+constrains a parameter: `register_path("/users/{id|[0-9]+}", ...)`.
+Unregister with `unregister_path` and `unregister_prefix`.
+
+The lambda overloads (`on_get`, `route`) are sugar on top of the same
+internal dispatcher used by `http_resource`. They are interoperable:
+within one server, some paths can be lambdas and others can be
+`http_resource` subclasses.
+
+See [`examples/url_registration.cpp`](examples/url_registration.cpp) and
+[`examples/handlers.cpp`](examples/handlers.cpp).
+
+## Threading contract
+
+Distilled from `specs/architecture/05-cross-cutting.md` §5.1 and DR-008
+(`specs/architecture/11-decisions/DR-008.md`):
+
+1. **Public methods on `webserver` are thread-safe and re-entrant from
+   inside a handler.** Two exceptions: `stop_and_wait()` and `~webserver()`
+   **deadlock** if invoked from a handler thread, because they wait for
+   that very thread to drain. Stop the server from a different thread, or
+   signal an external stop loop. (`stop_and_wait` is the v2 spelling for
+   the v1 "kill" routine.)
+2. **Handlers run concurrently on libmicrohttpd worker threads.** The same
+   lambda or `http_resource` instance is invoked from many threads at once.
+   Any state you share — counters, caches, file handles — must be
+   synchronized on your side. The library does not synchronize user state
+   for you.
+3. **`http_request` is single-threaded per request.** Sharing one
+   `http_request` across threads is undefined; the per-request arena makes
+   no guarantees outside the calling thread.
+4. **`http_response` is value-typed with exclusive ownership.** Returning
+   it transfers ownership into the dispatcher. There is no shared mutable
+   response object.
+
+## Error propagation
+
+Distilled from `specs/architecture/05-cross-cutting.md` §5.2 and DR-009
+(`specs/architecture/11-decisions/DR-009.md`):
+
+1. **A handler that throws `std::exception` is caught.** The library logs
+   the exception via the configured `error_logger` and invokes
+   `internal_error_handler(request, e.what())`. The handler's return value
+   is sent to the client (default: HTTP 500).
+2. **A handler that throws something other than `std::exception`** is also
+   caught, with `"unknown exception"` substituted for the message.
+3. **Library-internal failures during dispatch** (allocation, body
+   materialization) flow through the same `internal_error_handler` path.
+4. **If `internal_error_handler` itself throws**, the library logs and
+   sends a hardcoded 500 with an empty body. There is no third level of
+   fallback.
+5. **`feature_unavailable` is a normal `std::runtime_error`** — no special
+   status mapping. Catch it explicitly if you want to map it to a 503 or
+   similar; the library does not.
+6. **There is no throw-as-status idiom.** A handler that wants to return
+   404, 400, etc. builds the response by value (see [Response](#response)):
+   `return httpserver::http_response::empty().with_status(404);`.
+
+Install custom error handlers on the builder:
+
 ```cpp
-    #include <httpserver.hpp>
-
-    using namespace httpserver;
-
-    class file_response_resource : public http_resource {
-    public:
-        std::shared_ptr<http_response> render_get(const http_request& req) {
-            return std::shared_ptr<file_response>(new file_response("test_content", 200, "text/plain"));
-        }
-    };
-
-    int main(int argc, char** argv) {
-        webserver ws{create_webserver(8080)};
-
-        file_response_resource hwr;
-        ws.register_resource("/hello", &hwr);
-        ws.start(true);
-
-        return 0;
-    }
+auto cfg = httpserver::create_webserver(8080)
+    .not_found_handler([](const httpserver::http_request&) {
+        return httpserver::http_response::string("nope").with_status(404);
+    })
+    .method_not_allowed_handler([](const httpserver::http_request&) {
+        return httpserver::http_response::empty().with_status(405);
+    })
+    .internal_error_handler([](const httpserver::http_request&, std::string_view what) {
+        return httpserver::http_response::string(std::string{what}).with_status(500);
+    });
+httpserver::webserver ws{cfg};
 ```
-To test the above example, you can run the following command from a terminal:
-    
-    curl -XGET -v localhost:8080/hello
 
-You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/minimal_file_response.cpp).
+## Feature availability
 
-#### Example of a deferred response through callback
+Several capabilities are gated by build-time flags. v2.0 makes the gating
+visible at the API level so application code does not need preprocessor
+guards on `HAVE_*` macros.
+
+| Build flag | When disabled | Public-API behavior |
+|---|---|---|
+| `HAVE_BAUTH` | Basic-auth disabled | `get_user`, `get_pass` return empty `string_view`; `features().basic_auth == false`; `create_webserver::basic_auth(true)` throws `feature_unavailable` at `webserver` construction |
+| `HAVE_DAUTH` | Digest-auth disabled | `get_digested_user` returns empty; `check_digest_auth` returns a sentinel result; `features().digest_auth == false` |
+| `HAVE_GNUTLS` | TLS disabled | All `get_client_cert_*` accessors return empty / `-1` / `false`; `features().tls == false`; `create_webserver::use_ssl(true)` throws `feature_unavailable` |
+| `HAVE_WEBSOCKET` | WebSocket disabled | `register_ws_resource` throws `feature_unavailable`; `features().websocket == false` |
+
+**Probing at runtime.** `webserver::features()` returns a small struct of
+four `bool`s — one per flag — so callers can branch without preprocessor
+help:
+
 ```cpp
-    #include <httpserver.hpp>
-    
-    using namespace httpserver;
-    
-    static int counter = 0;
-    
-    ssize_t test_callback (std::shared_ptr<void> closure_data, char* buf, size_t max) {
-        if (counter == 2) {
-            return -1;
-        }
-        else {
-            memset(buf, 0, max);
-            strcat(buf, " test ");
-            counter++;
-            return std::string(buf).size();
-        }
-    }
-    
-    class deferred_resource : public http_resource {
-        public:
-            std::shared_ptr<http_response> render_get(const http_request& req) {
-                return std::shared_ptr<deferred_response<void> >(new deferred_response<void>(test_callback, nullptr, "cycle callback response"));
-            }
-    };
-    
-    int main(int argc, char** argv) {
-        webserver ws{create_webserver(8080)};
-    
-        deferred_resource hwr;
-        ws.register_resource("/hello", &hwr);
-        ws.start(true);
-    
-        return 0;
-    }
+if (ws.features().tls) {
+    // safe to call get_client_cert_*
+}
 ```
-To test the above example, you can run the following command from a terminal:
-    
-    curl -XGET -v localhost:8080/hello
 
-You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/minimal_deferred.cpp).
+**`feature_unavailable`.** Derives from `std::runtime_error`. Its
+`what()` names both the disabled feature and the build flag that gates
+it, so log lines pinpoint which flag a deployment is missing. Catch it
+where you call a feature-gated method:
 
-#### Example of a deferred response through callback (passing additional data along)
 ```cpp
-    #include <atomic>
-    #include <httpserver.hpp>
-    
-    using namespace httpserver;
-    
-    std::atomic<int> counter;
-    
-    ssize_t test_callback (std::shared_ptr<std::atomic<int> > closure_data, char* buf, size_t max) {
-        int reqid;
-        if (closure_data == nullptr) {
-            reqid = -1;
-        } else {
-            reqid = *closure_data;
-        }
-    
-        // only first 5 connections can be established
-        if (reqid >= 5) {
-            return -1;
-        } else {
-            // respond corresponding request IDs to the clients
-            std::string str = "";
-            str += std::to_string(reqid) + " ";
-            memset(buf, 0, max);
-            std::copy(str.begin(), str.end(), buf);
-    
-            // keep sending reqid
-            sleep(1);
-    
-            return (ssize_t)max;
-        }
-    }
-    
-    class deferred_resource : public http_resource {
-        public:
-            std::shared_ptr<http_response> render_get(const http_request& req) {
-                std::shared_ptr<std::atomic<int> > closure_data(new std::atomic<int>(counter++));
-                return std::shared_ptr<deferred_response<std::atomic<int> > >(new deferred_response<std::atomic<int> >(test_callback, closure_data, "cycle callback response"));
-            }
-    };
-    
-    int main(int argc, char** argv) {
-        webserver ws{create_webserver(8080)};
-    
-        deferred_resource hwr;
-        ws.register_resource("/hello", &hwr);
-        ws.start(true);
-    
-        return 0;
-    }
+try {
+    ws.register_ws_resource("/sock", std::make_unique<my_socket>());
+} catch (const httpserver::feature_unavailable& e) {
+    std::cerr << "websocket support is not available: " << e.what() << '\n';
+}
 ```
-To test the above example, you can run the following command from a terminal:
-    
-    curl -XGET -v localhost:8080/hello
 
-You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/deferred_with_accumulator.cpp).
+Block lists, IP-allow handling, and similar features that do not depend on
+external libraries are always available: `webserver::block_ip(addr)` and
+`webserver::unblock_ip(addr)` install and clear per-server blocks at
+runtime.
 
-#### Example of an empty response (204 No Content)
+## WebSocket
+
+WebSocket handlers are registered with `register_ws_resource`, taking
+ownership of a `websocket_handler` subclass:
+
 ```cpp
-    #include <httpserver.hpp>
-
-    using namespace httpserver;
-
-    class no_content_resource : public http_resource {
-    public:
-        std::shared_ptr<http_response> render_delete(const http_request&) {
-            // Return a 204 No Content response with no body
-            return std::make_shared<empty_response>(
-                    http::http_utils::http_no_content);
-        }
-
-        std::shared_ptr<http_response> render_head(const http_request&) {
-            // Return a HEAD-only response with headers but no body
-            auto response = std::make_shared<empty_response>(
-                    http::http_utils::http_ok,
-                    empty_response::HEAD_ONLY);
-            response->with_header("X-Total-Count", "42");
-            return response;
-        }
-    };
-
-    int main() {
-        webserver ws{create_webserver(8080)};
-
-        no_content_resource ncr;
-        ws.register_resource("/items", &ncr);
-        ws.start(true);
-
-        return 0;
-    }
+ws.register_ws_resource("/echo", std::make_unique<echo_handler>());
+// or
+auto handler = std::make_shared<echo_handler>();
+ws.register_ws_resource("/echo", handler);
 ```
-To test the above example, you can run the following commands from a terminal:
 
-    curl -XDELETE -v localhost:8080/items
-    curl -I -v localhost:8080/items
-
-You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/empty_response_example.cpp).
-
-#### Example of a scatter-gather (iovec) response
-```cpp
-    #include <httpserver.hpp>
-
-    using namespace httpserver;
-
-    class iovec_resource : public http_resource {
-    public:
-        std::shared_ptr<http_response> render_get(const http_request&) {
-            // Build a response from multiple separate buffers without copying
-            std::vector<std::string> parts;
-            parts.push_back("{\"header\": \"value\", ");
-            parts.push_back("\"items\": [1, 2, 3], ");
-            parts.push_back("\"footer\": \"end\"}");
-
-            return std::make_shared<iovec_response>(
-                    std::move(parts), 200, "application/json");
-        }
-    };
-
-    int main() {
-        webserver ws{create_webserver(8080)};
-
-        iovec_resource ir;
-        ws.register_resource("/data", &ir);
-        ws.start(true);
-
-        return 0;
-    }
-```
-To test the above example, you can run the following command from a terminal:
-
-    curl -XGET -v localhost:8080/data
-
-You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/iovec_response_example.cpp).
-
-#### Example of a pipe-based streaming response
-```cpp
-    #include <cstring>
-    #include <thread>
-    #include <unistd.h>
-    #include <httpserver.hpp>
-
-    using namespace httpserver;
-
-    class pipe_resource : public http_resource {
-    public:
-        std::shared_ptr<http_response> render_get(const http_request&) {
-            int pipefd[2];
-            if (pipe(pipefd) == -1) {
-                return std::make_shared<string_response>("pipe failed", 500);
-            }
-
-            // Spawn a thread to write data into the pipe
-            std::thread writer([fd = pipefd[1]]() {
-                const char* messages[] = {"Hello ", "from ", "a pipe!\n"};
-                for (const char* msg : messages) {
-                    ssize_t ret = write(fd, msg, strlen(msg));
-                    (void)ret;
-                }
-                close(fd);
-            });
-            writer.detach();
-
-            // Return the read end of the pipe as the response
-            return std::make_shared<pipe_response>(pipefd[0], 200, "text/plain");
-        }
-    };
-
-    int main() {
-        webserver ws{create_webserver(8080)};
-
-        pipe_resource pr;
-        ws.register_resource("/stream", &pr);
-        ws.start(true);
-
-        return 0;
-    }
-```
-To test the above example, you can run the following command from a terminal:
-
-    curl -XGET -v localhost:8080/stream
-
-You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/pipe_response_example.cpp).
-
-#### Example of a WebSocket echo server
-```cpp
-    #include <iostream>
-    #include <httpserver.hpp>
-
-    using namespace httpserver;
-
-    class echo_handler : public websocket_handler {
-    public:
-        void on_open(websocket_session& session) override {
-            std::cout << "WebSocket connection opened" << std::endl;
-            session.send_text("Welcome to the echo server!");
-        }
-
-        void on_message(websocket_session& session, std::string_view msg) override {
-            std::cout << "Received: " << msg << std::endl;
-            session.send_text("Echo: " + std::string(msg));
-        }
-
-        void on_close(websocket_session& session, uint16_t code, const std::string& reason) override {
-            std::cout << "WebSocket closed (code=" << code << ", reason=" << reason << ")" << std::endl;
-        }
-    };
-
-    int main() {
-        webserver ws{create_webserver(8080)};
-
-        echo_handler handler;
-        ws.register_ws_resource("/ws", &handler);
-        ws.start(true);
-
-        return 0;
-    }
-```
-Note: WebSocket support requires libmicrohttpd 1.0.0 built with WebSocket support. You can test this with any WebSocket client library or browser JavaScript: `new WebSocket("ws://localhost:8080/ws")`.
-
-You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/websocket_echo.cpp).
-
-#### Example of daemon introspection
-```cpp
-    #include <iostream>
-    #include <httpserver.hpp>
-
-    using namespace httpserver;
-
-    class hello_resource : public http_resource {
-    public:
-        std::shared_ptr<http_response> render_get(const http_request&) {
-            return std::make_shared<string_response>("Hello, World!");
-        }
-    };
-
-    int main() {
-        // Use port 0 to let the OS assign an ephemeral port
-        webserver ws{create_webserver(0)};
-
-        hello_resource hr;
-        ws.register_resource("/hello", &hr);
-        ws.start(false);
-
-        // Query daemon information
-        std::cout << "libmicrohttpd version: "
-                  << http::http_utils::get_mhd_version() << std::endl;
-        std::cout << "Bound port: " << ws.get_bound_port() << std::endl;
-        std::cout << "Listen FD: " << ws.get_listen_fd() << std::endl;
-        std::cout << "Active connections: " << ws.get_active_connections() << std::endl;
-        std::cout << "HTTP 200 reason: "
-                  << http::http_utils::reason_phrase(200) << std::endl;
-        std::cout << "HTTP 404 reason: "
-                  << http::http_utils::reason_phrase(404) << std::endl;
-
-        ws.stop_and_wait();
-        return 0;
-    }
-```
-You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/daemon_info.cpp).
-
-#### Example of an external event loop
-```cpp
-    #include <csignal>
-    #include <iostream>
-    #include <httpserver.hpp>
-
-    using namespace httpserver;
-
-    static volatile bool running = true;
-
-    void signal_handler(int) { running = false; }
-
-    class hello_resource : public http_resource {
-    public:
-        std::shared_ptr<http_response> render_get(const http_request&) {
-            return std::make_shared<string_response>("Hello from external event loop!");
-        }
-    };
-
-    int main() {
-        signal(SIGINT, signal_handler);
-
-        webserver ws{create_webserver(8080)};
-
-        hello_resource hr;
-        ws.register_resource("/hello", &hr);
-        ws.start(false);
-
-        std::cout << "Server running on port " << ws.get_bound_port() << std::endl;
-
-        // Drive the event loop externally using run_wait
-        while (running) {
-            // Block for up to 1000ms waiting for HTTP activity
-            ws.run_wait(1000);
-
-            // You can do other work here between iterations
-        }
-
-        // Graceful shutdown: stop accepting new connections first
-        ws.quiesce();
-        ws.stop();
-
-        return 0;
-    }
-```
-To test the above example, you can run the following command from a terminal:
-
-    curl -XGET -v localhost:8080/hello
-
-You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/external_event_loop.cpp).
-
-#### Example of turbo mode with performance options
-```cpp
-    #include <httpserver.hpp>
-
-    using namespace httpserver;
-
-    class hello_resource : public http_resource {
-    public:
-        std::shared_ptr<http_response> render_get(const http_request&) {
-            return std::make_shared<string_response>("Hello, turbo world!");
-        }
-    };
-
-    int main() {
-        // Create a high-performance server with turbo mode,
-        // suppressed date headers, and a thread pool.
-        webserver ws{create_webserver(8080)
-            .start_method(http::http_utils::INTERNAL_SELECT)
-            .max_threads(4)
-            .turbo()
-            .suppress_date_header()
-            .tcp_fastopen_queue_size(16)
-            .listen_backlog(128)};
-
-        hello_resource hr;
-        ws.register_resource("/hello", &hr);
-        ws.start(true);
-
-        return 0;
-    }
-```
-To test the above example, you can run the following command from a terminal:
-
-    curl -XGET -v localhost:8080/hello
-
-You can also check this example on [github](https://github.com/etr/libhttpserver/blob/master/examples/turbo_mode.cpp).
-
-[Back to TOC](#table-of-contents)
-
-## Copying
-This manual is for libhttpserver, C++ library for creating an embedded Rest HTTP server (and more).
-
-> Permission is granted to copy, distribute and/or modify this document
-> under the terms of the GNU Free Documentation License, Version 1.3
-> or any later version published by the Free Software Foundation;
-> with no Invariant Sections, no Front-Cover Texts, and no Back-Cover
-> Texts.  A copy of the license is included in the section entitled GNU
-> Free Documentation License.
-
-[Back to TOC](#table-of-contents)
-
-## GNU Lesser General Public License
-Version 2.1, February 1999
-
-Copyright &copy; 1991, 1999 Free Software Foundation, Inc.
-51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
-Everyone is permitted to copy and distribute verbatim copies
-of this license document, but changing it is not allowed.
-
-_This is the first released version of the Lesser GPL.  It also counts
-as the successor of the GNU Library Public License, version 2, hence
-the version number 2.1._
-
-### Preamble
-
-The licenses for most software are designed to take away your
-freedom to share and change it.  By contrast, the GNU General Public
-Licenses are intended to guarantee your freedom to share and change
-free software--to make sure the software is free for all its users.
-
-This license, the Lesser General Public License, applies to some
-specially designated software packages--typically libraries--of the
-Free Software Foundation and other authors who decide to use it.  You
-can use it too, but we suggest you first think carefully about whether
-this license or the ordinary General Public License is the better
-strategy to use in any particular case, based on the explanations below.
-
-When we speak of free software, we are referring to freedom of use,
-not price.  Our General Public Licenses are designed to make sure that
-you have the freedom to distribute copies of free software (and charge
-for this service if you wish); that you receive source code or can get
-it if you want it; that you can change the software and use pieces of
-it in new free programs; and that you are informed that you can do
-these things.
-
-To protect your rights, we need to make restrictions that forbid
-distributors to deny you these rights or to ask you to surrender these
-rights.  These restrictions translate to certain responsibilities for
-you if you distribute copies of the library or if you modify it.
-
-For example, if you distribute copies of the library, whether gratis
-or for a fee, you must give the recipients all the rights that we gave
-you.  You must make sure that they, too, receive or can get the source
-code.  If you link other code with the library, you must provide
-complete object files to the recipients, so that they can relink them
-with the library after making changes to the library and recompiling
-it.  And you must show them these terms so they know their rights.
-
-We protect your rights with a two-step method: (1) we copyright the
-library, and (2) we offer you this license, which gives you legal
-permission to copy, distribute and/or modify the library.
-
-To protect each distributor, we want to make it very clear that
-there is no warranty for the free library.  Also, if the library is
-modified by someone else and passed on, the recipients should know
-that what they have is not the original version, so that the original
-author's reputation will not be affected by problems that might be
-introduced by others.
-
-Finally, software patents pose a constant threat to the existence of
-any free program.  We wish to make sure that a company cannot
-effectively restrict the users of a free program by obtaining a
-restrictive license from a patent holder.  Therefore, we insist that
-any patent license obtained for a version of the library must be
-consistent with the full freedom of use specified in this license.
-
-Most GNU software, including some libraries, is covered by the
-ordinary GNU General Public License.  This license, the GNU Lesser
-General Public License, applies to certain designated libraries, and
-is quite different from the ordinary General Public License.  We use
-this license for certain libraries in order to permit linking those
-libraries into non-free programs.
-
-When a program is linked with a library, whether statically or using
-a shared library, the combination of the two is legally speaking a
-combined work, a derivative of the original library.  The ordinary
-General Public License therefore permits such linking only if the
-entire combination fits its criteria of freedom.  The Lesser General
-Public License permits more lax criteria for linking other code with
-the library.
-
-We call this license the &ldquo;Lesser&rdquo; General Public License because it
-does Less to protect the user's freedom than the ordinary General
-Public License.  It also provides other free software developers Less
-of an advantage over competing non-free programs.  These disadvantages
-are the reason we use the ordinary General Public License for many
-libraries.  However, the Lesser license provides advantages in certain
-special circumstances.
-
-For example, on rare occasions, there may be a special need to
-encourage the widest possible use of a certain library, so that it becomes
-a de-facto standard.  To achieve this, non-free programs must be
-allowed to use the library.  A more frequent case is that a free
-library does the same job as widely used non-free libraries.  In this
-case, there is little to gain by limiting the free library to free
-software only, so we use the Lesser General Public License.
-
-In other cases, permission to use a particular library in non-free
-programs enables a greater number of people to use a large body of
-free software.  For example, permission to use the GNU C Library in
-non-free programs enables many more people to use the whole GNU
-operating system, as well as its variant, the GNU/Linux operating
-system.
-
-Although the Lesser General Public License is Less protective of the
-users' freedom, it does ensure that the user of a program that is
-linked with the Library has the freedom and the wherewithal to run
-that program using a modified version of the Library.
-
-The precise terms and conditions for copying, distribution and
-modification follow.  Pay close attention to the difference between a
-&ldquo;work based on the library&rdquo; and a &ldquo;work that uses the library&rdquo;.  The
-former contains code derived from the library, whereas the latter must
-be combined with the library in order to run.
-
-### TERMS AND CONDITIONS FOR COPYING, DISTRIBUTION AND MODIFICATION
-
-**0.** This License Agreement applies to any software library or other
-program which contains a notice placed by the copyright holder or
-other authorized party saying it may be distributed under the terms of
-this Lesser General Public License (also called &ldquo;this License&rdquo;).
-Each licensee is addressed as &ldquo;you&rdquo;.
-
-A &ldquo;library&rdquo; means a collection of software functions and/or data
-prepared so as to be conveniently linked with application programs
-(which use some of those functions and data) to form executables.
-
-The &ldquo;Library&rdquo;, below, refers to any such software library or work
-which has been distributed under these terms.  A &ldquo;work based on the
-Library&rdquo; means either the Library or any derivative work under
-copyright law: that is to say, a work containing the Library or a
-portion of it, either verbatim or with modifications and/or translated
-straightforwardly into another language.  (Hereinafter, translation is
-included without limitation in the term &ldquo;modification&rdquo;.)
-
-&ldquo;Source code&rdquo; for a work means the preferred form of the work for
-making modifications to it.  For a library, complete source code means
-all the source code for all modules it contains, plus any associated
-interface definition files, plus the scripts used to control compilation
-and installation of the library.
-
-Activities other than copying, distribution and modification are not
-covered by this License; they are outside its scope.  The act of
-running a program using the Library is not restricted, and output from
-such a program is covered only if its contents constitute a work based
-on the Library (independent of the use of the Library in a tool for
-writing it).  Whether that is true depends on what the Library does
-and what the program that uses the Library does.
-
-**1.** You may copy and distribute verbatim copies of the Library's
-complete source code as you receive it, in any medium, provided that
-you conspicuously and appropriately publish on each copy an
-appropriate copyright notice and disclaimer of warranty; keep intact
-all the notices that refer to this License and to the absence of any
-warranty; and distribute a copy of this License along with the
-Library.
-
-You may charge a fee for the physical act of transferring a copy,
-and you may at your option offer warranty protection in exchange for a
-fee.
-
-**2.** You may modify your copy or copies of the Library or any portion
-of it, thus forming a work based on the Library, and copy and
-distribute such modifications or work under the terms of Section 1
-above, provided that you also meet all of these conditions:
-
-* **a)** The modified work must itself be a software library.
-* **b)** You must cause the files modified to carry prominent notices
-stating that you changed the files and the date of any change.
-* **c)** You must cause the whole of the work to be licensed at no
-charge to all third parties under the terms of this License.
-* **d)** If a facility in the modified Library refers to a function or a
-table of data to be supplied by an application program that uses
-the facility, other than as an argument passed when the facility
-is invoked, then you must make a good faith effort to ensure that,
-in the event an application does not supply such function or
-table, the facility still operates, and performs whatever part of
-its purpose remains meaningful.  
-(For example, a function in a library to compute square roots has
-a purpose that is entirely well-defined independent of the
-application.  Therefore, Subsection 2d requires that any
-application-supplied function or table used by this function must
-be optional: if the application does not supply it, the square
-root function must still compute square roots.)
-
-These requirements apply to the modified work as a whole.  If
-identifiable sections of that work are not derived from the Library,
-and can be reasonably considered independent and separate works in
-themselves, then this License, and its terms, do not apply to those
-sections when you distribute them as separate works.  But when you
-distribute the same sections as part of a whole which is a work based
-on the Library, the distribution of the whole must be on the terms of
-this License, whose permissions for other licensees extend to the
-entire whole, and thus to each and every part regardless of who wrote
-it.
-
-Thus, it is not the intent of this section to claim rights or contest
-your rights to work written entirely by you; rather, the intent is to
-exercise the right to control the distribution of derivative or
-collective works based on the Library.
-
-In addition, mere aggregation of another work not based on the Library
-with the Library (or with a work based on the Library) on a volume of
-a storage or distribution medium does not bring the other work under
-the scope of this License.
-
-**3.** You may opt to apply the terms of the ordinary GNU General Public
-License instead of this License to a given copy of the Library.  To do
-this, you must alter all the notices that refer to this License, so
-that they refer to the ordinary GNU General Public License, version 2,
-instead of to this License.  (If a newer version than version 2 of the
-ordinary GNU General Public License has appeared, then you can specify
-that version instead if you wish.)  Do not make any other change in
-these notices.
-
-Once this change is made in a given copy, it is irreversible for
-that copy, so the ordinary GNU General Public License applies to all
-subsequent copies and derivative works made from that copy.
-
-This option is useful when you wish to copy part of the code of
-the Library into a program that is not a library.
-
-**4.** You may copy and distribute the Library (or a portion or
-derivative of it, under Section 2) in object code or executable form
-under the terms of Sections 1 and 2 above provided that you accompany
-it with the complete corresponding machine-readable source code, which
-must be distributed under the terms of Sections 1 and 2 above on a
-medium customarily used for software interchange.
-
-If distribution of object code is made by offering access to copy
-from a designated place, then offering equivalent access to copy the
-source code from the same place satisfies the requirement to
-distribute the source code, even though third parties are not
-compelled to copy the source along with the object code.
-
-**5.** A program that contains no derivative of any portion of the
-Library, but is designed to work with the Library by being compiled or
-linked with it, is called a &ldquo;work that uses the Library&rdquo;.  Such a
-work, in isolation, is not a derivative work of the Library, and
-therefore falls outside the scope of this License.
-
-However, linking a &ldquo;work that uses the Library&rdquo; with the Library
-creates an executable that is a derivative of the Library (because it
-contains portions of the Library), rather than a &ldquo;work that uses the
-library&rdquo;.  The executable is therefore covered by this License.
-Section 6 states terms for distribution of such executables.
-
-When a &ldquo;work that uses the Library&rdquo; uses material from a header file
-that is part of the Library, the object code for the work may be a
-derivative work of the Library even though the source code is not.
-Whether this is true is especially significant if the work can be
-linked without the Library, or if the work is itself a library.  The
-threshold for this to be true is not precisely defined by law.
-
-If such an object file uses only numerical parameters, data
-structure layouts and accessors, and small macros and small inline
-functions (ten lines or less in length), then the use of the object
-file is unrestricted, regardless of whether it is legally a derivative
-work.  (Executables containing this object code plus portions of the
-Library will still fall under Section 6.)
-
-Otherwise, if the work is a derivative of the Library, you may
-distribute the object code for the work under the terms of Section 6.
-Any executables containing that work also fall under Section 6,
-whether or not they are linked directly with the Library itself.
-
-**6.** As an exception to the Sections above, you may also combine or
-link a &ldquo;work that uses the Library&rdquo; with the Library to produce a
-work containing portions of the Library, and distribute that work
-under terms of your choice, provided that the terms permit
-modification of the work for the customer's own use and reverse
-engineering for debugging such modifications.
-
-You must give prominent notice with each copy of the work that the
-Library is used in it and that the Library and its use are covered by
-this License.  You must supply a copy of this License.  If the work
-during execution displays copyright notices, you must include the
-copyright notice for the Library among them, as well as a reference
-directing the user to the copy of this License.  Also, you must do one
-of these things:
-
-* **a)** Accompany the work with the complete corresponding
-machine-readable source code for the Library including whatever
-changes were used in the work (which must be distributed under
-Sections 1 and 2 above); and, if the work is an executable linked
-with the Library, with the complete machine-readable &ldquo;work that
-uses the Library&rdquo;, as object code and/or source code, so that the
-user can modify the Library and then relink to produce a modified
-executable containing the modified Library.  (It is understood
-that the user who changes the contents of definitions files in the
-Library will not necessarily be able to recompile the application
-to use the modified definitions.)
-* **b)** Use a suitable shared library mechanism for linking with the
-Library.  A suitable mechanism is one that (1) uses at run time a
-copy of the library already present on the user's computer system,
-rather than copying library functions into the executable, and (2)
-will operate properly with a modified version of the library, if
-the user installs one, as long as the modified version is
-interface-compatible with the version that the work was made with.
-* **c)** Accompany the work with a written offer, valid for at
-least three years, to give the same user the materials
-specified in Subsection 6a, above, for a charge no more
-than the cost of performing this distribution.
-* **d)** If distribution of the work is made by offering access to copy
-from a designated place, offer equivalent access to copy the above
-specified materials from the same place.
-* **e)** Verify that the user has already received a copy of these
-materials or that you have already sent this user a copy.
-
-For an executable, the required form of the &ldquo;work that uses the
-Library&rdquo; must include any data and utility programs needed for
-reproducing the executable from it.  However, as a special exception,
-the materials to be distributed need not include anything that is
-normally distributed (in either source or binary form) with the major
-components (compiler, kernel, and so on) of the operating system on
-which the executable runs, unless that component itself accompanies
-the executable.
-
-It may happen that this requirement contradicts the license
-restrictions of other proprietary libraries that do not normally
-accompany the operating system.  Such a contradiction means you cannot
-use both them and the Library together in an executable that you
-distribute.
-
-**7.** You may place library facilities that are a work based on the
-Library side-by-side in a single library together with other library
-facilities not covered by this License, and distribute such a combined
-library, provided that the separate distribution of the work based on
-the Library and of the other library facilities is otherwise
-permitted, and provided that you do these two things:
-
-* **a)** Accompany the combined library with a copy of the same work
-based on the Library, uncombined with any other library
-facilities.  This must be distributed under the terms of the
-Sections above.
-* **b)** Give prominent notice with the combined library of the fact
-that part of it is a work based on the Library, and explaining
-where to find the accompanying uncombined form of the same work.
-
-**8.** You may not copy, modify, sublicense, link with, or distribute
-the Library except as expressly provided under this License.  Any
-attempt otherwise to copy, modify, sublicense, link with, or
-distribute the Library is void, and will automatically terminate your
-rights under this License.  However, parties who have received copies,
-or rights, from you under this License will not have their licenses
-terminated so long as such parties remain in full compliance.
-
-**9.** You are not required to accept this License, since you have not
-signed it.  However, nothing else grants you permission to modify or
-distribute the Library or its derivative works.  These actions are
-prohibited by law if you do not accept this License.  Therefore, by
-modifying or distributing the Library (or any work based on the
-Library), you indicate your acceptance of this License to do so, and
-all its terms and conditions for copying, distributing or modifying
-the Library or works based on it.
-
-**10.** Each time you redistribute the Library (or any work based on the
-Library), the recipient automatically receives a license from the
-original licensor to copy, distribute, link with or modify the Library
-subject to these terms and conditions.  You may not impose any further
-restrictions on the recipients' exercise of the rights granted herein.
-You are not responsible for enforcing compliance by third parties with
-this License.
-
-**11.** If, as a consequence of a court judgment or allegation of patent
-infringement or for any other reason (not limited to patent issues),
-conditions are imposed on you (whether by court order, agreement or
-otherwise) that contradict the conditions of this License, they do not
-excuse you from the conditions of this License.  If you cannot
-distribute so as to satisfy simultaneously your obligations under this
-License and any other pertinent obligations, then as a consequence you
-may not distribute the Library at all.  For example, if a patent
-license would not permit royalty-free redistribution of the Library by
-all those who receive copies directly or indirectly through you, then
-the only way you could satisfy both it and this License would be to
-refrain entirely from distribution of the Library.
-
-If any portion of this section is held invalid or unenforceable under any
-particular circumstance, the balance of the section is intended to apply,
-and the section as a whole is intended to apply in other circumstances.
-
-It is not the purpose of this section to induce you to infringe any
-patents or other property right claims or to contest validity of any
-such claims; this section has the sole purpose of protecting the
-integrity of the free software distribution system which is
-implemented by public license practices.  Many people have made
-generous contributions to the wide range of software distributed
-through that system in reliance on consistent application of that
-system; it is up to the author/donor to decide if he or she is willing
-to distribute software through any other system and a licensee cannot
-impose that choice.
-
-This section is intended to make thoroughly clear what is believed to
-be a consequence of the rest of this License.
-
-**12.** If the distribution and/or use of the Library is restricted in
-certain countries either by patents or by copyrighted interfaces, the
-original copyright holder who places the Library under this License may add
-an explicit geographical distribution limitation excluding those countries,
-so that distribution is permitted only in or among countries not thus
-excluded.  In such case, this License incorporates the limitation as if
-written in the body of this License.
-
-**13.** The Free Software Foundation may publish revised and/or new
-versions of the Lesser General Public License from time to time.
-Such new versions will be similar in spirit to the present version,
-but may differ in detail to address new problems or concerns.
-
-Each version is given a distinguishing version number.  If the Library
-specifies a version number of this License which applies to it and
-&ldquo;any later version&rdquo;, you have the option of following the terms and
-conditions either of that version or of any later version published by
-the Free Software Foundation.  If the Library does not specify a
-license version number, you may choose any version ever published by
-the Free Software Foundation.
-
-**14.** If you wish to incorporate parts of the Library into other free
-programs whose distribution conditions are incompatible with these,
-write to the author to ask for permission.  For software which is
-copyrighted by the Free Software Foundation, write to the Free
-Software Foundation; we sometimes make exceptions for this.  Our
-decision will be guided by the two goals of preserving the free status
-of all derivatives of our free software and of promoting the sharing
-and reuse of software generally.
-
-### NO WARRANTY
-
-**15.** BECAUSE THE LIBRARY IS LICENSED FREE OF CHARGE, THERE IS NO
-WARRANTY FOR THE LIBRARY, TO THE EXTENT PERMITTED BY APPLICABLE LAW.
-EXCEPT WHEN OTHERWISE STATED IN WRITING THE COPYRIGHT HOLDERS AND/OR
-OTHER PARTIES PROVIDE THE LIBRARY &ldquo;AS IS&rdquo; WITHOUT WARRANTY OF ANY
-KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, THE
-IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE
-LIBRARY IS WITH YOU.  SHOULD THE LIBRARY PROVE DEFECTIVE, YOU ASSUME
-THE COST OF ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
-
-**16.** IN NO EVENT UNLESS REQUIRED BY APPLICABLE LAW OR AGREED TO IN
-WRITING WILL ANY COPYRIGHT HOLDER, OR ANY OTHER PARTY WHO MAY MODIFY
-AND/OR REDISTRIBUTE THE LIBRARY AS PERMITTED ABOVE, BE LIABLE TO YOU
-FOR DAMAGES, INCLUDING ANY GENERAL, SPECIAL, INCIDENTAL OR
-CONSEQUENTIAL DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THE
-LIBRARY (INCLUDING BUT NOT LIMITED TO LOSS OF DATA OR DATA BEING
-RENDERED INACCURATE OR LOSSES SUSTAINED BY YOU OR THIRD PARTIES OR A
-FAILURE OF THE LIBRARY TO OPERATE WITH ANY OTHER SOFTWARE), EVEN IF
-SUCH HOLDER OR OTHER PARTY HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH
-DAMAGES.
-
-END OF TERMS AND CONDITIONS
-
-### How to Apply These Terms to Your New Libraries
-
-If you develop a new library, and you want it to be of the greatest
-possible use to the public, we recommend making it free software that
-everyone can redistribute and change.  You can do so by permitting
-redistribution under these terms (or, alternatively, under the terms of the
-ordinary General Public License).
-
-To apply these terms, attach the following notices to the library.  It is
-safest to attach them to the start of each source file to most effectively
-convey the exclusion of warranty; and each file should have at least the
-&ldquo;copyright&rdquo; line and a pointer to where the full notice is found.
-
-    <one line to give the library's name and a brief idea of what it does.>
-    Copyright (C) <year>  <name of author>
-
-    This library is free software; you can redistribute it and/or
-    modify it under the terms of the GNU Lesser General Public
-    License as published by the Free Software Foundation; either
-    version 2.1 of the License, or (at your option) any later version.
-
-    This library is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-    Lesser General Public License for more details.
-
-    You should have received a copy of the GNU Lesser General Public
-    License along with this library; if not, write to the Free Software
-    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
-
-Also add information on how to contact you by electronic and paper mail.
-
-You should also get your employer (if you work as a programmer) or your
-school, if any, to sign a &ldquo;copyright disclaimer&rdquo; for the library, if
-necessary.  Here is a sample; alter the names:
-
-  Yoyodyne, Inc., hereby disclaims all copyright interest in the
-  library `Frob' (a library for tweaking knobs) written by James Random Hacker.
-
-  <signature of Ty Coon>, 1 April 1990
-  Ty Coon, President of Vice
-
-That's all there is to it!
-
-[Back to TOC](#table-of-contents)
-
-## GNU Free Documentation License
-
-Version 1.3, 3 November 2008
-
-Copyright &copy; 2000, 2001, 2002, 2007, 2008 Free Software Foundation, Inc. &lt;<http://fsf.org/>&gt;
-
-Everyone is permitted to copy and distribute verbatim copies
-of this license document, but changing it is not allowed.
-
-### 0. PREAMBLE
-
-The purpose of this License is to make a manual, textbook, or other
-functional and useful document &ldquo;free&rdquo; in the sense of freedom: to
-assure everyone the effective freedom to copy and redistribute it,
-with or without modifying it, either commercially or noncommercially.
-Secondarily, this License preserves for the author and publisher a way
-to get credit for their work, while not being considered responsible
-for modifications made by others.
-
-This License is a kind of &ldquo;copyleft&rdquo;, which means that derivative
-works of the document must themselves be free in the same sense.  It
-complements the GNU General Public License, which is a copyleft
-license designed for free software.
-
-We have designed this License in order to use it for manuals for free
-software, because free software needs free documentation: a free
-program should come with manuals providing the same freedoms that the
-software does.  But this License is not limited to software manuals;
-it can be used for any textual work, regardless of subject matter or
-whether it is published as a printed book.  We recommend this License
-principally for works whose purpose is instruction or reference.
-
-
-### 1. APPLICABILITY AND DEFINITIONS
-
-This License applies to any manual or other work, in any medium, that
-contains a notice placed by the copyright holder saying it can be
-distributed under the terms of this License.  Such a notice grants a
-world-wide, royalty-free license, unlimited in duration, to use that
-work under the conditions stated herein.  The &ldquo;Document&rdquo;, below,
-refers to any such manual or work.  Any member of the public is a
-licensee, and is addressed as &ldquo;you&rdquo;.  You accept the license if you
-copy, modify or distribute the work in a way requiring permission
-under copyright law.
-
-A &ldquo;Modified Version&rdquo; of the Document means any work containing the
-Document or a portion of it, either copied verbatim, or with
-modifications and/or translated into another language.
-
-A &ldquo;Secondary Section&rdquo; is a named appendix or a front-matter section of
-the Document that deals exclusively with the relationship of the
-publishers or authors of the Document to the Document's overall
-subject (or to related matters) and contains nothing that could fall
-directly within that overall subject.  (Thus, if the Document is in
-part a textbook of mathematics, a Secondary Section may not explain
-any mathematics.)  The relationship could be a matter of historical
-connection with the subject or with related matters, or of legal,
-commercial, philosophical, ethical or political position regarding
-them.
-
-The &ldquo;Invariant Sections&rdquo; are certain Secondary Sections whose titles
-are designated, as being those of Invariant Sections, in the notice
-that says that the Document is released under this License.  If a
-section does not fit the above definition of Secondary then it is not
-allowed to be designated as Invariant.  The Document may contain zero
-Invariant Sections.  If the Document does not identify any Invariant
-Sections then there are none.
-
-The &ldquo;Cover Texts&rdquo; are certain short passages of text that are listed,
-as Front-Cover Texts or Back-Cover Texts, in the notice that says that
-the Document is released under this License.  A Front-Cover Text may
-be at most 5 words, and a Back-Cover Text may be at most 25 words.
-
-A &ldquo;Transparent&rdquo; copy of the Document means a machine-readable copy,
-represented in a format whose specification is available to the
-general public, that is suitable for revising the document
-straightforwardly with generic text editors or (for images composed of
-pixels) generic paint programs or (for drawings) some widely available
-drawing editor, and that is suitable for input to text formatters or
-for automatic translation to a variety of formats suitable for input
-to text formatters.  A copy made in an otherwise Transparent file
-format whose markup, or absence of markup, has been arranged to thwart
-or discourage subsequent modification by readers is not Transparent.
-An image format is not Transparent if used for any substantial amount
-of text.  A copy that is not &ldquo;Transparent&rdquo; is called &ldquo;Opaque&rdquo;.
-
-Examples of suitable formats for Transparent copies include plain
-ASCII without markup, Texinfo input format, LaTeX input format, SGML
-or XML using a publicly available DTD, and standard-conforming simple
-HTML, PostScript or PDF designed for human modification.  Examples of
-transparent image formats include PNG, XCF and JPG.  Opaque formats
-include proprietary formats that can be read and edited only by
-proprietary word processors, SGML or XML for which the DTD and/or
-processing tools are not generally available, and the
-machine-generated HTML, PostScript or PDF produced by some word
-processors for output purposes only.
-
-The &ldquo;Title Page&rdquo; means, for a printed book, the title page itself,
-plus such following pages as are needed to hold, legibly, the material
-this License requires to appear in the title page.  For works in
-formats which do not have any title page as such, &ldquo;Title Page&rdquo; means
-the text near the most prominent appearance of the work's title,
-preceding the beginning of the body of the text.
-
-The &ldquo;publisher&rdquo; means any person or entity that distributes copies of
-the Document to the public.
-
-A section &ldquo;Entitled XYZ&rdquo; means a named subunit of the Document whose
-title either is precisely XYZ or contains XYZ in parentheses following
-text that translates XYZ in another language.  (Here XYZ stands for a
-specific section name mentioned below, such as &ldquo;Acknowledgements&rdquo;,
-&ldquo;Dedications&rdquo;, &ldquo;Endorsements&rdquo;, or &ldquo;History&rdquo;.)  To &ldquo;Preserve the Title&rdquo;
-of such a section when you modify the Document means that it remains a
-section &ldquo;Entitled XYZ&rdquo; according to this definition.
-
-The Document may include Warranty Disclaimers next to the notice which
-states that this License applies to the Document.  These Warranty
-Disclaimers are considered to be included by reference in this
-License, but only as regards disclaiming warranties: any other
-implication that these Warranty Disclaimers may have is void and has
-no effect on the meaning of this License.
-
-### 2. VERBATIM COPYING
-
-You may copy and distribute the Document in any medium, either
-commercially or noncommercially, provided that this License, the
-copyright notices, and the license notice saying this License applies
-to the Document are reproduced in all copies, and that you add no
-other conditions whatsoever to those of this License.  You may not use
-technical measures to obstruct or control the reading or further
-copying of the copies you make or distribute.  However, you may accept
-compensation in exchange for copies.  If you distribute a large enough
-number of copies you must also follow the conditions in section 3.
-
-You may also lend copies, under the same conditions stated above, and
-you may publicly display copies.
-
-
-### 3. COPYING IN QUANTITY
-
-If you publish printed copies (or copies in media that commonly have
-printed covers) of the Document, numbering more than 100, and the
-Document's license notice requires Cover Texts, you must enclose the
-copies in covers that carry, clearly and legibly, all these Cover
-Texts: Front-Cover Texts on the front cover, and Back-Cover Texts on
-the back cover.  Both covers must also clearly and legibly identify
-you as the publisher of these copies.  The front cover must present
-the full title with all words of the title equally prominent and
-visible.  You may add other material on the covers in addition.
-Copying with changes limited to the covers, as long as they preserve
-the title of the Document and satisfy these conditions, can be treated
-as verbatim copying in other respects.
-
-If the required texts for either cover are too voluminous to fit
-legibly, you should put the first ones listed (as many as fit
-reasonably) on the actual cover, and continue the rest onto adjacent
-pages.
-
-If you publish or distribute Opaque copies of the Document numbering
-more than 100, you must either include a machine-readable Transparent
-copy along with each Opaque copy, or state in or with each Opaque copy
-a computer-network location from which the general network-using
-public has access to download using public-standard network protocols
-a complete Transparent copy of the Document, free of added material.
-If you use the latter option, you must take reasonably prudent steps,
-when you begin distribution of Opaque copies in quantity, to ensure
-that this Transparent copy will remain thus accessible at the stated
-location until at least one year after the last time you distribute an
-Opaque copy (directly or through your agents or retailers) of that
-edition to the public.
-
-It is requested, but not required, that you contact the authors of the
-Document well before redistributing any large number of copies, to
-give them a chance to provide you with an updated version of the
-Document.
-
-
-### 4. MODIFICATIONS
-
-You may copy and distribute a Modified Version of the Document under
-the conditions of sections 2 and 3 above, provided that you release
-the Modified Version under precisely this License, with the Modified
-Version filling the role of the Document, thus licensing distribution
-and modification of the Modified Version to whoever possesses a copy
-of it.  In addition, you must do these things in the Modified Version:
-
-* **A.** Use in the Title Page (and on the covers, if any) a title distinct
-from that of the Document, and from those of previous versions
-(which should, if there were any, be listed in the History section
-of the Document).  You may use the same title as a previous version
-if the original publisher of that version gives permission.
-* **B.** List on the Title Page, as authors, one or more persons or entities
-responsible for authorship of the modifications in the Modified
-Version, together with at least five of the principal authors of the
-Document (all of its principal authors, if it has fewer than five),
-unless they release you from this requirement.
-* **C.** State on the Title page the name of the publisher of the
-Modified Version, as the publisher.
-* **D.** Preserve all the copyright notices of the Document.
-* **E.** Add an appropriate copyright notice for your modifications
-adjacent to the other copyright notices.
-* **F.** Include, immediately after the copyright notices, a license notice
-giving the public permission to use the Modified Version under the
-terms of this License, in the form shown in the Addendum below.
-* **G.** Preserve in that license notice the full lists of Invariant Sections
-and required Cover Texts given in the Document's license notice.
-* **H.** Include an unaltered copy of this License.
-* **I.** Preserve the section Entitled &ldquo;History&rdquo;, Preserve its Title, and add
-to it an item stating at least the title, year, new authors, and
-publisher of the Modified Version as given on the Title Page.  If
-there is no section Entitled &ldquo;History&rdquo; in the Document, create one
-stating the title, year, authors, and publisher of the Document as
-given on its Title Page, then add an item describing the Modified
-Version as stated in the previous sentence.
-* **J.** Preserve the network location, if any, given in the Document for
-public access to a Transparent copy of the Document, and likewise
-the network locations given in the Document for previous versions
-it was based on.  These may be placed in the &ldquo;History&rdquo; section.
-You may omit a network location for a work that was published at
-least four years before the Document itself, or if the original
-publisher of the version it refers to gives permission.
-* **K.** For any section Entitled &ldquo;Acknowledgements&rdquo; or &ldquo;Dedications&rdquo;,
-Preserve the Title of the section, and preserve in the section all
-the substance and tone of each of the contributor acknowledgements
-and/or dedications given therein.
-* **L.** Preserve all the Invariant Sections of the Document,
-unaltered in their text and in their titles.  Section numbers
-or the equivalent are not considered part of the section titles.
-* **M.** Delete any section Entitled &ldquo;Endorsements&rdquo;.  Such a section
-may not be included in the Modified Version.
-* **N.** Do not retitle any existing section to be Entitled &ldquo;Endorsements&rdquo;
-or to conflict in title with any Invariant Section.
-* **O.** Preserve any Warranty Disclaimers.
-
-If the Modified Version includes new front-matter sections or
-appendices that qualify as Secondary Sections and contain no material
-copied from the Document, you may at your option designate some or all
-of these sections as invariant.  To do this, add their titles to the
-list of Invariant Sections in the Modified Version's license notice.
-These titles must be distinct from any other section titles.
-
-You may add a section Entitled &ldquo;Endorsements&rdquo;, provided it contains
-nothing but endorsements of your Modified Version by various
-parties--for example, statements of peer review or that the text has
-been approved by an organization as the authoritative definition of a
-standard.
-
-You may add a passage of up to five words as a Front-Cover Text, and a
-passage of up to 25 words as a Back-Cover Text, to the end of the list
-of Cover Texts in the Modified Version.  Only one passage of
-Front-Cover Text and one of Back-Cover Text may be added by (or
-through arrangements made by) any one entity.  If the Document already
-includes a cover text for the same cover, previously added by you or
-by arrangement made by the same entity you are acting on behalf of,
-you may not add another; but you may replace the old one, on explicit
-permission from the previous publisher that added the old one.
-
-The author(s) and publisher(s) of the Document do not by this License
-give permission to use their names for publicity for or to assert or
-imply endorsement of any Modified Version.
-
-
-### 5. COMBINING DOCUMENTS
-
-You may combine the Document with other documents released under this
-License, under the terms defined in section 4 above for modified
-versions, provided that you include in the combination all of the
-Invariant Sections of all of the original documents, unmodified, and
-list them all as Invariant Sections of your combined work in its
-license notice, and that you preserve all their Warranty Disclaimers.
-
-The combined work need only contain one copy of this License, and
-multiple identical Invariant Sections may be replaced with a single
-copy.  If there are multiple Invariant Sections with the same name but
-different contents, make the title of each such section unique by
-adding at the end of it, in parentheses, the name of the original
-author or publisher of that section if known, or else a unique number.
-Make the same adjustment to the section titles in the list of
-Invariant Sections in the license notice of the combined work.
-
-In the combination, you must combine any sections Entitled &ldquo;History&rdquo;
-in the various original documents, forming one section Entitled
-&ldquo;History&rdquo;; likewise combine any sections Entitled &ldquo;Acknowledgements&rdquo;,
-and any sections Entitled &ldquo;Dedications&rdquo;.  You must delete all sections
-Entitled &ldquo;Endorsements&rdquo;.
-
-
-### 6. COLLECTIONS OF DOCUMENTS
-
-You may make a collection consisting of the Document and other
-documents released under this License, and replace the individual
-copies of this License in the various documents with a single copy
-that is included in the collection, provided that you follow the rules
-of this License for verbatim copying of each of the documents in all
-other respects.
-
-You may extract a single document from such a collection, and
-distribute it individually under this License, provided you insert a
-copy of this License into the extracted document, and follow this
-License in all other respects regarding verbatim copying of that
-document.
-
-
-### 7. AGGREGATION WITH INDEPENDENT WORKS
-
-A compilation of the Document or its derivatives with other separate
-and independent documents or works, in or on a volume of a storage or
-distribution medium, is called an &ldquo;aggregate&rdquo; if the copyright
-resulting from the compilation is not used to limit the legal rights
-of the compilation's users beyond what the individual works permit.
-When the Document is included in an aggregate, this License does not
-apply to the other works in the aggregate which are not themselves
-derivative works of the Document.
-
-If the Cover Text requirement of section 3 is applicable to these
-copies of the Document, then if the Document is less than one half of
-the entire aggregate, the Document's Cover Texts may be placed on
-covers that bracket the Document within the aggregate, or the
-electronic equivalent of covers if the Document is in electronic form.
-Otherwise they must appear on printed covers that bracket the whole
-aggregate.
-
-
-### 8. TRANSLATION
-
-Translation is considered a kind of modification, so you may
-distribute translations of the Document under the terms of section 4.
-Replacing Invariant Sections with translations requires special
-permission from their copyright holders, but you may include
-translations of some or all Invariant Sections in addition to the
-original versions of these Invariant Sections.  You may include a
-translation of this License, and all the license notices in the
-Document, and any Warranty Disclaimers, provided that you also include
-the original English version of this License and the original versions
-of those notices and disclaimers.  In case of a disagreement between
-the translation and the original version of this License or a notice
-or disclaimer, the original version will prevail.
-
-If a section in the Document is Entitled &ldquo;Acknowledgements&rdquo;,
-&ldquo;Dedications&rdquo;, or &ldquo;History&rdquo;, the requirement (section 4) to Preserve
-its Title (section 1) will typically require changing the actual
-title.
-
-
-### 9. TERMINATION
-
-You may not copy, modify, sublicense, or distribute the Document
-except as expressly provided under this License.  Any attempt
-otherwise to copy, modify, sublicense, or distribute it is void, and
-will automatically terminate your rights under this License.
-
-However, if you cease all violation of this License, then your license
-from a particular copyright holder is reinstated (a) provisionally,
-unless and until the copyright holder explicitly and finally
-terminates your license, and (b) permanently, if the copyright holder
-fails to notify you of the violation by some reasonable means prior to
-60 days after the cessation.
-
-Moreover, your license from a particular copyright holder is
-reinstated permanently if the copyright holder notifies you of the
-violation by some reasonable means, this is the first time you have
-received notice of violation of this License (for any work) from that
-copyright holder, and you cure the violation prior to 30 days after
-your receipt of the notice.
-
-Termination of your rights under this section does not terminate the
-licenses of parties who have received copies or rights from you under
-this License.  If your rights have been terminated and not permanently
-reinstated, receipt of a copy of some or all of the same material does
-not give you any rights to use it.
-
-
-### 10. FUTURE REVISIONS OF THIS LICENSE
-
-The Free Software Foundation may publish new, revised versions of the
-GNU Free Documentation License from time to time.  Such new versions
-will be similar in spirit to the present version, but may differ in
-detail to address new problems or concerns.  See
-&lt;<http://www.gnu.org/copyleft/>&gt;.
-
-Each version of the License is given a distinguishing version number.
-If the Document specifies that a particular numbered version of this
-License &ldquo;or any later version&rdquo; applies to it, you have the option of
-following the terms and conditions either of that specified version or
-of any later version that has been published (not as a draft) by the
-Free Software Foundation.  If the Document does not specify a version
-number of this License, you may choose any version ever published (not
-as a draft) by the Free Software Foundation.  If the Document
-specifies that a proxy can decide which future versions of this
-License can be used, that proxy's public statement of acceptance of a
-version permanently authorizes you to choose that version for the
-Document.
-
-### 11. RELICENSING
-
-&ldquo;Massive Multiauthor Collaboration Site&rdquo; (or &ldquo;MMC Site&rdquo;) means any
-World Wide Web server that publishes copyrightable works and also
-provides prominent facilities for anybody to edit those works.  A
-public wiki that anybody can edit is an example of such a server.  A
-&ldquo;Massive Multiauthor Collaboration&rdquo; (or &ldquo;MMC&rdquo;) contained in the site
-means any set of copyrightable works thus published on the MMC site.
-
-&ldquo;CC-BY-SA&rdquo; means the Creative Commons Attribution-Share Alike 3.0 
-license published by Creative Commons Corporation, a not-for-profit 
-corporation with a principal place of business in San Francisco, 
-California, as well as future copyleft versions of that license 
-published by that same organization.
-
-&ldquo;Incorporate&rdquo; means to publish or republish a Document, in whole or in 
-part, as part of another Document.
-
-An MMC is &ldquo;eligible for relicensing&rdquo; if it is licensed under this 
-License, and if all works that were first published under this License 
-somewhere other than this MMC, and subsequently incorporated in whole or 
-in part into the MMC, (1) had no cover texts or invariant sections, and 
-(2) were thus incorporated prior to November 1, 2008.
-
-The operator of an MMC Site may republish an MMC contained in the site
-under CC-BY-SA on the same site at any time before August 1, 2009,
-provided the MMC is eligible for relicensing.
-
-
-## ADDENDUM: How to use this License for your documents
-
-To use this License in a document you have written, include a copy of
-the License in the document and put the following copyright and
-license notices just after the title page:
-
-    Copyright (c)  YEAR  YOUR NAME.
-    Permission is granted to copy, distribute and/or modify this document
-    under the terms of the GNU Free Documentation License, Version 1.3
-    or any later version published by the Free Software Foundation;
-    with no Invariant Sections, no Front-Cover Texts, and no Back-Cover Texts.
-    A copy of the license is included in the section entitled &ldquo;GNU
-    Free Documentation License&rdquo;.
-
-If you have Invariant Sections, Front-Cover Texts and Back-Cover Texts,
-replace the `with...Texts.` line with this:
-
-    with the Invariant Sections being LIST THEIR TITLES, with the
-    Front-Cover Texts being LIST, and with the Back-Cover Texts being LIST.
-
-If you have Invariant Sections without Cover Texts, or some other
-combination of the three, merge those two alternatives to suit the
-situation.
-
-If your document contains nontrivial examples of program code, we
-recommend releasing these examples in parallel under your choice of
-free software license, such as the GNU General Public License,
-to permit their use in free software.
-
-[Back to TOC](#table-of-contents)
-
-## Thanks
-
-This library has been originally developed under the zencoders flags and this community has always supported me all along this work so I am happy to put the logo on this readme.
-
-              When you see this tree, know that you've came across ZenCoders
-    
-                                   with open('ZenCoders.                            
-                             `num` in numbers   synchronized                        
-                         datetime d      glob.     sys.argv[2] .                    
-                      def myclass   `..` @@oscla   org.   .  class {                
-                   displ  hooks(   public static void   ma    functor:              
-                 $myclass->method(  impport sys, os.pipe `   @param name`           
-               fcl   if(system(cmd) myc. /de   `  $card( array("a"   srand          
-             format  lists:  ++:   conc   ++ "my  an   WHERE  for(   == myi         
-           `sys:  myvalue(myvalue) sys.t   Console.W  try{    rais     using        
-          connec  SELECT * FROM table mycnf acco desc and or selector::clas  at     
-         openldap string  sys.   print "zenc der " { 'a':  `ls -l` >  appe &firs    
-        import Tkinter    paste( $obh  &a or it myval  bro roll:  :: [] require a   
-       case `` super. +y  <svg x="100">  expr    say " %rooms 1  --account fb- yy   
-      proc    meth Animate => send(D, open)    putd    EndIf 10  whi   myc`   cont  
-     and    main (--) import loop $$ or  end onload  UNION WITH tab   timer 150 *2  
-     end. begin True GtkLabel *label    doto partition te   let auto  i<- (i + d ); 
-    .mushup ``/.  ^/zenc/    myclass->her flv   op             <> element >> 71  or 
-    QFileDi   :   and  ..    with myc  toA  channel::bo    myc isEmpty a  not  bodt;
-    class T  public pol    str    mycalc d   pt &&a     *i fc  add               ^ac
-    ::ZenCoders::core::namespac  boost::function st  f = std:   ;;     int    assert
-    cout << endl   public genera   #include "b ost   ::ac myna const cast<char*> mys
-    ac  size_t   return ran  int (*getNextValue)(void) ff   double sa_family_t famil
-    pu        a   do puts("      ac   int main(int argc, char*   "%5d    struct nam
-    cs               float       for     typedef    enum  puts            getchar() 
-    if(                        else      #define     fp    FILE* f         char* s 
-     i++                                 strcat(           %s                  int 
-     31]                                 total+=                               do  
-      }do                                while(1)                             sle  
-      getc                              strcpy( a                            for   
-       prin                            scanf(%d, &                          get    
-         int                       void myfunc(int pa                     retu      
-           BEQ                   BNEQZ R1 10 ANDI R1 R2                  SYS        
-            XOR                SYSCALL 5 SLTIU MFLO 15 SW               JAL         
-              BNE            BLTZAL R1 1 LUI 001 NOOP MULTU           SLLV          
-                MOV R1     ADD R1 R2  JUMP  10 1001 BEQ R1 R2 1      ANDI            
-                   1101  1010001100  111 001 01  1010 101100 1001  100              
-                     110110 100   0  01 101 01100 100 100 1000100011                
-                        11101001001  00   11  100   11  10100010                    
-                            000101001001 10  1001   101000101                       
-                                 010010010010110101001010
-
-For further information:
-visit our website https://zencoders.github.io
-
-**Author:** Sebastiano Merlino
-
-[Back to TOC](#table-of-contents)
+On a build with `HAVE_WEBSOCKET` disabled — for example, when the system
+libmicrohttpd was built without WebSocket support — `register_ws_resource`
+throws `feature_unavailable`. See
+[`examples/websocket_echo.cpp`](examples/websocket_echo.cpp).
+
+## Migrating from v1
+
+v2.0 is a single breaking release. There is no opt-in compatibility shim:
+every v1 client has at least one shape change to make (response factories,
+handler signatures, threading contract, error propagation). The v1.x line
+is end-of-life on the day v2.0 ships, and v2 is packaged as
+`libhttpserver2` — parallel-installable with `libhttpserver1`, so old
+binaries keep running while you port.
+
+The rename/removed/added cheat sheet — every API surface that moved — lives
+in [`RELEASE_NOTES.md`](RELEASE_NOTES.md).
+
+## Examples index
+
+Every program under [`examples/`](examples/) is a standalone `.cpp` that
+links against libhttpserver. The grouped index (HTTP basics, response
+shapes, request features, authentication, TLS, WebSocket, performance,
+diagnostics) lives in [`examples/README.md`](examples/README.md).
+
+Start with:
+
+* [`examples/hello_world.cpp`](examples/hello_world.cpp) — the ten-line
+  lambda form quoted at the top of this README.
+* [`examples/shared_state.cpp`](examples/shared_state.cpp) — when the
+  class form is the right shape.
+* [`examples/setting_headers.cpp`](examples/setting_headers.cpp) — fluent
+  `with_header` chaining.
+* [`examples/url_registration.cpp`](examples/url_registration.cpp) —
+  paths, prefixes, parameters, and per-segment regex constraints.
+* [`examples/custom_error.cpp`](examples/custom_error.cpp) — installing
+  `not_found_handler`, `method_not_allowed_handler`, and
+  `internal_error_handler`.
+
+## Community and license
+
+* [Code of Conduct](CODE_OF_CONDUCT.md)
+* [Contributing](CONTRIBUTING.md)
+* The library is distributed under the GNU LGPL — see [`COPYING.LESSER`](COPYING.LESSER).
+* This documentation is distributed under the GNU FDL — see [`LICENSE`](LICENSE).

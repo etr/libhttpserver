@@ -39,7 +39,7 @@ endif
 endif
 
 EXTRA_DIST = libhttpserver.pc.in $(DX_CONFIG) scripts/extract-release-notes.sh scripts/validate-version.sh \
-	scripts/check-examples.sh scripts/verify-installed-examples.sh \
+	scripts/check-examples.sh scripts/check-readme.sh scripts/verify-installed-examples.sh \
 	test/headers/consumer_direct.cpp test/headers/consumer_detail.cpp test/headers/consumer_umbrella.cpp \
 	test/headers/consumer_post_umbrella.cpp \
 	test/headers/consumer_umbrella_no_backend.cpp
