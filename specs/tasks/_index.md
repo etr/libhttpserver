@@ -125,7 +125,7 @@ Nominally: **13 sequential tasks**, each S–XL. Most other tasks parallelize of
 | TASK-040 | Rewrite `examples/` | M6 | Done | TASK-025, TASK-036 |
 | TASK-041 | Rewrite `README.md` | M6 | Done | TASK-031, TASK-032, TASK-040 |
 | TASK-042 | Write `RELEASE_NOTES.md` for v2.0 | M6 | Done | TASK-041 |
-| TASK-043 | Doxygen / inline doc refresh | M6 | Not Started | TASK-031, TASK-034, TASK-041 |
+| TASK-043 | Doxygen / inline doc refresh | M6 | Done | TASK-031, TASK-034, TASK-041 |
 | TASK-044 | SOVERSION bump and packaging | M6 | Not Started | TASK-042, TASK-043 |
 
 ## PRD requirement coverage
