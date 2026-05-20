@@ -777,6 +777,11 @@ jobs:
     - name: Run tests
       run: |
         cd build ;
+        # tsan: suppress libstdc++'s benign std::ctype<char> narrow-cache race
+        # (see test/tsan.supp). All libhttpserver-internal races stay fatal.
+        if [ "$BUILD_TYPE" = "tsan" ]; then
+          export TSAN_OPTIONS="suppressions=$(pwd)/../test/tsan.supp" ;
+        fi
         make check;
       # TASK-037: flag-invariance-{on,off} are compile/link-only gates, so
       # skip the full `make check` (which spins up real servers and would

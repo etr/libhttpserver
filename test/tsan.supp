@@ -1,0 +1,14 @@
+# ThreadSanitizer suppressions for libhttpserver tests.
+#
+# Each entry below is a documented libstdc++ benign race; suppress at the
+# library boundary only — never inside libhttpserver code. New races in
+# libhttpserver itself MUST be fixed, not suppressed.
+
+# libstdc++ lazily fills std::ctype<char>::_M_narrow_ok / _M_narrow on the
+# first call to narrow() (commonly the first std::regex compile). The cache
+# write is idempotent — every initialiser computes the same 256-byte table —
+# but the guard flag is not declared atomic, so TSan flags concurrent writers
+# even though the resulting state is identical. Reported as a libstdc++ bug
+# upstream (gcc bug #58938 and related); benign in practice.
+race:std::ctype<char>::narrow
+race:std::ctype<char>::_M_narrow_init

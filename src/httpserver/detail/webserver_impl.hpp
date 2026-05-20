@@ -42,6 +42,7 @@
 #include <stdarg.h>
 
 #include <array>
+#include <atomic>
 #include <cstddef>
 #include <cstring>
 #include <list>
@@ -183,7 +184,10 @@ class webserver_impl {
     pthread_mutex_t mutexwait;
     pthread_cond_t  mutexcond;
 
-    bool running = false;
+    // Atomic to allow lock-free reads in stop()/is_running() concurrent
+    // with the mutex-guarded writes in start()/stop(). TSan-flagged in the
+    // ws_start_stop integ test (start on worker thread, stop on main).
+    std::atomic<bool> running{false};
 
     // TASK-023: route-table entries hold shared_ptr<http_resource>.
     // The two public register_resource overloads (unique_ptr / shared_ptr)

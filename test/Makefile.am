@@ -344,6 +344,7 @@ TESTS = $(check_PROGRAMS)
 @VALGRIND_CHECK_RULES@
 VALGRIND_SUPPRESSIONS_FILES = libhttpserver.supp
 EXTRA_DIST = libhttpserver.supp \
+             tsan.supp \
              PERFORMANCE.md \
              v1_baseline/README.md \
              v1_baseline/v1_constants.hpp \
