@@ -51,8 +51,10 @@
 //   route_table_concurrency.cpp (TASK-027).
 
 #include <curl/curl.h>
+#ifndef _WIN32
 #include <sys/wait.h>
 #include <unistd.h>
+#endif
 
 #include <atomic>
 #include <chrono>
@@ -277,6 +279,14 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
         return;
     }
 
+#ifdef _WIN32
+    // fork()/waitpid() are POSIX-only; the wedge cannot be contained in a
+    // child process on Windows. Skip — DR-008 is verified by the POSIX
+    // lanes, and Windows is not a release-blocking target for this gate.
+    std::cout << "[SKIP] stop_from_handler_deadlocks_as_documented"
+                 " — fork()/waitpid() unavailable on Windows\n";
+    return;
+#else
     // Run the wedge in a forked child so the unsafe stop() call does
     // not kill the test binary. The expected observable on this MHD
     // version is fatal-abort: libmicrohttpd detects the self-join
@@ -368,6 +378,7 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
                      "code " << code
                   << " (non-zero exit on contract violation)\n";
     }
+#endif  // _WIN32
 LT_END_AUTO_TEST(stop_from_handler_deadlocks_as_documented)
 
 LT_BEGIN_AUTO_TEST_ENV()

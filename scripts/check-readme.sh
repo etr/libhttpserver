@@ -53,16 +53,21 @@ extract_first_cpp_block() {
 }
 
 tmp_block="$(mktemp)"
-trap 'rm -f "$tmp_block"' EXIT
-extract_first_cpp_block "$README" > "$tmp_block"
+tmp_hello="$(mktemp)"
+trap 'rm -f "$tmp_block" "$tmp_hello"' EXIT
+extract_first_cpp_block "$README" | tr -d '\r' > "$tmp_block"
+# Strip CRLFs from the cpp file too: msys2/MINGW Windows runners check out
+# README.md with CRLF (git autocrlf=true) and the .cpp with LF, which makes
+# the byte-for-byte diff fail even though the visible content is identical.
+tr -d '\r' < "$HELLO" > "$tmp_hello"
 
 if [ ! -s "$tmp_block" ]; then
     fail "A1: README.md contains no \`\`\`cpp fenced block (need first block to match $HELLO byte-for-byte)"
 fi
 
-if ! diff -u "$HELLO" "$tmp_block" >/dev/null 2>&1; then
+if ! diff -u "$tmp_hello" "$tmp_block" >/dev/null 2>&1; then
     echo "check-readme: FAIL: A1: first \`\`\`cpp block in README.md does not match examples/hello_world.cpp byte-for-byte:" >&2
-    diff -u "$HELLO" "$tmp_block" >&2 || true
+    diff -u "$tmp_hello" "$tmp_block" >&2 || true
     exit 1
 fi
 
