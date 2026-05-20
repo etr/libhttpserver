@@ -39,7 +39,8 @@ endif
 endif
 
 EXTRA_DIST = libhttpserver.pc.in $(DX_CONFIG) scripts/extract-release-notes.sh scripts/validate-version.sh \
-	scripts/check-examples.sh scripts/check-readme.sh scripts/verify-installed-examples.sh \
+	scripts/check-examples.sh scripts/check-readme.sh scripts/check-release-notes.sh \
+	scripts/verify-installed-examples.sh \
 	test/headers/consumer_direct.cpp test/headers/consumer_detail.cpp test/headers/consumer_umbrella.cpp \
 	test/headers/consumer_post_umbrella.cpp \
 	test/headers/consumer_umbrella_no_backend.cpp
@@ -282,7 +283,7 @@ check-hygiene:
 # shared staged install to avoid paying two full `make install` costs on
 # every `make check`. Both sub-checks can still be invoked standalone (they
 # will do their own install when CHECK_*_SHARED is not set).
-check-local: check-headers check-examples check-readme
+check-local: check-headers check-examples check-readme check-release-notes
 	@echo "=== Shared staged install for check-install-layout and check-hygiene ==="
 	@rm -rf $(abs_top_builddir)/.shared-check-stage
 	@$(MAKE) $(AM_MAKEFLAGS) install DESTDIR=$(abs_top_builddir)/.shared-check-stage >check-shared-install.log 2>&1 || { \
@@ -311,7 +312,14 @@ check-readme:
 	@echo "=== check-readme: enforce TASK-041 invariants on README.md ==="
 	@$(top_srcdir)/scripts/check-readme.sh
 
-.PHONY: check-headers check-install-layout check-hygiene check-examples check-readme
+# TASK-042: enforce static invariants on RELEASE_NOTES.md
+# (required v1/v2 tokens, sections, same-line rename pairs, arch citations,
+# disclaimer). Run as part of `make check` via check-local.
+check-release-notes:
+	@echo "=== check-release-notes: enforce TASK-042 invariants on RELEASE_NOTES.md ==="
+	@$(top_srcdir)/scripts/check-release-notes.sh
+
+.PHONY: check-headers check-install-layout check-hygiene check-examples check-readme check-release-notes
 
 # TASK-039: top-level convenience rule that descends into test/ to
 # build and run the bench binaries (see test/Makefile.am and
