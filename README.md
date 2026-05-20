@@ -17,6 +17,7 @@ This README introduces the v2.0 API. It is not exhaustive: the headers under
 the authoritative reference.
 
 ```cpp
+// Copyright 2026 Sebastiano Merlino
 // libhttpserver hello-world example — the lambda form (PRD §3.4).
 // Compiles in ten lines including main(), with no http_resource subclass
 // and no raw-pointer ownership. Production code typically qualifies names
