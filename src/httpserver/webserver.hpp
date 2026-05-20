@@ -80,6 +80,41 @@ namespace httpserver {
 /**
  * Class representing the webserver. Main class of the apis.
  *
+ * ### Threading contract (DR-008 / §5.1)
+ *
+ * The webserver dispatches each request on one of libmicrohttpd's worker
+ * threads. The thread-safety contract:
+ *
+ *   1. Public registration / un-registration methods (@ref register_path,
+ *      @ref register_prefix, @ref register_resource, the @ref on_get
+ *      family, @ref route, @ref unregister_path, @ref unregister_prefix,
+ *      @ref unregister_resource, @ref register_ws_resource,
+ *      @ref unregister_ws_resource, @ref block_ip, @ref unblock_ip) are
+ *      thread-safe and re-entrant from inside a request handler.
+ *   2. The exceptions are @ref stop, @ref stop_and_wait, and the
+ *      destructor: each joins libmicrohttpd's worker threads and
+ *      therefore deadlocks (or aborts with "Failed to join a thread."
+ *      on some libmicrohttpd versions) when called from within a
+ *      handler thread. Call them from the thread that owns the
+ *      webserver instance.
+ *   3. `http_request` is single-threaded per request: it is owned by
+ *      the worker thread servicing that request and MUST NOT be
+ *      retained beyond the handler's return.
+ *   4. `http_response` is a value type with exclusive ownership; no
+ *      cross-thread sharing.
+ *   5. User-supplied callbacks invoked from MHD worker threads --
+ *      @ref create_webserver::log_access, @ref create_webserver::log_error,
+ *      @ref create_webserver::not_found_handler,
+ *      @ref create_webserver::method_not_allowed_handler,
+ *      @ref create_webserver::internal_error_handler,
+ *      @ref create_webserver::file_cleanup_callback, the PSK / SNI / ALPN
+ *      callbacks, and any registered @ref http_resource render method --
+ *      may run concurrently on multiple threads. Implementations MUST be
+ *      thread-safe.
+ *
+ * See specs/architecture/11-decisions/DR-008.md and §5.1 for the
+ * decision record.
+ *
  * ### Handler error-propagation contract (DR-009 / §5.2 / PRD-FLG-REQ-002)
  *
  * Every registered request handler is invoked from the dispatch path under
@@ -179,6 +214,7 @@ class webserver {
       *             in the form /path/to/url/{par1}/and/{par2} or a regex.
       * @param res  unique_ptr to the http_resource (or any derived type);
       *             ownership is transferred to the webserver.
+      * @see register_prefix, unregister_path
      **/
      template <typename T,
                typename = std::enable_if_t<
@@ -187,8 +223,19 @@ class webserver {
          register_path(path,
                        std::shared_ptr<http_resource>(std::move(res)));
      }
-     /// @copydoc register_path(const std::string&, std::unique_ptr<T>)
-     /// @param res shared_ptr to the http_resource; the caller retains a reference.
+     /**
+      * Register a resource for an exact-match URL (shared_ptr overload).
+      *
+      * Identical contract to @ref register_path(const std::string&, std::unique_ptr<T>)
+      * but lets the caller retain a reference to the resource; the
+      * webserver keeps one reference until @ref unregister_path or
+      * destruction releases it.
+      *
+      * @param path The url pointing to the resource. May be parameterized
+      *             in the form /path/to/url/{par1}/and/{par2} or a regex.
+      * @param res  shared_ptr to the http_resource; the caller retains
+      *             a reference.
+     **/
      void register_path(const std::string& path,
                         std::shared_ptr<http_resource> res);
 
@@ -207,6 +254,7 @@ class webserver {
       *
       * @param path The url whose subtree this resource handles.
       * @param res  unique_ptr to the http_resource (or any derived type).
+      * @see register_path, unregister_prefix
      **/
      template <typename T,
                typename = std::enable_if_t<
@@ -215,8 +263,16 @@ class webserver {
          register_prefix(path,
                          std::shared_ptr<http_resource>(std::move(res)));
      }
-     /// @copydoc register_prefix(const std::string&, std::unique_ptr<T>)
-     /// @param res shared_ptr to the http_resource; the caller retains a reference.
+     /**
+      * Register a resource for a prefix URL match (shared_ptr overload).
+      *
+      * Identical contract to @ref register_prefix(const std::string&, std::unique_ptr<T>)
+      * but lets the caller retain a reference to the resource.
+      *
+      * @param path The url whose subtree this resource handles.
+      * @param res  shared_ptr to the http_resource; the caller retains
+      *             a reference.
+     **/
      void register_prefix(const std::string& path,
                           std::shared_ptr<http_resource> res);
 
@@ -336,12 +392,18 @@ class webserver {
      /**
       * Unregister an exact-match (register_path) registration.
       * No-op if no exact registration exists at @p path.
+      *
+      * @param path the exact URL previously passed to @ref register_path.
+      * @see register_path, unregister_prefix, unregister_resource
      **/
      void unregister_path(const std::string& path);
 
      /**
       * Unregister a prefix-match (register_prefix) registration.
       * No-op if no prefix registration exists at @p path.
+      *
+      * @param path the prefix URL previously passed to @ref register_prefix.
+      * @see register_prefix, unregister_path, unregister_resource
      **/
      void unregister_prefix(const std::string& path);
 
@@ -349,6 +411,9 @@ class webserver {
       * Kind-agnostic convenience: erases either an exact or a prefix
       * registration at @p path. Equivalent to calling unregister_path
       * and unregister_prefix; idempotent.
+      *
+      * @param path the URL previously passed to @ref register_path or @ref register_prefix.
+      * @see register_path, register_prefix, unregister_path, unregister_prefix
      **/
      void unregister_resource(const std::string& path);
 
@@ -358,12 +423,18 @@ class webserver {
       * callback. Intended for use under the default ACCEPT policy.
       * No-op semantics are preserved when the same IP is added twice;
       * a more specific entry replaces a previously-recorded wildcard.
+      *
+      * @param ip an IP literal or wildcard pattern.
+      * @see unblock_ip
      **/
      void block_ip(std::string_view ip);
 
      /**
       * Remove @p ip from the IP block list. Idempotent: removing an IP
       * that is not currently blocked is a no-op.
+      *
+      * @param ip an IP literal or wildcard pattern previously passed to @ref block_ip.
+      * @see block_ip
      **/
      void unblock_ip(std::string_view ip);
 
@@ -516,6 +587,7 @@ class webserver {
       * @param handler  unique_ptr to the websocket_handler (or any
       *                 derived type); ownership is transferred to the
       *                 webserver.
+      * @see unregister_ws_resource, feature_unavailable, features
       **/
      template <typename T,
                typename = std::enable_if_t<
@@ -526,9 +598,16 @@ class webserver {
              resource,
              std::shared_ptr<websocket_handler>(std::move(handler)));
      }
-     /// @copydoc register_ws_resource(const std::string&, std::unique_ptr<T>)
-     /// @param handler shared_ptr to the websocket_handler; the caller
-     ///                retains a reference.
+     /**
+      * Register a websocket handler at @p resource (shared_ptr overload).
+      *
+      * Identical contract to @ref register_ws_resource(const std::string&, std::unique_ptr<T>)
+      * but lets the caller retain a reference to the handler.
+      *
+      * @param resource The url at which to register the handler.
+      * @param handler  shared_ptr to the websocket_handler; the caller
+      *                 retains a reference.
+      **/
      void register_ws_resource(const std::string& resource,
                                std::shared_ptr<websocket_handler> handler);
 
@@ -542,6 +621,9 @@ class webserver {
       * drops it.
       *
       * Throws feature_unavailable on a HAVE_WEBSOCKET-off build.
+      *
+      * @param resource the URL previously passed to @ref register_ws_resource.
+      * @see register_ws_resource, feature_unavailable, features
       **/
      void unregister_ws_resource(const std::string& resource);
 

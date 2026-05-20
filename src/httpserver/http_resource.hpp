@@ -63,7 +63,8 @@ class http_resource {
       * @param req Request passed through http
       * @return A http_response object
      **/
-     virtual http_response render(const http_request& /*req*/) {
+     virtual http_response render(const http_request& req) {
+         (void)req;
          // TASK-036: default-constructed http_response carries
          // status_code_ == -1 — the v1-compatible "handler did not
          // produce a response" sentinel that finalize_answer recognises
