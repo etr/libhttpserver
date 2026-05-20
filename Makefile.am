@@ -40,6 +40,7 @@ endif
 
 EXTRA_DIST = libhttpserver.pc.in $(DX_CONFIG) scripts/extract-release-notes.sh scripts/validate-version.sh \
 	scripts/check-examples.sh scripts/check-readme.sh scripts/check-release-notes.sh \
+	scripts/check-doxygen.sh \
 	scripts/verify-installed-examples.sh \
 	test/headers/consumer_direct.cpp test/headers/consumer_detail.cpp test/headers/consumer_umbrella.cpp \
 	test/headers/consumer_post_umbrella.cpp \
@@ -283,7 +284,7 @@ check-hygiene:
 # shared staged install to avoid paying two full `make install` costs on
 # every `make check`. Both sub-checks can still be invoked standalone (they
 # will do their own install when CHECK_*_SHARED is not set).
-check-local: check-headers check-examples check-readme check-release-notes
+check-local: check-headers check-examples check-readme check-release-notes check-doxygen
 	@echo "=== Shared staged install for check-install-layout and check-hygiene ==="
 	@rm -rf $(abs_top_builddir)/.shared-check-stage
 	@$(MAKE) $(AM_MAKEFLAGS) install DESTDIR=$(abs_top_builddir)/.shared-check-stage >check-shared-install.log 2>&1 || { \
@@ -319,7 +320,15 @@ check-release-notes:
 	@echo "=== check-release-notes: enforce TASK-042 invariants on RELEASE_NOTES.md ==="
 	@$(top_srcdir)/scripts/check-release-notes.sh
 
-.PHONY: check-headers check-install-layout check-hygiene check-examples check-readme check-release-notes
+# TASK-043: run doxygen and fail on any substantive warning. The script
+# delegates to `make doxygen-run` and parses stderr; environmental noise
+# (obsolete config tags, missing graphviz) is filtered out. Skips with
+# exit 0 if doxygen is not installed.
+check-doxygen:
+	@echo "=== check-doxygen: enforce TASK-043 zero-warning invariant ==="
+	@BUILD_DIR="$(abs_top_builddir)" $(top_srcdir)/scripts/check-doxygen.sh
+
+.PHONY: check-headers check-install-layout check-hygiene check-examples check-readme check-release-notes check-doxygen
 
 # TASK-039: top-level convenience rule that descends into test/ to
 # build and run the bench binaries (see test/Makefile.am and

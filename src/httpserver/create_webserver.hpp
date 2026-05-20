@@ -46,11 +46,25 @@ namespace httpserver {
 class webserver;
 class http_request;
 
-// TASK-030 / PRD-NAM-REQ-003 — see specs/architecture/04-components/create-webserver.md.
+/**
+ * Callback signature for the 404 and 405 error-page handlers.
+ *
+ * Returned by value; the webserver writes the response to the wire.
+ * (TASK-030 / PRD-NAM-REQ-003 — see specs/architecture/04-components/create-webserver.md.)
+ */
 typedef std::function<http_response(const http_request&)> error_handler;
 
-// TASK-031 / DR-009 §5.2 — internal_error_handler receives the originating
-// exception's message as a non-owning view; see create-webserver.md.
+/**
+ * Callback signature for @ref create_webserver::internal_error_handler.
+ *
+ * The handler receives the originating exception's message as a non-owning
+ * `std::string_view` — for `std::exception` derivatives this is `e.what()`;
+ * for non-`std::exception` throws (`throw 42`) it is the literal string
+ * `"unknown exception"`. The view is valid only for the duration of the
+ * call; copy if you need to retain it.
+ *
+ * Full contract: DR-009 §5.2 (see @ref webserver class-level block).
+ */
 typedef std::function<http_response(const http_request&, std::string_view message)> internal_error_handler_t;
 
 typedef std::function<bool(const std::string&)> validator_ptr;
@@ -66,6 +80,25 @@ namespace http { class file_info; }
 typedef std::function<bool(const std::string&, const std::string&, const http::file_info&)> file_cleanup_callback_ptr;
 typedef std::function<std::shared_ptr<http_response>(const http_request&)> auth_handler_ptr;
 
+/**
+ * Fluent builder for @ref webserver instances (PRD-NAM-REQ-004,
+ * PRD-CFG-REQ-001..003 / TASK-033).
+ *
+ * Each setter returns `*this` so calls can chain:
+ * `webserver ws{create_webserver{}.port(8080).use_ssl(true).max_threads(4)};`
+ *
+ * Setters validate eagerly where the input domain is well-defined
+ * (e.g. @ref port rejects values outside `[0, 65535]`, all `int` setters
+ * reject negatives); feature-gated settings (@ref use_ssl,
+ * @ref basic_auth, @ref digest_auth, websocket registration) are
+ * validated when the @ref webserver constructor consumes the builder,
+ * not at the setter — so a builder configured for an unsupported
+ * feature throws @ref feature_unavailable from `webserver(create_webserver)`
+ * rather than from the setter.
+ *
+ * The @ref webserver constructor is `explicit`: callers must direct-init
+ * (`webserver ws{cw};`) rather than rely on implicit conversion.
+ */
 class create_webserver {
  public:
      create_webserver() = default;
@@ -102,6 +135,16 @@ class create_webserver {
      create_webserver& max_thread_stack_size(int v) { check_non_negative("max_thread_stack_size", v); _max_thread_stack_size = v; return *this; }
 
      // Boolean flag setters (TASK-033 / PRD-CFG-REQ-001).
+     /**
+      * Enable TLS for the webserver (HTTPS).
+      *
+      * On a `HAVE_GNUTLS`-off build, constructing a @ref webserver from a
+      * builder with `use_ssl(true)` throws @ref feature_unavailable.
+      * Defaults to `false`.
+      *
+      * @param enable `true` to enable TLS, `false` to disable.
+      * @return reference to this builder for chaining.
+      */
      create_webserver& use_ssl(bool enable = true) { _use_ssl = enable; return *this; }
      create_webserver& use_ipv6(bool enable = true) { _use_ipv6 = enable; return *this; }
      create_webserver& use_dual_stack(bool enable = true) { _use_dual_stack = enable; return *this; }
@@ -125,7 +168,27 @@ class create_webserver {
      // validation lives in webserver(const create_webserver&), which
      // throws feature_unavailable when this is set to true on a
      // HAVE_BAUTH-off build.
+     /**
+      * Enable HTTP Basic authentication on the webserver.
+      *
+      * On a `HAVE_BAUTH`-off build, constructing a @ref webserver from a
+      * builder with `basic_auth(true)` throws @ref feature_unavailable.
+      * Default value depends on the build flag (see TASK-034).
+      *
+      * @param enable `true` to enable Basic auth, `false` to disable.
+      * @return reference to this builder for chaining.
+      */
      create_webserver& basic_auth(bool enable = true) { _basic_auth_enabled = enable; return *this; }
+     /**
+      * Enable HTTP Digest authentication on the webserver.
+      *
+      * On a `HAVE_DAUTH`-off build, constructing a @ref webserver from a
+      * builder with `digest_auth(true)` throws @ref feature_unavailable.
+      * Default value depends on the build flag.
+      *
+      * @param enable `true` to enable Digest auth, `false` to disable.
+      * @return reference to this builder for chaining.
+      */
      create_webserver& digest_auth(bool enable = true) { _digest_auth_enabled = enable; return *this; }
      create_webserver& deferred(bool enable = true) { _deferred_enabled = enable; return *this; }
      create_webserver& regex_checking(bool enable = true) { _regex_checking = enable; return *this; }
@@ -141,8 +204,60 @@ class create_webserver {
      create_webserver& generate_random_filename_on_upload(bool enable = true) { _generate_random_filename_on_upload = enable; return *this; }
      create_webserver& single_resource(bool enable = true) { _single_resource = enable; return *this; }
      create_webserver& tcp_nodelay(bool enable = true) { _tcp_nodelay = enable; return *this; }
+     /**
+      * Install a handler invoked when no resource matches the request path (HTTP 404).
+      *
+      * The handler returns an @ref http_response by value; its status
+      * code, headers, and body are sent on the wire as-is. If null, a
+      * default 404 response is generated.
+      *
+      * @param h error_handler callback; pass `nullptr` to clear.
+      * @return reference to this builder for chaining.
+      * @see method_not_allowed_handler, internal_error_handler
+      */
      create_webserver& not_found_handler(error_handler h) { _not_found_handler = std::move(h); return *this; }
+     /**
+      * Install a handler invoked when a resource matches the path but
+      * not the HTTP method (HTTP 405).
+      *
+      * The handler returns an @ref http_response by value. If null, a
+      * default 405 response is generated.
+      *
+      * @param h error_handler callback; pass `nullptr` to clear.
+      * @return reference to this builder for chaining.
+      * @see not_found_handler, internal_error_handler
+      */
      create_webserver& method_not_allowed_handler(error_handler h) { _method_not_allowed_handler = std::move(h); return *this; }
+     /**
+      * Install the handler invoked when a registered request handler
+      * throws (HTTP 500 by default).
+      *
+      * This is the load-bearing extension point for the dispatch
+      * error-propagation contract (DR-009 §5.2 / PRD-FLG-REQ-002). The
+      * contract — full statement on the @ref webserver class block — is:
+      *
+      *   1. The handler call is wrapped in `try/catch (std::exception&) / catch (...)`.
+      *   2. On `std::exception`: the message is logged via @ref log_error,
+      *      then @p h is invoked with `e.what()` as the @ref internal_error_handler_t
+      *      `message` argument.
+      *   3. On non-`std::exception`: same path with the message replaced
+      *      by the literal string `"unknown exception"`.
+      *   4. If @p h itself throws while servicing the above, the failure
+      *      is logged generically and a hardcoded 500 with an EMPTY body
+      *      is sent. No exception ever escapes into libmicrohttpd.
+      *   5. @ref feature_unavailable (a `std::runtime_error` subclass) is
+      *      NOT mapped specially: it lands as a generic 500 like any
+      *      other `std::exception`.
+      *   6. May run concurrently from multiple MHD worker threads;
+      *      implementations MUST be thread-safe.
+      *
+      * If @p h is null, the default response is a 500 with the message
+      * in the body (see DR-009).
+      *
+      * @param h @ref internal_error_handler_t callback; pass `nullptr` to clear.
+      * @return reference to this builder for chaining.
+      * @see webserver, not_found_handler, method_not_allowed_handler, feature_unavailable
+      */
      create_webserver& internal_error_handler(internal_error_handler_t h) { _internal_error_handler = std::move(h); return *this; }
      create_webserver& file_cleanup_callback(file_cleanup_callback_ptr v) { _file_cleanup_callback = v; return *this; }
      create_webserver& auth_handler(auth_handler_ptr v) { _auth_handler = v; return *this; }

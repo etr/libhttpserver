@@ -248,7 +248,8 @@ class http_request {
      /**
       * Method to get or create a file info struct in the map if the provided filename is already in the map
       * return the exiting file info struct, otherwise create one in the map and return it.
-      * @param upload_file_name the file name the user uploaded (this is the identifier for the map entry)
+      * @param key the multipart form field name (top-level map key).
+      * @param upload_file_name the file name the user uploaded (identifier for the inner map entry).
       * @result a http::file_info
      **/
      http::file_info& get_or_create_file_info(const std::string& key, const std::string& upload_file_name);
@@ -451,6 +452,13 @@ class http_request {
       * library was built without HAVE_DAUTH the implementation returns
       * the sentinel `digest_auth_result::WRONG_HEADER` (architecture
       * spec §7 "returns a sentinel result") without touching MHD.
+      *
+      * @param realm         protection realm advertised in the WWW-Authenticate header.
+      * @param password      cleartext password to verify against.
+      * @param nonce_timeout nonce lifetime in seconds (0 = backend default).
+      * @param max_nc        max accepted nonce-count value (0 = backend default).
+      * @param algo          digest hash algorithm; defaults to SHA-256.
+      * @return one of the @ref httpserver::http::http_utils::digest_auth_result values.
       **/
      http::http_utils::digest_auth_result check_digest_auth(
          const std::string& realm,
@@ -459,9 +467,22 @@ class http_request {
          uint32_t max_nc = 0,
          http::http_utils::digest_algorithm algo = http::http_utils::digest_algorithm::SHA256) const;
 
-     /// @copydoc check_digest_auth
-     /// @param userdigest pre-computed digest of the username/realm/password.
-     /// @param userdigest_size size of @p userdigest in bytes.
+     /**
+      * Digest-authenticate using a pre-computed user digest (no cleartext password).
+      *
+      * Variant of @ref check_digest_auth that takes a raw H(A1) digest
+      * instead of a cleartext password. Same feature-flag behaviour:
+      * declared unconditionally; returns
+      * `digest_auth_result::WRONG_HEADER` on HAVE_DAUTH-off builds.
+      *
+      * @param realm          protection realm advertised in the WWW-Authenticate header.
+      * @param userdigest     pre-computed digest of the username/realm/password.
+      * @param userdigest_size size of @p userdigest in bytes.
+      * @param nonce_timeout  nonce lifetime in seconds (0 = backend default).
+      * @param max_nc         max accepted nonce-count value (0 = backend default).
+      * @param algo           digest hash algorithm; defaults to SHA-256.
+      * @return one of the @ref httpserver::http::http_utils::digest_auth_result values.
+     **/
      http::http_utils::digest_auth_result check_digest_auth_digest(
          const std::string& realm,
          const void* userdigest,

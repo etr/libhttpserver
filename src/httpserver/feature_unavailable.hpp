@@ -31,17 +31,60 @@
 
 namespace httpserver {
 
-// Exception thrown when a build-time-disabled feature is invoked at runtime.
-// The class is unconditionally available regardless of HAVE_* flags so that
-// downstream code can always write
-//     try { ... } catch (const httpserver::feature_unavailable&) { ... }
-// even in builds that compiled out the optional feature in question.
-//
-// The class is header-only (and inline) on purpose: it has no library
-// dependencies, must be cheap to throw from anywhere in the codebase, and
-// avoids ABI churn for what is effectively a labelled std::runtime_error.
+/**
+ * Exception thrown when a build-time-disabled feature is invoked at runtime.
+ *
+ * The class is unconditionally available regardless of `HAVE_*` flags so
+ * that downstream code can always write
+ * @code
+ *     try { ... } catch (const httpserver::feature_unavailable&) { ... }
+ * @endcode
+ * even in builds that compiled out the optional feature in question.
+ *
+ * The class is header-only (and inline) on purpose: it has no library
+ * dependencies, must be cheap to throw from anywhere in the codebase, and
+ * avoids ABI churn for what is effectively a labelled `std::runtime_error`.
+ *
+ * ### Throw sites (architecture spec §7)
+ *
+ * The library throws `feature_unavailable` from these sites; each one
+ * pairs the feature label with the `HAVE_*` build flag that gates it:
+ *
+ *   - @ref webserver::webserver — when constructing from a builder that
+ *     enables `use_ssl(true)` on a `HAVE_GNUTLS`-off build, or
+ *     `basic_auth(true)` on a `HAVE_BAUTH`-off build, or
+ *     `digest_auth(true)` on a `HAVE_DAUTH`-off build.
+ *   - @ref webserver::register_ws_resource and
+ *     @ref webserver::unregister_ws_resource — on a `HAVE_WEBSOCKET`-off
+ *     build (every websocket entry point throws this).
+ *   - @ref websocket_session::send_text, @ref websocket_session::send_binary,
+ *     @ref websocket_session::send_ping, @ref websocket_session::send_pong,
+ *     and @ref websocket_session::close — on a `HAVE_WEBSOCKET`-off build,
+ *     so that downstream handlers that capture a session reference get a
+ *     uniform exception type rather than a link-time error.
+ *
+ * Catching `feature_unavailable` (or its base `std::runtime_error`) on
+ * the dispatch path is handled by the standard
+ * @ref webserver internal_error_handler contract — it surfaces as a
+ * generic 500 unless the application installs an
+ * @ref create_webserver::internal_error_handler that special-cases it.
+ *
+ * @see create_webserver::use_ssl, create_webserver::basic_auth,
+ *      create_webserver::digest_auth, webserver::register_ws_resource,
+ *      websocket_session
+ */
 class feature_unavailable : public std::runtime_error {
  public:
+    /**
+     * Construct with the feature name and the build flag that gates it.
+     *
+     * The resulting `what()` is
+     * `"feature '<feature>' unavailable: built without <build_flag>"`.
+     *
+     * @param feature    human-readable feature label (e.g. `"TLS"`, `"WebSocket"`).
+     * @param build_flag the autoconf-defined `HAVE_*` flag that was off
+     *                   in this build (e.g. `"HAVE_GNUTLS"`).
+     */
     feature_unavailable(std::string_view feature, std::string_view build_flag)
         : std::runtime_error(compose_message(feature, build_flag)) {}
 

@@ -355,13 +355,16 @@ class header_comparator {
      // string_view-returning const accessors on http_response.
      using is_transparent = std::true_type;
      /**
-      * Operator used to compare strings.
-      * @param first string
-      * @param second string
+      * Case-insensitive less-than comparison.
+      * @param x first string to compare.
+      * @param y second string to compare.
+      * @return `true` iff @p x sorts before @p y under case-insensitive
+      *         lexicographic order.
      **/
      bool operator()(std::string_view x, std::string_view y) const {
          COMPARATOR(x, y, std::toupper);
      }
+     /// @copydoc operator()(std::string_view, std::string_view) const
      bool operator()(const std::string& x, const std::string& y) const {
          COMPARATOR(x, y, std::toupper);
      }
@@ -376,9 +379,15 @@ class arg_comparator {
  public:
      using is_transparent = std::true_type;
      /**
-      * Operator used to compare strings.
-      * @param first string
-      * @param second string
+      * Less-than comparison between two argument keys.
+      *
+      * Defaults to case-sensitive byte-wise ordering; if the library was
+      * built with `-DCASE_INSENSITIVE` it folds upper-case before
+      * comparing, matching arg_map's documented contract.
+      *
+      * @param x first string to compare.
+      * @param y second string to compare.
+      * @return `true` iff @p x sorts before @p y under the active mode.
      **/
      bool operator()(std::string_view x, std::string_view y) const {
 #ifdef CASE_INSENSITIVE
@@ -430,10 +439,13 @@ struct ip_representation {
 };
 
 /**
- * Method used to get an ip in form of string from a sockaddr structure
- * @param sa The sockaddr object to find the ip address from
- * @param maxlen Maxlen of the address (automatically discovered if not passed)
- * @return string containing the ip address
+ * Method used to get an ip in form of string from a sockaddr structure.
+ *
+ * The buffer length is computed internally from the address family; the
+ * v1 `maxlen` parameter was removed in v2.0.
+ *
+ * @param sa The sockaddr object to find the ip address from.
+ * @return string containing the ip address.
 **/
 std::string get_ip_str(const struct sockaddr *sa);
 
