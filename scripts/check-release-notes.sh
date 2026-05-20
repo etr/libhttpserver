@@ -46,6 +46,45 @@ fail() {
     exit 1
 }
 
+# Helper: check that every token in the given array appears at least once in
+# the target file.  Usage: check_tokens_present <label> <file> "${ARRAY[@]}"
+check_tokens_present() {
+    local label="$1" file="$2"; shift 2
+    local missing=()
+    for tok in "$@"; do
+        grep -qE "$tok" "$file" || missing+=("$tok")
+    done
+    if [ "${#missing[@]}" -gt 0 ]; then
+        echo "check-release-notes: FAIL: ${label}: missing tokens:" >&2
+        printf '  %s\n' "${missing[@]}" >&2
+        exit 1
+    fi
+}
+
+# Helper: extract body of a named section (between its H2 heading and the next H2/EOF).
+# $1 = file, $2 = regex matching the heading line (case-insensitive).
+extract_section_body() {
+    awk -v re="$2" '
+        BEGIN { in_section = 0 }
+        /^##[ \t]+/ {
+            if (in_section) { exit }
+            if (tolower($0) ~ tolower(re)) { in_section = 1; next }
+        }
+        in_section { print }
+    ' "$1"
+}
+
+# Helper: check that a named section exists and contains a required citation.
+# Usage: check_section_cites <label> <file> <heading_re> <citation_re> <section_name>
+check_section_cites() {
+    local label="$1" file="$2" heading_re="$3" citation_re="$4" section_name="$5"
+    local body
+    body="$(extract_section_body "$file" "$heading_re")"
+    [ -n "$body" ] || fail "${label}: RELEASE_NOTES.md is missing a '${section_name}' section"
+    echo "$body" | grep -qE "$citation_re" \
+        || fail "${label}: ${section_name} section must cite ${citation_re}"
+}
+
 # ---- A1: RELEASE_NOTES.md exists --------------------------------------------
 
 [ -f "$NOTES" ] || fail "A1: RELEASE_NOTES.md does not exist at $NOTES"
@@ -87,23 +126,18 @@ REQUIRED_V1_TOKENS=(
     '\bgnutls_session_t\b'
     '\bget_raw_response\b'
     '\bDEFAULT_WS_PORT\b'
+    '\bDEFAULT_WS_TIMEOUT\b'
+    '\bdecorate_response\b'
+    '\benqueue_response\b'
     '\bHAVE_GNUTLS\b'
 )
 
-missing_v1=()
-for tok in "${REQUIRED_V1_TOKENS[@]}"; do
-    if ! grep -qE "$tok" "$NOTES"; then
-        missing_v1+=("$tok")
-    fi
-done
-if [ "${#missing_v1[@]}" -gt 0 ]; then
-    echo "check-release-notes: FAIL: A2: RELEASE_NOTES.md is missing required v1-era tokens:" >&2
-    for tok in "${missing_v1[@]}"; do echo "  $tok" >&2; done
-    exit 1
-fi
+check_tokens_present "A2: RELEASE_NOTES.md is missing required v1-era tokens" "$NOTES" "${REQUIRED_V1_TOKENS[@]}"
 
 # ---- A3: required v2-era tokens appear --------------------------------------
-# Replacement list. Kept in lock-step with check-readme.sh A3.
+# Replacement list. Deliberately duplicated from check-readme.sh A3 (not sourced)
+# to keep each script independently runnable without cross-script dependencies;
+# with only two consumers a shared lib would be over-engineering.
 
 REQUIRED_V2_TOKENS=(
     '\bon_get\b'
@@ -134,17 +168,7 @@ REQUIRED_V2_TOKENS=(
     '\biovec_entry\b'
 )
 
-missing_v2=()
-for tok in "${REQUIRED_V2_TOKENS[@]}"; do
-    if ! grep -qE "$tok" "$NOTES"; then
-        missing_v2+=("$tok")
-    fi
-done
-if [ "${#missing_v2[@]}" -gt 0 ]; then
-    echo "check-release-notes: FAIL: A3: RELEASE_NOTES.md is missing required v2 tokens:" >&2
-    for tok in "${missing_v2[@]}"; do echo "  $tok" >&2; done
-    exit 1
-fi
+check_tokens_present "A3: RELEASE_NOTES.md is missing required v2 tokens" "$NOTES" "${REQUIRED_V2_TOKENS[@]}"
 
 # ---- A4: required H2 sections present ---------------------------------------
 
@@ -183,9 +207,9 @@ fi
 
 RENAME_PAIRS=(
     'sweet_kill;stop_and_wait'
-    'ban_ip;block_ip'
+    '\bban_ip\b;block_ip'
     'unban_ip;unblock_ip'
-    'allow_ip;(block_ip|unblock_ip)'
+    '\ballow_ip\b;(block_ip|unblock_ip)'
     'disallow_ip;(block_ip|unblock_ip)'
     'not_found_resource;not_found_handler'
     'method_not_allowed_resource;method_not_allowed_handler'
@@ -207,6 +231,7 @@ RENAME_PAIRS=(
     'deferred_response;http_response::deferred'
     'basic_auth_fail_response;http_response::unauthorized'
     'digest_auth_fail_response;http_response::unauthorized'
+    'webserver.*create_webserver;explicit'
 )
 
 missing_pairs=()
@@ -226,35 +251,15 @@ fi
 
 # ---- A6: threading & error sections cite architecture sources ---------------
 
-extract_section_body() {
-    # $1 = file, $2 = regex matching the heading line (case-insensitive).
-    # Captures lines after the first matching heading up to the next H2 or EOF.
-    awk -v re="$2" '
-        BEGIN { in_section = 0 }
-        /^##[ \t]+/ {
-            if (in_section) { exit }
-            if (tolower($0) ~ tolower(re)) { in_section = 1; next }
-        }
-        in_section { print }
-    ' "$1"
-}
+check_section_cites "A6" "$NOTES" \
+    '^##[ \t]+.*threading' \
+    '(DR-008|§[[:space:]]*5\.1|specs/architecture/05-cross-cutting\.md|specs/architecture/11-decisions/DR-008)' \
+    'Threading'
 
-thread_body="$(extract_section_body "$NOTES" '^##[ \t]+.*threading')"
-err_body="$(extract_section_body "$NOTES" '^##[ \t]+.*error[ \t-]+propag')"
-
-if [ -z "$thread_body" ]; then
-    fail "A6: RELEASE_NOTES.md is missing a '## Threading...' section"
-fi
-if ! echo "$thread_body" | grep -qE '(DR-008|§[[:space:]]*5\.1|specs/architecture/05-cross-cutting\.md|specs/architecture/11-decisions/DR-008)'; then
-    fail "A6: Threading section must cite DR-008 or §5.1"
-fi
-
-if [ -z "$err_body" ]; then
-    fail "A6: RELEASE_NOTES.md is missing an '## Error propagation' section"
-fi
-if ! echo "$err_body" | grep -qE '(DR-009|§[[:space:]]*5\.2|specs/architecture/05-cross-cutting\.md|specs/architecture/11-decisions/DR-009)'; then
-    fail "A6: Error-propagation section must cite DR-009 or §5.2"
-fi
+check_section_cites "A6" "$NOTES" \
+    '^##[ \t]+.*error[ \t-]+propag' \
+    '(DR-009|§[[:space:]]*5\.2|specs/architecture/05-cross-cutting\.md|specs/architecture/11-decisions/DR-009)' \
+    'Error propagation'
 
 # ---- A7: explicit "not a compatibility commitment" disclaimer ---------------
 
@@ -265,7 +270,7 @@ fi
 # ---- Markdown sanity --------------------------------------------------------
 # (S1) Balanced ``` fences (count of ``` lines must be even).
 fence_count="$(grep -cE '^```' "$NOTES" || true)"
-if [ "$(( ${fence_count:-0} % 2 ))" -ne 0 ]; then
+if [ "$((fence_count % 2))" -ne 0 ]; then
     fail "S1: RELEASE_NOTES.md has an odd number of \`\`\` fence lines ($fence_count); fences are unbalanced"
 fi
 
@@ -285,7 +290,7 @@ awk '
 
 # ---- Optional: markdownlint advisory ----------------------------------------
 if command -v markdownlint >/dev/null 2>&1; then
-    if ! markdownlint -q "$NOTES" 2>&1; then
+    if ! markdownlint -q "$NOTES" 2>/dev/null; then
         echo "check-release-notes: NOTE: markdownlint reported issues (advisory only, not gating)" >&2
     fi
 fi
