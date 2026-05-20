@@ -41,6 +41,7 @@ endif
 EXTRA_DIST = libhttpserver.pc.in $(DX_CONFIG) scripts/extract-release-notes.sh scripts/validate-version.sh \
 	scripts/check-examples.sh scripts/check-readme.sh scripts/check-release-notes.sh \
 	scripts/check-doxygen.sh \
+	scripts/check-soversion.sh scripts/check-parallel-install.sh \
 	scripts/verify-installed-examples.sh \
 	test/headers/consumer_direct.cpp test/headers/consumer_detail.cpp test/headers/consumer_umbrella.cpp \
 	test/headers/consumer_post_umbrella.cpp \
@@ -328,7 +329,26 @@ check-doxygen:
 	@echo "=== check-doxygen: enforce TASK-043 zero-warning invariant ==="
 	@BUILD_DIR="$(abs_top_builddir)" $(top_srcdir)/scripts/check-doxygen.sh
 
-.PHONY: check-headers check-install-layout check-hygiene check-examples check-readme check-release-notes check-doxygen
+# TASK-044: SOVERSION acceptance gate. Stages a clean DESTDIR install and
+# asserts that the v2.0 on-disk SONAME layout is correct (libhttpserver.so.2
+# on Linux / libhttpserver.2.dylib on Darwin, pkg-config --modversion 2.0.0,
+# correct symlink chain). NOT wired into `make check` — it does its own
+# `make install` and is intentionally invoked standalone to keep per-PR CI
+# fast. Run manually before tagging a release.
+check-soversion:
+	@echo "=== check-soversion: TASK-044 SOVERSION acceptance gate ==="
+	@BUILD_DIR="$(abs_top_builddir)" $(top_srcdir)/scripts/check-soversion.sh
+
+# TASK-044: parallel-installability verification. Builds master and installs
+# v1 + v2 into the same DESTDIR and asserts both SONAMEd libraries coexist.
+# Best-effort: emits SKIP and exits 0 if the v1 source cannot be built in
+# this environment (toolchain mismatch, missing libtoolize, etc.).
+# Definitely NOT in `make check` — requires a clean v1 build of master.
+check-parallel-install:
+	@echo "=== check-parallel-install: TASK-044 v1+v2 coexistence ==="
+	@BUILD_DIR="$(abs_top_builddir)" $(top_srcdir)/scripts/check-parallel-install.sh
+
+.PHONY: check-headers check-install-layout check-hygiene check-examples check-readme check-release-notes check-doxygen check-soversion check-parallel-install
 
 # TASK-039: top-level convenience rule that descends into test/ to
 # build and run the bench binaries (see test/Makefile.am and

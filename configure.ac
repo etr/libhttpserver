@@ -20,8 +20,8 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.57)
-m4_define([libhttpserver_MAJOR_VERSION],[0])dnl
-m4_define([libhttpserver_MINOR_VERSION],[20])dnl
+m4_define([libhttpserver_MAJOR_VERSION],[2])dnl
+m4_define([libhttpserver_MINOR_VERSION],[0])dnl
 m4_define([libhttpserver_REVISION],[0])dnl
 m4_define([libhttpserver_PKG_VERSION],[libhttpserver_MAJOR_VERSION.libhttpserver_MINOR_VERSION.libhttpserver_REVISION])dnl
 m4_define([libhttpserver_LDF_VERSION],[libhttpserver_MAJOR_VERSION:libhttpserver_MINOR_VERSION:libhttpserver_REVISION])dnl

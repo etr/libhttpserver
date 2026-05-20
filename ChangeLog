@@ -1,3 +1,12 @@
+Version 2.0.0
+
+	v2.0 release. See RELEASE_NOTES.md for the full v1->v2 porting summary.
+	SOVERSION bumped: shared library now ships as libhttpserver.so.2
+		(Linux) / libhttpserver.2.dylib (Darwin). Parallel-installable
+		with any prior libhttpserver.so.0/1 on disk (runtime artefacts
+		only; dev-time .la/.a/.pc/headers are last-installer-wins by
+		design).
+
 Version 0.20.0
 
 	Raised minimum C++ standard to C++20. Build now requires gcc >= 10
