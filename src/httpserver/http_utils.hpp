@@ -436,6 +436,18 @@ struct ip_representation {
         x = (x & 0x33333333) + ((x >> 2) & 0x33333333);
         return (((x + (x >> 4)) & 0x0F0F0F0F) * 0x01010101) >> 24;
     }
+
+ private:
+    // Helpers carved out of the string-ctor to keep each function under
+    // the project cyclomatic-complexity bar. parse_ipv6 / parse_ipv4
+    // do the top-level dispatch; the rest serve parse_ipv6.
+    void parse_ipv4(const std::string& ip);
+    void parse_ipv6(const std::string& ip);
+    static unsigned int compute_ipv6_omitted_segments(std::vector<std::string>& parts);
+    void apply_ipv6_part(std::vector<std::string>& parts, unsigned int i,
+                         int& y, unsigned int omitted);
+    void parse_nested_ipv4(const std::vector<std::string>& parts,
+                           unsigned int i, int y);
 };
 
 /**

@@ -385,116 +385,158 @@ ip_representation::ip_representation(const struct sockaddr* ip) {
     mask = constants::DEFAULT_MASK_VALUE;
 }
 
+namespace {
+
+// "::ffff:1.2.3.4" / "::1.2.3.4" prefix invariants: bytes 10-11 must
+// be either 0x00 (pure ::-mapped) or 0xFF (v4-mapped). Lifted out of
+// parse_nested_ipv4 so the surrounding function stays below the CCN
+// bar.
+bool ipv4_mapped_prefix_invalid(uint16_t a, uint16_t b) {
+    return (a != 0 && a != 255) || (b != 0 && b != 255);
+}
+
+}  // namespace
+
+void ip_representation::parse_ipv4(const std::string& ip) {
+    ip_version = http_utils::IPV4;
+    auto parts = string_utilities::string_split(ip, '.');
+    if (parts.size() != 4) {
+        throw std::invalid_argument("IP is badly formatted. Max 4 parts in IPV4.");
+    }
+    for (unsigned int i = 0; i < parts.size(); i++) {
+        if (parts[i] == "*") {
+            CLEAR_BIT(mask, 12+i);
+            continue;
+        }
+        pieces[12+i] = strtol(parts[i].c_str(), nullptr, 10);
+        if (pieces[12+i] > 255) {
+            throw std::invalid_argument("IP is badly formatted. 255 is max value for ip part.");
+        }
+    }
+}
+
+unsigned int ip_representation::compute_ipv6_omitted_segments(std::vector<std::string>& parts) {
+    unsigned int omitted = 8 - (parts.size() - 1);
+    if (omitted == 0) return 0;
+
+    int empty_count = 0;
+    for (unsigned int i = 0; i < parts.size(); i++) {
+        if (parts[i].size() == 0) empty_count++;
+    }
+    if (empty_count <= 1) return omitted;
+
+    // > 1 empty segments: the only legal shape is a leading "::" (which
+    // string_split produces as two consecutive empties) on an IPv6 that
+    // also has a nested IPv4 trailing dotted-quad — the "::" produces
+    // one extra empty segment beyond the canonical single placeholder.
+    if (parts.back().find('.') != std::string::npos) omitted -= 1;
+
+    const bool leading_double_colon =
+        empty_count == 2 && parts[0].empty() && parts[1].empty();
+    if (!leading_double_colon) {
+        throw std::invalid_argument(
+            "IP is badly formatted. Cannot have more than one omitted segment in IPV6.");
+    }
+    omitted += 1;
+    parts.erase(parts.begin());
+    return omitted;
+}
+
+void ip_representation::parse_nested_ipv4(const std::vector<std::string>& parts,
+                                          unsigned int i, int y) {
+    if (y != 12) {
+        throw std::invalid_argument("IP is badly formatted. Missing parts before nested IPV4.");
+    }
+    if (i != parts.size() - 1) {
+        throw std::invalid_argument("IP is badly formatted. Nested IPV4 should be at the end");
+    }
+    auto subparts = string_utilities::string_split(parts[i], '.');
+    if (subparts.size() != 4) {
+        throw std::invalid_argument("IP is badly formatted. Nested IPV4 can have max 4 parts.");
+    }
+    // Bytes 0-9 must be zero; bytes 10-11 must be 0x00 or 0xFF.
+    for (unsigned int k = 0; k < 10; k++) {
+        if (pieces[k] != 0) {
+            throw std::invalid_argument(
+                "IP is badly formatted. Nested IPV4 can be preceded only by 0 "
+                "(and, optionally, two 255 octects)");
+        }
+    }
+    if (ipv4_mapped_prefix_invalid(pieces[10], pieces[11])) {
+        throw std::invalid_argument(
+            "IP is badly formatted. Nested IPV4 can be preceded only by 0 "
+            "(and, optionally, two 255 octects)");
+    }
+    for (unsigned int ii = 0; ii < subparts.size(); ii++) {
+        if (subparts[ii] == "*") {
+            CLEAR_BIT(mask, y+ii);
+            continue;
+        }
+        pieces[y+ii] = strtol(subparts[ii].c_str(), nullptr, 10);
+        if (pieces[y+ii] > 255) {
+            throw std::invalid_argument("IP is badly formatted. 255 is max value for ip part.");
+        }
+    }
+}
+
+void ip_representation::apply_ipv6_part(std::vector<std::string>& parts, unsigned int i,
+                                        int& y, unsigned int omitted) {
+    auto& part = parts[i];
+    if (part == "*") {
+        CLEAR_BIT(mask, y);
+        CLEAR_BIT(mask, y+1);
+        y += 2;
+        return;
+    }
+    if (part.empty()) {
+        // Placeholder for one or more omitted segments. Zero-fill the
+        // implied slots; the bump is `omitted` segments x 2 bytes each.
+        for (unsigned int o = 0; o < omitted; o++) {
+            pieces[y]   = 0;
+            pieces[y+1] = 0;
+            y += 2;
+        }
+        return;
+    }
+    if (part.size() < 4) {
+        // Pad short hex group to 4 chars (e.g. "f" -> "000f").
+        std::stringstream ss;
+        ss << std::setfill('0') << std::setw(4) << part;
+        part = ss.str();
+    }
+    if (part.size() == 4) {
+        pieces[y]   = strtol(part.substr(0, 2).c_str(), nullptr, 16);
+        pieces[y+1] = strtol(part.substr(2, 2).c_str(), nullptr, 16);
+        y += 2;
+        return;
+    }
+    if (part.find('.') == std::string::npos) {
+        throw std::invalid_argument(
+            "IP is badly formatted. IPV6 parts can have max 4 characters (or nest an IPV4)");
+    }
+    parse_nested_ipv4(parts, i, y);
+}
+
+void ip_representation::parse_ipv6(const std::string& ip) {
+    ip_version = http_utils::IPV6;
+    auto parts = string_utilities::string_split(ip, ':', false);
+    if (parts.size() > 8) {
+        throw std::invalid_argument("IP is badly formatted. Max 8 parts in IPV6.");
+    }
+    unsigned int omitted = compute_ipv6_omitted_segments(parts);
+    int y = 0;
+    for (unsigned int i = 0; i < parts.size(); i++) {
+        apply_ipv6_part(parts, i, y, omitted);
+    }
+}
+
 ip_representation::ip_representation(const std::string& ip) {
-    std::vector<std::string> parts;
     mask = constants::DEFAULT_MASK_VALUE;
     std::fill(pieces, pieces + 16, 0);
-    if (ip.find(':') != std::string::npos) {  // IPV6
-        ip_version = http_utils::IPV6;
-        parts = string_utilities::string_split(ip, ':', false);
-        if (parts.size() > 8) {
-            throw std::invalid_argument("IP is badly formatted. Max 8 parts in IPV6.");
-        }
-
-        unsigned int omitted = 8 - (parts.size() - 1);
-        if (omitted != 0) {
-            int empty_count = 0;
-            for (unsigned int i = 0; i < parts.size(); i++) {
-                if (parts[i].size() == 0) empty_count++;
-            }
-
-            if (empty_count > 1) {
-                if (parts[parts.size() - 1].find(".") != std::string::npos) omitted -= 1;
-
-                if (empty_count == 2 && parts[0] == "" && parts[1] == "") {
-                    omitted += 1;
-                    parts = std::vector<std::string>(parts.begin() + 1, parts.end());
-                } else {
-                    throw std::invalid_argument("IP is badly formatted. Cannot have more than one omitted segment in IPV6.");
-                }
-            }
-        }
-
-        int y = 0;
-        for (unsigned int i = 0; i < parts.size(); i++) {
-            if (parts[i] != "*") {
-                if (parts[i].size() == 0) {
-                    for (unsigned int omitted_idx = 0; omitted_idx < omitted; omitted_idx++) {
-                        pieces[y] = 0;
-                        pieces[y+1] = 0;
-                        y += 2;
-                    }
-
-                    continue;
-                }
-
-                if (parts[i].size() < 4) {
-                    std::stringstream ss;
-                    ss << std::setfill('0') << std::setw(4) << parts[i];
-                    parts[i] = ss.str();
-                }
-
-                if (parts[i].size() == 4) {
-                    pieces[y] = strtol((parts[i].substr(0, 2)).c_str(), nullptr, 16);
-                    pieces[y+1] = strtol((parts[i].substr(2, 2)).c_str(), nullptr, 16);
-
-                    y += 2;
-                } else {
-                    if (parts[i].find('.') != std::string::npos) {
-                        if (y != 12) {
-                            throw std::invalid_argument("IP is badly formatted. Missing parts before nested IPV4.");
-                        }
-
-                        if (i != parts.size() - 1) {
-                            throw std::invalid_argument("IP is badly formatted. Nested IPV4 should be at the end");
-                        }
-
-                        std::vector<std::string> subparts = string_utilities::string_split(parts[i], '.');
-                        if (subparts.size() == 4) {
-                            for (unsigned int k = 0; k < 10; k++) {
-                                if (pieces[k] != 0) throw std::invalid_argument("IP is badly formatted. Nested IPV4 can be preceded only by 0 (and, optionally, two 255 octects)");
-                            }
-
-                            if ((pieces[10] != 0 && pieces[10] != 255) || (pieces[11] != 0 && pieces[11] != 255)) {
-                                throw std::invalid_argument("IP is badly formatted. Nested IPV4 can be preceded only by 0 (and, optionally, two 255 octects)");
-                            }
-
-                            for (unsigned int ii = 0; ii < subparts.size(); ii++) {
-                                if (subparts[ii] != "*") {
-                                    pieces[y+ii] = strtol(subparts[ii].c_str(), nullptr, 10);
-                                    if (pieces[y+ii] > 255) throw std::invalid_argument("IP is badly formatted. 255 is max value for ip part.");
-                                } else {
-                                    CLEAR_BIT(mask, y+ii);
-                                }
-                            }
-                        } else {
-                            throw std::invalid_argument("IP is badly formatted. Nested IPV4 can have max 4 parts.");
-                        }
-                    } else {
-                        throw std::invalid_argument("IP is badly formatted. IPV6 parts can have max 4 characters (or nest an IPV4)");
-                    }
-                }
-            } else {
-                CLEAR_BIT(mask, y);
-                CLEAR_BIT(mask, y+1);
-                y+=2;
-            }
-        }
-    } else {  // IPV4
-        ip_version = http_utils::IPV4;
-        parts = string_utilities::string_split(ip, '.');
-        if (parts.size() == 4) {
-            for (unsigned int i = 0; i < parts.size(); i++) {
-                if (parts[i] != "*") {
-                    pieces[12+i] = strtol(parts[i].c_str(), nullptr, 10);
-                    if (pieces[12+i] > 255) throw std::invalid_argument("IP is badly formatted. 255 is max value for ip part.");
-                } else {
-                    CLEAR_BIT(mask, 12+i);
-                }
-            }
-        } else {
-            throw std::invalid_argument("IP is badly formatted. Max 4 parts in IPV4.");
-        }
+    if (ip.find(':') != std::string::npos) {
+        parse_ipv6(ip);
+    } else {
+        parse_ipv4(ip);
     }
 }
 
