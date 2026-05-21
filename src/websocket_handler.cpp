@@ -33,6 +33,7 @@
 #include <cstdint>
 #include <cstring>
 #include <string>
+#include <type_traits>
 
 namespace httpserver {
 
@@ -92,24 +93,39 @@ void websocket_session::send_binary(const void* data, size_t len) {
     }
 }
 
-void websocket_session::send_ping(const std::string& payload) {
-    if (!valid) return;
+// Shared scaffolding for the ping/pong control frames: both MHD encode
+// functions share an identical signature and the surrounding
+// encode -> send_all -> free dance is byte-identical between them.
+// Type the encoder via decltype so we pick up MHD's exact return type
+// (`enum MHD_WEBSOCKET_STATUS`, not `int`) without restating it.
+using control_frame_encoder = decltype(&MHD_websocket_encode_ping);
+static_assert(std::is_same_v<control_frame_encoder, decltype(&MHD_websocket_encode_pong)>,
+              "MHD_websocket_encode_ping and _pong must share a signature "
+              "for send_control_frame's function-pointer parameter to be valid.");
+
+static void send_control_frame(control_frame_encoder encode,
+                               struct MHD_WebSocketStream* ws_stream,
+                               MHD_socket sock,
+                               const std::string& payload,
+                               bool& valid) {
     char* frame = nullptr;
     size_t frame_len = 0;
-    if (MHD_websocket_encode_ping(ws_stream, payload.c_str(), payload.size(), &frame, &frame_len) == MHD_WEBSOCKET_STATUS_OK) {
-        if (!send_all(static_cast<MHD_socket>(sock), frame, frame_len)) valid = false;
+    if (encode(ws_stream, payload.c_str(), payload.size(), &frame, &frame_len) == MHD_WEBSOCKET_STATUS_OK) {
+        if (!send_all(sock, frame, frame_len)) valid = false;
         MHD_websocket_free(ws_stream, frame);
     }
 }
 
+void websocket_session::send_ping(const std::string& payload) {
+    if (!valid) return;
+    send_control_frame(&MHD_websocket_encode_ping, ws_stream,
+                       static_cast<MHD_socket>(sock), payload, valid);
+}
+
 void websocket_session::send_pong(const std::string& payload) {
     if (!valid) return;
-    char* frame = nullptr;
-    size_t frame_len = 0;
-    if (MHD_websocket_encode_pong(ws_stream, payload.c_str(), payload.size(), &frame, &frame_len) == MHD_WEBSOCKET_STATUS_OK) {
-        if (!send_all(static_cast<MHD_socket>(sock), frame, frame_len)) valid = false;
-        MHD_websocket_free(ws_stream, frame);
-    }
+    send_control_frame(&MHD_websocket_encode_pong, ws_stream,
+                       static_cast<MHD_socket>(sock), payload, valid);
 }
 
 void websocket_session::close(uint16_t code, const std::string& reason) {
