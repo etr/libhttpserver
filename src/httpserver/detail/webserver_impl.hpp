@@ -539,6 +539,22 @@ class webserver_impl {
                                    const char* data,
                                    size_t size) const;
 
+    // Mirror a register_path / register_prefix call into the v2 3-tier
+    // route table. Distinct from upsert_v2_table_entry (which is the
+    // on_*/route path with methods merging): this is a one-shot insert
+    // with method_set::set_all() and no merge. Takes route_table_mutex_
+    // internally.
+    void register_v2_route(const detail::http_endpoint& idx,
+                           std::shared_ptr<::httpserver::http_resource> res,
+                           bool family);
+
+    // Map a wire-string HTTP method to mr->callback (pointer-to-member
+    // dispatch), mr->method_enum (for is_allowed checks), and mr->has_body
+    // (for the body-buffering branch in requests_answer_first_step).
+    // Unrecognised methods leave the defaults in place; finalize_answer
+    // then routes through the 405 path.
+    static void resolve_method_callback(const char* method, modded_request* mr);
+
     MHD_Result complete_request(MHD_Connection* connection, modded_request* mr,
                                 const char* version, const char* method);
     struct MHD_Response* get_raw_response_with_fallback(modded_request* mr);

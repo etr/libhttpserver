@@ -413,42 +413,48 @@ void webserver::register_impl_(const std::string& resource,
     }
     registered_resources_lock.unlock();
 
-    // TASK-027: mirror into the v2 3-tier table. Tier placement via
-    // classify_route_tier() (single source-of-truth):
+    impl_->register_v2_route(idx, std::move(res), family);
+    impl_->invalidate_route_cache();
+}
+
+namespace detail {
+
+void webserver_impl::register_v2_route(const detail::http_endpoint& idx,
+        std::shared_ptr<http_resource> res, bool family) {
+    // TASK-027: mirror a register_path / register_prefix call into the
+    // v2 3-tier route table. Tier placement via classify_route_tier()
+    // (single source-of-truth):
     //   - family=true  -> radix tree (prefix terminus).
     //   - radix tier   -> radix tree (exact terminus, wildcard nodes).
     //   - regex tier   -> regex_routes_ (pre-compiled at registration time).
     //   - exact tier   -> exact_routes_ hash map.
-    {
-        std::unique_lock table_lock(impl_->route_table_mutex_);
-        detail::route_entry entry;
-        entry.methods = method_set{}.set_all();
-        entry.handler = res;
-        entry.is_prefix = family;
-
-        if (family) {
-            impl_->param_and_prefix_routes_.insert(
-                idx.get_url_complete(), entry, /*is_prefix=*/true);
-        } else {
-            auto tier = classify_route_tier(idx);
-            switch (tier.kind) {
-            case route_tier_kind::radix:
-                impl_->param_and_prefix_routes_.insert(
-                    idx.get_url_complete(), entry, /*is_prefix=*/false);
-                break;
-            case route_tier_kind::regex_:
-                impl_->regex_routes_.push_back(
-                    {idx.get_url_complete(), std::move(*tier.re), entry});
-                break;
-            case route_tier_kind::exact:
-                impl_->exact_routes_.emplace(idx.get_url_complete(), entry);
-                break;
-            }
-        }
+    std::unique_lock table_lock(route_table_mutex_);
+    detail::route_entry entry;
+    entry.methods = method_set{}.set_all();
+    entry.handler = std::move(res);
+    entry.is_prefix = family;
+    if (family) {
+        param_and_prefix_routes_.insert(idx.get_url_complete(), std::move(entry),
+                                        /*is_prefix=*/true);
+        return;
     }
-
-    impl_->invalidate_route_cache();
+    auto tier = classify_route_tier(idx);
+    switch (tier.kind) {
+    case route_tier_kind::radix:
+        param_and_prefix_routes_.insert(idx.get_url_complete(), std::move(entry),
+                                        /*is_prefix=*/false);
+        break;
+    case route_tier_kind::regex_:
+        regex_routes_.push_back(
+            {idx.get_url_complete(), std::move(*tier.re), std::move(entry)});
+        break;
+    case route_tier_kind::exact:
+        exact_routes_.emplace(idx.get_url_complete(), std::move(entry));
+        break;
+    }
 }
+
+}  // namespace detail
 
 void webserver::register_path(const std::string& path,
                               std::shared_ptr<http_resource> res) {
@@ -1627,6 +1633,64 @@ MHD_Result webserver_impl::post_iterator(void *cls, enum MHD_ValueKind kind,
 }  // namespace detail
 
 #ifdef HAVE_WEBSOCKET
+namespace {
+
+// RFC 6455 §5.5.1: a CLOSE frame's payload starts with a 2-byte
+// status code (default 1000 "normal closure") followed by an optional
+// UTF-8 reason. Pulled out of dispatch_websocket_frame so the switch
+// stays under the CCN bar.
+void handle_close_frame(websocket_handler* handler, websocket_session& session,
+                        const char* frame_data, size_t frame_len) {
+    uint16_t close_code = 1000;
+    std::string close_reason;
+    if (frame_len >= 2) {
+        close_code = static_cast<uint16_t>(
+            (static_cast<unsigned char>(frame_data[0]) << 8) |
+             static_cast<unsigned char>(frame_data[1]));
+        if (frame_len > 2) {
+            close_reason.assign(frame_data + 2, frame_len - 2);
+        }
+    }
+    handler->on_close(session, close_code, close_reason);
+    // Echo the close back and end the loop.
+    session.close(close_code, close_reason);
+}
+
+void dispatch_websocket_frame(int status, struct MHD_WebSocketStream* ws_stream,
+                              websocket_handler* handler,
+                              websocket_session& session,
+                              char* frame_data, size_t frame_len) {
+    switch (status) {
+        case MHD_WEBSOCKET_STATUS_TEXT_FRAME:
+            handler->on_message(session, std::string_view(frame_data, frame_len));
+            MHD_websocket_free(ws_stream, frame_data);
+            break;
+        case MHD_WEBSOCKET_STATUS_BINARY_FRAME:
+            handler->on_binary(session, frame_data, frame_len);
+            MHD_websocket_free(ws_stream, frame_data);
+            break;
+        case MHD_WEBSOCKET_STATUS_PING_FRAME:
+            handler->on_ping(session, std::string_view(frame_data, frame_len));
+            MHD_websocket_free(ws_stream, frame_data);
+            break;
+        case MHD_WEBSOCKET_STATUS_CLOSE_FRAME:
+            handle_close_frame(handler, session, frame_data, frame_len);
+            MHD_websocket_free(ws_stream, frame_data);
+            break;
+        case MHD_WEBSOCKET_STATUS_OK:
+            // Need more data - go back to recv.
+            if (frame_data != nullptr) MHD_websocket_free(ws_stream, frame_data);
+            break;
+        default:
+            // Protocol error or unknown frame.
+            if (frame_data != nullptr) MHD_websocket_free(ws_stream, frame_data);
+            session.close(1002, "Protocol error");
+            break;
+    }
+}
+
+}  // namespace
+
 static void decode_websocket_buffer(struct MHD_WebSocketStream* ws_stream,
                                     websocket_handler* handler,
                                     websocket_session& session,
@@ -1643,51 +1707,9 @@ static void decode_websocket_buffer(struct MHD_WebSocketStream* ws_stream,
                                            &frame_data,
                                            &frame_len);
         offset += step;
-        switch (status) {
-            case MHD_WEBSOCKET_STATUS_TEXT_FRAME:
-                handler->on_message(session, std::string_view(frame_data, frame_len));
-                MHD_websocket_free(ws_stream, frame_data);
-                break;
-            case MHD_WEBSOCKET_STATUS_BINARY_FRAME:
-                handler->on_binary(session, frame_data, frame_len);
-                MHD_websocket_free(ws_stream, frame_data);
-                break;
-            case MHD_WEBSOCKET_STATUS_PING_FRAME:
-                handler->on_ping(session, std::string_view(frame_data, frame_len));
-                MHD_websocket_free(ws_stream, frame_data);
-                break;
-            case MHD_WEBSOCKET_STATUS_CLOSE_FRAME: {
-                uint16_t close_code = 1000;
-                std::string close_reason;
-                if (frame_len >= 2) {
-                    close_code = static_cast<uint16_t>(
-                        (static_cast<unsigned char>(frame_data[0]) << 8) |
-                         static_cast<unsigned char>(frame_data[1]));
-                    if (frame_len > 2) {
-                        close_reason.assign(frame_data + 2, frame_len - 2);
-                    }
-                }
-                handler->on_close(session, close_code, close_reason);
-                MHD_websocket_free(ws_stream, frame_data);
-                // Send close response and end the loop
-                session.close(close_code, close_reason);
-                break;
-            }
-            case MHD_WEBSOCKET_STATUS_OK:
-                // Need more data - go back to recv
-                if (frame_data != nullptr) {
-                    MHD_websocket_free(ws_stream, frame_data);
-                }
-                break;
-            default:
-                // Protocol error or unknown frame
-                if (frame_data != nullptr) {
-                    MHD_websocket_free(ws_stream, frame_data);
-                }
-                session.close(1002, "Protocol error");
-                break;
-        }
-        // If decode consumed no bytes, we need more data
+        dispatch_websocket_frame(status, ws_stream, handler, session,
+                                 frame_data, frame_len);
+        // If decode consumed no bytes, we need more data.
         if (step == 0) break;
     }
 }
@@ -2428,34 +2450,15 @@ MHD_Result webserver_impl::complete_request(MHD_Connection* connection, struct d
     return finalize_answer(connection, mr);
 }
 
-MHD_Result webserver_impl::answer_to_connection(void* cls, MHD_Connection* connection, const char* url, const char* method,
-        const char* version, const char* upload_data, size_t* upload_data_size, void** con_cls) {
-    struct detail::modded_request* mr = static_cast<struct detail::modded_request*>(*con_cls);
-    auto* impl = static_cast<webserver_impl*>(cls);
-
-    if (mr->dhr) {
-        return impl->requests_answer_second_step(connection, method, version, upload_data, upload_data_size, mr);
-    }
-
-    const MHD_ConnectionInfo * conninfo = MHD_get_connection_info(connection, MHD_CONNECTION_INFO_CONNECTION_FD);
-
-    if (conninfo != nullptr && impl->parent->tcp_nodelay) {
-        int yes = 1;
-        setsockopt(conninfo->connect_fd, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<char*>(&yes), sizeof(int));
-    }
-
-    std::string t_url = url;
-
-    base_unescaper(&t_url, impl->parent->unescaper);
-    mr->standardized_url = http_utils::standardize_url(t_url);
-
-    mr->has_body = false;
-
-    webserver_impl::access_log(impl->parent, mr->complete_uri + " METHOD: " + method);
-
+void webserver_impl::resolve_method_callback(const char* method,
+                                              detail::modded_request* mr) {
     // Case-sensitive per RFC 7230 §3.1.1: HTTP method is case-sensitive.
     // TASK-021: also record the enum form once so finalize_answer can
     // call hrm->is_allowed without re-scanning the wire string.
+    // Unrecognised methods leave mr->method_enum at the default
+    // (count_), so is_allowed(count_) returns false and the request
+    // takes the 405 path. Pre-existing latent bug: mr->callback may
+    // also be left un-set here; see TASK-027 for the dispatch redesign.
     if (0 == strcmp(method, http_utils::http_method_get)) {
         mr->callback = &http_resource::render_get;
         mr->method_enum = http_method::get;
@@ -2488,10 +2491,33 @@ MHD_Result webserver_impl::answer_to_connection(void* cls, MHD_Connection* conne
         mr->callback = &http_resource::render_options;
         mr->method_enum = http_method::options;
     }
-    // Else: mr->method_enum stays at the default (count_), so
-    // is_allowed(count_) returns false and the request takes the 405
-    // path. Pre-existing latent bug: mr->callback may also be left
-    // un-set here; see TASK-027 for the dispatch redesign.
+}
+
+MHD_Result webserver_impl::answer_to_connection(void* cls, MHD_Connection* connection, const char* url, const char* method,
+        const char* version, const char* upload_data, size_t* upload_data_size, void** con_cls) {
+    auto* mr = static_cast<detail::modded_request*>(*con_cls);
+    auto* impl = static_cast<webserver_impl*>(cls);
+
+    if (mr->dhr) {
+        return impl->requests_answer_second_step(connection, method, version,
+                                                  upload_data, upload_data_size, mr);
+    }
+
+    const MHD_ConnectionInfo* conninfo =
+        MHD_get_connection_info(connection, MHD_CONNECTION_INFO_CONNECTION_FD);
+    if (conninfo != nullptr && impl->parent->tcp_nodelay) {
+        int yes = 1;
+        setsockopt(conninfo->connect_fd, IPPROTO_TCP, TCP_NODELAY,
+                   reinterpret_cast<char*>(&yes), sizeof(int));
+    }
+
+    std::string t_url = url;
+    base_unescaper(&t_url, impl->parent->unescaper);
+    mr->standardized_url = http_utils::standardize_url(t_url);
+    mr->has_body = false;
+
+    webserver_impl::access_log(impl->parent, mr->complete_uri + " METHOD: " + method);
+    resolve_method_callback(method, mr);
 
     return impl->requests_answer_first_step(connection, mr);
 }
