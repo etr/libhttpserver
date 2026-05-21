@@ -50,6 +50,7 @@
 #include <memory>
 #include <memory_resource>
 #include <mutex>
+#include <optional>
 #include <regex>
 #include <set>
 #include <shared_mutex>
@@ -383,6 +384,100 @@ class webserver_impl {
     // finalize_answer now consults mr->method_enum (set once by
     // answer_to_connection) for the is_allowed check.
     MHD_Result finalize_answer(MHD_Connection* connection, modded_request* mr);
+
+    // Sub-helpers carved out of finalize_answer to keep each function
+    // under the cyclomatic-complexity bar. The orchestrator delegates,
+    // in order, to the websocket-upgrade probe, the resource lookup,
+    // the auth short-circuit, the dispatch path, and the response
+    // materialiser.
+    std::optional<MHD_Result> try_handle_websocket_upgrade(MHD_Connection* connection,
+                                                           modded_request* mr);
+#ifdef HAVE_WEBSOCKET
+    // Returns the validated Sec-WebSocket-Key on a well-formed RFC 6455
+    // handshake; nullopt if any required header is missing or malformed.
+    std::optional<const char*> validate_websocket_handshake(MHD_Connection* connection);
+
+    // Finish the upgrade once the handshake is validated. Returns the
+    // MHD_queue_response result if the upgrade was queued; nullopt if
+    // no handler is registered at this URL or the upgrade response
+    // could not be created (caller falls through to normal dispatch).
+    std::optional<MHD_Result> complete_websocket_upgrade(MHD_Connection* connection,
+                                                         modded_request* mr,
+                                                         const char* ws_key);
+#endif  // HAVE_WEBSOCKET
+
+    // Carry the data the regex+cache lookup path produces back to the
+    // caller. matched_endpoint is needed both to extract URL parameters
+    // and to store the entry in the LRU cache.
+    struct regex_route_lookup {
+        std::shared_ptr<::httpserver::http_resource> hrm;
+        std::vector<std::string> url_pars;
+        std::vector<int> chunks;
+    };
+
+    // Locate the resource serving @p mr. Returns true and sets @p hrm
+    // on hit (also populates URL parameters on @p mr for regex-route
+    // hits); false otherwise. Takes a shared lock on
+    // registered_resources_mutex internally.
+    bool resolve_resource_for_request(modded_request* mr,
+            std::shared_ptr<::httpserver::http_resource>& hrm);
+
+    // LRU cache hit path: returns the cached match (hrm + url_pars +
+    // chunks) and promotes the entry to the front of the list. Caller
+    // must hold registered_resources_mutex (shared).
+    std::optional<regex_route_lookup>
+        lookup_route_cache(const std::string& key);
+
+    // Linear regex scan with longest-match-wins tie-breaking. Returns
+    // the matched endpoint + resource on hit. Caller must hold
+    // registered_resources_mutex (shared).
+    struct regex_route_scan_hit {
+        detail::http_endpoint endpoint;
+        std::shared_ptr<::httpserver::http_resource> hrm;
+    };
+    std::optional<regex_route_scan_hit>
+        scan_regex_routes(const detail::http_endpoint& target);
+
+    // Insert a (key -> matched_endpoint, hrm) entry at the front of
+    // the LRU and evict the oldest entry if the cache is full. Caller
+    // must hold registered_resources_mutex (shared).
+    void store_route_cache(const std::string& key,
+                           const detail::http_endpoint& matched,
+                           std::shared_ptr<::httpserver::http_resource> hrm);
+
+    // Walk url_pars/chunks parallel arrays and set each named parameter
+    // on the request, guarding against an out-of-range chunk index.
+    void apply_extracted_params(modded_request* mr,
+            const detail::http_endpoint& target,
+            const std::vector<std::string>& url_pars,
+            const std::vector<int>& chunks);
+
+    // Run the centralized auth handler if one is configured. Returns
+    // true if the handler produced a response (dispatch should
+    // short-circuit and the caller must skip resource rendering);
+    // false to continue with normal dispatch.
+    bool apply_auth_short_circuit(modded_request* mr);
+
+    // Invoke the resource handler bound to @p mr, populating
+    // mr->response_. On is_allowed=false, queues a 405 with an Allow
+    // header. On handler-throw, routes through the safe internal-error
+    // path (TASK-031 / DR-009).
+    void dispatch_resource_handler(modded_request* mr,
+            const std::shared_ptr<::httpserver::http_resource>& hrm);
+
+    // Serialize an allowed-method set into the comma-separated value
+    // expected by the HTTP `Allow:` header. Enum-declaration order
+    // (TASK-021): GET, HEAD, POST, PUT, DELETE, CONNECT, OPTIONS, TRACE,
+    // PATCH.
+    std::string serialize_allow_methods(method_set allowed) const;
+
+    // Final stage of finalize_answer: build an MHD_Response from
+    // mr->response_, decorate it, queue it on the connection. Handles
+    // the belt-and-suspenders fallback when get_raw_response_with_fallback
+    // itself fails to produce a response.
+    MHD_Result materialize_and_queue_response(MHD_Connection* connection,
+                                              modded_request* mr);
+
     MHD_Result complete_request(MHD_Connection* connection, modded_request* mr,
                                 const char* version, const char* method);
     struct MHD_Response* get_raw_response_with_fallback(modded_request* mr);
