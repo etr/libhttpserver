@@ -112,6 +112,23 @@ class radix_tree {
         }
     }
 
+    // Match the root node's termini (exact first, then prefix). Pulled
+    // out of find() so the empty-segments branch stays a one-liner.
+    bool match_root_terminus(radix_match<T>& out) const {
+        const radix_node<T>* node = root_.get();
+        if (node->exact_terminus_.has_value()) {
+            out.entry = &node->exact_terminus_.value();
+            out.is_prefix_match = false;
+            return true;
+        }
+        if (node->prefix_terminus_.has_value()) {
+            out.entry = &node->prefix_terminus_.value();
+            out.is_prefix_match = true;
+            return true;
+        }
+        return false;
+    }
+
     // Find the most specific match for `path`. Returns true on hit and
     // populates `out`. Lookup preference (most specific first):
     //   1. exact_terminus_ on the matched node, if every request segment
@@ -120,34 +137,15 @@ class radix_tree {
     bool find(std::string_view path, radix_match<T>& out) const {
         out = {};
         const auto segments = tokenize(path);
+        if (segments.empty()) return match_root_terminus(out);
+
         const radix_node<T>* node = root_.get();
-
-        // Root path "/" has no segments. Match the root exact terminus
-        // first (most specific), falling back to the root prefix terminus.
-        if (segments.empty()) {
-            if (node->exact_terminus_.has_value()) {
-                out.entry = &node->exact_terminus_.value();
-                out.is_prefix_match = false;
-                return true;
-            }
-            if (node->prefix_terminus_.has_value()) {
-                out.entry = &node->prefix_terminus_.value();
-                out.is_prefix_match = true;
-                return true;
-            }
-            return false;
-        }
-
         // Track best prefix candidate seen during descent (deepest wins).
-        const T* best_prefix = nullptr;
-        std::vector<std::pair<std::string, std::string>> best_prefix_caps;
-
         // Root prefix terminus: a `register_prefix("/")` matches every
         // request, so seed best_prefix with it before walking deeper.
-        if (node->prefix_terminus_.has_value()) {
-            best_prefix = &node->prefix_terminus_.value();
-            best_prefix_caps.clear();
-        }
+        const T* best_prefix = node->prefix_terminus_.has_value()
+            ? &node->prefix_terminus_.value() : nullptr;
+        std::vector<std::pair<std::string, std::string>> best_prefix_caps;
         std::vector<std::pair<std::string, std::string>> caps;
 
         for (std::size_t i = 0; i < segments.size(); ++i) {
@@ -170,8 +168,7 @@ class radix_tree {
             }
             // If we just consumed the last request segment AND this node
             // carries an exact terminus, that beats any prefix candidate.
-            if (i + 1 == segments.size()
-                && node->exact_terminus_.has_value()) {
+            if (i + 1 == segments.size() && node->exact_terminus_.has_value()) {
                 out.entry = &node->exact_terminus_.value();
                 out.captures = std::move(caps);
                 out.is_prefix_match = false;
@@ -179,13 +176,11 @@ class radix_tree {
             }
         }
 
-        if (best_prefix != nullptr) {
-            out.entry = best_prefix;
-            out.captures = std::move(best_prefix_caps);
-            out.is_prefix_match = true;
-            return true;
-        }
-        return false;
+        if (best_prefix == nullptr) return false;
+        out.entry = best_prefix;
+        out.captures = std::move(best_prefix_caps);
+        out.is_prefix_match = true;
+        return true;
     }
 
     // Remove the entry at `path`. is_prefix selects which terminus to

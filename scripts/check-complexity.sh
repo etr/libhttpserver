@@ -13,12 +13,12 @@
 #   CCN_MAX       max cyclomatic complexity per function (default below)
 #   LIZARD_EXTRA  extra flags passed through to lizard (e.g. --length=200)
 #
-# CCN_MAX is intentionally elevated above the long-term target (10,
-# matching the project's wider mccabe convention) while the incremental
-# refactor that drives every existing offender below the line lands on
-# feature/v2.0. Each refactor commit ratchets CCN_MAX one step lower
-# until the final value of 10 is reached. The default below is updated
-# in the same commit that retires each offender.
+# CCN_MAX is set to 10, matching the project's wider mccabe convention.
+# The bar was reached on feature/v2.0 via an incremental refactor that
+# retired the 14 v1 offenders one commit at a time, with CCN_MAX
+# ratcheting down each step so each commit was both a refactor and a
+# tighter gate. New offenders must be brought below 10 at the same
+# commit they are introduced; lifting CCN_MAX is not allowed.
 #
 # Exit codes:
 #   0  no violations
@@ -27,7 +27,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-CCN_MAX="${CCN_MAX:-13}"
+CCN_MAX="${CCN_MAX:-10}"
 
 # Prefer the standalone `lizard` entrypoint if it's on PATH; fall back to
 # `python3 -m lizard` which is what `pip install --user lizard` produces

@@ -25,6 +25,8 @@
 #ifndef SRC_HTTPSERVER_HTTP_METHOD_HPP_
 #define SRC_HTTPSERVER_HTTP_METHOD_HPP_
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <string_view>
 #include <type_traits>
@@ -122,19 +124,24 @@ struct method_set {
 // an empty view rather than crashing — keeps logging robust against
 // stale enum values.
 constexpr std::string_view to_string(http_method m) noexcept {
-    switch (m) {
-        case http_method::get:     return std::string_view{"GET"};
-        case http_method::head:    return std::string_view{"HEAD"};
-        case http_method::post:    return std::string_view{"POST"};
-        case http_method::put:     return std::string_view{"PUT"};
-        case http_method::del:     return std::string_view{"DELETE"};
-        case http_method::connect: return std::string_view{"CONNECT"};
-        case http_method::options: return std::string_view{"OPTIONS"};
-        case http_method::trace:   return std::string_view{"TRACE"};
-        case http_method::patch:   return std::string_view{"PATCH"};
-        case http_method::count_:  return std::string_view{};
-    }
-    return std::string_view{};
+    // Indexed by the underlying enum value (0..count_-1). Out-of-range
+    // values (only producible via static_cast) return an empty view.
+    // The order MUST stay aligned with the http_method enum declaration
+    // (TASK-021); a static_assert on count_ catches drift.
+    constexpr std::array<std::string_view, static_cast<std::size_t>(http_method::count_)> names{
+        std::string_view{"GET"},
+        std::string_view{"HEAD"},
+        std::string_view{"POST"},
+        std::string_view{"PUT"},
+        std::string_view{"DELETE"},
+        std::string_view{"CONNECT"},
+        std::string_view{"OPTIONS"},
+        std::string_view{"TRACE"},
+        std::string_view{"PATCH"},
+    };
+    const auto idx = static_cast<std::size_t>(m);
+    if (idx >= names.size()) return std::string_view{};
+    return names[idx];
 }
 
 // Bitwise composition. Operators on http_method yield a method_set so

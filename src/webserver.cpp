@@ -1955,22 +1955,31 @@ webserver_impl::lookup_v2(http_method method, const std::string& path) {
 
 }  // namespace detail
 
+namespace {
+
+// Apply one path segment to the running stack: "" / "." are skipped,
+// ".." pops, anything else pushes. Pulled out of normalize_path so the
+// caller stays a flat tokenize-and-rebuild loop.
+void apply_normalized_segment(std::vector<std::string>& segments,
+                              const std::string& seg) {
+    if (seg == "..") {
+        if (!segments.empty()) segments.pop_back();
+        return;
+    }
+    if (seg.empty() || seg == ".") return;
+    segments.push_back(seg);
+}
+
+}  // namespace
+
 static std::string normalize_path(const std::string& path) {
     std::vector<std::string> segments;
     std::string::size_type start = 0;
-    // Skip leading slash
-    if (!path.empty() && path[0] == '/') {
-        start = 1;
-    }
+    if (!path.empty() && path[0] == '/') start = 1;
     while (start < path.size()) {
         auto end = path.find('/', start);
         if (end == std::string::npos) end = path.size();
-        std::string seg = path.substr(start, end - start);
-        if (seg == "..") {
-            if (!segments.empty()) segments.pop_back();
-        } else if (!seg.empty() && seg != ".") {
-            segments.push_back(seg);
-        }
+        apply_normalized_segment(segments, path.substr(start, end - start));
         start = end + 1;
     }
     std::string normalized = "/";
