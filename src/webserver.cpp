@@ -798,6 +798,143 @@ void webserver::unregister_ws_resource(const std::string& resource) {
 #endif
 }
 
+// TASK-045 -- Hook bus skeleton.
+//
+// register_hook_(): single internal funnel used by every add_hook
+// overload. Validates the runtime phase tag matches the overload's
+// compile-time phase, allocates a fresh slot id, takes the unique
+// writer lock, pushes the callable into the per-phase vector, and
+// flips the any_hooks_ gate to true. Returns the armed hook_handle.
+//
+// All eleven public overloads are thin one-liners that pick the right
+// per-phase vector member; the validation, locking, slot allocation,
+// and gate flip live here exactly once.
+namespace {
+
+// register_hook_impl: helper used by every add_hook overload. Lives in
+// an anonymous namespace; it would normally call hook_handle's private
+// constructor through webserver's friendship, but webserver's friend
+// status doesn't extend to a free function -- so we route the
+// hook_handle creation through a tiny webserver static helper that
+// IS a member and IS a friend of hook_handle (transitively). See
+// webserver::make_hook_handle_ below.
+template <class Vec, class Fn>
+::httpserver::hook_handle register_hook_impl(
+        ::httpserver::detail::webserver_impl* impl,
+        ::httpserver::hook_phase requested,
+        ::httpserver::hook_phase expected,
+        Vec& vec,
+        Fn fn) {
+    if (requested != expected) {
+        throw std::invalid_argument(
+            std::string("hook phase mismatch: add_hook overload for ")
+            + std::string(::httpserver::to_string(expected))
+            + " received phase tag "
+            + std::string(::httpserver::to_string(requested)));
+    }
+    if (!fn) {
+        throw std::invalid_argument("hook callable must not be empty");
+    }
+    const std::uint64_t id =
+        impl->next_slot_id_.fetch_add(1, std::memory_order_relaxed);
+    {
+        std::unique_lock lock(impl->hook_table_mutex_);
+        vec.push_back({id, std::move(fn)});
+        impl->any_hooks_[static_cast<std::size_t>(expected)].store(
+            true, std::memory_order_release);
+    }
+    return ::httpserver::webserver::make_hook_handle_(impl, expected, id);
+}
+
+}  // namespace
+
+// TASK-045: tiny static helper that materialises an armed hook_handle.
+// hook_handle's constructor is private but webserver is friend; this
+// static gives the anonymous-namespace register_hook_impl a way to
+// reach into that private surface without making it a friend itself.
+hook_handle webserver::make_hook_handle_(detail::webserver_impl* impl,
+                                         hook_phase phase,
+                                         std::uint64_t slot_id) noexcept {
+    return hook_handle{impl, phase, slot_id};
+}
+
+hook_handle webserver::add_hook(hook_phase phase,
+        std::function<void(const connection_open_ctx&)> fn) {
+    return register_hook_impl(impl_.get(), phase,
+        hook_phase::connection_opened,
+        impl_->hooks_connection_opened_, std::move(fn));
+}
+
+hook_handle webserver::add_hook(hook_phase phase,
+        std::function<void(const accept_ctx&)> fn) {
+    return register_hook_impl(impl_.get(), phase,
+        hook_phase::accept_decision,
+        impl_->hooks_accept_decision_, std::move(fn));
+}
+
+hook_handle webserver::add_hook(hook_phase phase,
+        std::function<hook_action(request_received_ctx&)> fn) {
+    return register_hook_impl(impl_.get(), phase,
+        hook_phase::request_received,
+        impl_->hooks_request_received_, std::move(fn));
+}
+
+hook_handle webserver::add_hook(hook_phase phase,
+        std::function<hook_action(body_chunk_ctx&)> fn) {
+    return register_hook_impl(impl_.get(), phase,
+        hook_phase::body_chunk,
+        impl_->hooks_body_chunk_, std::move(fn));
+}
+
+hook_handle webserver::add_hook(hook_phase phase,
+        std::function<void(const route_resolved_ctx&)> fn) {
+    return register_hook_impl(impl_.get(), phase,
+        hook_phase::route_resolved,
+        impl_->hooks_route_resolved_, std::move(fn));
+}
+
+hook_handle webserver::add_hook(hook_phase phase,
+        std::function<hook_action(before_handler_ctx&)> fn) {
+    return register_hook_impl(impl_.get(), phase,
+        hook_phase::before_handler,
+        impl_->hooks_before_handler_, std::move(fn));
+}
+
+hook_handle webserver::add_hook(hook_phase phase,
+        std::function<hook_action(const handler_exception_ctx&)> fn) {
+    return register_hook_impl(impl_.get(), phase,
+        hook_phase::handler_exception,
+        impl_->hooks_handler_exception_, std::move(fn));
+}
+
+hook_handle webserver::add_hook(hook_phase phase,
+        std::function<hook_action(after_handler_ctx&)> fn) {
+    return register_hook_impl(impl_.get(), phase,
+        hook_phase::after_handler,
+        impl_->hooks_after_handler_, std::move(fn));
+}
+
+hook_handle webserver::add_hook(hook_phase phase,
+        std::function<void(const response_sent_ctx&)> fn) {
+    return register_hook_impl(impl_.get(), phase,
+        hook_phase::response_sent,
+        impl_->hooks_response_sent_, std::move(fn));
+}
+
+hook_handle webserver::add_hook(hook_phase phase,
+        std::function<void(const request_completed_ctx&)> fn) {
+    return register_hook_impl(impl_.get(), phase,
+        hook_phase::request_completed,
+        impl_->hooks_request_completed_, std::move(fn));
+}
+
+hook_handle webserver::add_hook(hook_phase phase,
+        std::function<void(const connection_close_ctx&)> fn) {
+    return register_hook_impl(impl_.get(), phase,
+        hook_phase::connection_closed,
+        impl_->hooks_connection_closed_, std::move(fn));
+}
+
 namespace detail {
 
 // Wrap MHD_OptionItem aggregate-init so each push reads uniformly
