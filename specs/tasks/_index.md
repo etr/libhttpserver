@@ -19,7 +19,7 @@
 | M2 | Response Refactor | `http_response` is a value type with SBO body, factories, fluent `with_*` chains, const-correct getters. Public `*_response` subclasses gone. After M2 a downstream consumer can build & chain a response. | TASK-008 .. TASK-013 |
 | M3 | Webserver internal & Request Refactor | `webserver_impl` and `http_request_impl` PIMPL split; per-connection arena allocator; `const&` / `string_view` getters; high-level GnuTLS accessors. Public headers are free of `<microhttpd.h>`, `<pthread.h>`, `<gnutls/gnutls.h>`, `<sys/socket.h>`. | TASK-014 .. TASK-020 |
 | M4 | Handler & Resource Model | `http_resource` allow-mask via `method_set`, snake_case `render_*`, smart-pointer registration, `register_path`/`register_prefix`, lambda `on_*`, generic `route()`. After M4 a consumer can register handlers in either form. | TASK-021 .. TASK-026 |
-| M5 | Routing, Lifecycle, Builder & Features | 3-tier route table (hash + radix + regex) with LRU cache, v1-corpus regression gate, name canonicalization (`stop_and_wait`, `block_ip`/`unblock_ip`, `_handler` suffix), error-propagation contract, thread-safety stress test, builder cleanup, `features()`, websocket smart-pointer overloads, handler return-by-value dispatch cutover. After M5 the library is feature-complete. | TASK-027 .. TASK-036 |
+| M5 | Routing, Lifecycle, Builder & Features | 3-tier route table (hash + radix + regex) with LRU cache, v1-corpus regression gate, name canonicalization (`stop_and_wait`, `block_ip`/`unblock_ip`, `_handler` suffix), error-propagation contract, thread-safety stress test, builder cleanup, `features()`, websocket smart-pointer overloads, handler return-by-value dispatch cutover, lifecycle hook bus (server-wide + per-route, 11 phases, with v1 setters retained as documented aliases). After M5 the library is feature-complete. | TASK-027 .. TASK-036, TASK-045 .. TASK-052 |
 | M6 | Release Readiness | Build-flag-invariance CI test, sanitizer move tests, performance acceptance (`get_headers` ≥10×, `sizeof(http_resource)` shrink), examples (≤10 LOC hello world), README rewrite, RELEASE_NOTES.md, Doxygen refresh, SOVERSION bump 1→2, packaging. | TASK-037 .. TASK-044 |
 
 ## Dependency graph
@@ -60,6 +60,14 @@ M5: Routing, Lifecycle, Builder & Features
     034 [features() + flag-independence] (depends on 003, 019, 033)
     035 [websocket smart-ptr] (depends on 014, 034)
     036 [handler return-by-value dispatch] (depends on 022, 025, 027, 031)
+    045 [hook bus skeleton] (depends on 009, 014) ──┐
+                                                     ├──→ 046 [conn + accept hooks; closes #332]
+                                                     ├──→ 047 [request_received + body_chunk; closes #273]
+                                                     ├──→ 048 [route_resolved + before_handler; 404/405/auth aliases] (also depends on 027, 031)
+                                                     ├──→ 049 [handler_exception; internal_error_handler alias] (also depends on 031)
+                                                     ├──→ 050 [after_handler + response_sent + request_completed; log_access alias; closes #281, #69]
+                                                     └──→ 051 [per-route hooks on http_resource] (also depends on 048, 049, 050)
+                                                              └──→ 052 [docs + examples + bench + stress-test ext; touches back into TASK-040/041/042/043]
 
 M6: Release Readiness
 └── 037 [build-flag invariance CI] (depends on 034)
@@ -119,6 +127,14 @@ Nominally: **13 sequential tasks**, each S–XL. Most other tasks parallelize of
 | TASK-034 | Build-flag-independent public API + `webserver::features()` | M5 | Done | TASK-003, TASK-019, TASK-033 |
 | TASK-035 | Smart-pointer `register_ws_resource` overloads | M5 | Done | TASK-014, TASK-034 |
 | TASK-036 | Handler return-by-value dispatch cutover | M5 | Done | TASK-022, TASK-025, TASK-027, TASK-031 |
+| TASK-045 | Hook bus skeleton (`hook_phase`, `hook_action`, `hook_handle`, `webserver::add_hook`) | M5 | Not Started | TASK-009, TASK-014 |
+| TASK-046 | Fire `connection_opened` / `connection_closed` / `accept_decision` | M5 | Not Started | TASK-045 |
+| TASK-047 | Fire `request_received` and `body_chunk` (pre-handler short-circuit) | M5 | Not Started | TASK-045 |
+| TASK-048 | Fire `route_resolved` and `before_handler`; wire 404/405/auth aliases | M5 | Not Started | TASK-045, TASK-027, TASK-031 |
+| TASK-049 | Fire `handler_exception`; wire `internal_error_handler` alias | M5 | Not Started | TASK-045, TASK-031 |
+| TASK-050 | Fire `after_handler` (post-handler short-circuit), `response_sent`, `request_completed`; wire `log_access` alias | M5 | Not Started | TASK-045 |
+| TASK-051 | Per-route hooks (`http_resource::add_hook`) | M5 | Not Started | TASK-045, TASK-048, TASK-049, TASK-050 |
+| TASK-052 | Hook bus documentation, examples, benchmark, stress-test extension (touches back into TASK-040/041/042/043) | M5 | Not Started | TASK-045, TASK-046, TASK-047, TASK-048, TASK-049, TASK-050, TASK-051 |
 | TASK-037 | CI test for build-flag invariance | M6 | Done | TASK-034 |
 | TASK-038 | Sanitizer-clean tests for `http_response` move semantics | M6 | Done | TASK-009, TASK-036 |
 | TASK-039 | Performance acceptance (`get_headers`, `sizeof(http_resource)`) | M6 | Done | TASK-017, TASK-018, TASK-021 |
@@ -169,6 +185,15 @@ Each PRD EARS requirement maps to one or more tasks below.
 | PRD-NAM-REQ-003 (`_handler` suffix) | TASK-030 |
 | PRD-NAM-REQ-004 (`explicit` ctor) | TASK-030 |
 | PRD-NAM-REQ-005 (`block_ip`/`unblock_ip` only) | TASK-029 |
+| PRD-HOOK-REQ-001 (`add_hook` returns RAII `hook_handle`) | TASK-045 |
+| PRD-HOOK-REQ-002 (registered hook invoked on every phase firing in order) | TASK-045, TASK-046, TASK-047, TASK-048, TASK-049, TASK-050, TASK-051 |
+| PRD-HOOK-REQ-003 (pre-handler short-circuit skips remaining hooks + resource) | TASK-047, TASK-048, TASK-049 |
+| PRD-HOOK-REQ-004 (post-handler `after_handler` short-circuit replaces response) | TASK-050 |
+| PRD-HOOK-REQ-005 (throwing hook routes through DR-9 §5.2) | TASK-046, TASK-047, TASK-048, TASK-049, TASK-050, TASK-051 |
+| PRD-HOOK-REQ-006 (`http_resource::add_hook` is per-route, runs after server-wide) | TASK-051 |
+| PRD-HOOK-REQ-007 (concurrent `add_hook` doesn't disturb in-flight chains) | TASK-045, TASK-052 (stress-test extension) |
+| PRD-HOOK-REQ-008 (zero-cost when unused — atomic `any_hooks_` flag) | TASK-045, TASK-052 (`bench_hook_overhead`) |
+| PRD-HOOK-REQ-009 (v1 setters documented as aliases) | TASK-048, TASK-049, TASK-050, TASK-052 (final docs sweep) |
 
 ## Decision-record coverage
 
@@ -186,3 +211,4 @@ Each PRD EARS requirement maps to one or more tasks below.
 | DR-009 (error-propagation contract) | Implements: TASK-031. Documents: TASK-041, TASK-043 |
 | DR-010 (deferred / WS lifecycle) | TASK-035, TASK-036 |
 | DR-011 (SOVERSION-only versioning) | TASK-044 |
+| DR-012 (lifecycle hook bus) | Implements: TASK-045 (skeleton), TASK-046 .. TASK-051 (phase firing + per-route). Documents: TASK-052 (README / RELEASE_NOTES / Doxygen / examples, plus stress-test and benchmark extensions). |

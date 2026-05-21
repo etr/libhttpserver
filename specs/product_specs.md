@@ -234,6 +234,53 @@ The response hierarchy has eight subclasses (`string_response`, `file_response`,
 
 ---
 
+### 3.8 Lifecycle Hooks (API-HOOK)
+
+**Problem / outcome**
+v1 exposes extension points as one-shot callbacks scattered across `create_webserver` (`log_access`, `log_error`, `not_found_handler`, `method_not_allowed_handler`, `internal_error_handler`, `auth_handler`, `file_cleanup_callback`). Each is single-subscriber, fits one phase, and the set has gaps that surface as long-standing open issues:
+
+- #332 (banned-IP error log entry) — no hook fires when `policy_callback` rejects an IP.
+- #281 (response-aware access log) — `log_access` runs before the response is built; the user cannot record the status, body size, or duration.
+- #69 (Common-Log-Format access log with `time-taken`) — same root cause as #281.
+- #273 (early 413 on oversize body) — no pre-body hook can short-circuit before the body is read.
+- #272 (delayed body processing, partial) — no per-chunk hook.
+
+After this work, users register hooks at named lifecycle phases via `webserver::add_hook(phase, callable)`. Multiple hooks per phase, registration order, short-circuit semantics at the phases where it makes sense. `http_resource::add_hook(...)` scopes a hook to one resource. The v1 single-slot setters remain as documented aliases that internally register a hook at the equivalent phase, so existing v2.0 code keeps compiling.
+
+**In scope**
+- Public types: `hook_phase` enum (eleven phases — see architecture §4.10), `hook_action` (pre/post-handler short-circuit token), `hook_handle` (RAII), one context struct per phase carrying libhttpserver-defined fields only (never MHD types).
+- `webserver::add_hook(phase, callable)` per-phase overloads returning `hook_handle`.
+- `http_resource::add_hook(phase, callable)` per-route variant, restricted to phases that fire after route resolution (`before_handler`, `handler_exception`, `after_handler`, `response_sent`, `request_completed`).
+- Both pre-handler phases (`request_received`, `body_chunk`, `before_handler`, `handler_exception`) AND the `after_handler` post-handler phase can short-circuit by returning `hook_action::respond_with(response)`. `response_sent`, `request_completed`, `connection_opened`, `connection_closed`, `accept_decision`, `route_resolved` are observation-only.
+- Execution order: server-wide hooks before per-route hooks within the same phase; within each scope, registration order.
+- Exception policy: a throwing hook is caught and routed through DR-009 §5.2.
+- Zero-cost when unused: per-phase `std::atomic<bool> any_hooks_` flag short-circuits the hot path to a relaxed atomic load + compare-with-zero.
+- v1 setters (`log_access`, `not_found_handler`, `method_not_allowed_handler`, `internal_error_handler`, `auth_handler`) retained as documented aliases that internally register a hook.
+
+**Out of scope**
+- WebSocket upgrade hook (no `on_websocket_upgrade` phase in v2.0).
+- TLS handshake observation hook.
+- Body-buffer steal / streaming-body API (#272 is only partially addressed by `body_chunk`; the "give me back my string" half needs a separate streaming-body design — v2.1 candidate).
+- Hook priority parameter; ordering is registration order in v2.0 (additive evolution if needed later).
+
+**EARS Requirements**
+- `PRD-HOOK-REQ-001` When a user calls `webserver::add_hook(phase, callable)` then the system shall return a `hook_handle` that removes the registration on `remove()` or on destruction (unless the handle is `detach`ed).
+- `PRD-HOOK-REQ-002` When a hook is registered at a phase then the system shall invoke it at every firing of that phase, in registration order, until removed.
+- `PRD-HOOK-REQ-003` When a pre-handler hook (`request_received`, `body_chunk`, `before_handler`, `handler_exception`) returns `hook_action::respond_with(r)` then the system shall send `r` without invoking the resource handler or any remaining hooks at that phase.
+- `PRD-HOOK-REQ-004` When a post-handler hook at `after_handler` returns `hook_action::respond_with(r)` then the system shall replace the in-flight response with `r` and skip remaining hooks at that phase.
+- `PRD-HOOK-REQ-005` When a hook throws then the system shall route the exception through the DR-009 §5.2 dispatch error path — log via `log_error`, invoke the configured `handler_exception` hook chain (or the `internal_error_handler` alias), never let the exception escape into libmicrohttpd.
+- `PRD-HOOK-REQ-006` When the user calls `http_resource::add_hook(phase, callable)` then the system shall scope that hook to dispatches of that resource only and shall invoke it after all server-wide hooks at the same phase.
+- `PRD-HOOK-REQ-007` When `add_hook` is called concurrently with request dispatch then the system shall apply the new hook to subsequent phase firings without disturbing in-flight invocations.
+- `PRD-HOOK-REQ-008` When no hooks are registered for a phase then the system shall not incur per-firing `std::function` invocation cost for that phase.
+- `PRD-HOOK-REQ-009` When the documentation describes the v1-derived setters (`log_access`, `not_found_handler`, `method_not_allowed_handler`, `internal_error_handler`, `auth_handler`) then it shall identify each as an alias that internally registers a hook at the equivalent phase and shall name that phase.
+
+**Acceptance criteria**
+- A test program registers two server-wide `response_sent` hooks and one per-route `response_sent` hook on a registered resource; serves one request; observes three invocations in (server-wide registration order, then per-route) order.
+- The set of hooks listed in §4.10 closes issues #332 (single `accept_decision` hook), #281 + #69 (single `response_sent` hook with status / bytes / timing context), and #273 (single `request_received` hook returning `hook_action::respond_with(http_response::empty().with_status(413))`); each closing example fits in a self-contained `examples/*.cpp` file.
+- A microbenchmark (`bench_hook_overhead`) shows per-request cost on a server with zero hooks registered is within 2× microbench noise of the pre-hook-system baseline.
+
+---
+
 ## 4) Traceability
 - API-HDR → `src/httpserver/*.hpp`, `src/webserver.cpp`, `src/http_response.cpp`
 - API-FLG → `src/httpserver/*.hpp`, `src/webserver.cpp`, `src/http_request.cpp`
@@ -242,6 +289,7 @@ The response hierarchy has eight subclasses (`string_response`, `file_response`,
 - API-RSP → `src/httpserver/http_response.hpp`, `src/httpserver/*_response.hpp`
 - API-REQ → `src/httpserver/http_request.hpp`, `src/httpserver/http_resource.hpp`
 - API-NAM → `src/httpserver/webserver.hpp`, `src/httpserver/http_response.hpp`, `README.md`
+- API-HOOK → `src/httpserver/hook_phase.hpp`, `src/httpserver/hook_action.hpp`, `src/httpserver/hook_handle.hpp`, `src/httpserver/hook_context.hpp`, `src/httpserver/webserver.hpp`, `src/httpserver/http_resource.hpp`, `src/webserver.cpp`
 
 ---
 
