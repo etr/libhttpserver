@@ -763,193 +763,201 @@ void webserver::unregister_ws_resource(const std::string& resource) {
 #endif
 }
 
-bool webserver::start(bool blocking) {
-    struct {
-        MHD_OptionItem operator ()(enum MHD_OPTION opt, intptr_t val, void *ptr = nullptr) {
-            MHD_OptionItem x = {opt, val, ptr};
-            return x;
-        }
-    } gen;
-    vector<struct MHD_OptionItem> iov;
+namespace detail {
 
-    iov.push_back(gen(MHD_OPTION_NOTIFY_COMPLETED, (intptr_t) &detail::webserver_impl::request_completed, nullptr));
+// Wrap MHD_OptionItem aggregate-init so each push reads uniformly
+// across the option-array builders below. Replaces the local
+// struct-with-operator() that used to live inside webserver::start().
+static MHD_OptionItem make_option(enum MHD_OPTION opt, intptr_t val,
+                                  void* ptr = nullptr) {
+    MHD_OptionItem x = {opt, val, ptr};
+    return x;
+}
+
+void webserver_impl::add_base_mhd_options(std::vector<MHD_OptionItem>& iov) const {
+    iov.push_back(make_option(MHD_OPTION_NOTIFY_COMPLETED,
+                              (intptr_t) &webserver_impl::request_completed, nullptr));
     // TASK-016: per-connection arena anchor. MHD_OPTION_NOTIFY_CONNECTION
     // hands us a per-connection void** (socket_context) on STARTED, where
     // we new a detail::connection_state (which owns the arena), and on
     // CLOSED, where we delete it. This makes the arena's lifetime equal
     // to the MHD_Connection's lifetime; request_completed reuses the
     // arena across keep-alive request boundaries via arena_.release().
-    iov.push_back(gen(MHD_OPTION_NOTIFY_CONNECTION, (intptr_t) &detail::webserver_impl::connection_notify, nullptr));
-    iov.push_back(gen(MHD_OPTION_URI_LOG_CALLBACK, (intptr_t) &detail::webserver_impl::uri_log, this));
-    iov.push_back(gen(MHD_OPTION_EXTERNAL_LOGGER, (intptr_t) &detail::webserver_impl::error_log, this));
-    iov.push_back(gen(MHD_OPTION_UNESCAPE_CALLBACK, (intptr_t) &detail::webserver_impl::unescaper_func, this));
-    iov.push_back(gen(MHD_OPTION_CONNECTION_TIMEOUT, connection_timeout));
-    if (impl_->bind_socket != 0) {
-        iov.push_back(gen(MHD_OPTION_LISTEN_SOCKET, impl_->bind_socket));
+    iov.push_back(make_option(MHD_OPTION_NOTIFY_CONNECTION,
+                              (intptr_t) &webserver_impl::connection_notify, nullptr));
+    iov.push_back(make_option(MHD_OPTION_URI_LOG_CALLBACK,
+                              (intptr_t) &webserver_impl::uri_log, parent));
+    iov.push_back(make_option(MHD_OPTION_EXTERNAL_LOGGER,
+                              (intptr_t) &webserver_impl::error_log, parent));
+    iov.push_back(make_option(MHD_OPTION_UNESCAPE_CALLBACK,
+                              (intptr_t) &webserver_impl::unescaper_func, parent));
+    iov.push_back(make_option(MHD_OPTION_CONNECTION_TIMEOUT, parent->connection_timeout));
+    if (bind_socket != 0) {
+        iov.push_back(make_option(MHD_OPTION_LISTEN_SOCKET, bind_socket));
     }
-
-    if (start_method == http_utils::THREAD_PER_CONNECTION && (max_threads != 0 || max_thread_stack_size != 0)) {
-        throw std::invalid_argument("Cannot specify maximum number of threads when using a thread per connection");
+    if (parent->max_threads != 0) {
+        iov.push_back(make_option(MHD_OPTION_THREAD_POOL_SIZE, parent->max_threads));
     }
-
-    if (max_threads != 0) {
-        iov.push_back(gen(MHD_OPTION_THREAD_POOL_SIZE, max_threads));
+    if (parent->max_connections != 0) {
+        iov.push_back(make_option(MHD_OPTION_CONNECTION_LIMIT, parent->max_connections));
     }
-
-    if (max_connections != 0) {
-        iov.push_back(gen(MHD_OPTION_CONNECTION_LIMIT, max_connections));
+    if (parent->memory_limit != 0) {
+        iov.push_back(make_option(MHD_OPTION_CONNECTION_MEMORY_LIMIT, parent->memory_limit));
     }
-
-    if (memory_limit != 0) {
-        iov.push_back(gen(MHD_OPTION_CONNECTION_MEMORY_LIMIT, memory_limit));
+    if (parent->per_IP_connection_limit != 0) {
+        iov.push_back(make_option(MHD_OPTION_PER_IP_CONNECTION_LIMIT, parent->per_IP_connection_limit));
     }
-
-    if (per_IP_connection_limit != 0) {
-        iov.push_back(gen(MHD_OPTION_PER_IP_CONNECTION_LIMIT, per_IP_connection_limit));
+    if (parent->max_thread_stack_size != 0) {
+        iov.push_back(make_option(MHD_OPTION_THREAD_STACK_SIZE, parent->max_thread_stack_size));
     }
-
-    if (max_thread_stack_size != 0) {
-        iov.push_back(gen(MHD_OPTION_THREAD_STACK_SIZE, max_thread_stack_size));
-    }
-
 #ifdef HAVE_DAUTH
-    if (nonce_nc_size != 0) {
-        iov.push_back(gen(MHD_OPTION_NONCE_NC_SIZE, nonce_nc_size));
+    if (parent->nonce_nc_size != 0) {
+        iov.push_back(make_option(MHD_OPTION_NONCE_NC_SIZE, parent->nonce_nc_size));
     }
 #endif  // HAVE_DAUTH
+}
 
-    if (use_ssl) {
-        // Need for const_cast to respect MHD interface that needs a void*
-        iov.push_back(gen(MHD_OPTION_HTTPS_MEM_KEY, 0, reinterpret_cast<void*>(const_cast<char*>(https_mem_key.c_str()))));
-        iov.push_back(gen(MHD_OPTION_HTTPS_MEM_CERT, 0, reinterpret_cast<void*>(const_cast<char*>(https_mem_cert.c_str()))));
-
-        if (!https_mem_trust.empty()) {
-            iov.push_back(gen(MHD_OPTION_HTTPS_MEM_TRUST, 0, reinterpret_cast<void*>(const_cast<char*>(https_mem_trust.c_str()))));
+void webserver_impl::add_tls_mhd_options(std::vector<MHD_OptionItem>& iov) const {
+    if (parent->use_ssl) {
+        // const_cast respects the MHD C interface, which takes a void*
+        // even though the data is read-only at the library boundary.
+        iov.push_back(make_option(MHD_OPTION_HTTPS_MEM_KEY, 0,
+                                  reinterpret_cast<void*>(const_cast<char*>(parent->https_mem_key.c_str()))));
+        iov.push_back(make_option(MHD_OPTION_HTTPS_MEM_CERT, 0,
+                                  reinterpret_cast<void*>(const_cast<char*>(parent->https_mem_cert.c_str()))));
+        if (!parent->https_mem_trust.empty()) {
+            iov.push_back(make_option(MHD_OPTION_HTTPS_MEM_TRUST, 0,
+                                      reinterpret_cast<void*>(const_cast<char*>(parent->https_mem_trust.c_str()))));
         }
-
-        if (!https_priorities.empty()) {
-            iov.push_back(gen(MHD_OPTION_HTTPS_PRIORITIES, 0, reinterpret_cast<void*>(const_cast<char*>(https_priorities.c_str()))));
+        if (!parent->https_priorities.empty()) {
+            iov.push_back(make_option(MHD_OPTION_HTTPS_PRIORITIES, 0,
+                                      reinterpret_cast<void*>(const_cast<char*>(parent->https_priorities.c_str()))));
         }
     }
-
 #ifdef HAVE_DAUTH
-    if (digest_auth_random != "") {
-        // Need for const_cast to respect MHD interface that needs a char*
-        iov.push_back(gen(MHD_OPTION_DIGEST_AUTH_RANDOM, digest_auth_random.size(), const_cast<char*>(digest_auth_random.c_str())));
+    if (parent->digest_auth_random != "") {
+        iov.push_back(make_option(MHD_OPTION_DIGEST_AUTH_RANDOM,
+                                  parent->digest_auth_random.size(),
+                                  const_cast<char*>(parent->digest_auth_random.c_str())));
     }
 #endif  // HAVE_DAUTH
+}
 
+void webserver_impl::add_gnutls_mhd_options(std::vector<MHD_OptionItem>& iov) const {
 #ifdef HAVE_GNUTLS
-    if (cred_type != http_utils::NONE) {
-        iov.push_back(gen(MHD_OPTION_HTTPS_CRED_TYPE, cred_type));
+    if (parent->cred_type != http_utils::NONE) {
+        iov.push_back(make_option(MHD_OPTION_HTTPS_CRED_TYPE, parent->cred_type));
     }
-
-    if (psk_cred_handler != nullptr && use_ssl) {
-        iov.push_back(gen(MHD_OPTION_GNUTLS_PSK_CRED_HANDLER,
-                          (intptr_t)&detail::webserver_impl::psk_cred_handler_func, this));
+    if (parent->psk_cred_handler != nullptr && parent->use_ssl) {
+        iov.push_back(make_option(MHD_OPTION_GNUTLS_PSK_CRED_HANDLER,
+                                  (intptr_t)&webserver_impl::psk_cred_handler_func, parent));
     }
-
 #ifdef MHD_OPTION_HTTPS_CERT_CALLBACK
-    if (sni_callback != nullptr && use_ssl) {
-        iov.push_back(gen(MHD_OPTION_HTTPS_CERT_CALLBACK,
-                          (intptr_t)&detail::webserver_impl::sni_cert_callback_func, this));
+    if (parent->sni_callback != nullptr && parent->use_ssl) {
+        iov.push_back(make_option(MHD_OPTION_HTTPS_CERT_CALLBACK,
+                                  (intptr_t)&webserver_impl::sni_cert_callback_func, parent));
     }
 #endif  // MHD_OPTION_HTTPS_CERT_CALLBACK
+#else   // HAVE_GNUTLS
+    (void)iov;
 #endif  // HAVE_GNUTLS
+}
 
-    if (listen_backlog > 0) {
-        iov.push_back(gen(MHD_OPTION_LISTEN_BACKLOG_SIZE, listen_backlog));
+void webserver_impl::add_extended_mhd_options(std::vector<MHD_OptionItem>& iov) const {
+    if (parent->listen_backlog > 0) {
+        iov.push_back(make_option(MHD_OPTION_LISTEN_BACKLOG_SIZE, parent->listen_backlog));
     }
-
-    if (address_reuse != 0) {
-        iov.push_back(gen(MHD_OPTION_LISTENING_ADDRESS_REUSE, address_reuse));
+    if (parent->address_reuse != 0) {
+        iov.push_back(make_option(MHD_OPTION_LISTENING_ADDRESS_REUSE, parent->address_reuse));
     }
-
-    if (connection_memory_increment > 0) {
-        iov.push_back(gen(MHD_OPTION_CONNECTION_MEMORY_INCREMENT, connection_memory_increment));
+    if (parent->connection_memory_increment > 0) {
+        iov.push_back(make_option(MHD_OPTION_CONNECTION_MEMORY_INCREMENT,
+                                  parent->connection_memory_increment));
     }
-
-    if (tcp_fastopen_queue_size > 0) {
-        iov.push_back(gen(MHD_OPTION_TCP_FASTOPEN_QUEUE_SIZE, tcp_fastopen_queue_size));
+    if (parent->tcp_fastopen_queue_size > 0) {
+        iov.push_back(make_option(MHD_OPTION_TCP_FASTOPEN_QUEUE_SIZE,
+                                  parent->tcp_fastopen_queue_size));
     }
-
-    if (sigpipe_handled_by_app) {
-        iov.push_back(gen(MHD_OPTION_SIGPIPE_HANDLED_BY_APP, 1));
+    if (parent->sigpipe_handled_by_app) {
+        iov.push_back(make_option(MHD_OPTION_SIGPIPE_HANDLED_BY_APP, 1));
     }
-
-    if (!https_mem_dhparams.empty()) {
-        iov.push_back(gen(MHD_OPTION_HTTPS_MEM_DHPARAMS, 0, const_cast<char*>(https_mem_dhparams.c_str())));
+    if (parent->no_alpn) {
+        iov.push_back(make_option(MHD_OPTION_TLS_NO_ALPN, 1));
     }
-
-    if (!https_key_password.empty()) {
-        iov.push_back(gen(MHD_OPTION_HTTPS_KEY_PASSWORD, 0, const_cast<char*>(https_key_password.c_str())));
+    if (parent->client_discipline_level >= 0) {
+        iov.push_back(make_option(MHD_OPTION_CLIENT_DISCIPLINE_LVL, parent->client_discipline_level));
     }
+}
 
-    if (!https_priorities_append.empty()) {
-        iov.push_back(gen(MHD_OPTION_HTTPS_PRIORITIES_APPEND, 0, const_cast<char*>(https_priorities_append.c_str())));
+void webserver_impl::add_https_extra_options(std::vector<MHD_OptionItem>& iov) const {
+    if (!parent->https_mem_dhparams.empty()) {
+        iov.push_back(make_option(MHD_OPTION_HTTPS_MEM_DHPARAMS, 0,
+                                  const_cast<char*>(parent->https_mem_dhparams.c_str())));
     }
-
-    if (no_alpn) {
-        iov.push_back(gen(MHD_OPTION_TLS_NO_ALPN, 1));
+    if (!parent->https_key_password.empty()) {
+        iov.push_back(make_option(MHD_OPTION_HTTPS_KEY_PASSWORD, 0,
+                                  const_cast<char*>(parent->https_key_password.c_str())));
     }
-
-    if (client_discipline_level >= 0) {
-        iov.push_back(gen(MHD_OPTION_CLIENT_DISCIPLINE_LVL, client_discipline_level));
+    if (!parent->https_priorities_append.empty()) {
+        iov.push_back(make_option(MHD_OPTION_HTTPS_PRIORITIES_APPEND, 0,
+                                  const_cast<char*>(parent->https_priorities_append.c_str())));
     }
+}
 
-    iov.push_back(gen(MHD_OPTION_END, 0, nullptr));
+void webserver_impl::build_mhd_option_array(std::vector<MHD_OptionItem>& iov) const {
+    add_base_mhd_options(iov);
+    add_tls_mhd_options(iov);
+    add_gnutls_mhd_options(iov);
+    add_extended_mhd_options(iov);
+    add_https_extra_options(iov);
+    iov.push_back(make_option(MHD_OPTION_END, 0, nullptr));
+}
 
-    int start_conf = start_method;
+int webserver_impl::compose_transport_flags() const {
+    int flags = 0;
+    if (parent->use_ssl) flags |= MHD_USE_SSL;
+    if (parent->use_ipv6) flags |= MHD_USE_IPv6;
+    if (parent->use_dual_stack) flags |= MHD_USE_DUAL_STACK;
+    return flags;
+}
 
-    if (use_ssl) {
-        start_conf |= MHD_USE_SSL;
-    }
-
-    if (use_ipv6) {
-        start_conf |= MHD_USE_IPv6;
-    }
-
-    if (use_dual_stack) {
-        start_conf |= MHD_USE_DUAL_STACK;
-    }
-
-    if (debug) {
-        start_conf |= MHD_USE_DEBUG;
-    }
-    if (pedantic) {
-        start_conf |= MHD_USE_PEDANTIC_CHECKS;
-    }
-
-    if (deferred_enabled) {
-        start_conf |= MHD_USE_SUSPEND_RESUME;
-    }
-
-#ifdef USE_FASTOPEN
-    start_conf |= MHD_USE_TCP_FASTOPEN;
-#endif
-
-    if (no_listen_socket) {
-        start_conf |= MHD_USE_NO_LISTEN_SOCKET;
-    }
-
-    if (no_thread_safety) {
-        start_conf |= MHD_USE_NO_THREAD_SAFETY;
-    }
-
-    if (turbo) {
-        start_conf |= MHD_USE_TURBO;
-    }
-
-    if (suppress_date_header) {
-        start_conf |= MHD_USE_SUPPRESS_DATE_NO_CLOCK;
-    }
-
+int webserver_impl::compose_runtime_flags() const {
+    int flags = 0;
+    if (parent->debug) flags |= MHD_USE_DEBUG;
+    if (parent->pedantic) flags |= MHD_USE_PEDANTIC_CHECKS;
+    if (parent->deferred_enabled) flags |= MHD_USE_SUSPEND_RESUME;
+    if (parent->no_listen_socket) flags |= MHD_USE_NO_LISTEN_SOCKET;
+    if (parent->no_thread_safety) flags |= MHD_USE_NO_THREAD_SAFETY;
+    if (parent->turbo) flags |= MHD_USE_TURBO;
+    if (parent->suppress_date_header) flags |= MHD_USE_SUPPRESS_DATE_NO_CLOCK;
 #ifdef HAVE_WEBSOCKET
-    if (!impl_->registered_ws_handlers.empty()) {
-        start_conf |= MHD_ALLOW_UPGRADE;
-    }
+    if (!registered_ws_handlers.empty()) flags |= MHD_ALLOW_UPGRADE;
 #endif  // HAVE_WEBSOCKET
+    return flags;
+}
 
+int webserver_impl::compose_start_flags() const {
+    int flags = parent->start_method;
+    flags |= compose_transport_flags();
+    flags |= compose_runtime_flags();
+#ifdef USE_FASTOPEN
+    flags |= MHD_USE_TCP_FASTOPEN;
+#endif
+    return flags;
+}
+
+}  // namespace detail
+
+bool webserver::start(bool blocking) {
+    if (start_method == http_utils::THREAD_PER_CONNECTION
+            && (max_threads != 0 || max_thread_stack_size != 0)) {
+        throw std::invalid_argument(
+            "Cannot specify maximum number of threads when using a thread per connection");
+    }
+
+    vector<struct MHD_OptionItem> iov;
+    impl_->build_mhd_option_array(iov);
+    const int start_conf = impl_->compose_start_flags();
 
     impl_->daemon = nullptr;
     if (bind_address == nullptr) {
@@ -966,8 +974,6 @@ bool webserver::start(bool blocking) {
         throw std::invalid_argument("Unable to connect daemon to port: " + std::to_string(port));
     }
 
-    bool value_onclose = false;
-
     impl_->running = true;
 
     if (blocking) {
@@ -976,9 +982,9 @@ bool webserver::start(bool blocking) {
             pthread_cond_wait(&impl_->mutexcond, &impl_->mutexwait);
         }
         pthread_mutex_unlock(&impl_->mutexwait);
-        value_onclose = true;
+        return true;
     }
-    return value_onclose;
+    return false;
 }
 
 bool webserver::is_running() {

@@ -360,6 +360,21 @@ class webserver_impl {
     bool should_skip_auth(const std::string& path) const;
     void invalidate_route_cache();
 
+    // Helpers for webserver::start(). Each appends a logical subset of
+    // libmicrohttpd's option array, or composes a logical subset of the
+    // daemon start-flag bitmask, reading the const config bag from
+    // `parent`. Split for readability and to keep each function under
+    // the project's cyclomatic-complexity bar.
+    void build_mhd_option_array(std::vector<MHD_OptionItem>& iov) const;
+    void add_base_mhd_options(std::vector<MHD_OptionItem>& iov) const;
+    void add_tls_mhd_options(std::vector<MHD_OptionItem>& iov) const;
+    void add_gnutls_mhd_options(std::vector<MHD_OptionItem>& iov) const;
+    void add_extended_mhd_options(std::vector<MHD_OptionItem>& iov) const;
+    void add_https_extra_options(std::vector<MHD_OptionItem>& iov) const;
+    int compose_start_flags() const;
+    int compose_transport_flags() const;
+    int compose_runtime_flags() const;
+
     MHD_Result requests_answer_first_step(MHD_Connection* connection, modded_request* mr);
     MHD_Result requests_answer_second_step(MHD_Connection* connection,
             const char* method, const char* version, const char* upload_data,
