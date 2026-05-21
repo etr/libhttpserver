@@ -45,6 +45,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstring>
+#include <functional>
 #include <list>
 #include <map>
 #include <memory>
@@ -86,6 +87,7 @@ class websocket_handler;
 namespace detail {
 
 struct modded_request;
+class lambda_resource;
 
 // connection_state: per-MHD_Connection arena anchor.
 //
@@ -477,6 +479,39 @@ class webserver_impl {
     // itself fails to produce a response.
     MHD_Result materialize_and_queue_response(MHD_Connection* connection,
                                               modded_request* mr);
+
+    // Helpers carved out of webserver::on_methods_ to stay under the
+    // cyclomatic-complexity bar. The orchestrator on_methods_ retains
+    // input validation and the public ordering; everything that
+    // mutates the v1 maps or the v2 3-tier table lives here.
+    //
+    // Caller must hold registered_resources_mutex (unique_lock) for
+    // prepare_or_create_lambda_shim, commit_handlers_to_shim, and
+    // insert_fresh_v1_entries. upsert_v2_table_entry takes
+    // route_table_mutex_ internally.
+    std::shared_ptr<detail::lambda_resource>
+        prepare_or_create_lambda_shim(const detail::http_endpoint& idx,
+                                      method_set methods,
+                                      bool& fresh_out);
+    void commit_handlers_to_shim(detail::lambda_resource& shim,
+                                 method_set methods,
+                                 const std::function<::httpserver::http_response(
+                                     const ::httpserver::http_request&)>& handler);
+    void insert_fresh_v1_entries(const detail::http_endpoint& idx,
+                                 std::shared_ptr<::httpserver::http_resource> shim);
+    void upsert_v2_table_entry(const detail::http_endpoint& idx,
+                               method_set methods,
+                               std::shared_ptr<::httpserver::http_resource> shim,
+                               bool fresh);
+    void upsert_v2_param_route(const std::string& key,
+                               method_set methods,
+                               std::shared_ptr<::httpserver::http_resource> shim);
+    void insert_fresh_v2_entry(const detail::http_endpoint& idx,
+                               method_set methods,
+                               std::shared_ptr<::httpserver::http_resource> shim);
+    void update_existing_v2_entry(const std::string& key,
+                                  method_set methods,
+                                  std::shared_ptr<::httpserver::http_resource> shim);
 
     MHD_Result complete_request(MHD_Connection* connection, modded_request* mr,
                                 const char* version, const char* method);

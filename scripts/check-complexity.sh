@@ -27,7 +27,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-CCN_MAX="${CCN_MAX:-29}"
+CCN_MAX="${CCN_MAX:-23}"
 
 # Prefer the standalone `lizard` entrypoint if it's on PATH; fall back to
 # `python3 -m lizard` which is what `pip install --user lizard` produces

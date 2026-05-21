@@ -491,6 +491,171 @@ void webserver::register_resource(const std::string& resource,
 // gating the 405 path, then dispatches via the per-method member-
 // function pointer set in answer_to_connection. The lambda_resource
 // shim's render_* overrides invoke the stored slot.
+namespace {
+
+// Iterate enum-declaration order (get, head, post, ...) over the bits
+// set in @p methods, invoking @p fn for each. Used by the on_methods_
+// pre-check loop and the commit loop; pulling the scaffolding into a
+// single helper dedupes the iteration boilerplate. The order matches
+// http_method::count_'s enum order (TASK-021), which is also the
+// serialization order for the `Allow:` header.
+template <typename Fn>
+void for_each_requested_method(method_set methods, Fn&& fn) {
+    for (std::uint8_t i = 0;
+            i < static_cast<std::uint8_t>(http_method::count_); ++i) {
+        auto m = static_cast<http_method>(i);
+        if (methods.contains(m)) fn(m);
+    }
+}
+
+}  // namespace
+
+namespace detail {
+
+std::shared_ptr<detail::lambda_resource>
+webserver_impl::prepare_or_create_lambda_shim(const detail::http_endpoint& idx,
+                                              method_set methods,
+                                              bool& fresh_out) {
+    auto it = registered_resources.find(idx);
+    if (it == registered_resources.end()) {
+        fresh_out = true;
+        return std::make_shared<detail::lambda_resource>();
+    }
+    // Existing entry. Must be a lambda_resource shim, otherwise a
+    // class-based register_path/register_prefix has already taken
+    // this path -- lambda and class registrations cannot coexist
+    // on the same path.
+    auto shim = std::dynamic_pointer_cast<detail::lambda_resource>(it->second);
+    if (!shim) {
+        throw std::invalid_argument(
+            "A non-lambda http_resource is already registered at "
+            "this path; on_*/route cannot share a path with "
+            "register_path/register_prefix");
+    }
+    // Atomicity pre-check: every requested slot must be empty BEFORE
+    // we mutate any of them.
+    for_each_requested_method(methods, [&](http_method m) {
+        if (shim->has_slot(m)) {
+            throw std::invalid_argument(
+                "A handler is already registered for one of the "
+                "requested methods on this path");
+        }
+    });
+    fresh_out = false;
+    return shim;
+}
+
+void webserver_impl::commit_handlers_to_shim(detail::lambda_resource& shim,
+        method_set methods,
+        const std::function<::httpserver::http_response(
+            const ::httpserver::http_request&)>& handler) {
+    // The shared std::function copies cheaply (type-erased callable),
+    // so each slot owns its own copy.
+    for_each_requested_method(methods, [&](http_method m) {
+        shim.set_slot(m, handler);
+    });
+}
+
+void webserver_impl::insert_fresh_v1_entries(const detail::http_endpoint& idx,
+        std::shared_ptr<http_resource> shim) {
+    registered_resources.insert({idx, shim});
+    if (idx.get_url_pars().empty()) {
+        registered_resources_str.insert({idx.get_url_complete(), shim});
+    }
+    if (idx.is_regex_compiled()) {
+        registered_resources_regex.insert({idx, shim});
+    }
+}
+
+void webserver_impl::upsert_v2_param_route(const std::string& key,
+        method_set methods, std::shared_ptr<http_resource> shim) {
+    // Read-merge-reinsert: radix_tree::insert always overwrites the
+    // terminus, so we must fold any existing entry's methods in first.
+    detail::radix_match<detail::route_entry> existing;
+    detail::route_entry merged;
+    if (param_and_prefix_routes_.find(key, existing)
+            && existing.entry && !existing.is_prefix_match) {
+        merged = *existing.entry;
+    }
+    merged.methods = merged.methods | methods;
+    merged.handler = std::move(shim);
+    merged.is_prefix = false;
+    param_and_prefix_routes_.insert(key, std::move(merged), /*is_prefix=*/false);
+}
+
+void webserver_impl::insert_fresh_v2_entry(const detail::http_endpoint& idx,
+        method_set methods, std::shared_ptr<http_resource> shim) {
+    auto tier = classify_route_tier(idx);
+    switch (tier.kind) {
+    case route_tier_kind::radix:
+        // Unreachable: callers route url_pars-non-empty through
+        // upsert_v2_param_route, never here.
+        break;
+    case route_tier_kind::exact: {
+        detail::route_entry entry;
+        entry.methods   = methods;
+        entry.handler   = std::move(shim);
+        entry.is_prefix = false;
+        exact_routes_.emplace(idx.get_url_complete(), std::move(entry));
+        break;
+    }
+    case route_tier_kind::regex_: {
+        detail::route_entry entry;
+        entry.methods   = methods;
+        entry.handler   = std::move(shim);
+        entry.is_prefix = false;
+        regex_routes_.push_back(
+            {idx.get_url_complete(), std::move(*tier.re), std::move(entry)});
+        break;
+    }
+    }
+}
+
+void webserver_impl::update_existing_v2_entry(const std::string& key,
+        method_set methods, std::shared_ptr<http_resource> shim) {
+    // The tier was fixed at first registration. For the exact tier a
+    // direct map lookup suffices; for the regex tier walk the vector
+    // and match by shim identity (regex patterns are not repeated
+    // keys; pointer identity is the cheapest and most reliable
+    // discriminator).
+    auto merge_into = [&](detail::route_entry& target) {
+        target.methods = target.methods | methods;
+        target.handler = shim;
+        target.is_prefix = false;
+    };
+    auto exact_it = exact_routes_.find(key);
+    if (exact_it != exact_routes_.end()) {
+        merge_into(exact_it->second);
+        return;
+    }
+    for (auto& rr : regex_routes_) {
+        auto* sp = std::get_if<std::shared_ptr<http_resource>>(&rr.entry.handler);
+        if (sp && *sp == shim) {
+            merge_into(rr.entry);
+            return;
+        }
+    }
+}
+
+void webserver_impl::upsert_v2_table_entry(const detail::http_endpoint& idx,
+        method_set methods, std::shared_ptr<http_resource> shim, bool fresh) {
+    // TASK-027: mirror into the v2 3-tier table. We store the
+    // lambda_resource shim via the shared_ptr arm so dispatch is
+    // identical to class-resource registration. The methods bitmask
+    // accumulates across calls when fresh==false.
+    std::unique_lock table_lock(route_table_mutex_);
+    const std::string& key = idx.get_url_complete();
+    if (!idx.get_url_pars().empty()) {
+        upsert_v2_param_route(key, methods, std::move(shim));
+    } else if (fresh) {
+        insert_fresh_v2_entry(idx, methods, std::move(shim));
+    } else {
+        update_existing_v2_entry(key, methods, std::move(shim));
+    }
+}
+
+}  // namespace detail
+
 void webserver::on_methods_(method_set methods,
                             const std::string& path,
                             std::function<http_response(const http_request&)> handler) {
@@ -502,7 +667,6 @@ void webserver::on_methods_(method_set methods,
         throw std::invalid_argument(
             "The handler function passed to on_*/route must be non-empty");
     }
-
     // Same single-resource constraint as register_path: only "" or "/"
     // is acceptable, and the matching mode must be exact (which on_*/
     // route are).
@@ -515,151 +679,16 @@ void webserver::on_methods_(method_set methods,
     detail::http_endpoint idx(path, /*family=*/false,
                               /*registration=*/true, regex_checking);
 
-    std::unique_lock registered_resources_lock(impl_->registered_resources_mutex);
-
-    auto it = impl_->registered_resources.find(idx);
-    std::shared_ptr<detail::lambda_resource> shim;
     bool fresh = false;
-
-    if (it != impl_->registered_resources.end()) {
-        // Existing entry. Must be a lambda_resource shim, otherwise a
-        // class-based register_path/register_prefix has already taken
-        // this path -- lambda and class registrations cannot coexist
-        // on the same path.
-        shim = std::dynamic_pointer_cast<detail::lambda_resource>(it->second);
-        if (!shim) {
-            throw std::invalid_argument(
-                "A non-lambda http_resource is already registered at "
-                "this path; on_*/route cannot share a path with "
-                "register_path/register_prefix");
-        }
-        // Atomicity pre-check: every requested slot must be empty
-        // BEFORE we mutate any of them. Iterates in enum order (get,
-        // head, post, ...) matching the `Allow:` header serialization.
-        for (std::uint8_t i = 0;
-             i < static_cast<std::uint8_t>(http_method::count_);
-             ++i) {
-            auto m = static_cast<http_method>(i);
-            if (!methods.contains(m)) continue;
-            if (shim->has_slot(m)) {
-                throw std::invalid_argument(
-                    "A handler is already registered for one of the "
-                    "requested methods on this path");
-            }
-        }
-    } else {
-        shim = std::make_shared<detail::lambda_resource>();
-        fresh = true;
-    }
-
-    // Commit phase: install the handler into every requested slot.
-    // The shared std::function copies cheaply (type-erased callable),
-    // so each slot owns its own copy.
-    for (std::uint8_t i = 0;
-         i < static_cast<std::uint8_t>(http_method::count_);
-         ++i) {
-        auto m = static_cast<http_method>(i);
-        if (!methods.contains(m)) continue;
-        shim->set_slot(m, handler);
-    }
-
-    if (fresh) {
-        impl_->registered_resources.insert({idx, shim});
-        bool is_exact = idx.get_url_pars().empty();
-        if (is_exact) {
-            impl_->registered_resources_str.insert(
-                {idx.get_url_complete(), shim});
-        }
-        if (idx.is_regex_compiled()) {
-            impl_->registered_resources_regex.insert({idx, shim});
-        }
-    }
-    registered_resources_lock.unlock();
-
-    // TASK-027: mirror into the v2 3-tier table. We store the
-    // lambda_resource shim via the shared_ptr arm so dispatch is
-    // identical to class-resource registration. The methods bitmask
-    // accumulates across calls when fresh==false (a subsequent on_post
-    // on the same path adds the POST bit to the existing entry).
-    //
-    // classify_route_tier() is called only when fresh==true; on updates
-    // (fresh==false) the tier was already chosen at first-registration
-    // time and re-running the self-match would be redundant.
+    std::shared_ptr<detail::lambda_resource> shim;
     {
-        std::unique_lock table_lock(impl_->route_table_mutex_);
-        const std::string& key = idx.get_url_complete();
-
-        auto upsert = [&](detail::route_entry& target) {
-            target.methods = target.methods | methods;
-            target.handler = std::shared_ptr<http_resource>(shim);
-            target.is_prefix = false;
-        };
-
-        if (!idx.get_url_pars().empty()) {
-            // Radix tier: parameterized path. read-merge-reinsert because
-            // radix_tree::insert always overwrites the terminus.
-            detail::radix_match<detail::route_entry> existing;
-            detail::route_entry merged;
-            if (impl_->param_and_prefix_routes_.find(key, existing)
-                && existing.entry && !existing.is_prefix_match) {
-                merged = *existing.entry;
-            }
-            merged.methods = merged.methods | methods;
-            merged.handler = std::shared_ptr<http_resource>(shim);
-            merged.is_prefix = false;
-            impl_->param_and_prefix_routes_.insert(
-                key, std::move(merged), /*is_prefix=*/false);
-        } else if (fresh) {
-            // First registration on this path: classify and insert.
-            auto tier = classify_route_tier(idx);
-            switch (tier.kind) {
-            case route_tier_kind::radix:
-                // Unreachable: url_pars non-empty is handled above.
-                break;
-            case route_tier_kind::exact: {
-                detail::route_entry entry;
-                entry.methods   = methods;
-                entry.handler   = std::shared_ptr<http_resource>(shim);
-                entry.is_prefix = false;
-                impl_->exact_routes_.emplace(key, std::move(entry));
-                break;
-            }
-            case route_tier_kind::regex_: {
-                detail::route_entry entry;
-                entry.methods   = methods;
-                entry.handler   = std::shared_ptr<http_resource>(shim);
-                entry.is_prefix = false;
-                impl_->regex_routes_.push_back(
-                    {key, std::move(*tier.re), std::move(entry)});
-                break;
-            }
-            }
-        } else {
-            // Update path (fresh==false): the tier was fixed at first
-            // registration. Find the existing entry and merge methods.
-            //
-            // For the exact tier, a direct map lookup suffices.
-            // For the regex tier, walk the vector and match by shim identity
-            // (regex patterns are not repeated keys; pointer identity is the
-            // cheapest and most reliable discriminator).
-            std::shared_ptr<http_resource> shim_ptr(shim);
-
-            auto exact_it = impl_->exact_routes_.find(key);
-            if (exact_it != impl_->exact_routes_.end()) {
-                upsert(exact_it->second);
-            } else {
-                for (auto& rr : impl_->regex_routes_) {
-                    auto* sp = std::get_if<std::shared_ptr<http_resource>>(
-                        &rr.entry.handler);
-                    if (sp && *sp == shim_ptr) {
-                        upsert(rr.entry);
-                        break;
-                    }
-                }
-            }
-        }
+        std::unique_lock registered_resources_lock(impl_->registered_resources_mutex);
+        shim = impl_->prepare_or_create_lambda_shim(idx, methods, fresh);
+        impl_->commit_handlers_to_shim(*shim, methods, handler);
+        if (fresh) impl_->insert_fresh_v1_entries(idx, shim);
     }
 
+    impl_->upsert_v2_table_entry(idx, methods, shim, fresh);
     impl_->invalidate_route_cache();
 }
 
