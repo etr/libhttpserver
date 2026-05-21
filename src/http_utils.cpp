@@ -540,30 +540,43 @@ ip_representation::ip_representation(const std::string& ip) {
     }
 }
 
+namespace {
+
+// Add (16 - i) * piece[i] for both ip representations when both have
+// the i-th octet masked in. Pulled out of operator< so the surrounding
+// function stays below the CCN bar.
+void accumulate_octet_score(const ip_representation& a,
+                            const ip_representation& b, int i,
+                            int64_t& a_score, int64_t& b_score) {
+    if (!(CHECK_BIT(a.mask, i) && CHECK_BIT(b.mask, i))) return;
+    a_score += (16 - i) * a.pieces[i];
+    b_score += (16 - i) * b.pieces[i];
+}
+
+// True when both v4-mapped-prefix octets on a and b are 0x00 or 0xFF.
+// Mirrors the "::ffff:" / "::"-prefix invariant from parse_nested_ipv4.
+bool is_v4_mapped_prefix_octet_pair(uint16_t a, uint16_t b) {
+    return (a == 0x00 || a == 0xFF) && (b == 0x00 || b == 0xFF);
+}
+
+}  // namespace
+
 bool ip_representation::operator <(const ip_representation& b) const {
     int64_t this_score = 0;
     int64_t b_score = 0;
     for (int i = 0; i < 16; i++) {
         if (i == 10 || i == 11) continue;
-
-        if (CHECK_BIT(mask, i) && CHECK_BIT(b.mask, i)) {
-            this_score += (16 - i) * pieces[i];
-            b_score += (16 - i) * b.pieces[i];
-        }
+        accumulate_octet_score(*this, b, i, this_score, b_score);
     }
 
-    if (this_score == b_score &&
-            ((pieces[10] == 0x00 || pieces[10] == 0xFF) && (b.pieces[10] == 0x00 || b.pieces[10] == 0xFF)) &&
-            ((pieces[11] == 0x00 || pieces[11] == 0xFF) && (b.pieces[11] == 0x00 || b.pieces[11] == 0xFF))) {
+    if (this_score == b_score
+            && is_v4_mapped_prefix_octet_pair(pieces[10], b.pieces[10])
+            && is_v4_mapped_prefix_octet_pair(pieces[11], b.pieces[11])) {
         return false;
     }
 
-    for (int i = 10; i < 12; i++) {
-        if (CHECK_BIT(mask, i) && CHECK_BIT(b.mask, i)) {
-            this_score += (16 - i) * pieces[i];
-            b_score += (16 - i) * b.pieces[i];
-        }
-    }
+    accumulate_octet_score(*this, b, 10, this_score, b_score);
+    accumulate_octet_score(*this, b, 11, this_score, b_score);
 
     return this_score < b_score;
 }

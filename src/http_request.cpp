@@ -484,22 +484,75 @@ bool http_request_impl::has_client_certificate() const {
     return (cert_list != nullptr && list_size > 0);
 }
 
-void http_request_impl::populate_all_cert_fields() const {
-    if (client_cert_fields_cached) {
-        return;
-    }
+namespace {
 
+// Two-pass GnuTLS string extractor: first call discovers the length,
+// second call fills the buffer. The DN APIs (get_dn / get_issuer_dn)
+// share this exact shape, so parameterising on the function pointer
+// dedupes the wrapping and keeps the surrounding ctor under the CCN
+// bar.
+using x509_string_getter = int (*)(gnutls_x509_crt_t, char*, size_t*);
+
+std::string extract_x509_string(gnutls_x509_crt_t cert,
+                                x509_string_getter getter) {
+    size_t size = 0;
+    getter(cert, nullptr, &size);
+    std::string buf(size, '\0');
+    if (getter(cert, buf.data(), &size) != GNUTLS_E_SUCCESS) return {};
+    if (!buf.empty() && buf.back() == '\0') buf.pop_back();
+    return buf;
+}
+
+std::string extract_x509_common_name(gnutls_x509_crt_t cert) {
+    size_t cn_size = 0;
+    gnutls_x509_crt_get_dn_by_oid(cert, GNUTLS_OID_X520_COMMON_NAME, 0, 0,
+                                  nullptr, &cn_size);
+    if (cn_size == 0) return {};
+    std::string cn(cn_size, '\0');
+    if (gnutls_x509_crt_get_dn_by_oid(cert, GNUTLS_OID_X520_COMMON_NAME, 0, 0,
+                                      cn.data(), &cn_size) != GNUTLS_E_SUCCESS) {
+        return {};
+    }
+    if (!cn.empty() && cn.back() == '\0') cn.pop_back();
+    return cn;
+}
+
+std::string extract_x509_fingerprint_sha256(gnutls_x509_crt_t cert) {
+    unsigned char fingerprint[32];
+    size_t fingerprint_size = sizeof(fingerprint);
+    if (gnutls_x509_crt_get_fingerprint(cert, GNUTLS_DIG_SHA256, fingerprint,
+                                        &fingerprint_size) != GNUTLS_E_SUCCESS) {
+        return {};
+    }
+    std::string hex;
+    hex.reserve(fingerprint_size * 2);
+    for (size_t i = 0; i < fingerprint_size; ++i) {
+        char buf[3];
+        snprintf(buf, sizeof(buf), "%02x", fingerprint[i]);
+        hex += buf;
+    }
+    return hex;
+}
+
+bool verify_peer_certificate(gnutls_session_t session) {
+    unsigned int status = 0;
+    if (gnutls_certificate_verify_peers2(session, &status) != GNUTLS_E_SUCCESS) {
+        return false;
+    }
+    return status == 0;
+}
+
+}  // namespace
+
+void http_request_impl::populate_all_cert_fields() const {
+    if (client_cert_fields_cached) return;
     client_cert_fields_cached = true;
 
     gnutls_session_t session = nullptr;
-    if (has_tls_session()) {
-        session = get_tls_session();
-    }
+    if (has_tls_session()) session = get_tls_session();
 
     scoped_x509_cert cert;
-    if (session != nullptr) {
-        cert.init_from_session(session);
-    }
+    if (session != nullptr) cert.init_from_session(session);
 
     if (!cert.is_valid()) {
         // Default values (empty strings and -1) are already set by the
@@ -507,67 +560,21 @@ void http_request_impl::populate_all_cert_fields() const {
         return;
     }
 
-    // Client certificate verification
-    {
-        unsigned int status = 0;
-        if (gnutls_certificate_verify_peers2(session, &status) == GNUTLS_E_SUCCESS) {
-            client_cert_verified = (status == 0);
-        }
-    }
+    client_cert_verified = verify_peer_certificate(session);
 
-    // Subject DN
-    {
-        size_t dn_size = 0;
-        gnutls_x509_crt_get_dn(cert.get(), nullptr, &dn_size);
-        std::string dn(dn_size, '\0');
-        if (gnutls_x509_crt_get_dn(cert.get(), &dn[0], &dn_size) == GNUTLS_E_SUCCESS) {
-            if (!dn.empty() && dn.back() == '\0') dn.pop_back();
-            // pmr::string has no cross-allocator copy-assign, so we
-            // assign through the .assign(ptr, len) overload.
-            client_cert_dn.assign(dn.data(), dn.size());
-        }
-    }
+    // pmr::string has no cross-allocator copy-assign, so we route every
+    // assignment through .assign(ptr, len).
+    auto subject_dn = extract_x509_string(cert.get(), gnutls_x509_crt_get_dn);
+    client_cert_dn.assign(subject_dn.data(), subject_dn.size());
 
-    // Issuer DN
-    {
-        size_t dn_size = 0;
-        gnutls_x509_crt_get_issuer_dn(cert.get(), nullptr, &dn_size);
-        std::string dn(dn_size, '\0');
-        if (gnutls_x509_crt_get_issuer_dn(cert.get(), &dn[0], &dn_size) == GNUTLS_E_SUCCESS) {
-            if (!dn.empty() && dn.back() == '\0') dn.pop_back();
-            client_cert_issuer_dn.assign(dn.data(), dn.size());
-        }
-    }
+    auto issuer_dn = extract_x509_string(cert.get(), gnutls_x509_crt_get_issuer_dn);
+    client_cert_issuer_dn.assign(issuer_dn.data(), issuer_dn.size());
 
-    // Common Name
-    {
-        size_t cn_size = 0;
-        gnutls_x509_crt_get_dn_by_oid(cert.get(), GNUTLS_OID_X520_COMMON_NAME, 0, 0, nullptr, &cn_size);
-        if (cn_size > 0) {
-            std::string cn(cn_size, '\0');
-            if (gnutls_x509_crt_get_dn_by_oid(cert.get(), GNUTLS_OID_X520_COMMON_NAME, 0, 0, &cn[0], &cn_size) == GNUTLS_E_SUCCESS) {
-                if (!cn.empty() && cn.back() == '\0') cn.pop_back();
-                client_cert_cn.assign(cn.data(), cn.size());
-            }
-        }
-    }
+    auto cn = extract_x509_common_name(cert.get());
+    client_cert_cn.assign(cn.data(), cn.size());
 
-    // SHA-256 fingerprint
-    {
-        unsigned char fingerprint[32];
-        size_t fingerprint_size = sizeof(fingerprint);
-        if (gnutls_x509_crt_get_fingerprint(cert.get(), GNUTLS_DIG_SHA256, fingerprint, &fingerprint_size) == GNUTLS_E_SUCCESS) {
-            std::string hex_fingerprint;
-            hex_fingerprint.reserve(fingerprint_size * 2);
-            for (size_t i = 0; i < fingerprint_size; ++i) {
-                char hex[3];
-                snprintf(hex, sizeof(hex), "%02x", fingerprint[i]);
-                hex_fingerprint += hex;
-            }
-            client_cert_fingerprint_sha256.assign(hex_fingerprint.data(),
-                                                  hex_fingerprint.size());
-        }
-    }
+    auto fp = extract_x509_fingerprint_sha256(cert.get());
+    client_cert_fingerprint_sha256.assign(fp.data(), fp.size());
 
     // Validity times. The GnuTLS API returns std::time_t; we cast to
     // int64_t so the public accessors can return a fixed-width type
