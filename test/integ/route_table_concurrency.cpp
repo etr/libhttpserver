@@ -117,10 +117,20 @@ LT_BEGIN_AUTO_TEST(route_table_concurrency_suite,
         });
     }
 
-    // Run for ~500ms. Long enough to cover several context-switch
-    // windows on a loaded box; short enough that `make check` stays
-    // under one second.
+    // Run for ~500ms baseline (long enough to cover several context-
+    // switch windows; short enough that `make check` stays under a
+    // second on a normal box). Then keep going in 100ms chunks until
+    // both counters are non-zero, up to a 30s safety ceiling — this
+    // keeps the test reliable on heavily-instrumented lanes such as
+    // valgrind/memcheck where a single register_path+regex-compile
+    // can take longer than the entire baseline window.
+    auto deadline =
+        std::chrono::steady_clock::now() + std::chrono::seconds(30);
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    while ((writer_ops.load() == 0 || reader_ops.load() == 0)
+           && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
     stop.store(true, std::memory_order_relaxed);
     for (auto& t : threads) t.join();
 
@@ -202,7 +212,14 @@ LT_BEGIN_AUTO_TEST(route_table_concurrency_suite,
         });
     }
 
+    // Same baseline + valgrind-tolerant extension as Cycle I above.
+    auto deadline2 =
+        std::chrono::steady_clock::now() + std::chrono::seconds(30);
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    while ((writer_ops.load() == 0 || reader_ops.load() == 0)
+           && std::chrono::steady_clock::now() < deadline2) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
     stop.store(true, std::memory_order_relaxed);
     for (auto& t : threads) t.join();
 

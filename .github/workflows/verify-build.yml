@@ -388,7 +388,13 @@ jobs:
     - name: Install MinGW64 packages
       if: ${{ matrix.os-type == 'windows' && matrix.msys-env == 'MINGW64' }}
       run: |
-        pacman --noconfirm -S --needed mingw-w64-x86_64-{toolchain,libtool,make,pkg-config,libsystre,doxygen,gnutls,graphviz,curl}
+        # NB: doxygen + graphviz intentionally excluded — `make check-local`
+        # invokes scripts/check-doxygen.sh which spawns `make doxygen-run`,
+        # and the autoconf-archive-generated MINGW recipe hangs indefinitely
+        # waiting on a cmd.exe batch prompt (job timed out at the 6h ceiling
+        # in CI). The doxygen invariant is exhaustively checked by the Linux
+        # lanes; Windows just builds and tests the library here.
+        pacman --noconfirm -S --needed mingw-w64-x86_64-{toolchain,libtool,make,pkg-config,libsystre,gnutls,curl}
 
     - name: Install MSYS packages
       if: ${{ matrix.os-type == 'windows' && matrix.msys-env == 'MSYS' }}
