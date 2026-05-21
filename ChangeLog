@@ -6,6 +6,16 @@ Version 2.0.0
 		with any prior libhttpserver.so.0/1 on disk (runtime artefacts
 		only; dev-time .la/.a/.pc/headers are last-installer-wins by
 		design).
+	Added per-function cyclomatic complexity gate
+		(scripts/check-complexity.sh via `lizard`) and copy/paste
+		detection gate (scripts/check-duplication.sh via PMD CPD with
+		the C++ tokenizer), wired into the existing CI lint lane and
+		exposed locally as `make lint-complexity` /
+		`make lint-duplication`. Initial CCN ceiling intentionally set
+		above the current worst offender so CI stays green; ratcheted
+		down per refactor commit until reaching the long-term target
+		of 10. Duplication gate runs at PMD's default
+		minimum-tokens=100 from day one (currently zero hits).
 
 Version 0.20.0
 

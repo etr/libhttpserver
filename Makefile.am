@@ -42,6 +42,7 @@ EXTRA_DIST = libhttpserver.pc.in $(DX_CONFIG) scripts/extract-release-notes.sh s
 	scripts/check-examples.sh scripts/check-readme.sh scripts/check-release-notes.sh \
 	scripts/check-doxygen.sh \
 	scripts/check-soversion.sh scripts/check-parallel-install.sh \
+	scripts/check-complexity.sh scripts/check-duplication.sh \
 	scripts/verify-installed-examples.sh \
 	test/headers/consumer_direct.cpp test/headers/consumer_detail.cpp test/headers/consumer_umbrella.cpp \
 	test/headers/consumer_post_umbrella.cpp \
@@ -348,7 +349,24 @@ check-parallel-install:
 	@echo "=== check-parallel-install: TASK-044 v1+v2 coexistence ==="
 	@BUILD_DIR="$(abs_top_builddir)" $(top_srcdir)/scripts/check-parallel-install.sh
 
-.PHONY: check-headers check-install-layout check-hygiene check-examples check-readme check-release-notes check-doxygen check-soversion check-parallel-install
+# Per-function cyclomatic complexity gate. Wraps `lizard` against src/ and
+# fails if any function exceeds CCN_MAX (default in the script; ratcheted
+# down as the v2.0 refactor lands each offender below the line). Not wired
+# into `make check` — invoked directly by CI's `lint` lane to keep the
+# gate visible as its own status.
+lint-complexity:
+	@echo "=== lint-complexity: enforce per-function CCN ceiling ==="
+	@$(top_srcdir)/scripts/check-complexity.sh
+
+# Copy/paste detection gate. Wraps PMD's CPD with the C++ tokenizer
+# against src/ and fails if any duplicate run is at or above
+# CPD_MIN_TOKENS (default 100 in the script). Not wired into `make
+# check` — invoked directly by CI's `lint` lane.
+lint-duplication:
+	@echo "=== lint-duplication: enforce zero copy/paste duplication ==="
+	@$(top_srcdir)/scripts/check-duplication.sh
+
+.PHONY: check-headers check-install-layout check-hygiene check-examples check-readme check-release-notes check-doxygen check-soversion check-parallel-install lint-complexity lint-duplication
 
 # TASK-039: top-level convenience rule that descends into test/ to
 # build and run the bench binaries (see test/Makefile.am and

@@ -440,7 +440,24 @@ jobs:
     - name: Install cpplint if needed
       run: sudo pip3 install cpplint ;
       if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
-    
+
+    - name: Install lizard if needed
+      run: sudo pip3 install lizard ;
+      if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
+
+    - name: Install PMD (CPD) if needed
+      # CPD is shipped as part of the PMD distribution. The apt package
+      # is pinned to PMD 6.x; we want the modern PMD 7 CLI (`pmd cpd ...`)
+      # to match the script. Java is pre-installed on ubuntu-latest.
+      run: |
+        PMD_VERSION=7.24.0
+        curl -fsSL -o /tmp/pmd.zip \
+          "https://github.com/pmd/pmd/releases/download/pmd_releases%2F${PMD_VERSION}/pmd-dist-${PMD_VERSION}-bin.zip"
+        sudo unzip -q -o /tmp/pmd.zip -d /opt
+        sudo ln -sf "/opt/pmd-bin-${PMD_VERSION}/bin/pmd" /usr/local/bin/pmd
+        pmd --version
+      if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
+
     - name: Install IWYU dependencies if needed
       run: |
         sudo apt-get install llvm-18-dev libclang-18-dev clang-18 ;
@@ -654,6 +671,14 @@ jobs:
 
     - name: Run cpplint on code
       run: cpplint --extensions=cpp,hpp --headers=hpp --recursive . ;
+      if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
+
+    - name: Run per-function complexity gate (lizard)
+      run: ./scripts/check-complexity.sh
+      if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
+
+    - name: Run copy/paste detection gate (PMD CPD)
+      run: ./scripts/check-duplication.sh
       if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
 
     - name: Run libhttpserver configure
