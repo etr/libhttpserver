@@ -186,6 +186,20 @@ class http_endpoint {
       * Boolean indicating if the regex is compiled
      **/
      bool reg_compiled;
+
+     // Sub-helpers carved out of the string-ctor to keep each function
+     // under the cyclomatic-complexity bar. process_url_part dispatches
+     // per-iteration between the three modes (non-registration / literal
+     // / parameter), each of which appends its own piece to url_normalized,
+     // url_pieces, and (for parameters) url_pars + chunk_positions.
+     void normalize_url_complete();
+     void process_url_part(const std::vector<std::string>& parts,
+                           unsigned int i, bool& first, bool registration);
+     void append_non_registration_part(const std::string& part, bool& first);
+     void append_literal_url_part(const std::string& part, bool& first);
+     void append_parameter_url_part(const std::string& part,
+                                    unsigned int i, bool& first);
+     void compile_regex_url();
 };
 
 }  // namespace detail

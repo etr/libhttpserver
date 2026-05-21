@@ -42,80 +42,95 @@ namespace detail {
 http_endpoint::~http_endpoint() {
 }
 
+void http_endpoint::normalize_url_complete() {
+    if (url_complete[url_complete.size() - 1] == '/') {
+        url_complete = url_complete.substr(0, url_complete.size() - 1);
+    }
+    if (url_complete[0] != '/') {
+        url_complete = "/" + url_complete;
+    }
+}
+
+void http_endpoint::append_non_registration_part(const string& part, bool& first) {
+    url_normalized += (first ? "" : "/") + part;
+    first = false;
+    url_pieces.push_back(part);
+}
+
+void http_endpoint::append_literal_url_part(const string& part, bool& first) {
+    if (first) {
+        // First piece: respect a leading '^' anchor verbatim by replacing
+        // (not appending to) url_normalized's seed prefix.
+        url_normalized = (part[0] == '^' ? "" : url_normalized) + part;
+        first = false;
+    } else {
+        url_normalized += "/" + part;
+    }
+    url_pieces.push_back(part);
+}
+
+void http_endpoint::append_parameter_url_part(const string& part,
+                                              unsigned int i, bool& first) {
+    if (part.size() < 3 || part[0] != '{' || part[part.size() - 1] != '}') {
+        throw std::invalid_argument("Bad URL format");
+    }
+    // {name} or {name|regex}: split on the optional '|'.
+    std::string::size_type bar = part.find_first_of('|');
+    const bool has_regex = bar != string::npos;
+    url_pars.push_back(part.substr(1, has_regex ? bar - 1 : part.size() - 2));
+    url_normalized += (first ? "" : "/")
+        + (has_regex ? part.substr(bar + 1, part.size() - bar - 2) : "([^\\/]+)");
+    first = false;
+    chunk_positions.push_back(i);
+    url_pieces.push_back(part);
+}
+
+void http_endpoint::process_url_part(const vector<string>& parts,
+                                     unsigned int i, bool& first, bool registration) {
+    if (!registration) {
+        append_non_registration_part(parts[i], first);
+        return;
+    }
+    if (!parts[i].empty() && parts[i][0] != '{') {
+        append_literal_url_part(parts[i], first);
+        return;
+    }
+    append_parameter_url_part(parts[i], i, first);
+}
+
+void http_endpoint::compile_regex_url() {
+    url_normalized += "$";
+    try {
+        re_url_normalized = std::regex(url_normalized,
+            std::regex::extended | std::regex::icase | std::regex::nosubs);
+    } catch (std::regex_error& e) {
+        throw std::invalid_argument("Not a valid regex in URL: " + url_normalized);
+    }
+    reg_compiled = true;
+}
+
 http_endpoint::http_endpoint(const string& url, bool family, bool registration, bool use_regex):
     family_url(family),
     reg_compiled(false) {
     if (use_regex && !registration) {
         throw std::invalid_argument("Cannot use regex if not during registration");
     }
-
     url_normalized = use_regex ? "^/" : "/";
-    vector<string> parts;
 
 #ifdef CASE_INSENSITIVE
     string_utilities::to_lower_copy(url, url_complete);
 #else
     url_complete = url;
 #endif
+    normalize_url_complete();
 
-    if (url_complete[url_complete.size() - 1] == '/') {
-        url_complete = url_complete.substr(0, url_complete.size() - 1);
-    }
-
-    if (url_complete[0] != '/') {
-        url_complete = "/" + url_complete;
-    }
-
-    parts = httpserver::http::http_utils::tokenize_url(url);
-    string buffered;
+    auto parts = httpserver::http::http_utils::tokenize_url(url);
     bool first = true;
-
     for (unsigned int i = 0; i < parts.size(); i++) {
-        if (!registration) {
-            url_normalized += (first ? "" : "/") + parts[i];
-            first = false;
-
-            url_pieces.push_back(parts[i]);
-
-            continue;
-        }
-
-        if ((parts[i] != "") && (parts[i][0] != '{')) {
-            if (first) {
-                url_normalized = (parts[i][0] == '^' ? "" : url_normalized) + parts[i];
-                first = false;
-            } else {
-                url_normalized += "/" + parts[i];
-            }
-            url_pieces.push_back(parts[i]);
-
-            continue;
-        }
-
-        if ((parts[i].size() < 3) || (parts[i][0] != '{') || (parts[i][parts[i].size() - 1] != '}')) {
-            throw std::invalid_argument("Bad URL format");
-        }
-
-        std::string::size_type bar = parts[i].find_first_of('|');
-        url_pars.push_back(parts[i].substr(1, bar != string::npos ? bar - 1 : parts[i].size() - 2));
-        url_normalized += (first ? "" : "/") + (bar != string::npos ? parts[i].substr(bar + 1, parts[i].size() - bar - 2) : "([^\\/]+)");
-
-        first = false;
-
-        chunk_positions.push_back(i);
-
-        url_pieces.push_back(parts[i]);
+        process_url_part(parts, i, first, registration);
     }
 
-    if (use_regex) {
-        url_normalized += "$";
-        try {
-            re_url_normalized = std::regex(url_normalized, std::regex::extended | std::regex::icase | std::regex::nosubs);
-        } catch (std::regex_error& e) {
-            throw std::invalid_argument("Not a valid regex in URL: " + url_normalized);
-        }
-        reg_compiled = true;
-    }
+    if (use_regex) compile_regex_url();
 }
 
 http_endpoint::http_endpoint(const http_endpoint& h):
