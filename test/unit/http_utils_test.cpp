@@ -944,6 +944,73 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation_wildcard_weight)
     LT_CHECK_EQ(ip1.weight() > ip2.weight(), true);
 LT_END_AUTO_TEST(ip_representation_wildcard_weight)
 
+// ---- sanitize_upload_filename (finding test-quality-reviewer-iter1-1) -------
+//
+// sanitize_upload_filename is a pure public helper that extracts the basename
+// from an upload filename, rejecting path-traversal components ('.', '..').
+// A regression would silently permit path-traversal filenames in the upload
+// path.
+
+// Normal filename: returned as-is.
+LT_BEGIN_AUTO_TEST(http_utils_suite, sanitize_upload_filename_normal)
+    LT_CHECK_EQ(httpserver::http::http_utils::sanitize_upload_filename("report.pdf"),
+                std::string("report.pdf"));
+LT_END_AUTO_TEST(sanitize_upload_filename_normal)
+
+// Filename with leading Unix directory components: only the basename is returned.
+LT_BEGIN_AUTO_TEST(http_utils_suite, sanitize_upload_filename_unix_path)
+    LT_CHECK_EQ(httpserver::http::http_utils::sanitize_upload_filename("/tmp/uploads/report.pdf"),
+                std::string("report.pdf"));
+LT_END_AUTO_TEST(sanitize_upload_filename_unix_path)
+
+// Filename with Windows-style backslash separator: only the basename is returned.
+LT_BEGIN_AUTO_TEST(http_utils_suite, sanitize_upload_filename_windows_path)
+    LT_CHECK_EQ(httpserver::http::http_utils::sanitize_upload_filename("C:\\Users\\upload\\evil.exe"),
+                std::string("evil.exe"));
+LT_END_AUTO_TEST(sanitize_upload_filename_windows_path)
+
+// Empty string input: returns empty string.
+LT_BEGIN_AUTO_TEST(http_utils_suite, sanitize_upload_filename_empty)
+    LT_CHECK_EQ(httpserver::http::http_utils::sanitize_upload_filename(""),
+                std::string(""));
+LT_END_AUTO_TEST(sanitize_upload_filename_empty)
+
+// Bare dot "." is rejected: returns empty string.
+LT_BEGIN_AUTO_TEST(http_utils_suite, sanitize_upload_filename_dot)
+    LT_CHECK_EQ(httpserver::http::http_utils::sanitize_upload_filename("."),
+                std::string(""));
+LT_END_AUTO_TEST(sanitize_upload_filename_dot)
+
+// Bare double-dot ".." is rejected: returns empty string.
+LT_BEGIN_AUTO_TEST(http_utils_suite, sanitize_upload_filename_dot_dot)
+    LT_CHECK_EQ(httpserver::http::http_utils::sanitize_upload_filename(".."),
+                std::string(""));
+LT_END_AUTO_TEST(sanitize_upload_filename_dot_dot)
+
+// Path ending in "..": the basename portion ".." is rejected.
+LT_BEGIN_AUTO_TEST(http_utils_suite, sanitize_upload_filename_path_ending_dot_dot)
+    LT_CHECK_EQ(httpserver::http::http_utils::sanitize_upload_filename("/a/b/.."),
+                std::string(""));
+LT_END_AUTO_TEST(sanitize_upload_filename_path_ending_dot_dot)
+
+// Path ending in ".": the basename portion "." is rejected.
+LT_BEGIN_AUTO_TEST(http_utils_suite, sanitize_upload_filename_path_ending_dot)
+    LT_CHECK_EQ(httpserver::http::http_utils::sanitize_upload_filename("/a/b/."),
+                std::string(""));
+LT_END_AUTO_TEST(sanitize_upload_filename_path_ending_dot)
+
+// Trailing separator (e.g. "dir/"): basename after the last '/' is empty -> rejected.
+LT_BEGIN_AUTO_TEST(http_utils_suite, sanitize_upload_filename_trailing_slash)
+    LT_CHECK_EQ(httpserver::http::http_utils::sanitize_upload_filename("dir/"),
+                std::string(""));
+LT_END_AUTO_TEST(sanitize_upload_filename_trailing_slash)
+
+// Mixed separators: last component after backslash is taken.
+LT_BEGIN_AUTO_TEST(http_utils_suite, sanitize_upload_filename_mixed_separators)
+    LT_CHECK_EQ(httpserver::http::http_utils::sanitize_upload_filename("a/b\\c.txt"),
+                std::string("c.txt"));
+LT_END_AUTO_TEST(sanitize_upload_filename_mixed_separators)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

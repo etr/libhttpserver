@@ -334,6 +334,112 @@ LT_BEGIN_AUTO_TEST(webserver_register_path_prefix_suite,
     ws.stop();
 LT_END_AUTO_TEST(register_resource_deprecated_forwarder_behaves_like_register_path)
 
+// ---- normalize_path / should_skip_auth (finding test-quality-reviewer-iter1-2) ---
+//
+// apply_normalized_segment and normalize_path live in anonymous namespace in
+// webserver.cpp. The only observable path through them is
+// webserver_impl::should_skip_auth, which is triggered when an auth_handler is
+// set and a registered route is reached.  We probe the observable effect: if
+// the normalised form of the request path matches an auth_skip_paths entry the
+// request is served (200); otherwise the auth_handler returns 401.
+//
+// Auth handler: always returns a 401 sentinel.  When should_skip_auth fires,
+// apply_auth_short_circuit returns false so the route is dispatched (200).
+
+namespace {
+
+// auth_handler_ptr is std::function<std::shared_ptr<http_response>(const http_request&)>.
+// Return a non-null 401 response to block the request.
+std::shared_ptr<httpserver::http_response> reject_auth(const httpserver::http_request&) {
+    return std::make_shared<httpserver::http_response>(
+        std::move(httpserver::http_response::string("blocked").with_status(401)));
+}
+
+// fetch_code: thin wrapper returning only the HTTP status code.
+long fetch_code(const std::string& url) {
+    return fetch(url).response_code;
+}
+
+}  // namespace
+
+// Exact match: a path listed verbatim in auth_skip_paths is served (200).
+LT_BEGIN_AUTO_TEST(webserver_register_path_prefix_suite,
+                   auth_skip_exact_path_is_served)
+    webserver ws{create_webserver(PORT + 8)
+                     .auth_handler(reject_auth)
+                     .auth_skip_paths({"/public"})};
+    ws.register_path("/public", std::make_shared<ok_resource>());
+    ws.start(false);
+
+    // /public matches the skip list -> 200.
+    LT_CHECK_EQ(fetch_code("localhost:8188/public"), 200);
+
+    ws.stop();
+LT_END_AUTO_TEST(auth_skip_exact_path_is_served)
+
+// Path-traversal normalization: "/a/b/../c" normalises to "/a/c".
+// If "/a/c" is in auth_skip_paths the request is served (200).
+LT_BEGIN_AUTO_TEST(webserver_register_path_prefix_suite,
+                   auth_skip_dot_dot_normalizes_to_canonical_path)
+    webserver ws{create_webserver(PORT + 9)
+                     .auth_handler(reject_auth)
+                     .auth_skip_paths({"/a/c"})};
+    ws.register_path("/a/c", std::make_shared<ok_resource>());
+    ws.start(false);
+
+    // /a/b/../c -- the ".." pops "b"; normalises to /a/c -> skip list hit -> 200.
+    LT_CHECK_EQ(fetch_code("localhost:8189/a/b/../c"), 200);
+
+    ws.stop();
+LT_END_AUTO_TEST(auth_skip_dot_dot_normalizes_to_canonical_path)
+
+// Single-dot segments are elided: "/a/./b" normalises to "/a/b".
+LT_BEGIN_AUTO_TEST(webserver_register_path_prefix_suite,
+                   auth_skip_single_dot_segment_is_elided)
+    webserver ws{create_webserver(PORT + 10)
+                     .auth_handler(reject_auth)
+                     .auth_skip_paths({"/a/b"})};
+    ws.register_path("/a/b", std::make_shared<ok_resource>());
+    ws.start(false);
+
+    // /a/./b -> elide "." -> /a/b -> skip list hit -> 200.
+    LT_CHECK_EQ(fetch_code("localhost:8190/a/./b"), 200);
+
+    ws.stop();
+LT_END_AUTO_TEST(auth_skip_single_dot_segment_is_elided)
+
+// Path NOT in auth_skip_paths is blocked by the auth handler (401).
+LT_BEGIN_AUTO_TEST(webserver_register_path_prefix_suite,
+                   auth_not_in_skip_list_is_blocked)
+    webserver ws{create_webserver(PORT + 11)
+                     .auth_handler(reject_auth)
+                     .auth_skip_paths({"/allowed"})};
+    ws.register_path("/blocked", std::make_shared<ok_resource>());
+    ws.start(false);
+
+    // /blocked is not in the skip list -> auth_handler fires -> 401.
+    LT_CHECK_EQ(fetch_code("localhost:8191/blocked"), 401);
+
+    ws.stop();
+LT_END_AUTO_TEST(auth_not_in_skip_list_is_blocked)
+
+// Multiple leading ".." that would escape the root: normalize_path must
+// clamp the stack at empty (not underflow) so the resulting path is "/".
+LT_BEGIN_AUTO_TEST(webserver_register_path_prefix_suite,
+                   auth_skip_excess_dot_dot_clamps_to_root)
+    webserver ws{create_webserver(PORT + 12)
+                     .auth_handler(reject_auth)
+                     .auth_skip_paths({"/secure"})};
+    ws.register_path("/secure", std::make_shared<ok_resource>());
+    ws.start(false);
+
+    // "/../../secure" -> two ".." with empty stack -> clamps to root ->
+    // then push "secure" -> normalises to "/secure" -> skip list hit -> 200.
+    LT_CHECK_EQ(fetch_code("localhost:8192/../../secure"), 200);
+
+    ws.stop();
+LT_END_AUTO_TEST(auth_skip_excess_dot_dot_clamps_to_root)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

@@ -551,6 +551,162 @@ LT_BEGIN_AUTO_TEST(webserver_on_methods_suite,
     ws.stop();
 LT_END_AUTO_TEST(on_get_and_on_post_compose_on_true_regex_path)
 
+// ---- serialize_allow_methods ordering contract (finding test-quality-reviewer-iter1-3) --
+//
+// serialize_allow_methods emits methods in enum-declaration order:
+//   GET HEAD POST PUT DELETE CONNECT OPTIONS TRACE PATCH (indices 0..8).
+// The 405 Allow: header string is the observable output. Tests below pin
+// two-method, three-method, and the enumeration-order guarantee.
+
+// {GET, HEAD}: Allow header must be "GET, HEAD" (enum order).
+LT_BEGIN_AUTO_TEST(webserver_on_methods_suite,
+                   allow_header_get_head_set_is_ordered)
+    webserver ws{create_webserver(PORT + 19)};
+    ws.on_get("/gh", [](const http_request&) {
+        return http_response::string("g");
+    });
+    ws.on_head("/gh", [](const http_request&) {
+        return http_response::string("h");
+    });
+    ws.start(false);
+
+    // POST to a GET+HEAD resource: 405, Allow must list both in enum order.
+    fetch_result fr = do_request("localhost:8209/gh", "POST", "");
+    LT_CHECK_EQ(fr.response_code, 405);
+    LT_CHECK_EQ(fr.allow_header, std::string("GET, HEAD"));
+
+    ws.stop();
+LT_END_AUTO_TEST(allow_header_get_head_set_is_ordered)
+
+// {GET, POST, PUT}: Allow header must be "GET, POST, PUT" (enum order,
+// NOT alphabetical which would be "GET, POST, PUT" coincidentally).
+// Register in reverse enum order (PUT, POST, GET) to confirm the output
+// is always by enum index, not registration order.
+LT_BEGIN_AUTO_TEST(webserver_on_methods_suite,
+                   allow_header_get_post_put_set_is_enum_ordered)
+    webserver ws{create_webserver(PORT + 20)};
+    ws.on_put("/gpp", [](const http_request&) {
+        return http_response::string("put");
+    });
+    ws.on_post("/gpp", [](const http_request&) {
+        return http_response::string("post");
+    });
+    ws.on_get("/gpp", [](const http_request&) {
+        return http_response::string("get");
+    });
+    ws.start(false);
+
+    // DELETE to a GET+POST+PUT resource: 405.
+    fetch_result fr = do_request("localhost:8210/gpp", "DELETE");
+    LT_CHECK_EQ(fr.response_code, 405);
+    // Enum order: GET(0) POST(2) PUT(3) -- not alphabetical, not registration order.
+    LT_CHECK_EQ(fr.allow_header, std::string("GET, POST, PUT"));
+
+    ws.stop();
+LT_END_AUTO_TEST(allow_header_get_post_put_set_is_enum_ordered)
+
+// All seven registered on_* methods produce Allow in full enum order.
+// (CONNECT, TRACE are not exposed by the on_* API so "all" here means
+// the seven on_* methods: GET, HEAD, POST, PUT, DELETE, OPTIONS, PATCH.)
+LT_BEGIN_AUTO_TEST(webserver_on_methods_suite,
+                   allow_header_all_on_star_methods_enum_ordered)
+    webserver ws{create_webserver(PORT + 21)};
+    // Register in arbitrary order to confirm enum ordering.
+    ws.on_patch("/all_m", [](const http_request&) { return http_response::string("pa"); });
+    ws.on_delete("/all_m", [](const http_request&) { return http_response::string("d"); });
+    ws.on_options("/all_m", [](const http_request&) { return http_response::string("o"); });
+    ws.on_post("/all_m", [](const http_request&) { return http_response::string("po"); });
+    ws.on_head("/all_m", [](const http_request&) { return http_response::string("h"); });
+    ws.on_put("/all_m", [](const http_request&) { return http_response::string("pu"); });
+    ws.on_get("/all_m", [](const http_request&) { return http_response::string("g"); });
+    ws.start(false);
+
+    // CONNECT is not registered; it's not exposed by on_* either.
+    // Use TRACE to trigger a 405 (also not registered).
+    // Expected Allow: GET, HEAD, POST, PUT, DELETE, OPTIONS, PATCH (enum order,
+    // skipping CONNECT and TRACE which are not registered).
+    fetch_result fr = do_request("localhost:8211/all_m", "TRACE");
+    LT_CHECK_EQ(fr.response_code, 405);
+    LT_CHECK_EQ(fr.allow_header,
+                std::string("GET, HEAD, POST, PUT, DELETE, OPTIONS, PATCH"));
+
+    ws.stop();
+LT_END_AUTO_TEST(allow_header_all_on_star_methods_enum_ordered)
+
+// ---- upsert_v2_param_route method-bitmask merge (finding test-quality-reviewer-iter1-4) --
+//
+// upsert_v2_param_route performs a read-merge-reinsert on the radix/param
+// tier. Specifically, it must fold the existing entry's method bitmask before
+// overwriting. These tests pin:
+//   (1) Composition: GET then POST on the same parameterized path -> both served.
+//   (2) Atomicity: after a failed duplicate-method registration, the original
+//       registration is still intact and serves requests.
+
+// (1) Composition: register GET first, then POST on the same {id} path.
+//     Both methods must be served and route args must still be bound.
+LT_BEGIN_AUTO_TEST(webserver_on_methods_suite,
+                   upsert_param_route_composes_get_and_post)
+    webserver ws{create_webserver(PORT + 22)};
+    ws.on_get("/items/{id}", [](const http_request& req) {
+        std::string body = "get:";
+        body.append(req.get_arg("id"));
+        return http_response::string(body);
+    });
+    ws.on_post("/items/{id}", [](const http_request& req) {
+        std::string body = "post:";
+        body.append(req.get_arg("id"));
+        return http_response::string(body);
+    });
+    ws.start(false);
+
+    fetch_result get_result = do_request("localhost:8212/items/7", "GET");
+    LT_CHECK_EQ(get_result.response_code, 200);
+    LT_CHECK_EQ(get_result.body, std::string("get:7"));
+
+    fetch_result post_result = do_request("localhost:8212/items/7", "POST", "");
+    LT_CHECK_EQ(post_result.response_code, 200);
+    LT_CHECK_EQ(post_result.body, std::string("post:7"));
+
+    // DELETE is not registered: must 405.
+    LT_CHECK_EQ(do_request("localhost:8212/items/7", "DELETE").response_code, 405);
+
+    ws.stop();
+LT_END_AUTO_TEST(upsert_param_route_composes_get_and_post)
+
+// (2) Atomicity: register GET, then attempt a duplicate GET on the same
+//     parameterized path (must throw). After the throw the original GET
+//     handler must still work -- the failed registration must not have
+//     corrupted the route table or partially overwritten the bitmask.
+LT_BEGIN_AUTO_TEST(webserver_on_methods_suite,
+                   upsert_param_route_failed_duplicate_leaves_original_intact)
+    webserver ws{create_webserver(PORT + 23)};
+    ws.on_get("/nodes/{id}", [](const http_request& req) {
+        std::string body = "node:";
+        body.append(req.get_arg("id"));
+        return http_response::string(body);
+    });
+
+    // Duplicate GET on the same parameterized path must throw.
+    bool threw = false;
+    try {
+        ws.on_get("/nodes/{id}", [](const http_request&) {
+            return http_response::string("should-not-replace");
+        });
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK(threw);
+
+    ws.start(false);
+
+    // After the failed registration, the original GET handler must still serve.
+    fetch_result fr = do_request("localhost:8213/nodes/42", "GET");
+    LT_CHECK_EQ(fr.response_code, 200);
+    LT_CHECK_EQ(fr.body, std::string("node:42"));
+
+    ws.stop();
+LT_END_AUTO_TEST(upsert_param_route_failed_duplicate_leaves_original_intact)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()
