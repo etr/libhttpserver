@@ -1521,85 +1521,105 @@ size_t webserver_impl::unescaper_func(void * cls, struct MHD_Connection *c, char
 
 namespace detail {
 
+MHD_Result webserver_impl::handle_post_form_arg(detail::modded_request* mr,
+        const char* key, const char* data, size_t size, uint64_t off) {
+    // No file: set the arg key/value and return. A non-zero @p off
+    // means MHD is feeding us a continuation chunk of a previously-
+    // started value, so append rather than replace.
+    if (off > 0) {
+        mr->dhr->grow_last_arg(key, std::string(data, size));
+    } else {
+        mr->dhr->set_arg(key, std::string(data, size));
+    }
+    return MHD_YES;
+}
+
+bool webserver_impl::setup_new_upload_file_info(http::file_info& file,
+        const char* filename, const char* content_type,
+        const char* transfer_encoding) const {
+    // First chunk for this (key, filename) pair: choose the on-disk
+    // destination path (random if generate_random_filename_on_upload,
+    // otherwise sanitize the client-supplied filename) and prime the
+    // file_info with content_type / transfer_encoding when MHD gave
+    // them to us.
+    if (parent->generate_random_filename_on_upload) {
+        file.set_file_system_file_name(
+            http_utils::generate_random_upload_filename(parent->file_upload_dir));
+    } else {
+        std::string safe_name = http_utils::sanitize_upload_filename(filename);
+        if (safe_name.empty()) return false;
+        file.set_file_system_file_name(parent->file_upload_dir + "/" + safe_name);
+    }
+    // Avoid appending to a leftover file from a previous request.
+    unlink(file.get_file_system_file_name().c_str());
+    if (content_type != nullptr) file.set_content_type(content_type);
+    if (transfer_encoding != nullptr) file.set_transfer_encoding(transfer_encoding);
+    return true;
+}
+
+void webserver_impl::manage_upload_stream(detail::modded_request* mr,
+        const char* filename, const char* key, http::file_info& file) {
+    // If MHD switches us to a different (filename, key) pair, close the
+    // previous output stream. The four-way OR covers fresh state (both
+    // tracking strings empty) and either coordinate changing.
+    if (mr->upload_filename.empty()
+            || mr->upload_key.empty()
+            || strcmp(filename, mr->upload_filename.c_str()) != 0
+            || strcmp(key, mr->upload_key.c_str()) != 0) {
+        if (mr->upload_ostrm != nullptr) mr->upload_ostrm->close();
+    }
+    // Open a stream when we don't already have one (first chunk, or
+    // just-closed above).
+    if (mr->upload_ostrm == nullptr || !mr->upload_ostrm->is_open()) {
+        mr->upload_key = key;
+        mr->upload_filename = filename;
+        mr->upload_ostrm = std::make_unique<std::ofstream>();
+        mr->upload_ostrm->open(file.get_file_system_file_name(),
+                               std::ios::binary | std::ios::app);
+    }
+}
+
+MHD_Result webserver_impl::process_file_upload(detail::modded_request* mr,
+        const char* key, const char* filename, const char* content_type,
+        const char* transfer_encoding, const char* data, size_t size) const {
+    http::file_info& file = mr->dhr->get_or_create_file_info(key, filename);
+    if (file.get_file_system_file_name().empty()) {
+        if (!setup_new_upload_file_info(file, filename, content_type, transfer_encoding)) {
+            return MHD_NO;
+        }
+    }
+    manage_upload_stream(mr, filename, key, file);
+    if (size > 0) {
+        mr->upload_ostrm->write(data, size);
+        if (!mr->upload_ostrm->good()) return MHD_NO;
+    }
+    file.grow_file_size(size);
+    return MHD_YES;
+}
+
 MHD_Result webserver_impl::post_iterator(void *cls, enum MHD_ValueKind kind,
         const char *key, const char *filename, const char *content_type,
         const char *transfer_encoding, const char *data, uint64_t off, size_t size) {
     // Parameter needed to respect MHD interface, but not needed here.
     std::ignore = kind;
-
     auto* mr = static_cast<detail::modded_request*>(cls);
 
     if (!filename) {
-        // There is no actual file, just set the arg key/value and return.
-        if (off > 0) {
-            mr->dhr->grow_last_arg(key, std::string(data, size));
-            return MHD_YES;
-        }
-
-        mr->dhr->set_arg(key, std::string(data, size));
-        return MHD_YES;
+        return handle_post_form_arg(mr, key, data, size, off);
     }
 
     try {
         if (mr->ws->file_upload_target != FILE_UPLOAD_DISK_ONLY) {
-            mr->dhr->set_arg_flat(key, std::string(mr->dhr->get_arg(key)) + std::string(data, size));
+            mr->dhr->set_arg_flat(key,
+                std::string(mr->dhr->get_arg(key)) + std::string(data, size));
         }
-
         if (*filename != '\0' && mr->ws->file_upload_target != FILE_UPLOAD_MEMORY_ONLY) {
-            // either get the existing file info struct or create a new one in the file map
-            http::file_info& file = mr->dhr->get_or_create_file_info(key, filename);
-            // if the file_system_file_name is not filled yet, this is a new entry and the name has to be set
-            // (either random or copy of the original filename)
-            if (file.get_file_system_file_name().empty()) {
-                if (mr->ws->generate_random_filename_on_upload) {
-                    file.set_file_system_file_name(http_utils::generate_random_upload_filename(mr->ws->file_upload_dir));
-                } else {
-                    std::string safe_name = http_utils::sanitize_upload_filename(filename);
-                    if (safe_name.empty()) {
-                        return MHD_NO;
-                    }
-                    file.set_file_system_file_name(mr->ws->file_upload_dir + "/" + safe_name);
-                }
-                // to not append to an already existing file, delete an already existing file
-                unlink(file.get_file_system_file_name().c_str());
-                if (content_type != nullptr) {
-                    file.set_content_type(content_type);
-                }
-                if (transfer_encoding != nullptr) {
-                    file.set_transfer_encoding(transfer_encoding);
-                }
-            }
-
-            // if multiple files are uploaded, a different filename or a different key indicates
-            // the start of a new file, so close the previous one
-            if (mr->upload_filename.empty() ||
-                mr->upload_key.empty() ||
-                0 != strcmp(filename, mr->upload_filename.c_str()) ||
-                0 != strcmp(key, mr->upload_key.c_str())) {
-                if (mr->upload_ostrm != nullptr) {
-                    mr->upload_ostrm->close();
-                }
-            }
-
-            if (mr->upload_ostrm == nullptr || !mr->upload_ostrm->is_open()) {
-                mr->upload_key = key;
-                mr->upload_filename = filename;
-                mr->upload_ostrm = std::make_unique<std::ofstream>();
-                mr->upload_ostrm->open(file.get_file_system_file_name(), std::ios::binary | std::ios::app);
-            }
-
-            if (size > 0) {
-                mr->upload_ostrm->write(data, size);
-                if (!mr->upload_ostrm->good()) {
-                    return MHD_NO;
-                }
-            }
-
-            // update the file size in the map
-            file.grow_file_size(size);
+            MHD_Result r = mr->ws->impl_->process_file_upload(
+                mr, key, filename, content_type, transfer_encoding, data, size);
+            if (r != MHD_YES) return r;
         }
         return MHD_YES;
-    } catch(const http::generateFilenameException& e) {
+    } catch (const http::generateFilenameException&) {
         return MHD_NO;
     }
 }

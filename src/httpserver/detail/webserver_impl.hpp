@@ -513,6 +513,32 @@ class webserver_impl {
                                   method_set methods,
                                   std::shared_ptr<::httpserver::http_resource> shim);
 
+    // Helpers carved out of post_iterator. The MHD post-iterator
+    // trampoline is a static MHD callback; the orchestrator below
+    // (process_file_upload) is an instance method because it reads the
+    // const config bag on parent (file_upload_target,
+    // generate_random_filename_on_upload, file_upload_dir).
+    static MHD_Result handle_post_form_arg(modded_request* mr,
+                                           const char* key,
+                                           const char* data,
+                                           size_t size,
+                                           uint64_t off);
+    bool setup_new_upload_file_info(::httpserver::http::file_info& file,
+                                    const char* filename,
+                                    const char* content_type,
+                                    const char* transfer_encoding) const;
+    static void manage_upload_stream(modded_request* mr,
+                                     const char* filename,
+                                     const char* key,
+                                     ::httpserver::http::file_info& file);
+    MHD_Result process_file_upload(modded_request* mr,
+                                   const char* key,
+                                   const char* filename,
+                                   const char* content_type,
+                                   const char* transfer_encoding,
+                                   const char* data,
+                                   size_t size) const;
+
     MHD_Result complete_request(MHD_Connection* connection, modded_request* mr,
                                 const char* version, const char* method);
     struct MHD_Response* get_raw_response_with_fallback(modded_request* mr);
