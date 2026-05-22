@@ -29,14 +29,22 @@
 # scripts/check-complexity.sh. New files must come in well below the
 # long-term target; lifting FILE_LOC_MAX is not allowed.
 #
-# Current offenders above the long-term 500-line target (2026-05-22):
-#   src/webserver.cpp                          2673
+# Long-term target reached (2026-05-22): every .cpp/.hpp under src/ is
+# below the 500-line ceiling. The ratchet completed in seven steps:
 #
-# FILE_LOC_MAX is pinned by the largest unfixed file (webserver.cpp at
-# 2673), so it cannot drop until the top offender is decomposed. The
-# ratchet ticks once per shrink of the worst file, not once per fixed
-# offender — taking down a smaller file removes it from the list above
-# but leaves the threshold where it is.
+#   1. extract ip_representation from http_utils.hpp           (505 -> 478)
+#   2. extract auth surface from http_request.hpp              (656 -> 497)
+#   3. split webserver_impl.hpp into connection_state and
+#      webserver_impl_dispatch.hpp                              (674 -> 330)
+#   4. extract ip_representation impl from http_utils.cpp      (730 -> 493)
+#   5. split webserver.hpp into routes/ws/hooks sub-headers    (845 -> 498)
+#   6. split http_request.cpp 4-way (impl + impl_tls +
+#      http_request_auth + residual)                            (1175 -> 392)
+#   7. split webserver.cpp 7-way (setup + register + routes +
+#      callbacks + websocket + dispatch + request + residual)   (2673 -> 464)
+#
+# New files must come in well below the long-term target; lifting
+# FILE_LOC_MAX is not allowed.
 #
 # Exit codes:
 #   0  no violations
@@ -44,7 +52,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-FILE_LOC_MAX="${FILE_LOC_MAX:-2700}"
+FILE_LOC_MAX="${FILE_LOC_MAX:-500}"
 
 cd "$REPO_ROOT"
 
