@@ -43,6 +43,7 @@ EXTRA_DIST = libhttpserver.pc.in $(DX_CONFIG) scripts/extract-release-notes.sh s
 	scripts/check-doxygen.sh \
 	scripts/check-soversion.sh scripts/check-parallel-install.sh \
 	scripts/check-complexity.sh scripts/check-duplication.sh \
+	scripts/check-file-size.sh \
 	scripts/verify-installed-examples.sh \
 	test/headers/consumer_direct.cpp test/headers/consumer_detail.cpp test/headers/consumer_umbrella.cpp \
 	test/headers/consumer_post_umbrella.cpp \
@@ -366,7 +367,15 @@ lint-duplication:
 	@echo "=== lint-duplication: enforce zero copy/paste duplication ==="
 	@$(top_srcdir)/scripts/check-duplication.sh
 
-.PHONY: check-headers check-install-layout check-hygiene check-examples check-readme check-release-notes check-doxygen check-soversion check-parallel-install lint-complexity lint-duplication
+# Per-file line-count gate. Fails if any src/ .cpp/.hpp exceeds
+# FILE_LOC_MAX (default in the script; ratcheted down toward the
+# long-term 500-line target as each offender is decomposed). Not wired
+# into `make check` — invoked directly by CI's `lint` lane.
+lint-file-size:
+	@echo "=== lint-file-size: enforce per-file line-count ceiling ==="
+	@$(top_srcdir)/scripts/check-file-size.sh
+
+.PHONY: check-headers check-install-layout check-hygiene check-examples check-readme check-release-notes check-doxygen check-soversion check-parallel-install lint-complexity lint-duplication lint-file-size
 
 # TASK-039: top-level convenience rule that descends into test/ to
 # build and run the bench binaries (see test/Makefile.am and

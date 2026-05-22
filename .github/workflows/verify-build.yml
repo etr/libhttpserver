@@ -681,6 +681,10 @@ jobs:
       run: ./scripts/check-duplication.sh
       if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
 
+    - name: Run per-file line-count gate
+      run: ./scripts/check-file-size.sh
+      if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
+
     - name: Run libhttpserver configure
       run: |
         # Set memory check flags. They need to stay in step as env variables don't propagate across steps.
