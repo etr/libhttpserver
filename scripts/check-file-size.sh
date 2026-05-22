@@ -29,14 +29,19 @@
 # scripts/check-complexity.sh. New files must come in well below the
 # long-term target; lifting FILE_LOC_MAX is not allowed.
 #
-# Current offenders above the long-term 500-line target (2026-05-21):
+# Current offenders above the long-term 500-line target (2026-05-22):
 #   src/webserver.cpp                          2673
 #   src/http_request.cpp                       1175
 #   src/httpserver/webserver.hpp                845
 #   src/http_utils.cpp                          730
 #   src/httpserver/detail/webserver_impl.hpp    674
 #   src/httpserver/http_request.hpp             656
-#   src/httpserver/http_utils.hpp               505
+#
+# FILE_LOC_MAX is pinned by the largest unfixed file (webserver.cpp at
+# 2673), so it cannot drop until the top offender is decomposed. The
+# ratchet ticks once per shrink of the worst file, not once per fixed
+# offender — taking down a smaller file removes it from the list above
+# but leaves the threshold where it is.
 #
 # Exit codes:
 #   0  no violations

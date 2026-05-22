@@ -413,42 +413,15 @@ using arg_map = std::map<std::string, http_arg_value, http::arg_comparator>;
 using arg_view_map = std::map<std::string_view, http_arg_value, http::arg_comparator>;
 
 
-struct ip_representation {
-    http_utils::IP_version_T ip_version;
-    uint16_t pieces[16];
-    uint16_t mask;
+}  // namespace http
+}  // namespace httpserver
 
-    explicit ip_representation(http_utils::IP_version_T ip_version) :
-        ip_version(ip_version) {
-            mask = constants::DEFAULT_MASK_VALUE;
-            std::fill(pieces, pieces + 16, 0);
-    }
+// ip_representation lives in its own header; included here so existing
+// consumers of <httpserver/http_utils.hpp> still see the type.
+#include "httpserver/ip_representation.hpp"
 
-    explicit ip_representation(const std::string& ip);
-    explicit ip_representation(const struct sockaddr* ip);
-
-    bool operator<(const ip_representation& b) const;
-
-    int weight() const {
-        // variable-precision SWAR algorithm
-        uint16_t x = mask;
-        x = x - ((x >> 1) & 0x55555555);
-        x = (x & 0x33333333) + ((x >> 2) & 0x33333333);
-        return (((x + (x >> 4)) & 0x0F0F0F0F) * 0x01010101) >> 24;
-    }
-
- private:
-    // Helpers carved out of the string-ctor to keep each function under
-    // the project cyclomatic-complexity bar. parse_ipv6 / parse_ipv4
-    // do the top-level dispatch; the rest serve parse_ipv6.
-    void parse_ipv4(const std::string& ip);
-    void parse_ipv6(const std::string& ip);
-    static unsigned int compute_ipv6_omitted_segments(std::vector<std::string>& parts);
-    void apply_ipv6_part(std::vector<std::string>& parts, unsigned int i,
-                         int& y, unsigned int omitted);
-    void parse_nested_ipv4(const std::vector<std::string>& parts,
-                           unsigned int i, int y);
-};
+namespace httpserver {
+namespace http {
 
 /**
  * Method used to get an ip in form of string from a sockaddr structure.
