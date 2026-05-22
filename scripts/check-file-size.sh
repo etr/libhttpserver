@@ -35,7 +35,6 @@
 #   src/httpserver/webserver.hpp                845
 #   src/http_utils.cpp                          730
 #   src/httpserver/detail/webserver_impl.hpp    674
-#   src/httpserver/http_request.hpp             656
 #
 # FILE_LOC_MAX is pinned by the largest unfixed file (webserver.cpp at
 # 2673), so it cannot drop until the top offender is decomposed. The
