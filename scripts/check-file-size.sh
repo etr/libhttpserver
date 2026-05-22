@@ -31,7 +31,6 @@
 #
 # Current offenders above the long-term 500-line target (2026-05-22):
 #   src/webserver.cpp                          2673
-#   src/http_request.cpp                       1175
 #
 # FILE_LOC_MAX is pinned by the largest unfixed file (webserver.cpp at
 # 2673), so it cannot drop until the top offender is decomposed. The
