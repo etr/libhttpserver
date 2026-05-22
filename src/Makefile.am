@@ -25,12 +25,12 @@ lib_LTLIBRARIES = libhttpserver.la
 # builds. The WS-off branch in websocket_handler.cpp provides stub
 # definitions (every member throws feature_unavailable except is_valid()
 # which returns false).
-libhttpserver_la_SOURCES = string_utilities.cpp webserver.cpp http_utils.cpp file_info.cpp http_request.cpp http_response.cpp create_webserver.cpp create_test_request.cpp websocket_handler.cpp detail/http_endpoint.cpp detail/body.cpp
+libhttpserver_la_SOURCES = string_utilities.cpp webserver.cpp http_utils.cpp file_info.cpp http_request.cpp http_response.cpp create_webserver.cpp create_test_request.cpp websocket_handler.cpp hook_handle.cpp detail/http_endpoint.cpp detail/body.cpp
 # noinst_HEADERS: shipped in the tarball but NEVER installed under $prefix/include.
 # Detail headers (httpserver/detail/*.hpp) live here so they cannot leak to
 # downstream consumers — the public surface comes in through <httpserver.hpp>.
 noinst_HEADERS = httpserver/string_utilities.hpp httpserver/detail/modded_request.hpp httpserver/detail/http_endpoint.hpp httpserver/detail/body.hpp httpserver/detail/webserver_impl.hpp httpserver/detail/http_request_impl.hpp httpserver/detail/route_entry.hpp httpserver/detail/lambda_resource.hpp httpserver/detail/radix_tree.hpp httpserver/detail/route_cache.hpp gettext.h
-nobase_include_HEADERS = httpserver.hpp httpserver/body_kind.hpp httpserver/constants.hpp httpserver/create_webserver.hpp httpserver/create_test_request.hpp httpserver/webserver.hpp httpserver/websocket_handler.hpp httpserver/http_utils.hpp httpserver/file_info.hpp httpserver/http_request.hpp httpserver/http_response.hpp httpserver/http_resource.hpp httpserver/feature_unavailable.hpp httpserver/iovec_entry.hpp httpserver/http_arg_value.hpp httpserver/http_method.hpp
+nobase_include_HEADERS = httpserver.hpp httpserver/body_kind.hpp httpserver/constants.hpp httpserver/create_webserver.hpp httpserver/create_test_request.hpp httpserver/webserver.hpp httpserver/websocket_handler.hpp httpserver/http_utils.hpp httpserver/file_info.hpp httpserver/http_request.hpp httpserver/http_response.hpp httpserver/http_resource.hpp httpserver/feature_unavailable.hpp httpserver/iovec_entry.hpp httpserver/http_arg_value.hpp httpserver/http_method.hpp httpserver/hook_phase.hpp httpserver/hook_action.hpp httpserver/hook_handle.hpp httpserver/hook_context.hpp
 
 AM_CXXFLAGS += -fPIC -Wall
 

@@ -65,7 +65,11 @@
 #include <gnutls/gnutls.h>
 #endif  // HAVE_GNUTLS
 
+#include "httpserver/file_info.hpp"
 #include "httpserver/http_utils.hpp"
+#include "httpserver/hook_action.hpp"
+#include "httpserver/hook_context.hpp"
+#include "httpserver/hook_phase.hpp"
 #include "httpserver/detail/http_endpoint.hpp"
 #include "httpserver/detail/radix_tree.hpp"
 #include "httpserver/detail/route_cache.hpp"
@@ -281,6 +285,65 @@ class webserver_impl {
     // documented above. Returns lookup_result; populates `tier` even on
     // miss (tier_hit::none) so callers can branch deterministically.
     lookup_result lookup_v2(http_method method, const std::string& path);
+
+    // TASK-045 -- Lifecycle hook bus (skeleton, no firing yet).
+    //
+    // Per-phase callable storage. Each phase has its own
+    // std::vector<phase_entry<Sig>> because phase signatures differ
+    // (some return void, some return hook_action; ctx types differ).
+    // Concurrency:
+    //   - `hook_table_mutex_` is a shared_mutex covering ALL eleven
+    //     phase vectors. Writers (add_hook, hook_handle::remove) take
+    //     a unique_lock; future firing sites (TASK-046+) will take
+    //     a shared_lock to snapshot a phase vector before iterating.
+    //   - `any_hooks_[i]` is a short-circuit gate read with relaxed/
+    //     acquire semantics on the dispatch hot path so a phase with
+    //     no registrations costs one atomic load. Set on first
+    //     registration of a phase and cleared when the phase's vector
+    //     drops to empty (memory_order_release on both edges).
+    //   - `next_slot_id_` is a monotonic 64-bit counter. It is never
+    //     reused, so a hook_handle whose slot has already been erased
+    //     simply finds no match in remove() -- the idempotent no-op
+    //     path. 64 bits is unboundedly large in practice (centuries
+    //     at any realistic registration rate).
+    template <class Sig>
+    struct phase_entry {
+        std::uint64_t slot_id;
+        std::function<Sig> fn;
+    };
+
+    std::shared_mutex hook_table_mutex_;
+    std::atomic<std::uint64_t> next_slot_id_{1};
+    std::array<std::atomic<bool>,
+               static_cast<std::size_t>(hook_phase::count_)> any_hooks_{};
+
+    std::vector<phase_entry<void(const ::httpserver::connection_open_ctx&)>>
+        hooks_connection_opened_;
+    std::vector<phase_entry<void(const ::httpserver::accept_ctx&)>>
+        hooks_accept_decision_;
+    std::vector<phase_entry<::httpserver::hook_action(
+            ::httpserver::request_received_ctx&)>>
+        hooks_request_received_;
+    std::vector<phase_entry<::httpserver::hook_action(
+            ::httpserver::body_chunk_ctx&)>>
+        hooks_body_chunk_;
+    std::vector<phase_entry<void(const ::httpserver::route_resolved_ctx&)>>
+        hooks_route_resolved_;
+    std::vector<phase_entry<::httpserver::hook_action(
+            ::httpserver::before_handler_ctx&)>>
+        hooks_before_handler_;
+    std::vector<phase_entry<::httpserver::hook_action(
+            const ::httpserver::handler_exception_ctx&)>>
+        hooks_handler_exception_;
+    std::vector<phase_entry<::httpserver::hook_action(
+            ::httpserver::after_handler_ctx&)>>
+        hooks_after_handler_;
+    std::vector<phase_entry<void(const ::httpserver::response_sent_ctx&)>>
+        hooks_response_sent_;
+    std::vector<phase_entry<void(const ::httpserver::request_completed_ctx&)>>
+        hooks_request_completed_;
+    std::vector<phase_entry<void(const ::httpserver::connection_close_ctx&)>>
+        hooks_connection_closed_;
 
     std::shared_mutex bans_mutex;
     std::set<http::ip_representation> bans;

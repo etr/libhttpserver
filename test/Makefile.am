@@ -26,7 +26,7 @@ LDADD += -lcurl
 
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/ -DHTTPSERVER_COMPILATION
 METASOURCES = AUTO
-check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver create_webserver_explicit new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories http_response_move_sanitizer webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_const_getters http_request_tls_accessors webserver_register_smartptr webserver_register_path_prefix webserver_on_methods webserver_route route_table lookup_pipeline route_table_concurrency routing_regression threadsafety_stress webserver_features webserver_ws_unavailable webserver_register_ws_smartptr webserver_dauth_unavailable consumer_fixture
+check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver create_webserver_explicit new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories http_response_move_sanitizer webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_const_getters http_request_tls_accessors webserver_register_smartptr webserver_register_path_prefix webserver_on_methods webserver_route route_table lookup_pipeline route_table_concurrency routing_regression threadsafety_stress webserver_features webserver_ws_unavailable webserver_register_ws_smartptr webserver_dauth_unavailable consumer_fixture header_hygiene_hooks hook_api_shape hooks_no_firing
 
 MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
 
@@ -324,6 +324,23 @@ webserver_dauth_unavailable_SOURCES = unit/webserver_dauth_unavailable_test.cpp
 # regression that re-introduces #ifdef HAVE_* around a public method
 # breaks the off lane (verified locally during TASK-037 cycle R).
 consumer_fixture_SOURCES = consumer_fixture.cpp
+
+# TASK-045 -- Hook bus skeleton (hook_phase, hook_action, hook_handle,
+# hook_context, webserver::add_hook). Three tests:
+#
+# - header_hygiene_hooks: per-header preprocessor sentinel that the
+#   four new hook public headers do not transitively pull <microhttpd.h>,
+#   <gnutls/gnutls.h>, <sys/socket.h>, or <sys/uio.h>. Mirrors
+#   header_hygiene_iovec_test.cpp.
+# - hook_api_shape: compile-time + runtime contract for hook_phase /
+#   hook_action / hook_handle / webserver::add_hook. Reaches into
+#   webserver_impl via the HTTPSERVER_COMPILATION-gated friend bridge,
+#   so it needs -lmicrohttpd transitively (default LDADD covers it).
+# - hooks_no_firing: integration sentinel registering one hook on every
+#   phase and asserting zero invocations across a real HTTP round-trip.
+header_hygiene_hooks_SOURCES = unit/header_hygiene_hooks_test.cpp
+hook_api_shape_SOURCES = unit/hook_api_shape_test.cpp
+hooks_no_firing_SOURCES = integ/hooks_no_firing.cpp
 
 noinst_HEADERS = littletest.hpp
 AM_CXXFLAGS += -Wall -fPIC -Wno-overloaded-virtual
