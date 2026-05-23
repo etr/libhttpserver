@@ -26,7 +26,7 @@ LDADD += -lcurl
 
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/ -DHTTPSERVER_COMPILATION
 METASOURCES = AUTO
-check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver create_webserver_explicit new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories http_response_move_sanitizer webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_const_getters http_request_tls_accessors webserver_register_smartptr webserver_register_path_prefix webserver_on_methods webserver_route route_table lookup_pipeline route_table_concurrency routing_regression threadsafety_stress webserver_features webserver_ws_unavailable webserver_register_ws_smartptr webserver_dauth_unavailable consumer_fixture header_hygiene_hooks hook_api_shape hooks_no_firing
+check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver create_webserver_explicit new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories http_response_move_sanitizer webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_const_getters http_request_tls_accessors webserver_register_smartptr webserver_register_path_prefix webserver_on_methods webserver_route route_table lookup_pipeline route_table_concurrency routing_regression threadsafety_stress webserver_features webserver_ws_unavailable webserver_register_ws_smartptr webserver_dauth_unavailable consumer_fixture header_hygiene_hooks hook_api_shape hooks_no_firing hooks_accept_ctx_shape hooks_connection_lifecycle hooks_accept_decision_banned hooks_accept_decision_throwing
 
 MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
 
@@ -341,6 +341,22 @@ consumer_fixture_SOURCES = consumer_fixture.cpp
 header_hygiene_hooks_SOURCES = unit/header_hygiene_hooks_test.cpp
 hook_api_shape_SOURCES = unit/hook_api_shape_test.cpp
 hooks_no_firing_SOURCES = integ/hooks_no_firing.cpp
+
+# TASK-046 -- Lifecycle hook bus firing sites (connection_opened,
+# accept_decision, connection_closed). Adds:
+#
+# - hooks_accept_ctx_shape: compile-time pin for accept_ctx's extended
+#   {peer, accepted, reason} shape (TASK-045 landed peer only).
+# - hooks_connection_lifecycle: integ test driving one curl round-trip
+#   and asserting all three lifecycle hooks fired with a valid peer.
+# - hooks_accept_decision_banned: blocks 127.0.0.1, asserts the
+#   accept_decision hook observes accepted=false reason="banned".
+# - hooks_accept_decision_throwing: a throwing accept_decision hook
+#   must not flip the accept/reject decision.
+hooks_accept_ctx_shape_SOURCES = unit/hooks_accept_ctx_shape_test.cpp
+hooks_connection_lifecycle_SOURCES = integ/hooks_connection_lifecycle.cpp
+hooks_accept_decision_banned_SOURCES = integ/hooks_accept_decision_banned.cpp
+hooks_accept_decision_throwing_SOURCES = integ/hooks_accept_decision_throwing.cpp
 
 noinst_HEADERS = littletest.hpp
 AM_CXXFLAGS += -Wall -fPIC -Wno-overloaded-virtual

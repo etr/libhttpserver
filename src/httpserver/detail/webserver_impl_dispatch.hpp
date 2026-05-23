@@ -78,6 +78,29 @@
 // re-enter the catch from inside its own catch.
 void log_dispatch_error(std::string_view msg) const;
 
+// TASK-046 -- Lifecycle hook firing helpers.
+//
+// Each helper snapshots the relevant phase vector under a shared_lock
+// on hook_table_mutex_, releases the lock, then iterates the snapshot
+// invoking each hook inside a try/catch. Any exception is routed
+// through log_dispatch_error so the MHD callback stays clean (DR-009
+// §5.2). The helpers are noexcept: even an out-of-band failure (e.g.
+// std::bad_alloc in the snapshot copy) is contained by std::terminate
+// rather than escaping into MHD.
+//
+// `fire_accept_decision` returns void: the YES/NO decision is fixed
+// in policy_callback BEFORE the hook fires (DR-012 §4.10); a throwing
+// hook cannot change it.
+//
+// Callers MUST gate each call with the relaxed any_hooks_ short-
+// circuit so zero-cost-when-unused holds (PRD-HOOK-REQ-008).
+void fire_connection_opened(
+    const ::httpserver::connection_open_ctx& ctx) noexcept;
+void fire_accept_decision(
+    const ::httpserver::accept_ctx& ctx) noexcept;
+void fire_connection_closed(
+    const ::httpserver::connection_close_ctx& ctx) noexcept;
+
 // TASK-031: invoke the user-supplied internal_error_handler safely.
 // On success, returns the response it produced. If the user handler
 // itself throws, logs generically via log_dispatch_error and returns

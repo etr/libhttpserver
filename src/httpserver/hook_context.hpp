@@ -103,8 +103,23 @@ struct connection_close_ctx {
 
 // accept_decision: observation-only per DR-012; the handler returns
 // void. accept/deny is decided by the policy callback, not by the hook.
+//
+// TASK-046 extends the TASK-045 skeleton with the decision the policy
+// callback already computed before the hook fires:
+//   - `accepted` mirrors policy_callback's MHD_YES/MHD_NO return.
+//   - `reason` is set when the connection is rejected:
+//       * `"banned"`      — the peer hit the ban list.
+//       * `"not-allowed"` — default policy REJECT and the peer is not
+//                            on the allowance list.
+//       * `std::nullopt`  — the connection was accepted.
+//
+// The string_view's referent is always a string literal with static
+// storage duration; capturing it past the hook return is safe. If a
+// heap-owned copy is needed, materialize `std::string(*ctx.reason)`.
 struct accept_ctx {
     peer_address peer{};
+    bool accepted = true;
+    std::optional<std::string_view> reason{};
 };
 
 struct request_received_ctx {

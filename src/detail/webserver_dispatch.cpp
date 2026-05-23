@@ -78,8 +78,11 @@
 #endif  // HAVE_GNUTLS
 
 using std::string;
+using std::map;
 
 namespace httpserver {
+
+using httpserver::http::http_utils;
 
 namespace detail {
 

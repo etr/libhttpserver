@@ -8,16 +8,20 @@
      version 2.1 of the License, or (at your option) any later version.
 */
 
-// TASK-045 integration sentinel:
+// TASK-045 integration sentinel — narrowed by TASK-046.
 //
+// Originally:
 //   "No phase actually fires yet — verified by registering one hook on
 //    every phase and observing zero invocations across a complete
 //    request/response cycle. (Phases start firing in TASK-046..051.)"
 //
-// We start a webserver, register one hook on each of the eleven phases
-// (each hook increments a per-phase counter), drive one full HTTP
-// round-trip through libcurl, then stop the webserver and assert every
-// counter is still zero.
+// TASK-046 wired the three connection-level phases (connection_opened,
+// accept_decision, connection_closed), so the gate now narrows to the
+// remaining EIGHT phases that TASK-047..051 will wire. Those eight
+// must still observe zero invocations across a complete round-trip.
+// We still register all eleven hooks so we keep one-call-site coverage
+// of the API surface; we just assert silence on the not-yet-wired
+// phases only.
 
 #include <curl/curl.h>
 
@@ -157,8 +161,23 @@ LT_BEGIN_AUTO_TEST(hooks_no_firing_suite, all_phases_silent_across_round_trip)
 
     ws.stop();
 
+    // TASK-046 carved out the three lifecycle phases. They MAY fire
+    // (in fact must, per the new lifecycle tests); we only enforce
+    // silence on the eight phases still un-wired by TASK-047..051.
+    auto not_yet_wired = [](hook_phase p) {
+        switch (p) {
+        case hook_phase::connection_opened:
+        case hook_phase::accept_decision:
+        case hook_phase::connection_closed:
+            return false;
+        default:
+            return true;
+        }
+    };
     for (std::size_t i = 0; i < counters.size(); ++i) {
-        LT_CHECK_EQ(counters[i].load(), static_cast<std::size_t>(0));
+        if (not_yet_wired(static_cast<hook_phase>(i))) {
+            LT_CHECK_EQ(counters[i].load(), static_cast<std::size_t>(0));
+        }
     }
 LT_END_AUTO_TEST(all_phases_silent_across_round_trip)
 

@@ -110,8 +110,12 @@ void webserver_impl::add_base_mhd_options(std::vector<MHD_OptionItem>& iov) cons
     // CLOSED, where we delete it. This makes the arena's lifetime equal
     // to the MHD_Connection's lifetime; request_completed reuses the
     // arena across keep-alive request boundaries via arena_.release().
+    // TASK-046 -- closure pointer is the owning webserver* so the
+    // callback can reach impl_->any_hooks_ / fire_connection_opened /
+    // fire_connection_closed. (Until TASK-046 this was nullptr because
+    // the trampoline only managed the per-connection arena.)
     iov.push_back(make_option(MHD_OPTION_NOTIFY_CONNECTION,
-                              (intptr_t) &webserver_impl::connection_notify, nullptr));
+                              (intptr_t) &webserver_impl::connection_notify, parent));
     iov.push_back(make_option(MHD_OPTION_URI_LOG_CALLBACK,
                               (intptr_t) &webserver_impl::uri_log, parent));
     iov.push_back(make_option(MHD_OPTION_EXTERNAL_LOGGER,

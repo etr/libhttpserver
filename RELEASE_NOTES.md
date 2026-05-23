@@ -101,6 +101,13 @@ v1.x is end-of-life on the day v2.0 ships.
   uses `method_set`.
 - **`httpserver::constants` namespace.** `constexpr` replacements for
   every removed `#define`.
+- **Lifecycle hook bus (M5).** `ws.add_hook(hook_phase, std::function)`
+  registers observation/mutation hooks on the request/connection
+  lifecycle. The three connection-level phases — `connection_opened`,
+  `accept_decision`, `connection_closed` — fire on every connection;
+  `accept_decision` exposes `{peer, accepted, reason}` (closes #332,
+  see `examples/banned_ip_log.cpp`). The other eight phases land in
+  later M5 tasks.
 
 ## What's renamed (v1 → v2)
 

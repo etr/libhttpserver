@@ -129,34 +129,11 @@ void webserver_impl::request_completed(void *cls, struct MHD_Connection *connect
     }
 }
 
-void webserver_impl::connection_notify(void* cls, struct MHD_Connection* connection,
-                                       void** socket_context,
-                                       enum MHD_ConnectionNotificationCode toe) {
-    std::ignore = cls;
-    std::ignore = connection;
-
-    switch (toe) {
-        case MHD_CONNECTION_NOTIFY_STARTED:
-            // Allocate the per-connection state (and its embedded arena)
-            // on connection start. The new is the only heap allocation
-            // tied to a connection's lifetime; afterwards every request
-            // on this connection draws its impl out of the arena.
-            *socket_context = new detail::connection_state();
-            break;
-        case MHD_CONNECTION_NOTIFY_CLOSED:
-            // MHD ordering guarantee: NOTIFY_COMPLETED fires before
-            // NOTIFY_CLOSED for the same connection. By the time we reach
-            // this branch, request_completed has already called reset_arena()
-            // and the modded_request has already been deleted -- so the
-            // connection_state is no longer referenced by any live object.
-            // (security-reviewer-iter1-4: documents the invariant that
-            // prevents the concurrent request_completed + NOTIFY_CLOSED
-            // race described in CWE-362.)
-            delete static_cast<detail::connection_state*>(*socket_context);
-            *socket_context = nullptr;
-            break;
-    }
-}
+// connection_notify (NOTIFY_STARTED / NOTIFY_CLOSED) and policy_callback
+// live in webserver_callbacks_lifecycle.cpp (TASK-046 split). Both
+// callbacks fire lifecycle hooks and reach into <sys/socket.h> via the
+// peer-address adapter; isolating them keeps this TU under the project
+// FILE_LOC_MAX gate.
 
 #ifdef HAVE_GNUTLS
 // MHD_PskServerCredentialsCallback signature:
@@ -288,28 +265,6 @@ int webserver_impl::sni_cert_callback_func(void* cls,
 }  // namespace detail
 
 namespace detail {
-
-MHD_Result webserver_impl::policy_callback(void *cls, const struct sockaddr* addr, socklen_t addrlen) {
-    // Parameter needed to respect MHD interface, but not needed here.
-    std::ignore = addrlen;
-
-    const auto ws = static_cast<webserver*>(cls);
-
-    if (!ws->ban_system_enabled) return MHD_YES;
-
-    auto* impl = ws->impl_.get();
-    std::shared_lock bans_lock(impl->bans_mutex);
-    std::shared_lock allowances_lock(impl->allowances_mutex);
-    const bool is_banned = impl->bans.count(ip_representation(addr));
-    const bool is_allowed = impl->allowances.count(ip_representation(addr));
-
-    if ((ws->default_policy == http_utils::ACCEPT && is_banned && !is_allowed) ||
-        (ws->default_policy == http_utils::REJECT && (!is_allowed || is_banned))) {
-        return MHD_NO;
-    }
-
-    return MHD_YES;
-}
 
 void* webserver_impl::uri_log(void* cls, const char* uri, struct MHD_Connection *con) {
     // Parameter needed to respect MHD interface, but not needed here.
