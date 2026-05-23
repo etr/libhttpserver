@@ -1,5 +1,5 @@
 // Copyright 2026 Sebastiano Merlino
-// libhttpserver hello-world example — the lambda form (PRD §3.4).
+// libhttpserver hello-world example — the lambda form.
 // Compiles in ten lines including main(), with no http_resource subclass
 // and no raw-pointer ownership. Production code typically qualifies names
 // explicitly; the `using namespace` here is a one-off so this file can
