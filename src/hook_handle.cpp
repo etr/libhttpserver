@@ -32,6 +32,7 @@
 #include <mutex>
 #include <shared_mutex>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -232,88 +233,63 @@ constexpr std::size_t kHookSnapshotReserve = 8;
 
 }  // namespace
 
-void detail::webserver_impl::fire_connection_opened(
-    const ::httpserver::connection_open_ctx& ctx) noexcept {
+// fire_hooks_for_phase: shared dispatch template for all void-returning
+// lifecycle hook phases. Snapshots the caller-supplied vector under a
+// shared_lock, releases the lock, then iterates the snapshot invoking
+// each hook inside an inner try/catch. Any exception is routed through
+// log_dispatch_error. The outer try/catch absorbs snapshot-copy failures
+// (e.g. std::bad_alloc). The function is not itself noexcept because the
+// callers are noexcept and will std::terminate on uncaught throws; the
+// inner catches ensure no exception can propagate.
+template <typename Ctx>
+static void fire_hooks_for_phase(
+    detail::webserver_impl* impl,
+    std::vector<detail::webserver_impl::phase_entry<void(const Ctx&)>>& hook_vec,
+    const Ctx& ctx,
+    std::string_view phase_name) {
     try {
-        std::vector<phase_entry<void(
-                const ::httpserver::connection_open_ctx&)>> snapshot;
+        std::vector<detail::webserver_impl::phase_entry<void(const Ctx&)>> snapshot;
         snapshot.reserve(kHookSnapshotReserve);
         {
-            std::shared_lock lock(hook_table_mutex_);
-            snapshot = hooks_connection_opened_;
+            std::shared_lock lock(impl->hook_table_mutex_);
+            snapshot = hook_vec;
         }
         for (const auto& entry : snapshot) {
             try {
                 entry.fn(ctx);
             } catch (const std::exception& e) {
-                log_dispatch_error(
-                    std::string("hook[connection_opened] threw: ") + e.what());
+                impl->log_dispatch_error(
+                    std::string("hook[") + std::string(phase_name) +
+                    "] threw: " + e.what());
             } catch (...) {
-                log_dispatch_error(
-                    "hook[connection_opened] threw unknown exception");
+                impl->log_dispatch_error(
+                    std::string("hook[") + std::string(phase_name) +
+                    "] threw unknown exception");
             }
         }
     } catch (...) {
         // Snapshot copy itself failed (e.g. allocator threw). Nothing
-        // more we can do at this layer; the function is noexcept so the
-        // contract holds even if std::terminate triggers below.
-        log_dispatch_error(
-            "fire_connection_opened: snapshot copy failed");
+        // more we can do at this layer; callers are noexcept so the
+        // contract holds even if std::terminate triggers.
+        impl->log_dispatch_error(
+            std::string("fire_hooks_for_phase[") + std::string(phase_name) +
+            "]: snapshot copy failed");
     }
+}
+
+void detail::webserver_impl::fire_connection_opened(
+    const ::httpserver::connection_open_ctx& ctx) noexcept {
+    fire_hooks_for_phase(this, hooks_connection_opened_, ctx, "connection_opened");
 }
 
 void detail::webserver_impl::fire_accept_decision(
     const ::httpserver::accept_ctx& ctx) noexcept {
-    try {
-        std::vector<phase_entry<void(
-                const ::httpserver::accept_ctx&)>> snapshot;
-        snapshot.reserve(kHookSnapshotReserve);
-        {
-            std::shared_lock lock(hook_table_mutex_);
-            snapshot = hooks_accept_decision_;
-        }
-        for (const auto& entry : snapshot) {
-            try {
-                entry.fn(ctx);
-            } catch (const std::exception& e) {
-                log_dispatch_error(
-                    std::string("hook[accept_decision] threw: ") + e.what());
-            } catch (...) {
-                log_dispatch_error(
-                    "hook[accept_decision] threw unknown exception");
-            }
-        }
-    } catch (...) {
-        log_dispatch_error(
-            "fire_accept_decision: snapshot copy failed");
-    }
+    fire_hooks_for_phase(this, hooks_accept_decision_, ctx, "accept_decision");
 }
 
 void detail::webserver_impl::fire_connection_closed(
     const ::httpserver::connection_close_ctx& ctx) noexcept {
-    try {
-        std::vector<phase_entry<void(
-                const ::httpserver::connection_close_ctx&)>> snapshot;
-        snapshot.reserve(kHookSnapshotReserve);
-        {
-            std::shared_lock lock(hook_table_mutex_);
-            snapshot = hooks_connection_closed_;
-        }
-        for (const auto& entry : snapshot) {
-            try {
-                entry.fn(ctx);
-            } catch (const std::exception& e) {
-                log_dispatch_error(
-                    std::string("hook[connection_closed] threw: ") + e.what());
-            } catch (...) {
-                log_dispatch_error(
-                    "hook[connection_closed] threw unknown exception");
-            }
-        }
-    } catch (...) {
-        log_dispatch_error(
-            "fire_connection_closed: snapshot copy failed");
-    }
+    fire_hooks_for_phase(this, hooks_connection_closed_, ctx, "connection_closed");
 }
 
 }  // namespace httpserver

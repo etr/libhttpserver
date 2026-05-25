@@ -137,6 +137,19 @@ void webserver_impl::connection_notify(void* cls, struct MHD_Connection* connect
         return make_peer_address(ci->client_addr);
     };
 
+    // Short-circuit predicate: returns true when at least one hook is
+    // registered for the given phase. Uses a relaxed atomic load because
+    // the gate only needs to be visible after the hook was added (which
+    // happens under a unique_lock with a release store). False-negative
+    // on a very early concurrent add is acceptable; the hook simply fires
+    // on the next event. A single lambda definition avoids duplicating the
+    // cast and memory-order spelling at every call site.
+    auto hooks_armed = [&impl](::httpserver::hook_phase p) -> bool {
+        return impl != nullptr &&
+               impl->any_hooks_[static_cast<std::size_t>(p)]
+                   .load(std::memory_order_relaxed);
+    };
+
     switch (toe) {
         case MHD_CONNECTION_NOTIFY_STARTED:
             // Allocate the per-connection state (and its embedded arena)
@@ -146,10 +159,7 @@ void webserver_impl::connection_notify(void* cls, struct MHD_Connection* connect
             *socket_context = new detail::connection_state();
             // Fire connection_opened. Zero-cost when no hook is
             // registered: a single relaxed atomic load + branch.
-            if (impl != nullptr &&
-                impl->any_hooks_[static_cast<std::size_t>(
-                        ::httpserver::hook_phase::connection_opened)]
-                    .load(std::memory_order_relaxed)) {
+            if (hooks_armed(::httpserver::hook_phase::connection_opened)) {
                 ::httpserver::connection_open_ctx ctx{resolve_peer()};
                 impl->fire_connection_opened(ctx);
             }
@@ -159,10 +169,7 @@ void webserver_impl::connection_notify(void* cls, struct MHD_Connection* connect
             // deleted. The arena is not exposed through
             // connection_close_ctx today (only peer_address), but the
             // ordering choice is safe regardless and pins the contract.
-            if (impl != nullptr &&
-                impl->any_hooks_[static_cast<std::size_t>(
-                        ::httpserver::hook_phase::connection_closed)]
-                    .load(std::memory_order_relaxed)) {
+            if (hooks_armed(::httpserver::hook_phase::connection_closed)) {
                 ::httpserver::connection_close_ctx ctx{resolve_peer()};
                 impl->fire_connection_closed(ctx);
             }
