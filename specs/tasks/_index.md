@@ -129,7 +129,7 @@ Nominally: **13 sequential tasks**, each S–XL. Most other tasks parallelize of
 | TASK-036 | Handler return-by-value dispatch cutover | M5 | Done | TASK-022, TASK-025, TASK-027, TASK-031 |
 | TASK-045 | Hook bus skeleton (`hook_phase`, `hook_action`, `hook_handle`, `webserver::add_hook`) | M5 | Done | TASK-009, TASK-014 |
 | TASK-046 | Fire `connection_opened` / `connection_closed` / `accept_decision` | M5 | Done | TASK-045 |
-| TASK-047 | Fire `request_received` and `body_chunk` (pre-handler short-circuit) | M5 | Not Started | TASK-045 |
+| TASK-047 | Fire `request_received` and `body_chunk` (pre-handler short-circuit) | M5 | Done | TASK-045 |
 | TASK-048 | Fire `route_resolved` and `before_handler`; wire 404/405/auth aliases | M5 | Not Started | TASK-045, TASK-027, TASK-031 |
 | TASK-049 | Fire `handler_exception`; wire `internal_error_handler` alias | M5 | Not Started | TASK-045, TASK-031 |
 | TASK-050 | Fire `after_handler` (post-handler short-circuit), `response_sent`, `request_completed`; wire `log_access` alias | M5 | Not Started | TASK-045 |

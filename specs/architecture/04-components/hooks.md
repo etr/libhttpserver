@@ -8,8 +8,8 @@
 |---|---|---|---|
 | `connection_opened` | `webserver.cpp:connection_notify` — `MHD_CONNECTION_NOTIFY_STARTED` | no | no |
 | `accept_decision` | `webserver.cpp:policy_callback` — after YES/NO decision | no | no |
-| `request_received` | `webserver.cpp:requests_answer_first_step` — post header-parse, pre body-read | **yes** | no (route not yet known) |
-| `body_chunk` | `webserver.cpp:requests_answer_second_step` — per chunk | **yes** | no |
+| `request_received` | `webserver_body_pipeline.cpp:requests_answer_first_step` — post header-parse, pre body-read | **yes** | no (route not yet known) |
+| `body_chunk` | `webserver_body_pipeline.cpp:requests_answer_second_step` — per chunk | **yes** | no |
 | `route_resolved` | `webserver.cpp:resolve_resource_for_request` — after lookup | no | n/a (boundary phase) |
 | `before_handler` | `webserver.cpp:dispatch_resource_handler` — start | **yes** | yes |
 | `handler_exception` | `webserver.cpp:dispatch_resource_handler` — each catch arm | **yes** (maps exception to response) | yes |
