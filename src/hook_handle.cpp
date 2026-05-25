@@ -360,4 +360,18 @@ detail::webserver_impl::fire_body_chunk(
         this, hooks_body_chunk_, ctx, "body_chunk");
 }
 
+// ---- fire_* (TASK-048) ---------------------------------------------------
+
+void detail::webserver_impl::fire_route_resolved(
+    const ::httpserver::route_resolved_ctx& ctx) noexcept {
+    fire_hooks_for_phase(this, hooks_route_resolved_, ctx, "route_resolved");
+}
+
+std::optional<::httpserver::http_response>
+detail::webserver_impl::fire_before_handler(
+    ::httpserver::before_handler_ctx& ctx) noexcept {
+    return fire_short_circuit_hooks_for_phase(
+        this, hooks_before_handler_, ctx, "before_handler");
+}
+
 }  // namespace httpserver

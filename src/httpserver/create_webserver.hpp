@@ -211,6 +211,13 @@ class create_webserver {
       * code, headers, and body are sent on the wire as-is. If null, a
       * default 404 response is generated.
       *
+      * @note This is an alias. Calling it (with a non-null callable)
+      *       installs a hook at @ref httpserver::hook_phase::route_resolved.
+      *       Equivalent to `ws.add_hook(hook_phase::route_resolved, ...)`
+      *       at webserver construction (TASK-048 / PRD-HOOK-REQ-009 / §4.10).
+      *       The on-the-wire 404 synthesis flows through the v1 dispatch
+      *       path; the hook registration is the alias-equivalence story.
+      *
       * @param h error_handler callback; pass `nullptr` to clear.
       * @return reference to this builder for chaining.
       * @see method_not_allowed_handler, internal_error_handler
@@ -222,6 +229,13 @@ class create_webserver {
       *
       * The handler returns an @ref http_response by value. If null, a
       * default 405 response is generated.
+      *
+      * @note This is an alias. Calling it (with a non-null callable)
+      *       installs a hook at @ref httpserver::hook_phase::before_handler.
+      *       Equivalent to `ws.add_hook(hook_phase::before_handler, ...)`
+      *       at webserver construction (TASK-048 / PRD-HOOK-REQ-009 / §4.10).
+      *       The on-the-wire 405 synthesis flows through the v1 dispatch
+      *       path; the hook registration is the alias-equivalence story.
       *
       * @param h error_handler callback; pass `nullptr` to clear.
       * @return reference to this builder for chaining.
@@ -260,6 +274,24 @@ class create_webserver {
       */
      create_webserver& internal_error_handler(internal_error_handler_t h) { _internal_error_handler = std::move(h); return *this; }
      create_webserver& file_cleanup_callback(file_cleanup_callback_ptr v) { _file_cleanup_callback = v; return *this; }
+     /**
+      * Install the centralised auth handler invoked before every
+      * dispatched request whose path is not on the @ref auth_skip_paths
+      * list. Returning a non-null `shared_ptr<http_response>` short-
+      * circuits dispatch and sends that response on the wire
+      * (typically a 401 or 403).
+      *
+      * @note This is an alias. Calling it (with a non-null callable)
+      *       installs a hook at @ref httpserver::hook_phase::before_handler.
+      *       Equivalent to `ws.add_hook(hook_phase::before_handler, ...)`
+      *       at webserver construction (TASK-048 / PRD-HOOK-REQ-009 / §4.10).
+      *       The on-the-wire auth short-circuit flows through the v1
+      *       dispatch path; the hook registration is the
+      *       alias-equivalence story.
+      *
+      * @param v auth_handler_ptr callback; pass `nullptr` to clear.
+      * @return reference to this builder for chaining.
+      */
      create_webserver& auth_handler(auth_handler_ptr v) { _auth_handler = v; return *this; }
      create_webserver& auth_skip_paths(const std::vector<std::string>& v) { _auth_skip_paths = v; return *this; }
      create_webserver& sni_callback(sni_callback_t v) { _sni_callback = v; return *this; }

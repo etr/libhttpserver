@@ -328,6 +328,32 @@ MHD_Result webserver_impl::materialize_and_queue_response(MHD_Connection* connec
     return (MHD_Result) to_ret;
 }
 
+// TASK-048: gated fire of the route_resolved phase. Built as a small
+// helper so finalize_answer stays under the per-function CCN ceiling
+// (CCN_MAX in scripts/check-complexity.sh) after the addition of the
+// hook firing site. Observation-only per DR-012 §4.10.
+static void fire_route_resolved_gated(webserver_impl* impl,
+                                      detail::modded_request* mr,
+                                      bool found,
+                                      const std::shared_ptr<http_resource>& hrm) {
+    if (!impl->any_hooks_[static_cast<std::size_t>(hook_phase::route_resolved)]
+            .load(std::memory_order_relaxed)) {
+        return;
+    }
+    std::optional<route_descriptor> desc;
+    if (found && hrm) {
+        desc = route_descriptor{
+            /*path_template=*/std::string_view{mr->matched_path_template},
+            /*methods=*/hrm->get_allowed_methods(),
+            /*is_prefix=*/mr->matched_is_prefix};
+    }
+    route_resolved_ctx ctx{
+        /*request=*/mr->dhr.get(),
+        /*matched=*/std::move(desc),
+        /*resource=*/hrm ? hrm.get() : nullptr};
+    impl->fire_route_resolved(ctx);
+}
+
 MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection,
                                            struct detail::modded_request* mr) {
     if (auto ws_result = try_handle_websocket_upgrade(connection, mr)) {
@@ -347,6 +373,8 @@ MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection,
     // finalize_answer.
     std::shared_ptr<http_resource> hrm;
     bool found = resolve_resource_for_request(mr, hrm);
+
+    fire_route_resolved_gated(this, mr, found, hrm);
 
     if (found && apply_auth_short_circuit(mr)) {
         found = false;  // Skip resource rendering, go directly to response.

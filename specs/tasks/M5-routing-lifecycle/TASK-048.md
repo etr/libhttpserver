@@ -32,4 +32,4 @@ Wire the routing-boundary observation phase and the pre-handler short-circuit ph
 **Related Requirements:** PRD-HOOK-REQ-002, PRD-HOOK-REQ-003, PRD-HOOK-REQ-005, PRD-HOOK-REQ-009
 **Related Decisions:** DR-012, §4.10
 
-**Status:** Not Started
+**Status:** Done

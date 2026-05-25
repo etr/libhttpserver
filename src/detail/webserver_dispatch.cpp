@@ -86,74 +86,11 @@ using httpserver::http::http_utils;
 
 namespace detail {
 
-http_response webserver_impl::not_found_page(detail::modded_request* mr) const {
-    if (parent->not_found_handler != nullptr) {
-        return parent->not_found_handler(*mr->dhr);
-    }
-    return http_response::string(std::string{constants::NOT_FOUND_ERROR})
-        .with_status(http_utils::http_not_found);
-}
-
-http_response webserver_impl::method_not_allowed_page(detail::modded_request* mr) const {
-    if (parent->method_not_allowed_handler != nullptr) {
-        return parent->method_not_allowed_handler(*mr->dhr);
-    }
-    return http_response::string(std::string{constants::METHOD_ERROR})
-        .with_status(http_utils::http_method_not_allowed);
-}
-
-http_response webserver_impl::internal_error_page(
-    detail::modded_request* mr,
-    std::string_view msg,
-    bool force_our) const {
-    // TASK-031 / DR-009 §5.2 point 4: the double-fault fallback. Used when
-    // the user-supplied internal_error_handler itself threw or when the
-    // belt-and-suspenders site after get_raw_response_with_fallback fires.
-    // The body is intentionally empty and the message is intentionally
-    // ignored.
-    if (force_our) {
-        return http_response::empty()
-            .with_status(http_utils::http_internal_server_error);
-    }
-    // §5.2 point 2/3: invoke the user handler with the originating message.
-    if (parent->internal_error_handler != nullptr) {
-        return parent->internal_error_handler(*mr->dhr, msg);
-    }
-    // No handler configured: surface the message in the default body so
-    // the unset-handler path is informative for debugging. Operators who
-    // need a fixed body can wire a constant-returning handler.
-    return http_response::string(std::string{msg})
-        .with_status(http_utils::http_internal_server_error);
-}
-
-void webserver_impl::log_dispatch_error(std::string_view msg) const {
-    if (parent->log_error == nullptr) {
-        return;
-    }
-    // A misbehaving user logger must not poison the catch from inside the
-    // catch. Swallow any exception it throws; we have no recovery beyond
-    // dropping the log line.
-    try {
-        parent->log_error(std::string(msg));
-    } catch (...) {
-        // Intentionally suppressed.
-    }
-}
-
-http_response
-webserver_impl::run_internal_error_handler_safely(
-    detail::modded_request* mr,
-    std::string_view msg) const {
-    try {
-        return internal_error_page(mr, msg, /*force_our=*/false);
-    } catch (...) {
-        // §5.2 point 4: the user handler itself threw. Log generically
-        // and return an empty-body 500. No exception escapes from here.
-        log_dispatch_error("internal_error_handler threw; "
-                           "sending hardcoded empty-body 500");
-        return internal_error_page(mr, "", /*force_our=*/true);
-    }
-}
+// TASK-048: error-page helpers (not_found_page, method_not_allowed_page,
+// internal_error_page, log_dispatch_error, run_internal_error_handler_safely)
+// moved to detail/webserver_error_pages.cpp to keep this TU under the
+// 500-LOC ceiling (FILE_LOC_MAX in scripts/check-file-size.sh) once the
+// route_resolved and before_handler firing sites landed.
 
 void webserver_impl::invalidate_route_cache() {
     // Clear both the v1 and v2 caches. v1's cache is keyed on
@@ -349,12 +286,23 @@ bool webserver_impl::resolve_resource_for_request(detail::modded_request* mr,
 
     if (parent->single_resource) {
         hrm = registered_resources.begin()->second;
+        // single_resource: the one registered endpoint serves every URL.
+        // Capture its key for the route_resolved/before_handler hook ctx.
+        const auto& only = *registered_resources.begin();
+        mr->matched_path_template = only.first.get_url_complete();
+        mr->matched_is_prefix = only.first.is_family_url();
         return true;
     }
 
     auto fe = registered_resources_str.find(mr->standardized_url.c_str());
     if (fe != registered_resources_str.end()) {
         hrm = fe->second;
+        // Exact-match: the registration key equals the standardized URL.
+        // Copy into modded_request so the hook context's string_view is
+        // safe across hook calls even if a concurrent unregister_path
+        // erases the slot.
+        mr->matched_path_template = fe->first;
+        mr->matched_is_prefix = false;
         return true;
     }
 
@@ -365,6 +313,11 @@ bool webserver_impl::resolve_resource_for_request(detail::modded_request* mr,
     if (auto cached = lookup_route_cache(mr->standardized_url)) {
         hrm = cached->hrm;
         apply_extracted_params(mr, endpoint, cached->url_pars, cached->chunks);
+        // Cache layer dropped the matched endpoint at its API boundary;
+        // fall back to the requested URL as a stable approximation of
+        // the path_template (used by the route_resolved hook ctx only).
+        mr->matched_path_template = mr->standardized_url;
+        mr->matched_is_prefix = false;
         return true;
     }
 
@@ -375,6 +328,8 @@ bool webserver_impl::resolve_resource_for_request(detail::modded_request* mr,
     store_route_cache(mr->standardized_url, scan_hit->endpoint, hrm);
     apply_extracted_params(mr, endpoint, scan_hit->endpoint.get_url_pars(),
                            scan_hit->endpoint.get_chunk_positions());
+    mr->matched_path_template = scan_hit->endpoint.get_url_complete();
+    mr->matched_is_prefix = scan_hit->endpoint.is_family_url();
     return true;
 }
 
@@ -416,6 +371,31 @@ void webserver_impl::dispatch_resource_handler(detail::modded_request* mr,
         if (mr->pp != nullptr) {
             MHD_destroy_post_processor(mr->pp);
             mr->pp = nullptr;
+        }
+        // TASK-048: before_handler firing site. Fires AFTER the
+        // post-processor teardown (so a hook observing form data sees
+        // it already destroyed -- consistent with the existing dispatch
+        // ordering) and BEFORE both is_allowed and the resource
+        // invocation. A short-circuit response replaces both. The
+        // any_hooks_ gate preserves zero-cost-when-unused.
+        if (any_hooks_[static_cast<std::size_t>(hook_phase::before_handler)]
+                .load(std::memory_order_relaxed)) {
+            std::optional<route_descriptor> desc;
+            if (!mr->matched_path_template.empty()) {
+                desc = route_descriptor{
+                    /*path_template=*/std::string_view{mr->matched_path_template},
+                    /*methods=*/hrm->get_allowed_methods(),
+                    /*is_prefix=*/mr->matched_is_prefix};
+            }
+            before_handler_ctx ctx{
+                /*request=*/mr->dhr.get(),
+                /*matched=*/std::move(desc),
+                /*method=*/mr->method_enum,
+                /*resource=*/hrm.get()};
+            if (auto sc = fire_before_handler(ctx)) {
+                mr->response_.emplace(std::move(*sc));
+                return;
+            }
         }
         if (hrm->is_allowed(mr->method_enum)) {
             // TASK-036: pointer-to-member dispatch returns http_response

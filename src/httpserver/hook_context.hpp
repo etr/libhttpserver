@@ -167,9 +167,25 @@ struct route_resolved_ctx {
     const http_resource* resource = nullptr;  // nullable; nullptr for lambda routes
 };
 
+// before_handler: short-circuit-capable. Fires after route resolution
+// (the matched resource is known) and BEFORE both is_allowed and the
+// resource handler invocation. Returning hook_action::respond_with(r)
+// skips both checks and goes straight to response materialisation.
+//
+// TASK-048 extends the TASK-045 skeleton with `method` and `resource`:
+//   - `method` is the wire method already decoded by
+//     answer_to_connection (mr->method_enum). The 405-alias hook
+//     consults this against `resource->get_allowed_methods()` to
+//     decide whether to short-circuit with 405 + Allow header.
+//   - `resource` is the resolved http_resource pointer; nullptr for
+//     route misses (the hook fires only for hits — see §4.10) and
+//     for lambda-route registrations exposed without a stable
+//     http_resource*.
 struct before_handler_ctx {
     http_request* request = nullptr;
     std::optional<route_descriptor> matched{};
+    http_method method = http_method::count_;
+    const http_resource* resource = nullptr;
 };
 
 struct handler_exception_ctx {
