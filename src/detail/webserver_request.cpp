@@ -49,6 +49,7 @@
 #include <iostream>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <regex>
 #include <set>
 #include <shared_mutex>
@@ -142,58 +143,10 @@ bool webserver_impl::should_skip_auth(const std::string& path) const {
     return false;
 }
 
-MHD_Result webserver_impl::requests_answer_first_step(MHD_Connection* connection, struct detail::modded_request* mr) {
-    mr->dhr.reset(new http_request(connection, parent->unescaper));
-    mr->dhr->set_file_cleanup_callback(parent->file_cleanup_callback);
-
-    if (!mr->has_body) {
-        return MHD_YES;
-    }
-
-    mr->dhr->set_content_size_limit(parent->content_size_limit);
-    const char *encoding = MHD_lookup_connection_value(connection, MHD_HEADER_KIND, http_utils::http_header_content_type);
-
-    if (parent->post_process_enabled &&
-        (nullptr != encoding &&
-            ((0 == strncasecmp(http_utils::http_post_encoding_form_urlencoded, encoding, strlen(http_utils::http_post_encoding_form_urlencoded))) ||
-             (0 == strncasecmp(http_utils::http_post_encoding_multipart_formdata, encoding, strlen(http_utils::http_post_encoding_multipart_formdata)))))) {
-        const size_t post_memory_limit(32 * 1024);  // Same as #MHD_POOL_SIZE_DEFAULT
-        mr->pp = MHD_create_post_processor(connection, post_memory_limit, &webserver_impl::post_iterator, mr);
-    } else {
-        mr->pp = nullptr;
-    }
-    return MHD_YES;
-}
-
-MHD_Result webserver_impl::requests_answer_second_step(MHD_Connection* connection, const char* method,
-        const char* version, const char* upload_data,
-        size_t* upload_data_size, struct detail::modded_request* mr) {
-    if (0 == *upload_data_size) return complete_request(connection, mr, version, method);
-
-    if (mr->has_body) {
-#ifdef DEBUG
-        std::cout << "Writing content: " << std::string(upload_data, *upload_data_size) << std::endl;
-#endif  // DEBUG
-        // The post iterator is only created from the libmicrohttpd for content of type
-        // multipart/form-data and application/x-www-form-urlencoded
-        // all other content (which is indicated by mr-pp == nullptr)
-        // has to be put to the content even if put_processed_data_to_content is set to false
-        if (mr->pp == nullptr || parent->put_processed_data_to_content) {
-            mr->dhr->grow_content(upload_data, *upload_data_size);
-        }
-
-        if (mr->pp != nullptr) {
-            mr->ws = parent;
-            MHD_post_process(mr->pp, upload_data, *upload_data_size);
-            if (mr->upload_ostrm != nullptr && mr->upload_ostrm->is_open()) {
-                mr->upload_ostrm->close();
-            }
-        }
-    }
-
-    *upload_data_size = 0;
-    return MHD_YES;
-}
+// TASK-047: requests_answer_first_step and requests_answer_second_step
+// moved to detail/webserver_body_pipeline.cpp to keep this TU under the
+// 500-LOC ceiling (FILE_LOC_MAX in scripts/check-file-size.sh) once the
+// request_received and body_chunk hook firing sites landed.
 
 // TASK-013: dispatch helpers replacing the v1 `get_raw_response`,
 // `decorate_response`, and `enqueue_response` virtuals on http_response.
@@ -379,6 +332,13 @@ MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection,
                                            struct detail::modded_request* mr) {
     if (auto ws_result = try_handle_websocket_upgrade(connection, mr)) {
         return *ws_result;
+    }
+
+    // TASK-047: a pre-handler short-circuit hook (request_received or
+    // body_chunk) already populated mr->response_. Skip route lookup,
+    // auth, and handler dispatch -- go straight to the response queue.
+    if (mr->skip_handler) {
+        return materialize_and_queue_response(connection, mr);
     }
 
     // TASK-023: hold a shared_ptr copy across dispatch. If a concurrent

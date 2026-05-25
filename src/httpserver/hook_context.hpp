@@ -122,11 +122,36 @@ struct accept_ctx {
     std::optional<std::string_view> reason{};
 };
 
+// request_received: fires after the http_request is fully populated
+// from MHD's headers and BEFORE any body bytes are read. The request
+// pointer is mutable so a hook may adjust per-request state (e.g.
+// content-size limit) before the upload starts. Short-circuit:
+// returning hook_action::respond_with(r) aborts the upload -- the body
+// is never read and the resource handler is never invoked.
 struct request_received_ctx {
     http_request* request = nullptr;          // mutable: hook may set context
     std::chrono::steady_clock::time_point received_at{};
 };
 
+// body_chunk: fires once per chunk MHD delivers to the upload
+// callback, BEFORE the bytes are appended to the request body or fed
+// to any in-flight post-processor.
+//
+// IMPORTANT: this phase is invoked from arbitrary MHD worker threads
+// at arbitrary granularity -- on slow networks chunks may be a single
+// byte. Hooks MUST be cheap (no blocking I/O, no per-chunk heap
+// allocation in the hot path) -- a slow hook back-pressures the
+// connection's upload. The `chunk` span aliases MHD-owned memory and
+// is only valid for the duration of the hook call; copy into owned
+// storage if it must outlive this firing. `offset` is the number of
+// body bytes already buffered (so the first firing has offset==0,
+// the next has offset==chunk0.size(), etc.).
+//
+// Short-circuit: returning hook_action::respond_with(r) aborts the
+// upload at the next MHD callback and the resource handler is never
+// invoked. Any in-flight post-processor is destroyed and its buffer
+// freed at the short-circuit point (so registered handlers cannot
+// observe a half-populated form).
 struct body_chunk_ctx {
     http_request* request = nullptr;
     std::span<const std::byte> chunk{};

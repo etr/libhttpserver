@@ -30,11 +30,15 @@
 #include <cstdio>
 #include <exception>
 #include <mutex>
+#include <optional>
 #include <shared_mutex>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
+
+#include "httpserver/hook_action.hpp"
+#include "httpserver/http_response.hpp"
 
 #include "httpserver/hook_context.hpp"
 #include "httpserver/detail/webserver_impl.hpp"
@@ -290,6 +294,70 @@ void detail::webserver_impl::fire_accept_decision(
 void detail::webserver_impl::fire_connection_closed(
     const ::httpserver::connection_close_ctx& ctx) noexcept {
     fire_hooks_for_phase(this, hooks_connection_closed_, ctx, "connection_closed");
+}
+
+// ---- fire_* (TASK-047) ---------------------------------------------------
+//
+// Short-circuit-capable firing helpers. Mirrors fire_hooks_for_phase but:
+//   - the entry's std::function returns hook_action,
+//   - the ctx is mutable (Ctx&, not const Ctx&),
+//   - on the first non-pass hook we abandon the chain and return the
+//     extracted http_response.
+//
+// A throwing hook is caught + logged and treated as if it had returned
+// hook_action::pass() -- same DR-009 §5.2 routing as the void variant.
+template <typename Ctx>
+static std::optional<::httpserver::http_response>
+fire_short_circuit_hooks_for_phase(
+    detail::webserver_impl* impl,
+    std::vector<detail::webserver_impl::phase_entry<
+        ::httpserver::hook_action(Ctx&)>>& hook_vec,
+    Ctx& ctx,
+    std::string_view phase_name) {
+    try {
+        std::vector<detail::webserver_impl::phase_entry<
+            ::httpserver::hook_action(Ctx&)>> snapshot;
+        snapshot.reserve(kHookSnapshotReserve);
+        {
+            std::shared_lock lock(impl->hook_table_mutex_);
+            snapshot = hook_vec;
+        }
+        for (auto& entry : snapshot) {
+            try {
+                auto action = entry.fn(ctx);
+                if (!action.is_pass()) {
+                    return std::move(action).take_response();
+                }
+            } catch (const std::exception& e) {
+                impl->log_dispatch_error(
+                    std::string("hook[") + std::string(phase_name) +
+                    "] threw: " + e.what());
+            } catch (...) {
+                impl->log_dispatch_error(
+                    std::string("hook[") + std::string(phase_name) +
+                    "] threw unknown exception");
+            }
+        }
+    } catch (...) {
+        impl->log_dispatch_error(
+            std::string("fire_short_circuit_hooks_for_phase[") +
+            std::string(phase_name) + "]: snapshot copy failed");
+    }
+    return std::nullopt;
+}
+
+std::optional<::httpserver::http_response>
+detail::webserver_impl::fire_request_received(
+    ::httpserver::request_received_ctx& ctx) noexcept {
+    return fire_short_circuit_hooks_for_phase(
+        this, hooks_request_received_, ctx, "request_received");
+}
+
+std::optional<::httpserver::http_response>
+detail::webserver_impl::fire_body_chunk(
+    ::httpserver::body_chunk_ctx& ctx) noexcept {
+    return fire_short_circuit_hooks_for_phase(
+        this, hooks_body_chunk_, ctx, "body_chunk");
 }
 
 }  // namespace httpserver

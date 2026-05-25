@@ -19,7 +19,7 @@
 LDADD = $(top_builddir)/src/libhttpserver.la
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/
 METASOURCES = AUTO
-noinst_PROGRAMS = hello_world shared_state service custom_error allowing_disallowing_methods handlers hello_with_get_arg args_processing setting_headers custom_access_log minimal_https minimal_file_response minimal_deferred url_registration minimal_ip_ban banned_ip_log benchmark_select benchmark_threads benchmark_nodelay deferred_with_accumulator file_upload file_upload_with_callback empty_response_example iovec_response_example pipe_response_example daemon_info external_event_loop turbo_mode binary_buffer_response
+noinst_PROGRAMS = hello_world shared_state service custom_error allowing_disallowing_methods handlers hello_with_get_arg args_processing setting_headers custom_access_log minimal_https minimal_file_response minimal_deferred url_registration minimal_ip_ban banned_ip_log early_413 benchmark_select benchmark_threads benchmark_nodelay deferred_with_accumulator file_upload file_upload_with_callback empty_response_example iovec_response_example pipe_response_example daemon_info external_event_loop turbo_mode binary_buffer_response
 
 hello_world_SOURCES = hello_world.cpp
 shared_state_SOURCES = shared_state.cpp
@@ -38,6 +38,7 @@ deferred_with_accumulator_SOURCES = deferred_with_accumulator.cpp
 url_registration_SOURCES = url_registration.cpp
 minimal_ip_ban_SOURCES = minimal_ip_ban.cpp
 banned_ip_log_SOURCES = banned_ip_log.cpp
+early_413_SOURCES = early_413.cpp
 benchmark_select_SOURCES = benchmark_select.cpp
 benchmark_threads_SOURCES = benchmark_threads.cpp
 benchmark_nodelay_SOURCES = benchmark_nodelay.cpp

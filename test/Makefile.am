@@ -26,7 +26,7 @@ LDADD += -lcurl
 
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/ -DHTTPSERVER_COMPILATION
 METASOURCES = AUTO
-check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver create_webserver_explicit new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories http_response_move_sanitizer webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_const_getters http_request_tls_accessors webserver_register_smartptr webserver_register_path_prefix webserver_on_methods webserver_route route_table lookup_pipeline route_table_concurrency routing_regression threadsafety_stress webserver_features webserver_ws_unavailable webserver_register_ws_smartptr webserver_dauth_unavailable consumer_fixture header_hygiene_hooks hook_api_shape hooks_no_firing hooks_accept_ctx_shape hooks_connection_lifecycle hooks_accept_decision_banned hooks_accept_decision_throwing
+check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver create_webserver_explicit new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories http_response_move_sanitizer webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_const_getters http_request_tls_accessors webserver_register_smartptr webserver_register_path_prefix webserver_on_methods webserver_route route_table lookup_pipeline route_table_concurrency routing_regression threadsafety_stress webserver_features webserver_ws_unavailable webserver_register_ws_smartptr webserver_dauth_unavailable consumer_fixture header_hygiene_hooks hook_api_shape hooks_no_firing hooks_accept_ctx_shape hooks_connection_lifecycle hooks_accept_decision_banned hooks_accept_decision_throwing hooks_body_chunk_ctx_shape hooks_request_received_short_circuit hooks_body_chunk_observes_progress hooks_body_chunk_short_circuit_no_leak
 
 MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
 
@@ -357,6 +357,20 @@ hooks_accept_ctx_shape_SOURCES = unit/hooks_accept_ctx_shape_test.cpp
 hooks_connection_lifecycle_SOURCES = integ/hooks_connection_lifecycle.cpp
 hooks_accept_decision_banned_SOURCES = integ/hooks_accept_decision_banned.cpp
 hooks_accept_decision_throwing_SOURCES = integ/hooks_accept_decision_throwing.cpp
+
+# TASK-047 -- Pre-handler short-circuit hooks (request_received, body_chunk).
+# Adds:
+# - hooks_body_chunk_ctx_shape: compile-time pin for the request_received_ctx /
+#   body_chunk_ctx shapes (mutable request*, chunk span, offset, is_final).
+# - hooks_request_received_short_circuit: hook returns 413 on Content-Length > 1 MB,
+#   downstream body_chunk hook must NOT fire (closes #273).
+# - hooks_body_chunk_observes_progress: hook accumulates bytes; total equals body size.
+# - hooks_body_chunk_short_circuit_no_leak: ASan-verified that short-circuit drops
+#   the in-flight MHD_PostProcessor without leaking its buffer.
+hooks_body_chunk_ctx_shape_SOURCES = unit/hooks_body_chunk_ctx_shape_test.cpp
+hooks_request_received_short_circuit_SOURCES = integ/hooks_request_received_short_circuit.cpp
+hooks_body_chunk_observes_progress_SOURCES = integ/hooks_body_chunk_observes_progress.cpp
+hooks_body_chunk_short_circuit_no_leak_SOURCES = integ/hooks_body_chunk_short_circuit_no_leak.cpp
 
 noinst_HEADERS = littletest.hpp
 AM_CXXFLAGS += -Wall -fPIC -Wno-overloaded-virtual

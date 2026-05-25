@@ -25,7 +25,7 @@ lib_LTLIBRARIES = libhttpserver.la
 # builds. The WS-off branch in websocket_handler.cpp provides stub
 # definitions (every member throws feature_unavailable except is_valid()
 # which returns false).
-libhttpserver_la_SOURCES = string_utilities.cpp webserver.cpp http_utils.cpp file_info.cpp http_request.cpp http_request_auth.cpp http_response.cpp create_webserver.cpp create_test_request.cpp websocket_handler.cpp hook_handle.cpp detail/http_endpoint.cpp detail/body.cpp detail/ip_representation.cpp detail/http_request_impl.cpp detail/http_request_impl_tls.cpp detail/webserver_setup.cpp detail/webserver_register.cpp detail/webserver_routes.cpp detail/webserver_callbacks.cpp detail/webserver_callbacks_lifecycle.cpp detail/webserver_websocket.cpp detail/webserver_dispatch.cpp detail/webserver_request.cpp
+libhttpserver_la_SOURCES = string_utilities.cpp webserver.cpp http_utils.cpp file_info.cpp http_request.cpp http_request_auth.cpp http_response.cpp create_webserver.cpp create_test_request.cpp websocket_handler.cpp hook_handle.cpp detail/http_endpoint.cpp detail/body.cpp detail/ip_representation.cpp detail/http_request_impl.cpp detail/http_request_impl_tls.cpp detail/webserver_setup.cpp detail/webserver_register.cpp detail/webserver_routes.cpp detail/webserver_callbacks.cpp detail/webserver_callbacks_lifecycle.cpp detail/webserver_websocket.cpp detail/webserver_dispatch.cpp detail/webserver_request.cpp detail/webserver_body_pipeline.cpp
 # noinst_HEADERS: shipped in the tarball but NEVER installed under $prefix/include.
 # Detail headers (httpserver/detail/*.hpp) live here so they cannot leak to
 # downstream consumers — the public surface comes in through <httpserver.hpp>.

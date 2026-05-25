@@ -70,6 +70,13 @@ struct modded_request {
     // requires.
     std::optional<http_response> response_;
     bool has_body = false;
+    // TASK-047: set by a pre-handler hook short-circuit (request_received
+    // or body_chunk returning hook_action::respond_with(...)). When true,
+    // finalize_answer skips resource resolution / auth / dispatch entirely
+    // and goes straight to materialize_and_queue_response on the
+    // pre-populated mr->response_. Defaults false; cleared only by the
+    // modded_request destructor.
+    bool skip_handler = false;
 
     std::string upload_key;
     std::string upload_filename;

@@ -101,6 +101,27 @@ void fire_accept_decision(
 void fire_connection_closed(
     const ::httpserver::connection_close_ctx& ctx) noexcept;
 
+// TASK-047 -- Pre-handler short-circuit hook firing helpers.
+//
+// These two phases differ from the TASK-046 trio in two ways:
+//   1. The callable returns hook_action (not void) -- a hook can
+//      respond_with(...) to short-circuit the chain. We surface the
+//      short-circuit response as std::optional<http_response>: engaged
+//      iff some hook short-circuited.
+//   2. The context is mutable (request_received_ctx&, body_chunk_ctx&),
+//      so a hook can mutate per-request state before the handler runs.
+//
+// Same snapshot-under-shared_lock pattern as TASK-046. Same exception
+// containment: a throwing hook is caught + logged via
+// log_dispatch_error and treated as pass(); the chain continues. Callers
+// MUST gate each call with the relaxed any_hooks_ short-circuit so
+// zero-cost-when-unused holds.
+[[nodiscard]] std::optional<::httpserver::http_response>
+fire_request_received(::httpserver::request_received_ctx& ctx) noexcept;
+
+[[nodiscard]] std::optional<::httpserver::http_response>
+fire_body_chunk(::httpserver::body_chunk_ctx& ctx) noexcept;
+
 // TASK-031: invoke the user-supplied internal_error_handler safely.
 // On success, returns the response it produced. If the user handler
 // itself throws, logs generically via log_dispatch_error and returns
