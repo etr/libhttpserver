@@ -27,8 +27,8 @@
 
 #include "httpserver/hook_handle.hpp"
 
-#include <cstdio>
 #include <exception>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <shared_mutex>
@@ -41,6 +41,7 @@
 #include "httpserver/http_response.hpp"
 
 #include "httpserver/hook_context.hpp"
+#include "httpserver/detail/resource_hook_table.hpp"
 #include "httpserver/detail/webserver_impl.hpp"
 
 namespace httpserver {
@@ -51,10 +52,12 @@ hook_handle::hook_handle(hook_handle&& other) noexcept
     : impl_(other.impl_),
       slot_id_(other.slot_id_),
       phase_(other.phase_),
-      armed_(other.armed_) {
+      armed_(other.armed_),
+      table_weak_(std::move(other.table_weak_)) {
     // Disarm the source so its destructor is a no-op.
     other.armed_ = false;
     other.impl_ = nullptr;
+    other.table_weak_.reset();
 }
 
 hook_handle& hook_handle::operator=(hook_handle&& other) noexcept {
@@ -67,8 +70,10 @@ hook_handle& hook_handle::operator=(hook_handle&& other) noexcept {
         slot_id_ = other.slot_id_;
         phase_ = other.phase_;
         armed_ = other.armed_;
+        table_weak_ = std::move(other.table_weak_);
         other.armed_ = false;
         other.impl_ = nullptr;
+        other.table_weak_.reset();
     }
     return *this;
 }
@@ -79,8 +84,36 @@ hook_handle::~hook_handle() {
     }
 }
 
+// TASK-051: drain a per-route registration. Called by hook_handle::remove
+// when impl_ == nullptr (handles produced by http_resource::add_hook).
+// Disarm BEFORE the table call mirrors the server-wide discipline in
+// hook_handle::remove. If the resource owning the table has been
+// destroyed, the weak_ptr is expired and this is a no-op (the action-item
+// contract: "if the resource is destroyed before the handle, remove() is
+// a no-op").
+static void remove_per_route(std::weak_ptr<detail::resource_hook_table>& weak,
+                             hook_phase phase,
+                             std::uint64_t slot_id) noexcept {
+    auto table = weak.lock();
+    weak.reset();
+    if (table) {
+        table->remove_slot(phase, slot_id);
+    }
+}
+
 void hook_handle::remove() noexcept {
-    if (!armed_ || impl_ == nullptr) {
+    if (!armed_) {
+        return;
+    }
+    // TASK-051: handles produced by http_resource::add_hook have
+    // impl_ == nullptr and carry a (possibly-expired) weak_ptr to
+    // the resource's hook table. Handles produced by webserver::add_hook
+    // have a non-null impl_ and a default-constructed (empty) weak_ptr.
+    if (impl_ == nullptr) {
+        const auto phase = phase_;
+        const auto id = slot_id_;
+        armed_ = false;
+        remove_per_route(table_weak_, phase, id);
         return;
     }
     // Snapshot the source state and disarm BEFORE doing the erase, so
@@ -178,49 +211,18 @@ hook_handle hook_handle::detach() && noexcept {
     out.slot_id_ = slot_id_;
     out.phase_ = phase_;
     out.armed_ = false;     // detach() = "destructor will not touch impl"
+    out.table_weak_ = table_weak_;
     // Disarm the source so its destructor is also a no-op.
     armed_ = false;
     impl_ = nullptr;
+    table_weak_.reset();
     return out;
 }
 
 // ---- peer_address::to_string ---------------------------------------------
-
-std::string peer_address::to_string() const {
-    // No <netinet/in.h> / inet_ntop here so we keep this TU free of
-    // backend-platform headers. The format is canonical-enough for
-    // log lines without dragging in the full POSIX socket surface.
-    // 46 is POSIX INET6_ADDRSTRLEN; we round up for snprintf's NUL.
-    char buf[64];
-    switch (fam) {
-    case family::ipv4:
-        std::snprintf(buf, sizeof(buf), "%u.%u.%u.%u",
-                      static_cast<unsigned>(bytes[0]),
-                      static_cast<unsigned>(bytes[1]),
-                      static_cast<unsigned>(bytes[2]),
-                      static_cast<unsigned>(bytes[3]));
-        return std::string{buf};
-    case family::ipv6: {
-        // Group as eight uint16_t big-endian words, colon-separated.
-        // Skip zero-compression for simplicity at TASK-045; TASK-046
-        // can refine when telemetry/log requirements firm up.
-        std::snprintf(buf, sizeof(buf),
-                      "%x:%x:%x:%x:%x:%x:%x:%x",
-                      (bytes[0] << 8)  | bytes[1],
-                      (bytes[2] << 8)  | bytes[3],
-                      (bytes[4] << 8)  | bytes[5],
-                      (bytes[6] << 8)  | bytes[7],
-                      (bytes[8] << 8)  | bytes[9],
-                      (bytes[10] << 8) | bytes[11],
-                      (bytes[12] << 8) | bytes[13],
-                      (bytes[14] << 8) | bytes[15]);
-        return std::string{buf};
-    }
-    case family::unspec:
-    default:
-        return std::string{};
-    }
-}
+//
+// Moved to src/peer_address.cpp in TASK-051. See the rationale comment
+// at the top of that file.
 
 // ---- fire_* (TASK-046) ---------------------------------------------------
 //

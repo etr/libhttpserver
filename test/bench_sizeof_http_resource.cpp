@@ -47,42 +47,45 @@ using httpserver::v1_baseline::V1_STD_MAP_STRING_BOOL_SIZEOF;
 // of the new `method_set` member that replaced it (rounded up to
 // alignment).
 //
-// Algebra:
+// Algebra (TASK-039 + TASK-051):
 //   reduction := V1_HTTP_RESOURCE_SIZEOF - sizeof(http_resource)
 // must satisfy
-//   reduction + sizeof(method_set) * 2 >= V1_STD_MAP_STRING_BOOL_SIZEOF
+//   reduction + sizeof(method_set) * 2 + sizeof(void*) * 2
+//        >= V1_STD_MAP_STRING_BOOL_SIZEOF
 //
-// The `sizeof(method_set) * 2` term captures both the new member's
-// own size and the worst-case alignment padding it forces (a 4-byte
-// method_set in a struct with an 8-byte vptr is padded to the next
-// pointer boundary, giving up to `sizeof(method_set)` of slack).
+// The `sizeof(method_set) * 2` term captures the new method_set member
+// and its alignment padding; `sizeof(void*) * 2` captures the
+// shared_ptr<detail::resource_hook_table> hook_table_ member added in
+// TASK-051 (PIMPL slot for per-route lifecycle hooks).
 //
 // Equivalently: `sizeof(http_resource) +
 // V1_STD_MAP_STRING_BOOL_SIZEOF <= V1_HTTP_RESOURCE_SIZEOF +
-// sizeof(method_set) * 2`.
+// sizeof(method_set) * 2 + sizeof(void*) * 2`.
 //
 // The V1_* constants are selected at compile time by the detected
 // C++ standard library (libc++ vs. libstdc++) in v1_constants.hpp,
 // so the assertion is correct on both macOS and Linux:
 //
-//   macOS / libc++  (v1=32, map=24, v2=16, method_set=4):
-//       `16 + 24 = 40 <= 32 + 8 = 40` (tight, passes).
+//   macOS / libc++  (v1=32, map=24, v2=32, method_set=4):
+//       `32 + 24 = 56 <= 32 + 8 + 16 = 56` (tight, passes).
 //
-//   Linux / libstdc++ (v1=56, map=48, v2=16, method_set=4):
-//       `16 + 48 = 64 <= 56 + 8 = 64` (tight, passes).
+//   Linux / libstdc++ (v1=56, map=48, v2=32, method_set=4):
+//       `32 + 48 = 80 <= 56 + 8 + 16 = 80` (tight, passes).
 //
 // If a future refactor reintroduces a per-resource heap container or
-// grows the bitmask storage, this assertion breaks at compile time.
+// grows the bitmask storage beyond what TASK-051's hook PIMPL needed,
+// this assertion breaks at compile time and the growth gets reviewed.
 static_assert(sizeof(http_resource) + V1_STD_MAP_STRING_BOOL_SIZEOF
-              <= V1_HTTP_RESOURCE_SIZEOF + sizeof(method_set) * 2,
-              "http_resource did not shrink by at least the empty-std::map "
-              "footprint after the method_set refactor (PRD-REQ-REQ-003 / "
-              "PRD §3.6)");
+              <= V1_HTTP_RESOURCE_SIZEOF + sizeof(method_set) * 2
+                  + sizeof(void*) * 2,
+              "http_resource grew beyond the documented PRD-REQ-REQ-003 / "
+              "TASK-051 envelope (method_set + per-route hook PIMPL slot)");
 
-// Belt-and-suspenders: regardless of v1 anchoring, v2.0 must be
-// strictly smaller than v1.
-static_assert(sizeof(http_resource) < V1_HTTP_RESOURCE_SIZEOF,
-              "http_resource did not shrink at all relative to v1");
+// Belt-and-suspenders: regardless of v1 anchoring, v2.0 must be no
+// larger than v1 + the documented hook PIMPL slot (one shared_ptr).
+static_assert(sizeof(http_resource) <=
+                  V1_HTTP_RESOURCE_SIZEOF + sizeof(void*) * 2,
+              "http_resource grew beyond v1 + TASK-051 hook PIMPL slot");
 
 int main() {
     return 0;

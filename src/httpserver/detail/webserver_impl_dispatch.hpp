@@ -207,6 +207,18 @@ void fire_response_sent_gated(modded_request* mr);
 void fire_request_completed_gated(modded_request* mr,
                                   enum MHD_RequestTerminationCode toe);
 
+// TASK-051: gated fire of before_handler, server-wide AND per-route,
+// with short-circuit detection. Returns true iff either chain
+// short-circuited (mr->response_ already populated; caller must go
+// straight to materialize_and_queue_response). False means both chains
+// passed (or both gates were closed) and dispatch should proceed.
+// Definition lives in src/detail/webserver_finalize.cpp alongside the
+// other gated-fire helpers. @p hrm is the resolved resource (non-null at
+// the call site in finalize_answer).
+bool fire_before_handler_gated(
+    modded_request* mr,
+    const std::shared_ptr<::httpserver::http_resource>& hrm);
+
 // TASK-031: invoke the user-supplied internal_error_handler safely.
 // On success, returns the response it produced. If the user handler
 // itself throws, logs generically via log_dispatch_error and returns
