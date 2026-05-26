@@ -76,6 +76,37 @@ namespace httpserver {
 
 namespace {
 
+// TASK-049: build the std::function stored in
+// webserver_impl::handler_exception_alias_ from a (non-null) user-supplied
+// internal_error_handler callable. Extracted from
+// install_default_alias_hooks_ to keep that function under the CCN bar.
+std::function<hook_action(const handler_exception_ctx&)>
+make_internal_error_alias_(internal_error_handler_t user_handler) {
+    return [user_handler = std::move(user_handler)](
+                   const handler_exception_ctx& ctx) -> hook_action {
+        if (ctx.request == nullptr) {
+            // Defensive: caller always passes a non-null request, but
+            // stay benign if a future call site changes that contract.
+            return hook_action::pass();
+        }
+        return hook_action::respond_with(
+            user_handler(*ctx.request, ctx.message));
+    };
+}
+
+// TASK-049: install the internal_error_handler alias into the dedicated
+// last-position slot on webserver_impl. Extracted from
+// install_default_alias_hooks_ so the added `if` does not push the host
+// function over the CCN bar. See webserver_impl::handler_exception_alias_
+// for the lifetime contract (write-once-at-construction).
+void install_internal_error_alias_(
+        detail::webserver_impl* impl,
+        internal_error_handler_t user_handler) {
+    if (user_handler == nullptr) return;
+    impl->handler_exception_alias_ =
+        make_internal_error_alias_(std::move(user_handler));
+}
+
 // Serialize an allowed-method set into the comma-separated value
 // expected by the HTTP `Allow:` header. Enum-declaration order:
 // GET, HEAD, POST, PUT, DELETE, CONNECT, OPTIONS, TRACE, PATCH.
@@ -204,6 +235,35 @@ void webserver::install_default_alias_hooks_() {
                 })))
             .detach();
     }
+
+    // ----------------------------------------------------------------
+    // internal_error_handler -> handler_exception alias slot (LAST position).
+    // [TASK-049]
+    //
+    // This is an alias. Calling internal_error_handler(fn) on the builder
+    // makes the user callable the LAST-position fallback in the
+    // handler_exception chain (DR-012 §4.10, PRD-HOOK-REQ-009).
+    //
+    // Unlike auth_handler / method_not_allowed_handler / not_found_handler
+    // (which install at the FIRST position via add_hook so they short-
+    // circuit before user hooks), the internal_error_handler alias must
+    // fire LAST so user-added handler_exception hooks have a chance to
+    // recover first. We achieve this by storing the alias in the
+    // dedicated webserver_impl::handler_exception_alias_ slot rather than
+    // push_back-ing into the hooks_handler_exception_ vector. The fire
+    // site (fire_handler_exception in src/hook_handle.cpp) iterates the
+    // user vector first and only then invokes the alias slot.
+    //
+    // The alias body invokes the user-supplied callable with the
+    // originating exception's message and returns
+    // hook_action::respond_with(response). If the user callable itself
+    // throws, fire_handler_exception's catch arm absorbs it and returns
+    // nullopt; the caller in dispatch_resource_handler then emits the
+    // hardcoded empty-body 500 DIRECTLY without re-invoking the user
+    // callable (it has already been seen to throw on this request --
+    // calling it a second time would observably invoke the user code
+    // twice for one logical exception). See webserver_dispatch.cpp.
+    install_internal_error_alias_(impl_.get(), internal_error_handler);
 }
 
 }  // namespace httpserver

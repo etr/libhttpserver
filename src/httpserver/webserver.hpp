@@ -140,10 +140,12 @@ namespace httpserver {
  *      other `std::exception`.
  *   6. The `log_error` callback may be invoked concurrently from multiple
  *      MHD worker threads; user implementations MUST be thread-safe.
+ *   7. Hook layering (DR-012 §4.10):
+ *      @ref hook_phase::handler_exception hooks fire BEFORE this alias;
+ *      throwing hooks are caught and the chain continues; (4) fires
+ *      without re-invoking the alias on full chain failure.
  *
- * The contract is the single source of truth for dispatch-time exception
- * handling; resource implementations are encouraged to throw rather than
- * synthesise an http_response with a 500 status.
+ * Resources are encouraged to throw rather than synthesise 500s.
 **/
 class webserver {
  public:
