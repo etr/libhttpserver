@@ -14,8 +14,8 @@
 | `before_handler` | `webserver.cpp:dispatch_resource_handler` — start | **yes** | yes |
 | `handler_exception` | `webserver.cpp:dispatch_resource_handler` — each catch arm | **yes** (maps exception to response) | yes |
 | `after_handler` | between handler return and `materialize_and_queue_response` | **yes** (replaces response) | yes |
-| `response_sent` | `webserver.cpp:materialize_and_queue_response` — post `MHD_queue_response` | no | yes |
-| `request_completed` | `webserver.cpp:request_completed` — NOTIFY_COMPLETED | no | yes |
+| `response_sent` | `webserver_request.cpp:materialize_and_queue_response` — post `MHD_queue_response` | no | yes |
+| `request_completed` | `webserver_callbacks.cpp:request_completed` — NOTIFY_COMPLETED | no | yes |
 | `connection_closed` | `webserver.cpp:connection_notify` — NOTIFY_CLOSED | no | no |
 
 **Implementation.** Each phase has its own `std::vector<std::function<...>>` in `webserver_impl`, guarded by a single `std::shared_mutex hook_table_mutex_`. A per-phase `std::atomic<bool> any_hooks_[hook_phase::count_]` flag short-circuits the dispatch site to a relaxed atomic load and a compare-with-zero when no subscribers exist — the only hook-related cost on the hot request path for a server with zero hooks registered.

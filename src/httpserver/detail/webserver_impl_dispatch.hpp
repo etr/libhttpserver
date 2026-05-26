@@ -175,6 +175,38 @@ fire_before_handler(::httpserver::before_handler_ctx& ctx) noexcept;
 fire_handler_exception(
     const ::httpserver::handler_exception_ctx& ctx) noexcept;
 
+// TASK-050 -- after_handler / response_sent / request_completed firing
+// helpers.
+//
+// after_handler is short-circuit-capable: a hook returning
+// hook_action::respond_with(r2) REPLACES the in-flight response. Same
+// thread_local snapshot pattern as the other short-circuit phases; same
+// exception containment via log_dispatch_error.
+//
+// response_sent and request_completed are observation-only (void return,
+// const ctx). response_sent has an alias-slot tail (log_access_alias_)
+// invoked AFTER the user vector, exactly like the TASK-049
+// handler_exception alias.
+//
+// All three are noexcept. Snapshot-copy failure is logged and degraded
+// to "as if no hooks were registered".
+[[nodiscard]] std::optional<::httpserver::http_response>
+fire_after_handler(::httpserver::after_handler_ctx& ctx) noexcept;
+
+void fire_response_sent(
+    const ::httpserver::response_sent_ctx& ctx) noexcept;
+
+void fire_request_completed(
+    const ::httpserver::request_completed_ctx& ctx) noexcept;
+
+// TASK-050: gated-fire helpers, members so the http_response friendship
+// applies (response_sent_ctx::bytes_queued reads response.body_->size()).
+// Definitions live in src/detail/webserver_finalize.cpp.
+void fire_after_handler_gated(modded_request* mr);
+void fire_response_sent_gated(modded_request* mr);
+void fire_request_completed_gated(modded_request* mr,
+                                  enum MHD_RequestTerminationCode toe);
+
 // TASK-031: invoke the user-supplied internal_error_handler safely.
 // On success, returns the response it produced. If the user handler
 // itself throws, logs generically via log_dispatch_error and returns
@@ -406,7 +438,8 @@ static MHD_Result policy_callback(void* cls, const struct sockaddr* addr,
 static void error_log(void* cls, const char* fmt, va_list ap);
 static void* uri_log(void* cls, const char* uri,
                      struct MHD_Connection* con);
-static void access_log(::httpserver::webserver* cls, const std::string& uri);
+// TASK-050: webserver_impl::access_log removed. log_access is now a
+// response_sent hook alias (see src/detail/webserver_aliases.cpp).
 static size_t unescaper_func(void* cls, struct MHD_Connection* c, char* s);
 
 #ifdef HAVE_GNUTLS

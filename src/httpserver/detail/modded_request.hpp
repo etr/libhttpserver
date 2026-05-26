@@ -27,6 +27,7 @@
 
 #include <microhttpd.h>  // TASK-020: MHD_destroy_post_processor (no longer reachable transitively via http_request.hpp -> http_utils.hpp)
 
+#include <chrono>
 #include <string>
 #include <memory>
 #include <optional>
@@ -94,6 +95,15 @@ struct modded_request {
     std::string upload_key;
     std::string upload_filename;
     std::unique_ptr<std::ofstream> upload_ostrm;
+
+    // TASK-050: captured once on the first invocation of
+    // webserver_impl::answer_to_connection for this request (i.e., when
+    // mr->dhr is still null -- the "fresh request" branch). The
+    // response_sent and request_completed firing sites measure elapsed
+    // wall time from this anchor. Default-constructed value (epoch) is
+    // never read because both fire sites are unreachable until
+    // answer_to_connection has set this field.
+    std::chrono::steady_clock::time_point start_time{};
 
     modded_request() = default;
 

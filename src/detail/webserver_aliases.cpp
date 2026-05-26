@@ -62,6 +62,7 @@
 #include <string_view>
 #include <utility>
 
+#include "httpserver/create_webserver.hpp"
 #include "httpserver/hook_action.hpp"
 #include "httpserver/hook_context.hpp"
 #include "httpserver/hook_handle.hpp"
@@ -105,6 +106,44 @@ void install_internal_error_alias_(
     if (user_handler == nullptr) return;
     impl->handler_exception_alias_ =
         make_internal_error_alias_(std::move(user_handler));
+}
+
+// SECURITY (CWE-117): sanitize a string_view for use in an access-log line.
+// Replace any ASCII control character (< 0x20 or == 0x7F) with '-' to
+// prevent a client from injecting additional log lines via embedded newlines
+// or carriage-returns in the request path or method. Appends directly to
+// `out` rather than returning a heap-allocated copy, avoiding an extra
+// std::string allocation on every request.
+static void append_sanitized(std::string& out, std::string_view sv) {
+    for (unsigned char c : sv) {
+        out += (c < 0x20 || c == 0x7f) ? '-' : static_cast<char>(c);
+    }
+}
+
+// TASK-050: install the log_access alias into the dedicated response_sent
+// alias slot on webserver_impl. Extracted from install_default_alias_hooks_
+// for the same reason as install_internal_error_alias_: keeping the host
+// function under the project CCN gate. See webserver_impl::log_access_alias_
+// for the lifetime contract.
+void install_log_access_alias_(
+        detail::webserver_impl* impl,
+        log_access_ptr user_logger) {
+    if (user_logger == nullptr) return;
+    impl->log_access_alias_ =
+        [user_logger = std::move(user_logger)](
+                const response_sent_ctx& ctx) {
+        if (ctx.request == nullptr) return;
+        std::string line;
+        line.reserve(64);
+        // Append path and method with control-character sanitization
+        // (CWE-117). Append string_view directly to avoid intermediate
+        // heap allocations (performance: saves two alloc/dealloc pairs
+        // per request vs. the previous std::string(sv) approach).
+        append_sanitized(line, ctx.request->get_path());
+        line += " METHOD: ";
+        append_sanitized(line, ctx.request->get_method());
+        user_logger(line);
+    };
 }
 
 // Serialize an allowed-method set into the comma-separated value
@@ -264,6 +303,31 @@ void webserver::install_default_alias_hooks_() {
     // calling it a second time would observably invoke the user code
     // twice for one logical exception). See webserver_dispatch.cpp.
     install_internal_error_alias_(impl_.get(), internal_error_handler);
+
+    // ----------------------------------------------------------------
+    // log_access -> response_sent alias slot. [TASK-050]
+    //
+    // This is an alias. Calling log_access(fn) on the create_webserver
+    // builder wires `fn` into the dedicated single-slot member
+    // webserver_impl::log_access_alias_, which fire_response_sent
+    // invokes AFTER the user-added response_sent vector. Users who want
+    // the structured ctx (status, bytes_queued, elapsed -- the data
+    // issues #281 and #69 asked for) should call
+    // add_hook(hook_phase::response_sent, ...) directly.
+    //
+    // Format compatibility: the pre-TASK-050 access log was emitted by
+    // webserver_impl::access_log(parent, complete_uri + " METHOD: " +
+    // method) at request-arrival time from inside answer_to_connection.
+    // The existing log_access_callback integ test (test/integ/basic.cpp)
+    // asserts the substrings "/logtest" AND "METHOD" appear in the
+    // logged line. To keep that test passing without modification we
+    // emit a line that contains both, formatted as:
+    //     <path> METHOD: <method>
+    // using ctx.request->get_path() and ctx.request->get_method(). The
+    // alias body is null-safe (early-returns if ctx.request is null),
+    // which is structurally impossible at the fire site but the guard
+    // costs nothing and documents the contract.
+    install_log_access_alias_(impl_.get(), log_access);
 }
 
 }  // namespace httpserver

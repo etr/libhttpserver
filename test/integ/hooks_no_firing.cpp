@@ -170,9 +170,12 @@ LT_BEGIN_AUTO_TEST(hooks_no_firing_suite, all_phases_silent_across_round_trip)
     // handler_exception, but it only fires when the handler throws --
     // the successful GET below does not exercise it -- so the silence
     // assertion would still hold for it. We exclude it from
-    // not_yet_wired anyway to reflect the implementation contract:
-    // three phases remain un-wired by TASK-050..051; only they must
-    // observe silence on a happy-path GET.
+    // not_yet_wired anyway to reflect the implementation contract.
+    // TASK-050 wires after_handler, response_sent, and request_completed
+    // -- all three fire on the happy-path GET below, so they too are now
+    // excluded from not_yet_wired. The predicate now returns false for
+    // every phase that TASK-046..051 has put on the wire; only the
+    // residual unwired phases (if any) would still pin silence.
     auto not_yet_wired = [](hook_phase p) {
         switch (p) {
         case hook_phase::connection_opened:
@@ -183,6 +186,9 @@ LT_BEGIN_AUTO_TEST(hooks_no_firing_suite, all_phases_silent_across_round_trip)
         case hook_phase::route_resolved:
         case hook_phase::before_handler:
         case hook_phase::handler_exception:
+        case hook_phase::after_handler:
+        case hook_phase::response_sent:
+        case hook_phase::request_completed:
             return false;
         default:
             return true;

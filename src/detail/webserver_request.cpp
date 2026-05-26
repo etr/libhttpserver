@@ -44,6 +44,7 @@
 #include <stdlib.h>
 #include <strings.h>
 #include <algorithm>
+#include <chrono>
 #include <cstring>
 #include <iosfwd>
 #include <iostream>
@@ -227,91 +228,11 @@ struct MHD_Response* webserver_impl::get_raw_response_with_fallback(detail::modd
     }
 }
 
-#ifdef HAVE_WEBSOCKET
-std::optional<const char*>
-webserver_impl::validate_websocket_handshake(MHD_Connection* connection) {
-    const char* connection_header = MHD_lookup_connection_value(connection, MHD_HEADER_KIND,
-                                                                MHD_HTTP_HEADER_CONNECTION);
-    const char* ws_version = MHD_lookup_connection_value(connection, MHD_HEADER_KIND,
-                                                         "Sec-WebSocket-Version");
-    const char* ws_key = MHD_lookup_connection_value(connection, MHD_HEADER_KIND,
-                                                     "Sec-WebSocket-Key");
-    if (connection_header == nullptr || strcasestr(connection_header, "Upgrade") == nullptr) {
-        return std::nullopt;
-    }
-    if (ws_version == nullptr || strcmp(ws_version, "13") != 0) {
-        return std::nullopt;
-    }
-    if (ws_key == nullptr || ws_key[0] == '\0') {
-        return std::nullopt;
-    }
-    return ws_key;
-}
+// TASK-050: validate_websocket_handshake / complete_websocket_upgrade /
+// try_handle_websocket_upgrade moved to src/detail/webserver_websocket.cpp
+// to keep this TU under the FILE_LOC_MAX gate after adding the
+// after_handler / response_sent firing sites.
 
-std::optional<MHD_Result>
-webserver_impl::complete_websocket_upgrade(MHD_Connection* connection,
-                                           detail::modded_request* mr,
-                                           const char* ws_key) {
-    std::shared_lock lock(registered_resources_mutex);
-    auto ws_it = registered_ws_handlers.find(mr->standardized_url);
-    if (ws_it == registered_ws_handlers.end()) {
-        return std::nullopt;
-    }
-    // TASK-035: take a shared_ptr copy under the shared lock so the
-    // handler is kept alive across the MHD upgrade callback even if
-    // unregister_ws_resource erases the slot mid-upgrade.
-    std::shared_ptr<websocket_handler> handler_sp = ws_it->second;
-    lock.unlock();
-
-    auto* data = new ws_upgrade_data{this, std::move(handler_sp)};
-    struct MHD_Response* response = MHD_create_response_for_upgrade(
-        &webserver_impl::upgrade_handler, data);
-    if (response == nullptr) {
-        delete data;
-        return std::nullopt;
-    }
-    MHD_add_response_header(response, MHD_HTTP_HEADER_UPGRADE, "websocket");
-
-    // Compute Sec-WebSocket-Accept from client's key (RFC 6455 §4.2.2).
-    // Base64 of SHA-1 = 28 chars + null.
-    char accept_header[29];
-    if (MHD_websocket_create_accept_header(ws_key, accept_header) == MHD_WEBSOCKET_STATUS_OK) {
-        MHD_add_response_header(response, "Sec-WebSocket-Accept", accept_header);
-    }
-    MHD_Result to_ret = (MHD_Result) MHD_queue_response(connection,
-                                                       MHD_HTTP_SWITCHING_PROTOCOLS,
-                                                       response);
-    MHD_destroy_response(response);
-    return to_ret;
-}
-#endif  // HAVE_WEBSOCKET
-
-std::optional<MHD_Result>
-webserver_impl::try_handle_websocket_upgrade(MHD_Connection* connection,
-                                             detail::modded_request* mr) {
-#ifdef HAVE_WEBSOCKET
-    const char* upgrade_header = MHD_lookup_connection_value(connection, MHD_HEADER_KIND,
-                                                             MHD_HTTP_HEADER_UPGRADE);
-    if (upgrade_header == nullptr || strcasecmp(upgrade_header, "websocket") != 0) {
-        return std::nullopt;
-    }
-    auto ws_key = validate_websocket_handshake(connection);
-    if (!ws_key) {
-        // RFC 6455 §4.2.1: required handshake header missing or malformed.
-        struct MHD_Response* bad_response = MHD_create_response_from_buffer(0, nullptr,
-                                                                            MHD_RESPMEM_PERSISTENT);
-        MHD_Result ret = (MHD_Result) MHD_queue_response(connection, MHD_HTTP_BAD_REQUEST,
-                                                         bad_response);
-        MHD_destroy_response(bad_response);
-        return ret;
-    }
-    return complete_websocket_upgrade(connection, mr, *ws_key);
-#else
-    (void)connection;
-    (void)mr;
-    return std::nullopt;
-#endif  // HAVE_WEBSOCKET
-}
 MHD_Result webserver_impl::materialize_and_queue_response(MHD_Connection* connection,
                                                           detail::modded_request* mr) {
     struct MHD_Response* raw_response = get_raw_response_with_fallback(mr);
@@ -324,6 +245,14 @@ MHD_Result webserver_impl::materialize_and_queue_response(MHD_Connection* connec
     }
     decorate_mhd_response(raw_response, *mr->response_);
     int to_ret = MHD_queue_response(connection, mr->response_->get_status(), raw_response);
+    // TASK-050: fire response_sent AFTER MHD_queue_response (so the
+    // status/bytes ctx fields reflect what was actually queued) and
+    // BEFORE MHD_destroy_response (so ctx.response is backed by live
+    // storage). MHD copies the response data from raw_response during
+    // queue, so destroying the MHD_Response below does not affect the
+    // queued bytes -- only the http_response in mr->response_ matters
+    // for the hook ctx pointer.
+    fire_response_sent_gated(mr);
     MHD_destroy_response(raw_response);
     return (MHD_Result) to_ret;
 }
@@ -408,6 +337,17 @@ MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection,
         mr->response_.emplace(not_found_page(mr));
     }
 
+    // TASK-050: after_handler fires between handler return (or 404
+    // synthesis) and materialize_and_queue_response. Per §4.10 the
+    // phase is conceptually a "post-handler" phase, so the
+    // mr->skip_handler early-exit branch above bypasses it -- a
+    // pre-handler short-circuit means no handler ran. Whether to fire
+    // on the 404 path (synthesised not_found_page) is a documented
+    // design choice: we fire because the dispatch site has produced a
+    // response and the contract is "fires between response readiness
+    // and queue", and that gives users a uniform observation point.
+    fire_after_handler_gated(mr);
+
     return materialize_and_queue_response(connection, mr);
 }
 
@@ -482,12 +422,31 @@ MHD_Result webserver_impl::answer_to_connection(void* cls, MHD_Connection* conne
                    reinterpret_cast<char*>(&yes), sizeof(int));
     }
 
+    // TASK-050: anchor for response_sent.elapsed and
+    // request_completed.duration. Captured here -- the earliest moment
+    // for the request inside the dispatch path. uri_log runs earlier
+    // but is also invoked on non-HTTP traffic (#371); answer_to_connection
+    // is the first point where a real HTTP request is unambiguously
+    // in flight.
+    mr->start_time = std::chrono::steady_clock::now();
+    // TASK-050: hoist the parent-webserver back-pointer here (was set
+    // later in complete_request) so the request_completed firing site
+    // can reach impl_->any_hooks_ even on request_received short-circuit
+    // paths that may not reach complete_request.
+    mr->ws = impl->parent;
+
     std::string t_url = url;
     base_unescaper(&t_url, impl->parent->unescaper);
     mr->standardized_url = http_utils::standardize_url(t_url);
     mr->has_body = false;
 
-    webserver_impl::access_log(impl->parent, mr->complete_uri + " METHOD: " + method);
+    // TASK-050: log_access is now a response_sent alias (see
+    // src/detail/webserver_aliases.cpp). The pre-TASK-050 inline call
+    // here fired BEFORE the request was handled and had no access to
+    // status / bytes / timing -- exactly what issues #281 and #69
+    // complained about. The alias gives users the same per-request
+    // log line AFTER the response has been queued, with the full
+    // structured context available via add_hook(response_sent, ...).
     resolve_method_callback(method, mr);
 
     return impl->requests_answer_first_step(connection, mr);

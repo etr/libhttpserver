@@ -95,7 +95,23 @@ namespace detail {
 void webserver_impl::request_completed(void *cls, struct MHD_Connection *connection, void **con_cls, enum MHD_RequestTerminationCode toe) {
     // These parameters are passed to respect the MHD interface, but are not needed here.
     std::ignore = cls;
-    std::ignore = toe;
+
+    // TASK-050: fire request_completed BEFORE the modded_request is
+    // destroyed so the ctx pointers remain backed by live storage. The
+    // gate-and-fire helper reads any_hooks_[request_completed] and
+    // builds the ctx from mr->dhr, mr->response_, and the MHD
+    // termination code. The fire site is the very first thing this
+    // callback does, while mr is still untouched.
+    auto* mr = static_cast<detail::modded_request*>(*con_cls);
+    if (mr != nullptr) {
+        // mr->ws is the parent webserver -- set in answer_to_connection
+        // (hoisted there at TASK-050 time). For paths where
+        // answer_to_connection never ran (e.g., very early MHD failures),
+        // mr->ws may be null; skip the fire site in that degenerate case.
+        if (mr->ws != nullptr && mr->ws->impl_ != nullptr) {
+            mr->ws->impl_->fire_request_completed_gated(mr, toe);
+        }
+    }
 
     // (1) Destroy the modded_request first. This runs ~http_request,
     //     which calls the arena_deleter on the impl's unique_ptr (a
@@ -303,9 +319,9 @@ void webserver_impl::error_log(void* cls, const char* fmt, va_list ap) {
     if (dws->log_error != nullptr) dws->log_error(msg);
 }
 
-void webserver_impl::access_log(webserver* dws, const string& uri) {
-    if (dws->log_access != nullptr) dws->log_access(uri);
-}
+// TASK-050: webserver_impl::access_log removed. log_access is now a
+// response_sent hook alias installed in webserver_aliases.cpp; the v1
+// inline call site in answer_to_connection has been removed.
 
 size_t webserver_impl::unescaper_func(void * cls, struct MHD_Connection *c, char *s) {
     // Parameter needed to respect MHD interface, but not needed here.

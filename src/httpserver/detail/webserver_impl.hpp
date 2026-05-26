@@ -295,6 +295,22 @@ class webserver_impl {
         hooks_after_handler_;
     std::vector<phase_entry<void(const ::httpserver::response_sent_ctx&)>>
         hooks_response_sent_;
+    // TASK-050: log_access alias slot. Mirrors handler_exception_alias_
+    // (TASK-049): single-writer-at-construction, read on the dispatch hot
+    // path from fire_response_sent without a lock. webserver's ctor wires
+    // this slot from create_webserver().log_access(fn) if the user
+    // supplied a non-null callable.
+    //
+    // The slot fires AFTER user-added response_sent hooks so user hooks
+    // observe the response before the legacy access logger formats it.
+    //
+    // A future runtime setter that allows re-registration MUST take
+    // hook_table_mutex_ exclusively for the write, and the reader in
+    // fire_response_sent MUST take it shared. At v2.0 there is no runtime
+    // setter -- the slot is written exactly once at webserver construction
+    // before start() is called.
+    std::function<void(const ::httpserver::response_sent_ctx&)>
+        log_access_alias_;
     std::vector<phase_entry<void(const ::httpserver::request_completed_ctx&)>>
         hooks_request_completed_;
     std::vector<phase_entry<void(const ::httpserver::connection_close_ctx&)>>
