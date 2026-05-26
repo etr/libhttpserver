@@ -78,6 +78,19 @@ struct modded_request {
     // modded_request destructor.
     bool skip_handler = false;
 
+    // TASK-048: captured by resolve_resource_for_request when a route
+    // matched. The pair populates route_descriptor for both the
+    // route_resolved and before_handler firing sites. Lifetime is the
+    // request (i.e., the modded_request itself), so the string_view in
+    // the descriptor stays valid across hook calls even if a concurrent
+    // unregister_path erases the underlying registration.
+    //   - matched_path_template: owning copy of the matched endpoint's
+    //     url_complete. Empty when no match (404 path).
+    //   - matched_is_prefix: true for register_prefix / family-url
+    //     registrations; false for exact-path registrations.
+    std::string matched_path_template;
+    bool matched_is_prefix = false;
+
     std::string upload_key;
     std::string upload_filename;
     std::unique_ptr<std::ofstream> upload_ostrm;

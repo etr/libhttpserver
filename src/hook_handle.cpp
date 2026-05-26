@@ -245,15 +245,20 @@ constexpr std::size_t kHookSnapshotReserve = 8;
 // (e.g. std::bad_alloc). The function is not itself noexcept because the
 // callers are noexcept and will std::terminate on uncaught throws; the
 // inner catches ensure no exception can propagate.
+//
+// TASK-048 perf: the snapshot vector is thread_local so the per-template-
+// instantiation per-thread buffer is reused across calls — no heap
+// allocation after the first request on each thread (warm path).
 template <typename Ctx>
 static void fire_hooks_for_phase(
     detail::webserver_impl* impl,
     std::vector<detail::webserver_impl::phase_entry<void(const Ctx&)>>& hook_vec,
     const Ctx& ctx,
     std::string_view phase_name) {
+    using EntryVec = std::vector<detail::webserver_impl::phase_entry<void(const Ctx&)>>;
     try {
-        std::vector<detail::webserver_impl::phase_entry<void(const Ctx&)>> snapshot;
-        snapshot.reserve(kHookSnapshotReserve);
+        thread_local EntryVec snapshot;
+        snapshot.clear();
         {
             std::shared_lock lock(impl->hook_table_mutex_);
             snapshot = hook_vec;
@@ -306,6 +311,9 @@ void detail::webserver_impl::fire_connection_closed(
 //
 // A throwing hook is caught + logged and treated as if it had returned
 // hook_action::pass() -- same DR-009 §5.2 routing as the void variant.
+//
+// TASK-048 perf: thread_local snapshot buffer (same rationale as
+// fire_hooks_for_phase above).
 template <typename Ctx>
 static std::optional<::httpserver::http_response>
 fire_short_circuit_hooks_for_phase(
@@ -314,10 +322,11 @@ fire_short_circuit_hooks_for_phase(
         ::httpserver::hook_action(Ctx&)>>& hook_vec,
     Ctx& ctx,
     std::string_view phase_name) {
+    using EntryVec = std::vector<detail::webserver_impl::phase_entry<
+        ::httpserver::hook_action(Ctx&)>>;
     try {
-        std::vector<detail::webserver_impl::phase_entry<
-            ::httpserver::hook_action(Ctx&)>> snapshot;
-        snapshot.reserve(kHookSnapshotReserve);
+        thread_local EntryVec snapshot;
+        snapshot.clear();
         {
             std::shared_lock lock(impl->hook_table_mutex_);
             snapshot = hook_vec;
@@ -358,6 +367,20 @@ detail::webserver_impl::fire_body_chunk(
     ::httpserver::body_chunk_ctx& ctx) noexcept {
     return fire_short_circuit_hooks_for_phase(
         this, hooks_body_chunk_, ctx, "body_chunk");
+}
+
+// ---- fire_* (TASK-048) ---------------------------------------------------
+
+void detail::webserver_impl::fire_route_resolved(
+    const ::httpserver::route_resolved_ctx& ctx) noexcept {
+    fire_hooks_for_phase(this, hooks_route_resolved_, ctx, "route_resolved");
+}
+
+std::optional<::httpserver::http_response>
+detail::webserver_impl::fire_before_handler(
+    ::httpserver::before_handler_ctx& ctx) noexcept {
+    return fire_short_circuit_hooks_for_phase(
+        this, hooks_before_handler_, ctx, "before_handler");
 }
 
 }  // namespace httpserver

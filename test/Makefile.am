@@ -26,7 +26,7 @@ LDADD += -lcurl
 
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/ -DHTTPSERVER_COMPILATION
 METASOURCES = AUTO
-check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver create_webserver_explicit new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories http_response_move_sanitizer webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_const_getters http_request_tls_accessors webserver_register_smartptr webserver_register_path_prefix webserver_on_methods webserver_route route_table lookup_pipeline route_table_concurrency routing_regression threadsafety_stress webserver_features webserver_ws_unavailable webserver_register_ws_smartptr webserver_dauth_unavailable consumer_fixture header_hygiene_hooks hook_api_shape hooks_no_firing hooks_accept_ctx_shape hooks_connection_lifecycle hooks_accept_decision_banned hooks_accept_decision_throwing hooks_body_chunk_ctx_shape hooks_request_received_short_circuit hooks_body_chunk_observes_progress hooks_body_chunk_short_circuit_no_leak
+check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver create_webserver_explicit new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories http_response_move_sanitizer webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_const_getters http_request_tls_accessors webserver_register_smartptr webserver_register_path_prefix webserver_on_methods webserver_route route_table lookup_pipeline route_table_concurrency routing_regression threadsafety_stress webserver_features webserver_ws_unavailable webserver_register_ws_smartptr webserver_dauth_unavailable consumer_fixture header_hygiene_hooks hook_api_shape hooks_no_firing hooks_accept_ctx_shape hooks_connection_lifecycle hooks_accept_decision_banned hooks_accept_decision_throwing hooks_body_chunk_ctx_shape hooks_request_received_short_circuit hooks_body_chunk_observes_progress hooks_body_chunk_short_circuit_no_leak hooks_before_handler_ctx_shape hooks_route_resolved_miss_and_hit hooks_before_handler_short_circuit hooks_alias_count hooks_alias_functional
 
 MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
 
@@ -371,6 +371,27 @@ hooks_body_chunk_ctx_shape_SOURCES = unit/hooks_body_chunk_ctx_shape_test.cpp
 hooks_request_received_short_circuit_SOURCES = integ/hooks_request_received_short_circuit.cpp
 hooks_body_chunk_observes_progress_SOURCES = integ/hooks_body_chunk_observes_progress.cpp
 hooks_body_chunk_short_circuit_no_leak_SOURCES = integ/hooks_body_chunk_short_circuit_no_leak.cpp
+
+# TASK-048 -- route_resolved + before_handler firing sites and the three
+# v1-derived single-slot setters (auth_handler, not_found_handler,
+# method_not_allowed_handler) re-described as hook-bus aliases. Adds:
+# - hooks_before_handler_ctx_shape: compile-time pin for
+#   before_handler_ctx (method + resource fields) and route_resolved_ctx.
+# - hooks_route_resolved_miss_and_hit: two route_resolved hooks
+#   observe both hit (matched.has_value()) and miss (matched==nullopt).
+# - hooks_before_handler_short_circuit: before_handler hook returning
+#   respond_with(403) skips both is_allowed check and resource handler.
+# - hooks_alias_count: registering auth_handler(fn) installs +1 hook on
+#   before_handler; not_found_handler installs +1 on route_resolved.
+hooks_before_handler_ctx_shape_SOURCES = unit/hooks_before_handler_ctx_shape_test.cpp
+hooks_route_resolved_miss_and_hit_SOURCES = integ/hooks_route_resolved_miss_and_hit.cpp
+hooks_before_handler_short_circuit_SOURCES = integ/hooks_before_handler_short_circuit.cpp
+hooks_alias_count_SOURCES = unit/hooks_alias_count_test.cpp
+# hooks_alias_functional: TASK-048 finding fix. Pins that the
+# method_not_allowed_handler alias is a functional before_handler hook
+# that short-circuits the chain (not a no-op stub): a user hook registered
+# after the alias does NOT fire for method-not-allowed requests.
+hooks_alias_functional_SOURCES = integ/hooks_alias_functional_test.cpp
 
 noinst_HEADERS = littletest.hpp
 AM_CXXFLAGS += -Wall -fPIC -Wno-overloaded-virtual

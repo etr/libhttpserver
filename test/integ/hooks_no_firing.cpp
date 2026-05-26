@@ -161,12 +161,13 @@ LT_BEGIN_AUTO_TEST(hooks_no_firing_suite, all_phases_silent_across_round_trip)
 
     ws.stop();
 
-    // TASK-046 carved out the three lifecycle phases. TASK-047 adds
+    // TASK-046 carved out the three lifecycle phases. TASK-047 added
     // request_received and body_chunk (the GET round-trip below fires
     // request_received for every request; body_chunk does not fire on
     // a GET, but we exclude it for symmetry with the wiring contract).
-    // Six phases remain un-wired by TASK-048..051; only they must observe
-    // silence here.
+    // TASK-048 added route_resolved (fires on every request) and
+    // before_handler (fires on every request hit). Four phases remain
+    // un-wired by TASK-049..051; only they must observe silence here.
     auto not_yet_wired = [](hook_phase p) {
         switch (p) {
         case hook_phase::connection_opened:
@@ -174,6 +175,8 @@ LT_BEGIN_AUTO_TEST(hooks_no_firing_suite, all_phases_silent_across_round_trip)
         case hook_phase::connection_closed:
         case hook_phase::request_received:
         case hook_phase::body_chunk:
+        case hook_phase::route_resolved:
+        case hook_phase::before_handler:
             return false;
         default:
             return true;

@@ -266,6 +266,11 @@ webserver::webserver(const create_webserver& params):
 #endif
         ignore_sigpipe();
         impl_->bind_socket = params._bind_socket;
+        // TASK-048: register the three v1 setter aliases as hooks
+        // (route_resolved for not_found_handler; before_handler for
+        // method_not_allowed_handler and auth_handler). Conditional on
+        // each setter being non-null so zero-cost-when-unused holds.
+        install_default_alias_hooks_();
 }
 
 // TASK-034: build-time feature reporting (PRD-FLG-REQ-003). The body

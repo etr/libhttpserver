@@ -122,6 +122,30 @@ fire_request_received(::httpserver::request_received_ctx& ctx) noexcept;
 [[nodiscard]] std::optional<::httpserver::http_response>
 fire_body_chunk(::httpserver::body_chunk_ctx& ctx) noexcept;
 
+// TASK-048 -- route_resolved + before_handler firing helpers.
+//
+// route_resolved is observation-only (void return, const ctx). It fires
+// from finalize_answer right after resolve_resource_for_request returns
+// — both on hit and on miss — so user-supplied hooks can observe routing
+// decisions without the ability to alter the in-flight response (DR-012).
+//
+// before_handler is short-circuit-capable. It fires from
+// dispatch_resource_handler AFTER the existing post-processor destroy
+// step and BEFORE the is_allowed check + resource invocation. A hook
+// returning hook_action::respond_with(r) skips both the method-allowed
+// check and the resource handler, and the response goes straight to
+// materialization.
+//
+// Same exception containment as TASK-046/047: a throwing hook is caught
+// + logged via log_dispatch_error and treated as pass(). Callers MUST
+// gate each call with the relaxed any_hooks_ short-circuit so
+// zero-cost-when-unused holds.
+void fire_route_resolved(
+    const ::httpserver::route_resolved_ctx& ctx) noexcept;
+
+[[nodiscard]] std::optional<::httpserver::http_response>
+fire_before_handler(::httpserver::before_handler_ctx& ctx) noexcept;
+
 // TASK-031: invoke the user-supplied internal_error_handler safely.
 // On success, returns the response it produced. If the user handler
 // itself throws, logs generically via log_dispatch_error and returns
@@ -222,12 +246,6 @@ void apply_extracted_params(modded_request* mr,
         const detail::http_endpoint& target,
         const std::vector<std::string>& url_pars,
         const std::vector<int>& chunks);
-
-// Run the centralized auth handler if one is configured. Returns
-// true if the handler produced a response (dispatch should
-// short-circuit and the caller must skip resource rendering);
-// false to continue with normal dispatch.
-bool apply_auth_short_circuit(modded_request* mr);
 
 // Invoke the resource handler bound to @p mr, populating
 // mr->response_. On is_allowed=false, queues a 405 with an Allow
