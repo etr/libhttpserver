@@ -437,6 +437,7 @@ hooks_after_handler_mutates_response_in_place_SOURCES = integ/hooks_after_handle
 hooks_response_sent_carries_status_bytes_timing_SOURCES = integ/hooks_response_sent_carries_status_bytes_timing.cpp
 hooks_request_completed_fires_on_early_failure_SOURCES = integ/hooks_request_completed_fires_on_early_failure.cpp
 hooks_log_access_alias_slot_SOURCES = unit/hooks_log_access_alias_slot_test.cpp
+hooks_log_access_alias_slot_LDADD = $(LDADD) -lmicrohttpd
 
 noinst_HEADERS = littletest.hpp
 AM_CXXFLAGS += -Wall -fPIC -Wno-overloaded-virtual

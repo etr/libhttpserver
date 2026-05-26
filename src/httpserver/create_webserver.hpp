@@ -125,6 +125,31 @@ class create_webserver {
      create_webserver& content_size_limit(size_t v) { _content_size_limit = v; return *this; }
      create_webserver& connection_timeout(int v) { check_non_negative("connection_timeout", v); _connection_timeout = v; return *this; }
      create_webserver& per_IP_connection_limit(int v) { check_non_negative("per_IP_connection_limit", v); _per_IP_connection_limit = v; return *this; }
+     /**
+      * Install a legacy access-log callback invoked after every response
+      * is sent (HTTP 2xx, 4xx, 5xx — any status).
+      *
+      * The callback receives a single pre-formatted string:
+      * `<path> METHOD: <method>`. Control characters in path and method
+      * are replaced with '-' to prevent log-injection (CWE-117).
+      *
+      * @note This is an alias. Calling it (with a non-null callable)
+      *       installs a hook at @ref httpserver::hook_phase::response_sent
+      *       via a dedicated alias slot on the webserver implementation
+      *       (TASK-050 / PRD-HOOK-REQ-009 / §4.10). The alias fires AFTER
+      *       any user-added response_sent hooks so those hooks observe the
+      *       response first. Re-registration replaces the previous callable.
+      *       For richer structured access logging — including HTTP status
+      *       code, byte count, and request duration — prefer
+      *       `ws.add_hook(hook_phase::response_sent, ...)` directly, which
+      *       provides the full @ref httpserver::response_sent_ctx (the data
+      *       issues #281 and #69 asked for). See `examples/clf_access_log.cpp`
+      *       for a Common Log Format example.
+      *
+      * @param v log_access_ptr callback; pass `nullptr` to clear.
+      * @return reference to this builder for chaining.
+      * @see webserver, not_found_handler, internal_error_handler
+      */
      create_webserver& log_access(log_access_ptr v) { _log_access = v; return *this; }
      create_webserver& log_error(log_error_ptr v) { _log_error = v; return *this; }
      create_webserver& validator(validator_ptr v) { _validator = v; return *this; }

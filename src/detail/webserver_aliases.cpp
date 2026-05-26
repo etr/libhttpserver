@@ -108,6 +108,18 @@ void install_internal_error_alias_(
         make_internal_error_alias_(std::move(user_handler));
 }
 
+// SECURITY (CWE-117): sanitize a string_view for use in an access-log line.
+// Replace any ASCII control character (< 0x20 or == 0x7F) with '-' to
+// prevent a client from injecting additional log lines via embedded newlines
+// or carriage-returns in the request path or method. Appends directly to
+// `out` rather than returning a heap-allocated copy, avoiding an extra
+// std::string allocation on every request.
+static void append_sanitized(std::string& out, std::string_view sv) {
+    for (unsigned char c : sv) {
+        out += (c < 0x20 || c == 0x7f) ? '-' : static_cast<char>(c);
+    }
+}
+
 // TASK-050: install the log_access alias into the dedicated response_sent
 // alias slot on webserver_impl. Extracted from install_default_alias_hooks_
 // for the same reason as install_internal_error_alias_: keeping the host
@@ -123,9 +135,13 @@ void install_log_access_alias_(
         if (ctx.request == nullptr) return;
         std::string line;
         line.reserve(64);
-        line += std::string(ctx.request->get_path());
+        // Append path and method with control-character sanitization
+        // (CWE-117). Append string_view directly to avoid intermediate
+        // heap allocations (performance: saves two alloc/dealloc pairs
+        // per request vs. the previous std::string(sv) approach).
+        append_sanitized(line, ctx.request->get_path());
         line += " METHOD: ";
-        line += std::string(ctx.request->get_method());
+        append_sanitized(line, ctx.request->get_method());
         user_logger(line);
     };
 }

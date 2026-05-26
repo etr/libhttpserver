@@ -52,6 +52,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <string_view>
 
 #include <httpserver.hpp>
 
@@ -65,6 +66,19 @@ class hello_resource : public hs::http_resource {
         return hs::http_response::string("Hello, World!");
     }
 };
+
+// SECURITY (CWE-117): sanitize a string_view for CLF output.
+// Replace ASCII control characters (< 0x20 or == 0x7F) with '-' to
+// prevent a client from injecting additional log lines by embedding
+// newlines or carriage-returns in the request path or method.
+std::string sanitize_clf(std::string_view sv) {
+    std::string out;
+    out.reserve(sv.size());
+    for (unsigned char c : sv) {
+        out += (c < 0x20 || c == 0x7f) ? '-' : static_cast<char>(c);
+    }
+    return out;
+}
 
 void emit_clf_line(const hs::response_sent_ctx& ctx) {
     std::time_t now = std::time(nullptr);
@@ -81,8 +95,9 @@ void emit_clf_line(const hs::response_sent_ctx& ctx) {
                      ctx.elapsed).count();
     std::string method, path;
     if (ctx.request != nullptr) {
-        method = std::string(ctx.request->get_method());
-        path = std::string(ctx.request->get_path());
+        // Sanitize before embedding in the CLF line to prevent log injection.
+        method = sanitize_clf(ctx.request->get_method());
+        path   = sanitize_clf(ctx.request->get_path());
     }
     std::printf("- - - [%s] \"%s %s HTTP/1.1\" %d %zu %lld\n",
                 ts,

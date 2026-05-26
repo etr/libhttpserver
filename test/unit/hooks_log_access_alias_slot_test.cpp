@@ -29,16 +29,26 @@
 //      the TASK-048 aliases which DO push +1).
 //   3. ws.add_hook(response_sent, fn) appends to the user vector and
 //      leaves the alias slot independent.
+//
+// SECURITY (CWE-117): the alias lambda must sanitize path and method
+// before handing the formatted line to the user callable. Any ASCII
+// control character (< 0x20 or == 0x7F) must be replaced with '-' so
+// a client cannot inject additional log lines by embedding newlines in
+// the request path or method string.
 
+#include <algorithm>
 #include <functional>
 #include <string>
 
 #include "./httpserver.hpp"
+#include "httpserver/create_test_request.hpp"
 #include "httpserver/detail/webserver_impl.hpp"
 #include "./littletest.hpp"
 
+using httpserver::create_test_request;
 using httpserver::create_webserver;
 using httpserver::hook_phase;
+using httpserver::http_request;
 using httpserver::response_sent_ctx;
 using httpserver::webserver;
 using httpserver::detail::webserver_impl;
@@ -97,6 +107,58 @@ LT_BEGIN_AUTO_TEST(hooks_log_access_alias_slot_suite,
     LT_CHECK_EQ(impl->hooks_response_sent_.size(),
                 static_cast<std::size_t>(1));
 LT_END_AUTO_TEST(user_add_hook_grows_vector_alias_slot_untouched)
+
+// SECURITY: path with embedded newline must not appear verbatim in the
+// logged line. Control characters (< 0x20 or == 0x7F) must be replaced
+// with '-' to prevent log-injection (CWE-117).
+LT_BEGIN_AUTO_TEST(hooks_log_access_alias_slot_suite,
+                   alias_sanitizes_control_chars_in_path)
+    std::string captured;
+    auto logger = [&captured](const std::string& line) {
+        captured = line;
+    };
+    webserver ws{create_webserver(8244).log_access(logger)};
+    auto* impl = impl_of(ws);
+    LT_CHECK(static_cast<bool>(impl->log_access_alias_));
+
+    // Build a synthetic request with a newline injected in the path.
+    http_request raw_req =
+        create_test_request().path("/evil\ninjected").method("GET").build();
+
+    response_sent_ctx ctx{};
+    ctx.request = &raw_req;
+    impl->log_access_alias_(ctx);
+
+    // The logged line must not contain any control characters.
+    bool has_ctrl = std::any_of(captured.begin(), captured.end(),
+        [](unsigned char c) { return c < 0x20 || c == 0x7f; });
+    LT_CHECK(!has_ctrl);
+    // The replacement character '-' must appear where '\n' was.
+    LT_CHECK(captured.find('\n') == std::string::npos);
+LT_END_AUTO_TEST(alias_sanitizes_control_chars_in_path)
+
+// SECURITY: method with embedded carriage-return must also be sanitized.
+LT_BEGIN_AUTO_TEST(hooks_log_access_alias_slot_suite,
+                   alias_sanitizes_control_chars_in_method)
+    std::string captured;
+    auto logger = [&captured](const std::string& line) {
+        captured = line;
+    };
+    webserver ws{create_webserver(8244).log_access(logger)};
+    auto* impl = impl_of(ws);
+    LT_CHECK(static_cast<bool>(impl->log_access_alias_));
+
+    http_request raw_req =
+        create_test_request().path("/hello").method("GET\r\nX-Injected: yes").build();
+
+    response_sent_ctx ctx{};
+    ctx.request = &raw_req;
+    impl->log_access_alias_(ctx);
+
+    bool has_ctrl = std::any_of(captured.begin(), captured.end(),
+        [](unsigned char c) { return c < 0x20 || c == 0x7f; });
+    LT_CHECK(!has_ctrl);
+LT_END_AUTO_TEST(alias_sanitizes_control_chars_in_method)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

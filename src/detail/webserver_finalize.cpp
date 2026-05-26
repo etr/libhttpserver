@@ -106,13 +106,22 @@ void webserver_impl::fire_response_sent_gated(detail::modded_request* mr) {
     if (mr->response_->body_ != nullptr) {
         bytes = mr->response_->body_->size();
     }
+    // Only compute elapsed when user-registered response_sent hooks are
+    // present and will read the field. If only the log_access alias slot
+    // fires, elapsed is unused by the alias lambda (which reads only path
+    // and method), so we skip the steady_clock::now() call (typically
+    // 20-50 ns on Linux/macOS via VDSO) to avoid per-request overhead
+    // when the server is configured with log_access but no add_hook hooks.
+    const auto elapsed = user_hooks_present
+        ? std::chrono::duration_cast<std::chrono::nanoseconds>(
+              std::chrono::steady_clock::now() - mr->start_time)
+        : std::chrono::nanoseconds::zero();
     response_sent_ctx ctx{
         /*request=*/mr->dhr.get(),
         /*response=*/&*mr->response_,
         /*status=*/mr->response_->get_status(),
         /*bytes_queued=*/bytes,
-        /*elapsed=*/std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::steady_clock::now() - mr->start_time),
+        /*elapsed=*/elapsed,
     };
     fire_response_sent(ctx);
 }
