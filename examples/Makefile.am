@@ -19,7 +19,7 @@
 LDADD = $(top_builddir)/src/libhttpserver.la
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/
 METASOURCES = AUTO
-noinst_PROGRAMS = hello_world shared_state service custom_error allowing_disallowing_methods handlers hello_with_get_arg args_processing setting_headers custom_access_log minimal_https minimal_file_response minimal_deferred url_registration minimal_ip_ban banned_ip_log early_413 benchmark_select benchmark_threads benchmark_nodelay deferred_with_accumulator file_upload file_upload_with_callback empty_response_example iovec_response_example pipe_response_example daemon_info external_event_loop turbo_mode binary_buffer_response
+noinst_PROGRAMS = hello_world shared_state service custom_error allowing_disallowing_methods handlers hello_with_get_arg args_processing setting_headers custom_access_log clf_access_log minimal_https minimal_file_response minimal_deferred url_registration minimal_ip_ban banned_ip_log early_413 benchmark_select benchmark_threads benchmark_nodelay deferred_with_accumulator file_upload file_upload_with_callback empty_response_example iovec_response_example pipe_response_example daemon_info external_event_loop turbo_mode binary_buffer_response
 
 hello_world_SOURCES = hello_world.cpp
 shared_state_SOURCES = shared_state.cpp
@@ -31,6 +31,12 @@ hello_with_get_arg_SOURCES = hello_with_get_arg.cpp
 args_processing_SOURCES = args_processing.cpp
 setting_headers_SOURCES = setting_headers.cpp
 custom_access_log_SOURCES = custom_access_log.cpp
+# TASK-050: CLF-format access logger written as a response_sent hook.
+# Demonstrates the resolution of issues #281 and #69 -- with the
+# structured response_sent_ctx (status / bytes_queued / elapsed), users
+# can write a real CLF / time-taken log line in user code, without a
+# library change.
+clf_access_log_SOURCES = clf_access_log.cpp
 minimal_https_SOURCES = minimal_https.cpp
 minimal_file_response_SOURCES = minimal_file_response.cpp
 minimal_deferred_SOURCES = minimal_deferred.cpp

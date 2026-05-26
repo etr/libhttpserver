@@ -451,4 +451,47 @@ detail::webserver_impl::fire_handler_exception(
     return std::nullopt;
 }
 
+// ---- fire_* (TASK-050) ---------------------------------------------------
+//
+// after_handler is the post-handler short-circuit. Returns engaged
+// optional iff a hook short-circuited with respond_with(); the caller
+// (fire_after_handler_gated in webserver_finalize.cpp) emplaces the new
+// response into mr->response_ ahead of materialize_and_queue_response.
+
+std::optional<::httpserver::http_response>
+detail::webserver_impl::fire_after_handler(
+    ::httpserver::after_handler_ctx& ctx) noexcept {
+    return fire_short_circuit_hooks_for_phase(
+        this, hooks_after_handler_, ctx, "after_handler");
+}
+
+// response_sent: void-returning user hooks, then the log_access_alias_
+// slot. Same alias-tail pattern as fire_handler_exception (TASK-049).
+void detail::webserver_impl::fire_response_sent(
+    const ::httpserver::response_sent_ctx& ctx) noexcept {
+    fire_hooks_for_phase(this, hooks_response_sent_, ctx, "response_sent");
+    // Tail: invoke the alias slot, if any. Read without synchronisation;
+    // the slot is single-writer-at-construction (see webserver_impl.hpp).
+    if (log_access_alias_) {
+        try {
+            log_access_alias_(ctx);
+        } catch (const std::exception& e) {
+            log_dispatch_error(
+                std::string("log_access alias threw: ") + e.what());
+        } catch (...) {
+            log_dispatch_error(
+                "log_access alias threw unknown exception");
+        }
+    }
+}
+
+// request_completed: unconditional final hook. Pure observation -- no
+// alias slot here (the v1 log_access setter aliases to response_sent,
+// not request_completed).
+void detail::webserver_impl::fire_request_completed(
+    const ::httpserver::request_completed_ctx& ctx) noexcept {
+    fire_hooks_for_phase(this, hooks_request_completed_, ctx,
+                         "request_completed");
+}
+
 }  // namespace httpserver

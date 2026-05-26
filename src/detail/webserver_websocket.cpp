@@ -174,6 +174,66 @@ static void decode_websocket_buffer(struct MHD_WebSocketStream* ws_stream,
 
 namespace detail {
 
+// TASK-050: validate_websocket_handshake / complete_websocket_upgrade moved
+// here from webserver_request.cpp to keep that TU under FILE_LOC_MAX
+// after adding the after_handler / response_sent firing sites.
+std::optional<const char*>
+webserver_impl::validate_websocket_handshake(MHD_Connection* connection) {
+    const char* connection_header = MHD_lookup_connection_value(connection, MHD_HEADER_KIND,
+                                                                MHD_HTTP_HEADER_CONNECTION);
+    const char* ws_version = MHD_lookup_connection_value(connection, MHD_HEADER_KIND,
+                                                         "Sec-WebSocket-Version");
+    const char* ws_key = MHD_lookup_connection_value(connection, MHD_HEADER_KIND,
+                                                     "Sec-WebSocket-Key");
+    if (connection_header == nullptr || strcasestr(connection_header, "Upgrade") == nullptr) {
+        return std::nullopt;
+    }
+    if (ws_version == nullptr || strcmp(ws_version, "13") != 0) {
+        return std::nullopt;
+    }
+    if (ws_key == nullptr || ws_key[0] == '\0') {
+        return std::nullopt;
+    }
+    return ws_key;
+}
+
+std::optional<MHD_Result>
+webserver_impl::complete_websocket_upgrade(MHD_Connection* connection,
+                                           detail::modded_request* mr,
+                                           const char* ws_key) {
+    std::shared_lock lock(registered_resources_mutex);
+    auto ws_it = registered_ws_handlers.find(mr->standardized_url);
+    if (ws_it == registered_ws_handlers.end()) {
+        return std::nullopt;
+    }
+    // TASK-035: take a shared_ptr copy under the shared lock so the
+    // handler is kept alive across the MHD upgrade callback even if
+    // unregister_ws_resource erases the slot mid-upgrade.
+    std::shared_ptr<websocket_handler> handler_sp = ws_it->second;
+    lock.unlock();
+
+    auto* data = new ws_upgrade_data{this, std::move(handler_sp)};
+    struct MHD_Response* response = MHD_create_response_for_upgrade(
+        &webserver_impl::upgrade_handler, data);
+    if (response == nullptr) {
+        delete data;
+        return std::nullopt;
+    }
+    MHD_add_response_header(response, MHD_HTTP_HEADER_UPGRADE, "websocket");
+
+    // Compute Sec-WebSocket-Accept from client's key (RFC 6455 §4.2.2).
+    // Base64 of SHA-1 = 28 chars + null.
+    char accept_header[29];
+    if (MHD_websocket_create_accept_header(ws_key, accept_header) == MHD_WEBSOCKET_STATUS_OK) {
+        MHD_add_response_header(response, "Sec-WebSocket-Accept", accept_header);
+    }
+    MHD_Result to_ret = (MHD_Result) MHD_queue_response(connection,
+                                                       MHD_HTTP_SWITCHING_PROTOCOLS,
+                                                       response);
+    MHD_destroy_response(response);
+    return to_ret;
+}
+
 void webserver_impl::upgrade_handler(void *cls, struct MHD_Connection* connection,
                                 void *req_cls, const char *extra_in,
                                 size_t extra_in_size, MHD_socket sock,
@@ -223,5 +283,37 @@ void webserver_impl::upgrade_handler(void *cls, struct MHD_Connection* connectio
 
 }  // namespace detail
 #endif  // HAVE_WEBSOCKET
+
+// TASK-050: try_handle_websocket_upgrade lives outside the HAVE_WEBSOCKET
+// guard because it has a no-op definition on the WS-off branch. Moved
+// here from webserver_request.cpp.
+namespace detail {
+std::optional<MHD_Result>
+webserver_impl::try_handle_websocket_upgrade(MHD_Connection* connection,
+                                             detail::modded_request* mr) {
+#ifdef HAVE_WEBSOCKET
+    const char* upgrade_header = MHD_lookup_connection_value(connection, MHD_HEADER_KIND,
+                                                             MHD_HTTP_HEADER_UPGRADE);
+    if (upgrade_header == nullptr || strcasecmp(upgrade_header, "websocket") != 0) {
+        return std::nullopt;
+    }
+    auto ws_key = validate_websocket_handshake(connection);
+    if (!ws_key) {
+        // RFC 6455 §4.2.1: required handshake header missing or malformed.
+        struct MHD_Response* bad_response = MHD_create_response_from_buffer(0, nullptr,
+                                                                            MHD_RESPMEM_PERSISTENT);
+        MHD_Result ret = (MHD_Result) MHD_queue_response(connection, MHD_HTTP_BAD_REQUEST,
+                                                         bad_response);
+        MHD_destroy_response(bad_response);
+        return ret;
+    }
+    return complete_websocket_upgrade(connection, mr, *ws_key);
+#else
+    (void)connection;
+    (void)mr;
+    return std::nullopt;
+#endif  // HAVE_WEBSOCKET
+}
+}  // namespace detail
 
 }  // namespace httpserver

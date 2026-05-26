@@ -26,7 +26,7 @@ LDADD += -lcurl
 
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/ -DHTTPSERVER_COMPILATION
 METASOURCES = AUTO
-check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver create_webserver_explicit new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories http_response_move_sanitizer webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_const_getters http_request_tls_accessors webserver_register_smartptr webserver_register_path_prefix webserver_on_methods webserver_route route_table lookup_pipeline route_table_concurrency routing_regression threadsafety_stress webserver_features webserver_ws_unavailable webserver_register_ws_smartptr webserver_dauth_unavailable consumer_fixture header_hygiene_hooks hook_api_shape hooks_no_firing hooks_accept_ctx_shape hooks_connection_lifecycle hooks_accept_decision_banned hooks_accept_decision_throwing hooks_body_chunk_ctx_shape hooks_request_received_short_circuit hooks_body_chunk_observes_progress hooks_body_chunk_short_circuit_no_leak hooks_before_handler_ctx_shape hooks_route_resolved_miss_and_hit hooks_before_handler_short_circuit hooks_alias_count hooks_alias_functional hooks_handler_exception_chain hooks_handler_exception_user_handler_throws_continues_chain hooks_handler_exception_fallback_to_hardcoded_500 hooks_handler_exception_slot
+check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver create_webserver_explicit new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories http_response_move_sanitizer webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_const_getters http_request_tls_accessors webserver_register_smartptr webserver_register_path_prefix webserver_on_methods webserver_route route_table lookup_pipeline route_table_concurrency routing_regression threadsafety_stress webserver_features webserver_ws_unavailable webserver_register_ws_smartptr webserver_dauth_unavailable consumer_fixture header_hygiene_hooks hook_api_shape hooks_no_firing hooks_accept_ctx_shape hooks_connection_lifecycle hooks_accept_decision_banned hooks_accept_decision_throwing hooks_body_chunk_ctx_shape hooks_request_received_short_circuit hooks_body_chunk_observes_progress hooks_body_chunk_short_circuit_no_leak hooks_before_handler_ctx_shape hooks_route_resolved_miss_and_hit hooks_before_handler_short_circuit hooks_alias_count hooks_alias_functional hooks_handler_exception_chain hooks_handler_exception_user_handler_throws_continues_chain hooks_handler_exception_fallback_to_hardcoded_500 hooks_handler_exception_slot hooks_response_sent_ctx_shape hooks_request_completed_ctx_shape hooks_after_handler_replaces_response hooks_after_handler_mutates_response_in_place hooks_response_sent_carries_status_bytes_timing hooks_request_completed_fires_on_early_failure hooks_log_access_alias_slot
 
 MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
 
@@ -409,6 +409,34 @@ hooks_handler_exception_chain_SOURCES = integ/hooks_handler_exception_chain.cpp
 hooks_handler_exception_user_handler_throws_continues_chain_SOURCES = integ/hooks_handler_exception_user_handler_throws_continues_chain.cpp
 hooks_handler_exception_fallback_to_hardcoded_500_SOURCES = integ/hooks_handler_exception_fallback_to_hardcoded_500.cpp
 hooks_handler_exception_slot_SOURCES = unit/hooks_handler_exception_slot_test.cpp
+
+# TASK-050 -- after_handler / response_sent / request_completed firing
+# sites + log_access alias. Adds:
+# - hooks_response_sent_ctx_shape: compile-time pin for the extended
+#   response_sent_ctx fields (status, bytes_queued, elapsed).
+# - hooks_request_completed_ctx_shape: compile-time pin for the
+#   extended request_completed_ctx (resp pointer + succeeded flag).
+# - hooks_after_handler_replaces_response: after_handler returning
+#   respond_with(r2) replaces mr->response_ before MHD_queue_response.
+# - hooks_after_handler_mutates_response_in_place: after_handler
+#   returning pass() after ctx.response->with_header(...) puts the
+#   header on the wire.
+# - hooks_response_sent_carries_status_bytes_timing: response_sent
+#   hook observes status==200, bytes_queued==body.size(), elapsed>0.
+# - hooks_request_completed_fires_on_early_failure: a request_received
+#   hook short-circuits to a 413; request_completed still fires with
+#   succeeded==true and a non-null resp pointing at the 413.
+# - hooks_log_access_alias_slot: unit pin that log_access(fn) wires the
+#   dedicated alias slot on webserver_impl (same pattern as the TASK-049
+#   internal_error_handler alias slot), and that no entry is pushed
+#   into hooks_response_sent_.
+hooks_response_sent_ctx_shape_SOURCES = unit/hooks_response_sent_ctx_shape_test.cpp
+hooks_request_completed_ctx_shape_SOURCES = unit/hooks_request_completed_ctx_shape_test.cpp
+hooks_after_handler_replaces_response_SOURCES = integ/hooks_after_handler_replaces_response.cpp
+hooks_after_handler_mutates_response_in_place_SOURCES = integ/hooks_after_handler_mutates_response_in_place.cpp
+hooks_response_sent_carries_status_bytes_timing_SOURCES = integ/hooks_response_sent_carries_status_bytes_timing.cpp
+hooks_request_completed_fires_on_early_failure_SOURCES = integ/hooks_request_completed_fires_on_early_failure.cpp
+hooks_log_access_alias_slot_SOURCES = unit/hooks_log_access_alias_slot_test.cpp
 
 noinst_HEADERS = littletest.hpp
 AM_CXXFLAGS += -Wall -fPIC -Wno-overloaded-virtual

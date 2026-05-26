@@ -199,14 +199,66 @@ struct after_handler_ctx {
     http_response* response = nullptr;        // mutable: hook may mutate
 };
 
+// response_sent: observation point fired immediately after
+// MHD_queue_response and BEFORE MHD_destroy_response. Carries the data
+// users have been asking for (issues #281 and #69):
+//
+//   - status:        the HTTP status code MHD was handed (the value
+//                    passed to MHD_queue_response).
+//   - bytes_queued:  http_response::body_->size(). For deferred / pipe
+//                    bodies, body::size() returns 0 because the final
+//                    length is not yet known at queue time -- consumers
+//                    that need byte counts for streamed bodies should
+//                    fall back to the Content-Length header value.
+//   - elapsed:       std::chrono::steady_clock::now() at the fire site
+//                    minus modded_request::start_time (captured on the
+//                    first invocation of answer_to_connection for this
+//                    request -- the earliest moment we can measure).
+//                    Granularity is nanoseconds.
+//
+// The `response` pointer is non-null at the fire site (the dispatch
+// path guarantees a response value lives in mr->response_ by the time
+// materialize_and_queue_response is called). Hooks MUST NOT capture
+// this pointer past their return: the http_response is destroyed in
+// ~modded_request right after request_completed fires.
 struct response_sent_ctx {
     const http_request* request = nullptr;
     const http_response* response = nullptr;
-    std::chrono::steady_clock::time_point sent_at{};
+    int status = 0;
+    std::size_t bytes_queued = 0;
+    std::chrono::nanoseconds elapsed{};
 };
 
+// request_completed: unconditional final hook. Fires BEFORE the
+// modded_request is destroyed so the ctx pointers remain backed by
+// live storage for the duration of the hook call.
+//
+//   - resp:       NULLABLE. On early-failure paths (e.g., a
+//                 request_received hook returning respond_with(413)),
+//                 mr->response_ is populated and resp points into it.
+//                 On paths where MHD terminates the request before any
+//                 response object is built (very early MHD failures),
+//                 resp is nullptr.
+//   - succeeded:  maps from MHD_RequestTerminationCode:
+//                   * MHD_REQUEST_TERMINATED_COMPLETED_OK -> true
+//                   * everything else                     -> false
+//                 A user-policy rejection that produced a complete
+//                 response on the wire (e.g., a 413 from a
+//                 request_received short-circuit) reports succeeded
+//                 == true: MHD still drove the request to ordinary
+//                 completion -- the rejection happened in libhttpserver,
+//                 not in MHD's transport.
+//   - duration:   steady_clock::now() at the fire site minus
+//                 modded_request::start_time. Kept for back-compat
+//                 with the TASK-045 shape; mirrors response_sent's
+//                 elapsed measurement.
+//
+// Hooks MUST NOT capture `request` or `resp` past their return -- both
+// are destroyed in ~modded_request immediately after this fire.
 struct request_completed_ctx {
     const http_request* request = nullptr;
+    const http_response* resp = nullptr;
+    bool succeeded = false;
     std::chrono::steady_clock::duration duration{};
 };
 
