@@ -376,8 +376,30 @@ MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection,
 
     fire_route_resolved_gated(this, mr, found, hrm);
 
-    if (found && apply_auth_short_circuit(mr)) {
-        found = false;  // Skip resource rendering, go directly to response.
+    // TASK-048: fire before_handler from finalize_answer (not from inside
+    // dispatch_resource_handler). This ensures auth and method-not-allowed
+    // alias hooks run as part of the unified before_handler chain, with
+    // the auth alias as the first hook (registered in
+    // install_default_alias_hooks_). The gate preserves zero-cost-when-unused.
+    if (found &&
+        any_hooks_[static_cast<std::size_t>(hook_phase::before_handler)]
+            .load(std::memory_order_relaxed)) {
+        std::optional<route_descriptor> desc;
+        if (!mr->matched_path_template.empty()) {
+            desc = route_descriptor{
+                /*path_template=*/std::string_view{mr->matched_path_template},
+                /*methods=*/hrm->get_allowed_methods(),
+                /*is_prefix=*/mr->matched_is_prefix};
+        }
+        before_handler_ctx ctx{
+            /*request=*/mr->dhr.get(),
+            /*matched=*/std::move(desc),
+            /*method=*/mr->method_enum,
+            /*resource=*/hrm.get()};
+        if (auto sc = fire_before_handler(ctx)) {
+            mr->response_.emplace(std::move(*sc));
+            return materialize_and_queue_response(connection, mr);
+        }
     }
 
     if (found) {

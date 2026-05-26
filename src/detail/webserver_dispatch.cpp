@@ -282,15 +282,27 @@ void webserver_impl::apply_extracted_params(detail::modded_request* mr,
 
 bool webserver_impl::resolve_resource_for_request(detail::modded_request* mr,
         std::shared_ptr<http_resource>& hrm) {
+    // TASK-048 perf: matched_path_template is only consumed by
+    // fire_route_resolved_gated and the before_handler firing site, both
+    // of which are gated by their respective any_hooks_ entries. Skip the
+    // heap allocation on every matched request when no hooks are registered.
+    const bool need_path_template =
+        any_hooks_[static_cast<std::size_t>(hook_phase::route_resolved)]
+            .load(std::memory_order_relaxed) ||
+        any_hooks_[static_cast<std::size_t>(hook_phase::before_handler)]
+            .load(std::memory_order_relaxed);
+
     std::shared_lock registered_resources_lock(registered_resources_mutex);
 
     if (parent->single_resource) {
         hrm = registered_resources.begin()->second;
         // single_resource: the one registered endpoint serves every URL.
         // Capture its key for the route_resolved/before_handler hook ctx.
-        const auto& only = *registered_resources.begin();
-        mr->matched_path_template = only.first.get_url_complete();
-        mr->matched_is_prefix = only.first.is_family_url();
+        if (need_path_template) {
+            const auto& only = *registered_resources.begin();
+            mr->matched_path_template = only.first.get_url_complete();
+            mr->matched_is_prefix = only.first.is_family_url();
+        }
         return true;
     }
 
@@ -301,8 +313,10 @@ bool webserver_impl::resolve_resource_for_request(detail::modded_request* mr,
         // Copy into modded_request so the hook context's string_view is
         // safe across hook calls even if a concurrent unregister_path
         // erases the slot.
-        mr->matched_path_template = fe->first;
-        mr->matched_is_prefix = false;
+        if (need_path_template) {
+            mr->matched_path_template = fe->first;
+            mr->matched_is_prefix = false;
+        }
         return true;
     }
 
@@ -313,11 +327,13 @@ bool webserver_impl::resolve_resource_for_request(detail::modded_request* mr,
     if (auto cached = lookup_route_cache(mr->standardized_url)) {
         hrm = cached->hrm;
         apply_extracted_params(mr, endpoint, cached->url_pars, cached->chunks);
-        // Cache layer dropped the matched endpoint at its API boundary;
-        // fall back to the requested URL as a stable approximation of
-        // the path_template (used by the route_resolved hook ctx only).
-        mr->matched_path_template = mr->standardized_url;
-        mr->matched_is_prefix = false;
+        if (need_path_template) {
+            // Cache layer dropped the matched endpoint at its API boundary;
+            // fall back to the requested URL as a stable approximation of
+            // the path_template (used by the route_resolved hook ctx only).
+            mr->matched_path_template = mr->standardized_url;
+            mr->matched_is_prefix = false;
+        }
         return true;
     }
 
@@ -328,24 +344,10 @@ bool webserver_impl::resolve_resource_for_request(detail::modded_request* mr,
     store_route_cache(mr->standardized_url, scan_hit->endpoint, hrm);
     apply_extracted_params(mr, endpoint, scan_hit->endpoint.get_url_pars(),
                            scan_hit->endpoint.get_chunk_positions());
-    mr->matched_path_template = scan_hit->endpoint.get_url_complete();
-    mr->matched_is_prefix = scan_hit->endpoint.is_family_url();
-    return true;
-}
-
-bool webserver_impl::apply_auth_short_circuit(detail::modded_request* mr) {
-    if (parent->auth_handler == nullptr) return false;
-    std::string path(mr->dhr->get_path());
-    if (should_skip_auth(path)) return false;
-    // TASK-036 boundary: auth_handler_ptr is intentionally NOT touched
-    // by this task (PRD-AUTH out of scope). It still returns a
-    // shared_ptr<http_response>; when set it acts as a poor-man's
-    // optional. Move the pointee into the by-value slot so the
-    // dispatch path is uniform from here on. The shared_ptr drops at
-    // end of scope.
-    std::shared_ptr<http_response> auth_response = parent->auth_handler(*mr->dhr);
-    if (auth_response == nullptr) return false;
-    mr->response_.emplace(std::move(*auth_response));
+    if (need_path_template) {
+        mr->matched_path_template = scan_hit->endpoint.get_url_complete();
+        mr->matched_is_prefix = scan_hit->endpoint.is_family_url();
+    }
     return true;
 }
 
@@ -372,31 +374,18 @@ void webserver_impl::dispatch_resource_handler(detail::modded_request* mr,
             MHD_destroy_post_processor(mr->pp);
             mr->pp = nullptr;
         }
-        // TASK-048: before_handler firing site. Fires AFTER the
-        // post-processor teardown (so a hook observing form data sees
-        // it already destroyed -- consistent with the existing dispatch
-        // ordering) and BEFORE both is_allowed and the resource
-        // invocation. A short-circuit response replaces both. The
-        // any_hooks_ gate preserves zero-cost-when-unused.
-        if (any_hooks_[static_cast<std::size_t>(hook_phase::before_handler)]
-                .load(std::memory_order_relaxed)) {
-            std::optional<route_descriptor> desc;
-            if (!mr->matched_path_template.empty()) {
-                desc = route_descriptor{
-                    /*path_template=*/std::string_view{mr->matched_path_template},
-                    /*methods=*/hrm->get_allowed_methods(),
-                    /*is_prefix=*/mr->matched_is_prefix};
-            }
-            before_handler_ctx ctx{
-                /*request=*/mr->dhr.get(),
-                /*matched=*/std::move(desc),
-                /*method=*/mr->method_enum,
-                /*resource=*/hrm.get()};
-            if (auto sc = fire_before_handler(ctx)) {
-                mr->response_.emplace(std::move(*sc));
-                return;
-            }
-        }
+        // TASK-048: before_handler firing moved to finalize_answer so auth
+        // and method-not-allowed alias hooks run as part of the unified
+        // before_handler chain before dispatch_resource_handler is called.
+        // dispatch_resource_handler is only reached when the hook chain
+        // passes through without short-circuiting.
+        //
+        // The is_allowed check below remains as the default (no-hook)
+        // fallback for servers that have not registered a
+        // method_not_allowed_handler alias hook. When a functional alias
+        // hook is registered it fires and short-circuits before reaching
+        // here, so this check only runs when method_not_allowed_handler
+        // is not set (zero-cost-when-unused for the alias hook).
         if (hrm->is_allowed(mr->method_enum)) {
             // TASK-036: pointer-to-member dispatch returns http_response
             // by value (DR-004); the prvalue is moved into the

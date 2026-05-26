@@ -343,8 +343,9 @@ LT_END_AUTO_TEST(register_resource_deprecated_forwarder_behaves_like_register_pa
 // the normalised form of the request path matches an auth_skip_paths entry the
 // request is served (200); otherwise the auth_handler returns 401.
 //
-// Auth handler: always returns a 401 sentinel.  When should_skip_auth fires,
-// apply_auth_short_circuit returns false so the route is dispatched (200).
+// Auth handler: always returns a 401 sentinel.  When should_skip_auth fires
+// (i.e., the path matches an auth_skip_paths entry), the auth alias hook
+// returns hook_action::pass() so the route is dispatched (200).
 
 namespace {
 

@@ -247,12 +247,6 @@ void apply_extracted_params(modded_request* mr,
         const std::vector<std::string>& url_pars,
         const std::vector<int>& chunks);
 
-// Run the centralized auth handler if one is configured. Returns
-// true if the handler produced a response (dispatch should
-// short-circuit and the caller must skip resource rendering);
-// false to continue with normal dispatch.
-bool apply_auth_short_circuit(modded_request* mr);
-
 // Invoke the resource handler bound to @p mr, populating
 // mr->response_. On is_allowed=false, queues a 405 with an Allow
 // header. On handler-throw, routes through the safe internal-error
