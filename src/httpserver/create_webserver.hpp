@@ -268,6 +268,24 @@ class create_webserver {
       * If @p h is null, the default response is a 500 with the message
       * in the body (see DR-009).
       *
+      * @note This is an alias. Calling it with a non-null callable
+      *       installs the callable as a LAST-position hook at
+      *       @ref httpserver::hook_phase::handler_exception. Equivalent
+      *       to `ws.add_hook(hook_phase::handler_exception, ...)`
+      *       at webserver construction, except that the alias slot
+      *       ALWAYS fires last in the chain -- user-added
+      *       handler_exception hooks added via `add_hook` run first and
+      *       may short-circuit before the alias is reached. See DR-012
+      *       / §4.10 / PRD-HOOK-REQ-009.
+      *
+      *       Throwing-hook semantics (per DR-012): a throwing
+      *       handler_exception hook -- user-added or this alias -- is
+      *       caught and the chain CONTINUES to the next hook. If every
+      *       hook (including this alias) either throws or returns
+      *       @ref httpserver::hook_action::pass(), the dispatcher falls
+      *       back to the hardcoded empty-body 500 (DR-009 §5.2 point 4)
+      *       WITHOUT re-invoking @p h.
+      *
       * @param h @ref internal_error_handler_t callback; pass `nullptr` to clear.
       * @return reference to this builder for chaining.
       * @see webserver, not_found_handler, method_not_allowed_handler, feature_unavailable

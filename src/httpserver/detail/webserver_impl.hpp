@@ -272,6 +272,24 @@ class webserver_impl {
     std::vector<phase_entry<::httpserver::hook_action(
             const ::httpserver::handler_exception_ctx&)>>
         hooks_handler_exception_;
+    // TASK-049: internal_error_handler alias slot. Last-position fallback
+    // in the handler_exception chain. Distinct from hooks_handler_exception_
+    // because it must fire AFTER all user hooks (DR-012 §4.10) -- the
+    // opposite of the TASK-048 aliases which run before user hooks. By
+    // sitting in a dedicated slot rather than the vector, the alias never
+    // contends for ordering when a user does add_hook(handler_exception, ...).
+    //
+    // Lifetime: written exactly once during install_default_alias_hooks_()
+    // at webserver construction, before start() is called -- the daemon is
+    // not yet running, so no synchronisation is required for the write.
+    // Read on the dispatch hot path from fire_handler_exception with no
+    // lock (single-writer-before-readers contract, same as
+    // parent->internal_error_handler). If a future task adds a runtime
+    // setter the writer MUST take hook_table_mutex_ exclusively and the
+    // reader MUST take it shared -- same pattern as the per-phase vectors.
+    std::function<::httpserver::hook_action(
+            const ::httpserver::handler_exception_ctx&)>
+        handler_exception_alias_;
     std::vector<phase_entry<::httpserver::hook_action(
             ::httpserver::after_handler_ctx&)>>
         hooks_after_handler_;

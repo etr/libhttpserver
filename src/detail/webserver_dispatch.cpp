@@ -367,6 +367,49 @@ std::string webserver_impl::serialize_allow_methods(method_set allowed) const {
     return header_value;
 }
 
+namespace {
+
+// TASK-049: shared body of the two dispatch_resource_handler catch arms.
+// Either routes the dispatch-thrown exception through the
+// handler_exception hook chain (when any user hooks are registered or
+// the internal_error_handler alias slot is wired) or falls back to the
+// v1 run_internal_error_handler_safely path. Extracted to keep
+// dispatch_resource_handler under the per-function CCN bar.
+void handle_dispatch_exception(
+        webserver_impl* impl,
+        detail::modded_request* mr,
+        std::string_view message) {
+    if (impl->any_hooks_[static_cast<std::size_t>(
+                hook_phase::handler_exception)]
+            .load(std::memory_order_relaxed) ||
+        impl->handler_exception_alias_) {
+        handler_exception_ctx ctx{
+            /*request=*/mr->dhr.get(),
+            /*exception=*/std::current_exception(),
+            /*message=*/message};
+        if (auto sc = impl->fire_handler_exception(ctx)) {
+            mr->response_.emplace(std::move(*sc));
+            return;
+        }
+        // DR-009 §5.2 point 4 extended: every hook (and the alias) ran
+        // without producing a response -- emit the hardcoded empty-body
+        // 500 directly. Do NOT re-enter run_internal_error_handler_safely
+        // here; the alias slot has already invoked the user callable on
+        // this request.
+        mr->response_.emplace(
+            impl->internal_error_page(mr, "", /*force_our=*/true));
+        return;
+    }
+    // Backwards-compat fast path: no handler_exception hooks AND no
+    // alias wired (the v1 builder did not call internal_error_handler).
+    // Use the existing safe-call site so the unset-alias default body
+    // (which surfaces the message) still applies.
+    mr->response_.emplace(
+        impl->run_internal_error_handler_safely(mr, message));
+}
+
+}  // namespace
+
 void webserver_impl::dispatch_resource_handler(detail::modded_request* mr,
         const std::shared_ptr<http_resource>& hrm) {
     try {
@@ -412,17 +455,18 @@ void webserver_impl::dispatch_resource_handler(detail::modded_request* mr,
         }
     } catch (const std::exception& e) {
         // TASK-031 / DR-009 §5.2 point 2: handler threw std::exception.
-        // Log via error_logger, forward e.what() to internal_error_handler.
-        // run_internal_error_handler_safely contains a possible re-throw
-        // from the user handler (point 4).
+        // TASK-049 routes the exception through the handler_exception
+        // hook chain (with the internal_error_handler alias as the
+        // last-position fallback) inside handle_dispatch_exception.
         log_dispatch_error(std::string("dispatch: handler threw "
                                        "std::exception: ") + e.what());
-        mr->response_.emplace(run_internal_error_handler_safely(mr, e.what()));
+        handle_dispatch_exception(this, mr, std::string_view{e.what()});
     } catch (...) {
         // §5.2 point 3: handler threw non-std::exception. Same flow as
         // the std::exception arm but with the sentinel message.
         log_dispatch_error("dispatch: handler threw unknown exception");
-        mr->response_.emplace(run_internal_error_handler_safely(mr, "unknown exception"));
+        handle_dispatch_exception(this, mr,
+                                  std::string_view{"unknown exception"});
     }
 }
 

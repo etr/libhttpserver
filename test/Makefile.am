@@ -26,7 +26,7 @@ LDADD += -lcurl
 
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/ -DHTTPSERVER_COMPILATION
 METASOURCES = AUTO
-check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver create_webserver_explicit new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories http_response_move_sanitizer webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_const_getters http_request_tls_accessors webserver_register_smartptr webserver_register_path_prefix webserver_on_methods webserver_route route_table lookup_pipeline route_table_concurrency routing_regression threadsafety_stress webserver_features webserver_ws_unavailable webserver_register_ws_smartptr webserver_dauth_unavailable consumer_fixture header_hygiene_hooks hook_api_shape hooks_no_firing hooks_accept_ctx_shape hooks_connection_lifecycle hooks_accept_decision_banned hooks_accept_decision_throwing hooks_body_chunk_ctx_shape hooks_request_received_short_circuit hooks_body_chunk_observes_progress hooks_body_chunk_short_circuit_no_leak hooks_before_handler_ctx_shape hooks_route_resolved_miss_and_hit hooks_before_handler_short_circuit hooks_alias_count hooks_alias_functional
+check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver create_webserver_explicit new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories http_response_move_sanitizer webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_const_getters http_request_tls_accessors webserver_register_smartptr webserver_register_path_prefix webserver_on_methods webserver_route route_table lookup_pipeline route_table_concurrency routing_regression threadsafety_stress webserver_features webserver_ws_unavailable webserver_register_ws_smartptr webserver_dauth_unavailable consumer_fixture header_hygiene_hooks hook_api_shape hooks_no_firing hooks_accept_ctx_shape hooks_connection_lifecycle hooks_accept_decision_banned hooks_accept_decision_throwing hooks_body_chunk_ctx_shape hooks_request_received_short_circuit hooks_body_chunk_observes_progress hooks_body_chunk_short_circuit_no_leak hooks_before_handler_ctx_shape hooks_route_resolved_miss_and_hit hooks_before_handler_short_circuit hooks_alias_count hooks_alias_functional hooks_handler_exception_chain hooks_handler_exception_user_handler_throws_continues_chain hooks_handler_exception_fallback_to_hardcoded_500 hooks_handler_exception_slot
 
 MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
 
@@ -392,6 +392,23 @@ hooks_alias_count_SOURCES = unit/hooks_alias_count_test.cpp
 # that short-circuits the chain (not a no-op stub): a user hook registered
 # after the alias does NOT fire for method-not-allowed requests.
 hooks_alias_functional_SOURCES = integ/hooks_alias_functional_test.cpp
+
+# TASK-049 -- handler_exception firing site and internal_error_handler
+# alias slot. Adds:
+# - hooks_handler_exception_chain: A=pass, B=respond_with(418); alias C is
+#   never invoked because B wins.
+# - hooks_handler_exception_user_handler_throws_continues_chain: A throws;
+#   the chain continues to B; B's 418 is queued.
+# - hooks_handler_exception_fallback_to_hardcoded_500: A=pass, B=throws,
+#   alias C=throws -> dispatcher emits empty-body 500; alias C is called
+#   exactly once (no re-entry).
+# - hooks_handler_exception_slot: unit pin that internal_error_handler
+#   wires the dedicated last-position slot (not a vector entry), distinct
+#   from the TASK-048 aliases.
+hooks_handler_exception_chain_SOURCES = integ/hooks_handler_exception_chain.cpp
+hooks_handler_exception_user_handler_throws_continues_chain_SOURCES = integ/hooks_handler_exception_user_handler_throws_continues_chain.cpp
+hooks_handler_exception_fallback_to_hardcoded_500_SOURCES = integ/hooks_handler_exception_fallback_to_hardcoded_500.cpp
+hooks_handler_exception_slot_SOURCES = unit/hooks_handler_exception_slot_test.cpp
 
 noinst_HEADERS = littletest.hpp
 AM_CXXFLAGS += -Wall -fPIC -Wno-overloaded-virtual

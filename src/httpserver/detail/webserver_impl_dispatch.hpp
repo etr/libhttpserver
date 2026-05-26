@@ -146,6 +146,35 @@ void fire_route_resolved(
 [[nodiscard]] std::optional<::httpserver::http_response>
 fire_before_handler(::httpserver::before_handler_ctx& ctx) noexcept;
 
+// TASK-049 -- handler_exception firing helper.
+//
+// Returns engaged optional iff some hook (user-added or the
+// internal_error_handler alias slot) short-circuited with respond_with().
+// The caller -- the catch arms in dispatch_resource_handler -- stashes
+// that response into mr->response_ and falls through to
+// materialize_and_queue_response in finalize_answer.
+//
+// Chain order:
+//   1. User-added hooks in hooks_handler_exception_ (registration order).
+//   2. handler_exception_alias_ (the v1 internal_error_handler), if set.
+// If no hook short-circuits, returns std::nullopt -- the caller then
+// emits the hardcoded empty-body 500 (DR-009 §5.2 point 4) DIRECTLY,
+// WITHOUT re-invoking the user internal_error_handler: the alias slot
+// has already had its turn at this request, so a second call would
+// observably invoke the user code twice.
+//
+// Per DR-012: a throwing hook in THIS phase is caught, logged via
+// log_dispatch_error, and the chain CONTINUES to the next hook -- this
+// is the one phase that does not abort to DR-009 §5.2 on a throwing
+// hook, because the whole point of the chain IS exception recovery.
+// The same containment applies to the alias slot.
+//
+// noexcept: same contract as fire_before_handler. Snapshot-copy failure
+// is logged and degraded to "as if no hooks were registered".
+[[nodiscard]] std::optional<::httpserver::http_response>
+fire_handler_exception(
+    const ::httpserver::handler_exception_ctx& ctx) noexcept;
+
 // TASK-031: invoke the user-supplied internal_error_handler safely.
 // On success, returns the response it produced. If the user handler
 // itself throws, logs generically via log_dispatch_error and returns

@@ -231,11 +231,11 @@ std::string peer_address::to_string() const {
 // ws.add_hook() / handle.remove() because we no longer hold the table
 // lock by the time the user code runs.
 
-namespace {
-
-constexpr std::size_t kHookSnapshotReserve = 8;
-
-}  // namespace
+// (Previously an unused kHookSnapshotReserve constant lived here.
+// The thread_local snapshot buffers below are now sized lazily on
+// first use; the constant was dead code as of TASK-048's perf rework.
+// Removed in TASK-049 to silence -Wunused-const-variable under
+// --enable-debug.)
 
 // fire_hooks_for_phase: shared dispatch template for all void-returning
 // lifecycle hook phases. Snapshots the caller-supplied vector under a
@@ -381,6 +381,74 @@ detail::webserver_impl::fire_before_handler(
     ::httpserver::before_handler_ctx& ctx) noexcept {
     return fire_short_circuit_hooks_for_phase(
         this, hooks_before_handler_, ctx, "before_handler");
+}
+
+// ---- fire_* (TASK-049) ---------------------------------------------------
+//
+// handler_exception is the only short-circuit-capable phase whose ctx is
+// passed as `const&` (the user cannot mutate the in-flight exception or
+// request). It also layers a dedicated single-slot alias on top of the
+// user vector (handler_exception_alias_ -- the v1 internal_error_handler
+// re-described as a last-position hook). Both of those make the body
+// awkward to express via fire_short_circuit_hooks_for_phase<Ctx&>; the
+// firing logic is inlined here. The body mirrors the template's
+// structure -- snapshot under shared_lock, release, iterate with per-hook
+// try/catch -- with an extra tail that invokes the alias slot after the
+// user vector is exhausted.
+std::optional<::httpserver::http_response>
+detail::webserver_impl::fire_handler_exception(
+    const ::httpserver::handler_exception_ctx& ctx) noexcept {
+    using EntryVec = std::vector<phase_entry<
+        ::httpserver::hook_action(
+            const ::httpserver::handler_exception_ctx&)>>;
+    try {
+        thread_local EntryVec snapshot;
+        snapshot.clear();
+        {
+            std::shared_lock lock(hook_table_mutex_);
+            snapshot = hooks_handler_exception_;
+        }
+        for (auto& entry : snapshot) {
+            try {
+                auto action = entry.fn(ctx);
+                if (!action.is_pass()) {
+                    return std::move(action).take_response();
+                }
+            } catch (const std::exception& e) {
+                log_dispatch_error(
+                    std::string("hook[handler_exception] threw: ") + e.what());
+            } catch (...) {
+                log_dispatch_error(
+                    "hook[handler_exception] threw unknown exception");
+            }
+        }
+    } catch (...) {
+        log_dispatch_error(
+            "fire_handler_exception: snapshot copy failed");
+    }
+    // Tail: invoke the alias slot, if any. Read without synchronisation;
+    // the slot is single-writer-at-construction (see webserver_impl.hpp).
+    //
+    // Throw containment: a throwing alias is logged with the legacy
+    // "internal_error_handler threw" prefix so the DR-009 §5.2 point 4
+    // log contract (and its tests in basic.cpp) is preserved verbatim
+    // even though the call site has moved from
+    // run_internal_error_handler_safely into the hook chain.
+    if (handler_exception_alias_) {
+        try {
+            auto action = handler_exception_alias_(ctx);
+            if (!action.is_pass()) {
+                return std::move(action).take_response();
+            }
+        } catch (const std::exception& e) {
+            log_dispatch_error(
+                std::string("internal_error_handler threw: ") + e.what());
+        } catch (...) {
+            log_dispatch_error(
+                "internal_error_handler threw unknown exception");
+        }
+    }
+    return std::nullopt;
 }
 
 }  // namespace httpserver
