@@ -63,15 +63,8 @@ struct modded_request {
     httpserver::http_method method_enum = httpserver::http_method::count_;
 
     std::unique_ptr<http_request> dhr = nullptr;
-    // TASK-036 / DR-010 / §5.3: the response value lives here for the
-    // full lifetime of the connection. The dispatch path moves the
-    // handler's prvalue into this optional via emplace(); MHD's deferred
-    // trampoline keeps a `cls` pointer into the deferred_body that lives
-    // inside this http_response's SBO buffer. The optional is destroyed
-    // by ~modded_request() in webserver_impl::request_completed, after
-    // MHD has finished invoking the trampoline — so the captured
-    // producer's state is released exactly once and exactly when DR-010
-    // requires.
+    // DR-010 / §5.3: anchor kept alive until request_completed.
+    // See webserver_impl.hpp and specs/architecture for full contract.
     std::optional<http_response> response_;
     bool has_body = false;
     // TASK-047: set by a pre-handler hook short-circuit (request_received
