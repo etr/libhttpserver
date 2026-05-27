@@ -242,8 +242,12 @@ HYGIENE_STAMP = $(CHECK_HYGIENE_STAGE)/.hygiene-stamp
 
 # NOTE: wildcard is evaluated at parse time; run `make clean` if new headers
 # are added to src/httpserver/ in the same invocation that generates them.
-# Also includes the top-level umbrella so a change there invalidates the stamp.
-$(HYGIENE_STAMP): $(wildcard $(top_srcdir)/src/httpserver/*.hpp) $(top_srcdir)/src/httpserver.hpp
+# Makefile.am and consumer_umbrella_no_backend.cpp are also listed so that
+# changes to HEADER_HYGIENE_FORBIDDEN or the consumer TU invalidate the stamp.
+$(HYGIENE_STAMP): $(wildcard $(top_srcdir)/src/httpserver/*.hpp) \
+                  $(top_srcdir)/src/httpserver.hpp \
+                  $(top_srcdir)/Makefile.am \
+                  $(top_srcdir)/test/headers/consumer_umbrella_no_backend.cpp
 	@rm -rf $(CHECK_HYGIENE_STAGE)
 	@$(MAKE) $(AM_MAKEFLAGS) install DESTDIR=$(CHECK_HYGIENE_STAGE) >check-hygiene-install.log 2>&1 || { \
 	    echo "FAIL: staged install failed"; cat check-hygiene-install.log; \
