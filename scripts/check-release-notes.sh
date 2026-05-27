@@ -166,9 +166,31 @@ REQUIRED_V2_TOKENS=(
     '\bhttp_method\b'
     '\bmethod_set\b'
     '\biovec_entry\b'
+    '\badd_hook\b'
+    '\bhook_phase\b'
+    '\bhook_handle\b'
 )
 
 check_tokens_present "A3: RELEASE_NOTES.md is missing required v2 tokens" "$NOTES" "${REQUIRED_V2_TOKENS[@]}"
+
+# ---- A3b: TASK-052 — hook-bus closes-list issue numbers ----------------------
+# The "What's new" hook-bus bullet must reference the four (+1 partial) issues
+# the hook bus is documented to close. Tokens are matched anywhere in the file.
+
+REQUIRED_CLOSES_ISSUES=(
+    '#332'
+    '#281'
+    '#69'
+    '#273'
+    '#272'
+)
+check_tokens_present "A3b: RELEASE_NOTES.md is missing hook-bus closes-list issue numbers" "$NOTES" "${REQUIRED_CLOSES_ISSUES[@]}"
+
+# Also gate on the "eleven phases" summary — distinguishes the complete bullet
+# from the partial M5-skeleton wording that shipped with TASK-046.
+if ! grep -qiE '(eleven|11)[[:space:]]+phases?' "$NOTES"; then
+    fail "A3c: 'What's new' hook-bus bullet must mention 'eleven phases' (or '11 phases')"
+fi
 
 # ---- A4: required H2 sections present ---------------------------------------
 

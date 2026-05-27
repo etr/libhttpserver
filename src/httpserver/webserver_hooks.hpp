@@ -34,26 +34,40 @@
 #endif
 
 /**
- * Register a hook on a lifecycle phase (TASK-045 / §4.10 / DR-012).
+ * @brief Register a hook on a server-wide lifecycle phase
+ * (TASK-045 / §4.10 / DR-012).
  *
- * Eleven overloads, one per @ref httpserver::hook_phase value. The overload set
- * is distinguished by the @c std::function template argument; the
- * @ref httpserver::hook_phase parameter is validated at runtime against the
- * overload's phase and a mismatch throws @c std::invalid_argument.
- * In practice the compiler picks the right overload from the
- * std::function's signature, so the runtime guard catches only the
- * unusual case of a hand-built std::function being passed against
- * the wrong phase tag.
+ * Eleven overloads, one per @ref httpserver::hook_phase value. The
+ * accepted phases are:
  *
- * Returns a move-only @ref httpserver::hook_handle whose destructor (or
- * explicit @ref httpserver::hook_handle::remove ) erases the registration.
- * Call @ref httpserver::hook_handle::detach to disarm the destructor so the
- * registration persists for the webserver's lifetime.
+ *   - `connection_opened`   (observation-only)
+ *   - `accept_decision`     (observation-only)
+ *   - `connection_closed`   (observation-only)
+ *   - `request_received`    (short-circuit-capable; returns hook_action)
+ *   - `body_chunk`          (short-circuit-capable; returns hook_action)
+ *   - `route_resolved`      (observation-only)
+ *   - `before_handler`      (short-circuit-capable; returns hook_action)
+ *   - `handler_exception`   (short-circuit-capable; returns hook_action)
+ *   - `after_handler`       (short-circuit-capable; returns hook_action)
+ *   - `response_sent`       (observation-only)
+ *   - `request_completed`   (observation-only)
  *
- * **Skeleton-only at TASK-045.** No phase actually fires yet --
- * phases start firing in TASK-046..051. Registrations are stored
- * and reachable through @ref httpserver::hook_handle::remove ; no callback
- * runs until those tasks wire the firing sites.
+ * The overload set is distinguished by the @c std::function template
+ * argument; the @ref httpserver::hook_phase parameter is validated at
+ * runtime against the overload's phase and a mismatch throws
+ * @c std::invalid_argument. In practice the compiler picks the right
+ * overload from the std::function's signature, so the runtime guard
+ * catches only the unusual case of a hand-built std::function being
+ * passed against the wrong phase tag.
+ *
+ * Returns a move-only @ref httpserver::hook_handle whose destructor
+ * (or explicit @ref httpserver::hook_handle::remove ) erases the
+ * registration. Call @ref httpserver::hook_handle::detach to disarm
+ * the destructor so the registration persists for the webserver's
+ * lifetime.
+ *
+ * Per-route variants of the five post-route-resolution phases are
+ * available via @ref httpserver::http_resource::add_hook .
  *
  * @param phase   the lifecycle phase to register on. Must match the
  *                phase associated with the std::function signature.

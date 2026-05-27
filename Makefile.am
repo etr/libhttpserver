@@ -40,7 +40,7 @@ endif
 
 EXTRA_DIST = libhttpserver.pc.in $(DX_CONFIG) scripts/extract-release-notes.sh scripts/validate-version.sh \
 	scripts/check-examples.sh scripts/check-readme.sh scripts/check-release-notes.sh \
-	scripts/check-doxygen.sh \
+	scripts/check-doxygen.sh scripts/check-hooks-doc-spotcheck.sh \
 	scripts/check-soversion.sh scripts/check-parallel-install.sh \
 	scripts/check-complexity.sh scripts/check-duplication.sh \
 	scripts/check-file-size.sh \
@@ -287,7 +287,7 @@ check-hygiene:
 # shared staged install to avoid paying two full `make install` costs on
 # every `make check`. Both sub-checks can still be invoked standalone (they
 # will do their own install when CHECK_*_SHARED is not set).
-check-local: check-headers check-examples check-readme check-release-notes check-doxygen
+check-local: check-headers check-examples check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck
 	@echo "=== Shared staged install for check-install-layout and check-hygiene ==="
 	@rm -rf $(abs_top_builddir)/.shared-check-stage
 	@$(MAKE) $(AM_MAKEFLAGS) install DESTDIR=$(abs_top_builddir)/.shared-check-stage >check-shared-install.log 2>&1 || { \
@@ -330,6 +330,16 @@ check-release-notes:
 check-doxygen:
 	@echo "=== check-doxygen: enforce TASK-043 zero-warning invariant ==="
 	@BUILD_DIR="$(abs_top_builddir)" $(top_srcdir)/scripts/check-doxygen.sh
+
+# TASK-052: hook-bus documentation spotcheck (per-header @file/@brief blocks,
+# eleven-phase enumeration on webserver::add_hook, five-permitted /
+# six-rejected enumeration on http_resource::add_hook, alias callouts on the
+# five v1 setters, hook-concurrency sentence in the class-level threading
+# block). Static grep-based gate; complements check-doxygen's full Doxygen
+# warning sweep.
+check-hooks-doc-spotcheck:
+	@echo "=== check-hooks-doc-spotcheck: enforce TASK-052 invariants on hook public surface ==="
+	@$(top_srcdir)/scripts/check-hooks-doc-spotcheck.sh
 
 # TASK-044: SOVERSION acceptance gate. Stages a clean DESTDIR install and
 # asserts that the v2.0 on-disk SONAME layout is correct (libhttpserver.so.2
@@ -375,7 +385,7 @@ lint-file-size:
 	@echo "=== lint-file-size: enforce per-file line-count ceiling ==="
 	@$(top_srcdir)/scripts/check-file-size.sh
 
-.PHONY: check-headers check-install-layout check-hygiene check-examples check-readme check-release-notes check-doxygen check-soversion check-parallel-install lint-complexity lint-duplication lint-file-size
+.PHONY: check-headers check-install-layout check-hygiene check-examples check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck check-soversion check-parallel-install lint-complexity lint-duplication lint-file-size
 
 # TASK-039: top-level convenience rule that descends into test/ to
 # build and run the bench binaries (see test/Makefile.am and

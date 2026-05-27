@@ -101,13 +101,25 @@ v1.x is end-of-life on the day v2.0 ships.
   uses `method_set`.
 - **`httpserver::constants` namespace.** `constexpr` replacements for
   every removed `#define`.
-- **Lifecycle hook bus (M5).** `ws.add_hook(hook_phase, std::function)`
-  registers observation/mutation hooks on the request/connection
-  lifecycle. The three connection-level phases — `connection_opened`,
-  `accept_decision`, `connection_closed` — fire on every connection;
-  `accept_decision` exposes `{peer, accepted, reason}` (closes #332,
-  see `examples/banned_ip_log.cpp`). The other eight phases land in
-  later M5 tasks.
+- **Lifecycle hook bus (`webserver::add_hook` / `http_resource::add_hook`).**
+  Eleven phases (`hook_phase` enum: `connection_opened`,
+  `accept_decision`, `connection_closed`, `request_received`,
+  `body_chunk`, `route_resolved`, `before_handler`,
+  `handler_exception`, `after_handler`, `response_sent`,
+  `request_completed`) spanning connection, request, routing, handler,
+  and response. Multi-subscriber, server-wide and per-route. The v1
+  single-slot setters (`log_access`, `not_found_handler`,
+  `method_not_allowed_handler`, `internal_error_handler`,
+  `auth_handler`) survive as documented aliases for the corresponding
+  `add_hook` calls. Each registration returns a move-only `hook_handle`
+  whose destructor erases the entry; `hook_handle::detach()` keeps the
+  registration alive for the webserver's lifetime. See
+  `specs/architecture/04-components/hooks.md` and
+  [`README.md#lifecycle-hooks`](README.md#lifecycle-hooks). Closes:
+  #332 (banned-IP log, `examples/banned_ip_log.cpp`), #281 + #69
+  (CLF / time-taken access log, `examples/clf_access_log.cpp`), #273
+  (early 413, `examples/early_413.cpp`); partially closes #272
+  (per-chunk observation; body steal deferred to v2.1).
 
 ## What's renamed (v1 → v2)
 

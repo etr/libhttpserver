@@ -112,9 +112,9 @@ namespace httpserver {
  *      @ref create_webserver::method_not_allowed_handler,
  *      @ref create_webserver::internal_error_handler,
  *      @ref create_webserver::file_cleanup_callback, the PSK / SNI / ALPN
- *      callbacks, and any registered @ref http_resource render method --
- *      may run concurrently on multiple threads. Implementations MUST be
- *      thread-safe.
+ *      callbacks, any registered @ref http_resource render method, and
+ *      any registered lifecycle hook (@ref add_hook / @ref http_resource::add_hook )
+ *      -- may run concurrently on multiple threads. Implementations MUST be thread-safe.
  *
  * See specs/architecture/11-decisions/DR-008.md and §5.1 for the
  * decision record.

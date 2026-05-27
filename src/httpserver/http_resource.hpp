@@ -213,19 +213,32 @@ class http_resource {
      }
 
      /**
-      * TASK-051 / DR-012 / PRD-HOOK-REQ-006. Register a per-resource hook
-      * for one of the five post-route-resolution phases: before_handler,
-      * handler_exception, after_handler, response_sent, request_completed.
+      * @brief Register a per-resource hook on one of the five
+      * post-route-resolution phases.
       *
-      * Per-route hooks fire AFTER the server-wide chain at the same phase,
-      * and only if the server-wide chain did not short-circuit. The
-      * returned hook_handle owns the registration: destroying it (or
-      * calling remove()) erases the entry. If the resource is destroyed
-      * before the handle, the handle's destructor / remove() become no-ops.
+      * TASK-051 / DR-012 / PRD-HOOK-REQ-006. The five permitted phases
+      * are:
       *
-      * Passing any phase outside the five permitted ones throws
-      * std::invalid_argument naming the rejected phase. Passing an empty
-      * std::function also throws std::invalid_argument.
+      *   - `hook_phase::before_handler`     (short-circuit-capable)
+      *   - `hook_phase::handler_exception`  (short-circuit-capable)
+      *   - `hook_phase::after_handler`      (short-circuit-capable)
+      *   - `hook_phase::response_sent`      (observation-only)
+      *   - `hook_phase::request_completed`  (observation-only)
+      *
+      * The six rejected phases — `connection_opened`,
+      * `accept_decision`, `connection_closed`, `request_received`,
+      * `body_chunk`, and `route_resolved` — fire BEFORE the resource
+      * is known, so per-route registration is structurally impossible.
+      * Passing any of them (or `hook_phase::count_`) throws
+      * `std::invalid_argument` naming the rejected phase. Passing an
+      * empty `std::function` also throws `std::invalid_argument`.
+      *
+      * Per-route hooks fire AFTER the server-wide chain at the same
+      * phase, and only if the server-wide chain did not
+      * short-circuit. The returned `hook_handle` owns the
+      * registration: destroying it (or calling `remove()`) erases the
+      * entry. If the resource is destroyed before the handle, the
+      * handle's destructor / `remove()` become no-ops.
       *
       * @param phase one of: before_handler, handler_exception,
       *              after_handler, response_sent, request_completed.

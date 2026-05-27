@@ -95,6 +95,7 @@ The block above is reproduced byte-for-byte from
 * [WebSocket support](#websocket-support)
 * [Daemon introspection and external event loops](#daemon-introspection-and-external-event-loops)
 * [HTTP utils](#http-utils)
+* [Lifecycle hooks](#lifecycle-hooks)
 * [Threading contract](#threading-contract)
 * [Error propagation](#error-propagation)
 * [Feature availability](#feature-availability)
@@ -1510,6 +1511,93 @@ The following utility functions are available on `http::http_utils`:
 
 [Back to TOC](#table-of-contents)
 
+## Lifecycle hooks
+
+The hook bus is the single extension surface for observing or
+short-circuiting the request lifecycle. It replaces v1's single-slot
+patchwork (one `log_access` callback, one `not_found_handler`, one
+`method_not_allowed_handler`, one `internal_error_handler`, one
+`auth_handler`) with eleven distinct phases spanning connection,
+request, routing, handler, and response. Each phase accepts multiple
+subscribers and is observable both server-wide (via `webserver::add_hook`)
+and, for the five post-route-resolution phases, per-route (via
+`http_resource::add_hook`). The contract is captured in DR-012 and
+[`specs/architecture/04-components/hooks.md`](specs/architecture/04-components/hooks.md).
+
+Each call returns a move-only `hook_handle`. The handle's destructor
+removes the registration; `hook_handle::detach()` disarms the destructor
+so the registration persists for the webserver's lifetime.
+
+### Phases
+
+| Phase | Fires at | Short-circuit | Per-route eligible |
+|-------|----------|---------------|--------------------|
+| `connection_opened` | New TCP / TLS connection accepted by MHD | No | No |
+| `accept_decision` | After the default-policy / block-list verdict; the connection has been accepted or denied | No | No |
+| `connection_closed` | Connection torn down (peer close or server close) | No | No |
+| `request_received` | Request line and headers parsed, body not yet consumed | Yes (`hook_action`) | No |
+| `body_chunk` | Each upload-body chunk delivered by MHD | Yes (`hook_action`) | No |
+| `route_resolved` | After URL → resource resolution; carries the matched route or "no match" | No | No |
+| `before_handler` | After route resolution and method check, immediately before the handler runs | Yes (`hook_action`) | Yes |
+| `handler_exception` | Exception escapes the handler, before `internal_error_handler` is consulted | Yes (`hook_action`) | Yes |
+| `after_handler` | Handler returned a response, before it is queued on the wire (mutation point) | Yes (`hook_action`) | Yes |
+| `response_sent` | Response handed to `MHD_queue_response`; carries `status`, `bytes_queued`, `elapsed` | No | Yes |
+| `request_completed` | Request lifecycle finished (success or failure); last hook to fire per request | No | Yes |
+
+### Short-circuit semantics
+
+Phases marked "Short-circuit" return a `hook_action`:
+`hook_action::pass()` lets the chain continue;
+`hook_action::respond_with(response)` aborts the chain at that
+position. The wrapped response is sent on the wire in place of any
+handler output. Subsequent hooks in the same phase are not invoked.
+Observation-only phases (`connection_opened`, `accept_decision`,
+`connection_closed`, `route_resolved`, `response_sent`,
+`request_completed`) ignore the return; the chain always runs to
+completion.
+
+### Per-route hooks
+
+`http_resource::add_hook(phase, fn)` accepts only the five
+post-route-resolution phases: `before_handler`, `handler_exception`,
+`after_handler`, `response_sent`, `request_completed`. Per-route hooks
+fire after the server-wide chain at the same phase, and only if that
+server-wide chain did not short-circuit. Passing any other phase
+throws `std::invalid_argument` naming the rejected phase. See
+[`examples/per_route_auth.cpp`](examples/per_route_auth.cpp) for a
+worked example.
+
+### Examples
+
+* [`examples/banned_ip_log.cpp`](examples/banned_ip_log.cpp) — log every
+  banned-IP rejection via a single `accept_decision` hook.
+* [`examples/early_413.cpp`](examples/early_413.cpp) — return 413 from
+  a `request_received` hook before the body is consumed.
+* [`examples/clf_access_log.cpp`](examples/clf_access_log.cpp) — write
+  a Common Log Format access line from a `response_sent` hook.
+* [`examples/per_route_auth.cpp`](examples/per_route_auth.cpp) —
+  per-route HTTP Basic auth via `http_resource::add_hook(before_handler, ...)`.
+
+### v1 aliases
+
+Each of the v1 single-slot setters is an alias for an `add_hook` call
+at the corresponding phase. The aliases survive for ergonomic call
+sites; new code can use either form.
+
+| v1 setter | Equivalent `add_hook` call |
+|-----------|----------------------------|
+| `log_access(fn)` | `ws.add_hook(hook_phase::response_sent, fn)` |
+| `not_found_handler(fn)` | `ws.add_hook(hook_phase::route_resolved, fn)` |
+| `method_not_allowed_handler(fn)` | `ws.add_hook(hook_phase::before_handler, fn)` |
+| `internal_error_handler(fn)` | `ws.add_hook(hook_phase::handler_exception, fn)` |
+| `auth_handler(fn)` | `ws.add_hook(hook_phase::before_handler, fn)` |
+
+The aliases install observation-stub hooks under the same dispatch
+plumbing, so the on-the-wire behaviour is identical regardless of
+which form the caller used.
+
+[Back to TOC](#table-of-contents)
+
 ## Threading contract
 
 Distilled from
@@ -1716,6 +1804,21 @@ to the canonical example for each topic covered in this manual.
   per-request HTTP Digest auth via `check_digest_auth`.
 * [`examples/client_cert_auth.cpp`](examples/client_cert_auth.cpp) —
   mutual TLS with X.509 client certificates.
+
+### Lifecycle hooks
+
+* [`examples/banned_ip_log.cpp`](examples/banned_ip_log.cpp) — log every
+  banned-IP rejection from a single `accept_decision` hook (issue #332).
+* [`examples/early_413.cpp`](examples/early_413.cpp) — short-circuit
+  oversized uploads with 413 before any body bytes are consumed via a
+  `request_received` hook (issue #273).
+* [`examples/clf_access_log.cpp`](examples/clf_access_log.cpp) —
+  Common Log Format access logger written as a `response_sent` hook
+  using the structured `status` / `bytes_queued` / `elapsed` context
+  fields (issues #281 and #69).
+* [`examples/per_route_auth.cpp`](examples/per_route_auth.cpp) —
+  per-route HTTP Basic auth via `http_resource::add_hook(before_handler,
+  ...)` that does not touch sibling routes (DR-012).
 
 ### Operations
 
