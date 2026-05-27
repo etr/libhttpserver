@@ -323,7 +323,11 @@ DX_PDF_FEATURE(OFF)
 DX_PS_FEATURE(OFF)
 DX_INIT_DOXYGEN([$PACKAGE_NAME],[doxyconfig.in])
 
-LDFLAGS="$LDFLAGS -version-number libhttpserver_LDF_VERSION"
+# Export the libtool version-number triple so src/Makefile.am can scope it
+# to libhttpserver_la_LDFLAGS rather than injecting it into the global LDFLAGS
+# (which would affect all link steps, not just the shared library).
+LHT_LDF_VERSION="libhttpserver_LDF_VERSION"
+AC_SUBST(LHT_LDF_VERSION)
 
 AC_SUBST(LHT_LIBDEPS)
 AC_SUBST(AM_CXXFLAGS)

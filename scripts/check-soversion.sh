@@ -41,6 +41,10 @@
 # Exits non-zero on the first violation, with a clear FAIL line that names
 # the failing assertion.
 
+# -e is intentionally omitted: every significant command uses explicit
+# '|| fail ...' error handling so that failures produce a clear, named
+# assertion message rather than a silent non-zero exit.  Adding -e would
+# break the 'true'-guarded grep calls and confuse the intentional design.
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -57,6 +61,23 @@ pass() {
     echo "  PASS: $*"
 }
 
+# Portably resolve a chain of symlinks to the final real path.
+# Used instead of `readlink -f` which is not available on all platforms.
+resolve_symlink_chain() {
+    local p="$1"
+    local d
+    local target
+    while [ -L "$p" ]; do
+        target="$(readlink "$p")"
+        d="$(dirname "$p")"
+        case "$target" in
+            /*) p="$target" ;;
+            *)  p="$d/$target" ;;
+        esac
+    done
+    printf '%s\n' "$p"
+}
+
 # Detect the configured libdir/includedir from libtool's view of the build.
 # The Makefile substitutes ${prefix}, so we fish them out of config.status
 # (the canonical record of `./configure`'s decisions).
@@ -69,11 +90,9 @@ if [ ! -x "$CONFIG_STATUS" ]; then
     fail "$CONFIG_STATUS not found; run ./configure in $BUILD_DIR first"
 fi
 
-# Resolve prefix/libdir/includedir by asking config.status. These come back
-# already expanded (no ${prefix} placeholders), suitable for path use.
-RESOLVED_PREFIX="$("$CONFIG_STATUS" --config 2>/dev/null \
-    | tr ' ' '\n' | grep -E "^'?--prefix=" | head -1 | sed "s/^'\?--prefix=//;s/'\$//")"
-[ -z "$RESOLVED_PREFIX" ] && RESOLVED_PREFIX="/usr/local"
+# Resolve prefix by asking config.status (shared helper; see scripts/lib/).
+# shellcheck source=scripts/lib/resolve-prefix.sh
+source "$(dirname "$0")/lib/resolve-prefix.sh"
 
 # libdir & includedir default to $prefix/lib and $prefix/include for our
 # configure setup; configure.ac doesn't override AC_PROG_LIBTOOL defaults.
@@ -89,8 +108,13 @@ echo "  libdir    : $LIBDIR"
 # ---- A1: clean install --------------------------------------------------------
 rm -rf "$STAGE"
 mkdir -p "$STAGE"
-( cd "$BUILD_DIR" && make install DESTDIR="$STAGE" ) >"$STAGE/.install.log" 2>&1 \
-    || { echo "---- install log (tail) ----" >&2; tail -40 "$STAGE/.install.log" >&2; fail "A1: 'make install DESTDIR=$STAGE' failed"; }
+# Use tee so CI consoles see streaming progress while the log is also captured.
+( cd "$BUILD_DIR" && make install DESTDIR="$STAGE" ) 2>&1 | tee "$STAGE/.install.log"
+if [ "${PIPESTATUS[0]}" -ne 0 ]; then
+    echo "---- install log (tail) ----" >&2
+    tail -40 "$STAGE/.install.log" >&2
+    fail "A1: 'make install DESTDIR=$STAGE' failed"
+fi
 pass "A1: staged install succeeded"
 
 STAGE_LIB="$STAGE$LIBDIR"
@@ -143,22 +167,7 @@ fi
 
 # A4: dev symlink — must resolve (possibly through SONAME_LINK) to FULL.
 [ -L "$DEV_LINK" ] || fail "A4: expected symlink at $DEV_LINK"
-# Use shell readlink + manual chase; some systems lack `readlink -f`.
-chase_symlink() {
-    local p="$1"
-    local d
-    local target
-    while [ -L "$p" ]; do
-        target="$(readlink "$p")"
-        d="$(dirname "$p")"
-        case "$target" in
-            /*) p="$target" ;;
-            *)  p="$d/$target" ;;
-        esac
-    done
-    printf '%s\n' "$p"
-}
-DEV_RESOLVED="$(chase_symlink "$DEV_LINK")"
+DEV_RESOLVED="$(resolve_symlink_chain "$DEV_LINK")"
 if [ "$DEV_RESOLVED" != "$FULL" ]; then
     fail "A4: $DEV_LINK ultimately resolves to '$DEV_RESOLVED', expected '$FULL'"
 fi
@@ -172,14 +181,14 @@ case "$PLATFORM" in
             if [ -z "$soname_line" ]; then
                 fail "A5: readelf -d $FULL produced no SONAME line"
             fi
-            case "$soname_line" in
-                *"[$SONAME_BASENAME]"*|*"$SONAME_BASENAME"*)
-                    pass "A5: ELF SONAME = $SONAME_BASENAME"
-                    ;;
-                *)
-                    fail "A5: ELF SONAME mismatch — got: $soname_line"
-                    ;;
-            esac
+            # Extract the bracketed SONAME value for a strict equality check.
+            # readelf format: (SONAME)  Library soname: [libhttpserver.so.2]
+            extracted_soname="$(printf '%s\n' "$soname_line" | sed 's/.*\[\(.*\)\].*/\1/')"
+            if [ "$extracted_soname" = "$SONAME_BASENAME" ]; then
+                pass "A5: ELF SONAME = $SONAME_BASENAME"
+            else
+                fail "A5: ELF SONAME mismatch — got '$extracted_soname', expected '$SONAME_BASENAME'"
+            fi
         else
             echo "  SKIP A5: readelf not on PATH (filename-only verification accepted)"
         fi
@@ -243,11 +252,12 @@ fi
 # ---- A7: libtool .la --------------------------------------------------------
 LA_FILE="$STAGE_LIB/libhttpserver.la"
 [ -f "$LA_FILE" ] || fail "A7: libtool control file missing: $LA_FILE"
-# library_names should list the SONAME symlink (Linux) or 2.dylib (Darwin)
-if ! grep -q "$SONAME_BASENAME" "$LA_FILE"; then
-    fail "A7: $LA_FILE does not mention $SONAME_BASENAME"
+# Verify the SONAME appears specifically in the library_names= field, not just
+# anywhere in the file (e.g. not in a comment or dlname-only reference).
+if ! grep -E "^library_names=.*$SONAME_BASENAME" "$LA_FILE" >/dev/null 2>&1; then
+    fail "A7: $LA_FILE library_names= field does not reference $SONAME_BASENAME"
 fi
-pass "A7: $(basename "$LA_FILE") references $SONAME_BASENAME"
+pass "A7: $(basename "$LA_FILE") library_names references $SONAME_BASENAME"
 
 # ---- A8: static archive -----------------------------------------------------
 STATIC="$STAGE_LIB/libhttpserver.a"
