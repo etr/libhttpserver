@@ -189,6 +189,7 @@ LT_BEGIN_SUITE(deferred_suite)
 LT_END_SUITE(deferred_suite)
 
 LT_BEGIN_AUTO_TEST(deferred_suite, deferred_response_suite)
+    counter = 0;  // reset per-test; tear_down also resets but order may vary
     deferred_resource resource;
     ws->register_path("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
@@ -207,6 +208,7 @@ LT_BEGIN_AUTO_TEST(deferred_suite, deferred_response_suite)
 LT_END_AUTO_TEST(deferred_response_suite)
 
 LT_BEGIN_AUTO_TEST(deferred_suite, deferred_response_with_data)
+    counter = 0;  // reset per-test; tear_down also resets but order may vary
     deferred_resource_with_data resource;
     ws->register_path("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
@@ -225,6 +227,7 @@ LT_BEGIN_AUTO_TEST(deferred_suite, deferred_response_with_data)
 LT_END_AUTO_TEST(deferred_response_with_data)
 
 LT_BEGIN_AUTO_TEST(deferred_suite, deferred_response_empty_content)
+    counter = 0;  // reset per-test; tear_down also resets but order may vary
     deferred_resource_empty_content resource;
     ws->register_path("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);

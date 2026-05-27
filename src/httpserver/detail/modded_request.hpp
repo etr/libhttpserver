@@ -48,8 +48,11 @@ struct modded_request {
     webserver* ws = nullptr;
 
     // TASK-036: pointer-to-member dispatch slot; render_* now return
-    // http_response by value (PRD-RSP-REQ-007 / DR-004).
-    http_response (httpserver::http_resource::*callback)(const httpserver::http_request&);
+    // http_response by value (PRD-RSP-REQ-007 / DR-004). Initialized to
+    // nullptr; set by resolve_method_callback for recognized HTTP methods.
+    // For unrecognized methods mr->method_enum is left at count_ and
+    // finalize_answer takes the 405 path before invoking this pointer.
+    http_response (httpserver::http_resource::*callback)(const httpserver::http_request&) = nullptr;
 
     // TASK-021: enum form of the wire method, decoded once at the
     // dispatch boundary in webserver_impl::answer_to_connection. Used

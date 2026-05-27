@@ -366,8 +366,9 @@ void webserver_impl::resolve_method_callback(const char* method,
     // call hrm->is_allowed without re-scanning the wire string.
     // Unrecognised methods leave mr->method_enum at the default
     // (count_), so is_allowed(count_) returns false and the request
-    // takes the 405 path. Pre-existing latent bug: mr->callback may
-    // also be left un-set here; see TASK-027 for the dispatch redesign.
+    // takes the 405 path. mr->callback is left at nullptr (its
+    // default-initializer value) for unrecognised methods; the 405 guard
+    // in dispatch_resource_handler fires before it is ever invoked.
     if (0 == strcmp(method, http_utils::http_method_get)) {
         mr->callback = &http_resource::render_get;
         mr->method_enum = http_method::get;
