@@ -48,6 +48,7 @@ src/
 │   ├── http_response.hpp
 │   ├── http_resource.hpp
 │   ├── websocket_handler.hpp
+│   ├── constants.hpp                     # NEW — httpserver::constants namespace (TASK-006)
 │   ├── http_method.hpp                   # NEW — http_method + method_set
 │   ├── http_arg_value.hpp
 │   ├── http_utils.hpp

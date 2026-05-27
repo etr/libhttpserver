@@ -116,15 +116,15 @@ class create_webserver {
      create_webserver& operator=(const create_webserver& b) = default;
      create_webserver& operator=(create_webserver&& b) = default;
 
-     explicit create_webserver(uint16_t port): _port(port) { }
+     explicit create_webserver(std::uint16_t port): _port(port) { }
 
      // TASK-033 / PRD-CFG-REQ-003: validate at the setter. The `int` overload
      // exists so out-of-uint16_t values like 70000 are expressible (and
-     // throwable); the `uint16_t` overload preserves type-safe calls.
-     create_webserver& port(uint16_t port) { _port = port; return *this; }
+     // throwable); the `std::uint16_t` overload preserves type-safe calls.
+     create_webserver& port(std::uint16_t port) { _port = port; return *this; }
      create_webserver& port(int port) {
          if (port < 0 || port > 65535) throw_invalid("port", port, "[0, 65535]");
-         _port = static_cast<uint16_t>(port); return *this;
+         _port = static_cast<std::uint16_t>(port); return *this;
      }
 
      create_webserver& start_method(const http::http_utils::start_method_T& v) { _start_method = v; return *this; }
@@ -380,7 +380,7 @@ class create_webserver {
          if (v < 0) throw std::invalid_argument(std::string(name) + ": " + std::to_string(v) + " must be >= 0");
      }
 
-     uint16_t _port = constants::DEFAULT_WS_PORT;
+     std::uint16_t _port = constants::DEFAULT_WS_PORT;
      http::http_utils::start_method_T _start_method = http::http_utils::INTERNAL_SELECT;
      int _max_threads = 0;
      int _max_connections = 0;

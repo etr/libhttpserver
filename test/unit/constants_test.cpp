@@ -114,9 +114,11 @@ LT_BEGIN_SUITE(constants_suite)
     }
 LT_END_SUITE(constants_suite)
 
-// Runtime checks mirror the static_asserts so failures show up readably in
-// CI logs (a static_assert breaks the build with a message; the runtime
-// check produces a labelled "passed" line in the test runner).
+// Runtime checks intentionally mirror the static_asserts above. The duplication
+// is deliberate: static_asserts abort the build (opaque CI failure), whereas
+// these produce a labelled pass/fail line in the test runner output. Both
+// layers serve different diagnostic audiences and neither is redundant in
+// practice.
 LT_BEGIN_AUTO_TEST(constants_suite, default_ws_port_value)
     LT_CHECK_EQ(httpserver::constants::DEFAULT_WS_PORT, 9898);
 LT_END_AUTO_TEST(default_ws_port_value)

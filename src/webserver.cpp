@@ -61,7 +61,6 @@
 #include <utility>
 #include <vector>
 
-#include "httpserver/constants.hpp"
 #include "httpserver/create_webserver.hpp"
 // TASK-034: feature_unavailable + websocket_handler are public headers
 // included unconditionally so the public surface is identical across
