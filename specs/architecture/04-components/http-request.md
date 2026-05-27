@@ -2,7 +2,7 @@
 
 **Responsibility:** Carry per-request inputs from MHD's worker thread to the user handler. Lazily-cache derived data (path pieces, parsed args, basic-auth credentials, client cert fields).
 
-**Implementation:** PIMPL via `std::unique_ptr<http_request_impl>`. The impl is **arena-allocated** from a `std::pmr::monotonic_buffer_resource` that lives on the connection (one arena per MHD connection, reset between requests on the same keep-alive connection). The arena also backs the impl's owned strings and lazy-cache containers where practical, eliminating per-request `malloc` on the hot path.
+**Implementation:** PIMPL via `std::unique_ptr<http_request_impl>` (with a custom deleter that supports both heap and arena lifetimes). The impl is **arena-allocated** from a `std::pmr::monotonic_buffer_resource` that lives on the connection (one arena per MHD connection, reset between requests on the same keep-alive connection). The arena also backs the impl's owned strings and lazy-cache containers where practical, eliminating per-request `malloc` on the hot path. *[Historical note: the PIMPL boundary was introduced in TASK-015 using `std::make_unique` as a temporary heap allocation; the per-connection arena plumbing was wired in TASK-016, completing the DR-003b Option 2 decision.]*
 
 **Interfaces:**
 - Exposes (from PRD §3.6):
