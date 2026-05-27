@@ -49,7 +49,9 @@ endif
 
 libhttpserver_la_CFLAGS = $(AM_CFLAGS)
 libhttpserver_la_CXXFLAGS = $(AM_CXXFLAGS)
-libhttpserver_la_LDFLAGS = $(AM_LDFLAGS) -no-undefined
+# -version-number is scoped to the shared library link step only (not global
+# LDFLAGS, which would affect executables and test runners unnecessarily).
+libhttpserver_la_LDFLAGS = $(AM_LDFLAGS) -no-undefined -version-number @LHT_LDF_VERSION@
 
 install-data-hook:
 	(mkdir -p $(DESTDIR)$(includedir) && cd $(DESTDIR)$(includedir) && $(LN_S) -f httpserver.hpp httpserverpp)

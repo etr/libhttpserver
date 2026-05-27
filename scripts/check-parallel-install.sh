@@ -6,7 +6,7 @@
 # installed side-by-side into the same prefix without their shared-library
 # artefacts colliding. The promise is on the SONAME / runtime-library side —
 # v1's `libhttpserver.so.0` and v2's `libhttpserver.so.2` (Linux) or
-# `libhttpserver.0.dylib` and `libhttpserver.2.0.0.dylib` (Darwin) MUST
+# `libhttpserver.0.dylib` and `libhttpserver.2.dylib` (Darwin) MUST
 # coexist after installing both into the same DESTDIR.
 #
 # The dev-time artefacts (libhttpserver.la, libhttpserver.a, the .pc file,
@@ -50,6 +50,8 @@
 # install is well-formed; the on-disk filenames don't clash) is verified
 # either way.
 
+# -e is intentionally omitted: every significant command uses explicit
+# '|| fail/skip' error handling for clear diagnostic messages.
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -73,48 +75,57 @@ pass() {
     echo "  PASS: $*"
 }
 
-cleanup() {
-    # Tear down the ephemeral worktree if we created one. Don't touch
-    # $SHARED_STAGE — the maintainer may want to inspect it.
+remove_master_worktree() {
+    # Tear down the ephemeral worktree if it exists.  Used by both the
+    # pre-add stale-cleanup guard and the EXIT trap.
+    # `git worktree remove --force` may exit non-zero on shallow clones;
+    # ignore errors — the directory cleanup is sufficient for re-run safety.
     if [ -d "$MASTER_WORKTREE" ]; then
-        # `git worktree remove --force` may exit non-zero on shallow clones;
-        # ignore errors — the directory cleanup is sufficient for re-run safety.
         git -C "$REPO_ROOT" worktree remove --force "$MASTER_WORKTREE" 2>/dev/null || true
         rm -rf "$MASTER_WORKTREE"
     fi
+}
+
+cleanup() {
+    # Don't touch $SHARED_STAGE — the maintainer may want to inspect it.
+    remove_master_worktree
 }
 trap cleanup EXIT
 
 [ -d "$BUILD_DIR" ] || skip "BUILD_DIR=$BUILD_DIR does not exist (run ./configure first)"
 
-# Resolve libdir from config.status (same trick as check-soversion.sh).
+# Resolve libdir from config.status via the shared helper.
 CONFIG_STATUS="$BUILD_DIR/config.status"
 [ -x "$CONFIG_STATUS" ] || skip "$CONFIG_STATUS missing (run ./configure first)"
-RESOLVED_PREFIX="$("$CONFIG_STATUS" --config 2>/dev/null \
-    | tr ' ' '\n' | grep -E "^'?--prefix=" | head -1 | sed "s/^'\?--prefix=//;s/'\$//")"
-[ -z "$RESOLVED_PREFIX" ] && RESOLVED_PREFIX="/usr/local"
+# shellcheck source=scripts/lib/resolve-prefix.sh
+source "$(dirname "$0")/lib/resolve-prefix.sh"
 LIBDIR="$RESOLVED_PREFIX/lib"
 STAGE_LIB="$SHARED_STAGE$LIBDIR"
 
 case "$PLATFORM" in
     Linux)
         V2_FULL_BASENAME="libhttpserver.so.2.0.0"
-        # v1 install on disk uses the major from configure.ac's
-        # MAJOR_VERSION — most commonly .so.0 (legacy 0.x line) or
-        # .so.1. We don't pin the v1 SONAME here; we just require
-        # *some* sibling file shaped like libhttpserver.so.<digit>.
-        V1_PATTERN='^libhttpserver\.so\.[01]'
+        # V1_SONAME_PATTERN: fallback pattern when the exact v1 SONAME cannot
+        # be read from the .la file (see Phase 3 below).  [01] covers:
+        #   .so.0 — the legacy 0.x line (master MAJOR_VERSION=0)
+        #   .so.1 — a hypothetical 1.x bump (not shipped but possible)
+        # The exact v1 SONAME is always preferred; this pattern is a safety net.
+        V1_SONAME_PATTERN='^libhttpserver\.so\.[01]'
         ;;
     Darwin)
         # libtool with -version-number on Mach-O produces only the
         # major-numbered .N.dylib (no .N.M.P.dylib intermediate).
         V2_FULL_BASENAME="libhttpserver.2.dylib"
-        V1_PATTERN='^libhttpserver\.[01]\.dylib'
+        # V1_SONAME_PATTERN: fallback pattern — matches .0.dylib (legacy 0.x)
+        # or .1.dylib (hypothetical 1.x).  Same rationale as Linux above.
+        V1_SONAME_PATTERN='^libhttpserver\.[01]\.dylib'
         ;;
     *)
         fail "unsupported platform '$PLATFORM' (need Linux or Darwin)"
         ;;
 esac
+# Alias for backward-compatibility with the fallback grep path below.
+V1_PATTERN="$V1_SONAME_PATTERN"
 
 echo "=== check-parallel-install: v2 + v1 coexistence on the same DESTDIR ==="
 echo "  BUILD_DIR       : $BUILD_DIR"
@@ -144,10 +155,7 @@ if ! git -C "$REPO_ROOT" rev-parse --verify "$MASTER_REF" >/dev/null 2>&1; then
 fi
 
 # Remove a stale worktree from a previous aborted run, if any.
-if [ -d "$MASTER_WORKTREE" ]; then
-    git -C "$REPO_ROOT" worktree remove --force "$MASTER_WORKTREE" 2>/dev/null || true
-    rm -rf "$MASTER_WORKTREE"
-fi
+remove_master_worktree
 
 if ! git -C "$REPO_ROOT" worktree add --detach "$MASTER_WORKTREE" "$MASTER_REF" >"$SHARED_STAGE/.worktree-add.log" 2>&1; then
     cat "$SHARED_STAGE/.worktree-add.log" >&2
@@ -165,17 +173,36 @@ fi
 V1_BUILD="$MASTER_WORKTREE/build"
 mkdir -p "$V1_BUILD"
 echo "  configuring $MASTER_REF"
+# Build Darwin-specific include/lib hints using the active Homebrew prefix
+# (if brew is on PATH) so that arm64 (/opt/homebrew) and x86_64 (/usr/local)
+# Homebrew installs are both handled correctly.  On Linux these variables
+# remain empty and configure falls back to its own search paths.
+_HOMEBREW_CPPFLAGS=""
+_HOMEBREW_LDFLAGS=""
+if [ "$PLATFORM" = "Darwin" ]; then
+    if command -v brew >/dev/null 2>&1; then
+        _BREW_PREFIX="$(brew --prefix 2>/dev/null || true)"
+    else
+        _BREW_PREFIX="/opt/homebrew"   # best-effort fallback for arm64
+    fi
+    if [ -n "$_BREW_PREFIX" ]; then
+        _HOMEBREW_CPPFLAGS="-I${_BREW_PREFIX}/include -I${_BREW_PREFIX}/opt/gnutls/include"
+        _HOMEBREW_LDFLAGS="-L${_BREW_PREFIX}/lib -L${_BREW_PREFIX}/opt/gnutls/lib"
+    fi
+fi
 if ! ( cd "$V1_BUILD" && \
-        CPPFLAGS="${CPPFLAGS:-} -I/opt/homebrew/include -I/opt/homebrew/opt/gnutls/include" \
-        LDFLAGS="${LDFLAGS:-} -L/opt/homebrew/lib -L/opt/homebrew/opt/gnutls/lib" \
+        CPPFLAGS="${CPPFLAGS:-} ${_HOMEBREW_CPPFLAGS}" \
+        LDFLAGS="${LDFLAGS:-} ${_HOMEBREW_LDFLAGS}" \
         LIBS="${LIBS:--lgnutls}" \
         ../configure --prefix="$RESOLVED_PREFIX" ) >"$SHARED_STAGE/.v1-configure.log" 2>&1; then
     tail -20 "$SHARED_STAGE/.v1-configure.log" >&2
     skip "v1 configure failed (treating as environment limitation)"
 fi
 
-echo "  building $MASTER_REF"
-if ! ( cd "$V1_BUILD" && make -j4 ) >"$SHARED_STAGE/.v1-make.log" 2>&1; then
+# Use all available cores; mirror what the parent make would use.
+_NJOBS="$(nproc 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo 4)"
+echo "  building $MASTER_REF (make -j${_NJOBS})"
+if ! ( cd "$V1_BUILD" && make -j"${_NJOBS}" ) >"$SHARED_STAGE/.v1-make.log" 2>&1; then
     tail -30 "$SHARED_STAGE/.v1-make.log" >&2
     skip "v1 make failed (treating as environment limitation; e.g. v1 sources may not build on this toolchain)"
 fi
@@ -191,17 +218,42 @@ pass "v1 ($MASTER_REF) install succeeded into shared stage"
 [ -f "$STAGE_LIB/$V2_FULL_BASENAME" ] \
     || fail "v2 library $V2_FULL_BASENAME disappeared from $STAGE_LIB after v1 install"
 
-# Look for any v1-style sibling that is NOT the v2 file we just confirmed.
-v1_hits="$(ls "$STAGE_LIB" 2>/dev/null | grep -E "$V1_PATTERN" | grep -v "^$V2_FULL_BASENAME\$" || true)"
-if [ -z "$v1_hits" ]; then
-    fail "no v1-style library file (matching $V1_PATTERN, excluding $V2_FULL_BASENAME) found in $STAGE_LIB; install contents: $(ls "$STAGE_LIB" 2>/dev/null)"
+# Derive the expected v1 runtime library basename from the v1 build's .la
+# file (the `library_names` field), falling back to the broad V1_PATTERN
+# grep when the .la is absent (older libtool layouts).
+V1_LA="$V1_BUILD/.libs/libhttpserver.la"
+V1_EXPECTED_BASENAME=""
+if [ -f "$V1_LA" ]; then
+    # `library_names='libhttpserver.so.0.x.y libhttpserver.so.0 libhttpserver.so'`
+    # The last token in the library_names value is the dev link; the first is
+    # the versioned runtime file.  Extract the first token.
+    _raw="$(grep '^library_names=' "$V1_LA" | head -1 | sed "s/^library_names='*//;s/'*$//")"
+    V1_EXPECTED_BASENAME="${_raw%% *}"   # first whitespace-delimited token
 fi
 
-echo "  v1 artefacts coexisting with v2:"
-for f in $v1_hits; do
-    echo "    $f"
-done
-pass "v1 and v2 SONAMEd libraries coexist in $STAGE_LIB"
+if [ -n "$V1_EXPECTED_BASENAME" ]; then
+    # Strict check: the exact filename must appear in $STAGE_LIB and must
+    # differ from V2_FULL_BASENAME (ensures they coexist, not just that v2
+    # is present).
+    if [ "$V1_EXPECTED_BASENAME" = "$V2_FULL_BASENAME" ]; then
+        fail "v1 and v2 appear to have the SAME versioned filename ($V1_EXPECTED_BASENAME); SONAME collision detected"
+    fi
+    [ -f "$STAGE_LIB/$V1_EXPECTED_BASENAME" ] \
+        || fail "expected v1 library '$V1_EXPECTED_BASENAME' (from $V1_LA) not found in $STAGE_LIB; install contents: $(ls "$STAGE_LIB" 2>/dev/null)"
+    echo "  v1 artefact coexisting with v2: $V1_EXPECTED_BASENAME"
+    pass "v1 ($V1_EXPECTED_BASENAME) and v2 ($V2_FULL_BASENAME) SONAMEd libraries coexist in $STAGE_LIB"
+else
+    # Fallback: broad pattern-match (V1_PATTERN covers .so.0, .so.1, etc.).
+    v1_hits="$(ls "$STAGE_LIB" 2>/dev/null | grep -E "$V1_PATTERN" | grep -v "^$V2_FULL_BASENAME\$" || true)"
+    if [ -z "$v1_hits" ]; then
+        fail "no v1-style library file (matching $V1_PATTERN, excluding $V2_FULL_BASENAME) found in $STAGE_LIB; install contents: $(ls "$STAGE_LIB" 2>/dev/null)"
+    fi
+    echo "  v1 artefacts coexisting with v2:"
+    while IFS= read -r f; do
+        echo "    $f"
+    done <<< "$v1_hits"
+    pass "v1 and v2 SONAMEd libraries coexist in $STAGE_LIB"
+fi
 
 echo "  Note: dev-time files (libhttpserver.la, libhttpserver.a, libhttpserver.pc,"
 echo "        headers, the bare libhttpserver.so/.dylib dev symlink) are LAST-WRITER-WINS"
