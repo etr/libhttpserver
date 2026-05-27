@@ -55,7 +55,6 @@
 #include "httpserver/webserver.hpp"
 #include "httpserver/detail/webserver_impl.hpp"
 
-#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
@@ -63,6 +62,7 @@
 #include <utility>
 
 #include "httpserver/create_webserver.hpp"
+#include "httpserver/detail/method_utils.hpp"
 #include "httpserver/hook_action.hpp"
 #include "httpserver/hook_context.hpp"
 #include "httpserver/hook_handle.hpp"
@@ -146,24 +146,6 @@ void install_log_access_alias_(
     };
 }
 
-// Serialize an allowed-method set into the comma-separated value
-// expected by the HTTP `Allow:` header. Enum-declaration order:
-// GET, HEAD, POST, PUT, DELETE, CONNECT, OPTIONS, TRACE, PATCH.
-// Mirrors webserver_impl::serialize_allow_methods without the impl
-// dependency -- allows the alias lambda to build the Allow header
-// without capturing webserver_impl*.
-std::string serialize_allow_methods_local(method_set allowed) {
-    std::string header_value;
-    for (std::uint8_t i = 0;
-            i < static_cast<std::uint8_t>(http_method::count_); ++i) {
-        auto m = static_cast<http_method>(i);
-        if (!allowed.contains(m)) continue;
-        if (!header_value.empty()) header_value += ", ";
-        header_value += std::string(to_string(m));
-    }
-    return header_value;
-}
-
 }  // namespace
 
 void webserver::install_default_alias_hooks_() {
@@ -174,10 +156,24 @@ void webserver::install_default_alias_hooks_() {
     // hook_phase::before_handler. Equivalent to
     // ws.add_hook(hook_phase::before_handler, ...).
     //
-    // The hook replicates and replaces the former
-    // webserver_impl::apply_auth_short_circuit inline path: it respects
-    // auth_skip_paths, calls the user-supplied auth_handler, and
-    // short-circuits with the returned response when auth fails.
+    // The hook IS the auth enforcement path — it replaces (and removes)
+    // the former webserver_impl::apply_auth_short_circuit inline call.
+    // It respects auth_skip_paths via should_skip_auth, calls the user-
+    // supplied auth_handler callable, and returns
+    // hook_action::respond_with(*resp) when auth fails, short-circuiting
+    // the remaining before_handler chain AND dispatch_resource_handler.
+    //
+    // IMPORTANT: because before_handler fires from finalize_answer BEFORE
+    // dispatch_resource_handler is called (see webserver_request.cpp:
+    // fire_before_handler_gated), the auth hook fires for every request
+    // that resolves to a registered route (route hit). It does NOT fire
+    // for 404 paths (found==false), which is the correct semantic: there
+    // is no resource to authenticate against.
+    //
+    // DO NOT remove or replace this hook registration without also
+    // providing an equivalent enforcement mechanism. The hook IS the
+    // security boundary; there is no separate apply_auth_short_circuit
+    // fallback path remaining.
     // ----------------------------------------------------------------
     if (auth_handler != nullptr) {
         // Capture both the webserver* (for auth_handler callable) and the
@@ -240,9 +236,12 @@ void webserver::install_default_alias_hooks_() {
                     http_response resp =
                         ws_ptr->method_not_allowed_handler(*ctx.request);
                     // Append Allow header from the matched route descriptor.
+                    // TASK-048 review cleanup: use the shared free function
+                    // detail::format_allow_header (method_utils.hpp) instead of
+                    // the former local duplicate serialize_allow_methods_local.
                     if (ctx.matched) {
                         std::string allow_value =
-                            serialize_allow_methods_local(ctx.matched->methods);
+                            detail::format_allow_header(ctx.matched->methods);
                         if (!allow_value.empty()) {
                             resp.with_header(
                                 http::http_utils::http_header_allow,

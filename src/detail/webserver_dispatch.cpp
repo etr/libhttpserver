@@ -64,6 +64,7 @@
 #include "httpserver/websocket_handler.hpp"
 #include "httpserver/detail/http_endpoint.hpp"
 #include "httpserver/detail/lambda_resource.hpp"
+#include "httpserver/detail/method_utils.hpp"
 #include "httpserver/detail/modded_request.hpp"
 #include "httpserver/detail/resource_hook_table.hpp"
 #include "httpserver/http_request.hpp"
@@ -360,19 +361,11 @@ bool webserver_impl::resolve_resource_for_request(detail::modded_request* mr,
 }
 
 std::string webserver_impl::serialize_allow_methods(method_set allowed) const {
-    // TASK-021: enum-declaration order (GET, HEAD, POST, PUT, DELETE,
-    // CONNECT, OPTIONS, TRACE, PATCH). v1 used std::map iteration order
-    // (alphabetical); the only existing assertion in-tree is
-    // "HEAD, POST" which is preserved by enum order.
-    std::string header_value;
-    for (std::uint8_t i = 0;
-            i < static_cast<std::uint8_t>(http_method::count_); ++i) {
-        auto m = static_cast<http_method>(i);
-        if (!allowed.contains(m)) continue;
-        if (!header_value.empty()) header_value += ", ";
-        header_value += std::string(to_string(m));
-    }
-    return header_value;
+    // TASK-048 review cleanup (findings 3 & 4): delegate to the shared free
+    // function format_allow_header in detail/method_utils.hpp.  The member
+    // function is retained so existing call sites (dispatch_resource_handler
+    // below) compile unchanged; internally it is now a thin wrapper.
+    return detail::format_allow_header(allowed);
 }
 
 namespace {

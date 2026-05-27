@@ -19,6 +19,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
@@ -31,6 +32,7 @@ using httpserver::before_handler_ctx;
 using httpserver::create_webserver;
 using httpserver::hook_action;
 using httpserver::hook_phase;
+using httpserver::http_method;
 using httpserver::http_request;
 using httpserver::http_response;
 using httpserver::webserver;
@@ -102,11 +104,21 @@ LT_END_AUTO_TEST(short_circuit_skips_resource_handler)
 LT_BEGIN_AUTO_TEST(hooks_before_handler_short_circuit_suite,
                    pass_invokes_resource_handler)
     std::atomic<std::size_t> handler_calls{0};
+    // Capture ctx fields to verify the firing site populates them correctly.
+    // Stored as uint8_t (underlying type of http_method) and bool for
+    // atomic compatibility.
+    std::atomic<std::uint8_t> ctx_method{
+        static_cast<std::uint8_t>(http_method::count_)};  // sentinel: "not set"
+    std::atomic<bool> ctx_resource_non_null{false};
     webserver ws{create_webserver(PORT)};
 
     auto h = ws.add_hook(hook_phase::before_handler,
         std::function<hook_action(before_handler_ctx&)>(
-            [](before_handler_ctx&) {
+            [&ctx_method, &ctx_resource_non_null](before_handler_ctx& ctx) {
+                ctx_method.store(static_cast<std::uint8_t>(ctx.method),
+                                 std::memory_order_relaxed);
+                ctx_resource_non_null.store(ctx.resource != nullptr,
+                                            std::memory_order_relaxed);
                 return hook_action::pass();
             }));
 
@@ -133,6 +145,11 @@ LT_BEGIN_AUTO_TEST(hooks_before_handler_short_circuit_suite,
     LT_CHECK_EQ(http_code, 200L);
     LT_CHECK_EQ(resp_body, std::string("PRIVATE-DATA"));
     LT_CHECK_EQ(handler_calls.load(), static_cast<std::size_t>(1));
+    // Verify the firing site populates ctx.method and ctx.resource correctly
+    // for a GET request on a registered route (TASK-048 review finding 14).
+    LT_CHECK_EQ(ctx_method.load(),
+                static_cast<std::uint8_t>(http_method::get));
+    LT_CHECK(ctx_resource_non_null.load());
 LT_END_AUTO_TEST(pass_invokes_resource_handler)
 
 LT_BEGIN_AUTO_TEST_ENV()

@@ -268,6 +268,16 @@ MHD_Result webserver_impl::materialize_and_queue_response(MHD_Connection* connec
 // helper so finalize_answer stays under the per-function CCN ceiling
 // (CCN_MAX in scripts/check-complexity.sh) after the addition of the
 // hook firing site. Observation-only per DR-012 §4.10.
+//
+// LIFETIME NOTE: desc.path_template is a string_view into
+// mr->matched_path_template (a per-request std::string on modded_request).
+// The view is only valid for the duration of fire_route_resolved — hooks
+// must not capture it past their return. See route_descriptor::path_template
+// Doxygen in hook_context.hpp for the full contract.
+//
+// hrm may be null for lambda-route hits; the 'found && hrm' gate covers
+// both the miss path (found==false) and the lambda-route hit (found==true
+// but no http_resource*), both of which produce desc==nullopt.
 static void fire_route_resolved_gated(webserver_impl* impl,
                                       detail::modded_request* mr,
                                       bool found,
