@@ -18,6 +18,16 @@
 //   export AUTH_USER=alice AUTH_PASS=hunter2
 //   ./per_route_auth
 //
+// TRANSPORT NOTE: HTTP Basic auth sends credentials base64-encoded but
+// NOT encrypted. In production, serve only over TLS (use
+// create_webserver().use_ssl(...)).
+//
+// CONSTANT-TIME NOTE: The credential comparison below uses
+// std::string_view::operator==, which short-circuits on the first
+// differing byte and can leak information via timing side-channels
+// (CWE-208). In production, replace with a constant-time comparison
+// (e.g., CRYPTO_memcmp or an equivalent fixed-length loop).
+//
 // Then:
 //
 //   curl -v http://localhost:8080/public                       # 200 OK
@@ -81,8 +91,14 @@ int main() {
     auto h = priv->add_hook(hs::hook_phase::before_handler,
         std::function<hs::hook_action(hs::before_handler_ctx&)>(
             [user, pass](hs::before_handler_ctx& ctx) {
+                // Null should never occur at before_handler on a matched
+                // route, but fail closed (deny) rather than pass on any
+                // unexpected null to avoid a fail-open security hole
+                // (CWE-636).
                 if (ctx.request == nullptr) {
-                    return hs::hook_action::pass();
+                    return hs::hook_action::respond_with(
+                        hs::http_response::unauthorized(
+                            "Basic", "private-realm", "Unauthorized"));
                 }
                 std::string_view u = ctx.request->get_user();
                 std::string_view p = ctx.request->get_pass();

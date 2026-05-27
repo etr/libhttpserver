@@ -103,10 +103,10 @@ v1.x is end-of-life on the day v2.0 ships.
   every removed `#define`.
 - **Lifecycle hook bus (`webserver::add_hook` / `http_resource::add_hook`).**
   Eleven phases (`hook_phase` enum: `connection_opened`,
-  `accept_decision`, `connection_closed`, `request_received`,
-  `body_chunk`, `route_resolved`, `before_handler`,
-  `handler_exception`, `after_handler`, `response_sent`,
-  `request_completed`) spanning connection, request, routing, handler,
+  `accept_decision`, `request_received`, `body_chunk`,
+  `route_resolved`, `before_handler`, `handler_exception`,
+  `after_handler`, `response_sent`, `request_completed`,
+  `connection_closed`) spanning connection, request, routing, handler,
   and response. Multi-subscriber, server-wide and per-route. The v1
   single-slot setters (`log_access`, `not_found_handler`,
   `method_not_allowed_handler`, `internal_error_handler`,

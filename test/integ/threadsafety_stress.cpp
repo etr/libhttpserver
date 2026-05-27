@@ -102,7 +102,8 @@ struct OpCounters {
 
 // TASK-052: hook-handle bag retained across iterations so add/remove
 // ops race against each other AND against the route-table ops above.
-// shared_ptr to keep the test mutator obvious in handler captures.
+// Raw pointer (passed to driver_body) to a stack-allocated bag;
+// lifetime is the test body, so no ownership transfer is needed.
 struct HookBag {
     std::mutex mtx;
     std::vector<ht::hook_handle> handles;          // armed handles
@@ -113,8 +114,7 @@ class noop_resource : public ht::http_resource {
  public:
     ht::http_response render_get(
         const ht::http_request&) override {
-        return
-            ht::http_response::string("ok");
+        return ht::http_response::string("ok");
     }
 };
 
@@ -123,6 +123,9 @@ class noop_resource : public ht::http_resource {
 // phase selection happens at compile time via this switch (the runtime
 // `phase` value is purely the argument to add_hook). Returns an armed
 // hook_handle bound to the chosen phase.
+// NOTE: the modulo constant (11u) MUST match the number of hook_phase
+// enumerators in hook_phase.hpp. If a new phase is added, update both
+// the modulo and the switch cases here.
 ht::hook_handle install_random_hook(ht::webserver* ws, unsigned phase_idx) {
     switch (phase_idx % 11u) {
         case 0:
@@ -249,12 +252,11 @@ ht::http_response driver_body(const ht::http_request& req,
                 ws, static_cast<unsigned>(i));
             std::lock_guard<std::mutex> lk(hooks->mtx);
             if (hooks->handles.size() >= HookBag::kCap) {
-                // Recycle: move the oldest handle out before erasing so
-                // its destructor fires on a moved-from (empty) handle.
-                // This avoids any double-call of remove(): the explicit
-                // remove() below deregisters the hook, and the moved-
-                // from destructor is a guaranteed no-op — no TSan race
-                // on the 'already removed' guard in hook_handle.
+                // Recycle: move the oldest handle out, erase the slot,
+                // then call remove() so the moved-from dtor is a no-op.
+                // erase(begin()) is O(n) on vector; acceptable at
+                // kCap=256, but switch to std::deque if kCap grows
+                // significantly.
                 ht::hook_handle dead = std::move(hooks->handles.front());
                 hooks->handles.erase(hooks->handles.begin());
                 dead.remove();  // deregisters; dtor is now a no-op
@@ -270,8 +272,12 @@ ht::http_response driver_body(const ht::http_request& req,
                 // Pop the back: most recently added, most likely
                 // still in cache; removes pressure-test the writer-
                 // lock path on hook_table_mutex_.
-                hooks->handles.back().remove();
+                // Move out first, pop the slot, then call remove() so
+                // the (now-empty) bag entry's dtor is a no-op — mirrors
+                // the recycle pattern in case 4.
+                ht::hook_handle dead = std::move(hooks->handles.back());
                 hooks->handles.pop_back();
+                dead.remove();
                 counters->hook_remove_ok.fetch_add(
                     1, std::memory_order_relaxed);
             }
@@ -382,15 +388,12 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
     // documented TSan rebuild) no data race fired". TASK-052 adds the
     // hook add/remove pair to the same gate.
     LT_CHECK_GT(counters.handler_calls.load(), 0);
-    LT_CHECK_GT(counters.register_ok.load() +
-                    counters.unregister_ok.load(),
-                0);
-    LT_CHECK_GT(counters.block_ok.load() +
-                    counters.unblock_ok.load(),
-                0);
-    LT_CHECK_GT(counters.hook_add_ok.load() +
-                    counters.hook_remove_ok.load(),
-                0);  // TASK-052
+    LT_CHECK_GT(counters.register_ok.load(), 0);    // TASK-032
+    LT_CHECK_GT(counters.unregister_ok.load(), 0);  // TASK-032
+    LT_CHECK_GT(counters.block_ok.load(), 0);        // TASK-032
+    LT_CHECK_GT(counters.unblock_ok.load(), 0);      // TASK-032
+    LT_CHECK_GT(counters.hook_add_ok.load(), 0);     // TASK-052
+    LT_CHECK_GT(counters.hook_remove_ok.load(), 0);  // TASK-052
 
     // Drain the hook bag explicitly before the webserver stops so the
     // hook_handle destructors run while the impl is still alive. (The
