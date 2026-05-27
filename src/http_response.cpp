@@ -84,28 +84,35 @@ void http_response::destroy_body() noexcept {
         // ::operator new(sizeof(T)) the factory uses (TASK-010).
         ::operator delete(body_);
     }
+    // Invariant: leave in the empty/no-body state regardless of which
+    // branch ran (inline dtor only, or heap dtor + operator delete).
     body_ = nullptr;
     body_inline_ = false;
 }
 
-void http_response::adopt_body_from(http_response& o) noexcept {
-    if (o.body_ == nullptr) {
-        return;  // destination's body_/body_inline_ already cleared
+void http_response::adopt_body_from(http_response& other) noexcept {
+    if (other.body_ == nullptr) {
+        return;  // source has no body; nothing to adopt
     }
-    if (o.body_inline_) {
+    if (other.body_inline_) {
         // Placement-move into our buffer, then destroy the source's
         // inline body so the source's destructor is a no-op.
-        o.body_->move_into(body_storage_);
+        other.body_->move_into(body_storage_);
         body_ = reinterpret_cast<detail::body*>(body_storage_);
         body_inline_ = true;
-        o.body_->~body();
+        other.body_->~body();
     } else {
         // Heap path: pointer transfer — no allocation, no copy.
-        body_ = o.body_;
+        body_ = other.body_;
         body_inline_ = false;
     }
-    o.body_ = nullptr;
-    o.body_inline_ = false;
+    other.body_ = nullptr;
+    other.body_inline_ = false;
+    // Reset the moved-from source's kind_ to empty so any code that reads
+    // kind() on a moved-from http_response sees a consistent state
+    // (body_ == nullptr always corresponds to body_kind::empty).
+    // Findings: performance-reviewer-iter1-34 / security-reviewer-iter1-40.
+    other.kind_ = body_kind::empty;
 }
 
 // -----------------------------------------------------------------------
@@ -127,13 +134,13 @@ http_response::~http_response() {
 // movable; per-subclass body move ctors are noexcept by static_assert in
 // detail/body.hpp).
 // -----------------------------------------------------------------------
-http_response::http_response(http_response&& o) noexcept
-    : status_code_(o.status_code_),
-      headers_(std::move(o.headers_)),
-      footers_(std::move(o.footers_)),
-      cookies_(std::move(o.cookies_)),
-      kind_(o.kind_) {
-    adopt_body_from(o);
+http_response::http_response(http_response&& other) noexcept
+    : status_code_(other.status_code_),
+      headers_(std::move(other.headers_)),
+      footers_(std::move(other.footers_)),
+      cookies_(std::move(other.cookies_)),
+      kind_(other.kind_) {
+    adopt_body_from(other);
 }
 
 // -----------------------------------------------------------------------
@@ -146,17 +153,17 @@ http_response::http_response(http_response&& o) noexcept
 // Self-assignment is guarded explicitly because step 1 would otherwise
 // destroy the body we are about to read from.
 // -----------------------------------------------------------------------
-http_response& http_response::operator=(http_response&& o) noexcept {
-    if (this == &o) {
+http_response& http_response::operator=(http_response&& other) noexcept {
+    if (this == &other) {
         return *this;
     }
     destroy_body();
-    status_code_ = o.status_code_;
-    headers_ = std::move(o.headers_);
-    footers_ = std::move(o.footers_);
-    cookies_ = std::move(o.cookies_);
-    kind_ = o.kind_;
-    adopt_body_from(o);
+    status_code_ = other.status_code_;
+    headers_ = std::move(other.headers_);
+    footers_ = std::move(other.footers_);
+    cookies_ = std::move(other.cookies_);
+    kind_ = other.kind_;
+    adopt_body_from(other);
     return *this;
 }
 

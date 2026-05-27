@@ -113,6 +113,12 @@ namespace {
 
 using SBO = httpserver::http_response_sbo_test_access;
 
+// TODO(TASK-010): migrate place_* helpers to factory calls once factories
+// are stable. These helpers bypass the production factory path so they can
+// validate SBO internals before the factories land; they will need to be
+// partly rewritten or retired once TASK-010's http_response::string() et al.
+// are the canonical construction path.
+
 // Place a string_body into r's inline storage and wire the response
 // fields up. `r` must be empty (default-constructed).
 void place_inline_string(http_response& r, std::string content) {
@@ -149,6 +155,10 @@ class counter_body final : public body {
 
     body_kind kind() const noexcept override { return body_kind::empty; }
     std::size_t size() const noexcept override { return 0; }
+    // Returns nullptr intentionally: counter_body is a destructor-probe stub
+    // used only to detect whether destroy_body() called the dtor. It is never
+    // invoked through the MHD dispatch path in these tests, so a null return
+    // here is not a bug.
     MHD_Response* materialize() override { return nullptr; }
 
     void move_into(void* dst) noexcept override {
@@ -222,49 +232,77 @@ LT_END_AUTO_TEST(move_ctor_heap_source)
 // Move-assignment 4-case cross product.
 // -----------------------------------------------------------------------
 LT_BEGIN_AUTO_TEST(http_response_sbo_suite, move_assign_inline_to_inline)
+    // finding-6: dst's old inline body dtor must fire; finding-20: kind_ must propagate.
+    int dtor_count = 0;
     http_response dst;
     http_response src;
-    place_inline_string(dst, "old");
+    place_inline_counter(dst, &dtor_count);   // dst holds counter_body; tracks its dtor
     place_inline_string(src, "new");
 
     dst = std::move(src);
 
+    // Old dst body (counter_body) must have been destroyed exactly once.
+    LT_CHECK_EQ(dtor_count, 1);
     LT_CHECK_EQ(SBO::body_inline(dst), true);
     LT_ASSERT_NEQ(SBO::body_ptr(dst), static_cast<body*>(nullptr));
     LT_CHECK_EQ(reinterpret_cast<void*>(SBO::body_ptr(dst)),
                 reinterpret_cast<void*>(SBO::storage(dst)));
     LT_CHECK_EQ(SBO::body_ptr(src), static_cast<body*>(nullptr));
+    // kind_ must be propagated from src to dst (string) and src reset to empty.
+    LT_CHECK_EQ(static_cast<int>(SBO::kind(dst)),
+                static_cast<int>(body_kind::string));
+    LT_CHECK_EQ(static_cast<int>(SBO::kind(src)),
+                static_cast<int>(body_kind::empty));
 LT_END_AUTO_TEST(move_assign_inline_to_inline)
 
-LT_BEGIN_AUTO_TEST(http_response_sbo_suite, move_assign_inline_to_heap)
+// Naming note (finding-50): "inline_to_heap" was ambiguous — this test has
+// dst=inline, src=heap; the name now reads as "heap src into inline dst".
+LT_BEGIN_AUTO_TEST(http_response_sbo_suite, move_assign_heap_src_into_inline_dst)
+    // finding-20: kind_ must propagate; also verifies old inline dst body dtor.
+    int dtor_count = 0;
     http_response dst;
     http_response src;
-    place_inline_string(dst, "old-inline");
+    place_inline_counter(dst, &dtor_count);   // dst holds counter_body; dtor must fire
     place_heap_string(src, "new-heap");
     body* heap_ptr = SBO::body_ptr(src);
 
     dst = std::move(src);
 
+    // Old dst inline body must have been destroyed exactly once.
+    LT_CHECK_EQ(dtor_count, 1);
     LT_CHECK_EQ(SBO::body_inline(dst), false);
     LT_CHECK_EQ(SBO::body_ptr(dst), heap_ptr);
     LT_CHECK_EQ(SBO::body_ptr(src), static_cast<body*>(nullptr));
-LT_END_AUTO_TEST(move_assign_inline_to_heap)
+    LT_CHECK_EQ(static_cast<int>(SBO::kind(dst)),
+                static_cast<int>(body_kind::string));
+    LT_CHECK_EQ(static_cast<int>(SBO::kind(src)),
+                static_cast<int>(body_kind::empty));
+LT_END_AUTO_TEST(move_assign_heap_src_into_inline_dst)
 
 LT_BEGIN_AUTO_TEST(http_response_sbo_suite, move_assign_heap_to_inline)
+    // finding-7: old heap dst body dtor must fire; finding-20: kind_ must propagate.
+    int dtor_count = 0;
     http_response dst;
     http_response src;
-    place_heap_string(dst, "old-heap");
+    place_heap_counter(dst, &dtor_count);  // dst holds heap counter_body; dtor must fire
     place_inline_string(src, "new-inline");
 
     dst = std::move(src);
 
+    // Old dst heap body must have been destroyed exactly once.
+    LT_CHECK_EQ(dtor_count, 1);
     LT_CHECK_EQ(SBO::body_inline(dst), true);
     LT_CHECK_EQ(reinterpret_cast<void*>(SBO::body_ptr(dst)),
                 reinterpret_cast<void*>(SBO::storage(dst)));
     LT_CHECK_EQ(SBO::body_ptr(src), static_cast<body*>(nullptr));
+    LT_CHECK_EQ(static_cast<int>(SBO::kind(dst)),
+                static_cast<int>(body_kind::string));
+    LT_CHECK_EQ(static_cast<int>(SBO::kind(src)),
+                static_cast<int>(body_kind::empty));
 LT_END_AUTO_TEST(move_assign_heap_to_inline)
 
 LT_BEGIN_AUTO_TEST(http_response_sbo_suite, move_assign_heap_to_heap)
+    // finding-20: kind_ must propagate from src to dst, and src must be reset.
     http_response dst;
     http_response src;
     place_heap_string(dst, "old-heap");
@@ -276,6 +314,10 @@ LT_BEGIN_AUTO_TEST(http_response_sbo_suite, move_assign_heap_to_heap)
     LT_CHECK_EQ(SBO::body_inline(dst), false);
     LT_CHECK_EQ(SBO::body_ptr(dst), new_ptr);
     LT_CHECK_EQ(SBO::body_ptr(src), static_cast<body*>(nullptr));
+    LT_CHECK_EQ(static_cast<int>(SBO::kind(dst)),
+                static_cast<int>(body_kind::string));
+    LT_CHECK_EQ(static_cast<int>(SBO::kind(src)),
+                static_cast<int>(body_kind::empty));
 LT_END_AUTO_TEST(move_assign_heap_to_heap)
 
 // -----------------------------------------------------------------------
@@ -307,6 +349,21 @@ LT_BEGIN_AUTO_TEST(http_response_sbo_suite,
 LT_END_AUTO_TEST(destructor_heap_calls_dtor_and_delete)
 
 // -----------------------------------------------------------------------
+// Move-construction: null body source (finding-52).
+// Default-constructed responses have body_==nullptr. The adopt_body_from
+// early-return path must leave both dst and src with null body pointers.
+// -----------------------------------------------------------------------
+LT_BEGIN_AUTO_TEST(http_response_sbo_suite, move_ctor_null_body)
+    http_response src;  // default-constructed; body_ == nullptr
+    http_response dst(std::move(src));
+
+    LT_CHECK_EQ(SBO::body_ptr(dst), static_cast<body*>(nullptr));
+    LT_CHECK_EQ(SBO::body_inline(dst), false);
+    LT_CHECK_EQ(SBO::body_ptr(src), static_cast<body*>(nullptr));
+    LT_CHECK_EQ(SBO::body_inline(src), false);
+LT_END_AUTO_TEST(move_ctor_null_body)
+
+// -----------------------------------------------------------------------
 // Self-move-assign safety: the standard move-assign defect.
 // -----------------------------------------------------------------------
 LT_BEGIN_AUTO_TEST(http_response_sbo_suite, self_move_assign_safe)
@@ -322,6 +379,27 @@ LT_BEGIN_AUTO_TEST(http_response_sbo_suite, self_move_assign_safe)
     LT_CHECK_EQ(dtor_count, 0);
     LT_ASSERT_NEQ(SBO::body_ptr(r), static_cast<body*>(nullptr));
 LT_END_AUTO_TEST(self_move_assign_safe)
+
+// -----------------------------------------------------------------------
+// Self-move-assign safety: heap body path (finding-22).
+// If the `this == &o` guard in operator= were accidentally removed, the
+// heap path would double-free. This mirrors the inline test above.
+// -----------------------------------------------------------------------
+LT_BEGIN_AUTO_TEST(http_response_sbo_suite, self_move_assign_safe_heap)
+    int dtor_count = 0;
+    http_response r;
+    place_heap_counter(r, &dtor_count);
+    body* original_ptr = SBO::body_ptr(r);
+
+    http_response& alias = r;
+    r = std::move(alias);
+
+    // Dtor must NOT have fired (self-assign guard must have returned early).
+    LT_CHECK_EQ(dtor_count, 0);
+    LT_ASSERT_NEQ(SBO::body_ptr(r), static_cast<body*>(nullptr));
+    // Heap pointer must be unchanged.
+    LT_CHECK_EQ(SBO::body_ptr(r), original_ptr);
+LT_END_AUTO_TEST(self_move_assign_safe_heap)
 
 // -----------------------------------------------------------------------
 // Header/footer/cookie fields move with the rest of the response.
