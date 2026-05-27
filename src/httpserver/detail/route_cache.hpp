@@ -46,6 +46,7 @@
 #include <list>
 #include <mutex>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -107,6 +108,39 @@ class route_cache {
         list_.splice(list_.begin(), list_, it->second);
         out = it->second->second;
         return true;
+    }
+
+    // Zero-allocation warm-path variant: looks up without constructing a
+    // cache_key (avoids copying `path` into a std::string on every call,
+    // including every warm cache hit). Uses a compatible hash computed
+    // from (method, string_view) and a heterogeneous equality check.
+    // On hit, copies the value into `out` and promotes the entry.
+    // std::hash<std::string_view> produces the same hash as
+    // std::hash<std::string> for identical character sequences (C++17
+    // standard guarantee), so the probe always lands on the correct
+    // bucket.
+    bool find_by_view(http_method method, std::string_view path,
+                      cache_value& out) {
+        // Compute the same hash as cache_key_hash without owning `path`.
+        std::size_t h1 = std::hash<std::string_view>{}(path);
+        std::size_t h2 = static_cast<std::size_t>(method);
+        std::size_t bucket_hash = h1 ^ (h2 + 0x9e3779b97f4a7c15ULL
+                                        + (h1 << 6) + (h1 >> 2));
+        std::lock_guard<std::mutex> lock(mutex_);
+        // Walk the bucket manually via equal_range on the raw bucket index.
+        // unordered_map::bucket() + bucket_begin()/bucket_end() lets us
+        // scan the correct bucket without constructing a full cache_key.
+        std::size_t b = map_.bucket_count() ? bucket_hash % map_.bucket_count() : 0;
+        for (auto it = map_.cbegin(b), end = map_.cend(b); it != end; ++it) {
+            if (it->first.method == method && it->first.path == path) {
+                // Promote: splice requires a mutable iterator from the main map.
+                auto main_it = map_.find(it->first);
+                list_.splice(list_.begin(), list_, main_it->second);
+                out = main_it->second->second;
+                return true;
+            }
+        }
+        return false;
     }
 
     // Insert (or replace) the entry for `key`. Evicts the LRU back if

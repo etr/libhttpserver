@@ -148,16 +148,20 @@ webserver_impl::lookup_v2(http_method method, const std::string& path) {
     const std::string lookup_path = canonicalize_lookup_path(path);
 
     // Step 1: cache. Cache under the canonical key so /foo and /foo/
-    // share an entry.
-    cache_key key{method, lookup_path};
+    // share an entry. Use find_by_view to avoid copying lookup_path
+    // into a cache_key on every call, including warm-cache hits.
+    // cache_key is only constructed when an insert is needed (miss path).
     cache_value cached;
-    if (route_cache_v2.find(key, cached)) {
+    if (route_cache_v2.find_by_view(method, lookup_path, cached)) {
         result.found = true;
         result.tier = tier_hit::cache;
         result.entry = std::move(cached.entry);
         result.captured_params = std::move(cached.captured_params);
         return result;
     }
+    // Construct key only on the miss path, where we need to own the
+    // string for insertion into the cache.
+    cache_key key{method, lookup_path};
 
     // Step 2: walk the tiers under a shared lock.
     {

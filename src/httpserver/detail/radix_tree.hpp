@@ -134,12 +134,25 @@ class radix_tree {
     //   1. exact_terminus_ on the matched node, if every request segment
     //      consumed by exact-or-wildcard descent.
     //   2. prefix_terminus_ on the deepest ancestor that has one.
+    //
+    // Hot-path implementation: iterates `path` directly without calling
+    // tokenize(), avoiding the std::vector<std::string> allocation and
+    // per-segment string copies. Each segment is extracted as a
+    // std::string_view and compared against children_ keys (std::string)
+    // by std::unordered_map::find(std::string_view) — valid because
+    // std::string is implicitly comparable to std::string_view.
+    // The wildcard path copies the segment into captures<string,string>
+    // only when a wildcard node is taken.
     bool find(std::string_view path, radix_match<T>& out) const {
         out = {};
-        const auto segments = tokenize(path);
-        if (segments.empty()) return match_root_terminus(out);
-
         const radix_node<T>* node = root_.get();
+
+        // Strip a single leading slash; a bare "/" normalises to empty.
+        std::string_view rest = path;
+        if (!rest.empty() && rest.front() == '/') rest.remove_prefix(1);
+
+        if (rest.empty()) return match_root_terminus(out);
+
         // Track best prefix candidate seen during descent (deepest wins).
         // Root prefix terminus: a `register_prefix("/")` matches every
         // request, so seed best_prefix with it before walking deeper.
@@ -148,15 +161,38 @@ class radix_tree {
         std::vector<std::pair<std::string, std::string>> best_prefix_caps;
         std::vector<std::pair<std::string, std::string>> caps;
 
-        for (std::size_t i = 0; i < segments.size(); ++i) {
-            const std::string& seg = segments[i];
-            // Prefer exact child over wildcard.
-            auto it = node->children_.find(seg);
+        while (!rest.empty()) {
+            // Extract the next segment up to the next '/' (or end).
+            std::string_view seg;
+            std::string_view::size_type slash = rest.find('/');
+            if (slash == std::string_view::npos) {
+                seg = rest;
+                rest = {};
+            } else {
+                seg = rest.substr(0, slash);
+                rest = rest.substr(slash + 1);
+            }
+
+            // Prefer exact child over wildcard. std::unordered_map::find
+            // accepts a key_type const reference; we provide a temporary
+            // std::string constructed from the view only when the
+            // transparent lookup below fails.
+            //
+            // Use heterogeneous lookup: children_ is keyed by std::string
+            // and std::string is implicitly constructible from std::string_view,
+            // so passing a std::string_view to find() works via the key_equal
+            // (std::equal_to<std::string> compares against std::string_view
+            // through the implicit conversion on one side — but this requires
+            // a full std::string construction for the map lookup since
+            // std::unordered_map does not support heterogeneous lookup without
+            // a transparent hasher). Use string(seg) only here to avoid the
+            // full vector allocation while still performing the lookup.
+            auto it = node->children_.find(std::string(seg));
             if (it != node->children_.end()) {
                 node = it->second.get();
             } else if (node->wildcard_child_) {
                 node = node->wildcard_child_.get();
-                caps.emplace_back(node->wildcard_name_, seg);
+                caps.emplace_back(node->wildcard_name_, std::string(seg));
             } else {
                 // No way forward: best we can do is the deepest prefix
                 // candidate seen (or nothing).
@@ -168,7 +204,7 @@ class radix_tree {
             }
             // If we just consumed the last request segment AND this node
             // carries an exact terminus, that beats any prefix candidate.
-            if (i + 1 == segments.size() && node->exact_terminus_.has_value()) {
+            if (rest.empty() && node->exact_terminus_.has_value()) {
                 out.entry = &node->exact_terminus_.value();
                 out.captures = std::move(caps);
                 out.is_prefix_match = false;
