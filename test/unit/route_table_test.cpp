@@ -253,6 +253,31 @@ LT_BEGIN_AUTO_TEST(route_table_suite, cache_clear_empties_storage)
     LT_CHECK(!cache.find({ht::http_method::get, "/b"}, out));
 LT_END_AUTO_TEST(cache_clear_empties_storage)
 
+// Critical #2 (performance-reviewer): find_by_view avoids constructing
+// a cache_key on the warm-cache hot path. The view overload must return
+// identical results to the key-based overload.
+LT_BEGIN_AUTO_TEST(route_table_suite, cache_find_by_view_matches_find_by_key)
+    htd::route_cache cache(8);
+    htd::cache_value v;
+    v.entry = make_entry(99);
+    cache.insert({ht::http_method::get, "/view-path"}, v);
+
+    htd::cache_value out_key;
+    LT_CHECK(cache.find({ht::http_method::get, "/view-path"}, out_key));
+
+    htd::cache_value out_view;
+    std::string_view pv{"/view-path"};
+    LT_CHECK(cache.find_by_view(ht::http_method::get, pv, out_view));
+
+    // Miss: different path.
+    std::string_view miss{"/other"};
+    htd::cache_value out_miss;
+    LT_CHECK(!cache.find_by_view(ht::http_method::get, miss, out_miss));
+
+    // Miss: same path, different method.
+    LT_CHECK(!cache.find_by_view(ht::http_method::post, pv, out_miss));
+LT_END_AUTO_TEST(cache_find_by_view_matches_find_by_key)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()
