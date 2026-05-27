@@ -309,7 +309,7 @@ void webserver_impl::error_log(void* cls, const char* fmt, va_list ap) {
     webserver* dws = static_cast<webserver*>(cls);
 
     std::string msg;
-    msg.resize(80);  // Asssume one line will be enought most of the time.
+    msg.resize(80);  // Assume one line will be enough most of the time.
 
     va_list va;
     va_copy(va, ap);  // Stash a copy in case we need to try again.

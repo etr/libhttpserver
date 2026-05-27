@@ -182,15 +182,22 @@ class empty_resource : public http_resource {
     // No render methods overridden - uses defaults
 };
 
-LT_BEGIN_AUTO_TEST(http_resource_suite, default_render_returns_empty)
+LT_BEGIN_AUTO_TEST(http_resource_suite, default_render_returns_sentinel)
+    // The unique contract of TASK-036: the default render() returns a
+    // default-constructed http_response whose status_code_ == -1 is the
+    // v1-compatible "handler did not produce a response" sentinel.
+    // finalize_answer recognises -1 and routes through internal_error_page.
+    // This is the one contract that empty_resource exercises that
+    // allow_all_methods / is_allowed_known_methods do NOT.
     empty_resource er;
-    // All 9 methods allowed by default.
-    method_set allowed = er.get_allowed_methods();
-    for (std::uint8_t i = 0;
-         i < static_cast<std::uint8_t>(http_method::count_); ++i) {
-        LT_CHECK_EQ(allowed.contains(static_cast<http_method>(i)), true);
-    }
-LT_END_AUTO_TEST(default_render_returns_empty)
+    http_request req;
+    http_response resp = er.render(req);
+    LT_CHECK_EQ(resp.get_status(), -1);
+    // render_get / render_post / etc. forward to render(), so they also
+    // return the -1 sentinel by default.
+    http_response resp_get = er.render_get(req);
+    LT_CHECK_EQ(resp_get.get_status(), -1);
+LT_END_AUTO_TEST(default_render_returns_sentinel)
 
 LT_BEGIN_AUTO_TEST(http_resource_suite, render_only_resource_methods_allowed)
     render_only_resource ror;

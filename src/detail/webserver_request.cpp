@@ -194,41 +194,44 @@ struct MHD_Response* webserver_impl::get_raw_response_with_fallback(detail::modd
     // emplace(std::move(...)); the optional owns the value and the
     // deferred-body trampoline keeps a pointer into it for the lifetime
     // of the modded_request.
-    auto materialize_current = [&]() -> struct MHD_Response* {
+    auto try_materialize = [&]() -> struct MHD_Response* {
         return materialize_response(mr->response ? &*mr->response : nullptr);
     };
+    // Helper: emplace a new response and immediately materialize it.
+    // Each catch arm sets mr->response then returns the raw MHD handle.
+    auto emplace_and_materialize = [&](http_response r) -> struct MHD_Response* {
+        mr->response.emplace(std::move(r));
+        return try_materialize();
+    };
     try {
-        struct MHD_Response* raw = materialize_current();
+        struct MHD_Response* raw = try_materialize();
         if (raw == nullptr) {
             // TASK-031: no exception was thrown, but the body materializer
             // returned null. Route through the safe internal-error path so
             // a misbehaving user handler can't escape.
-            mr->response.emplace(run_internal_error_handler_safely(
+            return emplace_and_materialize(run_internal_error_handler_safely(
                 mr, "materialize_response returned null"));
-            raw = materialize_current();
         }
         return raw;
     } catch(const std::invalid_argument&) {
         try {
-            mr->response.emplace(not_found_page(mr));
-            return materialize_current();
+            return emplace_and_materialize(not_found_page(mr));
         } catch(...) {
             return nullptr;
         }
     } catch(const std::exception& e) {
         log_dispatch_error(std::string("materialize threw: ") + e.what());
         try {
-            mr->response.emplace(run_internal_error_handler_safely(mr, e.what()));
-            return materialize_current();
+            return emplace_and_materialize(
+                run_internal_error_handler_safely(mr, e.what()));
         } catch(...) {
             return nullptr;
         }
     } catch(...) {
         log_dispatch_error("materialize threw unknown exception");
         try {
-            mr->response.emplace(run_internal_error_handler_safely(mr,
-                                                         "unknown exception"));
-            return materialize_current();
+            return emplace_and_materialize(run_internal_error_handler_safely(
+                mr, "unknown exception"));
         } catch(...) {
             return nullptr;
         }
@@ -260,6 +263,14 @@ MHD_Result webserver_impl::materialize_and_queue_response(MHD_Connection* connec
     // queued bytes -- only the http_response in mr->response matters
     // for the hook ctx pointer.
     fire_response_sent_gated(mr);
+    // MHD reference-counting note: for MHD_create_response_from_callback
+    // responses (deferred/streaming), MHD increments its own internal
+    // refcount during MHD_queue_response, so this MHD_destroy_response only
+    // releases the *caller's* reference. MHD keeps the streaming callback
+    // (deferred_body::trampoline) alive — and therefore the cls pointer into
+    // mr->response — until request_completed fires and MHD releases its own
+    // reference. The modded_request (and mr->response) are destroyed only in
+    // the request_completed callback, which is after MHD is done streaming.
     MHD_destroy_response(raw_response);
     return (MHD_Result) to_ret;
 }

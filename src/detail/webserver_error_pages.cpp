@@ -98,6 +98,12 @@ void webserver_impl::log_dispatch_error(std::string_view msg) const {
     if (parent->log_error == nullptr) {
         return;
     }
+    // Framework contract (CWE-532): msg may contain e.what() text from
+    // a handler exception, which could include sensitive data (DB connection
+    // strings, file paths, user-supplied input that triggered the exception).
+    // Application code should sanitize or wrap exceptions that might expose
+    // sensitive information before re-throwing them.
+    //
     // A misbehaving user logger must not poison the catch from inside
     // the catch. Swallow any exception it throws; we have no recovery
     // beyond dropping the log line.
