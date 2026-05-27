@@ -37,11 +37,13 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstdint>
 #include <cstdio>
 #include <utility>
 #include <cstring>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
 
@@ -189,6 +191,7 @@ LT_BEGIN_SUITE(deferred_suite)
 LT_END_SUITE(deferred_suite)
 
 LT_BEGIN_AUTO_TEST(deferred_suite, deferred_response_suite)
+    counter = 0;  // reset per-test; tear_down also resets but order may vary
     deferred_resource resource;
     ws->register_path("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
@@ -207,6 +210,7 @@ LT_BEGIN_AUTO_TEST(deferred_suite, deferred_response_suite)
 LT_END_AUTO_TEST(deferred_response_suite)
 
 LT_BEGIN_AUTO_TEST(deferred_suite, deferred_response_with_data)
+    counter = 0;  // reset per-test; tear_down also resets but order may vary
     deferred_resource_with_data resource;
     ws->register_path("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
@@ -225,6 +229,7 @@ LT_BEGIN_AUTO_TEST(deferred_suite, deferred_response_with_data)
 LT_END_AUTO_TEST(deferred_response_with_data)
 
 LT_BEGIN_AUTO_TEST(deferred_suite, deferred_response_empty_content)
+    counter = 0;  // reset per-test; tear_down also resets but order may vary
     deferred_resource_empty_content resource;
     ws->register_path("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
@@ -256,28 +261,45 @@ LT_END_AUTO_TEST(deferred_response_empty_content)
 // ---------------------------------------------------------------------------
 
 namespace {
-// Sentinel whose destructor flips an atomic; the destructor runs when the
-// http_response (and its deferred_body) is destroyed inside
-// ~modded_request() — which fires from webserver_impl::request_completed.
+// Sentinel whose destructor fires when the http_response (and its
+// deferred_body) is destroyed inside ~modded_request(), which fires from
+// webserver_impl::request_completed.  On destruction it sets *destroyed to
+// true and notifies *cv so the test thread's timed_wait can return
+// immediately rather than spinning to a 1-second timeout.
 //
-// move_constructor leaves the source's pointer null so the moved-from
-// temporary's destructor is a no-op. Otherwise std::make_shared's
-// in-place copy/move of the temporary {&destroyed} aggregate would fire
-// the destructor on the source temporary at the end of the full
-// expression, flipping `destroyed` to true BEFORE the lambda even runs.
+// move_constructor leaves all pointers null so the moved-from temporary's
+// destructor is a no-op.  Otherwise std::make_shared's in-place copy/move
+// of the temporary aggregate would flip `destroyed` BEFORE the lambda runs.
 struct destruction_sentinel {
-    std::atomic<bool>* destroyed;
-    explicit destruction_sentinel(std::atomic<bool>* d) : destroyed(d) {}
+    std::atomic<bool>*     destroyed;
+    std::mutex*            cv_mu;
+    std::condition_variable* cv;
+
+    explicit destruction_sentinel(std::atomic<bool>* d,
+                                  std::mutex* mu,
+                                  std::condition_variable* c)
+        : destroyed(d), cv_mu(mu), cv(c) {}
     destruction_sentinel(const destruction_sentinel&) = delete;
     destruction_sentinel& operator=(const destruction_sentinel&) = delete;
     destruction_sentinel(destruction_sentinel&& o) noexcept
-        : destroyed(std::exchange(o.destroyed, nullptr)) {}
+        : destroyed(std::exchange(o.destroyed, nullptr)),
+          cv_mu(std::exchange(o.cv_mu, nullptr)),
+          cv(std::exchange(o.cv, nullptr)) {}
     destruction_sentinel& operator=(destruction_sentinel&& o) noexcept {
         destroyed = std::exchange(o.destroyed, nullptr);
+        cv_mu     = std::exchange(o.cv_mu,     nullptr);
+        cv        = std::exchange(o.cv,         nullptr);
         return *this;
     }
     ~destruction_sentinel() {
-        if (destroyed) destroyed->store(true);
+        if (!destroyed) return;
+        destroyed->store(true);
+        // Notify under the mutex so the waiting thread cannot miss the signal
+        // if it is between loading destroyed and entering wait.
+        {
+            std::lock_guard<std::mutex> lk(*cv_mu);
+        }
+        cv->notify_one();
     }
 };
 
@@ -291,7 +313,7 @@ class by_value_class_resource : public http_resource {
 
 LT_BEGIN_AUTO_TEST(deferred_suite, on_get_lambda_returns_value)
     // AC-1: lambda returns http_response by value (DR-004) and the dispatch
-    // path moves the prvalue into mr->response_.
+    // path moves the prvalue into mr->response.
     ws->on_get("/by_value", [](const http_request&) {
         return http_response::string("hi");
     });
@@ -343,34 +365,31 @@ LT_BEGIN_AUTO_TEST(deferred_suite, deferred_producer_destroyed_in_request_comple
     // capturing a shared_ptr<destruction_sentinel> inside the producer's
     // captures, then asserting the sentinel was destroyed after the server
     // is fully drained.
+    //
+    // Synchronization: sentinel destructor signals destroyed_cv so the test
+    // thread wakes immediately rather than spinning. Upper bound is 5 s to
+    // catch a genuine DR-010 regression without hanging the CI suite.
     std::atomic<bool> destroyed{false};
-    std::atomic<int> producer_calls{0};
+    std::atomic<int>  producer_calls{0};
+    std::mutex        destroyed_mu;
+    std::condition_variable destroyed_cv;
 
     // CRITICAL: the OUTER on_get lambda is stored long-term inside the
-    // registered lambda_resource. Anything it captures lives until the
-    // webserver itself is destroyed. So the outer lambda captures
-    // NOTHING but the atomic references — it allocates the
-    // destruction_sentinel inline (via make_shared) inside the INNER
-    // (producer) lambda's init-capture. The inner lambda's capture lives
-    // inside the http_response (and its deferred_body) anchored on
-    // mr->response_, so the sentinel is released exactly when
-    // ~modded_request fires from request_completed (DR-010). shared_ptr
-    // is required (not unique_ptr) because std::function — used as both
-    // lambda_handler and deferred_body::producer_type — requires its
-    // target to be CopyConstructible.
-    ws->on_get("/lifetime", [&producer_calls, &destroyed](
-                                const http_request&) {
+    // registered lambda_resource. Capture only lightweight references here;
+    // the destruction_sentinel lives inside the INNER (producer) lambda so
+    // it is released with the deferred_body when ~modded_request fires from
+    // request_completed (DR-010). shared_ptr is required because
+    // std::function requires its target to be CopyConstructible.
+    ws->on_get("/lifetime",
+               [&producer_calls, &destroyed, &destroyed_mu, &destroyed_cv](
+                   const http_request&) {
         return http_response::deferred(
-            [sentinel = std::make_shared<destruction_sentinel>(&destroyed),
+            [sentinel = std::make_shared<destruction_sentinel>(
+                 &destroyed, &destroyed_mu, &destroyed_cv),
              &producer_calls, &destroyed, served = 0](
                 std::uint64_t, char* buf, std::size_t max) mutable -> ssize_t {
-                // Defensive: the producer should never run after the
-                // sentinel is destroyed; if it did, this read would be
-                // undefined behaviour (we'd be reading a destroyed atomic
-                // through the captured sentinel pointer). Assert via a
-                // separate side-channel.
+                // Defensive: producer must not run after sentinel is gone.
                 if (destroyed.load()) {
-                    // Would be UB anyway, but flag the regression.
                     return -1;
                 }
                 producer_calls.fetch_add(1);
@@ -394,9 +413,8 @@ LT_BEGIN_AUTO_TEST(deferred_suite, deferred_producer_destroyed_in_request_comple
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &body);
     // Force HTTP/1.0 (no keep-alive) so MHD closes the connection as
-    // soon as curl finishes reading the body. That makes request_completed
-    // fire deterministically before ws->stop() — without relying on the
-    // keep-alive timeout.
+    // soon as curl finishes reading the body, making request_completed
+    // fire before ws->stop() in the common case.
     curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_0);
     CURLcode res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
@@ -410,20 +428,19 @@ LT_BEGIN_AUTO_TEST(deferred_suite, deferred_producer_destroyed_in_request_comple
     LT_CHECK(producer_calls.load() >= 2);
 
     // Force MHD to fire request_completed for every pending connection.
-    // MHD_stop_daemon (called by webserver::stop) joins the internal
-    // threads and drains the request_completed queue. After stop()
-    // returns, the modded_request (and its optional<http_response>
-    // holding our deferred_body, holding the inner-lambda's
-    // make_unique<destruction_sentinel>) MUST be gone. tear_down() will
-    // call stop() again — idempotent on an already-stopped server (see
-    // webserver::stop's running guard).
+    // MHD_stop_daemon (called by stop()) joins internal threads and drains
+    // the request_completed queue. tear_down() calls stop() again; that is
+    // safe because webserver::stop() is idempotent once already stopped.
     ws->stop();
-    // request_completed may run on a worker thread that completes a
-    // hair after stop() returns to us. Poll briefly for the destruction
-    // signal — bounded so a true regression (body anchor leaked past
-    // request_completed) fails fast instead of hanging.
-    for (int i = 0; i < 100 && !destroyed.load(); ++i) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+    // Wait for the sentinel to be destroyed. request_completed may fire on
+    // a worker thread that finishes a hair after stop() returns, so we use
+    // a condition variable rather than a busy-poll. 5-second upper bound
+    // catches a genuine DR-010 regression without hanging CI indefinitely.
+    {
+        std::unique_lock<std::mutex> lk(destroyed_mu);
+        destroyed_cv.wait_for(lk, std::chrono::seconds(5),
+                              [&destroyed] { return destroyed.load(); });
     }
     LT_CHECK_EQ(destroyed.load(), true);
 LT_END_AUTO_TEST(deferred_producer_destroyed_in_request_completed)

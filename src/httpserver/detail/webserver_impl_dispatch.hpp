@@ -45,7 +45,7 @@
 // owning webserver (via `parent`).
 //
 // TASK-036: synth-response helpers return http_response by value;
-// the dispatch path moves into modded_request::response_ (DR-010).
+// the dispatch path moves into modded_request::response (DR-010).
 ::httpserver::http_response not_found_page(modded_request* mr) const;
 ::httpserver::http_response method_not_allowed_page(modded_request* mr) const;
 // TASK-031: error-propagation entry point. @p msg carries the
@@ -151,7 +151,7 @@ fire_before_handler(::httpserver::before_handler_ctx& ctx) noexcept;
 // Returns engaged optional iff some hook (user-added or the
 // internal_error_handler alias slot) short-circuited with respond_with().
 // The caller -- the catch arms in dispatch_resource_handler -- stashes
-// that response into mr->response_ and falls through to
+// that response into mr->response and falls through to
 // materialize_and_queue_response in finalize_answer.
 //
 // Chain order:
@@ -209,7 +209,7 @@ void fire_request_completed_gated(modded_request* mr,
 
 // TASK-051: gated fire of before_handler, server-wide AND per-route,
 // with short-circuit detection. Returns true iff either chain
-// short-circuited (mr->response_ already populated; caller must go
+// short-circuited (mr->response already populated; caller must go
 // straight to materialize_and_queue_response). False means both chains
 // passed (or both gates were closed) and dispatch should proceed.
 // Definition lives in src/detail/webserver_finalize.cpp alongside the
@@ -321,7 +321,7 @@ void apply_extracted_params(modded_request* mr,
         const std::vector<int>& chunks);
 
 // Invoke the resource handler bound to @p mr, populating
-// mr->response_. On is_allowed=false, queues a 405 with an Allow
+// mr->response. On is_allowed=false, queues a 405 with an Allow
 // header. On handler-throw, routes through the safe internal-error
 // path (TASK-031 / DR-009).
 void dispatch_resource_handler(modded_request* mr,
@@ -334,7 +334,7 @@ void dispatch_resource_handler(modded_request* mr,
 std::string serialize_allow_methods(method_set allowed) const;
 
 // Final stage of finalize_answer: build an MHD_Response from
-// mr->response_, decorate it, queue it on the connection. Handles
+// mr->response, decorate it, queue it on the connection. Handles
 // the belt-and-suspenders fallback when get_raw_response_with_fallback
 // itself fails to produce a response.
 MHD_Result materialize_and_queue_response(MHD_Connection* connection,

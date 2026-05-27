@@ -130,7 +130,7 @@ class lambda_resource final : public ::httpserver::http_resource {
         assert(slot);
         // TASK-036: lambda_handler returns http_response by value; the
         // dispatch path in webserver_impl::finalize_answer moves the
-        // returned value into modded_request::response_ — the single
+        // returned value into modded_request::response — the single
         // anchor that keeps deferred-body producers alive until
         // request_completed (DR-010, §5.3).
         return slot(r);

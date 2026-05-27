@@ -85,8 +85,11 @@ http_response webserver_impl::internal_error_page(
         return parent->internal_error_handler(*mr->dhr, msg);
     }
     // No handler configured: surface the message in the default body so
-    // the unset-handler path is informative for debugging. Operators
-    // who need a fixed body can wire a constant-returning handler.
+    // the unset-handler path is informative for debugging.
+    // WARNING (CWE-209): in production, always wire a constant-returning
+    // internal_error_handler to avoid leaking exception details (stack
+    // paths, database connection strings, etc.) to HTTP clients. The
+    // informative default is intentional for development only.
     return http_response::string(std::string{msg})
         .with_status(http_utils::http_internal_server_error);
 }

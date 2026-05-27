@@ -194,14 +194,20 @@ void webserver::install_default_alias_hooks_() {
                     if (impl_ptr->should_skip_auth(path)) {
                         return hook_action::pass();
                     }
-                    // Call the user-supplied auth_handler.
-                    std::shared_ptr<http_response> auth_resp =
+                    // Call the user-supplied auth_handler. Returns nullptr
+                    // to mean "allow" (pass-through); non-null means
+                    // "reject with this response". The shared_ptr<> is the
+                    // v1 nullable-optional pattern; see the TODO on
+                    // auth_handler_ptr in create_webserver.hpp for the
+                    // deferred migration plan.
+                    std::shared_ptr<http_response> auth_rejection_response =
                         ws_ptr->auth_handler(*ctx.request);
-                    if (auth_resp == nullptr) {
+                    if (auth_rejection_response == nullptr) {
                         return hook_action::pass();
                     }
-                    // Auth failed: short-circuit with the auth response.
-                    return hook_action::respond_with(std::move(*auth_resp));
+                    // Auth failed: short-circuit with the rejection response.
+                    return hook_action::respond_with(
+                        std::move(*auth_rejection_response));
                 })))
             .detach();
     }
@@ -268,8 +274,8 @@ void webserver::install_default_alias_hooks_() {
                     // Observation stub. The actual 404 synthesis lives
                     // in webserver_impl::not_found_page, consulted from
                     // finalize_answer at the existing v1 call site.
-                    // Route_resolved_ctx does not carry mr->response_ so
-                    // the spec's "stash into mr->response_" is structurally
+                    // Route_resolved_ctx does not carry mr->response so
+                    // the spec's "stash into mr->response" is structurally
                     // deferred (see TASK-048 spec §action item 3 note).
                 })))
             .detach();
