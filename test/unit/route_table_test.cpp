@@ -24,6 +24,7 @@
 // method-distinct keys (cache).
 
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -277,6 +278,63 @@ LT_BEGIN_AUTO_TEST(route_table_suite, cache_find_by_view_matches_find_by_key)
     // Miss: same path, different method.
     LT_CHECK(!cache.find_by_view(ht::http_method::post, pv, out_miss));
 LT_END_AUTO_TEST(cache_find_by_view_matches_find_by_key)
+
+// Security #6 (route_cache.hpp:94): max_entries=0 silently disables caching,
+// which could mask DoS-mitigation behavior. Precondition check rejects it.
+LT_BEGIN_AUTO_TEST(route_table_suite, cache_zero_max_entries_throws)
+    bool threw = false;
+    try {
+        htd::route_cache cache(0);
+        (void)cache;
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK(threw);
+LT_END_AUTO_TEST(cache_zero_max_entries_throws)
+
+// Minor #30: multiple parameterised segments coverage.
+// (This test already exists at radix_tree_matches_multiple_parameterized_segments)
+
+// Minor #30: removing a parameterised path does not clear sibling exact terminus.
+LT_BEGIN_AUTO_TEST(route_table_suite, radix_tree_remove_parameterized_path)
+    htd::radix_tree<htd::route_entry> tree;
+    tree.insert("/users/{id}", make_entry(40));
+    htd::radix_match<htd::route_entry> m;
+    LT_CHECK(tree.find("/users/42", m));
+    LT_CHECK(tree.remove("/users/{id}", /*is_prefix=*/false));
+    LT_CHECK(!tree.find("/users/42", m));
+    // Removing a non-existent parameterised path returns false.
+    LT_CHECK(!tree.remove("/users/{id}", /*is_prefix=*/false));
+LT_END_AUTO_TEST(radix_tree_remove_parameterized_path)
+
+LT_BEGIN_AUTO_TEST(route_table_suite, radix_tree_remove_prefix_path)
+    htd::radix_tree<htd::route_entry> tree;
+    tree.insert("/static",
+                make_entry(41, ht::method_set{}.set(ht::http_method::get),
+                           /*is_prefix=*/true),
+                /*is_prefix=*/true);
+    htd::radix_match<htd::route_entry> m;
+    LT_CHECK(tree.find("/static/css", m));
+    LT_CHECK(tree.remove("/static", /*is_prefix=*/true));
+    LT_CHECK(!tree.find("/static/css", m));
+LT_END_AUTO_TEST(radix_tree_remove_prefix_path)
+
+LT_BEGIN_AUTO_TEST(route_table_suite, radix_tree_remove_one_terminus_does_not_clear_sibling)
+    // /static has both an exact terminus and a prefix terminus.
+    // Removing the exact one must not clear the prefix one.
+    htd::radix_tree<htd::route_entry> tree;
+    tree.insert("/static", make_entry(42),          /*is_prefix=*/false);
+    tree.insert("/static",
+                make_entry(43, ht::method_set{}.set(ht::http_method::get),
+                           /*is_prefix=*/true),
+                /*is_prefix=*/true);
+    htd::radix_match<htd::route_entry> m;
+    // Remove the exact terminus.
+    LT_CHECK(tree.remove("/static", /*is_prefix=*/false));
+    // Subpath still served by prefix terminus.
+    LT_CHECK(tree.find("/static/js", m));
+    LT_CHECK(m.is_prefix_match);
+LT_END_AUTO_TEST(radix_tree_remove_one_terminus_does_not_clear_sibling)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

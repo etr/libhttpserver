@@ -117,19 +117,16 @@ LT_BEGIN_AUTO_TEST(route_table_concurrency_suite,
         });
     }
 
-    // Run for ~500ms baseline (long enough to cover several context-
-    // switch windows; short enough that `make check` stays under a
-    // second on a normal box). Then keep going in 100ms chunks until
-    // both counters are non-zero, up to a 30s safety ceiling — this
-    // keeps the test reliable on heavily-instrumented lanes such as
-    // valgrind/memcheck where a single register_path+regex-compile
-    // can take longer than the entire baseline window.
+    // Run until enough operations have been observed by both writers and
+    // readers, or until a wall-clock safety ceiling (30s) to survive
+    // valgrind/TSan overhead. Using an operation count avoids fixed
+    // wall-clock sleeps that inflate on loaded CI boxes.
+    constexpr int kOpThreshold = 10000;
     auto deadline =
         std::chrono::steady_clock::now() + std::chrono::seconds(30);
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
-    while ((writer_ops.load() == 0 || reader_ops.load() == 0)
+    while ((writer_ops.load() < kOpThreshold || reader_ops.load() < kOpThreshold)
            && std::chrono::steady_clock::now() < deadline) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
     stop.store(true, std::memory_order_relaxed);
     for (auto& t : threads) t.join();
@@ -147,7 +144,7 @@ LT_END_AUTO_TEST(concurrent_register_and_lookup_no_data_race)
 // like /dyn/{id}/wN so the radix tree must allocate and free wildcard nodes
 // concurrently with readers calling lookup_v2 on those same paths.
 LT_BEGIN_AUTO_TEST(route_table_concurrency_suite,
-                   concurrent_parameterized_register_and_lookup_no_data_race)
+                   concurrent_wildcard_node_alloc_and_lookup_no_data_race)
     ht::webserver ws{ht::create_webserver(8080)
                           .start_method(ht::http::http_utils::INTERNAL_SELECT)};
     auto& impl = *ht::webserver_test_access::impl(ws);
@@ -225,7 +222,7 @@ LT_BEGIN_AUTO_TEST(route_table_concurrency_suite,
 
     LT_CHECK(writer_ops.load() > 0);
     LT_CHECK(reader_ops.load() > 0);
-LT_END_AUTO_TEST(concurrent_parameterized_register_and_lookup_no_data_race)
+LT_END_AUTO_TEST(concurrent_wildcard_node_alloc_and_lookup_no_data_race)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

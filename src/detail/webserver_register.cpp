@@ -204,28 +204,24 @@ void webserver::register_resource(const std::string& resource,
 //   1. Validates the handler, the method set (non-empty, no count_
 void webserver::unregister_impl_(const string& resource, bool family) {
     detail::http_endpoint he(resource, family, true, regex_checking);
-    std::unique_lock registered_resources_lock(impl_->registered_resources_mutex);
 
     {
-        std::lock_guard<std::mutex> cache_lock(impl_->route_cache_mutex);
-        impl_->route_cache_list.clear();
-        impl_->route_cache_map.clear();
-    }
-
-    impl_->registered_resources.erase(he);
-    impl_->registered_resources_regex.erase(he);
-    // The string-keyed fast-path map only ever holds exact (non-family)
-    // entries (see register_impl_). A prefix unregister has nothing to
-    // do here.
-    if (!family) {
-        impl_->registered_resources_str.erase(he.get_url_complete());
+        std::unique_lock registered_resources_lock(impl_->registered_resources_mutex);
+        impl_->registered_resources.erase(he);
+        impl_->registered_resources_regex.erase(he);
+        // The string-keyed fast-path map only ever holds exact (non-family)
+        // entries (see register_impl_). A prefix unregister has nothing to
+        // do here.
+        if (!family) {
+            impl_->registered_resources_str.erase(he.get_url_complete());
+        }
     }
 
     // TASK-027: mirror the erasure into the v2 3-tier table. Lock order:
-    // we already hold registered_resources_lock (v1 table); take
-    // route_table_mutex_ next, then route_cache_mutex_ via the
-    // route_cache::clear() helper. The discipline (table BEFORE cache)
-    // is consistent with register_impl_ and the documented invariant.
+    // registered_resources_mutex released above; take route_table_mutex_
+    // next, then invalidate_route_cache() takes route_cache_mutex_.
+    // This matches the pattern used in register_impl_ / on_methods_:
+    // table lock released before cache is cleared.
     {
         std::unique_lock table_lock(impl_->route_table_mutex_);
         const std::string& key = he.get_url_complete();
@@ -245,7 +241,7 @@ void webserver::unregister_impl_(const string& resource, bool family) {
                 impl_->regex_routes_.end());
         }
     }
-    impl_->route_cache_v2.clear();
+    impl_->invalidate_route_cache();
 }
 
 void webserver::unregister_path(const string& path) {
@@ -261,23 +257,18 @@ void webserver::unregister_resource(const string& resource) {
     detail::http_endpoint he_exact(resource, /*family=*/false, true, regex_checking);
     detail::http_endpoint he_prefix(resource, /*family=*/true,  true, regex_checking);
 
-    // Hold a single write-lock across both erasures so no request thread can
-    // observe a partially-unregistered state (CWE-367 TOCTOU fix: the exact
-    // entry and the prefix entry are removed atomically).
-    std::unique_lock registered_resources_lock(impl_->registered_resources_mutex);
-
     {
-        std::lock_guard<std::mutex> cache_lock(impl_->route_cache_mutex);
-        impl_->route_cache_list.clear();
-        impl_->route_cache_map.clear();
+        // Hold a single write-lock across both v1 erasures so no request thread
+        // can observe a partially-unregistered state (CWE-367 TOCTOU fix: the
+        // exact entry and the prefix entry are removed atomically).
+        std::unique_lock registered_resources_lock(impl_->registered_resources_mutex);
+        impl_->registered_resources.erase(he_exact);
+        impl_->registered_resources.erase(he_prefix);
+        impl_->registered_resources_regex.erase(he_exact);
+        impl_->registered_resources_regex.erase(he_prefix);
+        // The string-keyed fast-path map only holds exact (non-family) entries.
+        impl_->registered_resources_str.erase(he_exact.get_url_complete());
     }
-
-    impl_->registered_resources.erase(he_exact);
-    impl_->registered_resources.erase(he_prefix);
-    impl_->registered_resources_regex.erase(he_exact);
-    impl_->registered_resources_regex.erase(he_prefix);
-    // The string-keyed fast-path map only holds exact (non-family) entries.
-    impl_->registered_resources_str.erase(he_exact.get_url_complete());
 
     // TASK-027: mirror into the v2 3-tier table. Erase under both
     // classifications so a prior register_path AND register_prefix on
@@ -297,7 +288,10 @@ void webserver::unregister_resource(const string& resource) {
                            }),
             impl_->regex_routes_.end());
     }
-    impl_->route_cache_v2.clear();
+    // Delegate cache clearing to invalidate_route_cache() matching the
+    // pattern used by register_impl_ and on_methods_ (table lock released
+    // before cache is cleared).
+    impl_->invalidate_route_cache();
 }
 
 // TASK-029: The v2.0 public IP-control API is the pair block_ip / unblock_ip.

@@ -177,6 +177,48 @@ LT_BEGIN_AUTO_TEST(lookup_pipeline_suite, captured_params_from_lookup_v2_bind_to
     LT_CHECK_EQ(std::string(req.get_arg("id")), std::string("42"));
 LT_END_AUTO_TEST(captured_params_from_lookup_v2_bind_to_request_get_arg)
 
+// Major #5: lambda-registered routes (on_get / route()) have a distinct
+// code path in webserver_routes.cpp. Verify they are visible in lookup_v2.
+LT_BEGIN_AUTO_TEST(lookup_pipeline_suite, lambda_route_hits_exact_tier)
+    ht::webserver ws{ht::create_webserver(8080).start_method(ht::http::http_utils::INTERNAL_SELECT)};
+    ws.on_get("/lambda", [](const ht::http_request&) {
+        return ht::http_response::string("ok");
+    });
+
+    auto& impl = *ht::webserver_test_access::impl(ws);
+    auto r = impl.lookup_v2(ht::http_method::get, std::string("/lambda"));
+    LT_CHECK(r.found);
+    LT_CHECK(r.tier == ht::detail::webserver_impl::tier_hit::exact);
+LT_END_AUTO_TEST(lambda_route_hits_exact_tier)
+
+LT_BEGIN_AUTO_TEST(lookup_pipeline_suite, lambda_parameterized_route_hits_radix_tier)
+    ht::webserver ws{ht::create_webserver(8080).start_method(ht::http::http_utils::INTERNAL_SELECT)};
+    ws.on_get("/items/{id}", [](const ht::http_request&) {
+        return ht::http_response::string("ok");
+    });
+
+    auto& impl = *ht::webserver_test_access::impl(ws);
+    auto r = impl.lookup_v2(ht::http_method::get, std::string("/items/99"));
+    LT_CHECK(r.found);
+    LT_CHECK(r.tier == ht::detail::webserver_impl::tier_hit::radix);
+    LT_CHECK_EQ(r.captured_params.size(), static_cast<std::size_t>(1));
+    LT_CHECK_EQ(r.captured_params[0].first, std::string("id"));
+    LT_CHECK_EQ(r.captured_params[0].second, std::string("99"));
+LT_END_AUTO_TEST(lambda_parameterized_route_hits_radix_tier)
+
+// Minor #29: plain path (non-regex) with regex_checking=true hits exact tier.
+LT_BEGIN_AUTO_TEST(lookup_pipeline_suite, plain_path_with_regex_checking_hits_exact_tier)
+    ht::webserver ws{ht::create_webserver(8080).start_method(ht::http::http_utils::INTERNAL_SELECT)};
+    // /api/v1 is a plain path: its compiled regex matches the literal
+    // string itself, so classify_route_tier returns exact, not regex_.
+    ws.register_path("/api/v1", std::make_shared<noop_resource>());
+
+    auto& impl = *ht::webserver_test_access::impl(ws);
+    auto r = impl.lookup_v2(ht::http_method::get, std::string("/api/v1"));
+    LT_CHECK(r.found);
+    LT_CHECK(r.tier == ht::detail::webserver_impl::tier_hit::exact);
+LT_END_AUTO_TEST(plain_path_with_regex_checking_hits_exact_tier)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

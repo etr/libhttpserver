@@ -93,6 +93,8 @@ using httpserver::http::ip_representation;
 using httpserver::http::base_unescaper;
 
 
+namespace detail {
+
 namespace {
 
 // Apply one path segment to the running stack: "" / "." are skipped,
@@ -108,9 +110,13 @@ void apply_normalized_segment(std::vector<std::string>& segments,
     segments.push_back(seg);
 }
 
-}  // namespace
-
-static std::string normalize_path(const std::string& path) {
+// NOTE: the caller (should_skip_auth) must receive an already-unescaped
+// path (i.e., no %XX sequences remain). MHD's unescaper_func runs before
+// should_skip_auth, so this invariant is satisfied on the dispatch path.
+// Double slashes (//) and trailing slashes are collapsed automatically:
+// apply_normalized_segment skips empty segment strings, so consecutive
+// '/' separators produce zero segments (same as a single '/').
+std::string normalize_path(const std::string& path) {
     std::vector<std::string> segments;
     std::string::size_type start = 0;
     if (!path.empty() && path[0] == '/') start = 1;
@@ -128,7 +134,7 @@ static std::string normalize_path(const std::string& path) {
     return normalized;
 }
 
-namespace detail {
+}  // namespace
 
 bool webserver_impl::should_skip_auth(const std::string& path) const {
     std::string normalized = normalize_path(path);

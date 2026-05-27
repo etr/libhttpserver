@@ -30,6 +30,7 @@
 #include <optional>
 // Disabling lint error on regex (the only reason it errors is because the Chromium team prefers google/re2)
 #include <regex>  // NOLINT [build/c++11]
+#include <stdexcept>
 
 #include "httpserver/detail/http_endpoint.hpp"
 
@@ -78,8 +79,18 @@ inline route_tier_result classify_route_tier(const detail::http_endpoint& idx) {
         // pattern is trivially ^/literal$ and the exact hash tier is
         // faster and correct. Otherwise the path has meaningful regex
         // metacharacters and belongs in the regex tier.
-        std::regex re(idx.get_url_normalized(),
-                      std::regex::extended | std::regex::icase);
+        // Guard std::regex construction (CWE-248): a malformed pattern
+        // throws std::regex_error. Convert to std::invalid_argument so
+        // callers get a catchable typed exception at registration time.
+        std::regex re;
+        try {
+            re = std::regex(idx.get_url_normalized(),
+                            std::regex::extended | std::regex::icase);
+        } catch (const std::regex_error& e) {
+            throw std::invalid_argument(
+                std::string("invalid regex route pattern '")
+                + idx.get_url_normalized() + "': " + e.what());
+        }
         if (std::regex_match(idx.get_url_complete(), re)) {
             res.kind = route_tier_kind::exact;
         } else {
