@@ -59,8 +59,10 @@ enum class http_method : std::uint8_t {
 namespace detail {
 
 // Bit position for an http_method enumerator. Defined here so member
-// functions and free operators can share one definition. Out-of-range
-// inputs (>= 32) are masked out by the caller; this helper is total.
+// functions and free operators can share one definition. The static_assert
+// below guarantees count_ < 32, keeping every shift (0..count_-1)
+// well-defined. Only http_method values produced by valid enum syntax
+// (not out-of-range static_cast) should reach this helper.
 constexpr std::uint32_t method_bit(http_method m) noexcept {
     return std::uint32_t{1} << static_cast<std::uint8_t>(m);
 }
@@ -146,14 +148,16 @@ constexpr std::string_view to_string(http_method m) noexcept {
 
 // Bitwise composition. Operators on http_method yield a method_set so
 // `get | post` is a two-method set ready to feed into route_entry.
-// All operators are constexpr noexcept — usable in compile-time
-// context (the "consteval-friendly" requirement) AND at runtime, which
-// the route-table writer path needs.
+// All operators are constexpr noexcept — usable in both constant-expression
+// (compile-time) and non-constant (runtime) contexts, which the
+// route-table writer path needs.
 
 constexpr method_set operator|(http_method a, http_method b) noexcept {
     return method_set{detail::method_bit(a) | detail::method_bit(b)};
 }
 
+// operator& on two single-bit values yields non-empty only when a == b
+// (same bit ANDed with itself); distinct methods always AND to an empty set.
 constexpr method_set operator&(http_method a, http_method b) noexcept {
     return method_set{detail::method_bit(a) & detail::method_bit(b)};
 }
@@ -249,8 +253,12 @@ constexpr method_set& operator^=(method_set& s, http_method m) noexcept {
 // Layout / width invariants — pinned once at namespace scope so every
 // TU including this header gets the protection. Placed AFTER the
 // method_set definition so is_standard_layout_v / sizeof are well-formed.
-static_assert(static_cast<std::uint8_t>(http_method::count_) <= 32,
-              "http_method::count_ must fit in method_set's 32-bit bitmask");
+//
+// Bound is strictly < 32 (not <=): a shift of exactly 32 on a uint32_t
+// is undefined behaviour in C++ (CWE-190). With count_ < 32, every
+// shift in method_bit() (0..count_-1) is well-defined.
+static_assert(static_cast<std::uint8_t>(http_method::count_) < 32,
+              "http_method::count_ must be < 32 to keep method_bit() shifts well-defined");
 static_assert(std::is_standard_layout_v<method_set>,
               "method_set must be standard layout");
 static_assert(std::is_trivially_copyable_v<method_set>,
