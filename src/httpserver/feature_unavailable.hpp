@@ -82,23 +82,27 @@ class feature_unavailable : public std::runtime_error {
      * `"feature '<feature>' unavailable: built without <build_flag>"`.
      *
      * @param feature    human-readable feature label (e.g. `"TLS"`, `"WebSocket"`).
+     *                   Both views must remain valid for the duration of this
+     *                   constructor call; they are consumed before the constructor
+     *                   returns and need not outlive it.
      * @param build_flag the autoconf-defined `HAVE_*` flag that was off
      *                   in this build (e.g. `"HAVE_GNUTLS"`).
+     *                   See @p feature for the lifetime requirement.
      */
     feature_unavailable(std::string_view feature, std::string_view build_flag)
-        : std::runtime_error(compose_message(feature, build_flag)) {}
-
- private:
-    static std::string compose_message(std::string_view feature,
-                                       std::string_view build_flag) {
-        std::string msg;
-        msg.reserve(feature.size() + build_flag.size() + 32);
-        msg.append("feature '");
-        msg.append(feature);
-        msg.append("' unavailable: built without ");
-        msg.append(build_flag);
-        return msg;
-    }
+        : std::runtime_error([&] {
+            // Fixed-text portion: "feature '' unavailable: built without "
+            // Computed at compile time to stay in sync with any future wording change.
+            static constexpr std::size_t k_fixed_overhead =
+                std::string_view("feature '' unavailable: built without ").size();
+            std::string msg;
+            msg.reserve(feature.size() + build_flag.size() + k_fixed_overhead);
+            msg.append("feature '");
+            msg.append(feature);
+            msg.append("' unavailable: built without ");
+            msg.append(build_flag);
+            return msg;
+        }()) {}
 };
 
 }  // namespace httpserver

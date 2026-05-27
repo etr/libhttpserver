@@ -33,9 +33,11 @@ static_assert(
 
 LT_BEGIN_SUITE(feature_unavailable_suite)
     void set_up() {
+        // nothing to set up
     }
 
     void tear_down() {
+        // nothing to tear down
     }
 LT_END_SUITE(feature_unavailable_suite)
 
@@ -49,22 +51,25 @@ LT_BEGIN_AUTO_TEST(feature_unavailable_suite,
     } catch (const std::runtime_error& e) {
         msg = e.what();
     }
+    LT_CHECK(!msg.empty());
     LT_CHECK(msg.find("tls") != std::string::npos);
     LT_CHECK(msg.find("HAVE_GNUTLS") != std::string::npos);
 LT_END_AUTO_TEST(catches_as_runtime_error_with_feature_and_flag)
 
-// Catching the concrete type still produces a runtime_error-shaped what().
-LT_BEGIN_AUTO_TEST(feature_unavailable_suite, catches_as_feature_unavailable_directly)
+// AC #3: the polymorphism chain extends to std::exception — catching as the
+// common root still delivers an intact what() message, confirming that the
+// exception is not sliced and the hierarchy is fully connected.
+LT_BEGIN_AUTO_TEST(feature_unavailable_suite, catches_as_std_exception)
     std::string msg;
     try {
         throw httpserver::feature_unavailable("tls", "HAVE_GNUTLS");
-    } catch (const httpserver::feature_unavailable& e) {
-        const std::runtime_error* base = &e;
-        msg = base->what();
+    } catch (const std::exception& e) {
+        msg = e.what();
     }
+    LT_CHECK(!msg.empty());
     LT_CHECK(msg.find("tls") != std::string::npos);
     LT_CHECK(msg.find("HAVE_GNUTLS") != std::string::npos);
-LT_END_AUTO_TEST(catches_as_feature_unavailable_directly)
+LT_END_AUTO_TEST(catches_as_std_exception)
 
 // Guard against a hard-coded message: a different (feature, flag) pair must
 // also propagate verbatim into what().
@@ -75,9 +80,23 @@ LT_BEGIN_AUTO_TEST(feature_unavailable_suite, composes_message_for_websocket)
     } catch (const std::runtime_error& e) {
         msg = e.what();
     }
+    LT_CHECK(!msg.empty());
     LT_CHECK(msg.find("websocket") != std::string::npos);
     LT_CHECK(msg.find("HAVE_WEBSOCKET") != std::string::npos);
 LT_END_AUTO_TEST(composes_message_for_websocket)
+
+// Edge-case: empty feature name and empty build flag. The fixed surrounding
+// text ("feature '' unavailable: built without ") ensures what() is always
+// non-empty and well-formed regardless of the arguments.
+LT_BEGIN_AUTO_TEST(feature_unavailable_suite, empty_args_produce_non_empty_message)
+    std::string msg;
+    try {
+        throw httpserver::feature_unavailable("", "");
+    } catch (const std::runtime_error& e) {
+        msg = e.what();
+    }
+    LT_CHECK(!msg.empty());
+LT_END_AUTO_TEST(empty_args_produce_non_empty_message)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
