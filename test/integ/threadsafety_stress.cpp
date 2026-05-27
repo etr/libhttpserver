@@ -249,10 +249,15 @@ ht::http_response driver_body(const ht::http_request& req,
                 ws, static_cast<unsigned>(i));
             std::lock_guard<std::mutex> lk(hooks->mtx);
             if (hooks->handles.size() >= HookBag::kCap) {
-                // Recycle: drop the oldest entry's registration first
-                // so the bag stays bounded.
-                hooks->handles.front().remove();
+                // Recycle: move the oldest handle out before erasing so
+                // its destructor fires on a moved-from (empty) handle.
+                // This avoids any double-call of remove(): the explicit
+                // remove() below deregisters the hook, and the moved-
+                // from destructor is a guaranteed no-op — no TSan race
+                // on the 'already removed' guard in hook_handle.
+                ht::hook_handle dead = std::move(hooks->handles.front());
                 hooks->handles.erase(hooks->handles.begin());
+                dead.remove();  // deregisters; dtor is now a no-op
             }
             hooks->handles.push_back(std::move(h));
             counters->hook_add_ok.fetch_add(

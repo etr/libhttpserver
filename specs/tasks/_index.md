@@ -134,7 +134,7 @@ Nominally: **13 sequential tasks**, each S–XL. Most other tasks parallelize of
 | TASK-049 | Fire `handler_exception`; wire `internal_error_handler` alias | M5 | Done | TASK-045, TASK-031 |
 | TASK-050 | Fire `after_handler` (post-handler short-circuit), `response_sent`, `request_completed`; wire `log_access` alias | M5 | Done | TASK-045 |
 | TASK-051 | Per-route hooks (`http_resource::add_hook`) | M5 | Done | TASK-045, TASK-048, TASK-049, TASK-050 |
-| TASK-052 | Hook bus documentation, examples, benchmark, stress-test extension (touches back into TASK-040/041/042/043) | M5 | Not Started | TASK-045, TASK-046, TASK-047, TASK-048, TASK-049, TASK-050, TASK-051 |
+| TASK-052 | Hook bus documentation, examples, benchmark, stress-test extension (touches back into TASK-040/041/042/043) | M5 | Done | TASK-045, TASK-046, TASK-047, TASK-048, TASK-049, TASK-050, TASK-051 |
 | TASK-037 | CI test for build-flag invariance | M6 | Done | TASK-034 |
 | TASK-038 | Sanitizer-clean tests for `http_response` move semantics | M6 | Done | TASK-009, TASK-036 |
 | TASK-039 | Performance acceptance (`get_headers`, `sizeof(http_resource)`) | M6 | Done | TASK-017, TASK-018, TASK-021 |
