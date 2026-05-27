@@ -111,6 +111,11 @@ void run_post_processor_if_attached(modded_request* mr,
 }  // namespace
 
 MHD_Result webserver_impl::requests_answer_first_step(MHD_Connection* connection, struct detail::modded_request* mr) {
+    // The http_request constructor calls pick_resource(connection) internally
+    // to locate the per-connection arena installed by connection_notify via
+    // MHD_CONNECTION_INFO_SOCKET_CONTEXT, then allocates the http_request_impl
+    // from that arena. The arena plumbing is therefore implicit at this call
+    // site but explicit within the constructor. (spec-alignment-checker-iter1-2/3)
     mr->dhr.reset(new http_request(connection, parent->unescaper));
     mr->dhr->set_file_cleanup_callback(parent->file_cleanup_callback);
 

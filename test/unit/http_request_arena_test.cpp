@@ -21,6 +21,7 @@
 //      on the warm path -- after the first request grew the arena, the
 //      second request's upstream alloc count stays flat.
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -64,6 +65,10 @@ LT_END_SUITE(http_request_arena_suite)
 // (1) connection_state must own a std::pmr::monotonic_buffer_resource named
 //     arena_, and arena_.release() must rewind the bump pointer so a second
 //     allocation lands at the same address as the first.
+//
+//     Note: impl_address_reuse_after_release (test 3) extends this contract
+//     to http_request_impl construction, so the split between these two
+//     tests is intentional rather than redundant. (test-quality-reviewer-iter1-5)
 LT_BEGIN_AUTO_TEST(http_request_arena_suite, arena_release_resets_bump_pointer)
     httpserver::detail::connection_state cs;
 
@@ -94,7 +99,13 @@ LT_BEGIN_AUTO_TEST(http_request_arena_suite, warm_path_zero_upstream_allocs)
     using httpserver::detail::http_request_impl;
     using impl_alloc_t = std::pmr::polymorphic_allocator<http_request_impl>;
 
-    // First request: grows the arena (consumes some of the 8 KiB).
+    // First request (cold path): grows the arena (consumes some of the 8 KiB).
+    // The baseline is sampled AFTER the cold cycle so the warm-path assertion
+    // below measures only warm-path allocations. If the 8 KiB buffer is too
+    // small for the cold cycle, the cold cycle will spill to upstream but
+    // baseline will be non-zero, and the warm-path assertion would become
+    // vacuous. The warm_path_zero_upstream_allocs_with_containers test (7)
+    // asserts baseline == 0 there to guard against this. (test-quality-iter1-6)
     {
         impl_alloc_t alloc(&arena);
         auto* p = alloc.new_object<http_request_impl>(nullptr, nullptr, alloc);
@@ -244,14 +255,9 @@ LT_BEGIN_AUTO_TEST(http_request_arena_suite, reset_arena_clears_initial_buffer)
     cs.reset_arena();
 
     // After reset, the bytes at that location must be zero.
-    bool all_zero = true;
-    for (std::size_t i = 0; i < sentinel_size; ++i) {
-        if (alloc_ptr[i] != std::byte{0}) {
-            all_zero = false;
-            break;
-        }
-    }
-    LT_CHECK(all_zero);
+    // (test-quality-reviewer-iter1-4: use std::all_of for a cleaner assertion)
+    LT_CHECK(std::all_of(alloc_ptr, alloc_ptr + sentinel_size,
+                         [](std::byte b) { return b == std::byte{0}; }));
 
     // Verify the arena is also released (bump pointer rewound): a new
     // allocation of the same size must land at the same address.
@@ -268,6 +274,13 @@ LT_END_AUTO_TEST(reset_arena_clears_initial_buffer)
 //     test only exercised construction with a null connection (no container
 //     population), so it did not validate the acceptance criterion for a
 //     request that actually populates the arena-backed containers.
+//
+//     code-quality-reviewer-iter1-3 / spec-alignment-checker-iter1-7:
+//     The baseline is asserted to be zero to confirm the cold cycle itself
+//     fit within the 8 KiB initial buffer (no spill to upstream). If the
+//     buffer is ever too small, the cold-cycle spill would be silently
+//     included in the baseline and the warm-path assertion would still
+//     pass -- making the test vacuous.
 LT_BEGIN_AUTO_TEST(http_request_arena_suite, warm_path_zero_upstream_allocs_with_containers)
     assert_no_upstream_resource upstream;
 
@@ -307,12 +320,68 @@ LT_BEGIN_AUTO_TEST(http_request_arena_suite, warm_path_zero_upstream_allocs_with
     arena.release();
     const std::size_t baseline = upstream.upstream_alloc_count();
 
+    // Baseline must be zero: the 8 KiB initial buffer must be sufficient to
+    // hold all cold-cycle allocations. If this fails, the buffer is too small
+    // and the warm-path assertion below would be vacuous (the "baseline" would
+    // absorb cold-cycle spills and the warm path would appear zero-delta even
+    // if it also spills). (code-quality-reviewer-iter1-3)
+    LT_CHECK_EQ(baseline, std::size_t{0});
+
     // Warm cycle: reuses the arena's initial buffer -- upstream must stay flat.
     one_request_cycle();
     arena.release();
 
     LT_CHECK_EQ(upstream.upstream_alloc_count(), baseline);
 LT_END_AUTO_TEST(warm_path_zero_upstream_allocs_with_containers)
+
+// (6) Simulate the request_completed trampoline contract: destroy the
+//     arena-backed impl (running its destructor), then call reset_arena()
+//     on the connection_state, and verify the arena is ready for reuse at
+//     the same address. This tests the two-step sequence in
+//     webserver_impl::request_completed without requiring a live MHD daemon.
+//
+//     Acceptance criterion: 'MHD_RequestTerminationCode callback resets
+//     the arena (test)'. The structural tests (1) and (3) verify the
+//     bump-pointer rewind property; this test verifies the ordering contract
+//     between ~http_request_impl (step 1) and reset_arena() (step 2) by
+//     running them in the same order request_completed does.
+//     (code-quality-reviewer-iter1-2 / test-quality-reviewer-iter1-1)
+LT_BEGIN_AUTO_TEST(http_request_arena_suite, request_completed_trampoline_contract)
+    using httpserver::detail::http_request_impl;
+    using impl_alloc_t = std::pmr::polymorphic_allocator<http_request_impl>;
+
+    httpserver::detail::connection_state cs;
+
+    // Step 1 (mirrors request_completed): allocate and construct an
+    // http_request_impl from the connection_state's arena, populate
+    // a couple of args to give it live PMR state, then call its
+    // destructor via delete_object (mirrors the arena_deleter: destructor
+    // only, no deallocation). This must not touch the arena bump pointer.
+    impl_alloc_t alloc(&cs.arena_);
+    auto* p = alloc.new_object<http_request_impl>(nullptr, nullptr, alloc);
+
+    constexpr std::size_t limit = 1024;
+    p->set_arg("user", "alice", limit);
+    p->querystring = "?user=alice";
+    p->requestor_ip = "10.0.0.1";
+
+    // Capture the address before destruction so we can verify reuse.
+    const void* const first_addr = static_cast<void*>(p);
+
+    // Destroy the impl without deallocating (mirrors destroy_impl_arena).
+    p->~http_request_impl();
+
+    // Step 2 (mirrors request_completed): rewind and zero the arena.
+    cs.reset_arena();
+
+    // After reset, a new allocation of the same type must land at the same
+    // address (bump pointer rewound to the start of the initial buffer).
+    auto* p2 = alloc.new_object<http_request_impl>(nullptr, nullptr, alloc);
+    const void* const second_addr = static_cast<void*>(p2);
+    alloc.delete_object(p2);
+
+    LT_CHECK_EQ(first_addr, second_addr);
+LT_END_AUTO_TEST(request_completed_trampoline_contract)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

@@ -46,11 +46,12 @@ namespace detail {
 // keep-alive connection, request_completed calls arena_.release() to
 // rewind the bump pointer, so a second request reuses the same memory.
 //
-// Lifetime contract for views returned by http_request getters: they
-// remain valid until the request-completion callback fires for the
+// Lifetime contract for views returned by http_request getters
+// (string_view, const& to pmr::string / pmr::vector / pmr::map members):
+// they remain valid until the request-completion callback fires for the
 // request they were derived from. Capturing them past the user
 // handler's return is undefined behavior. (See architecture doc
-// 04-components/http-request.md.)
+// 04-components/http-request.md.) (spec-alignment-checker-iter1-4)
 //
 // Initial-buffer sizing math (8 KiB):
 //   - sizeof(http_request_impl) ~= 600-700 B with libstdc++/libc++
@@ -96,10 +97,23 @@ struct connection_state {
     // Explicit zeroing after release() closes that residual-credential
     // window. (security-reviewer-iter1-3, CWE-226.)
     //
+    // Scope limitation: zeroing covers only initial_buffer_ (ARENA_INITIAL_BYTES).
+    // If a request's arena usage overflows the initial buffer, the monotonic_
+    // buffer_resource silently allocates additional blocks from the upstream
+    // resource (heap). Those overflow blocks are freed by arena_.release()
+    // but NOT zeroed here. Credentials that spill past ARENA_INITIAL_BYTES
+    // are therefore not cleared by this call. In practice the buffer is sized
+    // to hold typical requests without overflow (see sizing comment above);
+    // if sizing assumptions change, this limitation should be revisited.
+    // (code-quality-reviewer-iter1-5)
+    //
     // Using std::memset here (rather than explicit_bzero / SecureZeroMemory)
     // is acceptable because the buffer is accessed again immediately by the
     // next request's arena allocation, preventing the compiler from
-    // optimising the clear away as a dead store.
+    // optimising the clear away as a dead store. (security-reviewer-iter1-4,
+    // CWE-14 risk acknowledged; std::atomic_signal_fence or volatile
+    // initial_buffer_ would provide a language-level guarantee if needed
+    // by future deployments.)
     void reset_arena() noexcept {
         arena_.release();
         std::memset(initial_buffer_.data(), 0, ARENA_INITIAL_BYTES);

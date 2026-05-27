@@ -281,11 +281,15 @@ class http_request_impl {
 //   max_args_bytes: maximum total key+value bytes accumulated before
 //     returning MHD_NO. Applies the same protection on a byte basis.
 //
-// Defaults are deliberately large (64 K / 64 KiB) so existing callers
-// that construct the accumulator without setting these fields remain
-// compatible. The webserver hot path sets these from connection_state
-// or a compile-time constant once the create_webserver API exposes them
-// (TODO(M5)).
+// Defaults are deliberately generous (64 unique keys / 64 KiB total bytes)
+// so existing callers that construct the accumulator without setting these
+// fields remain compatible. The webserver hot path sets these from
+// connection_state or a compile-time constant once the create_webserver
+// API exposes them (TODO(M5)).
+//
+// NOTE: POST argument limits are handled upstream by MHD_OPTION_CONNECTION_
+// MEMORY_LIMIT; the guards here apply only to GET arguments processed via
+// build_request_args / populate_args. (security-reviewer-iter1-5)
 struct arguments_accumulator {
     unescaper_ptr unescaper = nullptr;
     // TASK-016: points at the impl's pmr-backed map.
