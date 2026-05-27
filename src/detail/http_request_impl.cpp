@@ -43,17 +43,25 @@ namespace httpserver {
 
 namespace detail {
 
+// Map a MHD_ValueKind to the corresponding test-request local storage map.
+// Returns nullptr for kinds that have no local-storage counterpart (e.g.
+// MHD_GET_ARGUMENT_KIND). Called from both get_connection_value() and
+// ensure_headerlike_cache() to keep the kind→map dispatch in one place.
+// Adding a new kind (e.g. MHD_POSTDATA_KIND) only requires updating this
+// function. (code-simplifier-iter1 findings #3/#4 / major review items)
+const http::header_map* http_request_impl::local_map_for(MHD_ValueKind kind) const noexcept {
+    switch (kind) {
+        case MHD_HEADER_KIND: return &headers_local;
+        case MHD_FOOTER_KIND: return &footers_local;
+        case MHD_COOKIE_KIND: return &cookies_local;
+        default:              return nullptr;
+    }
+}
+
 std::string_view http_request_impl::get_connection_value(std::string_view key, MHD_ValueKind kind) const {
     // Test-request path: connection_ is null, fall back to local storage.
     if (connection_ == nullptr) {
-        const auto* map = [&]() -> const http::header_map* {
-            switch (kind) {
-                case MHD_HEADER_KIND: return &headers_local;
-                case MHD_FOOTER_KIND: return &footers_local;
-                case MHD_COOKIE_KIND: return &cookies_local;
-                default:             return nullptr;
-            }
-        }();
+        const auto* map = local_map_for(kind);
         if (map != nullptr) {
             // header_comparator is_transparent: find(string_view) works without
             // constructing a temporary std::string. (performance-reviewer-iter1-30)
@@ -83,34 +91,32 @@ MHD_Result http_request_impl::build_request_header(void* cls, MHD_ValueKind kind
 const http::header_view_map& http_request_impl::ensure_headerlike_cache(MHD_ValueKind kind) const {
     // Pick the cache slot and build-flag matching `kind`. We resolve them
     // up front so the cold (build) and warm (return) paths share a single
-    // reference without re-switching.
+    // reference without re-switching. local_map_for() provides the
+    // local-storage fallback pointer without duplicating the switch.
+    // (code-simplifier-iter1 findings #3/#4 / major review items)
     http::header_view_map* cache = nullptr;
     bool* built = nullptr;
-    const http::header_map* local_fallback = nullptr;
     switch (kind) {
         case MHD_HEADER_KIND:
             cache = &headers_cached_;
             built = &headers_cache_built_;
-            local_fallback = &headers_local;
             break;
         case MHD_FOOTER_KIND:
             cache = &footers_cached_;
             built = &footers_cache_built_;
-            local_fallback = &footers_local;
             break;
         case MHD_COOKIE_KIND:
             cache = &cookies_cached_;
             built = &cookies_cache_built_;
-            local_fallback = &cookies_local;
             break;
         default:
             // Unsupported kind: hand back the headers cache (kept empty)
             // as a safe fallback; the public API never reaches here.
             cache = &headers_cached_;
             built = &headers_cache_built_;
-            local_fallback = &headers_local;
             break;
     }
+    const http::header_map* local_fallback = local_map_for(kind);
 
     if (*built) {
         return *cache;
@@ -350,7 +356,8 @@ void http_request_impl::grow_last_arg(const std::string& key, const std::string&
 
 #ifdef HAVE_BAUTH
 void http_request_impl::fetch_user_pass() const {
-    // Test-request path: connection_ is null, credentials already set.
+    // Test-request path: connection_ is null, credentials already set
+    // directly by create_test_request; nothing to fetch.
     if (connection_ == nullptr) {
         return;
     }
@@ -363,6 +370,11 @@ void http_request_impl::fetch_user_pass() const {
         }
         MHD_free(info);
     }
+    // Mark as fetched so subsequent get_user()/get_pass() calls skip the
+    // MHD round-trip -- even when the request carries no auth header and
+    // the credential strings remain empty after this call.
+    // (code-simplifier-iter1 finding #6 / major review item)
+    user_pass_fetched = true;
 }
 #endif  // HAVE_BAUTH
 

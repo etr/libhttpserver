@@ -131,9 +131,14 @@ class http_request_impl {
 
     http_request_impl(const http_request_impl&) = delete;
     http_request_impl& operator=(const http_request_impl&) = delete;
-    // Moves are left implicitly defined (and unused -- the impl is held
-    // through unique_ptr so http_request's defaulted moves operate on
-    // the unique_ptr, not on the impl directly).
+    // Move operations: explicitly defaulted to document intent.
+    // The impl is held through a custom-deleter unique_ptr, so http_request's
+    // own move ctor/assign operate on the unique_ptr, never on the impl
+    // directly. These defaults are unused in practice but explicit = default
+    // is clearer than relying on the implicit definition.
+    // (code-simplifier-iter1 finding #33 / minor review item)
+    http_request_impl(http_request_impl&&) = default;
+    http_request_impl& operator=(http_request_impl&&) = default;
 
     // --- per-request backend handles ---
     MHD_Connection* connection_ = nullptr;
@@ -181,6 +186,23 @@ class http_request_impl {
     mutable std::pmr::vector<std::pmr::string> path_pieces;
     mutable bool args_populated = false;
     mutable bool path_pieces_cached = false;
+#ifdef HAVE_BAUTH
+    // Guard for fetch_user_pass(): once the MHD round-trip has been made
+    // (whether or not the request carries a Basic-Auth header), further
+    // calls to get_user()/get_pass() skip the MHD call entirely.
+    // Using a dedicated boolean (rather than checking username.empty())
+    // matches the args_populated / path_pieces_cached pattern and avoids
+    // a redundant MHD call on requests with no auth credentials where the
+    // credential strings remain empty after the first fetch.
+    // (code-simplifier finding #6 / major review item)
+    mutable bool user_pass_fetched = false;
+#endif  // HAVE_BAUTH
+    // Cache guard for get_requestor(). Using a dedicated boolean (rather
+    // than checking requestor_ip.empty()) is consistent with the boolean-
+    // flag pattern used by args_populated and path_pieces_cached, and is
+    // robust if the connection layer ever returns an empty IP string.
+    // (code-simplifier finding #7 / minor review item)
+    mutable bool requestor_ip_cached = false;
 
     // TASK-017: per-request caches for the six container getters. These
     // are typed in the public-API container types (default-allocator) so
@@ -233,6 +255,13 @@ class http_request_impl {
 #endif  // HAVE_GNUTLS
 
     // --- helpers (moved out of http_request public header) ---
+
+    // Map MHD_ValueKind to the corresponding test-request local-storage map
+    // pointer (nullptr for kinds with no local counterpart). Centralises the
+    // kind→map dispatch so get_connection_value() and ensure_headerlike_cache()
+    // share one switch body. (code-simplifier-iter1 findings #3/#4)
+    const http::header_map* local_map_for(MHD_ValueKind kind) const noexcept;
+
     std::string_view get_connection_value(std::string_view key, MHD_ValueKind kind) const;
     // TASK-017: ensures the cache for `kind` (HEADER / FOOTER / COOKIE) is
     // populated and returns a const reference to it. First call fills the

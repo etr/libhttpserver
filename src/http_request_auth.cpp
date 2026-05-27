@@ -41,10 +41,18 @@ namespace httpserver {
 
 std::string_view http_request::get_user() const {
 #ifdef HAVE_BAUTH
-    if (!impl_->username.empty()) {
-        return impl_->username;
+    // Use user_pass_fetched instead of !username.empty() as the cache
+    // guard: an empty username string after a successful MHD call is a
+    // valid result (no auth header), but would cause a redundant re-fetch
+    // on every subsequent get_user() call without the boolean.
+    // (code-simplifier-iter1 finding #6 / major review item)
+    if (!impl_->user_pass_fetched) {
+        impl_->fetch_user_pass();
+        // fetch_user_pass() sets user_pass_fetched = true on the live path.
+        // On the test-request path (connection_ == nullptr) it returns early
+        // without setting the flag; set it here so future calls are skipped.
+        impl_->user_pass_fetched = true;
     }
-    impl_->fetch_user_pass();
     return impl_->username;
 #else
     // TASK-034 §7 sentinel: BAUTH disabled at build time -> empty view.
@@ -54,10 +62,11 @@ std::string_view http_request::get_user() const {
 
 std::string_view http_request::get_pass() const {
 #ifdef HAVE_BAUTH
-    if (!impl_->password.empty()) {
-        return impl_->password;
+    // Mirror the get_user() boolean guard (code-simplifier-iter1 #6).
+    if (!impl_->user_pass_fetched) {
+        impl_->fetch_user_pass();
+        impl_->user_pass_fetched = true;
     }
-    impl_->fetch_user_pass();
     return impl_->password;
 #else
     return std::string_view{};

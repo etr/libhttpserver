@@ -309,12 +309,15 @@ std::string_view http_request::get_querystring() const noexcept {
 
 
 std::string_view http_request::get_requestor() const {
-    if (!impl_->requestor_ip.empty()) {
-        return impl_->requestor_ip;
-    }
-
-    // Test-request path: connection_ is null, requestor_ip already set.
-    if (impl_->connection_ == nullptr) {
+    // Single consolidated early-return covers both the cache-hit path
+    // (requestor_ip_cached == true after first call on a live connection)
+    // and the test-request path (connection_ == nullptr, requestor_ip was
+    // set directly by create_test_request). Using a dedicated boolean instead
+    // of checking requestor_ip.empty() is consistent with the args_populated /
+    // path_pieces_cached / user_pass_fetched pattern and is robust if the
+    // connection layer ever returns an empty IP string.
+    // (code-simplifier-iter1 findings #7 + #8/#9 / major+minor review items)
+    if (impl_->requestor_ip_cached || impl_->connection_ == nullptr) {
         return impl_->requestor_ip;
     }
 
@@ -326,6 +329,7 @@ std::string_view http_request::get_requestor() const {
 
     auto ip = http::get_ip_str(conninfo->client_addr);
     impl_->requestor_ip.assign(ip.data(), ip.size());
+    impl_->requestor_ip_cached = true;
     return impl_->requestor_ip;
 }
 
