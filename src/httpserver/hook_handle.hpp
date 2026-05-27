@@ -31,12 +31,17 @@
 
 #include "httpserver/hook_phase.hpp"
 
+/**
+ * @file hook_handle.hpp
+ * @brief Move-only RAII receipt returned by webserver / http_resource
+ *        `add_hook` calls.
+ *
+ * TASK-045 / §5.6 / DR-012. The PIMPL backing classes are forward-
+ * declared so this header carries no libmicrohttpd / pthread / gnutls
+ * baggage.
+ */
 namespace httpserver {
 
-// Forward-declare the PIMPL backing class so this header carries no
-// libmicrohttpd / pthread / gnutls baggage. The complete type is
-// required only at hook_handle's out-of-line definitions, which live
-// in src/hook_handle.cpp where detail/webserver_impl.hpp is in scope.
 namespace detail { class webserver_impl; }
 // TASK-051: per-resource hook table -- the per-route handle holds a
 // weak_ptr<resource_hook_table>, expired when the resource is
@@ -45,46 +50,69 @@ namespace detail { class resource_hook_table; }
 class webserver;
 class http_resource;
 
-// TASK-045 / §5.6.
-//
-// hook_handle is the move-only RAII receipt returned by
-// webserver::add_hook. Destruction (or explicit remove()) re-takes the
-// hook table's writer lock and erases the registration. detach()
-// disarms the destructor so the registration persists for the
-// webserver's lifetime.
-//
-// Back-reference: (phase, slot_id, impl_) where slot_id is a
-// monotonically-increasing 64-bit counter stored alongside each entry.
-// Reallocation of the phase vector cannot invalidate this handle: the
-// remove() path walks the vector linearly looking for `slot_id`, and a
-// not-found result is the idempotent no-op path.
+/**
+ * @brief Move-only RAII receipt for a hook registration.
+ *
+ * Returned by `webserver::add_hook` (server-wide) or
+ * `http_resource::add_hook` (per-route). Destruction or explicit
+ * `remove()` re-takes the hook table's writer lock and erases the
+ * registration. `detach()` disarms the destructor so the registration
+ * persists for the webserver's lifetime.
+ *
+ * Back-reference: `(phase, slot_id, impl_ or table_weak_)` where
+ * `slot_id` is a monotonically-increasing 64-bit counter. Reallocation
+ * of the phase vector cannot invalidate this handle: `remove()` walks
+ * the vector linearly looking for `slot_id`; a not-found result is
+ * the idempotent no-op path.
+ */
 class hook_handle {
  public:
-    // Default-constructed handle is in the "disarmed" state: remove()
-    // is a no-op and the destructor does not touch any impl. Three
-    // paths converge on this state -- default ctor, post-remove(),
-    // post-move-from.
+    /**
+     * @brief Default-construct a disarmed handle.
+     *
+     * `remove()` is a no-op and the destructor does not touch any
+     * impl. Three paths converge on this state: default ctor,
+     * post-`remove()`, and post-move-from.
+     */
     hook_handle() noexcept = default;
 
-    // Non-copyable, move-only with nothrow moves.
+    /// hook_handle is non-copyable.
     hook_handle(const hook_handle&) = delete;
+    /// hook_handle is non-copy-assignable.
     hook_handle& operator=(const hook_handle&) = delete;
+    /// Move-construct from @p other, leaving it disarmed.
     hook_handle(hook_handle&& other) noexcept;
+    /// Move-assign from @p other, leaving it disarmed.
     hook_handle& operator=(hook_handle&& other) noexcept;
 
-    // Destructor calls remove() unless the handle has been detach()-ed,
-    // moved-from, or already remove()-ed.
+    /**
+     * @brief Destructor.
+     *
+     * Calls `remove()` unless the handle has been `detach()`-ed,
+     * moved-from, or already `remove()`-ed.
+     */
     ~hook_handle();
 
-    // Erase the registration this handle refers to. Idempotent: a
-    // second call on the same handle is a no-op. After this call the
-    // handle is disarmed (the dtor will not touch the impl).
+    /**
+     * @brief Erase the registration this handle refers to.
+     *
+     * Idempotent: a second call on the same handle is a no-op. After
+     * this call the handle is disarmed (the destructor will not touch
+     * the impl). Safe to call on a default-constructed or moved-from
+     * handle.
+     */
     void remove() noexcept;
 
-    // Disarm the destructor: the underlying registration persists for
-    // the webserver's lifetime. Returns *this by value (move) so the
-    // call chain reads as `auto h2 = std::move(h).detach();`. The
-    // source handle is left in the disarmed state.
+    /**
+     * @brief Disarm the destructor.
+     *
+     * The underlying registration persists for the webserver's
+     * lifetime. The source handle is left in the disarmed state.
+     * Conventionally invoked as `auto h2 = std::move(h).detach();`.
+     *
+     * @return a new handle that owns the registration (or a disarmed
+     *         handle if the source was already disarmed).
+     */
     hook_handle detach() && noexcept;
 
  private:

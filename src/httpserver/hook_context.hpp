@@ -22,6 +22,17 @@
 #error "Only <httpserver.hpp> or <httpserverpp> can be included directly."
 #endif
 
+/**
+ * @file hook_context.hpp
+ * @brief Per-phase context structs passed to hook callables.
+ *
+ * TASK-045 / DR-012 / §4.10. Each `*_ctx` type carries exactly the
+ * information the matching phase publishes; lifetime is the hook
+ * callback invocation -- pointers in these structs MUST NOT be
+ * captured past the callback's return. See
+ * `specs/architecture/04-components/hooks.md` for the field-by-field
+ * contract.
+ */
 #ifndef SRC_HTTPSERVER_HOOK_CONTEXT_HPP_
 #define SRC_HTTPSERVER_HOOK_CONTEXT_HPP_
 
@@ -48,17 +59,15 @@ class http_request;
 class http_response;
 class http_resource;
 
-// TASK-045 / §4.10 / DR-012.
-//
-// peer_address is libhttpserver-defined to keep all <sys/socket.h> and
-// MHD types out of the public hook surface (PRD-HDR-REQ-001). TASK-046
-// will construct this struct from the `const struct sockaddr*` MHD
-// hands to the accept-decision callback, inside webserver.cpp where
-// <sys/socket.h> is already in scope.
-//
-// `bytes` is in network byte order (big-endian). For IPv4 the first
-// four bytes carry the address and the rest are zero; for IPv6 all
-// sixteen bytes are used. `port` is in host byte order.
+/**
+ * @brief Libhttpserver-defined peer address (IPv4 or IPv6) plus port.
+ *
+ * Kept libhttpserver-native so the public hook surface carries no
+ * `<sys/socket.h>` or MHD types (PRD-HDR-REQ-001). `bytes` is in
+ * network byte order: the first four bytes carry an IPv4 address with
+ * the rest zero; all sixteen bytes are used for IPv6. `port` is in
+ * host byte order.
+ */
 struct peer_address {
     enum class family : std::uint8_t { unspec = 0, ipv4 = 1, ipv6 = 2 };
     family fam = family::unspec;
@@ -70,13 +79,15 @@ struct peer_address {
     [[nodiscard]] std::string to_string() const;
 };
 
-// route_descriptor: light pointer-and-bag view of a matched route, used
-// by route_resolved_ctx and the after-handler context. Definition pinned
-// at TASK-045 so TASK-048 only has to populate it. `path_template` is a
-// view into the registered route's stored string -- valid for the
-// lifetime of the registration. `methods` carries the method bits the
-// matched entry serves; `is_prefix` flags prefix-match registrations
-// (register_prefix / single_resource).
+/**
+ * @brief Light pointer-and-bag view of a matched route.
+ *
+ * Used by `route_resolved_ctx` and `before_handler_ctx`.
+ * `path_template` is a view into the registered route's stored string
+ * and is valid for the lifetime of the registration. `methods`
+ * carries the method bits the matched entry serves; `is_prefix` flags
+ * prefix-match registrations (`register_prefix` / single-resource).
+ */
 struct route_descriptor {
     std::string_view path_template;
     method_set methods{};
@@ -93,14 +104,22 @@ struct route_descriptor {
 // populates these fields. The fields below are deliberately POD-shaped
 // (references / scalars / spans / string_views / optionals of POD).
 
+/// @brief Context for the `connection_opened` phase: new TCP/TLS connection.
 struct connection_open_ctx {
     peer_address peer{};
 };
 
+/// @brief Context for the `connection_closed` phase: connection torn down.
 struct connection_close_ctx {
     peer_address peer{};
 };
 
+/**
+ * @brief Context for the `accept_decision` phase.
+ *
+ * Observation-only per DR-012; the handler returns `void`. Accept/deny
+ * is decided by the policy callback, not by the hook.
+ */
 // accept_decision: observation-only per DR-012; the handler returns
 // void. accept/deny is decided by the policy callback, not by the hook.
 //
@@ -122,17 +141,32 @@ struct accept_ctx {
     std::optional<std::string_view> reason{};
 };
 
-// request_received: fires after the http_request is fully populated
-// from MHD's headers and BEFORE any body bytes are read. The request
-// pointer is mutable so a hook may adjust per-request state (e.g.
-// content-size limit) before the upload starts. Short-circuit:
-// returning hook_action::respond_with(r) aborts the upload -- the body
-// is never read and the resource handler is never invoked.
+/**
+ * @brief Context for the `request_received` phase.
+ *
+ * Fires after the `http_request` is fully populated from MHD's
+ * headers and BEFORE any body bytes are read. The request pointer is
+ * mutable so a hook may adjust per-request state before the upload
+ * starts. Short-circuit-capable: returning
+ * `hook_action::respond_with(r)` aborts the upload -- the body is
+ * never read and the resource handler is never invoked.
+ */
 struct request_received_ctx {
     http_request* request = nullptr;          // mutable: hook may set context
     std::chrono::steady_clock::time_point received_at{};
 };
 
+/**
+ * @brief Context for the `body_chunk` phase.
+ *
+ * Fires once per chunk MHD delivers to the upload callback, BEFORE
+ * the bytes are appended to the request body or fed to any in-flight
+ * post-processor. Short-circuit-capable.
+ *
+ * Invoked from arbitrary MHD worker threads at arbitrary granularity;
+ * hooks MUST be cheap. The `chunk` span aliases MHD-owned memory and
+ * is only valid for the duration of the hook call.
+ */
 // body_chunk: fires once per chunk MHD delivers to the upload
 // callback, BEFORE the bytes are appended to the request body or fed
 // to any in-flight post-processor.
@@ -159,14 +193,28 @@ struct body_chunk_ctx {
     bool is_final = false;
 };
 
-// route_resolved: observation-only. `matched` is empty for the 404 path
-// (no route matched); otherwise it describes the matched registration.
+/**
+ * @brief Context for the `route_resolved` phase.
+ *
+ * Observation-only. `matched` is empty for the 404 path (no route
+ * matched); otherwise it describes the matched registration.
+ */
 struct route_resolved_ctx {
     const http_request* request = nullptr;
     std::optional<route_descriptor> matched{};
     const http_resource* resource = nullptr;  // nullable; nullptr for lambda routes
 };
 
+/**
+ * @brief Context for the `before_handler` phase.
+ *
+ * Short-circuit-capable. Fires after route resolution (the matched
+ * resource is known) and BEFORE both `is_allowed` and the resource
+ * handler invocation. Returning `hook_action::respond_with(r)` skips
+ * both checks and goes straight to response materialisation. Also
+ * the phase used by the `method_not_allowed_handler` and
+ * `auth_handler` v1 aliases.
+ */
 // before_handler: short-circuit-capable. Fires after route resolution
 // (the matched resource is known) and BEFORE both is_allowed and the
 // resource handler invocation. Returning hook_action::respond_with(r)
@@ -188,17 +236,37 @@ struct before_handler_ctx {
     const http_resource* resource = nullptr;
 };
 
+/**
+ * @brief Context for the `handler_exception` phase.
+ *
+ * Short-circuit-capable. Fires when an exception escapes the resource
+ * handler, before the `internal_error_handler` v1 alias is consulted.
+ */
 struct handler_exception_ctx {
     const http_request* request = nullptr;
     std::exception_ptr exception{};
     std::string_view message{};
 };
 
+/**
+ * @brief Context for the `after_handler` phase.
+ *
+ * Short-circuit-capable; the `response` pointer is mutable so hooks
+ * may rewrite headers / status without replacing the body.
+ */
 struct after_handler_ctx {
     const http_request* request = nullptr;
     http_response* response = nullptr;        // mutable: hook may mutate
 };
 
+/**
+ * @brief Context for the `response_sent` phase.
+ *
+ * Observation point fired immediately after `MHD_queue_response` and
+ * BEFORE `MHD_destroy_response`. Carries the data users have been
+ * asking for (issues #281 and #69): `status`, `bytes_queued`,
+ * `elapsed`. The `log_access` v1 alias is wired through this phase.
+ */
 // response_sent: observation point fired immediately after
 // MHD_queue_response and BEFORE MHD_destroy_response. Carries the data
 // users have been asking for (issues #281 and #69):
@@ -229,6 +297,14 @@ struct response_sent_ctx {
     std::chrono::nanoseconds elapsed{};
 };
 
+/**
+ * @brief Context for the `request_completed` phase.
+ *
+ * Unconditional final hook. Fires BEFORE the per-request state is
+ * destroyed so the ctx pointers remain backed by live storage for the
+ * duration of the hook call. Hooks MUST NOT capture `request` or
+ * `resp` past their return.
+ */
 // request_completed: unconditional final hook. Fires BEFORE the
 // modded_request is destroyed so the ctx pointers remain backed by
 // live storage for the duration of the hook call.

@@ -70,6 +70,27 @@ TLS and authentication
 * `client_cert_auth.cpp` — mutual TLS with X.509 client certificates.
   Ships as a documentation artifact; not wired into `noinst_PROGRAMS`.
 
+Lifecycle hooks
+---------------
+
+The hook bus (DR-012, §4.10) lets user code observe and short-circuit
+every interesting point in the request lifecycle. The four examples
+below demonstrate the user-visible resolution of issues #332, #273,
+#281, #69, and the per-route hook contract introduced in TASK-051.
+
+* `banned_ip_log.cpp` — a single `accept_decision` hook logs every
+  banned-IP rejection to stderr. Resolves issue #332.
+* `early_413.cpp` — a single `request_received` hook returns
+  `respond_with(http_response::empty().with_status(413))` when
+  `Content-Length` exceeds the configured cap. The request body never
+  crosses the I/O boundary. Resolves issue #273.
+* `clf_access_log.cpp` — a single `response_sent` hook formats a
+  Common Log Format line using the structured context fields
+  (`status`, `bytes_queued`, `elapsed`). Resolves issues #281 and #69.
+* `per_route_auth.cpp` — `http_resource::add_hook(before_handler, ...)`
+  guards a single route with HTTP Basic auth without touching sibling
+  routes. Demonstrates per-route hook scoping (DR-012).
+
 Operations
 ----------
 

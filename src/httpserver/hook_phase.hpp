@@ -29,19 +29,33 @@
 #include <cstdint>
 #include <string_view>
 
+/**
+ * @file hook_phase.hpp
+ * @brief Enumerates the eleven lifecycle phases at which user hooks fire.
+ *
+ * TASK-045 / DR-012 / §4.10 / PRD-HOOK-REQ-001..002. Storage and firing
+ * semantics live in detail/webserver_impl.hpp; per-phase callable
+ * signatures live in hook_context.hpp and the matching
+ * webserver::add_hook / http_resource::add_hook overloads.
+ */
 namespace httpserver {
 
-// TASK-045 / DR-012 / §4.10 / PRD-HOOK-REQ-001..002.
-//
-// hook_phase enumerates the eleven points along the request/response
-// lifecycle at which user-registered hooks may fire. Listed in firing
-// order. count_ is a sentinel and must remain last; it is not a valid
-// phase value. The underlying type is uint8_t -- two orders of
-// magnitude of growth headroom past the current 11 phases is plenty.
-//
-// Storage and firing semantics live in detail/webserver_impl.hpp;
-// per-phase callable signatures live in hook_context.hpp and the
-// matching webserver::add_hook overloads.
+/**
+ * @brief Enumerates the eleven points along the request / response
+ * lifecycle at which user-registered hooks may fire.
+ *
+ * Phases are listed in firing order. `count_` is a sentinel and must
+ * remain last; it is not a valid phase value. The underlying type is
+ * `std::uint8_t` -- two orders of magnitude of growth headroom past
+ * the current eleven phases.
+ *
+ * Five phases (`before_handler`, `handler_exception`, `after_handler`,
+ * `response_sent`, `request_completed`) are also valid arguments to
+ * `http_resource::add_hook` for per-route registration. The other six
+ * are server-wide only.
+ *
+ * See `specs/architecture/04-components/hooks.md` §4.10 and DR-012.
+ */
 enum class hook_phase : std::uint8_t {
     connection_opened,
     accept_decision,
@@ -60,11 +74,18 @@ enum class hook_phase : std::uint8_t {
 static_assert(static_cast<std::size_t>(hook_phase::count_) == 11u,
               "hook_phase::count_ must be 11");
 
-// to_string returns the spec-canonical name of a phase for use in error
-// messages (the wrong-phase add_hook throw site) and in TASK-052
-// telemetry / docs. Total over the eleven declared enumerators; any
-// other underlying value (only producible via static_cast) returns an
-// empty view rather than crashing -- keeps logging robust.
+/**
+ * @brief Spec-canonical name of a phase, for error messages and logs.
+ *
+ * Total over the eleven declared enumerators; any other underlying
+ * value (only producible via `static_cast`) returns an empty view
+ * rather than crashing. Used by the wrong-phase `add_hook` throw site
+ * and by hook telemetry / docs.
+ *
+ * @param p phase to name.
+ * @return canonical name as a `std::string_view`, or an empty view if
+ *         `p` is `count_` or an out-of-range underlying value.
+ */
 constexpr std::string_view to_string(hook_phase p) noexcept {
     switch (p) {
     case hook_phase::connection_opened:  return std::string_view{"connection_opened"};

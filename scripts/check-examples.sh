@@ -174,5 +174,33 @@ if [ "$unlisted" -gt 0 ]; then
     fail "$unlisted .cpp file(s) in examples/ are not listed in Makefile.am noinst_PROGRAMS — add them or add to KNOWN_ARTIFACTS"
 fi
 
-echo "check-examples: OK (hello_world.cpp = $loc LOC; shared_state.cpp asserted; Makefile.am coverage verified bidirectionally)"
+# ---- TASK-052: hook-example documentation coverage --------------------------
+# The four lifecycle-hook examples (banned_ip_log, early_413, clf_access_log,
+# per_route_auth) must be listed in both examples/README.md and the top-level
+# README.md so the user-visible resolution of issues #332, #281, #69, #273 is
+# discoverable. Per TASK-052 / Phase 3.
+EXAMPLES_README="$REPO_ROOT/examples/README.md"
+TOP_README="$REPO_ROOT/README.md"
+HOOK_EXAMPLES="banned_ip_log early_413 clf_access_log per_route_auth"
+
+for f in "$EXAMPLES_README" "$TOP_README"; do
+    [ -f "$f" ] || fail "$(basename "$f") does not exist"
+done
+
+missing_doc=0
+for ex in $HOOK_EXAMPLES; do
+    if ! grep -q "${ex}\\.cpp" "$EXAMPLES_README"; then
+        echo "check-examples: FAIL: examples/README.md does not mention ${ex}.cpp" >&2
+        missing_doc=$((missing_doc + 1))
+    fi
+    if ! grep -q "${ex}\\.cpp" "$TOP_README"; then
+        echo "check-examples: FAIL: README.md does not mention ${ex}.cpp" >&2
+        missing_doc=$((missing_doc + 1))
+    fi
+done
+if [ "$missing_doc" -gt 0 ]; then
+    fail "$missing_doc hook-example reference(s) missing from README docs (TASK-052)"
+fi
+
+echo "check-examples: OK (hello_world.cpp = $loc LOC; shared_state.cpp asserted; Makefile.am coverage verified bidirectionally; hook examples listed in both READMEs)"
 exit 0

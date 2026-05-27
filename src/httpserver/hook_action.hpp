@@ -30,21 +30,29 @@
 
 #include "httpserver/http_response.hpp"
 
+/**
+ * @file hook_action.hpp
+ * @brief Return type of short-circuit-capable hook phases.
+ *
+ * TASK-045 / DR-012 / §5.6 / PRD-HOOK-REQ-003.
+ */
 namespace httpserver {
 
-// TASK-045 / DR-012 / §5.6 / PRD-HOOK-REQ-003.
-//
-// hook_action is the return type of short-circuit-capable phases
-// (request_received, body_chunk, before_handler, handler_exception,
-// after_handler). A pass-action lets dispatch continue; a
-// respond_with-action short-circuits and the wrapped http_response is
-// sent on the wire in place of the handler's output.
-//
-// Storage is std::optional<http_response>: empty == pass, engaged ==
-// short-circuit. Move-only because http_response is move-only (DR-005).
-// take_response() is rvalue-qualified so the "consumed once" contract
-// is syntactically explicit at the firing site: TASK-046+ will write
-// `if (!a.is_pass()) { return std::move(a).take_response(); }`.
+/**
+ * @brief Outcome value returned from short-circuit-capable hook phases.
+ *
+ * Used by `request_received`, `body_chunk`, `before_handler`,
+ * `handler_exception`, and `after_handler`. A pass action lets the
+ * chain continue to the next subscriber (or the original dispatch
+ * logic when the chain is exhausted); a `respond_with` action
+ * short-circuits and the wrapped `http_response` is sent on the wire
+ * in place of any handler output.
+ *
+ * Storage is `std::optional<http_response>`: empty means pass, engaged
+ * means short-circuit. Move-only because `http_response` is move-only
+ * (DR-005). `take_response()` is rvalue-qualified so the "consumed
+ * once" contract is syntactically explicit at the firing site.
+ */
 class hook_action {
  public:
     hook_action() noexcept = default;
@@ -54,29 +62,51 @@ class hook_action {
     hook_action& operator=(hook_action&&) noexcept = default;
     ~hook_action() = default;
 
-    // pass(): a no-op action; dispatch continues to the next hook (or
-    // the original logic if this is the last hook in the chain).
+    /**
+     * @brief A no-op action that lets dispatch continue.
+     *
+     * @return an empty action; the next subscriber (or, if this hook
+     *         is the last in the chain, the original dispatch logic)
+     *         runs unchanged.
+     */
     [[nodiscard]] static hook_action pass() noexcept {
         return hook_action{};
     }
 
-    // respond_with(r): short-circuit the chain with @p r. Subsequent
-    // hooks in the same phase are NOT invoked; the wrapped response is
-    // sent on the wire. (Per-phase exact semantics land in TASK-046..050.)
+    /**
+     * @brief Short-circuit the chain with @p r.
+     *
+     * Subsequent hooks at the same phase are NOT invoked; the wrapped
+     * response is sent on the wire.
+     *
+     * @param r response to send in place of the handler's output.
+     * @return action carrying @p r.
+     */
     [[nodiscard]] static hook_action respond_with(http_response r) noexcept {
         hook_action a;
         a.response_.emplace(std::move(r));
         return a;
     }
 
+    /**
+     * @brief Query whether this action carries a short-circuit response.
+     *
+     * @return true if this is a `pass()` action; false if it carries a
+     *         `respond_with(...)` payload.
+     */
     [[nodiscard]] bool is_pass() const noexcept {
         return !response_.has_value();
     }
 
-    // take_response() && returns the wrapped http_response by rvalue
-    // reference. Precondition: !is_pass(). The action is "consumed" --
-    // calling take_response() a second time on the same object yields
-    // an empty response (the optional has been moved-from).
+    /**
+     * @brief Consume the wrapped response.
+     *
+     * Precondition: `!is_pass()`. The action is consumed -- calling
+     * `take_response()` a second time on the same object yields an
+     * empty response (the optional has been moved-from).
+     *
+     * @return rvalue reference to the wrapped `http_response`.
+     */
     [[nodiscard]] http_response&& take_response() && noexcept {
         return std::move(*response_);
     }

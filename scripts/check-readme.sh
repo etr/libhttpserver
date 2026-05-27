@@ -120,6 +120,10 @@ REQUIRED_V2_TOKENS=(
     '\bhttp_method\b'
     '\bmethod_set\b'
     '\biovec_entry\b'
+    '\badd_hook\b'
+    '\bhook_phase\b'
+    '\bhook_action\b'
+    '\bhook_handle\b'
 )
 
 missing=()
@@ -187,6 +191,7 @@ REQUIRED_SECTIONS=(
     '^##[ \t]+request'
     '^##[ \t]+response'
     '^##[ \t]+routing'
+    'lifecycle[ \t-]+hook'
     'threading'
     'error[ \t-]+propag'
     'feature[ \t-]+avail'
@@ -212,6 +217,28 @@ if [ "${#missing_sections[@]}" -gt 0 ]; then
     for sec in "${missing_sections[@]}"; do echo "  pattern: $sec" >&2; done
     exit 1
 fi
+
+# ---- A4b: Lifecycle hooks section content (TASK-052) -----------------------
+# The new "## Lifecycle hooks" section must mention the five v1 aliases
+# alongside the word "alias", and reference all four hook examples.
+
+hooks_body="$(extract_section_body "$README" '^##[ \t]+.*lifecycle[ \t-]+hook')"
+if [ -z "$hooks_body" ]; then
+    fail "A4b: README.md is missing a '## Lifecycle hooks' section"
+fi
+if ! echo "$hooks_body" | grep -qiE '\balias\b'; then
+    fail "A4b: Lifecycle hooks section must call out v1 setters as aliases"
+fi
+for alias_name in log_access not_found_handler method_not_allowed_handler internal_error_handler auth_handler; do
+    if ! echo "$hooks_body" | grep -qE "\\b${alias_name}\\b"; then
+        fail "A4b: Lifecycle hooks section must mention v1 alias '${alias_name}'"
+    fi
+done
+for example_base in banned_ip_log early_413 clf_access_log per_route_auth; do
+    if ! echo "$hooks_body" | grep -qE "${example_base}\\.cpp"; then
+        fail "A4b: Lifecycle hooks section must reference example ${example_base}.cpp"
+    fi
+done
 
 # ---- A6: cross-links to examples/ and RELEASE_NOTES.md ----------------------
 

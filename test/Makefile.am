@@ -511,7 +511,7 @@ EXTRA_DIST = libhttpserver.supp \
 #   3. Add a `<name>_LDADD = ...` line if it needs more than the
 #      default empty LDADD.
 #   4. Run `make bench` from the build directory.
-bench_targets = bench_sizeof_http_resource bench_get_headers
+bench_targets = bench_sizeof_http_resource bench_get_headers bench_hook_overhead
 EXTRA_PROGRAMS = $(bench_targets)
 
 # bench_sizeof_http_resource: pure compile-time static_assert. Empty
@@ -526,6 +526,17 @@ bench_sizeof_http_resource_LDADD =
 # constructs an http_request whose impl includes <microhttpd.h>.
 bench_get_headers_SOURCES = bench_get_headers.cpp
 bench_get_headers_LDADD = $(LDADD) -lmicrohttpd
+
+# bench_hook_overhead (TASK-052): asserts the dispatch hot path's
+# per-phase any_hooks_ atomic-load gate stays within a 50ns ceiling
+# when no hooks are registered. The gate cost is what every request
+# pays per phase regardless of hook registration, and is the load-
+# bearing measurement for PRD-HOOK-REQ-009 / §4.10's "zero-cost-when-
+# unused" claim. Defines HTTPSERVER_COMPILATION so the bench can
+# reach webserver_test_access; this is the same friend pattern used
+# by test/unit/hook_api_shape_test.cpp.
+bench_hook_overhead_SOURCES = bench_hook_overhead.cpp
+bench_hook_overhead_LDADD = $(LDADD) -lmicrohttpd
 
 bench: $(bench_targets)
 	@for p in $(bench_targets); do \
