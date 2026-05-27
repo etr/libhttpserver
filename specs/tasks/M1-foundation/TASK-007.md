@@ -19,7 +19,7 @@ Lock in the "no backend headers leak through `<httpserver.hpp>`" invariant with 
 - Blocks: None (informational gate; will fail until M2-M5 land, that's expected and intended)
 
 **Acceptance Criteria:**
-- `grep -lE 'microhttpd\.h|pthread\.h|gnutls\.h|sys/socket\.h' src/httpserver/*.hpp` returns no results once M2-M5 land (PRD §3.1 acceptance).
+- `grep -lE 'microhttpd\.h|pthread\.h|gnutls/gnutls\.h|sys/socket\.h' src/httpserver/*.hpp` returns no results once M2-M5 land (PRD §3.1 acceptance).
 - The hygiene test is invoked by `make check` and fails loudly when violated.
 - Typecheck passes.
 

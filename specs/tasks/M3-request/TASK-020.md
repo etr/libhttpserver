@@ -20,7 +20,7 @@ Verify and lock the "no backend headers in public surface" invariant after PIMPL
 - Blocks: None (gating outcome that the rest of the project relies on)
 
 **Acceptance Criteria:**
-- `grep -lE 'microhttpd\.h|pthread\.h|gnutls\.h|sys/socket\.h' src/httpserver/*.hpp` returns no results (PRD §3.1 acceptance).
+- `grep -lE 'microhttpd\.h|pthread\.h|gnutls/gnutls\.h|sys/socket\.h' src/httpserver/*.hpp` returns no results (PRD §3.1 acceptance).
 - A test program containing only `#include <httpserver.hpp>` and `int main(){}` compiles without `-I` to libmicrohttpd / pthread / gnutls (PRD §3.1 acceptance).
 - TASK-007's hygiene test (red until now) goes green.
 - Typecheck passes.

@@ -222,10 +222,15 @@ check-install-layout:
 # route std::thread through pthread (e.g. MSVC's Microsoft STL).
 # ---------------------------------------------------------------------------
 
+# NOTE: each entry matches a basename; the grep in check-hygiene anchors with a
+# leading '/' so e.g. mypthread.h is not a false positive.  Keep this list in
+# sync with the #ifdef ladder in test/unit/header_hygiene_test.cpp.
 HEADER_HYGIENE_FORBIDDEN = microhttpd\.h|gnutls/gnutls\.h|sys/socket\.h|sys/uio\.h
-CHECK_HYGIENE_STAGE      = $(abs_top_builddir)/.hygiene-stage
-CHECK_HYGIENE_CXX        = $(CXX) -std=c++20 -E -I$(CHECK_HYGIENE_STAGE)$(includedir) $(CPPFLAGS)
-HEADER_HYGIENE_STRICT   ?= yes
+CHECK_HYGIENE_STAGE = $(abs_top_builddir)/.hygiene-stage
+CHECK_HYGIENE_CXX = $(CXX) -std=c++20 -E -I$(CHECK_HYGIENE_STAGE)$(includedir) $(CPPFLAGS)
+# Override on the command line to run against an in-flight umbrella:
+#   make check-hygiene HEADER_HYGIENE_STRICT=no
+HEADER_HYGIENE_STRICT ?= yes
 
 # Sentinel file: only re-run the staged install when headers have changed.
 # This is an mtime gate used exclusively for standalone `make check-hygiene`
@@ -235,7 +240,10 @@ HEADER_HYGIENE_STRICT   ?= yes
 # own pre-built shared stage, so this stamp target is bypassed entirely.
 HYGIENE_STAMP = $(CHECK_HYGIENE_STAGE)/.hygiene-stamp
 
-$(HYGIENE_STAMP): $(wildcard $(top_srcdir)/src/httpserver/*.hpp)
+# NOTE: wildcard is evaluated at parse time; run `make clean` if new headers
+# are added to src/httpserver/ in the same invocation that generates them.
+# Also includes the top-level umbrella so a change there invalidates the stamp.
+$(HYGIENE_STAMP): $(wildcard $(top_srcdir)/src/httpserver/*.hpp) $(top_srcdir)/src/httpserver.hpp
 	@rm -rf $(CHECK_HYGIENE_STAGE)
 	@$(MAKE) $(AM_MAKEFLAGS) install DESTDIR=$(CHECK_HYGIENE_STAGE) >check-hygiene-install.log 2>&1 || { \
 	    echo "FAIL: staged install failed"; cat check-hygiene-install.log; \
@@ -253,6 +261,11 @@ check-hygiene:
 	        echo "  Always pair CHECK_HYGIENE_SHARED=yes with CHECK_HYGIENE_STAGE=<valid-dir>."; \
 	        exit 1; \
 	    fi; \
+	    if ! test -f "$(CHECK_HYGIENE_STAGE)$(includedir)/httpserver.hpp"; then \
+	        echo "FAIL: CHECK_HYGIENE_STAGE exists but does not contain $(includedir)/httpserver.hpp"; \
+	        echo "  Was the staged install complete before invoking check-hygiene?"; \
+	        exit 1; \
+	    fi; \
 	fi
 	@status=0; \
 	if ! $(CHECK_HYGIENE_CXX) $(top_srcdir)/test/headers/consumer_umbrella_no_backend.cpp >check-hygiene.i 2>check-hygiene.err; then \
@@ -267,7 +280,7 @@ check-hygiene:
 	        sed 's/^/    /' check-hygiene.err | tail -10; \
 	    fi; \
 	else \
-	    leaks=`grep -hE '^# [0-9]+ "[^"]*/($(HEADER_HYGIENE_FORBIDDEN))"' check-hygiene.i | awk '{print $$3}' | sort -u`; \
+	    leaks=`grep -hE '^# [0-9]+ "[^"]*/($(HEADER_HYGIENE_FORBIDDEN))"' check-hygiene.i | sed 's/.*"\(.*\)".*/\1/' | sort -u`; \
 	    if test -n "$$leaks"; then \
 	        if test "$(HEADER_HYGIENE_STRICT)" = "yes"; then \
 	            echo "FAIL: forbidden headers leaked through <httpserver.hpp>:"; \
@@ -284,24 +297,30 @@ check-hygiene:
 	rm -f check-hygiene.i check-hygiene.err; \
 	exit $$status
 
-# check-local runs check-install-layout and check-hygiene against a single
-# shared staged install to avoid paying two full `make install` costs on
-# every `make check`. Both sub-checks can still be invoked standalone (they
+# check-local runs check-headers (prerequisite), check-install-layout and
+# check-hygiene (via recursive $(MAKE) with shared-stage variables) against a
+# single shared staged install to avoid paying two full `make install` costs on
+# every `make check`.  Both sub-checks can still be invoked standalone (they
 # will do their own install when CHECK_*_SHARED is not set).
+#
+# CHECK_INSTALL_SHARED=yes / CHECK_HYGIENE_SHARED=yes: the caller has already
+# staged the install; sub-check skips the install step to avoid double cost.
+# This knob is set only by check-local; do not set it when invoking sub-checks
+# standalone.
 check-local: check-headers check-examples check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck
 	@echo "=== Shared staged install for check-install-layout and check-hygiene ==="
-	@rm -rf $(abs_top_builddir)/.shared-check-stage
-	@$(MAKE) $(AM_MAKEFLAGS) install DESTDIR=$(abs_top_builddir)/.shared-check-stage >check-shared-install.log 2>&1 || { \
+	@rm -rf "$(abs_top_builddir)/.shared-check-stage"
+	@$(MAKE) $(AM_MAKEFLAGS) install DESTDIR="$(abs_top_builddir)/.shared-check-stage" >check-shared-install.log 2>&1 || { \
 	    echo "FAIL: shared staged install failed"; cat check-shared-install.log; \
-	    rm -f check-shared-install.log; rm -rf $(abs_top_builddir)/.shared-check-stage; exit 1; }
+	    rm -f check-shared-install.log; rm -rf "$(abs_top_builddir)/.shared-check-stage"; exit 1; }
 	@rm -f check-shared-install.log
 	@$(MAKE) $(AM_MAKEFLAGS) check-install-layout \
-	    CHECK_INSTALL_STAGE=$(abs_top_builddir)/.shared-check-stage \
+	    CHECK_INSTALL_STAGE="$(abs_top_builddir)/.shared-check-stage" \
 	    CHECK_INSTALL_SHARED=yes
 	@$(MAKE) $(AM_MAKEFLAGS) check-hygiene \
-	    CHECK_HYGIENE_STAGE=$(abs_top_builddir)/.shared-check-stage \
+	    CHECK_HYGIENE_STAGE="$(abs_top_builddir)/.shared-check-stage" \
 	    CHECK_HYGIENE_SHARED=yes
-	@rm -rf $(abs_top_builddir)/.shared-check-stage
+	@rm -rf "$(abs_top_builddir)/.shared-check-stage"
 
 # TASK-040: enforce static invariants on the two flagship examples
 # (hello_world.cpp <= 10 LOC, lambda-only; shared_state.cpp class+mutex).
@@ -386,7 +405,7 @@ lint-file-size:
 	@echo "=== lint-file-size: enforce per-file line-count ceiling ==="
 	@$(top_srcdir)/scripts/check-file-size.sh
 
-.PHONY: check-headers check-install-layout check-hygiene check-examples check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck check-soversion check-parallel-install lint-complexity lint-duplication lint-file-size
+.PHONY: check-headers check-install-layout check-hygiene check-local check-examples check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck check-soversion check-parallel-install lint-complexity lint-duplication lint-file-size
 
 # TASK-039: top-level convenience rule that descends into test/ to
 # build and run the bench binaries (see test/Makefile.am and
@@ -401,7 +420,7 @@ MOSTLYCLEANFILES = $(DX_CLEANFILES) *.gcda *.gcno *.gcov
 DISTCLEANFILES = DIST_REVISION
 
 clean-local:
-	rm -rf $(CHECK_HYGIENE_STAGE) $(abs_top_builddir)/.shared-check-stage $(CHECK_INSTALL_STAGE)
+	rm -rf "$(CHECK_HYGIENE_STAGE)" "$(abs_top_builddir)/.shared-check-stage" "$(CHECK_INSTALL_STAGE)"
 
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = libhttpserver.pc

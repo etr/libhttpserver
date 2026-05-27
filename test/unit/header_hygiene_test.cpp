@@ -44,11 +44,12 @@
 //      XPASS (a hard error by default) -- which is the explicit signal
 //      for TASK-020 to remove the XFAIL_TESTS marker.
 //
-// Guard-macro mapping (verified on glibc, musl, macOS/BSD):
+// Guard-macro mapping (verified on glibc, musl, macOS/BSD, MSYS2/MINGW64):
 //
 //   <microhttpd.h>     -> MHD_VERSION       (defined unconditionally inside)
 //   <pthread.h>        -> _PTHREAD_H        (glibc/musl, AND macOS/Apple SDK)
 //                         _PTHREAD_H_       (some BSDs)
+//                         _WINPTHREADS_H    (MSYS2/MINGW64 winpthreads)
 //   <gnutls/gnutls.h>  -> GNUTLS_GNUTLS_H   (the library's own include guard)
 //   <sys/socket.h>     -> _SYS_SOCKET_H     (glibc/musl)
 //                         _SYS_SOCKET_H_    (macOS/BSD)
@@ -78,10 +79,20 @@
 // preprocessor-grep target `make check-hygiene` in the top-level
 // Makefile.am. Keep both lists in sync.
 
+// <cstdio> is included before <httpserver.hpp> for fprintf availability.
+// The forbidden-header macro checks in main() are compile-time (#ifdef) guards
+// evaluated after the umbrella include, so <cstdio>'s transitive headers cannot
+// mask any umbrella-leaked macro.  Unlike consumer_umbrella_no_backend.cpp
+// (which avoids all standard-library includes for a strict Layer 2 isolation
+// test), this sentinel requires fprintf for human-readable runtime reporting.
 #include <cstdio>
 
 #include <httpserver.hpp>
 
+// Deliberate multi-assert design: all forbidden-header checks share a single
+// accumulator so CI logs show every leaked header in one run, not just the
+// first.  Each #ifdef block is independent; a single-assert style would stop
+// at the first failure and hide remaining leaks.
 int main() {
     int leaks = 0;
 
@@ -105,6 +116,11 @@ int main() {
 
 #ifdef _PTHREAD_H_
     std::fprintf(stderr, "LEAK: <pthread.h> reached the consumer TU (macOS/BSD guard _PTHREAD_H_)\n");
+    ++leaks;
+#endif
+
+#ifdef _WINPTHREADS_H
+    std::fprintf(stderr, "LEAK: <pthread.h> reached the consumer TU (MSYS2/MINGW64 guard _WINPTHREADS_H)\n");
     ++leaks;
 #endif
 #endif  // !_LIBCPP_VERSION && !_GLIBCXX_HAS_GTHREADS
