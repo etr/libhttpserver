@@ -55,7 +55,9 @@ std::string_view http_request_impl::get_connection_value(std::string_view key, M
             }
         }();
         if (map != nullptr) {
-            auto it = map->find(std::string(key));
+            // header_comparator is_transparent: find(string_view) works without
+            // constructing a temporary std::string. (performance-reviewer-iter1-30)
+            auto it = map->find(key);
             if (it != map->end()) return it->second;
         }
         return http_request::EMPTY;
@@ -271,12 +273,17 @@ void http_request_impl::ensure_path_pieces_cached(std::string_view path) const {
 
 namespace {
 
+// Type alias to avoid repeating the verbose map type in every helper
+// signature and call site. (code-quality-reviewer-iter1-11)
+using args_map_t = std::pmr::map<std::pmr::string,
+                                 std::pmr::vector<std::pmr::string>,
+                                 http::arg_comparator>;
+
 // Helper: look up `key` via heterogeneous string_view (no alloc), insert
 // a pmr::string key + an empty vector if missing, then append `value`.
 // All allocations use the map's allocator (the per-connection arena).
-inline auto& find_or_insert_arg(
-    std::pmr::map<std::pmr::string, std::pmr::vector<std::pmr::string>,
-                  http::arg_comparator>& args,
+inline std::pmr::vector<std::pmr::string>& find_or_insert_arg(
+    args_map_t& args,
     std::string_view key) {
     auto pmr_alloc = args.get_allocator();
     auto it = args.find(key);
@@ -291,8 +298,7 @@ inline auto& find_or_insert_arg(
 }
 
 inline void append_arg(
-    std::pmr::map<std::pmr::string, std::pmr::vector<std::pmr::string>,
-                  http::arg_comparator>& args,
+    args_map_t& args,
     std::string_view key, std::string_view value) {
     auto& vec = find_or_insert_arg(args, key);
     // emplace_back forwards (ptr, size) to pmr::string's (ptr, size, alloc)
