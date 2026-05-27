@@ -236,6 +236,8 @@ AM_LDFLAGS="-lstdc++"
 
 if test x"$debugit" = x"yes"; then
     AC_DEFINE([DEBUG],[],[Debug Mode])
+    # -std=c++20 is injected by AX_CXX_COMPILE_STDCXX into the CXX variable,
+    # not repeated here.  Omitting it avoids a double-standard flag conflict.
     AM_CXXFLAGS="$AM_CXXFLAGS -DDEBUG -g -Wall -Wextra -Werror -pedantic -Wno-unused-command-line-argument -O0"
     AM_CFLAGS="$AM_CXXFLAGS -DDEBUG -g -Wall -Wextra -Werror -pedantic -Wno-unused-command-line-argument -O0"
 else

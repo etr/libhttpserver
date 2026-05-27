@@ -19,7 +19,7 @@ Version 2.0.0
 
 Version 0.20.0
 
-	Raised minimum C++ standard to C++20. Build now requires gcc >= 10
+	Raised minimum C++ standard to C++20. Build now requires gcc >= 11
 		or clang >= 13 (Apple Clang from Xcode 15+). Updated
 		AX_CXX_COMPILE_STDCXX macro (m4/ax_cxx_compile_stdcxx.m4) to
 		serial 25 to support C++20 detection. Pruned CI matrix rows
