@@ -7,6 +7,6 @@ The architecture itself does not prescribe test frameworks (out of architecture 
 3. **Move semantics on `http_response`** (DR-5): sanitizer-clean tests for inline↔inline, inline↔heap, heap↔inline, heap↔heap on both move-construct and move-assign.
 4. **SBO size invariant** (DR-5): `static_assert(sizeof(detail::deferred_body) <= http_response::body_buf_size, ...)` at the end of `detail/body.hpp`. Compile-time guarantee.
 5. **Routing semantics preservation** (DR-7): the v1 routing-test corpus runs against v2.0 unchanged. Any regression is treated as a release-blocker.
-6. **Thread-safety contract** (DR-8): a stress test exercises `register_resource` / `block_ip` from within handlers, verifies no deadlock except for the documented `stop()` case.
+6. **Thread-safety contract** (DR-8): a stress test exercises `register_path` / `unregister_path` / `block_ip` / `unblock_ip` from within handlers, verifies no deadlock except for the documented `stop()` case. An opt-in negative test (`stop_from_handler_deadlocks_as_documented`, enabled via `HTTPSERVER_RUN_STOP_FROM_HANDLER=1`) confirms the deadlock contract by forking a child that calls `stop()` from inside a handler.
 
 ---

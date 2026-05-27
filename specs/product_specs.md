@@ -36,6 +36,9 @@
 - **Hot-path performance:** Per-request getters shall not allocate or copy containers; they return `const&` or `string_view`.
 - **Naming:** All public method names shall be snake_case; one canonical verb per concept.
 - **Documentation:** v2.0 ships with a rewritten `README` and an updated examples set. A short `RELEASE_NOTES.md` summarizes the API changes for users porting from v1; it is informational, not a compatibility commitment.
+- **Concurrency (DR-008):**
+  - `PRD-CON-REQ-001` When a caller invokes any `webserver` public method from a handler thread (except `stop()` or `~webserver()`), the system shall complete the call without deadlock or data race.
+  - `PRD-CON-REQ-002` When a caller invokes `stop()` or `~webserver()` from inside a handler thread, the system shall either deadlock (join waits indefinitely) or abort (libmicrohttpd self-join detection); it shall not return successfully.
 
 ---
 

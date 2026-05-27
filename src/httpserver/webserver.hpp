@@ -162,6 +162,8 @@ class webserver {
       * Destroy the webserver from the thread that constructed it.
       *
       * See specs/architecture/11-decisions/DR-008.md and §5.1.
+      *
+      * @see stop() for the threading constraints that apply equally here.
      **/
      ~webserver();
      // PIMPL-owned: copy/move would slice the backing impl object.
