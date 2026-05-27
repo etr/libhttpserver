@@ -65,6 +65,7 @@
 #include "httpserver/detail/http_endpoint.hpp"
 #include "httpserver/detail/lambda_resource.hpp"
 #include "httpserver/detail/modded_request.hpp"
+#include "httpserver/detail/resource_hook_table.hpp"
 #include "httpserver/http_request.hpp"
 #include "httpserver/http_resource.hpp"
 #include "httpserver/http_response.hpp"
@@ -379,31 +380,45 @@ void handle_dispatch_exception(
         webserver_impl* impl,
         detail::modded_request* mr,
         std::string_view message) {
-    if (impl->any_hooks_[static_cast<std::size_t>(
+    // TASK-051: per-route handler_exception. weak_ptr was set on mr in
+    // finalize_answer before dispatch_resource_handler was called.
+    auto res = mr->resource_weak_.lock();
+    auto* rtable = res ? res->hook_table_raw_() : nullptr;
+    const bool per_route = rtable != nullptr &&
+        rtable->any_hooks(hook_phase::handler_exception);
+    const bool server_chain =
+        impl->any_hooks_[static_cast<std::size_t>(
                 hook_phase::handler_exception)]
             .load(std::memory_order_relaxed) ||
-        impl->handler_exception_alias_) {
-        handler_exception_ctx ctx{
-            /*request=*/mr->dhr.get(),
-            /*exception=*/std::current_exception(),
-            /*message=*/message};
-        if (auto sc = impl->fire_handler_exception(ctx)) {
-            mr->response_.emplace(std::move(*sc));
-            return;
+        impl->handler_exception_alias_;
+
+    if (server_chain || per_route) {
+        handler_exception_ctx ctx{mr->dhr.get(),
+            std::current_exception(), message};
+        if (server_chain) {
+            if (auto sc = impl->fire_handler_exception(ctx)) {
+                mr->response_.emplace(std::move(*sc));
+                return;
+            }
         }
-        // DR-009 §5.2 point 4 extended: every hook (and the alias) ran
-        // without producing a response -- emit the hardcoded empty-body
-        // 500 directly. Do NOT re-enter run_internal_error_handler_safely
-        // here; the alias slot has already invoked the user callable on
-        // this request.
+        if (per_route) {
+            // Per-route chain runs AFTER server-wide. Same DR-009 §5.2
+            // semantics: respond_with() short-circuits the chain.
+            if (auto sc = rtable->fire_handler_exception(ctx,
+                    [impl](std::string_view m) {
+                        impl->log_dispatch_error(std::string(m));
+                    })) {
+                mr->response_.emplace(std::move(*sc));
+                return;
+            }
+        }
+        // §5.2 point 4: every hook (and the alias) ran without a
+        // response -- emit the hardcoded empty-body 500 directly.
         mr->response_.emplace(
             impl->internal_error_page(mr, "", /*force_our=*/true));
         return;
     }
-    // Backwards-compat fast path: no handler_exception hooks AND no
-    // alias wired (the v1 builder did not call internal_error_handler).
-    // Use the existing safe-call site so the unset-alias default body
-    // (which surfaces the message) still applies.
+    // Backwards-compat fast path: no hook chain at all.
     mr->response_.emplace(
         impl->run_internal_error_handler_safely(mr, message));
 }

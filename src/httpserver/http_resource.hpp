@@ -25,6 +25,9 @@
 #ifndef SRC_HTTPSERVER_HTTP_RESOURCE_HPP_
 #define SRC_HTTPSERVER_HTTP_RESOURCE_HPP_
 
+#include <functional>
+#include <memory>
+
 // TASK-036: render_* virtuals now return http_response by value; the
 // inline defaults call render(req) and forward the prvalue, which
 // requires http_response to be a complete type at every override site.
@@ -33,9 +36,17 @@
 #include "httpserver/http_method.hpp"
 #include "httpserver/http_response.hpp"
 
+// TASK-051: add_hook overloads on http_resource return hook_handle; the
+// public header is part of the umbrella surface (no MHD leak).
+#include "httpserver/hook_handle.hpp"
+#include "httpserver/hook_phase.hpp"
+#include "httpserver/hook_action.hpp"
+#include "httpserver/hook_context.hpp"
+
 namespace httpserver { class http_request; }
 namespace httpserver { class webserver; }
 namespace httpserver { namespace detail { class webserver_impl; } }
+namespace httpserver { namespace detail { class resource_hook_table; } }
 
 namespace httpserver {
 
@@ -201,6 +212,37 @@ class http_resource {
          return methods_allowed_;
      }
 
+     /**
+      * TASK-051 / DR-012 / PRD-HOOK-REQ-006. Register a per-resource hook
+      * for one of the five post-route-resolution phases: before_handler,
+      * handler_exception, after_handler, response_sent, request_completed.
+      *
+      * Per-route hooks fire AFTER the server-wide chain at the same phase,
+      * and only if the server-wide chain did not short-circuit. The
+      * returned hook_handle owns the registration: destroying it (or
+      * calling remove()) erases the entry. If the resource is destroyed
+      * before the handle, the handle's destructor / remove() become no-ops.
+      *
+      * Passing any phase outside the five permitted ones throws
+      * std::invalid_argument naming the rejected phase. Passing an empty
+      * std::function also throws std::invalid_argument.
+      *
+      * @param phase one of: before_handler, handler_exception,
+      *              after_handler, response_sent, request_completed.
+      * @param fn    non-empty callable matching the phase's signature.
+      * @return move-only hook_handle owning the registration.
+      */
+     hook_handle add_hook(hook_phase phase,
+         std::function<hook_action(before_handler_ctx&)> fn);
+     hook_handle add_hook(hook_phase phase,
+         std::function<hook_action(const handler_exception_ctx&)> fn);
+     hook_handle add_hook(hook_phase phase,
+         std::function<hook_action(after_handler_ctx&)> fn);
+     hook_handle add_hook(hook_phase phase,
+         std::function<void(const response_sent_ctx&)> fn);
+     hook_handle add_hook(hook_phase phase,
+         std::function<void(const request_completed_ctx&)> fn);
+
  protected:
      /**
       * Constructor of the class. The default state allows every defined
@@ -226,14 +268,47 @@ class http_resource {
      // constexpr, so the chained call is a constant expression and the
      // default member initialiser stays well-formed.
      method_set methods_allowed_ = method_set{}.set_all();
+
+     // TASK-051: per-resource hook bus storage (PIMPL). Lazily allocated
+     // on first add_hook() call; resources that never register a hook
+     // pay zero allocation cost and only sizeof(shared_ptr) of nullptr
+     // storage. shared_ptr lets the hook_handle hold a weak_ptr that
+     // expires cleanly when the resource is destroyed (handle.remove()
+     // then becomes a no-op without dereferencing freed memory).
+     //
+     // `mutable` because hook firing on `const http_resource&` (from the
+     // const path through dispatch) needs to read this pointer; the
+     // logical const-ness of the resource is preserved (the firing path
+     // only reads the table; only the public add_hook(non-const) writes).
+     mutable std::shared_ptr<detail::resource_hook_table> hook_table_;
+
+#if defined(HTTPSERVER_COMPILATION)
+
+ public:
+     // Internal accessor for the dispatch path (webserver_impl). The
+     // pointer is null when no hook has ever been registered on this
+     // resource (the dispatch hot path treats null as "no per-route
+     // hooks for any phase"). Public-but-HTTPSERVER_COMPILATION-gated
+     // for the same reason webserver::make_hook_handle_ is: the symbol
+     // is reachable only from within the library translation units.
+     detail::resource_hook_table* hook_table_raw_() const noexcept {
+         return hook_table_.get();
+     }
+
+ private:
+#endif
 };
 
-// TASK-021 acceptance: http_resource is now a vptr plus a 32-bit
-// method_set plus padding. The cap below leaves headroom for one
-// future small member (e.g. an arena tag) without re-invalidating
-// PRD-REQ-REQ-002 / PRD-REQ-REQ-003.
-static_assert(sizeof(http_resource) <= sizeof(void*) + sizeof(method_set) * 2,
-              "http_resource should be approximately vptr + method_set");
+// TASK-021 acceptance: http_resource was a vptr plus a 32-bit method_set
+// plus padding. TASK-051 added one `shared_ptr<resource_hook_table>` to
+// host the per-resource hook table PIMPL; the cap below reflects the
+// growth (vptr + shared_ptr + method_set + padding). Documented growth,
+// not silent drift -- PRD-REQ-REQ-002 / PRD-REQ-REQ-003 still hold (the
+// v1 std::map cost was much larger than this single shared_ptr slot).
+static_assert(sizeof(http_resource) <=
+                  sizeof(void*) * 3 + sizeof(method_set) * 2,
+              "http_resource should be approximately vptr + shared_ptr + "
+              "method_set after TASK-051");
 
 }  // namespace httpserver
 #endif  // SRC_HTTPSERVER_HTTP_RESOURCE_HPP_

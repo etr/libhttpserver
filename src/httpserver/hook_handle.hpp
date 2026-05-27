@@ -26,6 +26,7 @@
 #define SRC_HTTPSERVER_HOOK_HANDLE_HPP_
 
 #include <cstdint>
+#include <memory>
 #include <utility>
 
 #include "httpserver/hook_phase.hpp"
@@ -37,7 +38,12 @@ namespace httpserver {
 // required only at hook_handle's out-of-line definitions, which live
 // in src/hook_handle.cpp where detail/webserver_impl.hpp is in scope.
 namespace detail { class webserver_impl; }
+// TASK-051: per-resource hook table -- the per-route handle holds a
+// weak_ptr<resource_hook_table>, expired when the resource is
+// destroyed (remove() then becomes a safe no-op).
+namespace detail { class resource_hook_table; }
 class webserver;
+class http_resource;
 
 // TASK-045 / §5.6.
 //
@@ -82,20 +88,39 @@ class hook_handle {
     hook_handle detach() && noexcept;
 
  private:
-    // Constructor used by webserver::add_hook to build an armed handle.
-    // Private so user code can only obtain a hook_handle through the
-    // public add_hook entry points.
+    // Constructor used by webserver::add_hook to build an armed handle
+    // bound to the server-wide hook table.
     hook_handle(detail::webserver_impl* impl,
                 hook_phase phase,
                 std::uint64_t slot_id) noexcept
         : impl_(impl), slot_id_(slot_id), phase_(phase), armed_(true) {}
 
+    // TASK-051: constructor used by http_resource::add_hook to build an
+    // armed handle bound to a per-resource hook table. Discriminator is
+    // the non-empty weak_ptr -- remove() inspects table_weak_ first, and
+    // falls through to the server-wide impl_ path only if the weak_ptr
+    // is empty (default-constructed = "never had a table" sentinel).
+    //
+    // The handle holds a weak_ptr so a resource that outlives the handle
+    // is not kept alive by the handle (the handle is non-owning), and a
+    // resource destroyed before the handle expires the weak_ptr cleanly
+    // (lock() returns null, remove() is a no-op).
+    hook_handle(std::weak_ptr<detail::resource_hook_table> table_weak,
+                hook_phase phase,
+                std::uint64_t slot_id) noexcept
+        : slot_id_(slot_id), phase_(phase), armed_(true),
+          table_weak_(std::move(table_weak)) {}
+
     detail::webserver_impl* impl_ = nullptr;  // non-owning back-ref
     std::uint64_t slot_id_ = 0;
     hook_phase phase_ = hook_phase::count_;
     bool armed_ = false;
+    // Non-empty (has-a-control-block) iff this handle is for a per-route
+    // hook on an http_resource. Empty otherwise.
+    std::weak_ptr<detail::resource_hook_table> table_weak_{};
 
     friend class ::httpserver::webserver;
+    friend class ::httpserver::http_resource;
     friend class ::httpserver::detail::webserver_impl;
 };
 

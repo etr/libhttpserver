@@ -105,6 +105,19 @@ struct modded_request {
     // answer_to_connection has set this field.
     std::chrono::steady_clock::time_point start_time{};
 
+    // TASK-051: weak_ptr to the resource that handled this request.
+    // Populated in finalize_answer when resolve_resource_for_request
+    // returns a non-null hrm. Used by fire_response_sent_gated and
+    // fire_request_completed_gated to fire the per-route phase chain
+    // after the server-wide one. If the resource was unregistered
+    // between dispatch and completion, lock() returns null and the
+    // per-route chain is skipped (the action-item contract). The
+    // weak_ptr also keeps a control-block reference into the resource
+    // alive until ~modded_request, so the resource cannot be destroyed
+    // mid-firing -- the hot-path firing helpers lock() into a local
+    // shared_ptr before iterating.
+    std::weak_ptr<::httpserver::http_resource> resource_weak_{};
+
     modded_request() = default;
 
     modded_request(const modded_request& b) = delete;

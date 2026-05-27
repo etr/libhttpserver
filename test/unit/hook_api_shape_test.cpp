@@ -67,8 +67,13 @@ static_assert(std::is_nothrow_move_assignable_v<hook_handle>,
               "hook_handle must be nothrow move-assignable");
 
 // D11 — ABI size pin so future growth is reviewed explicitly.
-static_assert(sizeof(hook_handle) <= 32,
-              "hook_handle size grew unexpectedly past 32 bytes");
+// TASK-051 bumped this from 32 to 48 to make room for the per-route
+// path's weak_ptr<detail::resource_hook_table> member. Layout (libc++):
+//   impl_       (8) + slot_id_ (8) + phase_ (1) + armed_ (1) + pad (6)
+//   + table_weak_ (16)
+// = 40, padded to 48.
+static_assert(sizeof(hook_handle) <= 48,
+              "hook_handle size grew unexpectedly past 48 bytes");
 
 // add_hook returns hook_handle, taking a typed std::function.
 static_assert(std::is_same_v<

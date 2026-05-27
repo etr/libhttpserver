@@ -67,6 +67,7 @@
 #include "httpserver/detail/http_endpoint.hpp"
 #include "httpserver/detail/lambda_resource.hpp"
 #include "httpserver/detail/modded_request.hpp"
+#include "httpserver/detail/resource_hook_table.hpp"
 #include "httpserver/http_request.hpp"
 #include "httpserver/http_resource.hpp"
 #include "httpserver/http_response.hpp"
@@ -303,32 +304,29 @@ MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection,
     std::shared_ptr<http_resource> hrm;
     bool found = resolve_resource_for_request(mr, hrm);
 
+    // TASK-051: capture the resolved resource on the request so the
+    // tail-end firing helpers (fire_response_sent_gated /
+    // fire_request_completed_gated) can fire the per-route hook chain
+    // after the server-wide one. weak_ptr does not keep the resource
+    // alive; the local `hrm` shared_ptr does that for the duration of
+    // finalize_answer, after which mr->response_ no longer references
+    // the resource directly.
+    if (found) {
+        mr->resource_weak_ = hrm;
+    }
+
     fire_route_resolved_gated(this, mr, found, hrm);
 
-    // TASK-048: fire before_handler from finalize_answer (not from inside
-    // dispatch_resource_handler). This ensures auth and method-not-allowed
-    // alias hooks run as part of the unified before_handler chain, with
-    // the auth alias as the first hook (registered in
-    // install_default_alias_hooks_). The gate preserves zero-cost-when-unused.
-    if (found &&
-        any_hooks_[static_cast<std::size_t>(hook_phase::before_handler)]
-            .load(std::memory_order_relaxed)) {
-        std::optional<route_descriptor> desc;
-        if (!mr->matched_path_template.empty()) {
-            desc = route_descriptor{
-                /*path_template=*/std::string_view{mr->matched_path_template},
-                /*methods=*/hrm->get_allowed_methods(),
-                /*is_prefix=*/mr->matched_is_prefix};
-        }
-        before_handler_ctx ctx{
-            /*request=*/mr->dhr.get(),
-            /*matched=*/std::move(desc),
-            /*method=*/mr->method_enum,
-            /*resource=*/hrm.get()};
-        if (auto sc = fire_before_handler(ctx)) {
-            mr->response_.emplace(std::move(*sc));
-            return materialize_and_queue_response(connection, mr);
-        }
+    // TASK-048 / TASK-051: fire before_handler from finalize_answer (not
+    // from inside dispatch_resource_handler). This ensures auth and
+    // method-not-allowed alias hooks run as part of the unified
+    // before_handler chain, with the auth alias as the first hook
+    // (registered in install_default_alias_hooks_). Per-route firing is
+    // included by the helper (see fire_before_handler_gated). If either
+    // chain short-circuited, mr->response_ is already populated and we
+    // route straight to materialize.
+    if (found && fire_before_handler_gated(mr, hrm)) {
+        return materialize_and_queue_response(connection, mr);
     }
 
     if (found) {
