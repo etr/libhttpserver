@@ -1,7 +1,7 @@
 ## Cent OS 7 / RHEL 7
 
 CentOS 7's stock gcc (4.8.7) is far too old: this library requires a C++20 compiler
-(gcc >= 10 or clang >= 13).
+(gcc >= 11 or clang >= 13).
 
 Install gcc-toolset-14 (or newer) from the RHEL/CentOS Software Collections and
 `source /opt/rh/gcc-toolset-14/enable` before configuring. The same workaround applies

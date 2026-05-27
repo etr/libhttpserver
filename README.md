@@ -159,7 +159,7 @@ libhttpserver can be used without any dependencies aside from libmicrohttpd.
 
 The minimum versions required are:
 
-* g++ >= 10 or clang >= 13 (Apple Clang from Xcode 15+)
+* g++ >= 11 or clang >= 13 (Apple Clang from Xcode 15+)
 * C++20 or newer
 * libmicrohttpd >= 1.0.0
 * *[Optionally]* for TLS (HTTPS) support, you'll need [libgnutls](http://www.gnutls.org/).

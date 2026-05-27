@@ -113,7 +113,8 @@ jobs:
             debug: debug
             coverage: nocoverage
             shell: bash
-          # gcc-9 and gcc-10 dropped: lack full C++20 support (no concepts library, no std::span, no <bit> features).
+          # gcc-9 and gcc-10 dropped (were here); gcc-11 is now the minimum GCC entry in the extra matrix.
+          # Both lack full C++20 library support (no concepts, no std::span, no <bit>).
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
@@ -154,8 +155,8 @@ jobs:
             debug: nodebug
             coverage: nocoverage
             shell: bash
-          # clang-11, clang-12, clang-14, and clang-15 dropped: incomplete C++20 support (concepts/<bit>/<span> gaps).
-          # clang-13 retained: passes the autoconf C++20 feature check on ubuntu-22.04.
+          # clang-11, clang-12, clang-14, and clang-15 dropped (were here); clang-13 is now the minimum Clang entry.
+          # All four lack full C++20 support (concepts/<bit>/<span> gaps); clang-13 passes the autoconf C++20 check on ubuntu-22.04.
           - test-group: extra
             os: ubuntu-22.04
             os-type: ubuntu
@@ -472,13 +473,18 @@ jobs:
       if: ${{ matrix.build-type == 'iwyu' && matrix.os-type == 'ubuntu' }}
 
     # Installing iwyu manually because clang and iwyu paths won't match on Ubuntu otherwise.
+    # Supply-chain note: we clone --depth 1 --single-branch to limit exposure.
+    # TODO(security): pin to an immutable commit SHA instead of the mutable
+    # clang_18 branch reference.  Obtain the verified SHA from the upstream
+    # release page and replace the `git log` step below with a hard-coded check:
+    #   git checkout <sha> ; git rev-parse --verify HEAD == <sha>
     - name: Build IWYU if requested
       run: |
         CLANG_ROOT_PATH=`llvm-config-18 --prefix` ;
         CLANG_BIN_PATH=`llvm-config-18 --bindir` ;
-        git clone https://github.com/include-what-you-use/include-what-you-use.git ;
+        git clone --depth 1 --single-branch --branch clang_18 https://github.com/include-what-you-use/include-what-you-use.git ;
         cd include-what-you-use ;
-        git checkout clang_18 ;
+        echo "IWYU cloned at SHA: $(git rev-parse HEAD)" ;
         mkdir build_iwyu ;
         cd build_iwyu ;
         cmake -G "Unix Makefiles" -DCMAKE_PREFIX_PATH=$CLANG_ROOT_PATH -DCMAKE_C_COMPILER=$CLANG_BIN_PATH/clang -DCMAKE_CXX_COMPILER=$CLANG_BIN_PATH/clang++ ../ ;
@@ -503,6 +509,12 @@ jobs:
     - name: Build CURL (for testing)
       run: |
         curl https://libhttpserver.s3.amazonaws.com/travis_stuff/curl-7.75.0.tar.gz -o curl-7.75.0.tar.gz ;
+        # TODO(security): pin to a known-good SHA-256 and replace this logging
+        # line with a hard assertion, e.g.:
+        #   echo "<expected-sha256>  curl-7.75.0.tar.gz" | shasum -a 256 -c
+        # Obtain the expected digest by running this step once and capturing
+        # the output below, then commit it as the authoritative value.
+        echo "curl-7.75.0.tar.gz SHA-256: $(shasum -a 256 curl-7.75.0.tar.gz | awk '{print $1}')" ;
         tar -xzf curl-7.75.0.tar.gz ;
         cd curl-7.75.0 ;
         ./configure --with-darwinssl --without-ssl ;
