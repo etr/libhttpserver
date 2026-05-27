@@ -190,24 +190,38 @@ LT_BEGIN_AUTO_TEST(http_method_suite, set_clear_roundtrip)
 LT_END_AUTO_TEST(set_clear_roundtrip)
 
 // 3. set_all then contains every declared method.
+// Enumerated explicitly (no loop) so: (a) a future count_==0 bug cannot
+// silently pass, and (b) a failure message identifies the specific method.
 LT_BEGIN_AUTO_TEST(http_method_suite, set_all_then_contains_every_method)
     httpserver::method_set s{};
     s.set_all();
-    const auto count = static_cast<std::uint8_t>(httpserver::http_method::count_);
-    for (std::uint8_t i = 0; i < count; ++i) {
-        LT_CHECK(s.contains(static_cast<httpserver::http_method>(i)));
-    }
+    LT_CHECK(s.contains(httpserver::http_method::get));
+    LT_CHECK(s.contains(httpserver::http_method::head));
+    LT_CHECK(s.contains(httpserver::http_method::post));
+    LT_CHECK(s.contains(httpserver::http_method::put));
+    LT_CHECK(s.contains(httpserver::http_method::del));
+    LT_CHECK(s.contains(httpserver::http_method::connect));
+    LT_CHECK(s.contains(httpserver::http_method::options));
+    LT_CHECK(s.contains(httpserver::http_method::trace));
+    LT_CHECK(s.contains(httpserver::http_method::patch));
 LT_END_AUTO_TEST(set_all_then_contains_every_method)
 
 // 4. clear_all makes empty.
+// Enumerated explicitly (no loop) so a future count_==0 bug cannot
+// silently pass and a failure message names the specific method.
 LT_BEGIN_AUTO_TEST(http_method_suite, clear_all_makes_empty)
     httpserver::method_set s{};
     s.set_all();
     s.clear_all();
-    const auto count = static_cast<std::uint8_t>(httpserver::http_method::count_);
-    for (std::uint8_t i = 0; i < count; ++i) {
-        LT_CHECK(!s.contains(static_cast<httpserver::http_method>(i)));
-    }
+    LT_CHECK(!s.contains(httpserver::http_method::get));
+    LT_CHECK(!s.contains(httpserver::http_method::head));
+    LT_CHECK(!s.contains(httpserver::http_method::post));
+    LT_CHECK(!s.contains(httpserver::http_method::put));
+    LT_CHECK(!s.contains(httpserver::http_method::del));
+    LT_CHECK(!s.contains(httpserver::http_method::connect));
+    LT_CHECK(!s.contains(httpserver::http_method::options));
+    LT_CHECK(!s.contains(httpserver::http_method::trace));
+    LT_CHECK(!s.contains(httpserver::http_method::patch));
     LT_CHECK_EQ(s.bits, 0u);
 LT_END_AUTO_TEST(clear_all_makes_empty)
 
@@ -239,17 +253,25 @@ LT_BEGIN_AUTO_TEST(http_method_suite, bitwise_xor_symmetric_difference)
     LT_CHECK(!symdiff.contains(httpserver::http_method::post));
 LT_END_AUTO_TEST(bitwise_xor_symmetric_difference)
 
-// 8. Complement of a singleton contains every other declared method.
-LT_BEGIN_AUTO_TEST(http_method_suite, complement_of_singleton_contains_every_other_method)
+// 8a. Complement of a singleton excludes that method.
+// Separated from 8b so each assertion has its own named test context.
+LT_BEGIN_AUTO_TEST(http_method_suite, complement_of_singleton_excludes_that_method)
     auto comp = ~httpserver::http_method::get;
     LT_CHECK(!comp.contains(httpserver::http_method::get));
-    const auto count = static_cast<std::uint8_t>(httpserver::http_method::count_);
-    for (std::uint8_t i = 0; i < count; ++i) {
-        if (i == static_cast<std::uint8_t>(httpserver::http_method::get)) {
-            continue;
-        }
-        LT_CHECK(comp.contains(static_cast<httpserver::http_method>(i)));
-    }
+LT_END_AUTO_TEST(complement_of_singleton_excludes_that_method)
+
+// 8b. Complement of a singleton includes every other declared method.
+// Enumerated explicitly (no loop) for the same reasons as tests 3 and 4.
+LT_BEGIN_AUTO_TEST(http_method_suite, complement_of_singleton_contains_every_other_method)
+    auto comp = ~httpserver::http_method::get;
+    LT_CHECK(comp.contains(httpserver::http_method::head));
+    LT_CHECK(comp.contains(httpserver::http_method::post));
+    LT_CHECK(comp.contains(httpserver::http_method::put));
+    LT_CHECK(comp.contains(httpserver::http_method::del));
+    LT_CHECK(comp.contains(httpserver::http_method::connect));
+    LT_CHECK(comp.contains(httpserver::http_method::options));
+    LT_CHECK(comp.contains(httpserver::http_method::trace));
+    LT_CHECK(comp.contains(httpserver::http_method::patch));
 LT_END_AUTO_TEST(complement_of_singleton_contains_every_other_method)
 
 // 9. Complement of a method_set is bounded to the count_ window.
