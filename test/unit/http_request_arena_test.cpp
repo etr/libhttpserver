@@ -207,18 +207,24 @@ LT_BEGIN_AUTO_TEST(http_request_arena_suite, build_request_args_respects_max_arg
     impl_alloc_t alloc(&arena);
     auto* p = alloc.new_object<http_request_impl>(nullptr, nullptr, alloc);
 
+    // Named constants make the byte arithmetic self-documenting.
+    // "key" (3) + "val" (3) = 6 bytes; "key2" (4) + "val2" (4) = 8 bytes.
+    // A limit of MAX_BYTES=10 accepts the first pair (6<=10) and rejects
+    // the second (6+8=14>10). (code-simplifier-iter1-29)
+    constexpr std::size_t MAX_BYTES = 10;  // accepts "key"+"val" (6), rejects +"key2"+"val2" (14)
+
     httpserver::detail::arguments_accumulator aa;
     aa.unescaper = nullptr;
     aa.arguments = &p->unescaped_args;
-    aa.max_args_count = 100;   // high count limit; bytes limit is the active one
-    aa.max_args_bytes = 10;    // only 10 bytes total
+    aa.max_args_count = 100;        // high count limit; bytes limit is the active one
+    aa.max_args_bytes = MAX_BYTES;
 
-    // "key=val" = 3+3 = 6 bytes <= 10; should be accepted.
+    // "key=val" = 3+3 = 6 bytes <= MAX_BYTES; should be accepted.
     MHD_Result r1 = http_request_impl::build_request_args(
         &aa, MHD_GET_ARGUMENT_KIND, "key", "val");
     LT_CHECK_EQ(r1, MHD_YES);
 
-    // "key2=val2" would push total to 6+4+4 = 14 > 10; must be rejected.
+    // "key2=val2" = 4+4 = 8 bytes; total 6+8=14 > MAX_BYTES; must be rejected.
     MHD_Result r2 = http_request_impl::build_request_args(
         &aa, MHD_GET_ARGUMENT_KIND, "key2", "val2");
     LT_CHECK_EQ(r2, MHD_NO);
