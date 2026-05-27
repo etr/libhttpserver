@@ -41,6 +41,11 @@ namespace httpserver {
 
 namespace detail {
 
+// modded_request adapts the raw MHD connection data into the
+// libhttpserver request model, accumulating per-connection state
+// (parsed headers, upload stream, method callback, staged response)
+// across MHD's repeated answer_to_connection invocations for one
+// HTTP request until finalize_answer queues the response.
 struct modded_request {
     struct MHD_PostProcessor *pp = nullptr;
     std::string complete_uri;
@@ -63,8 +68,7 @@ struct modded_request {
     httpserver::http_method method_enum = httpserver::http_method::count_;
 
     std::unique_ptr<http_request> dhr = nullptr;
-    // DR-010 / §5.3: anchor kept alive until request_completed.
-    // See webserver_impl.hpp and specs/architecture for full contract.
+    // DR-010 / §5.3: anchor kept alive until request_completed. See webserver_impl.hpp for full contract.
     std::optional<http_response> response;
     bool has_body = false;
     // TASK-047: set by a pre-handler hook short-circuit (request_received

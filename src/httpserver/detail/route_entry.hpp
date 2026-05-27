@@ -61,6 +61,11 @@ namespace detail {
 // callable (lambda, function pointer, std::bind result, member-function
 // adaptor) without leaking the concrete callable type into the route
 // table.
+//
+// PRD-RSP-REQ-007 dispatch note: when the lookup_v2 path invokes this
+// variant arm, the returned http_response prvalue is moved directly into
+// modded_request::response via emplace(), matching the pointer-to-member
+// dispatch path used by the v1 finalize_answer (see DR-004 §5.3).
 using lambda_handler = std::function<::httpserver::http_response(const ::httpserver::http_request&)>;  // NOLINT(whitespace/line_length)
 
 // route_entry: §4.7-shape value type stored per route in the route

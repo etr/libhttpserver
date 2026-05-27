@@ -212,11 +212,15 @@ webserver_impl::complete_websocket_upgrade(MHD_Connection* connection,
     std::shared_ptr<websocket_handler> handler_sp = ws_it->second;
     lock.unlock();
 
-    auto* data = new ws_upgrade_data{this, std::move(handler_sp)};
+    // CWE-401: RAII guard so data is freed if MHD_create_response_for_upgrade
+    // returns null. Ownership is transferred to MHD (via release()) only after
+    // the queue call — upgrade_handler receives data_guard.get() as cls and
+    // wraps it in unique_ptr for cleanup (see upgrade_handler below).
+    std::unique_ptr<ws_upgrade_data> data_guard(
+        new ws_upgrade_data{this, std::move(handler_sp)});
     struct MHD_Response* response = MHD_create_response_for_upgrade(
-        &webserver_impl::upgrade_handler, data);
+        &webserver_impl::upgrade_handler, data_guard.get());
     if (response == nullptr) {
-        delete data;
         return std::nullopt;
     }
     MHD_add_response_header(response, MHD_HTTP_HEADER_UPGRADE, "websocket");
@@ -231,6 +235,7 @@ webserver_impl::complete_websocket_upgrade(MHD_Connection* connection,
                                                        MHD_HTTP_SWITCHING_PROTOCOLS,
                                                        response);
     MHD_destroy_response(response);
+    data_guard.release();  // MHD now owns; upgrade_handler will delete.
     return to_ret;
 }
 

@@ -178,6 +178,15 @@ void webserver::install_default_alias_hooks_() {
     // webserver_impl::apply_auth_short_circuit inline path: it respects
     // auth_skip_paths, calls the user-supplied auth_handler, and
     // short-circuits with the returned response when auth fails.
+    //
+    // Design note (security-reviewer-iter1-7 / CWE-200): auth_handler
+    // is registered as a before_handler hook, which fires only for
+    // matched routes (found==true). Requests to unregistered paths
+    // receive a 404 without consulting auth_handler. This means 401 vs
+    // 404 distinguishes registered from unregistered routes (auth oracle).
+    // Callers who need uniform authentication on all requests — including
+    // 404s — should add a catch-all fallback route or register a
+    // not_found_handler that applies equivalent auth logic.
     // ----------------------------------------------------------------
     if (auth_handler != nullptr) {
         // Capture both the webserver* (for auth_handler callable) and the

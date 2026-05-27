@@ -76,11 +76,7 @@ class http_resource {
      **/
      virtual http_response render(const http_request& req) {
          (void)req;
-         // TASK-036: default-constructed http_response carries
-         // status_code_ == -1 — the v1-compatible "handler did not
-         // produce a response" sentinel that finalize_answer recognises
-         // and routes through internal_error_page (see
-         // test/integ/basic.cpp::default_render_method).
+         // status_code_ == -1 sentinel; see class-level comment above.
          return http_response{};
      }
 

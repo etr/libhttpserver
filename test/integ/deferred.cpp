@@ -190,7 +190,7 @@ LT_BEGIN_SUITE(deferred_suite)
     }
 LT_END_SUITE(deferred_suite)
 
-LT_BEGIN_AUTO_TEST(deferred_suite, deferred_response_suite)
+LT_BEGIN_AUTO_TEST(deferred_suite, deferred_response_with_prefix_content)
     counter = 0;  // reset per-test; tear_down also resets but order may vary
     deferred_resource resource;
     ws->register_path("base", as_shared(resource));
@@ -207,7 +207,7 @@ LT_BEGIN_AUTO_TEST(deferred_suite, deferred_response_suite)
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "cycle callback responsetesttest");
     curl_easy_cleanup(curl);
-LT_END_AUTO_TEST(deferred_response_suite)
+LT_END_AUTO_TEST(deferred_response_with_prefix_content)
 
 LT_BEGIN_AUTO_TEST(deferred_suite, deferred_response_with_data)
     counter = 0;  // reset per-test; tear_down also resets but order may vary
@@ -335,6 +335,33 @@ LT_BEGIN_AUTO_TEST(deferred_suite, on_get_lambda_returns_value)
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(on_get_lambda_returns_value)
 
+LT_BEGIN_AUTO_TEST(deferred_suite, on_post_lambda_returns_value)
+    // Guard against method-specific dispatch bugs in lambda_resource::invoke_
+    // for non-GET verbs. on_post uses the same invoke_() template path as
+    // on_get but with http_method::post — one test covers the general case
+    // for all remaining verbs (render_post, render_put, render_delete, etc.).
+    ws->on_post("/post_by_value", [](const http_request&) {
+        return http_response::string("post-ok");
+    });
+    curl_global_init(CURL_GLOBAL_ALL);
+
+    std::string body;
+    CURL* curl = curl_easy_init();
+    curl_easy_setopt(curl, CURLOPT_URL,
+                     "localhost:" PORT_STRING "/post_by_value");
+    curl_easy_setopt(curl, CURLOPT_POST, 1L);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, "");
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &body);
+    CURLcode res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    int64_t http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    LT_CHECK_EQ(http_code, 200);
+    LT_CHECK_EQ(body, "post-ok");
+    curl_easy_cleanup(curl);
+LT_END_AUTO_TEST(on_post_lambda_returns_value)
+
 LT_BEGIN_AUTO_TEST(deferred_suite, class_render_get_returns_value)
     // AC-2: http_resource subclass with `http_response render_get(...)
     // override` works end-to-end.
@@ -374,12 +401,10 @@ LT_BEGIN_AUTO_TEST(deferred_suite, deferred_producer_destroyed_in_request_comple
     std::mutex        destroyed_mu;
     std::condition_variable destroyed_cv;
 
-    // CRITICAL: the OUTER on_get lambda is stored long-term inside the
-    // registered lambda_resource. Capture only lightweight references here;
-    // the destruction_sentinel lives inside the INNER (producer) lambda so
-    // it is released with the deferred_body when ~modded_request fires from
-    // request_completed (DR-010). shared_ptr is required because
-    // std::function requires its target to be CopyConstructible.
+    // Key contract (DR-010): the producer captures must live until
+    // request_completed. Capture the sentinel in the INNER (producer) lambda
+    // only — not the outer on_get lambda — so it is destroyed with
+    // deferred_body when ~modded_request fires from request_completed.
     ws->on_get("/lifetime",
                [&producer_calls, &destroyed, &destroyed_mu, &destroyed_cv](
                    const http_request&) {
@@ -429,8 +454,9 @@ LT_BEGIN_AUTO_TEST(deferred_suite, deferred_producer_destroyed_in_request_comple
 
     // Force MHD to fire request_completed for every pending connection.
     // MHD_stop_daemon (called by stop()) joins internal threads and drains
-    // the request_completed queue. tear_down() calls stop() again; that is
-    // safe because webserver::stop() is idempotent once already stopped.
+    // the request_completed queue. tear_down() will call stop() again after
+    // this test body returns; that is safe because webserver::stop() is
+    // idempotent — the second call is a documented no-op.
     ws->stop();
 
     // Wait for the sentinel to be destroyed. request_completed may fire on

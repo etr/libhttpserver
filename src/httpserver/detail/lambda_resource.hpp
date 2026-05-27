@@ -64,7 +64,10 @@ namespace detail {
 
 // Tiny adapter that wraps a single lambda_handler as an http_resource
 // virtual override. We keep one slot per method enum and dispatch in
-// each render_* override.
+// each render_* override. Each slot holds a
+//   std::function<http_response(const http_request&)>
+// (see route_entry.hpp::lambda_handler). Slots are installed via
+// set_slot() and invoked by the render_* overrides below.
 class lambda_resource final : public ::httpserver::http_resource {
  public:
     lambda_resource() {
@@ -90,6 +93,9 @@ class lambda_resource final : public ::httpserver::http_resource {
     // Each differs only by the http_method enum constant forwarded.
     // They are required by the http_resource base-class interface and
     // cannot be collapsed further without changing that interface.
+    // render_connect and render_trace intentionally fall back to the
+    // base-class default (no slot wired, no set_allowing call); they
+    // return the -1 sentinel and route through internal_error_page.
     ::httpserver::http_response
     render_get(const ::httpserver::http_request& r) override {
         return invoke_(http_method::get, r);
@@ -120,6 +126,9 @@ class lambda_resource final : public ::httpserver::http_resource {
     }
 
  private:
+    // Dispatch to the registered slot for method `m`, returning the
+    // handler's http_response by value. Callers must ensure is_allowed(m)
+    // is true before calling (the 405 guard in finalize_answer enforces this).
     ::httpserver::http_response
     invoke_(http_method m, const ::httpserver::http_request& r) {
         auto& slot = slots_[static_cast<std::size_t>(m)];

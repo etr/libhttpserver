@@ -170,8 +170,11 @@ void webserver_impl::commit_handlers_to_shim(detail::lambda_resource& shim,
         method_set methods,
         const std::function<::httpserver::http_response(
             const ::httpserver::http_request&)>& handler) {
-    // The shared std::function copies cheaply (type-erased callable),
-    // so each slot owns its own copy.
+    // Each slot gets its own copy of the std::function. For small captures
+    // (within SBO, ~16-32 bytes on libstdc++/libc++) the copies are cheap.
+    // For large-capture handlers registered across many methods, each copy
+    // allocates once. Registration-time only; not a hot-path concern.
+    // (performance-reviewer-iter1-3: document the per-slot copy behaviour.)
     for_each_requested_method(methods, [&](http_method m) {
         shim.set_slot(m, handler);
     });
