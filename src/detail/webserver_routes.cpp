@@ -213,18 +213,12 @@ void webserver_impl::insert_fresh_v2_entry(const detail::http_endpoint& idx,
         // upsert_v2_param_route, never here.
         break;
     case route_tier_kind::exact: {
-        detail::route_entry entry;
-        entry.methods   = methods;
-        entry.handler   = std::move(shim);
-        entry.is_prefix = false;
+        detail::route_entry entry{methods, std::move(shim), /*is_prefix=*/false};
         exact_routes_.emplace(idx.get_url_complete(), std::move(entry));
         break;
     }
     case route_tier_kind::regex_: {
-        detail::route_entry entry;
-        entry.methods   = methods;
-        entry.handler   = std::move(shim);
-        entry.is_prefix = false;
+        detail::route_entry entry{methods, std::move(shim), /*is_prefix=*/false};
         regex_routes_.push_back(
             {idx.get_url_complete(), std::move(*tier.re), std::move(entry)});
         break;
