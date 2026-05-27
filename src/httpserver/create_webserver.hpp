@@ -78,6 +78,15 @@ typedef std::function<std::pair<std::string, std::string>(const std::string& ser
 namespace http { class file_info; }
 
 typedef std::function<bool(const std::string&, const std::string&, const http::file_info&)> file_cleanup_callback_ptr;
+
+// TODO(follow-up): migrate auth_handler_ptr to
+//   std::function<std::optional<http_response>(const http_request&)>
+// to complete the DR-004 value-return rollout to the auth hook (removing
+// the per-authenticated-request heap allocation for the shared_ptr control
+// block). This requires updating the call site in webserver_finalize.cpp,
+// the example in examples/centralized_authentication.cpp, and the
+// integration test in test/integ/authentication.cpp. Deferred from TASK-036
+// to avoid a cascading public-API break mid-milestone.
 typedef std::function<std::shared_ptr<http_response>(const http_request&)> auth_handler_ptr;
 
 /**
