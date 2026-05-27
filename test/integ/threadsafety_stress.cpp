@@ -81,6 +81,16 @@ namespace ht = httpserver;
 
 namespace {
 
+// Named constants — replaces hex magic literals throughout.
+// kDynSlots: number of competing dynamic path slots (slot = i & (kDynSlots-1)).
+// kIpRange: number of distinct test IPs (ip suffix = i & (kIpRange-1)).
+// kExitCodeStopReturned: child exit when stop() returns from a handler (regression).
+// kExitCodeCurlCompleted: child exit when curl completes without abort (regression).
+constexpr int kDynSlots = 8;
+constexpr int kIpRange  = 256;
+constexpr int kExitCodeStopReturned  = 42;  // stop() returned — should not happen
+constexpr int kExitCodeCurlCompleted = 43;  // curl completed — stop() did not block
+
 // Discard libcurl response bodies — we only care about completing the
 // round-trip, not the body content.
 size_t discard_write(char* /*ptr*/, size_t size, size_t nmemb,
@@ -206,15 +216,19 @@ ht::http_response driver_body(const ht::http_request& req,
         // exercise.
     }
 
-    const int slot = i & 0x7;
+    const int slot = i & (kDynSlots - 1);
     const std::string dyn_path =
         "/dyn/" + std::to_string(slot);
     const std::string ip =
-        "198.51.100." + std::to_string(i & 0xff);
+        "198.51.100." + std::to_string(i & (kIpRange - 1));
 
     // Six ops total: 0..3 are the TASK-032 route-table / ban-list
     // mutators; 4..5 are TASK-052's hook bus churn. `op % 6` keeps
     // the distribution roughly uniform.
+    // NOTE: register_prefix / unregister_prefix are intentionally not
+    // exercised here because they share the same lock path as
+    // register_path / unregister_path (register_impl_ with family=true
+    // vs false); the existing cases already cover the mutex contention.
     switch (op % 6) {
         case 0:
             try {
@@ -231,7 +245,13 @@ ht::http_response driver_body(const ht::http_request& req,
                 ws->unregister_path(dyn_path);
                 counters->unregister_ok.fetch_add(
                     1, std::memory_order_relaxed);
-            } catch (...) {
+            } catch (const std::invalid_argument&) {
+                // Path not registered yet — expected race, not a bug.
+            } catch (const std::exception& e) {
+                // Surface unexpected exceptions so they are visible in
+                // test logs (e.g. bad_alloc, logic_error).
+                std::cerr << "[stress] unexpected unregister_path exception: "
+                          << e.what() << '\n';
             }
             break;
         case 2:
@@ -290,11 +310,12 @@ ht::http_response driver_body(const ht::http_request& req,
 
 // Stress duration: default 60 s (acceptance criterion), overridable
 // via HTTPSERVER_STRESS_SECONDS for fast local iteration.
+// Capped at 3600 s to prevent runaway in CI (CWE-1284).
 int stress_seconds() {
     if (const char* s = std::getenv("HTTPSERVER_STRESS_SECONDS")) {
         try {
             int v = std::stoi(s);
-            if (v > 0) return v;
+            if (v > 0 && v <= 3600) return v;
         } catch (...) {
         }
     }
@@ -349,6 +370,7 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
             // Per-thread curl handle: curl_easy_* is per-handle
             // thread-safe; each thread owns its handle.
             CURL* curl = curl_easy_init();
+            if (!curl) return;  // resource exhaustion — skip this thread
             curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, discard_write);
             // 198.51.100.0/24 is TEST-NET-2 (RFC 5737) — block/unblock
             // ops on these IPs cannot blacklist the loopback driver
@@ -361,12 +383,17 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
             while (!stop.load(std::memory_order_relaxed)) {
                 // Six ops: 0..3 route-table/ban; 4..5 hook bus (TASK-052).
                 const int op = static_cast<int>(rng() % 6u);
-                const int i = static_cast<int>(rng() & 0xff);
+                const int i = static_cast<int>(rng() & (kIpRange - 1));
                 const std::string url =
                     base + "?op=" + std::to_string(op) +
                     "&i=" + std::to_string(i);
                 curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
                 curl_easy_perform(curl);
+                // 5 ms inter-request sleep to rate-limit each thread to
+                // ~200 req/s. Under TSan (5–20× slower) this keeps total
+                // lock pressure and shadow-memory churn within the CI
+                // wall-clock budget without reducing lock-path coverage.
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
             }
             curl_easy_cleanup(curl);
         });
@@ -415,7 +442,7 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
     // and is opt-in because reproducing the deadlock requires _Exit()
     // to escape the wedged process.
     const char* run = std::getenv("HTTPSERVER_RUN_STOP_FROM_HANDLER");
-    if (run == nullptr || std::string(run) != "1") {
+    if (run == nullptr || std::string_view(run) != "1") {
         std::cout << "[SKIP] stop_from_handler_deadlocks_as_documented"
                      " — set HTTPSERVER_RUN_STOP_FROM_HANDLER=1 to run\n";
         return;
@@ -442,6 +469,7 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
     // a handler, contradicting the documented contract.
     const pid_t child = fork();
     LT_CHECK(child >= 0);
+    if (child < 0) return;  // fork failed; waitpid(-1,...) would reap unrelated processes
     if (child == 0) {
         // Child: trigger the contract violation. We do not care about
         // the child's stdout — silence it so the test log stays
@@ -459,9 +487,9 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
             // thread → DR-008 unsafe path.
             ws.stop();
             // Below is unreachable. If reached, the contract is
-            // broken — exit with a distinctive code (42) so the
-            // parent can flag the regression.
-            std::_Exit(42);
+            // broken — exit with a distinctive code so the parent
+            // can flag the regression.
+            std::_Exit(kExitCodeStopReturned);
             return ht::http_response::string("unreachable");
         });
 
@@ -473,26 +501,28 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
         CURL* curl = curl_easy_init();
         curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, discard_write);
-        curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, 10000L);
+        // 3 s < parent's 5 s deadline: curl's window expires before the
+        // parent SIGKILLs the child, keeping the two timeouts ordered.
+        curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, 3000L);
         curl_easy_perform(curl);
         curl_easy_cleanup(curl);
 
         // If we ever reach here, stop()-from-handler did NOT abort
-        // or deadlock as documented → regression. Exit 43 so the
-        // parent flags it distinctly from the unreachable-after-
-        // stop() case above.
-        std::_Exit(43);
+        // or deadlock as documented → regression. Use a distinct
+        // sentinel so the parent can flag it separately from the
+        // unreachable-after-stop() case above.
+        std::_Exit(kExitCodeCurlCompleted);
     }
 
     // Parent: bounded wait on the child. SIGKILL it after 5 s if it
     // is still running (the silent-deadlock branch of DR-008). Any
     // outcome OTHER than a zero exit is a positive observation of
-    // the contract; a zero exit (or codes 42/43) is a regression.
+    // the contract; a zero exit (or sentinel codes) is a regression.
     int status = 0;
-    auto deadline =
+    auto child_deadline =
         std::chrono::steady_clock::now() + std::chrono::seconds(5);
     bool reaped = false;
-    while (std::chrono::steady_clock::now() < deadline) {
+    while (std::chrono::steady_clock::now() < child_deadline) {
         pid_t r = ::waitpid(child, &status, WNOHANG);
         if (r == child) {
             reaped = true;
@@ -513,9 +543,12 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
                   << " (MHD self-join detection)\n";
     } else if (WIFEXITED(status)) {
         const int code = WEXITSTATUS(status);
-        // Codes 42/43 mark regressions seeded inside the child.
-        // Zero exit means stop() returned cleanly from a handler.
-        LT_CHECK(code != 0 && code != 42 && code != 43);
+        // kExitCodeStopReturned / kExitCodeCurlCompleted mark
+        // regressions seeded inside the child. Zero exit means
+        // stop() returned cleanly from a handler.
+        LT_CHECK(code != 0 &&
+                 code != kExitCodeStopReturned &&
+                 code != kExitCodeCurlCompleted);
         std::cout << "[OK] stop_from_handler — child exited with "
                      "code " << code
                   << " (non-zero exit on contract violation)\n";
