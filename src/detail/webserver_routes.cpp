@@ -209,8 +209,9 @@ void webserver_impl::insert_fresh_v2_entry(const detail::http_endpoint& idx,
     auto tier = classify_route_tier(idx);
     switch (tier.kind) {
     case route_tier_kind::radix:
-        // Unreachable: callers route url_pars-non-empty through
-        // upsert_v2_param_route, never here.
+        // Unreachable: upsert_v2_table_entry routes url_pars-non-empty paths
+        // through upsert_v2_param_route before calling insert_fresh_v2_entry.
+        __builtin_unreachable();
         break;
     case route_tier_kind::exact: {
         detail::route_entry entry;

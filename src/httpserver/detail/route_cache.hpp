@@ -45,6 +45,7 @@
 #include <functional>
 #include <list>
 #include <mutex>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -69,11 +70,13 @@ struct cache_key {
 };
 
 struct cache_key_hash {
+    // Golden-ratio mix constant: reduces hash clustering vs. plain XOR.
+    static constexpr std::size_t kHashMix = 0x9e3779b97f4a7c15ULL;
+
     std::size_t operator()(const cache_key& k) const noexcept {
         std::size_t h1 = std::hash<std::string>{}(k.path);
         std::size_t h2 = static_cast<std::size_t>(k.method);
-        // boost::hash_combine constant.
-        return h1 ^ (h2 + 0x9e3779b97f4a7c15ULL + (h1 << 6) + (h1 >> 2));
+        return h1 ^ (h2 + kHashMix + (h1 << 6) + (h1 >> 2));
     }
 };
 
@@ -97,7 +100,12 @@ struct cache_value {
 class route_cache {
  public:
     explicit route_cache(std::size_t max_entries = 256)
-        : max_entries_(max_entries) {}
+        : max_entries_(max_entries) {
+        if (max_entries == 0) {
+            throw std::invalid_argument(
+                "route_cache max_entries must be > 0");
+        }
+    }
 
     // Find by key; returns true on hit and copies the value into `out`.
     // Promotes the hit to the front of the LRU list as a side effect.
@@ -124,7 +132,7 @@ class route_cache {
         // Compute the same hash as cache_key_hash without owning `path`.
         std::size_t h1 = std::hash<std::string_view>{}(path);
         std::size_t h2 = static_cast<std::size_t>(method);
-        std::size_t bucket_hash = h1 ^ (h2 + 0x9e3779b97f4a7c15ULL
+        std::size_t bucket_hash = h1 ^ (h2 + cache_key_hash::kHashMix
                                         + (h1 << 6) + (h1 >> 2));
         std::lock_guard<std::mutex> lock(mutex_);
         // Walk the bucket manually via equal_range on the raw bucket index.
@@ -163,13 +171,15 @@ class route_cache {
         }
     }
 
-    void clear() noexcept {
+    // Note: not noexcept — std::lock_guard can throw std::system_error
+    // (though in practice it does not on POSIX under normal conditions).
+    void clear() {
         std::lock_guard<std::mutex> lock(mutex_);
         map_.clear();
         list_.clear();
     }
 
-    std::size_t size() const noexcept {
+    std::size_t size() const {
         std::lock_guard<std::mutex> lock(mutex_);
         return map_.size();
     }

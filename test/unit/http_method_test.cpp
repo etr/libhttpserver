@@ -281,18 +281,10 @@ LT_BEGIN_AUTO_TEST(http_method_suite, compound_assign_or_equals_with_enumerator)
     LT_CHECK_EQ(s.bits, 0u);
 LT_END_AUTO_TEST(compound_assign_or_equals_with_enumerator)
 
-// 11. to_string returns the uppercase wire-protocol tokens.
-LT_BEGIN_AUTO_TEST(http_method_suite, to_string_returns_uppercase_wire_tokens)
-    LT_CHECK(httpserver::to_string(httpserver::http_method::get)     == std::string_view{"GET"});
-    LT_CHECK(httpserver::to_string(httpserver::http_method::head)    == std::string_view{"HEAD"});
-    LT_CHECK(httpserver::to_string(httpserver::http_method::post)    == std::string_view{"POST"});
-    LT_CHECK(httpserver::to_string(httpserver::http_method::put)     == std::string_view{"PUT"});
-    LT_CHECK(httpserver::to_string(httpserver::http_method::del)     == std::string_view{"DELETE"});
-    LT_CHECK(httpserver::to_string(httpserver::http_method::connect) == std::string_view{"CONNECT"});
-    LT_CHECK(httpserver::to_string(httpserver::http_method::options) == std::string_view{"OPTIONS"});
-    LT_CHECK(httpserver::to_string(httpserver::http_method::trace)   == std::string_view{"TRACE"});
-    LT_CHECK(httpserver::to_string(httpserver::http_method::patch)   == std::string_view{"PATCH"});
-LT_END_AUTO_TEST(to_string_returns_uppercase_wire_tokens)
+// 11. (Removed: to_string_returns_uppercase_wire_tokens was a runtime
+// duplicate of the static_asserts at lines 132-148 above. Coverage is
+// provided at compile time by those asserts and at runtime by the MHD
+// round-trip test below. Kept as a numeric gap to avoid renumbering.)
 
 // 12. to_string of an unknown enum value returns an empty view.
 LT_BEGIN_AUTO_TEST(http_method_suite, to_string_unknown_returns_empty_view)

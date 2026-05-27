@@ -133,6 +133,9 @@ class webserver_impl {
     // ws_start_stop integ test (start on worker thread, stop on main).
     std::atomic<bool> running{false};
 
+    // --- v1 route table (legacy; to be removed once lookup_v2 is wired
+    //     into finalize_answer at Cycle K dispatch cutover) ---------------
+
     // TASK-023: route-table entries hold shared_ptr<http_resource>.
     // The two public register_resource overloads (unique_ptr / shared_ptr)
     // both funnel into the shared_ptr branch, so storage is always
@@ -154,21 +157,26 @@ class webserver_impl {
         std::shared_ptr<::httpserver::http_resource> resource;
     };
     static constexpr size_t ROUTE_CACHE_MAX_SIZE = 256;
-    std::mutex route_cache_mutex;
+    std::mutex route_cache_mutex_;
     std::list<std::pair<std::string, route_cache_entry>> route_cache_list;
     std::unordered_map<std::string,
         std::list<std::pair<std::string, route_cache_entry>>::iterator>
         route_cache_map;
 
-    // TASK-027: 3-tier route table (architecture §4.7).
+    // --- v2 3-tier route table (TASK-027, architecture §4.7) -------------
+
+    // TASK-027: 3-tier route table.
     //
     // The three tiers below shadow the v1 maps above and are populated
     // alongside them by every register_* / on_methods_ / unregister_*
-    // path. The lookup_v2() entry point walks this triple in order
+    // path. The lookup_v2() entry point walks this triple in order:
     //   1. exact_routes_           (hash, O(1))
     //   2. param_and_prefix_routes_ (segment-trie, parameterized + prefix)
     //   3. regex_routes_            (linear regex chain, fallback)
     // fronted by the LRU cache `route_cache_v2`.
+    //
+    // TODO(Cycle K): rename route_cache_v2 → route_lru_cache once the v1
+    // fields above are removed at dispatch cutover.
     //
     // **Lock order.** When both locks must be held, route_table_mutex_
     // is acquired BEFORE route_cache_mutex_. The lookup pipeline never
@@ -221,6 +229,13 @@ class webserver_impl {
     // Walk the v2 route table for (method, path) per the lookup pipeline
     // documented above. Returns lookup_result; populates `tier` even on
     // miss (tier_hit::none) so callers can branch deterministically.
+    //
+    // NOTE (CWE-284 guard): lookup_v2 is a SHADOW TABLE only. The live
+    // HTTP dispatch path (finalize_answer -> resolve_resource_for_request)
+    // still uses the v1 registered_resources* maps. lookup_v2 is used
+    // by tests to pin the v2 tier pipeline and will be wired into
+    // finalize_answer at Cycle K dispatch cutover. Until then, any access
+    // control registered via the v2 table has NO effect on live traffic.
     lookup_result lookup_v2(http_method method, const std::string& path);
 
     // TASK-045 -- Lifecycle hook bus (skeleton, no firing yet).

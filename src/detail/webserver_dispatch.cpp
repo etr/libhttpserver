@@ -98,7 +98,7 @@ void webserver_impl::invalidate_route_cache() {
     // standardized_url only; v2's is keyed on (method, path). A
     // registration may invalidate both, so clear both atomically.
     {
-        std::lock_guard<std::mutex> lock(route_cache_mutex);
+        std::lock_guard<std::mutex> lock(route_cache_mutex_);
         route_cache_list.clear();
         route_cache_map.clear();
     }
@@ -202,11 +202,14 @@ webserver_impl::lookup_v2(http_method method, const std::string& path) {
         }
     }  // table_lock released.
 
-    // Step 3: install into cache (cache mutex only).
+    // Step 3: install into cache (cache mutex only). Move result.entry and
+    // result.captured_params into the cache_value to avoid a second copy
+    // of the shared_ptr ref-count bump and captured vector on the miss path.
+    // result is not used after this point.
     if (result.found) {
         cache_value v;
-        v.entry = result.entry;
-        v.captured_params = result.captured_params;
+        v.entry = std::move(result.entry);
+        v.captured_params = std::move(result.captured_params);
         route_cache_v2.insert(key, std::move(v));
     }
 
@@ -219,7 +222,7 @@ namespace detail {
 
 std::optional<webserver_impl::regex_route_lookup>
 webserver_impl::lookup_route_cache(const std::string& key) {
-    std::lock_guard<std::mutex> cache_lock(route_cache_mutex);
+    std::lock_guard<std::mutex> cache_lock(route_cache_mutex_);
     auto cache_it = route_cache_map.find(key);
     if (cache_it == route_cache_map.end()) {
         return std::nullopt;
@@ -265,7 +268,7 @@ webserver_impl::scan_regex_routes(const detail::http_endpoint& target) {
 void webserver_impl::store_route_cache(const std::string& key,
                                        const detail::http_endpoint& matched,
                                        std::shared_ptr<http_resource> hrm) {
-    std::lock_guard<std::mutex> cache_lock(route_cache_mutex);
+    std::lock_guard<std::mutex> cache_lock(route_cache_mutex_);
     route_cache_list.emplace_front(key, route_cache_entry{matched, std::move(hrm)});
     route_cache_map[key] = route_cache_list.begin();
     if (route_cache_map.size() > ROUTE_CACHE_MAX_SIZE) {

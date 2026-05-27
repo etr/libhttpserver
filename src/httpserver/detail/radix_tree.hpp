@@ -20,12 +20,11 @@
 
 // TASK-027: segment-trie for the parameterized + prefix route tier.
 //
-// The architecture spec (§4.7) commits only to the OUTER shape (three-tier
-// + cache); the radix-tree implementation choice is intentionally left
-// open. A segment trie is sufficient for the 9-method / N-segment
-// registration shape libhttpserver supports and avoids dragging in a
-// vendored library (which would conflict with the project's tightly
-// curated source tree and LGPL-2.1 distribution).
+// A segment trie avoids dragging in a vendored library (which would
+// conflict with the project's tightly curated source tree and
+// LGPL-2.1 distribution). The architecture spec (§4.7) commits only
+// to the outer three-tier + cache shape; the implementation choice
+// is intentionally left open.
 //
 // Internal header — only reachable when compiling libhttpserver.
 #if !defined(HTTPSERVER_COMPILATION)
@@ -49,12 +48,8 @@
 namespace httpserver {
 namespace detail {
 
-// radix_match: result type of radix_tree<T>::find. `entry` is a non-owning
-// pointer into the tree; valid until the next mutation. `captures` lists
-// (parameter-name, captured-value) pairs in the order the wildcards
-// appear along the matched path. `is_prefix_match` is true iff the match
-// came from a `is_prefix=true` registration that did not consume every
-// remaining request segment.
+// radix_match: result type of radix_tree<T>::find.
+// `entry` is a non-owning pointer into the tree; valid until the next mutation.
 template <typename T>
 struct radix_match {
     const T* entry = nullptr;
@@ -62,15 +57,10 @@ struct radix_match {
     bool is_prefix_match = false;
 };
 
-// Single trie node. Children are split into:
-//   - `children_`: keyed by the literal segment string (exact match).
-//   - `wildcard_child_`: optional single child consuming any one segment.
-//
-// Each node may carry an `exact_terminus_` (registration with is_prefix=false
-// that ends here) and/or a `prefix_terminus_` (is_prefix=true). The two
-// are kept separately because a prefix and an exact registration may both
-// terminate at the same node (e.g. /static prefix + /static exact would be
-// a user error caught at registration time, but the storage allows it).
+// Single trie node. `wildcard_child_` is a single optional pointer (not
+// another map entry) because there can be at most one unnamed wildcard per
+// path level by design — two {name} siblings at the same depth are
+// ambiguous and rejected at registration time.
 template <typename T>
 struct radix_node {
     std::unordered_map<std::string, std::unique_ptr<radix_node>> children_;
@@ -221,6 +211,9 @@ class radix_tree {
 
     // Remove the entry at `path`. is_prefix selects which terminus to
     // clear. Returns true iff a terminus was actually cleared.
+    // NOTE: unlike find(), where descent uses the concrete request-path
+    // segment value (e.g. "42"), remove() receives the registered pattern
+    // (e.g. "{id}") and matches wildcard nodes by the placeholder shape.
     bool remove(std::string_view path, bool is_prefix) {
         radix_node<T>* node = root_.get();
         const auto segments = tokenize(path);
