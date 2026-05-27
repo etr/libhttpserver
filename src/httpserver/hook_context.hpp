@@ -119,22 +119,17 @@ struct connection_close_ctx {
  *
  * Observation-only per DR-012; the handler returns `void`. Accept/deny
  * is decided by the policy callback, not by the hook.
+ *
+ * @note `accepted` mirrors the policy callback's MHD_YES/MHD_NO return.
+ * @note `reason` is set when the connection is rejected:
+ *   - `"banned"` — the peer hit the ban list.
+ *   - `"not-allowed"` — default policy REJECT and the peer is not on
+ *     the allowance list.
+ *   - `std::nullopt` — the connection was accepted.
+ * @note The `string_view`'s referent is a string literal with static
+ *   storage duration; capturing it past the hook return is safe. If a
+ *   heap-owned copy is needed, use `std::string(*ctx.reason)`.
  */
-// accept_decision: observation-only per DR-012; the handler returns
-// void. accept/deny is decided by the policy callback, not by the hook.
-//
-// TASK-046 extends the TASK-045 skeleton with the decision the policy
-// callback already computed before the hook fires:
-//   - `accepted` mirrors policy_callback's MHD_YES/MHD_NO return.
-//   - `reason` is set when the connection is rejected:
-//       * `"banned"`      — the peer hit the ban list.
-//       * `"not-allowed"` — default policy REJECT and the peer is not
-//                            on the allowance list.
-//       * `std::nullopt`  — the connection was accepted.
-//
-// The string_view's referent is always a string literal with static
-// storage duration; capturing it past the hook return is safe. If a
-// heap-owned copy is needed, materialize `std::string(*ctx.reason)`.
 struct accept_ctx {
     peer_address peer{};
     bool accepted = true;
@@ -163,29 +158,22 @@ struct request_received_ctx {
  * the bytes are appended to the request body or fed to any in-flight
  * post-processor. Short-circuit-capable.
  *
- * Invoked from arbitrary MHD worker threads at arbitrary granularity;
- * hooks MUST be cheap. The `chunk` span aliases MHD-owned memory and
- * is only valid for the duration of the hook call.
+ * @attention This phase is invoked from arbitrary MHD worker threads
+ *   at arbitrary granularity — on slow networks chunks may be a single
+ *   byte. Hooks MUST be cheap (no blocking I/O, no per-chunk heap
+ *   allocation in the hot path) — a slow hook back-pressures the
+ *   connection's upload.
+ * @note `chunk` aliases MHD-owned memory; it is only valid for the
+ *   duration of the hook call. Copy into owned storage if the data must
+ *   outlive this firing.
+ * @note `offset` is the number of body bytes already buffered before
+ *   this chunk (first firing has `offset==0`, next has
+ *   `offset==chunk0.size()`, etc.).
+ * @note Short-circuit: returning `hook_action::respond_with(r)` aborts
+ *   the upload at the next MHD callback; the resource handler is never
+ *   invoked. Any in-flight post-processor is destroyed and its buffer
+ *   freed at the short-circuit point.
  */
-// body_chunk: fires once per chunk MHD delivers to the upload
-// callback, BEFORE the bytes are appended to the request body or fed
-// to any in-flight post-processor.
-//
-// IMPORTANT: this phase is invoked from arbitrary MHD worker threads
-// at arbitrary granularity -- on slow networks chunks may be a single
-// byte. Hooks MUST be cheap (no blocking I/O, no per-chunk heap
-// allocation in the hot path) -- a slow hook back-pressures the
-// connection's upload. The `chunk` span aliases MHD-owned memory and
-// is only valid for the duration of the hook call; copy into owned
-// storage if it must outlive this firing. `offset` is the number of
-// body bytes already buffered (so the first firing has offset==0,
-// the next has offset==chunk0.size(), etc.).
-//
-// Short-circuit: returning hook_action::respond_with(r) aborts the
-// upload at the next MHD callback and the resource handler is never
-// invoked. Any in-flight post-processor is destroyed and its buffer
-// freed at the short-circuit point (so registered handlers cannot
-// observe a half-populated form).
 struct body_chunk_ctx {
     http_request* request = nullptr;
     std::span<const std::byte> chunk{};
@@ -214,21 +202,15 @@ struct route_resolved_ctx {
  * both checks and goes straight to response materialisation. Also
  * the phase used by the `method_not_allowed_handler` and
  * `auth_handler` v1 aliases.
+ *
+ * @note `method` is the wire method decoded by `answer_to_connection`.
+ *   The 405-alias hook consults this against
+ *   `resource->get_allowed_methods()` to decide whether to
+ *   short-circuit with 405 + Allow header.
+ * @note `resource` is the resolved `http_resource` pointer; `nullptr`
+ *   for lambda-route registrations without a stable `http_resource*`.
+ *   The hook fires only for route hits (§4.10).
  */
-// before_handler: short-circuit-capable. Fires after route resolution
-// (the matched resource is known) and BEFORE both is_allowed and the
-// resource handler invocation. Returning hook_action::respond_with(r)
-// skips both checks and goes straight to response materialisation.
-//
-// TASK-048 extends the TASK-045 skeleton with `method` and `resource`:
-//   - `method` is the wire method already decoded by
-//     answer_to_connection (mr->method_enum). The 405-alias hook
-//     consults this against `resource->get_allowed_methods()` to
-//     decide whether to short-circuit with 405 + Allow header.
-//   - `resource` is the resolved http_resource pointer; nullptr for
-//     route misses (the hook fires only for hits — see §4.10) and
-//     for lambda-route registrations exposed without a stable
-//     http_resource*.
 struct before_handler_ctx {
     http_request* request = nullptr;
     std::optional<route_descriptor> matched{};
@@ -266,29 +248,21 @@ struct after_handler_ctx {
  * BEFORE `MHD_destroy_response`. Carries the data users have been
  * asking for (issues #281 and #69): `status`, `bytes_queued`,
  * `elapsed`. The `log_access` v1 alias is wired through this phase.
+ *
+ * @note `status` is the HTTP status code passed to
+ *   `MHD_queue_response`.
+ * @note `bytes_queued` is `http_response::body_->size()`. For deferred
+ *   or pipe bodies `size()` returns 0 because the final length is not
+ *   yet known at queue time; fall back to the Content-Length header for
+ *   streamed bodies.
+ * @note `elapsed` is `steady_clock::now()` at the fire site minus
+ *   `modded_request::start_time` (captured on the first invocation of
+ *   `answer_to_connection`). Granularity is nanoseconds.
+ * @attention The `response` pointer is non-null at the fire site.
+ *   Hooks MUST NOT capture it past their return — the `http_response`
+ *   is destroyed in `~modded_request` immediately after
+ *   `request_completed` fires.
  */
-// response_sent: observation point fired immediately after
-// MHD_queue_response and BEFORE MHD_destroy_response. Carries the data
-// users have been asking for (issues #281 and #69):
-//
-//   - status:        the HTTP status code MHD was handed (the value
-//                    passed to MHD_queue_response).
-//   - bytes_queued:  http_response::body_->size(). For deferred / pipe
-//                    bodies, body::size() returns 0 because the final
-//                    length is not yet known at queue time -- consumers
-//                    that need byte counts for streamed bodies should
-//                    fall back to the Content-Length header value.
-//   - elapsed:       std::chrono::steady_clock::now() at the fire site
-//                    minus modded_request::start_time (captured on the
-//                    first invocation of answer_to_connection for this
-//                    request -- the earliest moment we can measure).
-//                    Granularity is nanoseconds.
-//
-// The `response` pointer is non-null at the fire site (the dispatch
-// path guarantees a response value lives in mr->response_ by the time
-// materialize_and_queue_response is called). Hooks MUST NOT capture
-// this pointer past their return: the http_response is destroyed in
-// ~modded_request right after request_completed fires.
 struct response_sent_ctx {
     const http_request* request = nullptr;
     const http_response* response = nullptr;
@@ -304,33 +278,24 @@ struct response_sent_ctx {
  * destroyed so the ctx pointers remain backed by live storage for the
  * duration of the hook call. Hooks MUST NOT capture `request` or
  * `resp` past their return.
+ *
+ * @note `resp` is NULLABLE. On early-failure paths (e.g., a
+ *   `request_received` hook returning `respond_with(413)`),
+ *   `mr->response_` is populated and `resp` points into it. On paths
+ *   where MHD terminates the request before any response object is
+ *   built, `resp` is `nullptr`.
+ * @note `succeeded` maps from `MHD_RequestTerminationCode`:
+ *   `MHD_REQUEST_TERMINATED_COMPLETED_OK` → `true`; everything else →
+ *   `false`. A user-policy rejection that produced a complete response
+ *   on the wire (e.g., a 413 from a `request_received` short-circuit)
+ *   reports `succeeded == true` because MHD drove the request to
+ *   ordinary completion.
+ * @note `duration` is `steady_clock::now()` at the fire site minus
+ *   `modded_request::start_time`; mirrors `response_sent_ctx::elapsed`.
+ * @attention Hooks MUST NOT capture `request` or `resp` past their
+ *   return — both are destroyed in `~modded_request` immediately after
+ *   this fire.
  */
-// request_completed: unconditional final hook. Fires BEFORE the
-// modded_request is destroyed so the ctx pointers remain backed by
-// live storage for the duration of the hook call.
-//
-//   - resp:       NULLABLE. On early-failure paths (e.g., a
-//                 request_received hook returning respond_with(413)),
-//                 mr->response_ is populated and resp points into it.
-//                 On paths where MHD terminates the request before any
-//                 response object is built (very early MHD failures),
-//                 resp is nullptr.
-//   - succeeded:  maps from MHD_RequestTerminationCode:
-//                   * MHD_REQUEST_TERMINATED_COMPLETED_OK -> true
-//                   * everything else                     -> false
-//                 A user-policy rejection that produced a complete
-//                 response on the wire (e.g., a 413 from a
-//                 request_received short-circuit) reports succeeded
-//                 == true: MHD still drove the request to ordinary
-//                 completion -- the rejection happened in libhttpserver,
-//                 not in MHD's transport.
-//   - duration:   steady_clock::now() at the fire site minus
-//                 modded_request::start_time. Kept for back-compat
-//                 with the TASK-045 shape; mirrors response_sent's
-//                 elapsed measurement.
-//
-// Hooks MUST NOT capture `request` or `resp` past their return -- both
-// are destroyed in ~modded_request immediately after this fire.
 struct request_completed_ctx {
     const http_request* request = nullptr;
     const http_response* resp = nullptr;

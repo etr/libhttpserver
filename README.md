@@ -1534,7 +1534,6 @@ so the registration persists for the webserver's lifetime.
 |-------|----------|---------------|--------------------|
 | `connection_opened` | New TCP / TLS connection accepted by MHD | No | No |
 | `accept_decision` | After the default-policy / block-list verdict; the connection has been accepted or denied | No | No |
-| `connection_closed` | Connection torn down (peer close or server close) | No | No |
 | `request_received` | Request line and headers parsed, body not yet consumed | Yes (`hook_action`) | No |
 | `body_chunk` | Each upload-body chunk delivered by MHD | Yes (`hook_action`) | No |
 | `route_resolved` | After URL → resource resolution; carries the matched route or "no match" | No | No |
@@ -1543,6 +1542,7 @@ so the registration persists for the webserver's lifetime.
 | `after_handler` | Handler returned a response, before it is queued on the wire (mutation point) | Yes (`hook_action`) | Yes |
 | `response_sent` | Response handed to `MHD_queue_response`; carries `status`, `bytes_queued`, `elapsed` | No | Yes |
 | `request_completed` | Request lifecycle finished (success or failure); last hook to fire per request | No | Yes |
+| `connection_closed` | Connection torn down (peer close or server close) | No | No |
 
 ### Short-circuit semantics
 
