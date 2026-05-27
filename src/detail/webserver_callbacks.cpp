@@ -99,7 +99,7 @@ void webserver_impl::request_completed(void *cls, struct MHD_Connection *connect
     // TASK-050: fire request_completed BEFORE the modded_request is
     // destroyed so the ctx pointers remain backed by live storage. The
     // gate-and-fire helper reads any_hooks_[request_completed] and
-    // builds the ctx from mr->dhr, mr->response_, and the MHD
+    // builds the ctx from mr->dhr, mr->response, and the MHD
     // termination code. The fire site is the very first thing this
     // callback does, while mr is still untouched.
     auto* mr = static_cast<detail::modded_request*>(*con_cls);

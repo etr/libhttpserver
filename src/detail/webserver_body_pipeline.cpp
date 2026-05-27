@@ -67,7 +67,7 @@ namespace {
 // flat sequence of small steps. Returns true iff a hook short-circuited
 // and the caller should signal MHD that the chunk was consumed (returns
 // MHD_YES with *upload_data_size = 0). Side effects on short-circuit:
-//   - mr->response_ is populated with the hook-supplied response,
+//   - mr->response is populated with the hook-supplied response,
 //   - mr->skip_handler is set so finalize_answer routes through the
 //     skip branch,
 //   - any in-flight MHD_PostProcessor is destroyed (32 KB buffer freed).
@@ -84,7 +84,7 @@ bool fire_and_maybe_short_circuit_body_chunk(webserver_impl* impl,
         /*is_final=*/false};
     auto sc = impl->fire_body_chunk(ctx);
     if (!sc) return false;
-    mr->response_.emplace(std::move(*sc));
+    mr->response.emplace(std::move(*sc));
     mr->skip_handler = true;
     if (mr->pp != nullptr) {
         MHD_destroy_post_processor(mr->pp);
@@ -135,7 +135,7 @@ MHD_Result webserver_impl::requests_answer_first_step(MHD_Connection* connection
             mr->dhr.get(),
             std::chrono::steady_clock::now()};
         if (auto sc = fire_request_received(ctx)) {
-            mr->response_.emplace(std::move(*sc));
+            mr->response.emplace(std::move(*sc));
             mr->skip_handler = true;
             return MHD_YES;
         }
@@ -172,7 +172,7 @@ MHD_Result webserver_impl::requests_answer_second_step(MHD_Connection* connectio
 
     // TASK-047 -- a prior pre-handler short-circuit (request_received in
     // first_step, or body_chunk on an earlier chunk) already populated
-    // mr->response_. Consume the chunk so MHD advances; the next
+    // mr->response. Consume the chunk so MHD advances; the next
     // *upload_data_size == 0 callback will route to finalize_answer's
     // skip_handler branch.
     if (mr->skip_handler) {

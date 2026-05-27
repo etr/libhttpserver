@@ -313,7 +313,7 @@ class by_value_class_resource : public http_resource {
 
 LT_BEGIN_AUTO_TEST(deferred_suite, on_get_lambda_returns_value)
     // AC-1: lambda returns http_response by value (DR-004) and the dispatch
-    // path moves the prvalue into mr->response_.
+    // path moves the prvalue into mr->response.
     ws->on_get("/by_value", [](const http_request&) {
         return http_response::string("hi");
     });

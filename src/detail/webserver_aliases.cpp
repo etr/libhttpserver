@@ -274,8 +274,8 @@ void webserver::install_default_alias_hooks_() {
                     // Observation stub. The actual 404 synthesis lives
                     // in webserver_impl::not_found_page, consulted from
                     // finalize_answer at the existing v1 call site.
-                    // Route_resolved_ctx does not carry mr->response_ so
-                    // the spec's "stash into mr->response_" is structurally
+                    // Route_resolved_ctx does not carry mr->response so
+                    // the spec's "stash into mr->response" is structurally
                     // deferred (see TASK-048 spec §action item 3 note).
                 })))
             .detach();

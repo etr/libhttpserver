@@ -184,12 +184,12 @@ void webserver_impl::decorate_mhd_response(MHD_Response* response,
 }
 
 struct MHD_Response* webserver_impl::get_raw_response_with_fallback(detail::modded_request* mr) {
-    // TASK-036 / DR-010: every assignment into mr->response_ uses
+    // TASK-036 / DR-010: every assignment into mr->response uses
     // emplace(std::move(...)); the optional owns the value and the
     // deferred-body trampoline keeps a pointer into it for the lifetime
     // of the modded_request.
     auto materialize_current = [&]() -> struct MHD_Response* {
-        return materialize_response(mr->response_ ? &*mr->response_ : nullptr);
+        return materialize_response(mr->response ? &*mr->response : nullptr);
     };
     try {
         struct MHD_Response* raw = materialize_current();
@@ -197,14 +197,14 @@ struct MHD_Response* webserver_impl::get_raw_response_with_fallback(detail::modd
             // TASK-031: no exception was thrown, but the body materializer
             // returned null. Route through the safe internal-error path so
             // a misbehaving user handler can't escape.
-            mr->response_.emplace(run_internal_error_handler_safely(
+            mr->response.emplace(run_internal_error_handler_safely(
                 mr, "materialize_response returned null"));
             raw = materialize_current();
         }
         return raw;
     } catch(const std::invalid_argument&) {
         try {
-            mr->response_.emplace(not_found_page(mr));
+            mr->response.emplace(not_found_page(mr));
             return materialize_current();
         } catch(...) {
             return nullptr;
@@ -212,7 +212,7 @@ struct MHD_Response* webserver_impl::get_raw_response_with_fallback(detail::modd
     } catch(const std::exception& e) {
         log_dispatch_error(std::string("materialize threw: ") + e.what());
         try {
-            mr->response_.emplace(run_internal_error_handler_safely(mr, e.what()));
+            mr->response.emplace(run_internal_error_handler_safely(mr, e.what()));
             return materialize_current();
         } catch(...) {
             return nullptr;
@@ -220,7 +220,7 @@ struct MHD_Response* webserver_impl::get_raw_response_with_fallback(detail::modd
     } catch(...) {
         log_dispatch_error("materialize threw unknown exception");
         try {
-            mr->response_.emplace(run_internal_error_handler_safely(mr,
+            mr->response.emplace(run_internal_error_handler_safely(mr,
                                                          "unknown exception"));
             return materialize_current();
         } catch(...) {
@@ -241,17 +241,17 @@ MHD_Result webserver_impl::materialize_and_queue_response(MHD_Connection* connec
         // Belt-and-suspenders: even get_raw_response_with_fallback's
         // own try/catch couldn't produce a response. Force the
         // empty-body 500 fallback so MHD always has something to queue.
-        mr->response_.emplace(internal_error_page(mr, "", /*force_our=*/true));
-        raw_response = materialize_response(&*mr->response_);
+        mr->response.emplace(internal_error_page(mr, "", /*force_our=*/true));
+        raw_response = materialize_response(&*mr->response);
     }
-    decorate_mhd_response(raw_response, *mr->response_);
-    int to_ret = MHD_queue_response(connection, mr->response_->get_status(), raw_response);
+    decorate_mhd_response(raw_response, *mr->response);
+    int to_ret = MHD_queue_response(connection, mr->response->get_status(), raw_response);
     // TASK-050: fire response_sent AFTER MHD_queue_response (so the
     // status/bytes ctx fields reflect what was actually queued) and
     // BEFORE MHD_destroy_response (so ctx.response is backed by live
     // storage). MHD copies the response data from raw_response during
     // queue, so destroying the MHD_Response below does not affect the
-    // queued bytes -- only the http_response in mr->response_ matters
+    // queued bytes -- only the http_response in mr->response matters
     // for the hook ctx pointer.
     fire_response_sent_gated(mr);
     MHD_destroy_response(raw_response);
@@ -291,7 +291,7 @@ MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection,
     }
 
     // TASK-047: a pre-handler short-circuit hook (request_received or
-    // body_chunk) already populated mr->response_. Skip route lookup,
+    // body_chunk) already populated mr->response. Skip route lookup,
     // auth, and handler dispatch -- go straight to the response queue.
     if (mr->skip_handler) {
         return materialize_and_queue_response(connection, mr);
@@ -309,7 +309,7 @@ MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection,
     // fire_request_completed_gated) can fire the per-route hook chain
     // after the server-wide one. weak_ptr does not keep the resource
     // alive; the local `hrm` shared_ptr does that for the duration of
-    // finalize_answer, after which mr->response_ no longer references
+    // finalize_answer, after which mr->response no longer references
     // the resource directly.
     if (found) {
         mr->resource_weak_ = hrm;
@@ -323,7 +323,7 @@ MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection,
     // before_handler chain, with the auth alias as the first hook
     // (registered in install_default_alias_hooks_). Per-route firing is
     // included by the helper (see fire_before_handler_gated). If either
-    // chain short-circuited, mr->response_ is already populated and we
+    // chain short-circuited, mr->response is already populated and we
     // route straight to materialize.
     if (found && fire_before_handler_gated(mr, hrm)) {
         return materialize_and_queue_response(connection, mr);
@@ -331,8 +331,8 @@ MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection,
 
     if (found) {
         dispatch_resource_handler(mr, hrm);
-    } else if (!mr->response_) {
-        mr->response_.emplace(not_found_page(mr));
+    } else if (!mr->response) {
+        mr->response.emplace(not_found_page(mr));
     }
 
     // TASK-050: after_handler fires between handler return (or 404

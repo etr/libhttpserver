@@ -34,7 +34,7 @@
 //   - Aggregate-init the ctx struct.
 //   - Call the corresponding fire_X helper on webserver_impl.
 //   - On respond_with short-circuit (after_handler only): emplace the
-//     new response into mr->response_, replacing the in-flight one
+//     new response into mr->response, replacing the in-flight one
 //     (DR-010: emplace destroys the old http_response so any deferred
 //     captures are released here, not later in ~modded_request).
 
@@ -84,7 +84,7 @@ resource_hook_table* per_route_table(detail::modded_request* mr,
 // with short-circuit detection. Carved out of finalize_answer to keep
 // the host function under CCN_MAX after TASK-051's per-route extension
 // roughly doubled the local branch count. Returns true iff either chain
-// short-circuited (mr->response_ has already been emplaced; caller must
+// short-circuited (mr->response has already been emplaced; caller must
 // route straight to materialize_and_queue_response). False means both
 // chains passed (or both gates were closed) and dispatch should proceed.
 bool webserver_impl::fire_before_handler_gated(
@@ -112,7 +112,7 @@ bool webserver_impl::fire_before_handler_gated(
         /*resource=*/hrm.get()};
     if (server_gate) {
         if (auto sc = fire_before_handler(ctx)) {
-            mr->response_.emplace(std::move(*sc));
+            mr->response.emplace(std::move(*sc));
             return true;
         }
     }
@@ -121,7 +121,7 @@ bool webserver_impl::fire_before_handler_gated(
                 [this](std::string_view m) {
                     log_dispatch_error(std::string(m));
                 })) {
-            mr->response_.emplace(std::move(*sc));
+            mr->response.emplace(std::move(*sc));
             return true;
         }
     }
@@ -129,11 +129,11 @@ bool webserver_impl::fire_before_handler_gated(
 }
 
 // TASK-050: gated fire of after_handler. Fires between
-// dispatch_resource_handler (which populates mr->response_) and
+// dispatch_resource_handler (which populates mr->response) and
 // materialize_and_queue_response. A hook returning respond_with(...)
-// REPLACES mr->response_; the new response then flows through the
+// REPLACES mr->response; the new response then flows through the
 // normal materialise + queue path. A hook returning pass() may have
-// mutated *mr->response_ in place via ctx.response->with_header(...)
+// mutated *mr->response in place via ctx.response->with_header(...)
 // (the lvalue & overload).
 //
 // Per §4.10: after_handler fires only when a handler conceptually ran.
@@ -149,17 +149,17 @@ void webserver_impl::fire_after_handler_gated(detail::modded_request* mr) {
         rtable->any_hooks(hook_phase::after_handler);
 
     if (!server_gate && !route_gate) return;
-    if (!mr->response_) return;  // defensive: never fire without a response
+    if (!mr->response) return;  // defensive: never fire without a response
 
-    after_handler_ctx ctx{mr->dhr.get(), &*mr->response_};
+    after_handler_ctx ctx{mr->dhr.get(), &*mr->response};
     if (server_gate) {
         if (auto sc = fire_after_handler(ctx)) {
-            // Short-circuit: REPLACE mr->response_ (DR-010 -- emplace
+            // Short-circuit: REPLACE mr->response (DR-010 -- emplace
             // destroys the old response, releasing any deferred captures
             // here rather than later in ~modded_request). Per-route
             // chain ALSO sees the replaced response, so refresh ctx.
-            mr->response_.emplace(std::move(*sc));
-            ctx.response = &*mr->response_;
+            mr->response.emplace(std::move(*sc));
+            ctx.response = &*mr->response;
         }
     }
     // TASK-051: per-route chain AFTER the server-wide chain. Same
@@ -169,7 +169,7 @@ void webserver_impl::fire_after_handler_gated(detail::modded_request* mr) {
                 [this](std::string_view m) {
                     log_dispatch_error(std::string(m));
                 })) {
-            mr->response_.emplace(std::move(*sc));
+            mr->response.emplace(std::move(*sc));
         }
     }
 }
@@ -177,7 +177,7 @@ void webserver_impl::fire_after_handler_gated(detail::modded_request* mr) {
 // TASK-050: gated fire of response_sent. Fires immediately AFTER
 // MHD_queue_response and BEFORE MHD_destroy_response so the
 // ctx.response pointer is still backed by live storage in
-// mr->response_ (which lives until ~modded_request in
+// mr->response (which lives until ~modded_request in
 // webserver_impl::request_completed). bytes_queued is the logical body
 // size from http_response::body_->size(); for deferred/pipe bodies this
 // is 0 and consumers should fall back to the Content-Length header.
@@ -191,10 +191,10 @@ void webserver_impl::fire_response_sent_gated(detail::modded_request* mr) {
         rtable->any_hooks(hook_phase::response_sent);
 
     if (!server_gate && !route_gate && !log_access_alias_) return;
-    if (!mr->response_) return;
+    if (!mr->response) return;
 
-    const std::size_t bytes = (mr->response_->body_ != nullptr)
-        ? mr->response_->body_->size() : 0;
+    const std::size_t bytes = (mr->response->body_ != nullptr)
+        ? mr->response->body_->size() : 0;
     // elapsed is consumed by user hooks (server-wide + per-route), not
     // by the log_access alias. Skip the steady_clock::now() call when
     // only the alias slot is going to fire.
@@ -202,8 +202,8 @@ void webserver_impl::fire_response_sent_gated(detail::modded_request* mr) {
         ? std::chrono::duration_cast<std::chrono::nanoseconds>(
               std::chrono::steady_clock::now() - mr->start_time)
         : std::chrono::nanoseconds::zero();
-    response_sent_ctx ctx{mr->dhr.get(), &*mr->response_,
-        mr->response_->get_status(), bytes, elapsed};
+    response_sent_ctx ctx{mr->dhr.get(), &*mr->response,
+        mr->response->get_status(), bytes, elapsed};
     fire_response_sent(ctx);
     // TASK-051: per-route chain AFTER server-wide + its alias slot.
     // response_sent is observation-only; no short-circuit logic.
@@ -221,7 +221,7 @@ void webserver_impl::fire_response_sent_gated(detail::modded_request* mr) {
 //   MHD_REQUEST_TERMINATED_COMPLETED_OK -> true
 //   everything else                     -> false
 //
-// `resp` is nullable -- on very early MHD failures mr->response_ may
+// `resp` is nullable -- on very early MHD failures mr->response may
 // never have been populated.
 void webserver_impl::fire_request_completed_gated(
         detail::modded_request* mr,
@@ -248,7 +248,7 @@ void webserver_impl::fire_request_completed_gated(
         return;
     }
     const http_response* resp_ptr =
-        mr->response_ ? &*mr->response_ : nullptr;
+        mr->response ? &*mr->response : nullptr;
     // mr->start_time may be epoch if answer_to_connection never ran
     // (uri_log created mr but the connection failed before
     // answer_to_connection). In that case `duration` is meaninglessly

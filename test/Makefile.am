@@ -417,7 +417,7 @@ hooks_handler_exception_slot_SOURCES = unit/hooks_handler_exception_slot_test.cp
 # - hooks_request_completed_ctx_shape: compile-time pin for the
 #   extended request_completed_ctx (resp pointer + succeeded flag).
 # - hooks_after_handler_replaces_response: after_handler returning
-#   respond_with(r2) replaces mr->response_ before MHD_queue_response.
+#   respond_with(r2) replaces mr->response before MHD_queue_response.
 # - hooks_after_handler_mutates_response_in_place: after_handler
 #   returning pass() after ctx.response->with_header(...) puts the
 #   header on the wire.

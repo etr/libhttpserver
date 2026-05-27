@@ -401,7 +401,7 @@ void handle_dispatch_exception(
             std::current_exception(), message};
         if (server_chain) {
             if (auto sc = impl->fire_handler_exception(ctx)) {
-                mr->response_.emplace(std::move(*sc));
+                mr->response.emplace(std::move(*sc));
                 return;
             }
         }
@@ -412,18 +412,18 @@ void handle_dispatch_exception(
                     [impl](std::string_view m) {
                         impl->log_dispatch_error(std::string(m));
                     })) {
-                mr->response_.emplace(std::move(*sc));
+                mr->response.emplace(std::move(*sc));
                 return;
             }
         }
         // §5.2 point 4: every hook (and the alias) ran without a
         // response -- emit the hardcoded empty-body 500 directly.
-        mr->response_.emplace(
+        mr->response.emplace(
             impl->internal_error_page(mr, "", /*force_our=*/true));
         return;
     }
     // Backwards-compat fast path: no hook chain at all.
-    mr->response_.emplace(
+    mr->response.emplace(
         impl->run_internal_error_handler_safely(mr, message));
 }
 
@@ -453,24 +453,24 @@ void webserver_impl::dispatch_resource_handler(detail::modded_request* mr,
             // by value (DR-004); the prvalue is moved into the
             // per-connection optional anchor. shared_ptr has no
             // operator->*, so call as ((*ptr).*pmf)(...).
-            mr->response_.emplace(((*hrm).*(mr->callback))(*mr->dhr));
-            if (mr->response_->get_status() == -1) {
+            mr->response.emplace(((*hrm).*(mr->callback))(*mr->dhr));
+            if (mr->response->get_status() == -1) {
                 // TASK-031: no exception was thrown, but the handler
                 // returned the default-sentinel response. Route through
                 // the safe internal-error path so a misbehaving user
                 // handler can't escape into libmicrohttpd. (The "null
                 // response" arm from v1 is now structurally impossible:
                 // the optional always holds a value at this point.)
-                mr->response_.emplace(run_internal_error_handler_safely(
+                mr->response.emplace(run_internal_error_handler_safely(
                     mr, "handler returned null response"));
             }
             return;
         }
         // Method not allowed: serialize the allow-mask into a header.
-        mr->response_.emplace(method_not_allowed_page(mr));
+        mr->response.emplace(method_not_allowed_page(mr));
         std::string header_value = serialize_allow_methods(hrm->get_allowed_methods());
         if (!header_value.empty()) {
-            mr->response_->with_header(http_utils::http_header_allow, header_value);
+            mr->response->with_header(http_utils::http_header_allow, header_value);
         }
     } catch (const std::exception& e) {
         // TASK-031 / DR-009 §5.2 point 2: handler threw std::exception.

@@ -9,8 +9,8 @@
 //  observed on the wire; the response from the resource is NOT."
 //
 // after_handler fires between dispatch_resource_handler (which populates
-// mr->response_ with the resource's reply) and materialize_and_queue_response.
-// A respond_with(...) action REPLACES mr->response_ so the resource's
+// mr->response with the resource's reply) and materialize_and_queue_response.
+// A respond_with(...) action REPLACES mr->response so the resource's
 // reply is discarded.
 
 #include <curl/curl.h>

@@ -52,7 +52,7 @@ namespace httpserver {
 
 // TASK-036 / DR-004 / PRD-RSP-REQ-007: render_* virtuals return
 // http_response by value. The webserver dispatch path moves the value
-// into mr->response_ (an std::optional<http_response> living on the
+// into mr->response (an std::optional<http_response> living on the
 // per-connection modded_request, see §5.3) and keeps it alive until
 // MHD fires request_completed. The default render() returns a
 // default-constructed http_response whose status_code_ == -1 is the

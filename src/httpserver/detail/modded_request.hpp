@@ -65,13 +65,13 @@ struct modded_request {
     std::unique_ptr<http_request> dhr = nullptr;
     // DR-010 / §5.3: anchor kept alive until request_completed.
     // See webserver_impl.hpp and specs/architecture for full contract.
-    std::optional<http_response> response_;
+    std::optional<http_response> response;
     bool has_body = false;
     // TASK-047: set by a pre-handler hook short-circuit (request_received
     // or body_chunk returning hook_action::respond_with(...)). When true,
     // finalize_answer skips resource resolution / auth / dispatch entirely
     // and goes straight to materialize_and_queue_response on the
-    // pre-populated mr->response_. Defaults false; cleared only by the
+    // pre-populated mr->response. Defaults false; cleared only by the
     // modded_request destructor.
     bool skip_handler = false;
 

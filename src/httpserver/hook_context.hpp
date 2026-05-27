@@ -281,7 +281,7 @@ struct response_sent_ctx {
  *
  * @note `resp` is NULLABLE. On early-failure paths (e.g., a
  *   `request_received` hook returning `respond_with(413)`),
- *   `mr->response_` is populated and `resp` points into it. On paths
+ *   `mr->response` is populated and `resp` points into it. On paths
  *   where MHD terminates the request before any response object is
  *   built, `resp` is `nullptr`.
  * @note `succeeded` maps from `MHD_RequestTerminationCode`:
