@@ -128,6 +128,14 @@ void webserver_impl::request_completed(void *cls, struct MHD_Connection *connect
     //     both atomically. The next request on this keep-alive connection
     //     reuses the same memory (verified by http_request_arena unit test).
     //
+    // Unconditional release is correct regardless of the `toe`
+    // (MHD_RequestTerminationCode) value: step (1) above always destroys
+    // the modded_request (and thus all arena-backed objects) before this
+    // point, so the arena holds no live objects for any termination code,
+    // including MHD_REQUEST_TERMINATED_WITH_ERROR. Resetting unconditionally
+    // is therefore both safe and necessary to prepare the arena for the next
+    // keep-alive request. (code-quality-reviewer-iter1-4)
+    //
     // MHD ordering guarantee: NOTIFY_COMPLETED always fires before
     // NOTIFY_CLOSED for the same connection (MHD documentation, section
     // "Thread model guarantees"). Therefore the connection_state pointer

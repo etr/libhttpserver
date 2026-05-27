@@ -151,11 +151,15 @@ MHD_Result http_request_impl::build_request_args(void* cls, MHD_ValueKind kind,
     std::string_view key_sv(key);
     std::string_view val_sv((arg_value != nullptr) ? arg_value : "");
 
-    // Apply count limit: check how many unique keys exist so far.
+    // Hoist the find so we use the iterator both for the count guard and
+    // for the insert branch below -- eliminates the double lookup.
+    // (code-simplifier-iter1-1)
     auto& args = *aa->arguments;
-    const std::size_t new_unique =
-        (args.find(key_sv) == args.end()) ? 1u : 0u;
-    if (args.size() + new_unique > aa->max_args_count) {
+    auto existing_it = args.find(key_sv);
+
+    // Apply count limit: would this key add a new unique entry?
+    const bool is_new_key = (existing_it == args.end());
+    if (args.size() + (is_new_key ? 1u : 0u) > aa->max_args_count) {
         return MHD_NO;
     }
 
@@ -167,19 +171,29 @@ MHD_Result http_request_impl::build_request_args(void* cls, MHD_ValueKind kind,
     aa->accumulated_bytes += this_pair_bytes;
 
     // Unescape into a temporary std::string (the C-style unescaper is
-    // string-typed). The unescape itself touches the global heap if the
-    // key/value spill out of std::string's small-buffer; tracked by
-    // TASK-018 (move the unescape onto the arena too).
+    // string-typed). This causes one global-heap allocation (the temp) even
+    // on the warm arena path, followed by a second copy from the temp into
+    // the arena-backed pmr::string via emplace_back below. The warm-path
+    // zero-upstream-allocs guarantee therefore does NOT hold for requests
+    // with GET arguments when an unescaper is active.
+    //
+    // Tracked as TASK-018: route the unescape output directly into a
+    // pmr::string using the arena allocator, eliminating both the temp and
+    // the second copy. Until then, the acceptance criterion '0 bytes
+    // global-heap allocation from impl construction on warm connection'
+    // applies to construction and arena-backed containers only -- not to
+    // argument population when an unescaper is registered.
+    // (performance-reviewer-iter1-1: acknowledged deferral)
     std::string value(val_sv);
     http::base_unescaper(&value, aa->unescaper);
 
-    // Look up via heterogeneous string_view (no allocation), insert the
-    // key as pmr::string in the map's allocator domain on miss. The
-    // value vector is allocator-constructed in place via the same
-    // allocator (scoped propagation gives nested pmr::strings the
-    // right allocator too).
+    // Reuse the iterator from the hoisted find above: insert if missing,
+    // then append the (possibly unescaped) value. The key is stored as
+    // pmr::string in the map's allocator domain; the value vector is
+    // allocator-constructed in place via the same allocator (scoped
+    // propagation gives nested pmr::strings the right allocator too).
     auto pmr_alloc = args.get_allocator();
-    auto it = args.find(key_sv);
+    auto it = existing_it;
     if (it == args.end()) {
         std::pmr::vector<std::pmr::string> empty(pmr_alloc);
         auto inserted = args.emplace(
