@@ -19,7 +19,12 @@ Eliminate macro pollution from public headers by moving every `#define` constant
 - Blocks: TASK-033 (builder validation may reference port constants)
 
 **Acceptance Criteria:**
-- `grep -E '^\s*#define\s' src/httpserver/*.hpp` returns 0 lines (PRD §3.3 acceptance).
+- All seven value-constant macros (`DEFAULT_WS_PORT`, `DEFAULT_WS_TIMEOUT`, `DEFAULT_MASK_VALUE`,
+  `NOT_FOUND_ERROR`, `METHOD_ERROR`, `NOT_METHOD_ERROR`, `GENERIC_ERROR`) are absent from
+  `src/httpserver/*.hpp`. Note: include guards, the `COMPARATOR` function-like macro, and the
+  Windows platform shims (`_WINDOWS`, `_WIN32_WINNT`) are out of scope — they predate this task
+  and are not value constants. The PRD §3.3 grep pattern (`grep -E '^\s*#define\s'`) matches
+  these excluded forms; they are expected to remain.
 - Existing tests that referenced the macros via `<httpserver.hpp>` still resolve through `httpserver::constants::*`.
 - Typecheck passes.
 - Tests pass.
