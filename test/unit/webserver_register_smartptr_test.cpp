@@ -55,6 +55,12 @@ using httpserver::http_resource;
 using httpserver::http_response;
 using httpserver::webserver;
 
+// PORT and the PORT+N offsets below are fixed numeric values shared by all
+// tests in this TU. The tests run sequentially (single-process), so the
+// offsets (PORT+0 through PORT+5) do not conflict with each other.
+// If a future parallel test runner binds the same ports concurrently, switch
+// to create_webserver(0) and retrieve the OS-assigned port via
+// ws.get_bound_port() after ws.start().
 #define PORT 8080
 
 namespace {
@@ -140,6 +146,11 @@ static_assert(!has_raw_register_resource<webserver>::value,
 
 LT_BEGIN_SUITE(webserver_register_smartptr_suite)
     void set_up() {
+        // Reset the static dtor_count before every test so tests do not
+        // accumulate each other's destructor calls. This relies on the
+        // current runner executing tests sequentially; if a parallel
+        // runner is ever introduced, replace dtor_count with a per-test
+        // local atomic passed by reference.
         counted_resource::dtor_count = 0;
     }
 
@@ -149,6 +160,12 @@ LT_END_SUITE(webserver_register_smartptr_suite)
 // Acceptance criterion (verbatim from TASK-023 spec):
 //   "auto r = std::make_unique<my_resource>();
 //    ws.register_resource('/foo', std::move(r)); compiles and serves."
+//
+// Note: the static_asserts above (lines 101-137) already verify the
+// compile-time contract. This test adds the runtime "serves" signal via a
+// real curl round-trip, making it effectively an integration test embedded
+// in this unit TU. The network I/O is intentional — it satisfies the spec's
+// explicit "compiles AND serves" requirement.
 LT_BEGIN_AUTO_TEST(webserver_register_smartptr_suite,
                    unique_ptr_overload_compiles_and_serves)
     webserver ws{create_webserver(PORT)};
@@ -167,6 +184,7 @@ LT_BEGIN_AUTO_TEST(webserver_register_smartptr_suite,
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, std::string("OK"));
     curl_easy_cleanup(curl);
+    curl_global_cleanup();  // mirror curl_global_init to keep state balanced
     ws.stop();
 LT_END_AUTO_TEST(unique_ptr_overload_compiles_and_serves)
 
@@ -203,25 +221,27 @@ LT_END_AUTO_TEST(shared_ptr_caller_keeps_resource_alive)
 LT_BEGIN_AUTO_TEST(webserver_register_smartptr_suite,
                    null_unique_ptr_throws)
     webserver ws{create_webserver(PORT + 3)};
-    bool threw = false;
+    bool caught_invalid_argument = false;
     try {
         ws.register_resource("/x", std::unique_ptr<http_resource>{});
     } catch (const std::invalid_argument&) {
-        threw = true;
+        caught_invalid_argument = true;
     }
-    LT_CHECK_EQ(threw, true);
+    // Assert after the try-catch so a spurious exception inside the catch
+    // branch cannot mask a missed throw by leaving the flag unset.
+    LT_CHECK_EQ(caught_invalid_argument, true);
 LT_END_AUTO_TEST(null_unique_ptr_throws)
 
 LT_BEGIN_AUTO_TEST(webserver_register_smartptr_suite,
                    null_shared_ptr_throws)
     webserver ws{create_webserver(PORT + 4)};
-    bool threw = false;
+    bool caught_invalid_argument = false;
     try {
         ws.register_resource("/x", std::shared_ptr<http_resource>{});
     } catch (const std::invalid_argument&) {
-        threw = true;
+        caught_invalid_argument = true;
     }
-    LT_CHECK_EQ(threw, true);
+    LT_CHECK_EQ(caught_invalid_argument, true);
 LT_END_AUTO_TEST(null_shared_ptr_throws)
 
 // New void-returning API replaces v1's silent `return false` on
@@ -231,13 +251,13 @@ LT_BEGIN_AUTO_TEST(webserver_register_smartptr_suite,
                    duplicate_registration_throws)
     webserver ws{create_webserver(PORT + 5)};
     ws.register_resource("/dup", std::make_shared<ok_resource>());
-    bool threw = false;
+    bool caught_invalid_argument = false;
     try {
         ws.register_resource("/dup", std::make_shared<ok_resource>());
     } catch (const std::invalid_argument&) {
-        threw = true;
+        caught_invalid_argument = true;
     }
-    LT_CHECK_EQ(threw, true);
+    LT_CHECK_EQ(caught_invalid_argument, true);
 LT_END_AUTO_TEST(duplicate_registration_throws)
 
 LT_BEGIN_AUTO_TEST_ENV()

@@ -119,21 +119,31 @@ void webserver::register_impl_(const std::string& resource,
 
     if (!result.second) {
         // TASK-023: v1 returned false on duplicate. The new void API
-        // throws so the caller cannot silently lose ownership of a
-        // moved-in unique_ptr (it was destroyed inside the conversion
-        // to shared_ptr above; throwing surfaces the failure).
+        // throws so the caller cannot silently lose ownership. For the
+        // unique_ptr overload the resource was moved into a shared_ptr by
+        // the inline template shim in webserver.hpp before this function
+        // was entered; it will be destroyed when the shared_ptr parameter
+        // 'res' is unwound by this exception, cleanly releasing ownership.
         throw std::invalid_argument(
             "A resource is already registered at this path");
     }
 
-    bool is_exact = !family && idx.get_url_pars().empty();
-    if (is_exact) {
+    // is_plain_path: true when the route has no wildcards of either kind
+    // (not a family/prefix route AND no parameterized URL segments). Only
+    // plain-path routes go into the fast string-keyed lookup map.
+    bool is_plain_path = !family && idx.get_url_pars().empty();
+    if (is_plain_path) {
         impl_->registered_resources_str.insert(
             {idx.get_url_complete(), result.first->second});
     }
     if (idx.is_regex_compiled()) {
         impl_->registered_resources_regex.insert({idx, res});
     }
+    // Release the write lock before invalidating the cache.
+    // invalidate_route_cache() acquires route_cache_mutex_ independently;
+    // holding registered_resources_mutex across that call would invert the
+    // lock order documented in webserver_impl.hpp (cache mutex is always
+    // acquired AFTER table mutex, never while table mutex is held).
     registered_resources_lock.unlock();
 
     impl_->register_v2_route(idx, std::move(res), family);

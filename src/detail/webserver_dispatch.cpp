@@ -231,6 +231,10 @@ webserver_impl::lookup_route_cache(const std::string& key) {
     // Cache hit — promote to LRU front and copy the match data while
     // still under the cache lock, so a concurrent invalidation can't
     // free the cached endpoint out from under us.
+    // The shared_ptr copy (cached.resource) performs an atomic refcount bump
+    // while holding route_cache_mutex_ exclusively. This is the hottest
+    // point in the dispatch path; the atomic op is unavoidable as long as
+    // callers need the resource to survive a concurrent unregister_resource.
     route_cache_list.splice(route_cache_list.begin(), route_cache_list, cache_it->second);
     const route_cache_entry& cached = cache_it->second->second;
     return regex_route_lookup{
@@ -313,15 +317,21 @@ bool webserver_impl::resolve_resource_for_request(detail::modded_request* mr,
         return true;
     }
 
-    auto fe = registered_resources_str.find(mr->standardized_url.c_str());
-    if (fe != registered_resources_str.end()) {
-        hrm = fe->second;
+    auto exact_it = registered_resources_str.find(mr->standardized_url.c_str());
+    if (exact_it != registered_resources_str.end()) {
+        // Copy the shared_ptr (atomic refcount bump) while the shared_lock
+        // on registered_resources_mutex is still held. The copy extends the
+        // resource's lifetime past a concurrent unregister_path that might
+        // erase this slot — without the copy, dispatch_resource_handler
+        // could hold a dangling pointer. The single atomic op is the
+        // unavoidable cost of the use-after-unregister safety guarantee.
+        hrm = exact_it->second;
         // Exact-match: the registration key equals the standardized URL.
         // Copy into modded_request so the hook context's string_view is
         // safe across hook calls even if a concurrent unregister_path
         // erases the slot.
         if (need_path_template) {
-            mr->matched_path_template = fe->first;
+            mr->matched_path_template = exact_it->first;
             mr->matched_is_prefix = false;
         }
         return true;

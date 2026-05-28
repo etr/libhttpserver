@@ -166,6 +166,17 @@ class webserver_impl {
         std::shared_ptr<::httpserver::http_resource> resource;
     };
     static constexpr size_t ROUTE_CACHE_MAX_SIZE = 256;
+    // Performance note (perf-reviewer finding, TASK-023 review): every
+    // cache hit acquires route_cache_mutex_ exclusively to promote the
+    // touched entry to the LRU front (splice). Under high concurrency this
+    // serialises all dispatch threads at the hottest lookup point.
+    // Future improvement options:
+    //   - Skip LRU promotion under lock contention (try_lock + approximate LRU).
+    //   - Replace list+map with a lock-free or epoch-based structure.
+    //   - Move to the v2 route_cache_v2 which is already backed by a
+    //     concurrent-safe implementation (see route_cache.hpp).
+    // The v1 cache below is retained only for the legacy resolve_resource_for_request
+    // path and will be removed at Cycle K dispatch cutover.
     std::mutex route_cache_mutex_;
     std::list<std::pair<std::string, route_cache_entry>> route_cache_list;
     std::unordered_map<std::string,
