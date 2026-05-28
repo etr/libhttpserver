@@ -18,6 +18,10 @@
      USA
 */
 
+// TASK-014: this detail header uses a dual-mode gate (_HTTPSERVER_HPP_INSIDE_ OR
+// HTTPSERVER_COMPILATION) because webserver.hpp (a public header) still
+// transitively includes it. Once TASK-014 lands the PIMPL split removing that
+// transitive include, tighten this gate to HTTPSERVER_COMPILATION-only.
 #if !defined (_HTTPSERVER_HPP_INSIDE_) && !defined (HTTPSERVER_COMPILATION)
 #error "Only <httpserver.hpp> or <httpserverpp> can be included directly."
 #endif

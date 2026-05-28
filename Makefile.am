@@ -46,7 +46,8 @@ EXTRA_DIST = libhttpserver.pc.in $(DX_CONFIG) scripts/extract-release-notes.sh s
 	scripts/check-complexity.sh scripts/check-duplication.sh \
 	scripts/check-file-size.sh \
 	scripts/verify-installed-examples.sh \
-	test/headers/consumer_direct.cpp test/headers/consumer_detail.cpp test/headers/consumer_umbrella.cpp \
+	test/headers/consumer_direct.cpp test/headers/consumer_detail.cpp test/headers/consumer_detail_modded.cpp \
+	test/headers/consumer_umbrella.cpp \
 	test/headers/consumer_post_umbrella.cpp \
 	test/headers/consumer_umbrella_no_backend.cpp
 
@@ -62,10 +63,11 @@ EXTRA_DIST = libhttpserver.pc.in $(DX_CONFIG) scripts/extract-release-notes.sh s
 #   A.3 a consumer including only the umbrella, WITHOUT HTTPSERVER_COMPILATION,
 #       must compile cleanly.
 #
-# The CXX invocations below override CXXFLAGS to '' so that
-# -DHTTPSERVER_COMPILATION (injected by configure.ac into CXXFLAGS for the
-# library and test build) does NOT leak into the consumer-style compile. We
-# still pass -std=c++20 explicitly because libhttpserver requires C++20.
+# The CXX invocations below omit CXXFLAGS, AM_CPPFLAGS, and per-target CPPFLAGS
+# so that -DHTTPSERVER_COMPILATION (set per-directory in src/Makefile.am and
+# test/Makefile.am AM_CPPFLAGS, not in configure.ac global CXXFLAGS) does NOT
+# leak into the consumer-style compile. We still pass -std=c++20 explicitly
+# because libhttpserver requires C++20.
 # ---------------------------------------------------------------------------
 
 # Compose CXX with: explicit -std, the source/build include search paths used by
@@ -74,7 +76,7 @@ EXTRA_DIST = libhttpserver.pc.in $(DX_CONFIG) scripts/extract-release-notes.sh s
 # that -DHTTPSERVER_COMPILATION (set in src/ and test/ AM_CPPFLAGS) cannot
 # leak into the consumer-style compile. A true consumer never has that macro.
 CHECK_HEADERS_CXX = $(CXX) -std=c++20 -I$(top_builddir) -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver $(CPPFLAGS)
-CHECK_HEADERS_GATE_MSG = Only <httpserver.hpp> or <httpserverpp> can be included directly
+CHECK_HEADERS_GATE_MSG = Only <httpserver.hpp> or <httpserverpp> can be included directly.
 
 check-headers:
 	@echo "=== check-headers A.1: direct public-header include must fail ==="
@@ -93,6 +95,11 @@ check-headers:
 	@rm -f check-headers-A1.log
 	@echo "  PASS: A.1 gate fired as expected"
 	@echo "=== check-headers A.2: direct detail-header include must fail ==="
+	@# NOTE: A.2 currently fires for the same reason as A.1 (neither macro defined).
+	@# After TASK-014 tightens the detail gate to HTTPSERVER_COMPILATION-only,
+	@# consumer_detail.cpp will add '#define _HTTPSERVER_HPP_INSIDE_' to exercise
+	@# the stricter path. Do not collapse A.2 into A.1 — the include path distinction
+	@# (detail/ vs public) is valuable and A.2 becomes a discriminating test post-TASK-014.
 	@if $(CHECK_HEADERS_CXX) -c $(top_srcdir)/test/headers/consumer_detail.cpp -o /dev/null 2>check-headers-A2.log; then \
 	    echo "FAIL: consumer_detail.cpp compiled but should have errored"; \
 	    cat check-headers-A2.log; \
@@ -107,6 +114,22 @@ check-headers:
 	fi
 	@rm -f check-headers-A2.log
 	@echo "  PASS: A.2 gate fired as expected"
+	@echo "=== check-headers A.2b: direct detail-header (modded_request) include must fail ==="
+	@# Complements A.2 (http_endpoint.hpp); both detail headers must carry the gate.
+	@if $(CHECK_HEADERS_CXX) -c $(top_srcdir)/test/headers/consumer_detail_modded.cpp -o /dev/null 2>check-headers-A2b.log; then \
+	    echo "FAIL: consumer_detail_modded.cpp compiled but should have errored"; \
+	    cat check-headers-A2b.log; \
+	    rm -f check-headers-A2b.log; \
+	    exit 1; \
+	fi
+	@if ! grep -q "$(CHECK_HEADERS_GATE_MSG)" check-headers-A2b.log; then \
+	    echo "FAIL: consumer_detail_modded.cpp failed but not for the gate reason"; \
+	    cat check-headers-A2b.log; \
+	    rm -f check-headers-A2b.log; \
+	    exit 1; \
+	fi
+	@rm -f check-headers-A2b.log
+	@echo "  PASS: A.2b gate fired as expected (modded_request.hpp)"
 	@echo "=== check-headers A.3: umbrella include must succeed ==="
 	@if ! $(CHECK_HEADERS_CXX) -c $(top_srcdir)/test/headers/consumer_umbrella.cpp -o consumer_umbrella.check.o 2>check-headers-A3.log; then \
 	    echo "FAIL: consumer_umbrella.cpp did not compile"; \
@@ -133,22 +156,28 @@ check-headers:
 	@echo "  PASS: A.4 umbrella does not leak _HTTPSERVER_HPP_INSIDE_"
 
 # check-install-layout asserts that `make install DESTDIR=$(STAGE)` produces
-# a public include tree with NO `detail/` directory and NO `*_impl.hpp` files.
+# a public include tree with NO `detail/` directory and NO `*_impl.hpp` files,
+# and that the httpserverpp symlink is present.
 # This protects the public/private split as described in TASK-002 / DR-002.
+#
+# NOTE: when invoked standalone (without CHECK_INSTALL_SHARED=yes), this target
+# runs `make install` internally, which requires the library to have been built
+# first. If the library has not been compiled yet, the staged install will fail
+# with a confusing error. Always run `make` before `make check-install-layout`
+# when invoking standalone outside of `make check`.
 CHECK_INSTALL_STAGE = $(abs_top_builddir)/.install-stage
 
 check-install-layout:
 	@echo "=== check-install-layout: staged install must hide detail/ and *_impl.hpp ==="
 	@if test "$(CHECK_INSTALL_SHARED)" != "yes"; then \
 	    rm -rf $(CHECK_INSTALL_STAGE); \
-	    $(MAKE) $(AM_MAKEFLAGS) install DESTDIR=$(CHECK_INSTALL_STAGE) >check-install.log 2>&1 || { \
+	    mkdir -p $(CHECK_INSTALL_STAGE); \
+	    $(MAKE) $(AM_MAKEFLAGS) install DESTDIR=$(CHECK_INSTALL_STAGE) >$(CHECK_INSTALL_STAGE)/install.log 2>&1 || { \
 	        echo "FAIL: staged install failed"; \
-	        cat check-install.log; \
-	        rm -f check-install.log; \
+	        cat $(CHECK_INSTALL_STAGE)/install.log; \
 	        rm -rf $(CHECK_INSTALL_STAGE); \
 	        exit 1; \
 	    }; \
-	    rm -f check-install.log; \
 	fi
 	@leaked_detail=`find $(CHECK_INSTALL_STAGE) -type d -name detail 2>/dev/null`; \
 	if test -n "$$leaked_detail"; then \
@@ -157,6 +186,8 @@ check-install-layout:
 	    if test "$(CHECK_INSTALL_SHARED)" != "yes"; then rm -rf $(CHECK_INSTALL_STAGE); fi; \
 	    exit 1; \
 	fi
+	@# '*_impl.hpp' is the agreed suffix for PIMPL implementation headers (DR-002).
+	@# Any such file appearing in the installed tree indicates a Makefile regression.
 	@leaked_impl=`find $(CHECK_INSTALL_STAGE) -name '*_impl.hpp' 2>/dev/null`; \
 	if test -n "$$leaked_impl"; then \
 	    echo "FAIL: *_impl.hpp file leaked into install:"; \
@@ -167,6 +198,11 @@ check-install-layout:
 	@umbrella_count=`find $(CHECK_INSTALL_STAGE) -name 'httpserver.hpp' | wc -l | tr -d ' '`; \
 	if test "$$umbrella_count" != "1"; then \
 	    echo "FAIL: expected exactly 1 installed httpserver.hpp, got $$umbrella_count"; \
+	    if test "$(CHECK_INSTALL_SHARED)" != "yes"; then rm -rf $(CHECK_INSTALL_STAGE); fi; \
+	    exit 1; \
+	fi
+	@if ! test -L $(CHECK_INSTALL_STAGE)$(includedir)/httpserverpp; then \
+	    echo "FAIL: httpserverpp symlink not installed under $(includedir)"; \
 	    if test "$(CHECK_INSTALL_SHARED)" != "yes"; then rm -rf $(CHECK_INSTALL_STAGE); fi; \
 	    exit 1; \
 	fi
@@ -398,7 +434,12 @@ bench:
 
 .PHONY: bench
 
-MOSTLYCLEANFILES = $(DX_CLEANFILES) *.gcda *.gcno *.gcov
+MOSTLYCLEANFILES = $(DX_CLEANFILES) *.gcda *.gcno *.gcov \
+	check-headers-A1.log check-headers-A2.log check-headers-A2b.log \
+	check-headers-A3.log check-headers-A4.log \
+	consumer_umbrella.check.o \
+	check-hygiene.i check-hygiene.err check-hygiene-install.log \
+	check-shared-install.log
 DISTCLEANFILES = DIST_REVISION
 
 clean-local:

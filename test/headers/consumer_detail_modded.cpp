@@ -18,13 +18,14 @@
      USA
 */
 
-// Negative test (Check A.2): a consumer including a detail header directly,
+// Negative test (Check A.2b): a consumer including modded_request.hpp directly,
 // without HTTPSERVER_COMPILATION or _HTTPSERVER_HPP_INSIDE_, must hit the gate.
-// The dual-mode gate fires because neither macro is defined in this TU.
+// Complements consumer_detail.cpp (A.2) which covers http_endpoint.hpp; both
+// detail headers carry the same gate and both must be verified independently.
 //
 // TODO(TASK-014): when TASK-014 tightens the detail gate to HTTPSERVER_COMPILATION-
 // only (by removing the transitive include from webserver.hpp), add
-// '#define _HTTPSERVER_HPP_INSIDE_' here so A.2 validates that _HTTPSERVER_HPP_INSIDE_
+// '#define _HTTPSERVER_HPP_INSIDE_' here so A.2b validates that _HTTPSERVER_HPP_INSIDE_
 // alone is still rejected by the stricter HTTPSERVER_COMPILATION-only gate.
-#include "httpserver/detail/http_endpoint.hpp"
+#include "httpserver/detail/modded_request.hpp"
 int main() { return 0; }
