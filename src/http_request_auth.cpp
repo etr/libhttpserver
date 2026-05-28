@@ -69,18 +69,18 @@ std::string_view http_request::get_pass() const {
     }
     return impl_->password;
 #else
+    // TASK-034 §7 sentinel: BAUTH disabled at build time -> empty view.
     return std::string_view{};
 #endif
 }
 
 std::string_view http_request::get_digested_user() const {
 #ifdef HAVE_DAUTH
-    if (!impl_->digested_user.empty()) {
-        return impl_->digested_user;
-    }
-
-    // Test-request path: connection_ is null, digested_user already set.
-    if (impl_->connection_ == nullptr) {
+    // Fast-path: cached value (non-empty) or test-request (null connection,
+    // digested_user holds whatever create_test_request().digested_user() set).
+    // The two conditions are ORed so the null-connection check is not repeated
+    // below (code-simplifier finding: redundant-guard).
+    if (!impl_->digested_user.empty() || impl_->connection_ == nullptr) {
         return impl_->digested_user;
     }
 

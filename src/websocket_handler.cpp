@@ -187,6 +187,12 @@ void websocket_handler::on_close(websocket_session&, uint16_t, const std::string
 
 namespace httpserver {
 
+// Single site for the feature name and macro string so they stay in sync
+// across all five stub methods (code-simplifier finding).
+[[noreturn]] static void throw_ws_unavailable() {
+    throw feature_unavailable("websocket", "HAVE_WEBSOCKET");
+}
+
 websocket_session::websocket_session(std::uintptr_t sock,
                                      struct MHD_UpgradeResponseHandle* urh,
                                      struct MHD_WebSocketStream* ws_stream)
@@ -195,23 +201,23 @@ websocket_session::websocket_session(std::uintptr_t sock,
 websocket_session::~websocket_session() = default;
 
 void websocket_session::send_text(const std::string&) {
-    throw feature_unavailable("websocket", "HAVE_WEBSOCKET");
+    throw_ws_unavailable();
 }
 
 void websocket_session::send_binary(const void*, size_t) {
-    throw feature_unavailable("websocket", "HAVE_WEBSOCKET");
+    throw_ws_unavailable();
 }
 
 void websocket_session::send_ping(const std::string&) {
-    throw feature_unavailable("websocket", "HAVE_WEBSOCKET");
+    throw_ws_unavailable();
 }
 
 void websocket_session::send_pong(const std::string&) {
-    throw feature_unavailable("websocket", "HAVE_WEBSOCKET");
+    throw_ws_unavailable();
 }
 
 void websocket_session::close(uint16_t, const std::string&) {
-    throw feature_unavailable("websocket", "HAVE_WEBSOCKET");
+    throw_ws_unavailable();
 }
 
 bool websocket_session::is_valid() const {

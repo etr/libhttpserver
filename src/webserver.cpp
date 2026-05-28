@@ -300,33 +300,32 @@ webserver::webserver(const create_webserver& params):
 // return type from the function name (both spelled `features`). The
 // returned aggregate uses the same elaborated form for the same reason.
 struct webserver::features webserver::features() noexcept {
-    // The aggregate-init braces below are spelled without the type name
-    // because `features` would name-collide with the surrounding member
-    // function. `return {a,b,c,d};` uses the function's declared return
-    // type (resolved via the elaborated-type-specifier above), avoiding
-    // the ambiguity entirely.
-    return {
+    // Constexpr locals resolve each HAVE_* flag once. The aggregate-init
+    // braces below omit the type name to avoid the name collision between
+    // the return type and the member function (both spelled `features`);
+    // `return {a,b,c,d};` is resolved via the elaborated-type-specifier
+    // in the function signature above.
 #ifdef HAVE_BAUTH
-        /*basic_auth =*/ true,
+    constexpr bool k_bauth = true;
 #else
-        /*basic_auth =*/ false,
+    constexpr bool k_bauth = false;
 #endif
 #ifdef HAVE_DAUTH
-        /*digest_auth =*/ true,
+    constexpr bool k_dauth = true;
 #else
-        /*digest_auth =*/ false,
+    constexpr bool k_dauth = false;
 #endif
 #ifdef HAVE_GNUTLS
-        /*tls =*/ true,
+    constexpr bool k_tls = true;
 #else
-        /*tls =*/ false,
+    constexpr bool k_tls = false;
 #endif
 #ifdef HAVE_WEBSOCKET
-        /*websocket =*/ true,
+    constexpr bool k_ws = true;
 #else
-        /*websocket =*/ false,
+    constexpr bool k_ws = false;
 #endif
-    };
+    return {k_bauth, k_dauth, k_tls, k_ws};
 }
 
 webserver::~webserver() {

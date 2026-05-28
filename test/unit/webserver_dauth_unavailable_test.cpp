@@ -74,17 +74,36 @@ LT_END_AUTO_TEST(ctor_throws_feature_unavailable_when_digest_auth_requested)
 // explicit .digest_auth(true)) must NOT throw on a HAVE_DAUTH-off build.
 // This pins that _digest_auth_enabled defaults to false via
 // digest_auth_default(), not to the hardcoded true.
+// listen_socket(false) avoids binding a real port so the test is
+// port-safe in CI (port-safety finding from test-quality-reviewer).
 LT_BEGIN_AUTO_TEST(webserver_dauth_unavailable_suite,
                    default_ctor_does_not_throw_on_dauth_off)
     bool threw = false;
     try {
-        httpserver::webserver ws{httpserver::create_webserver(8092)};
-        ws.stop();
+        httpserver::webserver ws{
+            httpserver::create_webserver(8092).listen_socket(false)};
+        (void)ws;
     } catch (const httpserver::feature_unavailable&) {
         threw = true;
     }
     LT_CHECK(!threw);
 LT_END_AUTO_TEST(default_ctor_does_not_throw_on_dauth_off)
+
+// PRD-FLG-REQ-001 third path: an *explicit* .digest_auth(false) must also
+// not throw on a HAVE_DAUTH-off build — pinning that the guard fires only
+// on true, not on every non-default value of the setter.
+LT_BEGIN_AUTO_TEST(webserver_dauth_unavailable_suite,
+                   explicit_digest_auth_false_does_not_throw_on_dauth_off)
+    bool threw = false;
+    try {
+        httpserver::webserver ws{
+            httpserver::create_webserver(8093).digest_auth(false).listen_socket(false)};
+        (void)ws;
+    } catch (const httpserver::feature_unavailable&) {
+        threw = true;
+    }
+    LT_CHECK(!threw);
+LT_END_AUTO_TEST(explicit_digest_auth_false_does_not_throw_on_dauth_off)
 #endif  // !HAVE_DAUTH
 
 LT_BEGIN_AUTO_TEST_ENV()
