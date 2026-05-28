@@ -25,6 +25,7 @@
 #ifndef SRC_HTTPSERVER_HOOK_ACTION_HPP_
 #define SRC_HTTPSERVER_HOOK_ACTION_HPP_
 
+#include <cassert>
 #include <optional>
 #include <utility>
 
@@ -101,13 +102,21 @@ class hook_action {
     /**
      * @brief Consume the wrapped response.
      *
-     * Precondition: `!is_pass()`. The action is consumed -- calling
-     * `take_response()` a second time on the same object yields an
-     * empty response (the optional has been moved-from).
+     * Precondition: `!is_pass()`. Calling `take_response()` when
+     * `is_pass()` is true (i.e., `response_` is empty) dereferences an
+     * empty `std::optional`, which is undefined behavior. A debug-mode
+     * assertion catches misuse at the firing sites (CWE-476). The
+     * `noexcept` specifier is correct because the UB path is a
+     * precondition violation, not an expected exception path.
+     *
+     * The action is consumed -- calling `take_response()` a second time
+     * on the same object yields a moved-from (empty) `http_response`.
      *
      * @return rvalue reference to the wrapped `http_response`.
      */
     [[nodiscard]] http_response&& take_response() && noexcept {
+        assert(response_.has_value() &&
+               "take_response() called on a pass-action (is_pass() == true)");
         return std::move(*response_);
     }
 

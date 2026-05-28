@@ -75,7 +75,12 @@ struct peer_address {
     std::uint16_t port = 0;
 
     // Returns a printable representation of the address (no port).
-    // Defined out-of-line in src/hook_handle.cpp.
+    // Defined out-of-line in src/peer_address.cpp. (Placement note: this
+    // struct is logically a context type, but its to_string() body lives in
+    // a separate TU to keep both hook_handle.cpp and peer_address.cpp under
+    // the per-file LOC ceiling. A future task could consolidate into a
+    // dedicated hook_context.cpp if other context types grow out-of-line
+    // bodies.)
     [[nodiscard]] std::string to_string() const;
 };
 
@@ -149,6 +154,13 @@ struct accept_ctx {
  * starts. Short-circuit-capable: returning
  * `hook_action::respond_with(r)` aborts the upload -- the body is
  * never read and the resource handler is never invoked.
+ *
+ * @security The mutable `request` pointer gives hooks FULL write access
+ * to the live request object (headers, method, body state). A buggy or
+ * compromised hook can tamper with the request in ways that bypass
+ * downstream security checks (auth, validation). Prefer an immutable
+ * view if the hook only needs to observe. TASK-046+ reviewers should
+ * audit hooks registered for this phase carefully.
  */
 struct request_received_ctx {
     http_request* request = nullptr;          // mutable: hook may set context
@@ -214,6 +226,12 @@ struct route_resolved_ctx {
  * @note `resource` is the resolved `http_resource` pointer; `nullptr`
  *   for lambda-route registrations without a stable `http_resource*`.
  *   The hook fires only for route hits (§4.10).
+ *
+ * @security The mutable `request` pointer gives hooks FULL write access
+ * to the live request object. This is intentional (e.g., the auth hook
+ * may annotate the request), but a buggy or compromised hook can tamper
+ * in ways that bypass downstream security checks. TASK-046+ reviewers
+ * should audit hooks registered for this phase carefully.
  */
 struct before_handler_ctx {
     http_request* request = nullptr;
