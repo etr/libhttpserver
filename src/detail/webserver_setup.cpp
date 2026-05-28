@@ -439,12 +439,18 @@ void webserver::block_ip(std::string_view ip) {
     std::unique_lock bans_lock(impl_->bans_mutex);
     ip_representation t_ip{std::string{ip}};
     auto it = impl_->bans.find(t_ip);
-    if (it != impl_->bans.end() && (t_ip.weight() < it->weight())) {
+    // Replace only when the incoming entry is less specific (lower weight)
+    // than the one already stored: erase the more-specific entry so the
+    // wildcard takes precedence.  When t_ip is more specific (higher weight),
+    // std::set::insert is a no-op (the key is already present) — the existing
+    // entry is kept, which is the correct outcome.  The unconditional insert
+    // below therefore covers all three cases: (1) no existing entry — insert;
+    // (2) existing entry with equal or higher weight — no-op insert; (3)
+    // existing entry with lower weight — erase first, then insert.
+    if (it != impl_->bans.end() && t_ip.weight() < it->weight()) {
         impl_->bans.erase(it);
-        impl_->bans.insert(t_ip);
-    } else {
-        impl_->bans.insert(t_ip);
     }
+    impl_->bans.insert(t_ip);
 }
 
 void webserver::unblock_ip(std::string_view ip) {

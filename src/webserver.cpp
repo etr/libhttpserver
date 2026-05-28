@@ -336,6 +336,15 @@ webserver::~webserver() {
 }
 
 void webserver::stop_and_wait() {
+    // The "wait for in-flight handlers" guarantee is provided by
+    // MHD_stop_daemon(), which is a blocking call that drains all active
+    // connections and joins libmicrohttpd's worker threads before returning.
+    // stop() calls MHD_stop_daemon() internally, so this wrapper fulfils its
+    // stronger contract without additional synchronisation.  If the contract
+    // were ever stronger than what MHD_stop_daemon() provides (e.g. an
+    // application-level quiesce step), the extra logic should be added here
+    // rather than in stop(), preserving the distinction between the two
+    // entry-points.
     stop();
 }
 
