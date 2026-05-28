@@ -107,15 +107,18 @@ v1.x is end-of-life on the day v2.0 ships.
   `route_resolved`, `before_handler`, `handler_exception`,
   `after_handler`, `response_sent`, `request_completed`,
   `connection_closed`) spanning connection, request, routing, handler,
-  and response. Multi-subscriber, server-wide and per-route. The v1
-  single-slot setters (`log_access`, `not_found_handler`,
-  `method_not_allowed_handler`, `internal_error_handler`,
-  `auth_handler`) survive as documented aliases for the corresponding
-  `add_hook` calls. Each registration returns a move-only `hook_handle`
-  whose destructor erases the entry; `hook_handle::detach()` keeps the
-  registration alive for the webserver's lifetime. See
-  `specs/architecture/04-components/hooks.md` and
-  [`README.md#lifecycle-hooks`](README.md#lifecycle-hooks). Closes:
+  and response. Five of the phases are short-circuit-capable: their
+  handlers return `hook_action` (either `hook_action::pass()` to
+  continue normal processing or `hook_action::respond(http_response)` to
+  short-circuit with a custom response). Multi-subscriber, server-wide
+  and per-route. The v1 single-slot setters (`log_access`,
+  `not_found_handler`, `method_not_allowed_handler`,
+  `internal_error_handler`, `auth_handler`) survive as documented aliases
+  for the corresponding `add_hook` calls. Each registration returns a
+  move-only `hook_handle` whose destructor erases the entry;
+  `hook_handle::detach()` keeps the registration alive for the
+  webserver's lifetime. See `specs/architecture/04-components/hooks.md`
+  and [`README.md#lifecycle-hooks`](README.md#lifecycle-hooks). Closes:
   #332 (banned-IP log, `examples/banned_ip_log.cpp`), #281 + #69
   (CLF / time-taken access log, `examples/clf_access_log.cpp`), #273
   (early 413, `examples/early_413.cpp`); partially closes #272
@@ -157,6 +160,10 @@ and see the v2 replacement.
 | `basic_auth_fail_response` | `http_response::unauthorized` |
 | `digest_auth_fail_response` | `http_response::unauthorized` |
 
+> **Note:** `shoutCAST()` is the sole camelCase survivor in the v2 public API.
+> The name maps to the SHOUTcast streaming protocol and is intentionally
+> preserved unchanged (PRD §3.7).
+
 ## What changed semantically
 
 - **Handlers return `http_response` by value.** v1 returned
@@ -168,8 +175,9 @@ and see the v2 replacement.
   `get_header(name)` (and `get_arg`, `get_cookie`, `get_footer`) returned
   by value and inserted an empty entry into the request map on miss; v2's
   versions return a reference / `string_view` and never mutate the
-  request. Container getters (`get_headers()`, `get_args()`, …) return
-  `const&` to the underlying map.
+  request. Container getters (`get_headers()`, `get_args()`,
+  `get_path_pieces()`, `get_files()`) return `const&` to the underlying
+  map.
 - **`http_response::get_header` / `get_footer` / `get_cookie` are
   const and do not insert on miss.** Mutation uses the
   `with_header` / `with_footer` / `with_cookie` chain, which returns
@@ -252,4 +260,7 @@ DR-011 ([specs/architecture/11-decisions/DR-011.md](specs/architecture/11-decisi
 - [examples/](examples/) — every example is v2.0-idiomatic.
 - [specs/product_specs.md](specs/product_specs.md) §3.1–§3.7 — the
   authoritative requirement set behind each change.
+- [specs/architecture/13-documentation.md](specs/architecture/13-documentation.md)
+  — architecture deliverable definition that names this file as an explicit
+  deliverable; the requirement lineage for this document.
 - [ChangeLog](ChangeLog) — formal per-version log.

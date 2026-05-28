@@ -284,10 +284,13 @@ check-hygiene:
 	rm -f check-hygiene.i check-hygiene.err; \
 	exit $$status
 
-# check-local runs check-install-layout and check-hygiene against a single
-# shared staged install to avoid paying two full `make install` costs on
-# every `make check`. Both sub-checks can still be invoked standalone (they
-# will do their own install when CHECK_*_SHARED is not set).
+# check-local runs the following static (no-install) checks first:
+#   check-headers, check-examples, check-readme, check-release-notes,
+#   check-doxygen, check-hooks-doc-spotcheck
+# Then runs check-install-layout and check-hygiene against a single shared
+# staged install to avoid paying two full `make install` costs on every
+# `make check`. Both install-backed sub-checks can still be invoked standalone
+# (they will do their own install when CHECK_*_SHARED is not set).
 check-local: check-headers check-examples check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck
 	@echo "=== Shared staged install for check-install-layout and check-hygiene ==="
 	@rm -rf $(abs_top_builddir)/.shared-check-stage
@@ -317,9 +320,7 @@ check-readme:
 	@echo "=== check-readme: enforce TASK-041 invariants on README.md ==="
 	@$(top_srcdir)/scripts/check-readme.sh
 
-# TASK-042: enforce static invariants on RELEASE_NOTES.md
-# (required v1/v2 tokens, sections, same-line rename pairs, arch citations,
-# disclaimer). Run as part of `make check` via check-local.
+# TASK-042: static checks on RELEASE_NOTES.md — see scripts/check-release-notes.sh
 check-release-notes:
 	@echo "=== check-release-notes: enforce TASK-042 invariants on RELEASE_NOTES.md ==="
 	@$(top_srcdir)/scripts/check-release-notes.sh
