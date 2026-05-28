@@ -25,8 +25,8 @@
 #ifndef SRC_HTTPSERVER_HTTP_UTILS_HPP_
 #define SRC_HTTPSERVER_HTTP_UTILS_HPP_
 
-// TASK-019 / TASK-020: backend headers (<microhttpd.h>, <gnutls/gnutls.h>,
-// <sys/socket.h>) are deliberately NOT included from this public header.
+// TASK-019 / TASK-020: backend headers (libmicrohttpd, GnuTLS, BSD-socket)
+// are deliberately NOT included from this public header.
 // The enums declared below previously took their integer values from
 // upstream macros (MHD_USE_*, MHD_DIGEST_AUTH_ALGO3_*, MHD_DAUTH_*,
 // GNUTLS_CRD_*), dragging the backend headers through the umbrella to
@@ -36,7 +36,7 @@
 // pin the enum values to the upstream macros so any renumber breaks
 // the build at the right place. `struct sockaddr` is forward-declared
 // at file scope; the implementations live in src/http_utils.cpp where
-// <sys/socket.h> is reachable directly.
+// the BSD-socket header is included directly.
 
 // needed to force Vista as a bare minimum to have inet_ntop (libmicro defines
 // this to include XP support as a lower version).
@@ -60,12 +60,11 @@
 #include "httpserver/http_arg_value.hpp"
 
 // Forward-declare the BSD-socket address family. Only pointer-to-incomplete
-// uses appear in this header; the .cpp side pulls in <sys/socket.h> directly.
-// MinGW spells the corresponding type via <winsock2.h>; the same forward
-// declaration is valid there since the canonical name `struct sockaddr` is
-// the same across POSIX and Win32.
+// uses appear in this header; the .cpp side includes the BSD-socket header
+// directly. MinGW/Windows uses winsock2.h; the same forward declaration is
+// valid there since the canonical name `struct sockaddr` is the same across
+// POSIX and Win32.
 struct sockaddr;
-
 
 namespace httpserver {
 

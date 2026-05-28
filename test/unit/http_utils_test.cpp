@@ -32,6 +32,12 @@
 
 #include <sys/stat.h>
 #include <unistd.h>  // TASK-020: unlink (was reachable transitively via httpserver/http_utils.hpp -> microhttpd.h)
+// Note: the hard-coded integer values for start_method_T, digest_algorithm,
+// and digest_auth_result are pinned to the upstream MHD macros via
+// static_assert blocks in src/http_utils.cpp (unconditional start_method_T
+// asserts) and src/http_utils.cpp under #ifdef HAVE_DAUTH (digest enums).
+// Those compile-time guards serve as the test coverage for enum value
+// correctness; no duplicate runtime assertions are needed here.
 #include <cstdio>
 #include <iostream>
 #include <map>

@@ -115,17 +115,19 @@ class websocket_session {
 
  private:
      // `sock` carries an MHD_socket value; the public-header type is
-     // std::intptr_t so this header does not need <microhttpd.h>.
-     // src/websocket_handler.cpp casts back to MHD_socket at the
-     // boundary and static_asserts the underlying-width invariant.
-     websocket_session(std::intptr_t sock, struct MHD_UpgradeResponseHandle* urh,
+     // std::uintptr_t (unsigned) so this header does not need <microhttpd.h>.
+     // On Windows, MHD_socket is SOCKET (UINT_PTR); storing it as a signed
+     // intptr_t loses bit-pattern fidelity when the high bit is set (CWE-681).
+     // src/websocket_handler.cpp casts back to MHD_socket at the boundary
+     // and static_asserts the underlying-width invariant.
+     websocket_session(std::uintptr_t sock, struct MHD_UpgradeResponseHandle* urh,
                        struct MHD_WebSocketStream* ws_stream);
      ~websocket_session();
 
      websocket_session(const websocket_session&) = delete;
      websocket_session& operator=(const websocket_session&) = delete;
 
-     std::intptr_t sock;
+     std::uintptr_t sock;
      struct MHD_UpgradeResponseHandle* urh;
      struct MHD_WebSocketStream* ws_stream;
      bool valid;

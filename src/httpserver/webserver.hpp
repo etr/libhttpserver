@@ -46,23 +46,19 @@
 #include "httpserver/http_utils.hpp"
 #include "httpserver/create_webserver.hpp"
 
-// TASK-020: <sys/socket.h> is deliberately NOT included from this public
-// header. The class below uses `struct sockaddr` and `struct sockaddr_storage`
-// only by pointer, so they are forward-declared at file scope. The two
-// public methods that take socket-layer types on their argument lists --
-// `get_fdset(...)` and `add_connection(...)` -- accept opaque scalar types
-// (`void*` for `fd_set*`, `unsigned int` for `socklen_t`) on the public
-// surface so callers do not have to drag in `<sys/select.h>` or
-// `<sys/socket.h>` to use the umbrella `<httpserver.hpp>` header. The
-// implementations in src/webserver.cpp cast back to the real types where
-// the BSD-socket headers are reachable directly. POSIX guarantees
-// `socklen_t` is an unsigned integral type of at least 32 bits, and
-// `unsigned int` is wider on every supported platform.
-struct sockaddr;
-struct sockaddr_storage;
+// TASK-020 / TASK-020-review: socket-layer types used by pointer only.
+// The BSD-socket and select headers are deliberately NOT included from
+// this public header. Forward declarations below avoid the transitive
+// drag of those backend headers into every consumer TU. For individual
+// method ABI notes see the get_fdset and add_connection Doxygen blocks.
+// (struct sockaddr / struct sockaddr_storage are transitively available
+// via http_utils.hpp which is included above; they are not redeclared
+// here. struct fd_set is a plain struct on all POSIX platforms and on
+// Windows via winsock2.h and can be forward-declared safely.)
+struct fd_set;
 
 // Forward declarations: backend (MHD) types are intentionally NOT pulled in.
-// libmicrohttpd's <microhttpd.h> and <pthread.h> live behind the PIMPL
+// The libmicrohttpd and pthread headers live behind the PIMPL
 // boundary in detail/webserver_impl.hpp (TASK-014).
 namespace httpserver {
 class http_resource;
@@ -298,19 +294,18 @@ class webserver {
 
      /**
       * Get the file descriptor sets for select()-based event loop integration.
-      * The three set parameters are typed as `void*` so this header does not
-      * have to include `<sys/select.h>` (which transitively pulls in
-      * `<sys/socket.h>` on most platforms). Callers MUST pass valid
-      * `fd_set*` pointers; the implementation casts back to `fd_set*`
-      * internally. Conversion from `fd_set*` to `void*` is implicit at
-      * the call site, so existing source-level callers compile unchanged.
-      * @param read_fd_set set of FDs to watch for reading (`fd_set*`)
-      * @param write_fd_set set of FDs to watch for writing (`fd_set*`)
-      * @param except_fd_set set of FDs to watch for exceptions (`fd_set*`)
+      * `struct fd_set` is forward-declared at file scope so this header does
+      * not need to include `<sys/select.h>`. The typed parameters restore
+      * compile-time type safety: the compiler rejects non-fd_set* arguments
+      * that the previous void* signature silently accepted (CWE-704).
+      * @param read_fd_set set of FDs to watch for reading
+      * @param write_fd_set set of FDs to watch for writing
+      * @param except_fd_set set of FDs to watch for exceptions
       * @param max_fd highest FD number set in any of the sets
       * @return true on success, false on error
      **/
-     bool get_fdset(void* read_fd_set, void* write_fd_set, void* except_fd_set, int* max_fd);
+     bool get_fdset(struct fd_set* read_fd_set, struct fd_set* write_fd_set,
+                    struct fd_set* except_fd_set, int* max_fd);
 
      /**
       * Get the timeout until the next MHD action is needed.
@@ -322,11 +317,10 @@ class webserver {
      /**
       * Add an externally-accepted socket connection.
       * `addrlen` is typed as `unsigned int` rather than `socklen_t` so
-      * this header does not have to include `<sys/socket.h>`. POSIX
+      * this header does not have to include the BSD-socket header. POSIX
       * guarantees `socklen_t` is an unsigned integer of at least 32 bits;
       * `unsigned int` is wider on every supported platform. The
-      * implementation in src/webserver.cpp passes the value directly to
-      * MHD_add_connection, which takes a `socklen_t`.
+      * implementation passes the value directly to MHD_add_connection.
       * @param client_socket the accepted client socket
       * @param addr the client address (forward-declared `struct sockaddr*`)
       * @param addrlen length of the address (in bytes)

@@ -264,7 +264,7 @@ void webserver_impl::upgrade_handler(void *cls, struct MHD_Connection* connectio
         return;
     }
 
-    websocket_session session(sock, urh, ws_stream);
+    websocket_session session(static_cast<std::uintptr_t>(sock), urh, ws_stream);
     handler->on_open(session);
 
     // Process any initial data that MHD may have buffered

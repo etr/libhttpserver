@@ -22,14 +22,14 @@
 
 // TASK-020: <microhttpd.h> is no longer pulled in transitively by
 // <httpserver/http_utils.hpp>. Include it directly here so the
-// MHD_*-using bodies below still compile. <sys/socket.h> likewise
-// must be requested explicitly: it provides struct sockaddr's full
-// definition for the implementations of get_ip_str / get_port /
-// ip_representation::ip_representation that take a `struct sockaddr*`.
-#include <microhttpd.h>
+// MHD_*-using bodies below still compile.
+#include <microhttpd.h>  // TASK-020: needed directly; no longer reachable transitively
 
+// TASK-020: <sys/socket.h> (or its Windows equivalent) must also be
+// requested explicitly: it provides struct sockaddr's full definition
+// for get_ip_str / get_port / ip_representation::ip_representation.
 #if defined(_WIN32) && !defined(__CYGWIN__)
-#include <winsock2.h>
+#include <winsock2.h>    // TASK-020: needed directly; no longer reachable transitively
 #include <ws2tcpip.h>
 #include <io.h>
 #include <sys/stat.h>
@@ -39,7 +39,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <netinet/in.h>
-#include <sys/socket.h>
+#include <sys/socket.h>  // TASK-020: needed directly; no longer reachable transitively
 #include <sys/types.h>
 #endif  // WIN32 check
 
@@ -452,6 +452,9 @@ static_assert(
     static_cast<int>(http_utils::EXTERNAL_SELECT) == MHD_USE_AUTO,
     "start_method_T::EXTERNAL_SELECT diverged from MHD_USE_AUTO");
 
+// digest_algorithm and digest_auth_result: pinned only when HAVE_DAUTH is set
+// because the MHD_DIGEST_AUTH_ALGO3_* and MHD_DAUTH_* macros are only defined
+// by <microhttpd.h> in digest-auth-enabled builds.
 #ifdef HAVE_DAUTH
 static_assert(
     static_cast<int>(http_utils::digest_algorithm::MD5)

@@ -37,19 +37,18 @@
 
 namespace httpserver {
 
-// TASK-020: pin the public-header `std::intptr_t` choice for the
-// websocket socket handle to libmicrohttpd's `MHD_socket` typedef.
-// `intptr_t` is at least as wide as any integer-or-pointer scalar type
-// on every supported platform; if a future MHD release widens
-// `MHD_socket` past `intptr_t`, this assert fails and the public
-// signature must be revisited.
-static_assert(sizeof(MHD_socket) <= sizeof(std::intptr_t),
-              "MHD_socket is wider than std::intptr_t on this platform; "
+// TASK-020-review: pin the public-header `std::uintptr_t` choice for the
+// websocket socket handle to libmicrohttpd's `MHD_socket` typedef. Using
+// uintptr_t (unsigned) rather than intptr_t preserves all bit patterns of
+// SOCKET/MHD_socket through the round-trip on Windows where SOCKET is
+// UINT_PTR and valid descriptors can have the high bit set (CWE-681).
+static_assert(sizeof(MHD_socket) <= sizeof(std::uintptr_t),
+              "MHD_socket is wider than std::uintptr_t on this platform; "
               "websocket_session::sock's public type must be widened.");
 
 // websocket_session implementation
 
-websocket_session::websocket_session(std::intptr_t sock, struct MHD_UpgradeResponseHandle* urh,
+websocket_session::websocket_session(std::uintptr_t sock, struct MHD_UpgradeResponseHandle* urh,
                                      struct MHD_WebSocketStream* ws_stream):
     sock(sock), urh(urh), ws_stream(ws_stream), valid(true) {
 }
@@ -188,7 +187,7 @@ void websocket_handler::on_close(websocket_session&, uint16_t, const std::string
 
 namespace httpserver {
 
-websocket_session::websocket_session(std::intptr_t sock,
+websocket_session::websocket_session(std::uintptr_t sock,
                                      struct MHD_UpgradeResponseHandle* urh,
                                      struct MHD_WebSocketStream* ws_stream)
     : sock(sock), urh(urh), ws_stream(ws_stream), valid(false) {}

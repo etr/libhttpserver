@@ -97,6 +97,13 @@ int main() {
 // detail, not a libhttpserver leak. Skip these guards on both;
 // keep them strict on STLs that don't route std::thread through
 // pthread (e.g. MSVC's Microsoft STL).
+//
+// Detection macros: _LIBCPP_VERSION is defined by libc++ (LLVM/Apple
+// libcxx) as a numeric version; _GLIBCXX_HAS_GTHREADS is defined by
+// libstdc++ when threading is enabled (the default when -D_REENTRANT
+// is set, as configure.ac does). These are the correct stable guards
+// for this detection — re-verify on each major libstdc++/libc++ upgrade.
+// See also: Makefile.am HEADER_HYGIENE_FORBIDDEN rationale comment.
 #if !defined(_LIBCPP_VERSION) && !defined(_GLIBCXX_HAS_GTHREADS)
 #ifdef _PTHREAD_H
     std::fprintf(stderr, "LEAK: <pthread.h> reached the consumer TU (glibc/musl guard _PTHREAD_H)\n");

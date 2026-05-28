@@ -77,6 +77,20 @@
 #include <gnutls/x509.h>
 #endif  // HAVE_GNUTLS
 
+// TASK-020-review: pin add_connection's unsigned-int/socklen_t ABI contract
+// at file scope so the assertion is evaluated once at TU start rather than
+// being associated with the specific function body.
+static_assert(sizeof(unsigned int) >= sizeof(socklen_t),
+              "unsigned int is narrower than socklen_t on this platform; "
+              "webserver::add_connection's public signature must be widened.");
+// Also assert signedness: POSIX defines socklen_t as an unsigned type; the
+// static_cast<socklen_t>(addrlen) in add_connection is only well-defined
+// when the value fits in the unsigned target (CWE-681).
+static_assert(std::is_unsigned<socklen_t>::value,
+              "socklen_t is signed on this platform; "
+              "the static_cast<socklen_t>(addrlen) in add_connection may produce "
+              "sign-extension or truncation for large address lengths.");
+
 using std::string;
 using std::pair;
 using std::vector;
@@ -387,18 +401,18 @@ bool webserver::run_wait(int32_t millisec) {
     return MHD_run_wait(impl_->daemon, millisec) == MHD_YES;
 }
 
-bool webserver::get_fdset(void* read_fd_set, void* write_fd_set, void* except_fd_set, int* max_fd) {
-    // TASK-020: the public signature accepts `void*` so the public header
-    // does not need <sys/select.h>. Callers pass real `fd_set*` pointers
-    // (the implicit conversion to `void*` is well-defined in C++); cast
-    // back here, where <sys/select.h> is reachable transitively via
-    // <microhttpd.h>.
+bool webserver::get_fdset(struct fd_set* read_fd_set, struct fd_set* write_fd_set,
+                          struct fd_set* except_fd_set, int* max_fd) {
+    // TASK-020-review: signature now uses typed fd_set* (forward-declared in
+    // the public header) rather than void*, restoring compile-time type safety.
+    // <sys/select.h> is reachable here transitively via <microhttpd.h> so no
+    // cast is needed.
     if (impl_->daemon == nullptr) return false;
     MHD_socket mhd_max_fd = 0;
     if (MHD_get_fdset(impl_->daemon,
-                      static_cast<fd_set*>(read_fd_set),
-                      static_cast<fd_set*>(write_fd_set),
-                      static_cast<fd_set*>(except_fd_set),
+                      read_fd_set,
+                      write_fd_set,
+                      except_fd_set,
                       &mhd_max_fd) != MHD_YES) {
         return false;
     }
@@ -420,11 +434,8 @@ bool webserver::add_connection(int client_socket, const struct sockaddr* addr, u
     // TASK-020: the public signature accepts `unsigned int` instead of
     // `socklen_t` so the public header does not need <sys/socket.h>.
     // POSIX guarantees `socklen_t` is an unsigned integer of at least 32
-    // bits; `unsigned int` matches on every supported platform. The
-    // static_assert below pins that contract.
-    static_assert(sizeof(unsigned int) >= sizeof(socklen_t),
-                  "unsigned int is narrower than socklen_t on this platform; "
-                  "webserver::add_connection's public signature must be widened.");
+    // bits; `unsigned int` matches on every supported platform.
+    // (The sizeof static_assert is at file scope above.)
     if (impl_->daemon == nullptr) return false;
     return MHD_add_connection(impl_->daemon, client_socket, addr,
                               static_cast<socklen_t>(addrlen)) == MHD_YES;

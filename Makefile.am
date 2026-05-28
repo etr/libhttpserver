@@ -256,6 +256,12 @@ check-install-layout:
 # them on both libc++ (_LIBCPP_VERSION) and libstdc++ in thread mode
 # (_GLIBCXX_HAS_GTHREADS), so the guards still fire on STLs that don't
 # route std::thread through pthread (e.g. MSVC's Microsoft STL).
+# pthread.h is intentionally absent from HEADER_HYGIENE_FORBIDDEN below
+# for the same reason: the grep-based check would produce false positives
+# on libc++ and libstdc++ in thread mode. The runtime sentinel in
+# test/unit/header_hygiene_test.cpp enforces the pthread invariant via
+# the #ifndef _LIBCPP_VERSION && !_GLIBCXX_HAS_GTHREADS guard ladder so
+# it still fires on STLs that do not route std::thread through pthread.
 # ---------------------------------------------------------------------------
 
 HEADER_HYGIENE_FORBIDDEN = microhttpd\.h|gnutls/gnutls\.h|sys/socket\.h|sys/uio\.h

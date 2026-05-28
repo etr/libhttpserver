@@ -394,19 +394,9 @@ class http_request {
 
 #ifdef HTTPSERVER_COMPILATION
      // Internal-only constructor: takes a live MHD_Connection*. Hidden
-     // from public consumers via the HTTPSERVER_COMPILATION gate so that
-     // <microhttpd.h> need not be reachable when downstream code includes
-     // <httpserver.hpp>. Reachable only from src/webserver.cpp via the
-     // friend webserver_impl declaration below.
-     //
-     // The MHD_Connection* type is forward-declared at global scope
-     // above (see the comment near the `struct MHD_Connection;` line),
-     // not inside namespace httpserver, because in TASK-020 the public
-     // umbrella stopped transitively pulling in <microhttpd.h>. Without
-     // the global forward decl, an in-namespace elaborated type specifier
-     // would inject `httpserver::MHD_Connection` and shadow the real
-     // (global-namespace) type once <microhttpd.h> is reached later in
-     // src/http_request.cpp.
+     // from public consumers via the HTTPSERVER_COMPILATION gate.
+     // See the MHD_Connection forward-declaration comment at global scope
+     // above for the namespace-injection rationale.
      http_request(MHD_Connection* underlying_connection, unescaper_ptr unescaper);
 #endif  // HTTPSERVER_COMPILATION
 
