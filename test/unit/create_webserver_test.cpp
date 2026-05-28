@@ -455,23 +455,6 @@ LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_https_mem_trust_file)
     LT_CHECK_NOTHROW(create_webserver(8080).https_mem_trust("../test/test_root_ca.pem"));
 LT_END_AUTO_TEST(builder_https_mem_trust_file)
 
-// TASK-033 / PRD-CFG-REQ-003: port() rejects values that don't fit a uint16_t.
-// Test passes 70000 — must throw std::invalid_argument whose message names
-// "port" and the offending value.
-LT_BEGIN_AUTO_TEST(create_webserver_suite, port_out_of_range_throws)
-    bool threw = false;
-    std::string what_msg;
-    try {
-        create_webserver().port(70000);
-    } catch (const std::invalid_argument& e) {
-        threw = true;
-        what_msg = e.what();
-    }
-    LT_CHECK_EQ(threw, true);
-    LT_CHECK(what_msg.find("port") != std::string::npos);
-    LT_CHECK(what_msg.find("70000") != std::string::npos);
-LT_END_AUTO_TEST(port_out_of_range_throws)
-
 // Helper: assert that `op()` throws std::invalid_argument whose what()
 // contains `needle`. Used by the numeric-validation tests below.
 namespace {
@@ -575,6 +558,8 @@ LT_END_AUTO_TEST(connection_memory_increment_typical_accepted)
 LT_BEGIN_AUTO_TEST(create_webserver_suite, client_discipline_level_below_minus_one_throws)
     LT_CHECK(throws_invalid_argument_with(
         []{ create_webserver().client_discipline_level(-2); }, "client_discipline_level"));
+    LT_CHECK(throws_invalid_argument_with(
+        []{ create_webserver().client_discipline_level(-2); }, "-2"));
 LT_END_AUTO_TEST(client_discipline_level_below_minus_one_throws)
 
 LT_BEGIN_AUTO_TEST(create_webserver_suite, client_discipline_level_minus_one_ok)
@@ -592,19 +577,34 @@ LT_BEGIN_AUTO_TEST(create_webserver_suite, bind_address_invalid_ip_throws_with_p
         []{ create_webserver().bind_address(std::string("not.an.ip")); }, "bind_address"));
 LT_END_AUTO_TEST(bind_address_invalid_ip_throws_with_param_name)
 
-// Boundary check: port 65535 is accepted by both overloads, 65536 throws.
-// Both the parameter name and the offending value must appear in the message.
-LT_BEGIN_AUTO_TEST(create_webserver_suite, port_boundary_accept_and_reject)
+// Low boundary: port(0) is valid (OS-assigned ephemeral port); pin both the
+// int-setter and the uint16_t constructor path at the maximum boundary.
+LT_BEGIN_AUTO_TEST(create_webserver_suite, port_min_valid_boundary_accepted)
+    LT_CHECK_NOTHROW(create_webserver().port(0));
+LT_END_AUTO_TEST(port_min_valid_boundary_accepted)
+
+// High boundary: port(65535) is the maximum valid value; both the int-setter
+// and the uint16_t constructor overload must accept it without throwing.
+LT_BEGIN_AUTO_TEST(create_webserver_suite, port_max_valid_boundary_accepted)
     LT_CHECK_NOTHROW(create_webserver().port(65535));
+    LT_CHECK_NOTHROW(create_webserver(static_cast<std::uint16_t>(65535)));
+LT_END_AUTO_TEST(port_max_valid_boundary_accepted)
+
+// One above max: port(65536) must throw; message must name "port" and "65536".
+LT_BEGIN_AUTO_TEST(create_webserver_suite, port_one_above_max_rejected)
     LT_CHECK(throws_invalid_argument_with(
         []{ create_webserver().port(65536); }, "port"));
     LT_CHECK(throws_invalid_argument_with(
         []{ create_webserver().port(65536); }, "65536"));
+LT_END_AUTO_TEST(port_one_above_max_rejected)
+
+// Negative port must throw; message must name "port" and the offending value.
+LT_BEGIN_AUTO_TEST(create_webserver_suite, port_negative_rejected)
     LT_CHECK(throws_invalid_argument_with(
         []{ create_webserver().port(-1); }, "port"));
     LT_CHECK(throws_invalid_argument_with(
         []{ create_webserver().port(-1); }, "-1"));
-LT_END_AUTO_TEST(port_boundary_accept_and_reject)
+LT_END_AUTO_TEST(port_negative_rejected)
 
 // TASK-034 cycle C: on a HAVE_GNUTLS-off build, calling
 // webserver(create_webserver{...}.use_ssl(true)) must throw
