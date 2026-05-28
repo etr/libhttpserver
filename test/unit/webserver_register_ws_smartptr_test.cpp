@@ -182,6 +182,16 @@ LT_BEGIN_AUTO_TEST(webserver_register_ws_smartptr_suite,
     LT_CHECK_EQ(counted_ws_handler::dtor_count.load(), 1);
 LT_END_AUTO_TEST(shared_ptr_caller_keeps_handler_alive)
 
+// null_unique_ptr_throws and null_shared_ptr_throws both exercise the same
+// null-guard in the shared_ptr overload (webserver_routes.cpp): the
+// unique_ptr shim converts to shared_ptr before reaching the guard, so
+// there is no unique_ptr-specific branch. Keeping both tests pins both
+// call sites at the API surface.
+//
+// The explicit try/catch + bool flag pattern is a framework workaround:
+// littletest has no ASSERT_THROW macro, so the idiom here is the canonical
+// substitute. The LT_CHECK_EQ(threw, true) assertion is semantically
+// equivalent to EXPECT_THROW.
 LT_BEGIN_AUTO_TEST(webserver_register_ws_smartptr_suite,
                    null_unique_ptr_throws)
     webserver ws{create_webserver(PORT + 3)};
@@ -227,8 +237,11 @@ LT_END_AUTO_TEST(duplicate_registration_throws)
 LT_BEGIN_AUTO_TEST(webserver_register_ws_smartptr_suite,
                    unregister_ws_resource_drops_handler)
     webserver ws{create_webserver(PORT + 6)};
-    ws.register_ws_resource("/x", std::make_shared<my_ws_handler>());
+    ws.register_ws_resource("/x", std::make_unique<counted_ws_handler>());
     ws.unregister_ws_resource("/x");
+    // The shared_ptr inside the webserver is the only reference — unregister
+    // drops it, so the dtor must have fired before we reach here.
+    LT_CHECK_EQ(counted_ws_handler::dtor_count.load(), 1);
     // Slot is empty; re-registering must not throw.
     bool threw = false;
     try {
@@ -252,6 +265,25 @@ LT_BEGIN_AUTO_TEST(webserver_register_ws_smartptr_suite,
     }
     LT_CHECK_EQ(threw, false);
 LT_END_AUTO_TEST(unregister_missing_ws_resource_is_noop)
+
+// Derived-type shim: the templated unique_ptr<T> overload in
+// webserver_websocket.hpp uses enable_if_t<is_base_of_v<websocket_handler, T>>
+// so callers can pass std::make_unique<DerivedHandler>() without an explicit
+// cast to unique_ptr<websocket_handler>. This test pins that the SFINAE shim
+// resolves for a derived type, mirroring TASK-023's pattern for register_path.
+LT_BEGIN_AUTO_TEST(webserver_register_ws_smartptr_suite,
+                   derived_unique_ptr_accepted_by_shim)
+    webserver ws{create_webserver(PORT + 8)};
+    // counted_ws_handler derives from websocket_handler; passing its
+    // unique_ptr directly must compile and not throw.
+    bool threw = false;
+    try {
+        ws.register_ws_resource("/derived", std::make_unique<counted_ws_handler>());
+    } catch (...) {
+        threw = true;
+    }
+    LT_CHECK_EQ(threw, false);
+LT_END_AUTO_TEST(derived_unique_ptr_accepted_by_shim)
 
 #endif  // HAVE_WEBSOCKET
 

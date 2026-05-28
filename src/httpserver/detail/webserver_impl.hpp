@@ -85,9 +85,10 @@ namespace httpserver {
 class webserver;
 class http_resource;
 class http_response;
-#ifdef HAVE_WEBSOCKET
+// Forward declaration is unconditional to match the public webserver.hpp
+// surface (PRD-FLG-REQ-001). The class body and member functions remain
+// conditionally compiled; only the declaration is always present.
 class websocket_handler;
-#endif  // HAVE_WEBSOCKET
 
 namespace detail {
 
@@ -385,6 +386,11 @@ class webserver_impl {
     // MHD upgrade callback, even if unregister_ws_resource races to drop
     // the registration mid-upgrade. The webserver always holds one
     // reference until the slot is erased.
+    //
+    // Lock: protected by registered_resources_mutex (same mutex as the HTTP
+    // route tables registered_resources / registered_resources_str /
+    // registered_resources_regex). Sharing one mutex avoids potential
+    // lock-ordering bugs between HTTP and WebSocket registration paths.
     std::map<std::string, std::shared_ptr<::httpserver::websocket_handler>>
         registered_ws_handlers;
 
