@@ -203,14 +203,25 @@ LT_BEGIN_AUTO_TEST(hooks_no_firing_suite, unwired_phases_silent_across_round_tri
         }
     }
 
-    // Positive regression anchors for the two phases wired by TASK-048:
-    // route_resolved fires on every request (hit and miss), and
-    // before_handler fires on every route hit. The GET /hello round-trip
-    // above is a hit, so both must have fired at least once.
-    LT_CHECK(counters[static_cast<std::size_t>(hook_phase::route_resolved)].load()
-             >= static_cast<std::size_t>(1));
-    LT_CHECK(counters[static_cast<std::size_t>(hook_phase::before_handler)].load()
-             >= static_cast<std::size_t>(1));
+    // Positive regression anchors for all wired phases on a happy-path GET.
+    // If a phase stops firing, the counter drops to 0 and this catches it.
+    auto fired = [&](hook_phase p) {
+        return counters[static_cast<std::size_t>(p)].load()
+               >= static_cast<std::size_t>(1);
+    };
+    // TASK-048: route_resolved and before_handler fire on every route hit.
+    LT_CHECK(fired(hook_phase::route_resolved));
+    LT_CHECK(fired(hook_phase::before_handler));
+    // TASK-050: after_handler, response_sent, and request_completed fire
+    // on every happy-path request.
+    LT_CHECK(fired(hook_phase::after_handler));
+    LT_CHECK(fired(hook_phase::response_sent));
+    LT_CHECK(fired(hook_phase::request_completed));
+    // TASK-046: connection_opened and connection_closed bracket the session.
+    LT_CHECK(fired(hook_phase::connection_opened));
+    LT_CHECK(fired(hook_phase::connection_closed));
+    // request_received fires on every request (pre-body phase).
+    LT_CHECK(fired(hook_phase::request_received));
 LT_END_AUTO_TEST(unwired_phases_silent_across_round_trip)
 
 LT_BEGIN_AUTO_TEST_ENV()

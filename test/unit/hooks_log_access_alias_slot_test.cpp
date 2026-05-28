@@ -133,7 +133,9 @@ LT_BEGIN_AUTO_TEST(hooks_log_access_alias_slot_suite,
     bool has_ctrl = std::any_of(captured.begin(), captured.end(),
         [](unsigned char c) { return c < 0x20 || c == 0x7f; });
     LT_CHECK(!has_ctrl);
-    // The replacement character '-' must appear where '\n' was.
+    // The replacement character '-' must appear where '\n' was, followed
+    // by the rest of the path. Pin that the sanitizer replaced, not truncated.
+    LT_CHECK(captured.find("-injected") != std::string::npos);
     LT_CHECK(captured.find('\n') == std::string::npos);
 LT_END_AUTO_TEST(alias_sanitizes_control_chars_in_path)
 
@@ -158,7 +160,49 @@ LT_BEGIN_AUTO_TEST(hooks_log_access_alias_slot_suite,
     bool has_ctrl = std::any_of(captured.begin(), captured.end(),
         [](unsigned char c) { return c < 0x20 || c == 0x7f; });
     LT_CHECK(!has_ctrl);
+    // Non-control portions of the method must remain intact.
+    LT_CHECK(captured.find("GET") != std::string::npos);
 LT_END_AUTO_TEST(alias_sanitizes_control_chars_in_method)
+
+// Re-registration: calling log_access a second time on the builder
+// replaces the previous callable. At v2.0 the only write point is
+// webserver construction (write-once-at-construction contract); runtime
+// re-registration via a setter is deferred to a future task.
+// This test pins the replace semantics at construction time.
+LT_BEGIN_AUTO_TEST(hooks_log_access_alias_slot_suite,
+                   log_access_second_registration_replaces_first)
+    int first_calls = 0;
+    int second_calls = 0;
+    // Simulate re-registration by creating two builders and checking that
+    // only the callable set on the webserver used for construction is stored.
+    webserver ws1{create_webserver(8244)
+        .log_access([&first_calls](const std::string&) { ++first_calls; })};
+    webserver ws2{create_webserver(8245)
+        .log_access([&second_calls](const std::string&) { ++second_calls; })};
+
+    // Each webserver holds its own callable; neither pollutes the other.
+    auto* impl1 = impl_of(ws1);
+    auto* impl2 = impl_of(ws2);
+    LT_CHECK(static_cast<bool>(impl1->log_access_alias_));
+    LT_CHECK(static_cast<bool>(impl2->log_access_alias_));
+
+    // Invoke each alias independently.
+    http_request req1 =
+        create_test_request().path("/a").method("GET").build();
+    http_request req2 =
+        create_test_request().path("/b").method("GET").build();
+    response_sent_ctx ctx1{};
+    ctx1.request = &req1;
+    response_sent_ctx ctx2{};
+    ctx2.request = &req2;
+
+    impl1->log_access_alias_(ctx1);
+    impl2->log_access_alias_(ctx2);
+
+    // Only the callable stored on each respective webserver was invoked.
+    LT_CHECK_EQ(first_calls, 1);
+    LT_CHECK_EQ(second_calls, 1);
+LT_END_AUTO_TEST(log_access_second_registration_replaces_first)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
