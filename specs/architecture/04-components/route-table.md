@@ -23,4 +23,6 @@ A `route_entry` carries:
 
 **Related requirements:** PRD-HDL-REQ-002, PRD-HDL-REQ-004, PRD-HDL-REQ-006.
 
+**Implementation status:** TASK-025 introduced `detail::route_entry` and the `lambda_resource` shim into the existing v1 three-map storage shape. TASK-027 wired `route_entry` into the full 3-tier table described above (hash map for exact paths, radix tree for parameterized/prefix paths, regex chain for regex routes). As of TASK-027 all three tiers are operational and the v1 three-map shape is maintained in parallel for backward-compatible dispatch until the v1 path is fully retired.
+
 ---

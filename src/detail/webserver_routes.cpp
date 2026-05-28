@@ -288,7 +288,10 @@ void webserver::on_methods_(method_set methods,
     }
     // Same single-resource constraint as register_path: only "" or "/"
     // is acceptable, and the matching mode must be exact (which on_*/
-    // route are).
+    // route are). Note: register_impl_ has an additional `!family` arm
+    // in its guard (`single_resource && (...) || !family)`) that is always
+    // true for on_* because on_*/route always use exact (non-prefix) matching
+    // — omitting it here is intentional, not an oversight.
     if (single_resource && path != "" && path != "/") {
         throw std::invalid_argument(
             "When using a single_resource server, on_*/route requires "
@@ -298,16 +301,21 @@ void webserver::on_methods_(method_set methods,
     detail::http_endpoint idx(path, /*family=*/false,
                               /*registration=*/true, regex_checking);
 
-    bool fresh = false;
+    bool is_new_entry = false;
     std::shared_ptr<detail::lambda_resource> shim;
     {
+        // Scoped block: registered_resources_mutex is released at the
+        // closing brace, before upsert_v2_table_entry (which takes its own
+        // route_table_mutex_) and before invalidate_route_cache (which takes
+        // route_cache_mutex_). This lock-ordering — v1 mutex released before
+        // v2/cache mutexes are acquired — prevents deadlock.
         std::unique_lock registered_resources_lock(impl_->registered_resources_mutex);
-        shim = impl_->prepare_or_create_lambda_shim(idx, methods, fresh);
+        shim = impl_->prepare_or_create_lambda_shim(idx, methods, is_new_entry);
         impl_->commit_handlers_to_shim(*shim, methods, handler);
-        if (fresh) impl_->insert_fresh_v1_entries(idx, shim);
-    }
+        if (is_new_entry) impl_->insert_fresh_v1_entries(idx, shim);
+    }  // registered_resources_lock released here
 
-    impl_->upsert_v2_table_entry(idx, methods, shim, fresh);
+    impl_->upsert_v2_table_entry(idx, methods, shim, is_new_entry);
     impl_->invalidate_route_cache();
 }
 
