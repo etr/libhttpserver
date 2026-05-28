@@ -249,7 +249,18 @@ class webserver {
 
      /**
       * Stop the webserver and wait for in-flight handlers to complete
-      * before returning. Use stop() when no such guarantee is required.
+      * before returning.
+      *
+      * The wait guarantee is provided by @c MHD_stop_daemon(), which is a
+      * blocking call that drains all active connections and joins
+      * libmicrohttpd's worker threads before returning.  @c stop() calls
+      * @c MHD_stop_daemon() internally, and this wrapper delegates to it,
+      * so the two entry-points are behaviourally equivalent today.
+      * @c stop_and_wait() exists as a semantically richer named entry-point;
+      * any future quiesce or application-level waiting logic should be added
+      * here rather than in @c stop().
+      *
+      * @see stop()
      **/
      void stop_and_wait();
 
