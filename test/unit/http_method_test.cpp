@@ -38,8 +38,11 @@ static_assert(httpserver::method_set{}.set(httpserver::http_method::get)
               "method_set::set followed by contains must hold at compile time");
 
 // AC #2 — bitmask width sanity.
-static_assert(static_cast<std::uint8_t>(httpserver::http_method::count_) <= 32,
-              "http_method::count_ must fit in method_set's 32-bit bitmask");
+// (The production header's static_assert fires in every TU; this one
+//  adds no extra protection and is intentionally kept for documentation
+//  clarity in the acceptance-criteria block only.)
+static_assert(static_cast<std::uint8_t>(httpserver::http_method::count_) < 32,
+              "http_method::count_ must be < 32 to keep method_bit() shifts well-defined");
 
 // `count_` is the last enumerator (immediately after `patch`).
 static_assert(static_cast<std::uint8_t>(httpserver::http_method::patch) + 1u
@@ -165,11 +168,10 @@ static_assert(
     "method_set::empty() must return true after clear_all()");
 
 LT_BEGIN_SUITE(http_method_suite)
-    void set_up() {
-    }
-
-    void tear_down() {
-    }
+    // The littletest framework invokes set_up() and tear_down() via CRTP
+    // on the suite base; they must be defined even when empty.
+    void set_up() {}
+    void tear_down() {}
 LT_END_SUITE(http_method_suite)
 
 // 1. Runtime mirror of AC #1.
@@ -190,24 +192,38 @@ LT_BEGIN_AUTO_TEST(http_method_suite, set_clear_roundtrip)
 LT_END_AUTO_TEST(set_clear_roundtrip)
 
 // 3. set_all then contains every declared method.
+// Enumerated explicitly (no loop) so: (a) a future count_==0 bug cannot
+// silently pass, and (b) a failure message identifies the specific method.
 LT_BEGIN_AUTO_TEST(http_method_suite, set_all_then_contains_every_method)
     httpserver::method_set s{};
     s.set_all();
-    const auto count = static_cast<std::uint8_t>(httpserver::http_method::count_);
-    for (std::uint8_t i = 0; i < count; ++i) {
-        LT_CHECK(s.contains(static_cast<httpserver::http_method>(i)));
-    }
+    LT_CHECK(s.contains(httpserver::http_method::get));
+    LT_CHECK(s.contains(httpserver::http_method::head));
+    LT_CHECK(s.contains(httpserver::http_method::post));
+    LT_CHECK(s.contains(httpserver::http_method::put));
+    LT_CHECK(s.contains(httpserver::http_method::del));
+    LT_CHECK(s.contains(httpserver::http_method::connect));
+    LT_CHECK(s.contains(httpserver::http_method::options));
+    LT_CHECK(s.contains(httpserver::http_method::trace));
+    LT_CHECK(s.contains(httpserver::http_method::patch));
 LT_END_AUTO_TEST(set_all_then_contains_every_method)
 
 // 4. clear_all makes empty.
+// Enumerated explicitly (no loop) so a future count_==0 bug cannot
+// silently pass and a failure message names the specific method.
 LT_BEGIN_AUTO_TEST(http_method_suite, clear_all_makes_empty)
     httpserver::method_set s{};
     s.set_all();
     s.clear_all();
-    const auto count = static_cast<std::uint8_t>(httpserver::http_method::count_);
-    for (std::uint8_t i = 0; i < count; ++i) {
-        LT_CHECK(!s.contains(static_cast<httpserver::http_method>(i)));
-    }
+    LT_CHECK(!s.contains(httpserver::http_method::get));
+    LT_CHECK(!s.contains(httpserver::http_method::head));
+    LT_CHECK(!s.contains(httpserver::http_method::post));
+    LT_CHECK(!s.contains(httpserver::http_method::put));
+    LT_CHECK(!s.contains(httpserver::http_method::del));
+    LT_CHECK(!s.contains(httpserver::http_method::connect));
+    LT_CHECK(!s.contains(httpserver::http_method::options));
+    LT_CHECK(!s.contains(httpserver::http_method::trace));
+    LT_CHECK(!s.contains(httpserver::http_method::patch));
     LT_CHECK_EQ(s.bits, 0u);
 LT_END_AUTO_TEST(clear_all_makes_empty)
 
@@ -239,17 +255,25 @@ LT_BEGIN_AUTO_TEST(http_method_suite, bitwise_xor_symmetric_difference)
     LT_CHECK(!symdiff.contains(httpserver::http_method::post));
 LT_END_AUTO_TEST(bitwise_xor_symmetric_difference)
 
-// 8. Complement of a singleton contains every other declared method.
-LT_BEGIN_AUTO_TEST(http_method_suite, complement_of_singleton_contains_every_other_method)
+// 8a. Complement of a singleton excludes that method.
+// Separated from 8b so each assertion has its own named test context.
+LT_BEGIN_AUTO_TEST(http_method_suite, complement_of_singleton_excludes_that_method)
     auto comp = ~httpserver::http_method::get;
     LT_CHECK(!comp.contains(httpserver::http_method::get));
-    const auto count = static_cast<std::uint8_t>(httpserver::http_method::count_);
-    for (std::uint8_t i = 0; i < count; ++i) {
-        if (i == static_cast<std::uint8_t>(httpserver::http_method::get)) {
-            continue;
-        }
-        LT_CHECK(comp.contains(static_cast<httpserver::http_method>(i)));
-    }
+LT_END_AUTO_TEST(complement_of_singleton_excludes_that_method)
+
+// 8b. Complement of a singleton includes every other declared method.
+// Enumerated explicitly (no loop) for the same reasons as tests 3 and 4.
+LT_BEGIN_AUTO_TEST(http_method_suite, complement_of_singleton_contains_every_other_method)
+    auto comp = ~httpserver::http_method::get;
+    LT_CHECK(comp.contains(httpserver::http_method::head));
+    LT_CHECK(comp.contains(httpserver::http_method::post));
+    LT_CHECK(comp.contains(httpserver::http_method::put));
+    LT_CHECK(comp.contains(httpserver::http_method::del));
+    LT_CHECK(comp.contains(httpserver::http_method::connect));
+    LT_CHECK(comp.contains(httpserver::http_method::options));
+    LT_CHECK(comp.contains(httpserver::http_method::trace));
+    LT_CHECK(comp.contains(httpserver::http_method::patch));
 LT_END_AUTO_TEST(complement_of_singleton_contains_every_other_method)
 
 // 9. Complement of a method_set is bounded to the count_ window.
@@ -316,6 +340,74 @@ LT_BEGIN_AUTO_TEST(http_method_suite, to_string_round_trip_via_strcmp_with_mhd)
     LT_CHECK(httpserver::to_string(httpserver::http_method::patch)
              == std::string_view{MHD_HTTP_METHOD_PATCH});
 LT_END_AUTO_TEST(to_string_round_trip_via_strcmp_with_mhd)
+
+// 14. Compound assignment with method_set RHS — exercises the
+// method_set overloads (|=, &=, ^=) independently from the http_method
+// overloads exercised in test 10.
+LT_BEGIN_AUTO_TEST(http_method_suite, compound_assign_method_set_rhs)
+    auto ab = httpserver::http_method::get | httpserver::http_method::post;
+    auto bc = httpserver::http_method::post | httpserver::http_method::put;
+    httpserver::method_set s = ab;
+
+    // |= method_set: s should gain put without losing get/post.
+    s |= bc;
+    LT_CHECK(s.contains(httpserver::http_method::get));
+    LT_CHECK(s.contains(httpserver::http_method::post));
+    LT_CHECK(s.contains(httpserver::http_method::put));
+
+    // &= method_set: keep only bits in bc (post, put); drop get.
+    s &= bc;
+    LT_CHECK(!s.contains(httpserver::http_method::get));
+    LT_CHECK(s.contains(httpserver::http_method::post));
+    LT_CHECK(s.contains(httpserver::http_method::put));
+
+    // ^= method_set: XOR with bc flips post and put out.
+    s ^= bc;
+    LT_CHECK_EQ(s.bits, 0u);
+LT_END_AUTO_TEST(compound_assign_method_set_rhs)
+
+// 15. Mixed (method_set, http_method) and (http_method, method_set)
+// overloads for |, &, ^ — verifies commutativity of the mixed forms.
+LT_BEGIN_AUTO_TEST(http_method_suite, mixed_set_method_operators_are_commutative)
+    auto ms = httpserver::http_method::post | httpserver::http_method::put;
+
+    // method | method_set and method_set | method should yield same bits.
+    auto lhs_or = httpserver::http_method::get | ms;
+    auto rhs_or = ms | httpserver::http_method::get;
+    LT_CHECK_EQ(lhs_or.bits, rhs_or.bits);
+    LT_CHECK(lhs_or.contains(httpserver::http_method::get));
+    LT_CHECK(lhs_or.contains(httpserver::http_method::post));
+    LT_CHECK(lhs_or.contains(httpserver::http_method::put));
+
+    // method & method_set and method_set & method should yield same bits.
+    auto lhs_and = httpserver::http_method::post & ms;
+    auto rhs_and = ms & httpserver::http_method::post;
+    LT_CHECK_EQ(lhs_and.bits, rhs_and.bits);
+    LT_CHECK(lhs_and.contains(httpserver::http_method::post));
+    LT_CHECK(!lhs_and.contains(httpserver::http_method::put));
+
+    // method ^ method_set and method_set ^ method should yield same bits.
+    auto lhs_xor = httpserver::http_method::get ^ ms;
+    auto rhs_xor = ms ^ httpserver::http_method::get;
+    LT_CHECK_EQ(lhs_xor.bits, rhs_xor.bits);
+    LT_CHECK(lhs_xor.contains(httpserver::http_method::get));
+LT_END_AUTO_TEST(mixed_set_method_operators_are_commutative)
+
+// 16. Algebraic identity and annihilator laws at runtime.
+LT_BEGIN_AUTO_TEST(http_method_suite, algebraic_identity_and_annihilator_laws)
+    httpserver::method_set empty{};
+    httpserver::method_set full = httpserver::method_set{}.set_all();
+    auto s = httpserver::http_method::get | httpserver::http_method::post;
+
+    // s | empty == s
+    LT_CHECK_EQ((s | empty).bits, s.bits);
+    // s & full == s
+    LT_CHECK_EQ((s & full).bits, s.bits);
+    // s ^ s == empty
+    LT_CHECK_EQ((s ^ s).bits, 0u);
+    // s | full == full
+    LT_CHECK_EQ((s | full).bits, full.bits);
+LT_END_AUTO_TEST(algebraic_identity_and_annihilator_laws)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
