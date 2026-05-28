@@ -28,6 +28,9 @@
 #include <httpserver.hpp>
 
 void custom_access_log(const std::string& url) {
+    // NOTE: In production, sanitize the URL before writing to a terminal or
+    // log file — raw URLs may contain ANSI escape sequences or control
+    // characters that can corrupt terminal output (CWE-117).
     std::cout << "ACCESSING: " << url << std::endl;
 }
 

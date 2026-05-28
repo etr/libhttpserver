@@ -26,7 +26,7 @@
 
 class file_upload_resource : public httpserver::http_resource {
  public:
-     httpserver::http_response render_get(const httpserver::http_request&) {
+     httpserver::http_response render_get(const httpserver::http_request&) override {
          return httpserver::http_response::string(R"html(<html>
   <body>
     <form method="POST" enctype="multipart/form-data">
@@ -42,7 +42,7 @@ class file_upload_resource : public httpserver::http_resource {
 )html", "text/html");
      }
 
-     httpserver::http_response render_post(const httpserver::http_request& req) {
+     httpserver::http_response render_post(const httpserver::http_request& req) override {
         // Static header built from a raw string literal to avoid per-append
         // reallocations. The dynamic rows are appended after an upfront reserve.
         std::string post_response = R"html(<html>

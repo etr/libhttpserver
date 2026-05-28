@@ -32,7 +32,7 @@ httpserver::http_response not_allowed_custom(const httpserver::http_request&) {
 
 class hello_world_resource : public httpserver::http_resource {
  public:
-     httpserver::http_response render(const httpserver::http_request&) {
+     httpserver::http_response render(const httpserver::http_request&) override {
          return httpserver::http_response::string("Hello, World!");
      }
 };

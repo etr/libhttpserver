@@ -34,7 +34,11 @@ class echo_handler : public httpserver::websocket_handler {
 
      void on_message(httpserver::websocket_session& session, std::string_view msg) override {
          std::cout << "Received: " << msg << std::endl;
-         session.send_text("Echo: " + std::string(msg));
+         std::string reply;
+         reply.reserve(6 + msg.size());
+         reply = "Echo: ";
+         reply += msg;
+         session.send_text(reply);
      }
 
      void on_close(httpserver::websocket_session& session, uint16_t code, const std::string& reason) override {

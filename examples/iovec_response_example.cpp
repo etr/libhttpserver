@@ -40,7 +40,9 @@ int main() {
             { kPart3, sizeof(kPart3) - 1 },
         };
         return httpserver::http_response::iovec(parts)
-                   .with_header("Content-Type", "application/json");
+                   .with_header("Content-Type", "application/json")
+                   // defense-in-depth: prevent browsers from sniffing content type
+                   .with_header("X-Content-Type-Options", "nosniff");
     });
 
     ws.start(true);

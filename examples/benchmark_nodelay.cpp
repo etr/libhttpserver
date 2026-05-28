@@ -23,15 +23,15 @@
 
 #include <httpserver.hpp>
 
-#define PATH "/plaintext"
-#define BODY "Hello, World!"
+static constexpr const char* kPath = "/plaintext";
+static constexpr const char* kBody = "Hello, World!";
 
 class hello_world_resource : public httpserver::http_resource {
  public:
      // TASK-036: http_response is a movable value type; build it
      // per-request rather than caching a shared instance.
      httpserver::http_response render(const httpserver::http_request&) override {
-         return httpserver::http_response::string(BODY)
+         return httpserver::http_response::string(kBody)
                     .with_header("Server", "libhttpserver");
      }
 };
@@ -45,7 +45,7 @@ int main(int argc, char** argv) {
         .max_threads(atoi(argv[2]))};
 
     auto hwr = std::make_shared<hello_world_resource>();
-    ws.register_path(PATH, hwr);
+    ws.register_path(kPath, hwr);
 
     ws.start(true);
 

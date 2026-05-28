@@ -20,13 +20,12 @@
 
 #include <unistd.h>
 
-#include <cstdio>
 #include <iostream>
 #include <memory>
 
 #include <httpserver.hpp>
 
-bool verbose = false;
+static bool verbose = false;
 
 static void log_if_verbose(const httpserver::http_request& req,
                             const httpserver::http_response& res) {
@@ -146,29 +145,17 @@ int main(int argc, char **argv) {
                       << std::endl;
     }
 
-    //
-    // Use builder to define webserver configuration options
-    //
     httpserver::create_webserver cw = httpserver::create_webserver(port).max_threads(5);
 
     if (secure) {
         cw.use_ssl().https_mem_key(key).https_mem_cert(cert);
     }
 
-    //
-    // Create webserver using the configured options
-    //
     httpserver::webserver ws{cw};
 
-    //
-    // Create and register service resource available at /service
-    //
     auto res = std::make_shared<service_resource>();
     ws.register_prefix("/service", res);
 
-    //
-    // Start and block the webserver
-    //
     ws.start(true);
 
     return 0;

@@ -60,7 +60,6 @@ class deferred_resource : public httpserver::http_resource {
                      memset(buf, 0, max);
                      std::copy(str.begin(), str.end(), buf);
                      // keep sending reqid
-                     // sleep(1); ==> adapted for C++11 on non-*Nix systems
                      std::this_thread::sleep_for(std::chrono::seconds(1));
                      return static_cast<ssize_t>(max);
                  });

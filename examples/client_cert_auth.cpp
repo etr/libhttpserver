@@ -67,7 +67,7 @@ std::set<std::string> allowed_fingerprints;
 // Resource that requires client certificate authentication
 class secure_resource : public httpserver::http_resource {
  public:
-    httpserver::http_response render_get(const httpserver::http_request& req) {
+    httpserver::http_response render_get(const httpserver::http_request& req) override {
         // Check if client provided a certificate
         if (!req.has_client_certificate()) {
             return httpserver::http_response::string("Client certificate required").with_status(httpserver::http::http_utils::http_unauthorized);
@@ -107,7 +107,7 @@ class secure_resource : public httpserver::http_resource {
         // due to the absence of a certificate. Never call the time accessors
         // without first confirming cert presence and verification.
         // (security-reviewer item 21)
-        time_t now = time(nullptr);
+        std::int64_t now = static_cast<std::int64_t>(time(nullptr));
         std::int64_t not_before = req.get_client_cert_not_before();
         std::int64_t not_after = req.get_client_cert_not_after();
 
@@ -134,7 +134,7 @@ class secure_resource : public httpserver::http_resource {
 // Public resource that shows certificate info but doesn't require it
 class info_resource : public httpserver::http_resource {
  public:
-    httpserver::http_response render_get(const httpserver::http_request& req) {
+    httpserver::http_response render_get(const httpserver::http_request& req) override {
         std::string response;
 
         if (req.has_client_certificate()) {

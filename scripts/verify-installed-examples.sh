@@ -23,11 +23,18 @@
 # Reports all compile failures before exiting non-zero, rather than stopping
 # at the first failure, so a single CI run surfaces all broken examples.
 
-set -u
+set -eu
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD_DIR="${BUILD_DIR:-$REPO_ROOT/build}"
-PREFIX="${INSTALL_PREFIX:-$(mktemp -d -t libhttpserver-installed-examples-XXXXXX)}"
+# Create a temp prefix only when INSTALL_PREFIX is not externally supplied.
+# When we own the directory, register a trap to clean it up on exit.
+if [ -n "${INSTALL_PREFIX:-}" ]; then
+    PREFIX="$INSTALL_PREFIX"
+else
+    PREFIX="$(mktemp -d -t libhttpserver-installed-examples-XXXXXX)"
+    trap 'rm -rf "$PREFIX"' EXIT
+fi
 
 CXX="${CXX:-g++}"
 CXXFLAGS_EXTRA="${CXXFLAGS:-}"
@@ -40,20 +47,27 @@ if [ -d /opt/homebrew/include ]; then
 fi
 
 log() { echo "verify-installed-examples: $*"; }
-fail() { echo "verify-installed-examples: FAIL: $*" >&2; exit 1; }
+# fatal() is for infrastructure failures that abort the script immediately.
+# Per-example compile failures use the ok/failed counter pattern instead.
+fatal() { echo "verify-installed-examples: FAIL: $*" >&2; exit 1; }
 
-[ -d "$BUILD_DIR" ] || fail "build dir $BUILD_DIR does not exist; run ./configure first"
+[ -d "$BUILD_DIR" ] || fatal "build dir $BUILD_DIR does not exist; run ./configure first"
 
 log "installing into $PREFIX ..."
-( cd "$BUILD_DIR" && make install DESTDIR="" prefix="$PREFIX" exec_prefix="$PREFIX" >/dev/null 2>&1 ) \
-    || fail "make install into $PREFIX failed"
+_install_log="$(mktemp -t verify-install-XXXXXX.log)"
+if ! ( cd "$BUILD_DIR" && make install DESTDIR="" prefix="$PREFIX" exec_prefix="$PREFIX" >/dev/null 2>"$_install_log" ); then
+    cat "$_install_log" >&2
+    rm -f "$_install_log"
+    fatal "make install into $PREFIX failed"
+fi
+rm -f "$_install_log"
 
 INCLUDE="$PREFIX/include"
 LIBDIR="$PREFIX/lib"
 
-[ -f "$INCLUDE/httpserver.hpp" ] || fail "installed umbrella header missing at $INCLUDE/httpserver.hpp"
+[ -f "$INCLUDE/httpserver.hpp" ] || fatal "installed umbrella header missing at $INCLUDE/httpserver.hpp"
 [ -f "$LIBDIR/libhttpserver.dylib" ] || [ -f "$LIBDIR/libhttpserver.so" ] || [ -f "$LIBDIR/libhttpserver.a" ] \
-    || fail "installed libhttpserver shared/static library missing in $LIBDIR"
+    || fatal "installed libhttpserver shared/static library missing in $LIBDIR"
 
 # Compute skip list based on what the in-tree build was actually configured
 # with. The HAVE_* macros are not in config.h — they are injected via
@@ -150,13 +164,13 @@ done
 log "summary: $ok built, $skipped skipped, $failed failed"
 # Guard 1: no .cpp files found at all — broken glob or empty directory.
 if [ "$ok" -eq 0 ] && [ "$skipped" -eq 0 ] && [ "$failed" -eq 0 ]; then
-    fail "no .cpp files found in examples/ — check glob expansion or examples directory"
+    fatal "no .cpp files found in examples/ — check glob expansion or examples directory"
 fi
 # Guard 2: every example was skipped but none compiled — AM_CXXFLAGS detection
 # may have silently failed (e.g., continuation lines, changed variable casing).
 # Fail loudly so the false-all-skip case surfaces as an error, not a silent pass.
 if [ "$ok" -eq 0 ] && [ "$skipped" -gt 0 ]; then
-    fail "no examples were compiled — feature-flag detection may have failed; check $TOP_MAKEFILE for AM_CXXFLAGS"
+    fatal "no examples were compiled — feature-flag detection may have failed; check $TOP_MAKEFILE for AM_CXXFLAGS"
 fi
 if [ "$failed" -gt 0 ]; then
     echo "verify-installed-examples: FAIL: the following examples failed to build:$failed_list" >&2

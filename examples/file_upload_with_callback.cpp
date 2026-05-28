@@ -27,7 +27,7 @@
 
 class file_upload_resource : public httpserver::http_resource {
  public:
-     httpserver::http_response render_get(const httpserver::http_request&) {
+     httpserver::http_response render_get(const httpserver::http_request&) override {
          return httpserver::http_response::string(R"html(<html>
   <body>
     <h1>File Upload with Cleanup Callback Demo</h1>
@@ -42,7 +42,7 @@ class file_upload_resource : public httpserver::http_resource {
 )html", "text/html");
      }
 
-     httpserver::http_response render_post(const httpserver::http_request& req) {
+     httpserver::http_response render_post(const httpserver::http_request& req) override {
         std::string post_response = R"html(<html>
 <body>
   <h1>Upload Complete</h1>
