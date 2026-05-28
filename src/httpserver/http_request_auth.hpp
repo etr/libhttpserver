@@ -49,6 +49,14 @@
 // Basic-auth credentials. The string_view returns alias arena-backed
 // storage that lives for the handler call frame only — see the
 // class-level lifetime contract in http_request.hpp.
+//
+// TODO (API-FLG milestone): ensure any remaining HAVE_BAUTH and
+// HAVE_DAUTH gates in the implementation side (.cpp files) are
+// addressed so the full PRD-FLG-REQ-001 "unconditional public symbols"
+// contract is completed. The declarations here are already unconditional;
+// verify that the http_request_auth.cpp implementations return the
+// documented sentinels on HAVE_BAUTH-off / HAVE_DAUTH-off builds.
+// (spec-alignment-checker item 25)
 // -------------------------------------------------------------------
 
 /**

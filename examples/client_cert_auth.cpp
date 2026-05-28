@@ -96,6 +96,17 @@ class secure_resource : public httpserver::http_resource {
 
         // Check certificate validity times. TASK-019 narrows the
         // accessor return type to std::int64_t.
+        //
+        // IMPORTANT: these time checks are safe only because we have already
+        // confirmed has_client_certificate() == true (line 72) and
+        // is_client_cert_verified() == true (line 87) above. Without those
+        // earlier guards, get_client_cert_not_before() / get_client_cert_not_after()
+        // return the sentinel -1 (a large negative int64_t), and any non-negative
+        // `now` would satisfy `now > not_after`, producing a misleading
+        // "Certificate has expired" response instead of denying the request
+        // due to the absence of a certificate. Never call the time accessors
+        // without first confirming cert presence and verification.
+        // (security-reviewer item 21)
         time_t now = time(nullptr);
         std::int64_t not_before = req.get_client_cert_not_before();
         std::int64_t not_after = req.get_client_cert_not_after();
