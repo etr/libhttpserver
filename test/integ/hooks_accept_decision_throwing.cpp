@@ -46,7 +46,10 @@ using httpserver::http_response;
 using httpserver::webserver;
 using httpserver::http::http_utils;
 
-#define PORT 8201
+// Each sub-test gets its own named port constant so adding a third test
+// in the future does not require renaming the existing arithmetic.
+#define PORT_BANNED   8201
+#define PORT_ACCEPTED 8202
 
 namespace {
 
@@ -71,7 +74,7 @@ LT_END_SUITE(hooks_accept_decision_throwing_suite)
 
 LT_BEGIN_AUTO_TEST(hooks_accept_decision_throwing_suite,
                    banned_with_throwing_hook_still_rejected)
-    webserver ws{create_webserver(PORT)
+    webserver ws{create_webserver(PORT_BANNED)
                      .default_policy(http_utils::ACCEPT)};
     ws.block_ip("127.0.0.1");
 
@@ -91,7 +94,7 @@ LT_BEGIN_AUTO_TEST(hooks_accept_decision_throwing_suite,
 
     CURL* curl = curl_easy_init();
     LT_ASSERT_NEQ(curl, static_cast<CURL*>(nullptr));
-    std::string url = "http://127.0.0.1:" + std::to_string(PORT) + "/hello";
+    std::string url = "http://127.0.0.1:" + std::to_string(PORT_BANNED) + "/hello";
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 2L);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 4L);
@@ -106,7 +109,7 @@ LT_END_AUTO_TEST(banned_with_throwing_hook_still_rejected)
 
 LT_BEGIN_AUTO_TEST(hooks_accept_decision_throwing_suite,
                    unbanned_with_throwing_hook_still_accepted)
-    webserver ws{create_webserver(PORT + 1)
+    webserver ws{create_webserver(PORT_ACCEPTED)
                      .default_policy(http_utils::ACCEPT)};
 
     std::atomic<std::size_t> fired{0};
@@ -125,7 +128,7 @@ LT_BEGIN_AUTO_TEST(hooks_accept_decision_throwing_suite,
 
     CURL* curl = curl_easy_init();
     LT_ASSERT_NEQ(curl, static_cast<CURL*>(nullptr));
-    std::string url = "http://127.0.0.1:" + std::to_string(PORT + 1) + "/hello";
+    std::string url = "http://127.0.0.1:" + std::to_string(PORT_ACCEPTED) + "/hello";
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     std::string body;
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);

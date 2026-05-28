@@ -290,6 +290,7 @@ static void fire_hooks_for_phase(
         snapshot.clear();
         {
             std::shared_lock lock(impl->hook_table_mutex_);
+            if (hook_vec.empty()) return;  // early-exit: no hooks, no allocation
             snapshot = hook_vec;
         }
         for (const auto& entry : snapshot) {
@@ -297,11 +298,11 @@ static void fire_hooks_for_phase(
                 entry.fn(ctx);
             } catch (const std::exception& e) {
                 impl->log_dispatch_error(
-                    std::string("hook[") + std::string(phase_name) +
+                    "hook[" + std::string(phase_name) +
                     "] threw: " + e.what());
             } catch (...) {
                 impl->log_dispatch_error(
-                    std::string("hook[") + std::string(phase_name) +
+                    "hook[" + std::string(phase_name) +
                     "] threw unknown exception");
             }
         }
@@ -310,7 +311,7 @@ static void fire_hooks_for_phase(
         // more we can do at this layer; callers are noexcept so the
         // contract holds even if std::terminate triggers.
         impl->log_dispatch_error(
-            std::string("fire_hooks_for_phase[") + std::string(phase_name) +
+            "fire_hooks_for_phase[" + std::string(phase_name) +
             "]: snapshot copy failed");
     }
 }
@@ -358,6 +359,7 @@ fire_short_circuit_hooks_for_phase(
         snapshot.clear();
         {
             std::shared_lock lock(impl->hook_table_mutex_);
+            if (hook_vec.empty()) return std::nullopt;  // early-exit: no hooks, no allocation
             snapshot = hook_vec;
         }
         for (auto& entry : snapshot) {
@@ -368,17 +370,17 @@ fire_short_circuit_hooks_for_phase(
                 }
             } catch (const std::exception& e) {
                 impl->log_dispatch_error(
-                    std::string("hook[") + std::string(phase_name) +
+                    "hook[" + std::string(phase_name) +
                     "] threw: " + e.what());
             } catch (...) {
                 impl->log_dispatch_error(
-                    std::string("hook[") + std::string(phase_name) +
+                    "hook[" + std::string(phase_name) +
                     "] threw unknown exception");
             }
         }
     } catch (...) {
         impl->log_dispatch_error(
-            std::string("fire_short_circuit_hooks_for_phase[") +
+            "fire_short_circuit_hooks_for_phase[" +
             std::string(phase_name) + "]: snapshot copy failed");
     }
     return std::nullopt;

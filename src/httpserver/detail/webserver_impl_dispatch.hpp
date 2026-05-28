@@ -75,8 +75,10 @@
 
 // TASK-031: log @p msg via parent->log_error if a logger is configured.
 // Swallows any exception thrown by the logger -- dispatch must never
-// re-enter the catch from inside its own catch.
-void log_dispatch_error(std::string_view msg) const;
+// re-enter the catch from inside its own catch. Marked noexcept because
+// the outer catch(...) absorbs any bad_alloc from std::string(msg)
+// construction, so no exception can escape (security-reviewer-iter1-8).
+void log_dispatch_error(std::string_view msg) const noexcept;
 
 // TASK-046 -- Lifecycle hook firing helpers.
 //

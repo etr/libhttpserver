@@ -112,6 +112,19 @@ classify_decision(int default_policy, bool is_banned, bool is_allowed) {
     return {true, std::nullopt};
 }
 
+// Short-circuit gate for a single phase: returns true when at least one
+// hook is registered. Shared by connection_notify (via the hooks_armed
+// lambda which delegates to this) and policy_callback (which calls it
+// directly since the hooks_armed lambda is local to connection_notify).
+// Uses relaxed memory order: a false-negative on a very early concurrent
+// add is acceptable; the hook simply fires on the next event.
+inline bool is_phase_armed(const detail::webserver_impl* impl,
+                           ::httpserver::hook_phase p) noexcept {
+    return impl != nullptr &&
+           impl->any_hooks_[static_cast<std::size_t>(p)]
+               .load(std::memory_order_relaxed);
+}
+
 }  // namespace
 
 namespace detail {
@@ -124,7 +137,11 @@ void webserver_impl::connection_notify(void* cls, struct MHD_Connection* connect
     // exercise the callback without an enclosing webserver; defensive
     // null-check gates every hook fire on a non-null impl.
     auto* ws = static_cast<webserver*>(cls);
-    webserver_impl* impl = (ws != nullptr) ? ws->impl_.get() : nullptr;
+    // `ws_impl` names the owning webserver's impl explicitly, distinguishing
+    // it from the static trampoline's implicit `this` (which is the
+    // webserver_impl on which connection_notify is declared, but the
+    // trampoline pattern means `this` is never used here directly).
+    webserver_impl* ws_impl = (ws != nullptr) ? ws->impl_.get() : nullptr;
 
     // Resolve the peer address from MHD via the live MHD_Connection*.
     // The connection is valid in both the STARTED and CLOSED branches
@@ -137,17 +154,11 @@ void webserver_impl::connection_notify(void* cls, struct MHD_Connection* connect
         return make_peer_address(ci->client_addr);
     };
 
-    // Short-circuit predicate: returns true when at least one hook is
-    // registered for the given phase. Uses a relaxed atomic load because
-    // the gate only needs to be visible after the hook was added (which
-    // happens under a unique_lock with a release store). False-negative
-    // on a very early concurrent add is acceptable; the hook simply fires
-    // on the next event. A single lambda definition avoids duplicating the
-    // cast and memory-order spelling at every call site.
-    auto hooks_armed = [&impl](::httpserver::hook_phase p) -> bool {
-        return impl != nullptr &&
-               impl->any_hooks_[static_cast<std::size_t>(p)]
-                   .load(std::memory_order_relaxed);
+    // Short-circuit predicate: delegates to the file-scope is_phase_armed
+    // free function so that both connection_notify and policy_callback use
+    // the same idiom without duplicating the cast/load expression.
+    auto hooks_armed = [&ws_impl](::httpserver::hook_phase p) -> bool {
+        return is_phase_armed(ws_impl, p);
     };
 
     switch (toe) {
@@ -161,7 +172,7 @@ void webserver_impl::connection_notify(void* cls, struct MHD_Connection* connect
             // registered: a single relaxed atomic load + branch.
             if (hooks_armed(::httpserver::hook_phase::connection_opened)) {
                 ::httpserver::connection_open_ctx ctx{resolve_peer()};
-                impl->fire_connection_opened(ctx);
+                ws_impl->fire_connection_opened(ctx);
             }
             break;
         case MHD_CONNECTION_NOTIFY_CLOSED:
@@ -171,7 +182,7 @@ void webserver_impl::connection_notify(void* cls, struct MHD_Connection* connect
             // ordering choice is safe regardless and pins the contract.
             if (hooks_armed(::httpserver::hook_phase::connection_closed)) {
                 ::httpserver::connection_close_ctx ctx{resolve_peer()};
-                impl->fire_connection_closed(ctx);
+                ws_impl->fire_connection_closed(ctx);
             }
             // MHD ordering guarantee: NOTIFY_COMPLETED fires before
             // NOTIFY_CLOSED for the same connection. By the time we reach
@@ -219,9 +230,7 @@ MHD_Result webserver_impl::policy_callback(void *cls, const struct sockaddr* add
 
     // Fire the hook strictly after `decision` is fixed. The relaxed
     // atomic gate keeps zero-cost-when-unused (PRD-HOOK-REQ-008).
-    if (impl->any_hooks_[static_cast<std::size_t>(
-                ::httpserver::hook_phase::accept_decision)]
-            .load(std::memory_order_relaxed)) {
+    if (is_phase_armed(impl, ::httpserver::hook_phase::accept_decision)) {
         ::httpserver::accept_ctx ctx{
             make_peer_address(addr), accepted, reason};
         impl->fire_accept_decision(ctx);

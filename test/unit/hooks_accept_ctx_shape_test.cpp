@@ -46,7 +46,8 @@ LT_BEGIN_SUITE(hooks_accept_ctx_shape_suite)
     void tear_down() {}
 LT_END_SUITE(hooks_accept_ctx_shape_suite)
 
-LT_BEGIN_AUTO_TEST(hooks_accept_ctx_shape_suite, runtime_construction)
+LT_BEGIN_AUTO_TEST(hooks_accept_ctx_shape_suite,
+                   default_accepted_true_reason_nullopt_and_aggregate_init_with_banned)
     accept_ctx ctx{};
     LT_CHECK_EQ(ctx.accepted, true);
     LT_CHECK(!ctx.reason.has_value());
@@ -55,7 +56,7 @@ LT_BEGIN_AUTO_TEST(hooks_accept_ctx_shape_suite, runtime_construction)
     LT_CHECK_EQ(ctx2.accepted, false);
     LT_CHECK(ctx2.reason.has_value());
     LT_CHECK_EQ(std::string(*ctx2.reason), std::string("banned"));
-LT_END_AUTO_TEST(runtime_construction)
+LT_END_AUTO_TEST(default_accepted_true_reason_nullopt_and_aggregate_init_with_banned)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
