@@ -41,7 +41,7 @@ struct modded_request {
     std::string standardized_url;
     webserver* ws = nullptr;
 
-    std::shared_ptr<http_response> (httpserver::http_resource::*callback)(const httpserver::http_request&);
+    std::shared_ptr<http_response> (httpserver::http_resource::*callback)(const httpserver::http_request&) = nullptr;
 
     std::unique_ptr<http_request> dhr = nullptr;
     std::shared_ptr<http_response> dhrs;

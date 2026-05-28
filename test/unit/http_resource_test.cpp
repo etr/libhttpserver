@@ -141,20 +141,6 @@ LT_BEGIN_AUTO_TEST(http_resource_suite, default_render_returns_empty)
     LT_CHECK_EQ(allowed.size(), 9);  // All 9 methods allowed by default
 LT_END_AUTO_TEST(default_render_returns_empty)
 
-LT_BEGIN_AUTO_TEST(http_resource_suite, render_only_resource_methods_allowed)
-    render_only_resource ror;
-    // All methods should be allowed by default
-    LT_CHECK_EQ(ror.is_allowed(MHD_HTTP_METHOD_GET), true);
-    LT_CHECK_EQ(ror.is_allowed(MHD_HTTP_METHOD_POST), true);
-    LT_CHECK_EQ(ror.is_allowed(MHD_HTTP_METHOD_PUT), true);
-    LT_CHECK_EQ(ror.is_allowed(MHD_HTTP_METHOD_HEAD), true);
-    LT_CHECK_EQ(ror.is_allowed(MHD_HTTP_METHOD_DELETE), true);
-    LT_CHECK_EQ(ror.is_allowed(MHD_HTTP_METHOD_TRACE), true);
-    LT_CHECK_EQ(ror.is_allowed(MHD_HTTP_METHOD_CONNECT), true);
-    LT_CHECK_EQ(ror.is_allowed(MHD_HTTP_METHOD_OPTIONS), true);
-    LT_CHECK_EQ(ror.is_allowed(MHD_HTTP_METHOD_PATCH), true);
-LT_END_AUTO_TEST(render_only_resource_methods_allowed)
-
 LT_BEGIN_AUTO_TEST(http_resource_suite, resource_init_sets_all_methods)
     simple_resource sr;
     // Verify all 9 HTTP methods are initialized
