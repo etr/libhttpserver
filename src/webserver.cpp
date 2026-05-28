@@ -151,7 +151,17 @@ namespace detail {
 
 // ----- webserver_impl construction / destruction -------------------------
 
-webserver_impl::webserver_impl(webserver* parent_ptr) : parent(parent_ptr) {
+webserver_impl::webserver_impl(webserver* parent, MHD_socket bind_socket_val)
+    : parent(parent), bind_socket(bind_socket_val) {
+    // Guard against null parent: the dispatch helpers (not_found_page,
+    // method_not_allowed_page, internal_error_page, etc.) read the const
+    // config bag on `parent` and will dereference this pointer on every
+    // request. The only valid call site is webserver::webserver, which
+    // always passes `this` — a non-null pointer to the owning webserver.
+    if (parent == nullptr) {
+        throw std::invalid_argument(
+            "webserver_impl requires a non-null owning webserver pointer");
+    }
     pthread_mutex_init(&mutexwait, nullptr);
     pthread_cond_init(&mutexcond, nullptr);
 }
@@ -238,7 +248,17 @@ webserver::webserver(const create_webserver& params):
     https_priorities_append(params._https_priorities_append),
     no_alpn(params._no_alpn),
     client_discipline_level(params._client_discipline_level),
-    impl_(std::make_unique<detail::webserver_impl>(this)) {
+    // create_webserver uses int=0 as "no pre-bound socket" to keep the
+    // public builder header free of <microhttpd.h>. Convert to the
+    // MHD_socket sentinel (MHD_INVALID_SOCKET) so the impl always uses
+    // a well-defined sentinel. Pass through the impl_ constructor so the
+    // impl is fully initialised from the member-initialiser list with no
+    // post-construction mutations of impl_ members.
+    impl_(std::make_unique<detail::webserver_impl>(
+        this,
+        (params._bind_socket != 0)
+            ? static_cast<MHD_socket>(params._bind_socket)
+            : MHD_INVALID_SOCKET)) {
         // TASK-034 §7: any feature the builder asked for that the
         // library was not compiled with must fail loudly here. Throwing
         // from the ctor body (after the member-initialiser list) lets
@@ -264,7 +284,6 @@ webserver::webserver(const create_webserver& params):
         }
 #endif
         ignore_sigpipe();
-        impl_->bind_socket = params._bind_socket;
         // TASK-048: register the three v1 setter aliases as hooks
         // (route_resolved for not_found_handler; before_handler for
         // method_not_allowed_handler and auth_handler). Conditional on

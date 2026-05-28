@@ -40,15 +40,27 @@ static_assert(!std::is_move_constructible_v<httpserver::webserver>,
 static_assert(!std::is_move_assignable_v<httpserver::webserver>,
               "webserver must not be move-assignable");
 
-// (2) Conservative size upper bound: the config bag still lives on
-//     webserver in TASK-014; only backend-coupled state moves into the
-//     impl. The intent of this assertion is to fail loudly if a future
-//     hand merges impl members back into webserver. TASK-019/020 will
-//     tighten this to ~sizeof(void*) once the config bag also moves
-//     into the impl. The pre-TASK-014 baseline was ~1600 bytes on
-//     LP64 hosts; we bound the post-split layout at 144 pointers
-//     (1152 bytes on LP64) so any regrowth is caught.
+// (2) Size bounds: the config bag still lives on webserver in TASK-014;
+//     only backend-coupled state moves into the impl.
+//
+//     Upper bound: fail loudly if a future hand merges impl members back
+//     into webserver. TASK-019/020 will tighten this to ~sizeof(void*) once
+//     the config bag also moves into the impl. The pre-TASK-014 baseline was
+//     ~1600 bytes on LP64 hosts; we bound the post-split layout at 144
+//     pointers (1152 bytes on LP64) so any regrowth is caught.
 static_assert(sizeof(httpserver::webserver) <= 144 * sizeof(void*),
               "webserver size grew unexpectedly after PIMPL split");
+//
+//     Lower bound (symmetrical): webserver must contain at least the
+//     impl_ pointer itself. If someone accidentally links the backend
+//     state back in without changing the public class, this catches the
+//     case where the type somehow collapses to an empty shell.
+//     Also documents that the PIMPL split had a real structural effect
+//     (the post-split size is strictly smaller than the 1600-byte baseline).
+static_assert(sizeof(httpserver::webserver) >= sizeof(void*),
+              "webserver is suspiciously small — impl_ pointer may be missing");
+static_assert(sizeof(httpserver::webserver) < 1600,
+              "webserver grew back to pre-PIMPL-split size (>= 1600 bytes); "
+              "check that no impl members were moved back into the public class");
 
 int main() { return 0; }

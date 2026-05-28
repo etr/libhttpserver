@@ -18,12 +18,13 @@
      USA
 */
 
-// TASK-014: this detail header uses a dual-mode gate (_HTTPSERVER_HPP_INSIDE_ OR
-// HTTPSERVER_COMPILATION) because webserver.hpp (a public header) still
-// transitively includes it. Once TASK-014 lands the PIMPL split removing that
-// transitive include, tighten this gate to HTTPSERVER_COMPILATION-only.
-#if !defined (_HTTPSERVER_HPP_INSIDE_) && !defined (HTTPSERVER_COMPILATION)
-#error "Only <httpserver.hpp> or <httpserverpp> can be included directly."
+// ADR-002 / TASK-014: PIMPL split removed the transitive include of
+// http_endpoint.hpp from webserver.hpp. The dual-mode guard
+// (_HTTPSERVER_HPP_INSIDE_ OR HTTPSERVER_COMPILATION) is tightened to
+// HTTPSERVER_COMPILATION-only per ADR-002 §Consequences which states this
+// gate must be tightened once the PIMPL split lands.
+#if !defined(HTTPSERVER_COMPILATION)
+#error "httpserver/detail/http_endpoint.hpp is internal; only include it when compiling libhttpserver (HTTPSERVER_COMPILATION must be defined)."
 #endif
 
 #ifndef SRC_HTTPSERVER_DETAIL_HTTP_ENDPOINT_HPP_
