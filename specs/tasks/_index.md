@@ -1,7 +1,7 @@
 # libhttpserver v2.0 — Task Plan
 
 **Status:** Draft 1
-**Last updated:** 2026-05-20
+**Last updated:** 2026-05-27
 **Owner:** Sebastiano Merlino
 **Inputs:** [specs/product_specs.md](../product_specs.md), [specs/architecture/](../architecture/)
 

@@ -698,14 +698,9 @@ jobs:
       if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
 
     - name: Run libhttpserver configure
+      # TASK-038: fixed CXXLAGS -> CXXFLAGS typo so C++ TUs are instrumented by the sanitizer matrix.
       run: |
         # Set memory check flags. They need to stay in step as env variables don't propagate across steps.
-        # TASK-038: CXXFLAGS (NOT CXXLAGS) is the autoconf-recognized var
-        # that gets passed to the C++ compiler. A long-standing typo left
-        # C++ TUs uninstrumented under asan/msan/lsan/tsan/ubsan — the
-        # runtime libs were linked but the code itself was compiled
-        # without -fsanitize=..., so the sanitizers were no-ops on the
-        # library. The fix is a single missing 'F' per line.
         if [ "$BUILD_TYPE" = "asan" ]; then export CFLAGS='-fsanitize=address'; export CXXFLAGS='-fsanitize=address'; export LDFLAGS='-fsanitize=address'; fi
         if [ "$BUILD_TYPE" = "msan" ]; then export CFLAGS='-fsanitize=memory'; export CXXFLAGS='-fsanitize=memory'; export LDFLAGS='-fsanitize=memory'; fi
         if [ "$BUILD_TYPE" = "lsan" ]; then export CFLAGS='-fsanitize=leak'; export CXXFLAGS='-fsanitize=leak'; export LDFLAGS='-fsanitize=leak'; fi
