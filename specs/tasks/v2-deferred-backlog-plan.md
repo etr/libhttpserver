@@ -42,6 +42,7 @@ on `canonicalize_lookup_path`) can ride along with TASK-053.
 **Milestone:** M5 - Routing, Lifecycle, Builder & Features
 **Component:** `webserver_impl` dispatch
 **Estimate:** L
+**Status:** Done
 
 **Goal:**
 Make TASK-027's 3-tier route table (`exact_routes_`, radix tree, regex
@@ -52,24 +53,46 @@ the v1 vector. The architectural goal of TASK-027 (O(1) exact lookup +
 LRU cache + radix scan) is not realised end-to-end.
 
 **Action Items:**
-- [ ] Locate the v1 lookup site (`webserver_impl::find_route_for_request`
-  or equivalent in `src/detail/webserver_dispatch.cpp`) and add a feature
-  flag (`use_lookup_v2_`, default `true`) that selects `lookup_v2` over
-  the legacy walk.
-- [ ] Wire the `lookup_result` shape (tier_hit, captured_params) into the
-  existing dispatch contract so the call site doesn't need a parallel
-  `route_entry*` path.
-- [ ] Remove the v1 fallback walk once `make check` and
-  `routing_regression_test` pass under the v2 path.
-- [ ] Delete the legacy linear `route_table_v1_` field when no caller
-  remains. (May require a follow-up grep sweep of `webserver_register.cpp`
-  / `webserver_routes.cpp`.)
-- [ ] Run `test/bench_hook_overhead.cpp` and a new
-  `test/bench_route_lookup.cpp` to confirm the cache-hit path is in the
-  expected 100ns ballpark and the radix tier is in the µs range.
-- [ ] Drop the "TODO(Cycle K): rename route_cache_v2 → route_lru_cache"
-  comment in `webserver_impl.hpp:202` and do the rename now that v1 is
-  gone.
+- [x] Locate the v1 lookup site (`webserver_impl::resolve_resource_for_request`)
+  and add the safety net first: a unit-level contract test
+  (`test/unit/v2_dispatch_contract_test.cpp`) pinning the
+  end-to-end (method, path) → entry shape against `lookup_v2`
+  parity so step-2 cutover cannot regress silently. Committed
+  as TASK-053 step 1.
+- [x] Wire the `lookup_result` shape (tier_hit, captured_params) into
+  the dispatch contract: `resolve_resource_for_request` now
+  consults `lookup_v2()` directly behind the same `bool found,
+  route_entry entry` shape the v1 path expected, gated by the
+  `use_lookup_v2_` flag (default `true`). Committed as TASK-053
+  step 2.
+- [x] Remove the v1 fallback walk and rename `route_cache_v2` →
+  `route_lru_cache` in one commit so the dispatch path has a
+  single, named cache field. The four v1 lookup helpers
+  (`lookup_route_cache`, `scan_regex_routes`, `store_route_cache`,
+  `apply_extracted_params`) are deleted; the v1 registration
+  maps (`registered_resources*`) survive only as registration-
+  time bookkeeping for `prepare_or_create_lambda_shim` and the
+  WebSocket path, flagged in comments and the architecture doc
+  as non-dispatch state with their removal as its own follow-
+  up. Committed as TASK-053 step 3.
+- [x] Flip basic-suite integration tests whose v1 expectations no
+  longer match v2 semantics (`overlapping_endpoints`,
+  `regex_matching_arg_custom`, `regex_url_exact_match`) and
+  point them at `test/REGRESSION.md` §3/§4 plus the pinned
+  unit-level routing_regression tests. Committed as TASK-053
+  step 4.
+- [x] Add `test/bench_route_lookup.cpp`: pins cache-hit median ≤ 200
+  ns and 8-segment radix tier median ≤ 5 µs via
+  `webserver_test_access::impl(...)->lookup_v2(...)` (no MHD
+  daemon). Wired into `make bench` via `bench_targets`, NOT
+  `make check`. Sanitizer builds skip with exit 0. Committed
+  as TASK-053 step 5.
+- [x] The "TODO(Cycle K): rename route_cache_v2 → route_lru_cache"
+  comment was removed when the rename landed in step 3; the
+  field is now `route_lru_cache` and the only surviving
+  `route_cache_v2` token in the headers is the historical
+  pointer comment ("Renamed from route_cache_v2 in TASK-053
+  step 3...") on the field declaration.
 
 **Dependencies:**
 - Blocked by: TASK-027 (Done), TASK-028 (Done)
