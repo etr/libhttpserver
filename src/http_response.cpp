@@ -467,15 +467,20 @@ http_response http_response::unauthorized(std::string_view scheme,
             "character (CR, LF, or NUL)");
     }
 
-    // Security: escape double-quote characters inside realm per RFC 7235
-    // §2.1 quoted-string rules. An unescaped " terminates the quoted-string
-    // early, producing syntactically invalid header values that some parsers
-    // misinterpret (CWE-116).
+    // Security: escape backslash and double-quote characters inside realm
+    // per RFC 7235 §2.1 quoted-string rules.  RFC 7235 allows both to be
+    // escaped via the quoted-pair rule `\X`; an unescaped `"` terminates
+    // the quoted-string early (CWE-116) and an unescaped `\` is
+    // misinterpreted as starting an escape sequence by strict parsers.
+    // Backslash must be escaped first to avoid double-escaping the
+    // backslashes we insert for double-quote escaping.
     std::string escaped_realm;
     escaped_realm.reserve(realm.size());
     for (char c : realm) {
-        if (c == '"') {
-            escaped_realm.push_back('\\');
+        if (c == '\\') {
+            escaped_realm.push_back('\\');  // escape backslash first
+        } else if (c == '"') {
+            escaped_realm.push_back('\\');  // escape double-quote
         }
         escaped_realm.push_back(c);
     }

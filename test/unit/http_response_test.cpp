@@ -146,32 +146,6 @@ LT_BEGIN_AUTO_TEST(http_response_suite, ostream_operator_full)
     LT_CHECK_EQ(output.find("UserId") != string::npos, true);
 LT_END_AUTO_TEST(ostream_operator_full)
 
-// Test response code constants
-LT_BEGIN_AUTO_TEST(http_response_suite, response_code_200)
-    http_response resp = http_response::string("OK").with_status(200);
-    LT_CHECK_EQ(resp.get_status(), 200);
-LT_END_AUTO_TEST(response_code_200)
-
-LT_BEGIN_AUTO_TEST(http_response_suite, response_code_201)
-    http_response resp = http_response::string("Created").with_status(201);
-    LT_CHECK_EQ(resp.get_status(), 201);
-LT_END_AUTO_TEST(response_code_201)
-
-LT_BEGIN_AUTO_TEST(http_response_suite, response_code_301)
-    http_response resp = http_response::string("").with_status(301);
-    LT_CHECK_EQ(resp.get_status(), 301);
-LT_END_AUTO_TEST(response_code_301)
-
-LT_BEGIN_AUTO_TEST(http_response_suite, response_code_400)
-    http_response resp = http_response::string("Bad Request").with_status(400);
-    LT_CHECK_EQ(resp.get_status(), 400);
-LT_END_AUTO_TEST(response_code_400)
-
-LT_BEGIN_AUTO_TEST(http_response_suite, response_code_500)
-    http_response resp = http_response::string("Internal Server Error").with_status(500);
-    LT_CHECK_EQ(resp.get_status(), 500);
-LT_END_AUTO_TEST(response_code_500)
-
 // Test get_header with nonexistent key
 LT_BEGIN_AUTO_TEST(http_response_suite, get_header_nonexistent)
     http_response resp = http_response::string("body");

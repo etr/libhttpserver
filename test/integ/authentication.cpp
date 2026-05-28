@@ -304,6 +304,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_wrong_pass)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
+    long http_code = 0;  // NOLINT(runtime/int)
     curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_DIGEST);
 #if defined(_WINDOWS)
     curl_easy_setopt(curl, CURLOPT_USERPWD, "examplerealm/myuser:wrongpass");
@@ -320,6 +321,9 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_wrong_pass)
     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    // v2 contract: static 401 Digest challenge, no handshake completes.
+    LT_CHECK_EQ(http_code, 401);
     LT_CHECK_EQ(s, "FAIL");
     curl_easy_cleanup(curl);
 
@@ -348,6 +352,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
+    long http_code = 0;  // NOLINT(runtime/int)
     curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_DIGEST);
 #if defined(_WINDOWS)
     curl_easy_setopt(curl, CURLOPT_USERPWD, "examplerealm/myuser:mypass");
@@ -364,6 +369,9 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5)
     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    // v2 contract: static 401 Digest challenge, no handshake completes.
+    LT_CHECK_EQ(http_code, 401);
     // TASK-013 §2 / §10: v2 digest auth only emits a static challenge — see
     // digest_auth test above. Handshake cannot complete; body remains FAIL.
     LT_CHECK_EQ(s, "FAIL");
@@ -393,6 +401,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5_wrong_pass)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
+    long http_code = 0;  // NOLINT(runtime/int)
     curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_DIGEST);
 #if defined(_WINDOWS)
     curl_easy_setopt(curl, CURLOPT_USERPWD, "examplerealm/myuser:wrongpass");
@@ -409,6 +418,9 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5_wrong_pass)
     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    // v2 contract: static 401 Digest challenge, no handshake completes.
+    LT_CHECK_EQ(http_code, 401);
     LT_CHECK_EQ(s, "FAIL");
     curl_easy_cleanup(curl);
 
@@ -436,6 +448,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
+    long http_code = 0;  // NOLINT(runtime/int)
     curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_DIGEST);
 #if defined(_WINDOWS)
     curl_easy_setopt(curl, CURLOPT_USERPWD, "examplerealm/myuser:mypass");
@@ -452,6 +465,9 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256)
     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    // v2 contract: static 401 Digest challenge, no handshake completes.
+    LT_CHECK_EQ(http_code, 401);
     // TASK-013 §2 / §10: v2 digest auth only emits a static challenge — see
     // digest_auth test above. Handshake cannot complete; body remains FAIL.
     LT_CHECK_EQ(s, "FAIL");
@@ -482,6 +498,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256_wrong_pass)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
+    long http_code = 0;  // NOLINT(runtime/int)
     curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_DIGEST);
 #if defined(_WINDOWS)
     curl_easy_setopt(curl, CURLOPT_USERPWD, "examplerealm/myuser:wrongpass");
@@ -498,6 +515,9 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256_wrong_pass)
     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    // v2 contract: static 401 Digest challenge, no handshake completes.
+    LT_CHECK_EQ(http_code, 401);
     LT_CHECK_EQ(s, "FAIL");
     curl_easy_cleanup(curl);
 
@@ -560,7 +580,15 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_user_cache_no_auth)
     ws.stop();
 LT_END_AUTO_TEST(digest_user_cache_no_auth)
 
-// Test digested user caching with digest auth (cache hit with valid user)
+// Test that digest_user_cache_resource handles a digest-auth attempt under v2.
+// NOTE: Under v2's static-challenge model (DR-013), the digest handshake never
+// completes, so get_digested_user() always returns an empty string.  The cache
+// hit path inside digest_user_cache_resource is therefore unreachable.  This
+// test asserts only that the server issues the expected static 401 challenge
+// (body == "FAIL"); it does NOT verify the cache-hit code path, which becomes
+// meaningful when full v2 Digest support (nonce/opaque state machine) is added.
+// TODO(v2-digest): rename to digest_user_cache_with_auth_v2_no_handshake
+// and update assertions when full Digest auth lands.
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_user_cache_with_auth)
     webserver ws{create_webserver(PORT)
         .digest_auth_random("myrandom")
