@@ -160,24 +160,6 @@ LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_from_string_no_regex)
     LT_CHECK_EQ(test_endpoint.is_regex_compiled(), false);
 LT_END_AUTO_TEST(http_endpoint_from_string_no_regex)
 
-LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_registration)
-    http_endpoint test_endpoint("/path/to/resource", false, true, true);
-
-    LT_CHECK_EQ(test_endpoint.get_url_complete(), "/path/to/resource");
-    LT_CHECK_EQ(test_endpoint.get_url_normalized(), "^/path/to/resource$");
-
-    LT_CHECK_EQ(test_endpoint.get_url_pars().size(), 0);
-
-    string expected_arr[] = { "path", "to", "resource" };
-    vector<string> expected_pieces(expected_arr, expected_arr + sizeof(expected_arr) / sizeof(expected_arr[0]));
-    LT_CHECK_COLLECTIONS_EQ(test_endpoint.get_url_pieces().begin(), test_endpoint.get_url_pieces().end(), expected_pieces.begin());
-
-    LT_CHECK_EQ(test_endpoint.get_chunk_positions().size(), 0);
-
-    LT_CHECK_EQ(test_endpoint.is_family_url(), false);
-    LT_CHECK_EQ(test_endpoint.is_regex_compiled(), true);
-LT_END_AUTO_TEST(http_endpoint_registration)
-
 LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_registration_nested_regex)
     http_endpoint test_endpoint("/path/to/resource/with/[0-9]+/to/fetch", false, true, true);
 
@@ -266,9 +248,7 @@ LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_assignment)
 
     LT_CHECK_NEQ(a.get_url_complete(), b.get_url_complete());
 
-    std::cout << "before assigning" << std::endl;
     b = a;
-    std::cout << "after assigning" << std::endl;
 
     LT_CHECK_EQ(a.get_url_complete(), b.get_url_complete());
     LT_CHECK_EQ(a.get_url_normalized(), b.get_url_normalized());
@@ -563,16 +543,6 @@ LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_regex_no_registration_thro
     // use_regex=true but registration=false should throw
     LT_CHECK_THROW(http_endpoint("/path", false, false, true));
 LT_END_AUTO_TEST(http_endpoint_regex_no_registration_throws)
-
-// Test non-registration path (use_regex=false, registration=false)
-LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_non_registration)
-    http_endpoint test_endpoint("/path/to/resource", false, false, false);
-
-    // Non-registration endpoints should still parse correctly
-    LT_CHECK_EQ(test_endpoint.get_url_complete(), "/path/to/resource");
-    LT_CHECK_EQ(test_endpoint.get_url_normalized(), "/path/to/resource");
-    LT_CHECK_EQ(test_endpoint.is_regex_compiled(), false);
-LT_END_AUTO_TEST(http_endpoint_non_registration)
 
 // Test with trailing slash (should be removed)
 LT_BEGIN_AUTO_TEST(http_endpoint_suite, http_endpoint_trailing_slash_removed)

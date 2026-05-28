@@ -335,8 +335,8 @@ class http_response final {
      // allocated via ::operator new(sizeof(T)) + placement-new (heap
      // fallback). body_inline_ discriminates the two non-null cases so
      // the destructor knows whether to invoke ::operator delete.
-     // kind_ lets dispatch sites fast-path on body kind without a
-     // virtual call.
+     // kind_ will let dispatch sites (TASK-010/011) fast-path on body
+     // kind without a virtual call.
      body_kind kind_ = body_kind::empty;
      alignas(16) std::byte body_storage_[body_buf_size]{};
      detail::body* body_ = nullptr;
@@ -346,7 +346,7 @@ class http_response final {
      // move-assign. Both noexcept (DR-005). See http_response.cpp for
      // the inline-vs-heap discriminator details.
      void destroy_body() noexcept;
-     void adopt_body_from(http_response& o) noexcept;
+     void adopt_body_from(http_response& other) noexcept;
 
      // Shared mutation helpers for the fluent setters (TASK-012
      // review-pass). Each helper validates its inputs, then performs the

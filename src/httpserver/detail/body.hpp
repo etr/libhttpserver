@@ -358,14 +358,24 @@ class deferred_body final : public body {
 // ---------------------------------------------------------------------------
 static_assert(sizeof(empty_body) <= 64,
               "empty_body must fit in http_response SBO (DR-005)");
+static_assert(alignof(empty_body) <= 16,
+              "empty_body alignment must be <= alignas(16) SBO buffer (DR-005)");
 static_assert(sizeof(string_body) <= 64,
               "string_body must fit in http_response SBO (DR-005)");
+static_assert(alignof(string_body) <= 16,
+              "string_body alignment must be <= alignas(16) SBO buffer (DR-005)");
 static_assert(sizeof(file_body) <= 64,
               "file_body must fit in http_response SBO (DR-005)");
+static_assert(alignof(file_body) <= 16,
+              "file_body alignment must be <= alignas(16) SBO buffer (DR-005)");
 static_assert(sizeof(iovec_body) <= 64,
               "iovec_body must fit in http_response SBO (DR-005)");
+static_assert(alignof(iovec_body) <= 16,
+              "iovec_body alignment must be <= alignas(16) SBO buffer (DR-005)");
 static_assert(sizeof(pipe_body) <= 64,
               "pipe_body must fit in http_response SBO (DR-005)");
+static_assert(alignof(pipe_body) <= 16,
+              "pipe_body alignment must be <= alignas(16) SBO buffer (DR-005)");
 static_assert(sizeof(deferred_body) <= 64,
               "deferred_body must fit in http_response SBO (DR-005)");
 static_assert(alignof(deferred_body) <= 16,

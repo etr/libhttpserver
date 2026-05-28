@@ -57,7 +57,7 @@ struct modded_request {
     // nullptr; set by resolve_method_callback for recognized HTTP methods.
     // For unrecognized methods mr->method_enum is left at count_ and
     // finalize_answer takes the 405 path before invoking this pointer.
-    http_response (httpserver::http_resource::*callback)(const httpserver::http_request&) = nullptr;
+    http_response (http_resource::*callback)(const http_request&) = nullptr;
 
     // TASK-021: enum form of the wire method, decoded once at the
     // dispatch boundary in webserver_impl::answer_to_connection. Used
@@ -65,7 +65,7 @@ struct modded_request {
     // per-request string compare. Defaults to count_ — a sentinel
     // outside the valid_method_mask, so is_allowed returns false for
     // unrecognized verbs (the 405 path).
-    httpserver::http_method method_enum = httpserver::http_method::count_;
+    http_method method_enum = http_method::count_;
 
     std::unique_ptr<http_request> dhr = nullptr;
     // DR-010 / §5.3: anchor kept alive until request_completed. See webserver_impl.hpp for full contract.
@@ -116,7 +116,7 @@ struct modded_request {
     // alive until ~modded_request, so the resource cannot be destroyed
     // mid-firing -- the hot-path firing helpers lock() into a local
     // shared_ptr before iterating.
-    std::weak_ptr<::httpserver::http_resource> resource_weak_{};
+    std::weak_ptr<http_resource> resource_weak_{};
 
     modded_request() = default;
 
