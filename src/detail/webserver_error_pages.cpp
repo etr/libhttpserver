@@ -94,7 +94,7 @@ http_response webserver_impl::internal_error_page(
         .with_status(http_utils::http_internal_server_error);
 }
 
-void webserver_impl::log_dispatch_error(std::string_view msg) const {
+void webserver_impl::log_dispatch_error(std::string_view msg) const noexcept {
     if (parent->log_error == nullptr) {
         return;
     }

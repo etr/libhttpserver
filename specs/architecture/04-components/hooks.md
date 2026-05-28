@@ -6,8 +6,8 @@
 
 | Phase | Fires at (file:symbol) | Short-circuit | Per-route eligible |
 |---|---|---|---|
-| `connection_opened` | `webserver.cpp:connection_notify` — `MHD_CONNECTION_NOTIFY_STARTED` | no | no |
-| `accept_decision` | `webserver.cpp:policy_callback` — after YES/NO decision | no | no |
+| `connection_opened` | `detail/webserver_callbacks_lifecycle.cpp:connection_notify` — `MHD_CONNECTION_NOTIFY_STARTED` | no | no |
+| `accept_decision` | `detail/webserver_callbacks_lifecycle.cpp:policy_callback` — after YES/NO decision | no | no |
 | `request_received` | `webserver_body_pipeline.cpp:requests_answer_first_step` — post header-parse, pre body-read | **yes** | no (route not yet known) |
 | `body_chunk` | `webserver_body_pipeline.cpp:requests_answer_second_step` — per chunk | **yes** | no |
 | `route_resolved` | `webserver.cpp:resolve_resource_for_request` — after lookup | no | n/a (boundary phase) |
@@ -16,7 +16,7 @@
 | `after_handler` | between handler return and `materialize_and_queue_response` | **yes** (replaces response) | yes |
 | `response_sent` | `webserver_request.cpp:materialize_and_queue_response` — post `MHD_queue_response` | no | yes |
 | `request_completed` | `webserver_callbacks.cpp:request_completed` — NOTIFY_COMPLETED | no | yes |
-| `connection_closed` | `webserver.cpp:connection_notify` — NOTIFY_CLOSED | no | no |
+| `connection_closed` | `detail/webserver_callbacks_lifecycle.cpp:connection_notify` — NOTIFY_CLOSED | no | no |
 
 **Implementation.** Each phase has its own `std::vector<std::function<...>>` in `webserver_impl`, guarded by a single `std::shared_mutex hook_table_mutex_`. A per-phase `std::atomic<bool> any_hooks_[hook_phase::count_]` flag short-circuits the dispatch site to a relaxed atomic load and a compare-with-zero when no subscribers exist — the only hook-related cost on the hot request path for a server with zero hooks registered.
 

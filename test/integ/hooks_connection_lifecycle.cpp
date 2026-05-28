@@ -181,10 +181,32 @@ LT_BEGIN_AUTO_TEST(hooks_connection_lifecycle_suite, all_three_phases_fire)
     //   - connection_closed is the LAST event (lifecycle invariant)
     //   - the FIRST event is either connection_opened or accept_decision
     //     (MHD callback order is platform-dependent)
+    //   - connection_opened must appear before connection_closed
+    //     (the open-before-close invariant is always required)
     LT_ASSERT(!snapshot.empty());
     LT_CHECK_EQ(snapshot.back().phase_name, std::string("connection_closed"));
     const std::string& first = snapshot.front().phase_name;
     LT_CHECK(first == "connection_opened" || first == "accept_decision");
+
+    // Verify that connection_opened appears before connection_closed.
+    // Find the first index of each; connection_opened must come first.
+    std::size_t opened_idx = snapshot.size();
+    std::size_t closed_idx = snapshot.size();
+    for (std::size_t i = 0; i < snapshot.size(); ++i) {
+        if (snapshot[i].phase_name == "connection_opened" &&
+                opened_idx == snapshot.size()) {
+            opened_idx = i;
+        }
+        if (snapshot[i].phase_name == "connection_closed" &&
+                closed_idx == snapshot.size()) {
+            closed_idx = i;
+        }
+    }
+    // Both phases must have fired (already asserted above) and
+    // connection_opened must precede connection_closed.
+    LT_ASSERT(opened_idx < snapshot.size());
+    LT_ASSERT(closed_idx < snapshot.size());
+    LT_CHECK(opened_idx < closed_idx);
 
 LT_END_AUTO_TEST(all_three_phases_fire)
 
