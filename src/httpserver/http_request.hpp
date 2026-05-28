@@ -93,9 +93,10 @@ struct http_request_impl_deleter {
  *
  * Several getter methods return `std::string_view` rather than `std::string`
  * for zero-copy access to request data that lives in a per-connection arena.
- * **All `std::string_view` values returned by this class are only valid
- * within the handler's call frame.** They alias arena-backed storage that is
- * released by the request-completion callback once the handler returns.
+ * **All `std::string_view` values returned by this class are valid for the
+ * lifetime of the request object (typically the duration of the handler
+ * invocation).** They alias arena-backed storage that is released by the
+ * request-completion callback once the handler returns.
  *
  * Concretely: do NOT store a `std::string_view` from any getter in a
  * variable with a lifetime that outlasts the handler invocation.  If you
@@ -107,10 +108,10 @@ struct http_request_impl_deleter {
  *     // UNSAFE: the view is dangling after the handler returns.
  *     std::string_view view = request.get_user();  // captured past return!
  *
- * Getters affected: get_arg_flat(), get_querystring(), get_user(),
- * get_pass(), get_digested_user(), get_header(), get_footer(),
+ * Getters affected: get_arg_flat(), get_args_flat(), get_querystring(),
+ * get_user(), get_pass(), get_digested_user(), get_header(), get_footer(),
  * get_cookie(), get_requestor().
- * (security-reviewer-iter1-1, CWE-416 Use After Free.)
+ * (security-reviewer-iter1-1, CWE-416 Use After Free; Item 22.)
  *
  * ### Container reference lifetime contract (TASK-017)
  *
@@ -130,6 +131,16 @@ struct http_request_impl_deleter {
  * Implementation note: the first call to get_headers / get_footers /
  * get_cookies / get_args / get_path_pieces lazily populates a per-request
  * cache; subsequent calls are O(1) and return the same reference.
+ *
+ * ### Thread-safety (Item 21)
+ *
+ * `http_request` instances are **not thread-safe**. The lazy-fill booleans
+ * (`args_populated`, `headers_cache_built_`, etc.) are plain (non-atomic)
+ * booleans and the cache maps are unsynchronized. Accessing the same
+ * `http_request` from multiple threads simultaneously is a data race
+ * (CWE-362). The documented contract is that each request is processed by
+ * exactly one handler thread at a time; do not share an `http_request*`
+ * across threads without external synchronization.
 **/
 class http_request {
  public:
@@ -216,9 +227,19 @@ class http_request {
      /**
       * Method used to get all args passed with the request. If any key has multiple
       * values, one value is chosen and returned.
-      * @result the size of the map
+      * @return a by-value map of string_view key→value pairs. The views alias the
+      *         request's arena storage and must not outlive the handler invocation.
+      * @note (Item 22) The returned views carry the same CWE-416 dangling risk as
+      *       get_arg_flat() and the other affected getters listed in the class-level
+      *       string_view lifetime contract block above.
+      * @note (Item 24) This getter returns by value rather than const& (unlike
+      *       get_args()). The by-value return is intentional for now;
+      *       see TODO below. Callers should capture the result once and reuse it.
+      * TODO: consider a cached flat_args_view_cached_ (similar to args_view_cached_)
+      *       to avoid O(n log n) reconstruction on every call (Item 19, Item 24).
+      *       PRD-REQ-REQ-001 tracks making the container-level variant return const&.
      **/
-     const std::map<std::string_view, std::string_view, http::arg_comparator> get_args_flat() const;
+     [[nodiscard]] const std::map<std::string_view, std::string_view, http::arg_comparator> get_args_flat() const;
 
      /**
       * Method to get or create a file info struct in the map if the provided filename is already in the map
@@ -246,6 +267,9 @@ class http_request {
      std::string_view get_header(std::string_view key) const;
 
      /**
+      * Method used to get a specific cookie passed with the request.
+      * @param key the specific cookie to get the value from
+      * @return the value of the cookie.
       * @note The returned view is only valid within the handler's call frame.
      **/
      std::string_view get_cookie(std::string_view key) const;
@@ -262,6 +286,10 @@ class http_request {
       * Method used to get a specific argument passed with the request.
       * @param key the specific argument to get the value from
       * @return the value(s) of the arg.
+      * @note The `std::string_view` values inside the returned `http_arg_value`
+      *       alias the request's arena storage and carry the same lifetime
+      *       restriction as the standalone view accessors: do not store them
+      *       past the handler invocation. (Item 25: spec-alignment-checker.)
      **/
      http_arg_value get_arg(std::string_view key) const;
 
@@ -273,7 +301,7 @@ class http_request {
       * @note The returned view is only valid within the handler's call frame.
       *       Copy into std::string if the value must outlast the handler.
      **/
-     std::string_view get_arg_flat(std::string_view key) const;
+     [[nodiscard]] std::string_view get_arg_flat(std::string_view key) const;
 
      /**
       * Method used to get the content of the request.
@@ -302,8 +330,8 @@ class http_request {
       *       is only valid for the lifetime of the request object (typically
       *       the duration of the handler invocation). Copy into std::string
       *       to extend the lifetime.
-      * @note (TASK-018) The querystring is assembled eagerly at construction
-      *       on the live MHD path, so the public reader is `noexcept`.
+      * @note The querystring is assembled eagerly at construction on the live
+      *       MHD path, so the public reader is `noexcept`.
      **/
      std::string_view get_querystring() const noexcept;
 
@@ -332,7 +360,7 @@ class http_request {
      **/
      uint16_t get_requestor_port() const;
 
-     friend std::ostream &operator<< (std::ostream &os, http_request &r);
+     friend std::ostream& operator<<(std::ostream& os, const http_request& r);
 
      ~http_request();
 

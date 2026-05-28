@@ -71,7 +71,12 @@ std::string_view http_request_impl::get_connection_value(std::string_view key, M
         return http_request::EMPTY;
     }
 
-    const char* header_c = MHD_lookup_connection_value(connection_, kind, key.data());
+    // std::string_view is not guaranteed null-terminated, but
+    // MHD_lookup_connection_value requires a C-string. Construct a temporary
+    // null-terminated string from the view to avoid an OOB read when callers
+    // pass a non-terminated substring view. (Item 20: security-reviewer.)
+    const std::string key_str(key);
+    const char* header_c = MHD_lookup_connection_value(connection_, kind, key_str.c_str());
 
     if (header_c == nullptr) return http_request::EMPTY;
 

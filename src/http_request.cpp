@@ -259,7 +259,13 @@ std::string_view http_request::get_arg_flat(std::string_view key) const {
         return it->second[0];
     }
 
-    return impl_->get_connection_value(key, MHD_GET_ARGUMENT_KIND);
+    // Return EMPTY directly: populate_args() has already iterated over all
+    // MHD_GET_ARGUMENT_KIND values and stored them in unescaped_args.  If the
+    // key is absent after that pass, MHD will also not have it, so calling
+    // get_connection_value(key, MHD_GET_ARGUMENT_KIND) is redundant and
+    // would bypass unescaping, returning a raw (non-unescaped) value.
+    // (Items 4, 12, 18: code-simplifier / code-quality / performance.)
+    return EMPTY;
 }
 
 const http::arg_view_map& http_request::get_args() const {
@@ -304,6 +310,9 @@ std::string_view http_request::get_querystring() const noexcept {
     // TASK-018: querystring is assembled eagerly during construction (live
     // MHD path) or set directly by create_test_request (test path), so the
     // reader is a trivial member access -- genuinely noexcept.
+    // impl_ is always non-null on live requests; the default constructor is
+    // private and only callable by create_test_request, which constructs a
+    // valid impl_ before build() returns. (Item 5.)
     return impl_->querystring;
 }
 

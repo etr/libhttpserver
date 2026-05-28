@@ -451,11 +451,16 @@ LT_BEGIN_AUTO_TEST(create_test_request_suite, get_arg_flat_multi_value_returns_f
     LT_CHECK_EQ(std::string(arg.values[1]), std::string("second"));
 LT_END_AUTO_TEST(get_arg_flat_multi_value_returns_first)
 
+// Item 8 (code-quality-reviewer): note that the fallback path in
+// get_arg_flat() that previously called get_connection_value(key,
+// MHD_GET_ARGUMENT_KIND) on a miss has been removed (Item 4/12/18 fix).
+// The MHD live-connection path is exercised by integration tests; on the
+// test-request path (connection_ == nullptr) a miss correctly returns EMPTY.
+
 // Item 9 (code-quality-reviewer): get_arg_flat on a miss must return a
-// string_view whose data() points to http_request::EMPTY (the canonical
-// empty sentinel), not to some other static buffer. This is a direct check
-// on the return value, complementing the container-size invariant check in
-// missing_key_does_not_insert.
+// string_view whose data() points to the canonical empty sentinel, not a
+// nullptr. This is a direct check on the return value, complementing the
+// container-size invariant check in missing_key_does_not_insert.
 LT_BEGIN_AUTO_TEST(create_test_request_suite, get_arg_flat_miss_returns_empty_sentinel)
     auto req = create_test_request().build();
     std::string_view sv = req.get_arg_flat("no-such-key");
