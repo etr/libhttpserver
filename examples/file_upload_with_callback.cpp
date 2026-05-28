@@ -22,8 +22,38 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <string_view>
 
 #include <httpserver.hpp>
+
+// HTML-escape user-controlled text before placing it in a response body
+// to prevent reflected XSS (CWE-79). Never echo unfiltered client input.
+static std::string html_escape(std::string_view in) {
+    std::string out;
+    out.reserve(in.size());
+    for (char c : in) {
+        switch (c) {
+            case '&':  out += "&amp;";  break;
+            case '<':  out += "&lt;";   break;
+            case '>':  out += "&gt;";   break;
+            case '"':  out += "&quot;"; break;
+            case '\'': out += "&#39;";  break;
+            default:   out += c;        break;
+        }
+    }
+    return out;
+}
+
+// Reject filenames containing path separators, '..' segments, or NUL bytes
+// to prevent path traversal (CWE-22) when joining with permanent_dir.
+static bool is_safe_filename(std::string_view name) {
+    if (name.empty()) return false;
+    if (name == "." || name == "..") return false;
+    if (name.find('/') != std::string_view::npos) return false;
+    if (name.find('\\') != std::string_view::npos) return false;
+    if (name.find('\0') != std::string_view::npos) return false;
+    return true;
+}
 
 class file_upload_resource : public httpserver::http_resource {
  public:
@@ -54,7 +84,7 @@ class file_upload_resource : public httpserver::http_resource {
         for (auto &file_key : req.get_files()) {
             for (auto &files : file_key.second) {
                 post_response += "    <li>";
-                post_response += files.first;
+                post_response += html_escape(files.first);
                 post_response += " (";
                 post_response += std::to_string(files.second.get_file_size());
                 post_response += " bytes)</li>\n";
@@ -94,6 +124,16 @@ int main(int argc, char** argv) {
                                                  const std::string& filename,
                                                  const httpserver::http::file_info& info) {
             (void)key;  // Unused in this example
+            // Validate the filename before joining with permanent_dir.
+            // generate_random_filename_on_upload() already gives us a
+            // server-generated name, but a defensive check here protects
+            // against future code changes that may pass a client-supplied
+            // name through.
+            if (!is_safe_filename(filename)) {
+                std::cerr << "Rejected unsafe filename, will be deleted"
+                          << std::endl;
+                return true;
+            }
             // Move the uploaded file to permanent storage
             std::string dest = permanent_dir + "/" + filename;
             int result = std::rename(info.get_file_system_file_name().c_str(), dest.c_str());

@@ -141,10 +141,10 @@ exact children before wildcard children. Two wildcard-rooted routes
 that both match are resolved by first-registration insertion order
 into the wildcard chain. The pinned test
 (`overlapping_two_regex_routes_deterministic_first_wins`) asserts that
-the resolved handler is one of the two registered `shared_ptr`s
-without depending on which one — both because the v2 precedence is the
-new canonical behavior and because asserting "v1's accidental winner"
-would re-encode an explicit v1 bug into v2.
+the resolved handler is the first-registered `shared_ptr` (`*hp ==
+first`), pinning the deterministic first-wins contract. The earlier
+"could be either one" wording was a v1-era hedge that no longer
+matches v2 behavior.
 
 The companion test (`later_exact_registration_shadows_earlier_regex`)
 pins the cleaner half of `basic_suite::overlapping_endpoints`: when an

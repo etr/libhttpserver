@@ -21,8 +21,27 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <string_view>
 
 #include <httpserver.hpp>
+
+// HTML-escape user-controlled text before placing it in a response body
+// to prevent reflected XSS (CWE-79). Never echo unfiltered client input.
+static std::string html_escape(std::string_view in) {
+    std::string out;
+    out.reserve(in.size());
+    for (char c : in) {
+        switch (c) {
+            case '&':  out += "&amp;";  break;
+            case '<':  out += "&lt;";   break;
+            case '>':  out += "&gt;";   break;
+            case '"':  out += "&quot;"; break;
+            case '\'': out += "&#39;";  break;
+            default:   out += c;        break;
+        }
+    }
+    return out;
+}
 
 class file_upload_resource : public httpserver::http_resource {
  public:
@@ -72,17 +91,17 @@ class file_upload_resource : public httpserver::http_resource {
         for (auto &file_key : req.get_files()) {
             for (auto &files : file_key.second) {
                 post_response += "    <tr><td>";
-                post_response += file_key.first;
+                post_response += html_escape(file_key.first);
                 post_response += "</td><td>";
-                post_response += files.first;
+                post_response += html_escape(files.first);
                 post_response += "</td><td>";
-                post_response += files.second.get_file_system_file_name();
+                post_response += html_escape(files.second.get_file_system_file_name());
                 post_response += "</td><td>";
                 post_response += std::to_string(files.second.get_file_size());
                 post_response += "</td><td>";
-                post_response += files.second.get_content_type();
+                post_response += html_escape(files.second.get_content_type());
                 post_response += "</td><td>";
-                post_response += files.second.get_transfer_encoding();
+                post_response += html_escape(files.second.get_transfer_encoding());
                 post_response += "</td></tr>\n";
             }
         }
