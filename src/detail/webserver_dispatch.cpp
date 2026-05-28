@@ -95,15 +95,10 @@ namespace detail {
 // route_resolved and before_handler firing sites landed.
 
 void webserver_impl::invalidate_route_cache() {
-    // Clear both the v1 and v2 caches. v1's cache is keyed on
-    // standardized_url only; v2's is keyed on (method, path). A
-    // registration may invalidate both, so clear both atomically.
-    {
-        std::lock_guard<std::mutex> lock(route_cache_mutex_);
-        route_cache_list.clear();
-        route_cache_map.clear();
-    }
-    route_cache_v2.clear();
+    // Clear the v2 LRU cache. (The v1 dispatch cache — route_cache_list
+    // / route_cache_map / route_cache_mutex_ — was removed in TASK-053
+    // step 3 along with the v1 resolver.)
+    route_lru_cache.clear();
 }
 
 // TASK-027: 3-tier route lookup. Pipeline:
@@ -153,7 +148,7 @@ webserver_impl::lookup_v2(http_method method, const std::string& path) {
     // into a cache_key on every call, including warm-cache hits.
     // cache_key is only constructed when an insert is needed (miss path).
     cache_value cached;
-    if (route_cache_v2.find_by_view(method, lookup_path, cached)) {
+    if (route_lru_cache.find_by_view(method, lookup_path, cached)) {
         result.found = true;
         result.tier = tier_hit::cache;
         result.entry = std::move(cached.entry);
@@ -214,7 +209,7 @@ webserver_impl::lookup_v2(http_method method, const std::string& path) {
         cache_value v;
         v.entry = result.entry;
         v.captured_params = result.captured_params;
-        route_cache_v2.insert(key, std::move(v));
+        route_lru_cache.insert(key, std::move(v));
     }
 
     return result;
@@ -224,88 +219,15 @@ webserver_impl::lookup_v2(http_method method, const std::string& path) {
 
 namespace detail {
 
-std::optional<webserver_impl::regex_route_lookup>
-webserver_impl::lookup_route_cache(const std::string& key) {
-    std::lock_guard<std::mutex> cache_lock(route_cache_mutex_);
-    auto cache_it = route_cache_map.find(key);
-    if (cache_it == route_cache_map.end()) {
-        return std::nullopt;
-    }
-    // Cache hit — promote to LRU front and copy the match data while
-    // still under the cache lock, so a concurrent invalidation can't
-    // free the cached endpoint out from under us.
-    // The shared_ptr copy (cached.resource) performs an atomic refcount bump
-    // while holding route_cache_mutex_ exclusively. This is the hottest
-    // point in the dispatch path; the atomic op is unavoidable as long as
-    // callers need the resource to survive a concurrent unregister_resource.
-    route_cache_list.splice(route_cache_list.begin(), route_cache_list, cache_it->second);
-    const route_cache_entry& cached = cache_it->second->second;
-    return regex_route_lookup{
-        cached.resource,
-        cached.matched_endpoint.get_url_pars(),
-        cached.matched_endpoint.get_chunk_positions(),
-    };
-}
-
-std::optional<webserver_impl::regex_route_scan_hit>
-webserver_impl::scan_regex_routes(const detail::http_endpoint& target) {
-    // Longest-match-wins tie-breaking: prefer the endpoint with more
-    // url-pieces; among equals, prefer the longer url_complete string.
-    bool found = false;
-    size_t len = 0;
-    size_t tot_len = 0;
-    map<detail::http_endpoint, std::shared_ptr<http_resource>>::iterator found_endpoint;
-    for (auto it = registered_resources_regex.begin();
-            it != registered_resources_regex.end(); ++it) {
-        size_t endpoint_pieces_len = it->first.get_url_pieces().size();
-        size_t endpoint_tot_len = it->first.get_url_complete().size();
-        if (found && endpoint_pieces_len <= len
-                && !(endpoint_pieces_len == len && endpoint_tot_len > tot_len)) {
-            continue;
-        }
-        if (!it->first.match(target)) continue;
-        found = true;
-        len = endpoint_pieces_len;
-        tot_len = endpoint_tot_len;
-        found_endpoint = it;
-    }
-    if (!found) return std::nullopt;
-    return regex_route_scan_hit{found_endpoint->first, found_endpoint->second};
-}
-
-void webserver_impl::store_route_cache(const std::string& key,
-                                       const detail::http_endpoint& matched,
-                                       std::shared_ptr<http_resource> hrm) {
-    std::lock_guard<std::mutex> cache_lock(route_cache_mutex_);
-    route_cache_list.emplace_front(key, route_cache_entry{matched, std::move(hrm)});
-    route_cache_map[key] = route_cache_list.begin();
-    if (route_cache_map.size() > ROUTE_CACHE_MAX_SIZE) {
-        route_cache_map.erase(route_cache_list.back().first);
-        route_cache_list.pop_back();
-    }
-}
-
-void webserver_impl::apply_extracted_params(detail::modded_request* mr,
-        const detail::http_endpoint& target,
-        const std::vector<std::string>& url_pars,
-        const std::vector<int>& chunks) {
-    const auto& url_pieces = target.get_url_pieces();
-    for (unsigned int i = 0; i < url_pars.size(); i++) {
-        if (chunks[i] < 0 || static_cast<size_t>(chunks[i]) >= url_pieces.size()) continue;
-        mr->dhr->set_arg(url_pars[i], url_pieces[chunks[i]]);
-    }
-}
-
-// TASK-053 step 2: v2 lookup-backed resolver. Routes finalize_answer
-// through lookup_v2 (the 3-tier v2 table fronted by route_cache_v2)
-// instead of the v1 registered_resources* maps. See header comment in
-// webserver_impl_dispatch.hpp for the full contract.
+// TASK-053: v2 lookup-backed resolver. Routes finalize_answer through
+// lookup_v2 (the 3-tier v2 table fronted by route_lru_cache) — the v1
+// resolver and its helpers (lookup_route_cache, scan_regex_routes,
+// store_route_cache, apply_extracted_params) were deleted in TASK-053
+// step 3. See header comment in webserver_impl_dispatch.hpp for the
+// full contract.
 //
-// The dispatch path used to do:
-//   v1: hash registered_resources_str -> walk registered_resources_regex
-//       (with LRU front-end route_cache_list / route_cache_map).
-// This path now does:
-//   v2: lookup_v2() walks route_cache_v2 -> exact_routes_ ->
+// The dispatch path now does:
+//   lookup_v2() walks route_lru_cache -> exact_routes_ ->
 //       param_and_prefix_routes_ -> regex_routes_, returning a
 //       route_entry whose handler arm is always shared_ptr<http_resource>
 //       (the on_*/route entry points wrap user lambdas in lambda_resource
@@ -317,22 +239,22 @@ void webserver_impl::apply_extracted_params(detail::modded_request* mr,
 // would also work because single_resource installs a radix prefix at
 // "/"). Reading registered_resources avoids the captured-params /
 // route_entry plumbing for a configuration that has no parameters.
-bool webserver_impl::resolve_resource_for_request_v2(detail::modded_request* mr,
+bool webserver_impl::resolve_resource_for_request(detail::modded_request* mr,
         std::shared_ptr<http_resource>& hrm) {
     // matched_path_template + matched_is_prefix feed the route_resolved
     // and before_handler hook ctxs. Skip the heap allocation when no
-    // hook in either phase is registered. Mirrors the v1 resolver.
+    // hook in either phase is registered.
     const bool need_path_template =
         has_hooks_for(hook_phase::route_resolved) ||
         has_hooks_for(hook_phase::before_handler);
 
     // single_resource fast path: the one registered endpoint serves
-    // every URL. Read it directly from registered_resources to mirror
-    // the v1 resolver's behaviour. registered_resources_mutex protects
-    // a registration-time data store; under dispatch we still need a
-    // shared lock to make the read-then-copy atomic with respect to a
-    // concurrent unregister_path. (NOTE: single_resource webservers do
-    // not support runtime register/unregister in practice, but the lock
+    // every URL. Read it directly from registered_resources.
+    // registered_resources_mutex protects a registration-time data
+    // store; under dispatch we still need a shared lock to make the
+    // read-then-copy atomic with respect to a concurrent
+    // unregister_path. (NOTE: single_resource webservers do not
+    // support runtime register/unregister in practice, but the lock
     // is cheap when uncontended and the safety guarantee is worth it.)
     if (parent->single_resource) {
         std::shared_lock registered_resources_lock(registered_resources_mutex);
@@ -366,9 +288,9 @@ bool webserver_impl::resolve_resource_for_request_v2(detail::modded_request* mr,
     hrm = *hp;
 
     // Replay captured URL parameters into the request. This is the v2
-    // equivalent of apply_extracted_params (which the v1 resolver calls
-    // on regex-tier hits). Per-name set_arg matches the v1 behaviour
-    // exactly — duplicates with later wins, etc.
+    // equivalent of the v1-era apply_extracted_params (removed in
+    // TASK-053 step 3). Per-name set_arg matches v1 behaviour exactly —
+    // duplicates with later wins, etc.
     if (mr->dhr != nullptr) {
         for (const auto& [name, value] : result.captured_params) {
             mr->dhr->set_arg(name, value);
@@ -378,86 +300,10 @@ bool webserver_impl::resolve_resource_for_request_v2(detail::modded_request* mr,
     // Populate the hook ctx scratch slots when at least one hook is
     // registered for the phases that read them. v2 cache_value does
     // not store the matched URL template; fall back to standardized_url
-    // (matches the v1 cache-hit path; see resolve_resource_for_request
-    // ll. 348-353).
+    // (matches the v1 cache-hit path the legacy resolver used).
     if (need_path_template) {
         mr->matched_path_template = mr->standardized_url;
         mr->matched_is_prefix = result.entry.is_prefix;
-    }
-    return true;
-}
-
-bool webserver_impl::resolve_resource_for_request(detail::modded_request* mr,
-        std::shared_ptr<http_resource>& hrm) {
-    // TASK-048 perf: matched_path_template is only consumed by
-    // fire_route_resolved_gated and the before_handler firing site, both
-    // of which are gated by their respective any_hooks_ entries. Skip the
-    // heap allocation on every matched request when no hooks are registered.
-    const bool need_path_template =
-        has_hooks_for(hook_phase::route_resolved) ||
-        has_hooks_for(hook_phase::before_handler);
-
-    std::shared_lock registered_resources_lock(registered_resources_mutex);
-
-    if (parent->single_resource) {
-        hrm = registered_resources.begin()->second;
-        // single_resource: the one registered endpoint serves every URL.
-        // Capture its key for the route_resolved/before_handler hook ctx.
-        if (need_path_template) {
-            const auto& only = *registered_resources.begin();
-            mr->matched_path_template = only.first.get_url_complete();
-            mr->matched_is_prefix = only.first.is_family_url();
-        }
-        return true;
-    }
-
-    auto exact_it = registered_resources_str.find(mr->standardized_url.c_str());
-    if (exact_it != registered_resources_str.end()) {
-        // Copy the shared_ptr (atomic refcount bump) while the shared_lock
-        // on registered_resources_mutex is still held. The copy extends the
-        // resource's lifetime past a concurrent unregister_path that might
-        // erase this slot — without the copy, dispatch_resource_handler
-        // could hold a dangling pointer. The single atomic op is the
-        // unavoidable cost of the use-after-unregister safety guarantee.
-        hrm = exact_it->second;
-        // Exact-match: the registration key equals the standardized URL.
-        // Copy into modded_request so the hook context's string_view is
-        // safe across hook calls even if a concurrent unregister_path
-        // erases the slot.
-        if (need_path_template) {
-            mr->matched_path_template = exact_it->first;
-            mr->matched_is_prefix = false;
-        }
-        return true;
-    }
-
-    if (!parent->regex_checking) return false;
-
-    detail::http_endpoint endpoint(mr->standardized_url.c_str(), false, false, false);
-
-    if (auto cached = lookup_route_cache(mr->standardized_url)) {
-        hrm = cached->hrm;
-        apply_extracted_params(mr, endpoint, cached->url_pars, cached->chunks);
-        if (need_path_template) {
-            // Cache layer dropped the matched endpoint at its API boundary;
-            // fall back to the requested URL as a stable approximation of
-            // the path_template (used by the route_resolved hook ctx only).
-            mr->matched_path_template = mr->standardized_url;
-            mr->matched_is_prefix = false;
-        }
-        return true;
-    }
-
-    auto scan_hit = scan_regex_routes(endpoint);
-    if (!scan_hit) return false;
-
-    hrm = scan_hit->hrm;
-    store_route_cache(mr->standardized_url, scan_hit->endpoint, hrm);
-    apply_extracted_params(mr, endpoint, scan_hit->endpoint.get_url_pars(),
-                           scan_hit->endpoint.get_chunk_positions());
-    if (need_path_template) {
-        mr->matched_path_template = scan_hit->endpoint.get_url_complete();
-        mr->matched_is_prefix = scan_hit->endpoint.is_family_url();
     }
     return true;
 }

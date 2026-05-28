@@ -143,17 +143,34 @@ class webserver_impl {
     // ws_start_stop integ test (start on worker thread, stop on main).
     std::atomic<bool> running{false};
 
-    // --- v1 route table (legacy; to be removed once lookup_v2 is wired
-    //     into finalize_answer at Cycle K dispatch cutover) ---------------
-
-    // TASK-023: route-table entries hold shared_ptr<http_resource>.
-    // The two public register_resource overloads (unique_ptr / shared_ptr)
-    // both funnel into the shared_ptr branch, so storage is always
-    // shared_ptr regardless of which overload the caller used. This also
-    // closes a latent dispatch race: a thread holding a shared_ptr copy
-    // for the duration of an in-flight call cannot be invalidated by a
-    // concurrent unregister_resource — the resource lives until the call
-    // returns and its shared_ptr drops.
+    // --- Registration-side resource maps (post-TASK-053) ----------------
+    //
+    // As of TASK-053 these maps are NO LONGER on the dispatch hot path.
+    // The HTTP dispatch path now goes through lookup_v2() and the v2
+    // 3-tier route table below. The maps below survive as
+    // registration-time bookkeeping that two non-dispatch callers still
+    // depend on:
+    //
+    //   * `prepare_or_create_lambda_shim` (webserver_routes.cpp) reads
+    //     `registered_resources` to detect "trying to register a lambda
+    //     handler where a class resource already exists at the same
+    //     path, or vice versa." That conflict-detection oracle has not
+    //     been redesigned onto the v2 tiers in this task.
+    //   * The WebSocket dispatch path (`webserver_websocket.cpp`) uses
+    //     `registered_resources_mutex` for its own (non-HTTP) handler
+    //     lookup. That mutex must stay alive while WS support exists.
+    //
+    // Removing the maps and the mutex is a separate, larger task that
+    // restructures both callers — see TASK-053 §11 (the v1-maps catch).
+    //
+    // TASK-023: storage type is shared_ptr<http_resource>. Both public
+    // register_resource overloads (unique_ptr / shared_ptr) funnel into
+    // the shared_ptr branch, so storage is always shared_ptr regardless
+    // of which overload the caller used. This also closes a latent
+    // dispatch race: a thread holding a shared_ptr copy for the
+    // duration of an in-flight call cannot be invalidated by a
+    // concurrent unregister_resource — the resource lives until the
+    // call returns and its shared_ptr drops.
     std::shared_mutex registered_resources_mutex;
     std::map<detail::http_endpoint,
              std::shared_ptr<::httpserver::http_resource>> registered_resources;
@@ -162,48 +179,23 @@ class webserver_impl {
     std::map<detail::http_endpoint,
              std::shared_ptr<::httpserver::http_resource>> registered_resources_regex;
 
-    struct route_cache_entry {
-        detail::http_endpoint matched_endpoint;
-        std::shared_ptr<::httpserver::http_resource> resource;
-    };
+    // LRU cache size (architecture spec): 256 entries.
     static constexpr size_t ROUTE_CACHE_MAX_SIZE = 256;
-    // Performance note (perf-reviewer finding, TASK-023 review): every
-    // cache hit acquires route_cache_mutex_ exclusively to promote the
-    // touched entry to the LRU front (splice). Under high concurrency this
-    // serialises all dispatch threads at the hottest lookup point.
-    // Future improvement options:
-    //   - Skip LRU promotion under lock contention (try_lock + approximate LRU).
-    //   - Replace list+map with a lock-free or epoch-based structure.
-    //   - Move to the v2 route_cache_v2 which is already backed by a
-    //     concurrent-safe implementation (see route_cache.hpp).
-    // The v1 cache below is retained only for the legacy resolve_resource_for_request
-    // path and will be removed at Cycle K dispatch cutover.
-    std::mutex route_cache_mutex_;
-    std::list<std::pair<std::string, route_cache_entry>> route_cache_list;
-    std::unordered_map<std::string,
-        std::list<std::pair<std::string, route_cache_entry>>::iterator>
-        route_cache_map;
 
     // --- v2 3-tier route table (TASK-027, architecture §4.7) -------------
 
-    // TASK-027: 3-tier route table.
-    //
-    // The three tiers below shadow the v1 maps above and are populated
-    // alongside them by every register_* / on_methods_ / unregister_*
-    // path. The lookup_v2() entry point walks this triple in order:
-    //   1. exact_routes_           (hash, O(1))
+    // TASK-027: 3-tier route table. The dispatch path (lookup_v2 ->
+    // resolve_resource_for_request) walks the tiers in order:
+    //   1. exact_routes_            (hash, O(1))
     //   2. param_and_prefix_routes_ (segment-trie, parameterized + prefix)
     //   3. regex_routes_            (linear regex chain, fallback)
-    // fronted by the LRU cache `route_cache_v2`.
-    //
-    // TODO(Cycle K): rename route_cache_v2 → route_lru_cache once the v1
-    // fields above are removed at dispatch cutover.
+    // fronted by the LRU cache `route_lru_cache`.
     //
     // **Lock order.** When both locks must be held, route_table_mutex_
-    // is acquired BEFORE route_cache_mutex_. The lookup pipeline never
-    // holds both at once: it takes a brief shared_lock on the table to
-    // walk the tiers, releases it, then takes route_cache_mutex_ to
-    // promote the hit. Registration takes a unique_lock on the table,
+    // is acquired BEFORE the cache's internal mutex. The lookup
+    // pipeline never holds both at once: it takes a brief shared_lock
+    // on the table to walk the tiers, releases it, then promotes/inserts
+    // into the LRU cache. Registration takes a unique_lock on the table,
     // releases it, then clears the cache.
     std::shared_mutex route_table_mutex_;
     std::unordered_map<std::string, route_entry> exact_routes_;
@@ -227,17 +219,9 @@ class webserver_impl {
     std::vector<regex_route> regex_routes_;
 
     // TASK-027 LRU front-end. 256 entries per architecture spec.
-    route_cache route_cache_v2{ROUTE_CACHE_MAX_SIZE};
-
-    // TASK-053 step 2: transitional flag controlling whether
-    // finalize_answer routes its lookup through the v2 3-tier table
-    // (resolve_resource_for_request_v2 -> lookup_v2) or the legacy v1
-    // maps (resolve_resource_for_request). Default: v2.
-    //
-    // Step 3 of TASK-053 deletes this flag and the v1 resolver body in
-    // a separate commit so the diff stays reviewable in isolation. The
-    // flag exists only across step 2 / step 3.
-    bool use_lookup_v2_ = true;
+    // Renamed from route_cache_v2 in TASK-053 step 3 once the v1
+    // dispatch cache (route_cache_list / route_cache_map) was removed.
+    route_cache route_lru_cache{ROUTE_CACHE_MAX_SIZE};
 
     // tier_hit identifies which tier of the v2 route table answered a
     // lookup. Returned alongside the route_entry copy from lookup_v2()

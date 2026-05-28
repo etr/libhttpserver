@@ -26,11 +26,12 @@
 // the key so a path served by both on_get and on_post warms two distinct
 // cache entries.
 //
-// Concurrency: the cache uses its own plain std::mutex (route_cache_mutex_
-// in webserver_impl) — *not* a shared_mutex — because every cache touch,
+// Concurrency: the cache uses its own plain std::mutex (an internal
+// member of route_cache itself, owned by `route_lru_cache` on
+// webserver_impl) — *not* a shared_mutex — because every cache touch,
 // including the LRU promotion on a hit, is a write (std::list::splice).
 // Lock-order discipline: route_table_mutex_ is always acquired before
-// route_cache_mutex_ when both are held.
+// the cache's internal mutex when both are held.
 //
 // Internal header — only reachable when compiling libhttpserver.
 #if !defined(HTTPSERVER_COMPILATION)

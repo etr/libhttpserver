@@ -283,69 +283,23 @@ std::optional<MHD_Result> complete_websocket_upgrade(MHD_Connection* connection,
                                                      const char* ws_key);
 #endif  // HAVE_WEBSOCKET
 
-// Carry the data the regex+cache lookup path produces back to the
-// caller. matched_endpoint is needed both to extract URL parameters
-// and to store the entry in the LRU cache.
-struct regex_route_lookup {
-    std::shared_ptr<::httpserver::http_resource> hrm;
-    std::vector<std::string> url_pars;
-    std::vector<int> chunks;
-};
-
-// Locate the resource serving @p mr. Returns true and sets @p hrm
-// on hit (also populates URL parameters on @p mr for regex-route
-// hits); false otherwise. Takes a shared lock on
-// registered_resources_mutex internally.
+// TASK-053: Locate the resource serving @p mr by consulting lookup_v2
+// (cache -> exact -> radix -> regex). Returns true and sets @p hrm on
+// hit (also populates URL parameter captures on @p mr->dhr via
+// set_arg, and sets mr->matched_path_template + matched_is_prefix when
+// any hook in the route_resolved / before_handler phases is registered);
+// false otherwise. The parent->single_resource fast path is preserved
+// inside the resolver as a documented short-circuit (it reads the
+// registered_resources map directly because the configuration shape —
+// one registered endpoint serves every URL — is orthogonal to the
+// route-table tier choice).
+//
+// The v1 resolver (`registered_resources_str` exact + linear
+// `registered_resources_regex` scan + LRU front-end) and its helpers
+// were deleted in TASK-053 step 3; this entry point is the only
+// dispatch-side route resolver.
 bool resolve_resource_for_request(modded_request* mr,
         std::shared_ptr<::httpserver::http_resource>& hrm);
-
-// TASK-053 step 2: v2 lookup-backed resolver. Same observable
-// contract as resolve_resource_for_request (returns true + sets
-// @p hrm on hit, sets @p mr->matched_path_template + matched_is_prefix
-// when the hook ctx needs them; sets URL captures via mr->dhr->set_arg
-// for parameterized routes), but consults lookup_v2() and the v2 3-tier
-// route table (exact_routes_ / param_and_prefix_routes_ / regex_routes_)
-// fronted by route_cache_v2 instead of the v1 maps (registered_resources*
-// + route_cache_list). Selected over the v1 path at finalize_answer
-// per the use_lookup_v2_ flag on webserver_impl (default: true).
-//
-// Note: the parent->single_resource fast path is preserved here exactly
-// as in the v1 resolver — it reads registered_resources directly because
-// the configuration shape (one registered endpoint serves every URL) is
-// orthogonal to the route-table tier choice. (Folding it into lookup_v2
-// itself is cleaner long-term but would balloon the diff; deferred.)
-bool resolve_resource_for_request_v2(modded_request* mr,
-        std::shared_ptr<::httpserver::http_resource>& hrm);
-
-// LRU cache hit path: returns the cached match (hrm + url_pars +
-// chunks) and promotes the entry to the front of the list. Caller
-// must hold registered_resources_mutex (shared).
-std::optional<regex_route_lookup>
-    lookup_route_cache(const std::string& key);
-
-// Linear regex scan with longest-match-wins tie-breaking. Returns
-// the matched endpoint + resource on hit. Caller must hold
-// registered_resources_mutex (shared).
-struct regex_route_scan_hit {
-    detail::http_endpoint endpoint;
-    std::shared_ptr<::httpserver::http_resource> hrm;
-};
-std::optional<regex_route_scan_hit>
-    scan_regex_routes(const detail::http_endpoint& target);
-
-// Insert a (key -> matched_endpoint, hrm) entry at the front of
-// the LRU and evict the oldest entry if the cache is full. Caller
-// must hold registered_resources_mutex (shared).
-void store_route_cache(const std::string& key,
-                       const detail::http_endpoint& matched,
-                       std::shared_ptr<::httpserver::http_resource> hrm);
-
-// Walk url_pars/chunks parallel arrays and set each named parameter
-// on the request, guarding against an out-of-range chunk index.
-void apply_extracted_params(modded_request* mr,
-        const detail::http_endpoint& target,
-        const std::vector<std::string>& url_pars,
-        const std::vector<int>& chunks);
 
 // Invoke the resource handler bound to @p mr, populating
 // mr->response. On is_allowed=false, queues a 405 with an Allow

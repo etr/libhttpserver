@@ -334,10 +334,11 @@ void webserver::on_methods_(method_set methods,
     std::shared_ptr<detail::lambda_resource> shim;
     {
         // Scoped block: registered_resources_mutex is released at the
-        // closing brace, before upsert_v2_table_entry (which takes its own
-        // route_table_mutex_) and before invalidate_route_cache (which takes
-        // route_cache_mutex_). This lock-ordering — v1 mutex released before
-        // v2/cache mutexes are acquired — prevents deadlock.
+        // closing brace, before upsert_v2_table_entry (which takes its
+        // own route_table_mutex_) and before invalidate_route_cache
+        // (which takes the route_lru_cache internal mutex). This
+        // lock-ordering — registration mutex released before
+        // table/cache mutexes are acquired — prevents deadlock.
         std::unique_lock registered_resources_lock(impl_->registered_resources_mutex);
         shim = impl_->prepare_or_create_lambda_shim(idx, methods, is_new_entry);
         impl_->commit_handlers_to_shim(*shim, methods, std::move(handler));

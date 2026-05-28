@@ -142,18 +142,17 @@ void webserver::register_impl_(const std::string& resource,
         // shared_ptr copies are cheaper than the regex scan they help avoid.
         impl_->registered_resources_regex.insert({idx, res});
     }
-    // Release the write lock before invalidating the cache.
-    // invalidate_route_cache() acquires route_cache_mutex_ independently;
-    // holding registered_resources_mutex across that call would invert the
-    // lock order documented in webserver_impl.hpp (cache mutex is always
-    // acquired AFTER table mutex, never while table mutex is held).
+    // Release the registration mutex before clearing the LRU cache.
+    // route_lru_cache.clear() takes the cache's internal mutex; the
+    // lock order documented in webserver_impl.hpp acquires the table
+    // mutex BEFORE the cache mutex and never both at once, so the
+    // registration mutex (which gates the registration-side maps,
+    // distinct from the v2 table mutex) is also released first as a
+    // matter of discipline.
     registered_resources_lock.unlock();
-    // Unlocking before invalidate_route_cache() is intentional: it preserves
-    // lock-order discipline (registered_resources_mutex released before
-    // route_cache_mutex_ is acquired inside invalidate_route_cache).
-    // A reader can transiently see the new entry without a warm cache, causing
-    // one extra regex scan on the first hit. This is a harmless read-stale
-    // effect — the resource is already visible to readers under the shared lock.
+    // A reader can transiently see the new entry without a warm cache,
+    // causing one extra tier walk on the first hit — harmless read-stale
+    // effect: the resource is already visible under the shared lock.
 
     impl_->register_v2_route(idx, std::move(res), family);
     impl_->invalidate_route_cache();
@@ -236,11 +235,9 @@ void webserver::unregister_impl_(const string& resource, bool family) {
 
     // TASK-027: mirror the erasure into the v2 3-tier table.
     // Lock ordering: registered_resources_mutex (released above) ->
-    // route_table_mutex_ -> route_cache_mutex_ (inside invalidate_route_cache).
-    // Do not acquire route_cache_mutex_ without holding route_table_mutex_ or
-    // registered_resources_mutex first.
-    // This matches the pattern used in register_impl_ / on_methods_:
-    // table lock released before cache is cleared.
+    // route_table_mutex_ -> route_lru_cache's internal mutex
+    // (inside invalidate_route_cache). Table lock released before the
+    // LRU cache is cleared, matching register_impl_ / on_methods_.
     {
         std::unique_lock table_lock(impl_->route_table_mutex_);
         const std::string& key = he.get_url_complete();
