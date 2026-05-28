@@ -35,6 +35,7 @@
 
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
+#include "./log_capture.hpp"
 
 using httpserver::create_webserver;
 using httpserver::handler_exception_ctx;
@@ -60,18 +61,7 @@ class throwing_resource : public httpserver::http_resource {
     }
 };
 
-struct log_capture {
-    std::mutex m;
-    std::string buf;
-    void append(const std::string& msg) {
-        std::lock_guard<std::mutex> g(m);
-        buf.append(msg).append("\n");
-    }
-    std::string read() {
-        std::lock_guard<std::mutex> g(m);
-        return buf;
-    }
-};
+// log_capture is defined in log_capture.hpp (finding #39).
 
 }  // namespace
 

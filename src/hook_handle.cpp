@@ -198,6 +198,12 @@ void hook_handle::remove() noexcept {
         if (erase_if_found(impl->hooks_handler_exception_)) {
             reset_gate_if_empty(impl->hooks_handler_exception_);
         }
+        // Finding #6 (forward-looking): if a future task adds a runtime
+        // re-registration path for handler_exception_alias_, remove() will
+        // also need a path to clear that slot and re-evaluate any_hooks_
+        // (currently any_hooks_ remains true while the alias is wired;
+        // removing only a user-vector entry does not clear it if the alias
+        // is still set). Add that handling alongside the runtime setter.
         break;
     case hook_phase::after_handler:
         if (erase_if_found(impl->hooks_after_handler_)) {
@@ -297,13 +303,16 @@ static void fire_hooks_for_phase(
             try {
                 entry.fn(ctx);
             } catch (const std::exception& e) {
+                // TASK-049 review: avoid three intermediate heap strings.
+                // Use .append() chain on a pre-constructed string so only
+                // one allocation is needed (string is move-eligible).
                 impl->log_dispatch_error(
-                    "hook[" + std::string(phase_name) +
-                    "] threw: " + e.what());
+                    std::string("hook[").append(phase_name)
+                        .append("] threw: ").append(e.what()));
             } catch (...) {
                 impl->log_dispatch_error(
-                    "hook[" + std::string(phase_name) +
-                    "] threw unknown exception");
+                    std::string("hook[").append(phase_name)
+                        .append("] threw unknown exception"));
             }
         }
     } catch (...) {
@@ -311,8 +320,8 @@ static void fire_hooks_for_phase(
         // more we can do at this layer; callers are noexcept so the
         // contract holds even if std::terminate triggers.
         impl->log_dispatch_error(
-            "fire_hooks_for_phase[" + std::string(phase_name) +
-            "]: snapshot copy failed");
+            std::string("fire_hooks_for_phase[").append(phase_name)
+                .append("]: snapshot copy failed"));
     }
 }
 
@@ -369,19 +378,20 @@ fire_short_circuit_hooks_for_phase(
                     return std::move(action).take_response();
                 }
             } catch (const std::exception& e) {
+                // TASK-049 review: avoid three intermediate heap strings.
                 impl->log_dispatch_error(
-                    "hook[" + std::string(phase_name) +
-                    "] threw: " + e.what());
+                    std::string("hook[").append(phase_name)
+                        .append("] threw: ").append(e.what()));
             } catch (...) {
                 impl->log_dispatch_error(
-                    "hook[" + std::string(phase_name) +
-                    "] threw unknown exception");
+                    std::string("hook[").append(phase_name)
+                        .append("] threw unknown exception"));
             }
         }
     } catch (...) {
         impl->log_dispatch_error(
-            "fire_short_circuit_hooks_for_phase[" +
-            std::string(phase_name) + "]: snapshot copy failed");
+            std::string("fire_short_circuit_hooks_for_phase[")
+                .append(phase_name).append("]: snapshot copy failed"));
     }
     return std::nullopt;
 }
@@ -426,12 +436,27 @@ detail::webserver_impl::fire_before_handler(
 // structure -- snapshot under shared_lock, release, iterate with per-hook
 // try/catch -- with an extra tail that invokes the alias slot after the
 // user vector is exhausted.
+//
+// Structural differences preventing template reuse (findings #12, #13):
+//   1. ctx is `const Ctx&` (not `Ctx&`) -- the template takes mutable.
+//   2. The alias tail (handler_exception_alias_) sits AFTER the user
+//      vector and has its own throw-containment block.
+// If the template is extended to support const-ctx or alias-tail in a
+// future task, fire_handler_exception should be collapsed into it and
+// the rationale comment updated accordingly.
 std::optional<::httpserver::http_response>
 detail::webserver_impl::fire_handler_exception(
     const ::httpserver::handler_exception_ctx& ctx) noexcept {
     using EntryVec = std::vector<phase_entry<
         ::httpserver::hook_action(
             const ::httpserver::handler_exception_ctx&)>>;
+    // Per-thread cost note (finding #30): this thread_local EntryVec is a
+    // SECOND per-thread snapshot buffer in addition to the one inside
+    // fire_short_circuit_hooks_for_phase. Both buffers are warm after the
+    // first invocation on a given thread (no heap allocation on subsequent
+    // calls). If per-thread memory becomes a concern, a shared
+    // thread_local typed-union could unify them, but at typical
+    // concurrency levels the extra few KB is negligible.
     try {
         thread_local EntryVec snapshot;
         snapshot.clear();
@@ -446,8 +471,10 @@ detail::webserver_impl::fire_handler_exception(
                     return std::move(action).take_response();
                 }
             } catch (const std::exception& e) {
+                // Use .append() to avoid two intermediate heap strings.
                 log_dispatch_error(
-                    std::string("hook[handler_exception] threw: ") + e.what());
+                    std::string("hook[handler_exception] threw: ")
+                        .append(e.what()));
             } catch (...) {
                 log_dispatch_error(
                     "hook[handler_exception] threw unknown exception");
@@ -459,6 +486,13 @@ detail::webserver_impl::fire_handler_exception(
     }
     // Tail: invoke the alias slot, if any. Read without synchronisation;
     // the slot is single-writer-at-construction (see webserver_impl.hpp).
+    //
+    // Finding #33 (security-reviewer): if a future task adds a runtime
+    // setter for handler_exception_alias_, this read MUST be upgraded to
+    // take hook_table_mutex_ shared and the writer MUST take it exclusive.
+    // The synchronisation contract lives in webserver_impl.hpp at the
+    // handler_exception_alias_ field declaration -- keep both sites in
+    // sync when adding any runtime re-registration path.
     //
     // Throw containment: a throwing alias is logged with the legacy
     // "internal_error_handler threw" prefix so the DR-009 §5.2 point 4
@@ -472,8 +506,9 @@ detail::webserver_impl::fire_handler_exception(
                 return std::move(action).take_response();
             }
         } catch (const std::exception& e) {
+            // Use .append() to avoid two intermediate heap strings.
             log_dispatch_error(
-                std::string("internal_error_handler threw: ") + e.what());
+                std::string("internal_error_handler threw: ").append(e.what()));
         } catch (...) {
             log_dispatch_error(
                 "internal_error_handler threw unknown exception");
@@ -508,7 +543,7 @@ void detail::webserver_impl::fire_response_sent(
             log_access_alias_(ctx);
         } catch (const std::exception& e) {
             log_dispatch_error(
-                std::string("log_access alias threw: ") + e.what());
+                std::string("log_access alias threw: ").append(e.what()));
         } catch (...) {
             log_dispatch_error(
                 "log_access alias threw unknown exception");

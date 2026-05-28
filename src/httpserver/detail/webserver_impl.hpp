@@ -330,6 +330,8 @@ class webserver_impl {
     // parent->internal_error_handler). If a future task adds a runtime
     // setter the writer MUST take hook_table_mutex_ exclusively and the
     // reader MUST take it shared -- same pattern as the per-phase vectors.
+    // (Finding #14: full rationale lives here; fire_handler_exception in
+    // hook_handle.cpp has a cross-reference comment per finding #33.)
     std::function<::httpserver::hook_action(
             const ::httpserver::handler_exception_ctx&)>
         handler_exception_alias_;
