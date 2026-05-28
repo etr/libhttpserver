@@ -116,7 +116,7 @@
 22. [ ] **code-quality-reviewer** | `test/unit/http_utils_test.cpp:1003` | readability
     sanitize_upload_filename_trailing_slash is the only new test whose name does not fully capture the expected outcome: the name says 'trailing slash' but the contract pinned is 'trailing separator yields empty basename -> returns empty string'. The comment on line 1002 rescues the intent but the name alone is ambiguous.
     *Recommendation:* Rename to sanitize_upload_filename_trailing_slash_returns_empty to make the expected outcome self-documenting without relying on the adjacent comment.
-    *Status:* deferred — test name sanitize_upload_filename_trailing_slash not yet renamed.
+    *Status:* wontfix — cosmetic/style preference, no functional impact; test-name rename; pure readability
 
 23. [ ] **code-quality-reviewer** | `test/unit/webserver_on_methods_test.cpp:562` | test-coverage
     allow_header_get_head_set_is_ordered tests {GET, HEAD} but HEAD is both the second-lowest enum value (index 1) and alphabetically second, so this case cannot distinguish enum-order from alphabetical order. The test intent is sound but it is a weaker discriminator than the three-method test below it.
@@ -131,7 +131,7 @@
 25. [ ] **code-simplifier** | `/Users/etr/progs/libhttpserver/test/unit/http_utils_test.cpp:807` | naming
     `ip_representation_middle_bytes_comparison` substantially overlaps with `ip_representation_ffff_comparison` (lines 805-818): both construct `a("::ffff:192.168.1.1")` and `b("::192.168.1.1")` and assert `a < b == false`. The second test adds a `bool result = a < b` temporary variable and a `c < d` check that is already present in `ip_representation_ffff_comparison` (line 816-817). The test body comment refers to internal line numbers of the production source (`lines 489-494`), which will become stale when source is edited.
     *Recommendation:* Consolidate the two tests into one, removing the source-line-number comment. Name the single test after the observable contract (e.g. `ip_representation_ffff_prefix_compares_greater_than_zero_prefix`) and assert both the symmetric false case and the ordering case in that one test.
-    *Status:* deferred — ip_representation_middle_bytes_comparison not yet consolidated with ip_representation_ffff_comparison.
+    *Status:* wontfix — cosmetic/style preference, no functional impact; test consolidation is naming polish
 
 26. [ ] **code-simplifier** | `/Users/etr/progs/libhttpserver/test/unit/http_utils_test.cpp:911` | code-structure
     `dump_header_map_empty_prefix` (lines 911-921) uses `output.find(...) != std::string::npos` wrapped in `LT_CHECK_EQ(..., true)` instead of a direct substring check. The file already has `dump_header_map_no_prefix` (lines 739-748) that tests empty-prefix formatting directly with `LT_CHECK_EQ(ss.str(), ...)`. The new test therefore adds weaker assertions on functionality already covered more precisely by the older test.
@@ -141,7 +141,7 @@
 27. [ ] **code-simplifier** | `/Users/etr/progs/libhttpserver/test/unit/http_utils_test.cpp:924` | naming
     Test name `ip_representation_comparison_equal` is anchored to a misleading comment header ('Test get_ip_str with nullptr (edge case)') that describes a completely different intent. The comment was copy-pasted from the previous nullptr test and was never updated.
     *Recommendation:* Remove or correct the misleading comment on line 923 so readers understand this test checks equal-address less-than symmetry, not a nullptr edge case.
-    *Status:* deferred — misleading comment above ip_representation_comparison_equal not yet corrected.
+    *Status:* wontfix — cosmetic/style preference, no functional impact; misleading comment fix; naming polish
 
 28. [ ] **code-simplifier** | `src/detail/http_endpoint.cpp:45` | naming
     `normalize_url_complete` mutates `url_complete` in place (strips trailing '/', prepends leading '/') but its name suggests a read or return operation. Callers do not get a normalized copy — the method modifies `this`.
@@ -156,7 +156,7 @@
 30. [ ] **code-simplifier** | `src/http_utils.cpp:394` | naming
     `ipv4_mapped_prefix_invalid` uses negative naming (returns `true` when the prefix IS invalid). The anonymous-namespace sibling `is_v4_mapped_prefix_octet_pair` (line 558) uses positive naming for the same conceptual check from the other side. Having two helpers that test complementary conditions under different naming conventions makes callers harder to audit.
     *Recommendation:* Rename `ipv4_mapped_prefix_invalid` to `is_valid_ipv4_mapped_prefix` (flipping the return sense) to make both helpers use positive naming. This aligns with `is_v4_mapped_prefix_octet_pair` and avoids double-negation at call sites (`if (ipv4_mapped_prefix_invalid(...))` reads as `if (not valid)`).
-    *Status:* deferred — ipv4_mapped_prefix_invalid not yet renamed in src/detail/ip_representation.cpp.
+    *Status:* wontfix — cosmetic/style preference, no functional impact; test rename to reflect intent; naming polish
 
 31. [ ] **code-simplifier** | `src/webserver.cpp:2273` | code-structure
     `store_route_cache` acquires the cache lock, prepends to route_cache_list, and then evicts from the back if the map exceeds ROUTE_CACHE_MAX_SIZE. The eviction logic (erase map entry, pop_back list) is correct but could easily be broken if the list/map invariant is misunderstood. A local comment explaining the invariant (each list element corresponds to exactly one map entry) is missing.
@@ -271,7 +271,7 @@
 53. [ ] **test-quality-reviewer** | `test/unit/http_utils_test.cpp:924` | naming-convention
     Test name 'ip_representation_comparison_equal' (line 924) describes the same scenario as 'ip_representation_less_than' at line 688 (which already covers same-address equality returning false). The dedicated test adds no new scenario.
     *Recommendation:* Either remove the redundant test or rename it to pin a specific edge case not covered by ip_representation_less_than (e.g. equality after mask expansion).
-    *Status:* deferred — ip_representation_comparison_equal not yet removed or repurposed.
+    *Status:* wontfix — cosmetic/style preference, no functional impact; test rename; naming polish
 
 54. [ ] **test-quality-reviewer** | `test/unit/http_utils_test.cpp:924` | redundant-test
     ip_representation_comparison_equal (line 924) is a strict subset of ip_representation_less_than (line 688), which already asserts both directions of the same-address comparison for IPv4, IPv6, and nested forms. The new test exercises no additional code path.
