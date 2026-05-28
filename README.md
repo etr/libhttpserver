@@ -650,6 +650,7 @@ auto cfg = httpserver::create_webserver(8080)
         return httpserver::http_response::empty().with_status(405);
     })
     .internal_error_handler([](const httpserver::http_request&, std::string_view what) {
+        // In production, log 'what' internally and return a generic message to the client.
         return httpserver::http_response::string(std::string{what}).with_status(500);
     });
 httpserver::webserver ws{cfg};
@@ -790,10 +791,20 @@ CONNECT and TRACE go through `route()` (below).
 
 ### Lambda form: atomic multi-method via `route()`
 
-`route(http_method m, "/info", handler)` is the single-method form.
-`route(method_set methods, "/info", handler)` registers the handler
-under several methods in a single critical section — either every slot
-is registered, or none of them are:
+`route()` is the primary escape hatch when the HTTP method is known
+only at runtime (e.g. loaded from config, selected from a dispatch
+table). The single-method form:
+
+```cpp
+route(http_method m, "/info", handler)
+```
+
+takes a runtime `http_method` value and is the canonical form for
+config-driven or table-driven registration (PRD-HDL-REQ-006).
+
+`route(method_set methods, "/info", handler)` additionally allows
+registering a handler under several methods in a single critical
+section — either every slot is registered, or none of them are:
 
 ```cpp
 ws.route(http_method::GET | http_method::HEAD, "/info",
@@ -912,6 +923,14 @@ for working programs.
 | `get_digested_user()` | `std::string_view` | Digest-auth user; empty when `HAVE_DAUTH` is off |
 | `check_digest_auth(realm, password, nonce_timeout, signal_stale, algo)` | `digest_auth_result` | Validates a digest auth response against a plaintext password |
 | `check_digest_auth_digest(realm, ha1, ...)` | `digest_auth_result` | Same as above but against a pre-computed HA1 hash |
+
+> **Security note.** Basic auth (`get_user`/`get_pass`) transmits
+> credentials as Base64 — effectively cleartext. Digest auth
+> (`get_digested_user`) avoids transmitting the password but is still
+> vulnerable to man-in-the-middle attacks without TLS. Both are only
+> safe when the server is configured with TLS (`HAVE_GNUTLS`, `.use_ssl(true)`).
+> See [Feature availability](#feature-availability) and
+> [`examples/basic_authentication.cpp`](examples/basic_authentication.cpp).
 
 `digest_auth_result` is a strongly-typed enum:
 
@@ -1671,6 +1690,7 @@ auto cfg = httpserver::create_webserver(8080)
         return httpserver::http_response::empty().with_status(405);
     })
     .internal_error_handler([](const httpserver::http_request&, std::string_view what) {
+        // In production, log 'what' internally and return a generic message to the client.
         return httpserver::http_response::string(std::string{what}).with_status(500);
     });
 httpserver::webserver ws{cfg};

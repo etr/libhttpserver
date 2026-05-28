@@ -15,6 +15,7 @@
 #       (stop() deadlock per DR-008; internal_error_handler + feature_unavailable).
 #   A5. The eleven structural sections from TASK-041 exist (case-insensitive H2 match).
 #   A6. Cross-links to examples/ and RELEASE_NOTES.md exist.
+#   A6b. Every relative Markdown link resolves to a file on disk.
 #
 # Plus markdown sanity:
 #   - balanced ``` fences;
@@ -44,6 +45,7 @@ extract_first_cpp_block() {
     awk '
         BEGIN { in_block = 0; printed = 0 }
         {
+            gsub(/\r/, "")   # strip CRLF line endings (mirrors check-examples.sh)
             if (printed) next
             if (!in_block && $0 ~ /^```cpp[[:space:]]*$/) { in_block = 1; next }
             if (in_block && $0 ~ /^```[[:space:]]*$/) { in_block = 0; printed = 1; next }
@@ -66,23 +68,38 @@ if [ ! -s "$tmp_block" ]; then
 fi
 
 if ! diff -u "$tmp_hello" "$tmp_block" >/dev/null 2>&1; then
-    echo "check-readme: FAIL: A1: first \`\`\`cpp block in README.md does not match examples/hello_world.cpp byte-for-byte:" >&2
     diff -u "$tmp_hello" "$tmp_block" >&2 || true
-    exit 1
+    fail "A1: first \`\`\`cpp block in README.md does not match examples/hello_world.cpp byte-for-byte"
 fi
 
 # ---- A2: no v1-era tokens ----------------------------------------------------
 # Use a single grep -nE pass over README.md. Any hit fails.
 
-V1_TOKENS='\bsweet_kill\b|\bban_ip\b|\bunban_ip\b|\ballow_ip\b|\bdisallow_ip\b'
-V1_TOKENS="$V1_TOKENS"'|\bno_(basic_auth|digest_auth|ssl|debug|pedantic|deferred|regex_checking|ban_system|post_process|single_resource|ipv6|dual_stack)\b'
-V1_TOKENS="$V1_TOKENS"'|\brender_(GET|POST|PUT|DELETE|HEAD|OPTIONS|PATCH|CONNECT|TRACE)\b'
-V1_TOKENS="$V1_TOKENS"'|\bstring_response\b|\bfile_response\b|\biovec_response\b|\bpipe_response\b'
-V1_TOKENS="$V1_TOKENS"'|\bdeferred_response\b|\bempty_response\b'
-V1_TOKENS="$V1_TOKENS"'|\bbasic_auth_fail_response\b|\bdigest_auth_fail_response\b'
-V1_TOKENS="$V1_TOKENS"'|new[[:space:]]+[A-Za-z_]*_response[[:space:]]*\('
-V1_TOKENS="$V1_TOKENS"'|register_resource[[:space:]]*\([^,]*,[[:space:]]*new[[:space:]]+'
-V1_TOKENS="$V1_TOKENS"'|\bnot_found_resource\b|\bmethod_not_allowed_resource\b|\binternal_error_resource\b'
+V1_TOKENS_ARR=(
+    '\bsweet_kill\b'
+    '\bban_ip\b'
+    '\bunban_ip\b'
+    '\ballow_ip\b'
+    '\bdisallow_ip\b'
+    '\bno_(basic_auth|digest_auth|ssl|debug|pedantic|deferred|regex_checking|ban_system|post_process|single_resource|ipv6|dual_stack)\b'
+    '\brender_(GET|POST|PUT|DELETE|HEAD|OPTIONS|PATCH|CONNECT|TRACE)\b'
+    '\bstring_response\b'
+    '\bfile_response\b'
+    '\biovec_response\b'
+    '\bpipe_response\b'
+    '\bdeferred_response\b'
+    '\bempty_response\b'
+    '\bbasic_auth_fail_response\b'
+    '\bdigest_auth_fail_response\b'
+    'new[[:space:]]+[A-Za-z_]*_response[[:space:]]*\('
+    'register_resource[[:space:]]*\([^,]*,[[:space:]]*new[[:space:]]+'
+    '\bnot_found_resource\b'
+    '\bmethod_not_allowed_resource\b'
+    '\binternal_error_resource\b'
+)
+# Join array entries with | for a single grep pass.
+V1_TOKENS="${V1_TOKENS_ARR[0]}"
+for _tok in "${V1_TOKENS_ARR[@]:1}"; do V1_TOKENS="$V1_TOKENS|$_tok"; done
 
 if hits="$(grep -nE "$V1_TOKENS" "$README")"; then
     echo "check-readme: FAIL: A2: README.md contains v1-era tokens:" >&2
@@ -188,9 +205,9 @@ REQUIRED_SECTIONS=(
     'build.*install'
     'hello.*world'
     'class-form'
-    '^##[ \t]+request'
-    '^##[ \t]+response'
-    '^##[ \t]+routing'
+    'request'
+    'response'
+    'routing'
     'lifecycle[ \t-]+hook'
     'threading'
     'error[ \t-]+propag'
@@ -201,15 +218,8 @@ REQUIRED_SECTIONS=(
 
 missing_sections=()
 for sec in "${REQUIRED_SECTIONS[@]}"; do
-    # Patterns starting with ^ are absolute; others match anywhere on H2 lines.
-    if [[ "$sec" == ^* ]]; then
-        if ! grep -qiE "$sec" "$README"; then
-            missing_sections+=("$sec")
-        fi
-    else
-        if ! grep -qiE "^##[ \t]+.*${sec}" "$README"; then
-            missing_sections+=("$sec")
-        fi
+    if ! grep -qiE "^##[ \t]+.*${sec}" "$README"; then
+        missing_sections+=("$sec")
     fi
 done
 if [ "${#missing_sections[@]}" -gt 0 ]; then
@@ -254,12 +264,17 @@ fi
 # looks like a file path (no spaces, no C++ keywords). Skip http/https URLs
 # and in-page anchors (#...). Verify each relative target exists on disk.
 broken_links=()
+# Note: grep exit-1 (no matches) is not propagated from process substitution under bash set -e;
+# this is an intentional reliance on this bash-specific behavior (the script requires bash already).
 while IFS= read -r target; do
     case "$target" in
         http://*|https://*) continue ;;         # absolute URLs — not checked
         \#*)                continue ;;         # in-page anchors — not checked
         RELEASE_NOTES.md)   continue ;;         # created by TASK-042, not yet present
     esac
+    # Strip fragment identifiers (#section) before existence check to avoid
+    # false failures when a link like [foo](examples/foo.cpp#line) is added.
+    target="${target%%#*}"
     if [ ! -e "$REPO_ROOT/$target" ]; then
         broken_links+=("$target")
     fi
@@ -273,8 +288,12 @@ fi
 
 # ---- Markdown sanity --------------------------------------------------------
 # (S1) Balanced ``` fences (count of ``` lines must be even).
+# Known limitation: two consecutive opening fences and two closing fences
+# would still produce an even count but are structurally unbalanced.
+# The S3 awk pass (toggle-based) catches the tab-inside-block case and
+# could be extended to enforce in_block==0 at END for stricter balancing.
 fence_count="$(grep -cE '^```' "$README" || true)"
-if [ $((fence_count % 2)) -ne 0 ]; then
+if [ $(( ${fence_count:-0} % 2 )) -ne 0 ]; then
     fail "S1: README.md has an odd number of \`\`\` fence lines ($fence_count); fences are unbalanced"
 fi
 
@@ -292,10 +311,23 @@ awk '
     END { exit bad }
 ' "$README" >&2 || fail "S3: fenced code blocks in README.md contain tab characters (must use spaces)"
 
+# (S4) No CRLF line endings in README.md.
+# The grep -P below requires a POSIX-extended grep that understands \r; on macOS
+# use LC_ALL=C grep -P to avoid locale issues.
+if LC_ALL=C grep -qP '\r$' "$README" 2>/dev/null; then
+    fail "S4: README.md contains CRLF line endings; convert to LF before committing"
+fi
+
 # ---- Optional: markdownlint advisory ----------------------------------------
+# Lint output goes to stderr so it is visible in CI logs. Not gating: a
+# lint failure here does not fail the script. Set MARKDOWNLINT_STRICT=yes
+# to promote lint failures to a hard gate (analogous to HEADER_HYGIENE_STRICT).
 if command -v markdownlint >/dev/null 2>&1; then
-    if ! markdownlint -q "$README" 2>/dev/null; then
-        echo "check-readme: NOTE: markdownlint reported issues (advisory only, not gating)" >&2
+    if ! markdownlint -q "$README" 2>&1; then
+        echo "check-readme: NOTE: markdownlint reported issues above (advisory only, not gating)" >&2
+        if [ "${MARKDOWNLINT_STRICT:-no}" = "yes" ]; then
+            fail "markdownlint reported issues and MARKDOWNLINT_STRICT=yes"
+        fi
     fi
 fi
 
