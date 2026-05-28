@@ -363,7 +363,7 @@ void upsert_v2_table_entry(const detail::http_endpoint& idx,
                            method_set methods,
                            std::shared_ptr<::httpserver::http_resource> shim,
                            bool fresh);
-void upsert_v2_param_route(const std::string& key,
+void upsert_v2_radix_route(const std::string& key,
                            method_set methods,
                            std::shared_ptr<::httpserver::http_resource> shim);
 void insert_fresh_v2_entry(const detail::http_endpoint& idx,

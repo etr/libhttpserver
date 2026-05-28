@@ -1011,6 +1011,29 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, sanitize_upload_filename_mixed_separators)
                 std::string("c.txt"));
 LT_END_AUTO_TEST(sanitize_upload_filename_mixed_separators)
 
+// Null byte in filename: CWE-626 null-byte injection. A multipart filename
+// like "foo.txt\x00.php" is passed to std::ofstream::open() whose c_str()
+// call truncates at the embedded null, creating the file at the truncated
+// location rather than the full std::string path. Reject such names by
+// returning "". (security finding #12)
+LT_BEGIN_AUTO_TEST(http_utils_suite, sanitize_upload_filename_null_byte_returns_empty)
+    std::string with_null("foo.txt");
+    with_null += '\0';
+    with_null += ".php";
+    LT_CHECK_EQ(httpserver::http::http_utils::sanitize_upload_filename(with_null),
+                std::string(""));
+LT_END_AUTO_TEST(sanitize_upload_filename_null_byte_returns_empty)
+
+// Null byte preceded by directory separator: the basename portion still
+// contains the null byte and must be rejected.
+LT_BEGIN_AUTO_TEST(http_utils_suite, sanitize_upload_filename_path_with_null_byte_returns_empty)
+    std::string with_null("/uploads/good");
+    with_null += '\0';
+    with_null += "bad.php";
+    LT_CHECK_EQ(httpserver::http::http_utils::sanitize_upload_filename(with_null),
+                std::string(""));
+LT_END_AUTO_TEST(sanitize_upload_filename_path_with_null_byte_returns_empty)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

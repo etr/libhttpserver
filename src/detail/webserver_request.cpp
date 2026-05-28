@@ -396,38 +396,40 @@ void webserver_impl::resolve_method_callback(const char* method,
     // takes the 405 path. mr->callback is left at nullptr (its
     // default-initializer value) for unrecognised methods; the 405 guard
     // in dispatch_resource_handler fires before it is ever invoked.
-    if (0 == strcmp(method, http_utils::http_method_get)) {
-        mr->callback = &http_resource::render_get;
-        mr->method_enum = http_method::get;
-    } else if (0 == strcmp(method, http_utils::http_method_post)) {
-        mr->callback = &http_resource::render_post;
-        mr->method_enum = http_method::post;
-        mr->has_body = true;
-    } else if (0 == strcmp(method, http_utils::http_method_put)) {
-        mr->callback = &http_resource::render_put;
-        mr->method_enum = http_method::put;
-        mr->has_body = true;
-    } else if (0 == strcmp(method, http_utils::http_method_delete)) {
-        mr->callback = &http_resource::render_delete;
-        mr->method_enum = http_method::del;
-        mr->has_body = true;
-    } else if (0 == strcmp(method, http_utils::http_method_patch)) {
-        mr->callback = &http_resource::render_patch;
-        mr->method_enum = http_method::patch;
-        mr->has_body = true;
-    } else if (0 == strcmp(method, http_utils::http_method_head)) {
-        mr->callback = &http_resource::render_head;
-        mr->method_enum = http_method::head;
-    } else if (0 == strcmp(method, http_utils::http_method_connect)) {
-        mr->callback = &http_resource::render_connect;
-        mr->method_enum = http_method::connect;
-    } else if (0 == strcmp(method, http_utils::http_method_trace)) {
-        mr->callback = &http_resource::render_trace;
-        mr->method_enum = http_method::trace;
-    } else if (0 == strcmp(method, http_utils::http_method_options)) {
-        mr->callback = &http_resource::render_options;
-        mr->method_enum = http_method::options;
+    //
+    // Data-driven lookup table (finding #3): replaces the former 9-branch
+    // if/else chain. A new HTTP method requires only one row here (wire
+    // string, callback pointer, enum value, has_body flag). CCN reduced
+    // from ~10 to ~3 (one loop + one conditional for has_body).
+    using render_fn = http_response (http_resource::*)(const http_request&);
+    struct method_entry {
+        const char*  wire;
+        render_fn    callback;
+        http_method  enum_val;
+        bool         has_body;
+    };
+    static const method_entry methods[] = {
+        { http_utils::http_method_get,     &http_resource::render_get,     http_method::get,     false },
+        { http_utils::http_method_post,    &http_resource::render_post,    http_method::post,    true  },
+        { http_utils::http_method_put,     &http_resource::render_put,     http_method::put,     true  },
+        { http_utils::http_method_delete,  &http_resource::render_delete,  http_method::del,     true  },
+        { http_utils::http_method_patch,   &http_resource::render_patch,   http_method::patch,   true  },
+        { http_utils::http_method_head,    &http_resource::render_head,    http_method::head,    false },
+        { http_utils::http_method_connect, &http_resource::render_connect, http_method::connect, false },
+        { http_utils::http_method_trace,   &http_resource::render_trace,   http_method::trace,   false },
+        { http_utils::http_method_options, &http_resource::render_options, http_method::options, false },
+    };
+    for (const auto& e : methods) {
+        if (0 == strcmp(method, e.wire)) {
+            mr->callback    = e.callback;
+            mr->method_enum = e.enum_val;
+            if (e.has_body) mr->has_body = true;
+            return;
+        }
     }
+    // Unrecognised method: leave mr->callback == nullptr and
+    // mr->method_enum == http_method::count_ (both set by modded_request
+    // default initialiser); the 405 guard fires before callback is used.
 }
 
 MHD_Result webserver_impl::answer_to_connection(void* cls, MHD_Connection* connection, const char* url, const char* method,
