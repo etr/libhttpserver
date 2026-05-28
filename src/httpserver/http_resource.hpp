@@ -61,6 +61,17 @@ namespace httpserver {
 
 /**
  * Class representing a callable http resource.
+ *
+ * Subclass this and override one or more `render_*` methods to handle
+ * specific HTTP verbs. Overriding `render()` catches all verbs not
+ * covered by a more-specific override; the default implementation
+ * returns a sentinel `http_response{}` that the dispatch path
+ * translates to a 405 Method Not Allowed.
+ *
+ * @par Thread-safety (DR-008 §5.1)
+ * A single registered instance may be invoked concurrently from
+ * multiple libmicrohttpd worker threads. All state accessed by
+ * `render_*` overrides must be externally synchronized.
 **/
 class http_resource {
  public:

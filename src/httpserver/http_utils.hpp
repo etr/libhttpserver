@@ -396,12 +396,15 @@ class arg_comparator {
          COMPARATOR(x, y,);  // NOLINT(whitespace/comma)
 #endif
      }
+     /// @copydoc operator()(std::string_view, std::string_view) const
      bool operator()(const std::string& x, const std::string& y) const {
         return operator()(std::string_view(x), std::string_view(y));
      }
+     /// @copydoc operator()(std::string_view, std::string_view) const
      bool operator()(std::string_view x, const std::string& y) const {
         return operator()(x, std::string_view(y));
      }
+     /// @copydoc operator()(std::string_view, std::string_view) const
      bool operator()(const std::string& x, std::string_view y) const {
         return operator()(std::string_view(x), y);
      }
