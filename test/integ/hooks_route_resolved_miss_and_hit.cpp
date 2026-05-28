@@ -49,6 +49,12 @@ struct probe_state {
     std::atomic<std::size_t> misses{0};
     std::atomic<bool> last_is_prefix{false};
     std::atomic<std::size_t> last_path_len{0};
+    // TASK-048 review finding 16: route_resolved_ctx::resource is newly-
+    // added public API — pin it with a positive regression assertion.
+    // For a route hit, resource should be non-null (the registered
+    // http_resource*); for a miss, resource should be null.
+    std::atomic<bool> last_hit_resource_non_null{false};
+    std::atomic<bool> last_miss_resource_null{true};
 };
 
 class hello_resource : public httpserver::http_resource {
@@ -97,8 +103,15 @@ LT_BEGIN_AUTO_TEST(hooks_route_resolved_suite, two_hooks_observe_hit_and_miss)
                                            std::memory_order_relaxed);
                     a.last_path_len.store(ctx.matched->path_template.size(),
                                           std::memory_order_relaxed);
+                    // TASK-048 review finding 16: record whether resource
+                    // is non-null on a hit (should be the registered resource).
+                    a.last_hit_resource_non_null.store(ctx.resource != nullptr,
+                                                       std::memory_order_relaxed);
                 } else {
                     a.misses.fetch_add(1, std::memory_order_relaxed);
+                    // On a miss, resource should be null.
+                    a.last_miss_resource_null.store(ctx.resource == nullptr,
+                                                    std::memory_order_relaxed);
                 }
             }));
 
@@ -139,6 +152,12 @@ LT_BEGIN_AUTO_TEST(hooks_route_resolved_suite, two_hooks_observe_hit_and_miss)
     // exact-path registrations.
     LT_CHECK(a.last_path_len.load() >= static_cast<std::size_t>(1));
     LT_CHECK_EQ(a.last_is_prefix.load(), false);
+
+    // TASK-048 review finding 16: route_resolved_ctx::resource is newly-
+    // added API. Assert it is non-null for a hit (the registered resource
+    // pointer) and null for a miss (no matched route).
+    LT_CHECK(a.last_hit_resource_non_null.load());
+    LT_CHECK(a.last_miss_resource_null.load());
 LT_END_AUTO_TEST(two_hooks_observe_hit_and_miss)
 
 LT_BEGIN_AUTO_TEST_ENV()

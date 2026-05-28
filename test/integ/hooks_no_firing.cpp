@@ -8,20 +8,23 @@
      version 2.1 of the License, or (at your option) any later version.
 */
 
-// TASK-045 integration sentinel — narrowed by TASK-046.
+// TASK-045 integration sentinel — narrowed incrementally by TASK-046..051.
 //
-// Originally:
-//   "No phase actually fires yet — verified by registering one hook on
-//    every phase and observing zero invocations across a complete
-//    request/response cycle. (Phases start firing in TASK-046..051.)"
+// Originally named all_phases_silent_across_round_trip (TASK-045). As
+// TASK-046..051 wired each phase, the test narrowed: it now only asserts
+// silence on phases that are still unwired. Renamed to
+// unwired_phases_silent_across_round_trip (TASK-048 review cleanup) to
+// accurately reflect that it is a sentinel for the unwired residual,
+// NOT a claim that all phases are silent.
 //
-// TASK-046 wired the three connection-level phases (connection_opened,
-// accept_decision, connection_closed), so the gate now narrows to the
-// remaining EIGHT phases that TASK-047..051 will wire. Those eight
-// must still observe zero invocations across a complete round-trip.
+// As of TASK-051, all eleven phases are wired; not_yet_wired returns
+// false for every phase. The loop below is therefore a no-op but is
+// preserved to document the wiring boundary: if a new phase is added
+// in a future task, it will initially return true from not_yet_wired
+// and will be asserted silent until wired.
+//
 // We still register all eleven hooks so we keep one-call-site coverage
-// of the API surface; we just assert silence on the not-yet-wired
-// phases only.
+// of the API surface.
 
 #include <curl/curl.h>
 
@@ -69,7 +72,7 @@ LT_BEGIN_SUITE(hooks_no_firing_suite)
     }
 LT_END_SUITE(hooks_no_firing_suite)
 
-LT_BEGIN_AUTO_TEST(hooks_no_firing_suite, all_phases_silent_across_round_trip)
+LT_BEGIN_AUTO_TEST(hooks_no_firing_suite, unwired_phases_silent_across_round_trip)
     webserver ws{create_webserver(PORT)};
 
     // Eleven counters indexed by phase ordinal.
@@ -199,7 +202,16 @@ LT_BEGIN_AUTO_TEST(hooks_no_firing_suite, all_phases_silent_across_round_trip)
             LT_CHECK_EQ(counters[i].load(), static_cast<std::size_t>(0));
         }
     }
-LT_END_AUTO_TEST(all_phases_silent_across_round_trip)
+
+    // Positive regression anchors for the two phases wired by TASK-048:
+    // route_resolved fires on every request (hit and miss), and
+    // before_handler fires on every route hit. The GET /hello round-trip
+    // above is a hit, so both must have fired at least once.
+    LT_CHECK(counters[static_cast<std::size_t>(hook_phase::route_resolved)].load()
+             >= static_cast<std::size_t>(1));
+    LT_CHECK(counters[static_cast<std::size_t>(hook_phase::before_handler)].load()
+             >= static_cast<std::size_t>(1));
+LT_END_AUTO_TEST(unwired_phases_silent_across_round_trip)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

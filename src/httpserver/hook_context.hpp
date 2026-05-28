@@ -83,10 +83,14 @@ struct peer_address {
  * @brief Light pointer-and-bag view of a matched route.
  *
  * Used by `route_resolved_ctx` and `before_handler_ctx`.
- * `path_template` is a view into the registered route's stored string
- * and is valid for the lifetime of the registration. `methods`
- * carries the method bits the matched entry serves; `is_prefix` flags
- * prefix-match registrations (`register_prefix` / single-resource).
+ * `path_template` is a `string_view` into per-request storage; it is
+ * valid **only for the duration of the hook call**. Do NOT capture or
+ * store the view beyond the hook's return — the backing string is owned
+ * by the per-request `modded_request` object and is destroyed when the
+ * request completes. If you need the value after the hook returns, copy
+ * it into a `std::string` inside the hook body.
+ * `methods` carries the method bits the matched entry serves; `is_prefix`
+ * flags prefix-match registrations (`register_prefix` / single-resource).
  */
 struct route_descriptor {
     std::string_view path_template;
