@@ -257,9 +257,9 @@ MHD_Result requests_answer_first_step(MHD_Connection* connection, modded_request
 MHD_Result requests_answer_second_step(MHD_Connection* connection,
         const char* method, const char* version, const char* upload_data,
         size_t* upload_data_size, modded_request* mr);
-// TASK-021: the wire-string `method` parameter was dropped because
-// finalize_answer now consults mr->method_enum (set once by
-// answer_to_connection) for the is_allowed check.
+// The wire-string `method` parameter was dropped because finalize_answer
+// now consults mr->method_enum (set once by answer_to_connection) for
+// the is_allowed check.
 MHD_Result finalize_answer(MHD_Connection* connection, modded_request* mr);
 
 // Sub-helpers carved out of finalize_answer to keep each function
@@ -337,9 +337,8 @@ void dispatch_resource_handler(modded_request* mr,
         const std::shared_ptr<::httpserver::http_resource>& hrm);
 
 // Serialize an allowed-method set into the comma-separated value
-// expected by the HTTP `Allow:` header. Enum-declaration order
-// (TASK-021): GET, HEAD, POST, PUT, DELETE, CONNECT, OPTIONS, TRACE,
-// PATCH.
+// expected by the HTTP `Allow:` header. Enum-declaration order:
+// GET, HEAD, POST, PUT, DELETE, CONNECT, OPTIONS, TRACE, PATCH.
 std::string serialize_allow_methods(method_set allowed) const;
 
 // Final stage of finalize_answer: build an MHD_Response from

@@ -1698,10 +1698,10 @@ LT_BEGIN_AUTO_TEST(basic_suite, method_not_allowed_header)
     int64_t http_code = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
     LT_ASSERT_EQ(http_code, 405);
-    // TASK-021: Allow-header tokens are emitted in http_method
-    // enum-declaration order (head=1, post=2). For this test the
-    // resulting "HEAD, POST" matches v1's std::map alphabetical order
-    // by coincidence; do not generalize the assumption.
+    // Allow-header tokens are emitted in http_method enum-declaration
+    // order (head=1, post=2). For this test the resulting "HEAD, POST"
+    // matches v1's std::map alphabetical order by coincidence; do not
+    // generalize the assumption.
     LT_CHECK_EQ(ss["Allow"], "HEAD, POST");
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(method_not_allowed_header)

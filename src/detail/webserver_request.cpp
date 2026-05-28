@@ -413,8 +413,8 @@ MHD_Result webserver_impl::complete_request(MHD_Connection* connection, struct d
 void webserver_impl::resolve_method_callback(const char* method,
                                               detail::modded_request* mr) {
     // Case-sensitive per RFC 7230 §3.1.1: HTTP method is case-sensitive.
-    // TASK-021: also record the enum form once so finalize_answer can
-    // call hrm->is_allowed without re-scanning the wire string.
+    // Also record the enum form once so finalize_answer can call
+    // hrm->is_allowed without re-scanning the wire string.
     // Unrecognised methods leave mr->method_enum at the default
     // (count_), so is_allowed(count_) returns false and the request
     // takes the 405 path. mr->callback is left at nullptr (its

@@ -49,8 +49,8 @@ namespace detail {
 // includes this header.
 //
 // Enum-declaration order: GET, HEAD, POST, PUT, DELETE, CONNECT,
-// OPTIONS, TRACE, PATCH (TASK-021). The only existing assertion in-tree
-// is "HEAD, POST" which is preserved by enum order.
+// OPTIONS, TRACE, PATCH. The only existing assertion in-tree is
+// "HEAD, POST" which is preserved by enum order.
 inline std::string format_allow_header(method_set allowed) {
     std::string header_value;
     // Pre-size for 9 methods * ~8 chars each (finding #27: avoid

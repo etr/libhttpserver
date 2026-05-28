@@ -63,12 +63,11 @@ struct modded_request {
     // finalize_answer takes the 405 path before invoking this pointer.
     http_response (http_resource::*callback)(const http_request&) = nullptr;
 
-    // TASK-021: enum form of the wire method, decoded once at the
-    // dispatch boundary in webserver_impl::answer_to_connection. Used
-    // by finalize_answer to ask http_resource::is_allowed without a
-    // per-request string compare. Defaults to count_ — a sentinel
-    // outside the valid_method_mask, so is_allowed returns false for
-    // unrecognized verbs (the 405 path).
+    // Enum form of the wire method, decoded once at the dispatch boundary
+    // in webserver_impl::answer_to_connection. Used by finalize_answer to
+    // ask http_resource::is_allowed without a per-request string compare.
+    // Defaults to count_ — a sentinel outside the valid_method_mask, so
+    // is_allowed returns false for unrecognized verbs (the 405 path).
     http_method method_enum = http_method::count_;
 
     std::unique_ptr<http_request> dhr = nullptr;
