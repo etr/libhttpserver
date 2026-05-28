@@ -26,6 +26,7 @@
 #include "httpserver/http_request.hpp"
 
 #include <algorithm>
+#include <cassert>
 #include <map>
 #include <memory_resource>
 #include <string>
@@ -115,8 +116,13 @@ const http::header_view_map& http_request_impl::ensure_headerlike_cache(MHD_Valu
             built = &cookies_cache_built_;
             break;
         default:
-            // Unsupported kind: hand back the headers cache (kept empty)
-            // as a safe fallback; the public API never reaches here.
+            // The public API (get_headers / get_footers / get_cookies) only
+            // passes valid kinds; this branch is unreachable through all
+            // current callers. An assertion here makes any future misuse fail
+            // loudly rather than silently returning stale header data
+            // (security-reviewer-iter1-16 / code-quality-reviewer-iter1-3).
+            assert(false && "ensure_headerlike_cache: unsupported MHD_ValueKind");
+            // Fallback for release builds: return headers cache to avoid UB.
             cache = &headers_cached_;
             built = &headers_cache_built_;
             break;
@@ -264,6 +270,46 @@ void http_request_impl::populate_args() const {
     args_populated = true;
 }
 
+void http_request_impl::ensure_path_pieces_public_cached() const {
+    // Populate the public-typed mirror of path_pieces (std::vector<std::string>)
+    // from the already-built pmr-backed path_pieces. Must be called after
+    // ensure_path_pieces_cached(). Building the mirror inside the impl class
+    // keeps all cache-maintenance logic in one place.
+    // (code-quality-reviewer-iter1-4 / code-simplifier-iter1-8)
+    if (path_pieces_public_built_) {
+        return;
+    }
+    path_pieces_public_.clear();
+    path_pieces_public_.reserve(path_pieces.size());
+    for (const auto& p : path_pieces) {
+        path_pieces_public_.emplace_back(p.data(), p.size());
+    }
+    path_pieces_public_built_ = true;
+}
+
+void http_request_impl::ensure_args_view_cached() const {
+    // Populate the arg view-map cache from unescaped_args. Must be called
+    // after populate_args(). Building the cache here (inside the impl class)
+    // keeps all cache-maintenance code in one place, analogous to
+    // ensure_headerlike_cache() / ensure_path_pieces_cached().
+    // (code-simplifier-iter1-9)
+    if (args_view_cache_built_) {
+        return;
+    }
+    args_view_cached_.clear();
+    for (const auto& [key, value] : unescaped_args) {
+        // The string_view keys/values alias the pmr-backed strings owned
+        // by `unescaped_args` -- same lifetime as the request.
+        auto& arg_values = args_view_cached_[
+            std::string_view(key.data(), key.size())];
+        arg_values.values.reserve(value.size());
+        for (const auto& v : value) {
+            arg_values.values.emplace_back(v.data(), v.size());
+        }
+    }
+    args_view_cache_built_ = true;
+}
+
 void http_request_impl::ensure_path_pieces_cached(std::string_view path) const {
     if (path_pieces_cached) {
         return;
@@ -322,6 +368,10 @@ inline void append_arg(
 
 void http_request_impl::set_arg(const std::string& key, const std::string& value,
                                 std::size_t content_size_limit) {
+    // Invalidate the args_view_cached_ so a subsequent get_args() call
+    // rebuilds the view map from the updated unescaped_args.
+    // (security-reviewer-iter1-17: prevent stale cache after post-build mutation)
+    args_view_cache_built_ = false;
     append_arg(unescaped_args, key,
                std::string_view(value).substr(
                    0, std::min(value.size(), content_size_limit)));
@@ -329,12 +379,20 @@ void http_request_impl::set_arg(const std::string& key, const std::string& value
 
 void http_request_impl::set_arg(const char* key, const char* value, std::size_t size,
                                 std::size_t content_size_limit) {
+    // Invalidate the args_view_cached_ so a subsequent get_args() call
+    // rebuilds the view map from the updated unescaped_args.
+    // (security-reviewer-iter1-17: prevent stale cache after post-build mutation)
+    args_view_cache_built_ = false;
     append_arg(unescaped_args, key,
                std::string_view(value, std::min(size, content_size_limit)));
 }
 
 void http_request_impl::set_arg_flat(const std::string& key, const std::string& value,
                                      std::size_t content_size_limit) {
+    // Invalidate the args_view_cached_ so a subsequent get_args() call
+    // rebuilds the view map from the updated unescaped_args.
+    // (security-reviewer-iter1-17: prevent stale cache after post-build mutation)
+    args_view_cache_built_ = false;
     auto& vec = find_or_insert_arg(unescaped_args, key);
     vec.clear();
     const auto bounded_size = std::min(value.size(), content_size_limit);
@@ -343,6 +401,10 @@ void http_request_impl::set_arg_flat(const std::string& key, const std::string& 
 
 void http_request_impl::set_args(const std::map<std::string, std::string>& args,
                                  std::size_t content_size_limit) {
+    // Invalidate the args_view_cached_ so a subsequent get_args() call
+    // rebuilds the view map from the updated unescaped_args.
+    // (security-reviewer-iter1-17: prevent stale cache after post-build mutation)
+    args_view_cache_built_ = false;
     for (auto const& [key, value] : args) {
         append_arg(unescaped_args, key,
                    std::string_view(value).substr(
@@ -351,6 +413,10 @@ void http_request_impl::set_args(const std::map<std::string, std::string>& args,
 }
 
 void http_request_impl::grow_last_arg(const std::string& key, const std::string& value) {
+    // Invalidate the args_view_cached_ so a subsequent get_args() call
+    // rebuilds the view map from the updated unescaped_args.
+    // (security-reviewer-iter1-17: prevent stale cache after post-build mutation)
+    args_view_cache_built_ = false;
     auto& vec = find_or_insert_arg(unescaped_args, key);
     if (!vec.empty()) {
         vec.back() += value;

@@ -258,8 +258,12 @@ LT_BEGIN_AUTO_TEST(create_test_request_suite, build_no_client_cert_returns_senti
     LT_CHECK_EQ(req2.get_client_cert_not_after(), static_cast<std::int64_t>(-1));
 LT_END_AUTO_TEST(build_no_client_cert_returns_sentinels)
 
-// Test that all getters on a minimal request return empty without crashing
-LT_BEGIN_AUTO_TEST(create_test_request_suite, empty_getters_no_crash)
+// Smoke-check that all getters on a minimal request return empty/default without
+// crashing. Each path (header, footer, cookie, arg, container) is exercised
+// once; any crash here pinpoints the specific getter.
+// (test-quality-reviewer-iter1-23: renamed from empty_getters_no_crash to
+// communicate intent more clearly)
+LT_BEGIN_AUTO_TEST(create_test_request_suite, empty_getters_smoke_check)
     auto req = create_test_request().build();
     // These should all return empty/default without crashing
     LT_CHECK_EQ(std::string(req.get_header("Anything")), std::string(""));
@@ -274,7 +278,7 @@ LT_BEGIN_AUTO_TEST(create_test_request_suite, empty_getters_no_crash)
     LT_CHECK_EQ(req.get_args().size(), static_cast<size_t>(0));
     LT_CHECK_EQ(req.get_args_flat().size(), static_cast<size_t>(0));
     LT_CHECK_EQ(req.get_path_pieces().size(), static_cast<size_t>(0));
-LT_END_AUTO_TEST(empty_getters_no_crash)
+LT_END_AUTO_TEST(empty_getters_smoke_check)
 
 // End-to-end: build request, call render, inspect response
 class greeting_resource : public http_resource {
@@ -396,6 +400,11 @@ LT_BEGIN_AUTO_TEST(create_test_request_suite, getters_return_const_ref_stable)
     LT_CHECK_EQ(cref.get_cookies().size(), static_cast<size_t>(1));
     LT_CHECK_EQ(cref.get_args().size(),    static_cast<size_t>(1));
     LT_CHECK_EQ(cref.get_path_pieces().size(), static_cast<size_t>(3));
+    // get_files() returns a direct reference to impl_->files_ (no cache flag),
+    // so it cannot misbehave in the same way as the other five; include it here
+    // for symmetry and completeness of the sanity block.
+    // (test-quality-reviewer-iter1-24)
+    LT_CHECK_EQ(cref.get_files().size(), static_cast<size_t>(0));
 LT_END_AUTO_TEST(getters_return_const_ref_stable)
 
 // TASK-018: per-key getters must be empty-on-miss and must NOT insert

@@ -184,6 +184,11 @@ class header_reading_resource : public http_resource {
 class full_args_resource : public http_resource {
  public:
      http_response render_get(const http_request& req) {
+         // get_args() returns const http::arg_view_map& (TASK-017). The
+         // .at("arg") call is read-only on const&; the http_arg_value is
+         // implicitly converted to std::string at the call site. This call
+         // site was reviewed for copy-semantic reliance and requires no
+         // modification. (spec-alignment-checker-iter1-20)
          return http_response::string(std::string(req.get_args().at("arg")));
      }
 };
@@ -2410,14 +2415,16 @@ class args_cache_resource : public http_resource {
  public:
     http_response render_get(const http_request& req) {
         // Call get_args twice to test caching. TASK-017: returns const&
-        // aliasing the impl-owned cache; both binds should be the same
-        // address. We don't read args1/args2 here -- the test for caching
-        // is end-to-end via the response body -- but we keep them as
-        // references to lock in the new contract at the call site.
+        // aliasing the impl-owned cache; both calls must return the same
+        // address proving the cache is built once and reused.
+        // (code-quality-reviewer-iter1-6 / test-quality-reviewer-iter1-22:
+        // promote address equality to an assertion rather than dead code)
         const auto& args1 = req.get_args();
         const auto& args2 = req.get_args();  // Should hit cache
-        (void)args1;
-        (void)args2;
+        // Address equality: the two references must alias the same object.
+        if (&args1 != &args2) {
+            return http_response::string("ERROR: args cache not stable");
+        }
 
         // Also test get_args_flat (still by-value for now -- TASK-017 only
         // narrows the six container getters listed in its acceptance set).

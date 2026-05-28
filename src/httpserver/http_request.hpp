@@ -197,6 +197,10 @@ class http_request {
       * @return a const reference to a map<string_view, string_view>
       *         containing all headers. The reference (and the views it
       *         holds) remain valid until the http_request is destroyed.
+      * @note The string_view keys and values inside the returned map are
+      *       only valid within the handler call frame. Copy to std::string
+      *       if a longer lifetime is required.
+      *       (security-reviewer-iter1-18 / CWE-672)
      **/
      [[nodiscard]] const http::header_view_map& get_headers() const;
 
@@ -205,6 +209,10 @@ class http_request {
       * @return a const reference to a map<string_view, string_view>
       *         containing all footers. The reference (and the views it
       *         holds) remain valid until the http_request is destroyed.
+      * @note The string_view keys and values inside the returned map are
+      *       only valid within the handler call frame. Copy to std::string
+      *       if a longer lifetime is required.
+      *       (security-reviewer-iter1-18 / CWE-672)
      **/
      [[nodiscard]] const http::header_view_map& get_footers() const;
 
@@ -213,6 +221,10 @@ class http_request {
       * @return a const reference to a map<string_view, string_view>
       *         containing all cookies. The reference (and the views it
       *         holds) remain valid until the http_request is destroyed.
+      * @note The string_view keys and values inside the returned map are
+      *       only valid within the handler call frame. Copy to std::string
+      *       if a longer lifetime is required.
+      *       (security-reviewer-iter1-18 / CWE-672)
      **/
      [[nodiscard]] const http::header_view_map& get_cookies() const;
 
@@ -221,6 +233,10 @@ class http_request {
       * @return a const reference to the args map. The reference (and the
       *         string_view keys/values it holds) remain valid until the
       *         http_request is destroyed.
+      * @note The string_view keys and values inside the returned map are
+      *       only valid within the handler call frame. Copy to std::string
+      *       if a longer lifetime is required.
+      *       (security-reviewer-iter1-18 / CWE-672)
      **/
      [[nodiscard]] const http::arg_view_map& get_args() const;
 
@@ -255,6 +271,12 @@ class http_request {
       * @return a const reference to a map<std::string, map<std::string,
       *         http::file_info>> containing all files. The reference
       *         remains valid until the http_request is destroyed.
+      * @note Copying the returned map copies file metadata only (paths,
+      *       sizes, MIME types). The actual on-disk temporary files are
+      *       NOT copied; they remain subject to cleanup when the
+      *       http_request destructor runs unless the file_cleanup_callback
+      *       suppresses deletion.
+      *       (architecture-alignment-checker-iter1-2 / CWE-672)
      **/
      [[nodiscard]] const std::map<std::string, std::map<std::string, http::file_info>>& get_files() const noexcept;
 
