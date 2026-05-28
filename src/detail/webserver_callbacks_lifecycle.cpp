@@ -145,9 +145,7 @@ void webserver_impl::connection_notify(void* cls, struct MHD_Connection* connect
     // on the next event. A single lambda definition avoids duplicating the
     // cast and memory-order spelling at every call site.
     auto hooks_armed = [&impl](::httpserver::hook_phase p) -> bool {
-        return impl != nullptr &&
-               impl->any_hooks_[static_cast<std::size_t>(p)]
-                   .load(std::memory_order_relaxed);
+        return impl != nullptr && impl->has_hooks_for(p);
     };
 
     switch (toe) {
@@ -219,9 +217,7 @@ MHD_Result webserver_impl::policy_callback(void *cls, const struct sockaddr* add
 
     // Fire the hook strictly after `decision` is fixed. The relaxed
     // atomic gate keeps zero-cost-when-unused (PRD-HOOK-REQ-008).
-    if (impl->any_hooks_[static_cast<std::size_t>(
-                ::httpserver::hook_phase::accept_decision)]
-            .load(std::memory_order_relaxed)) {
+    if (impl->has_hooks_for(::httpserver::hook_phase::accept_decision)) {
         ::httpserver::accept_ctx ctx{
             make_peer_address(addr), accepted, reason};
         impl->fire_accept_decision(ctx);

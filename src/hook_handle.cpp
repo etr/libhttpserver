@@ -263,6 +263,7 @@ static void fire_hooks_for_phase(
         snapshot.clear();
         {
             std::shared_lock lock(impl->hook_table_mutex_);
+            if (hook_vec.empty()) return;
             snapshot = hook_vec;
         }
         for (const auto& entry : snapshot) {
@@ -331,6 +332,7 @@ fire_short_circuit_hooks_for_phase(
         snapshot.clear();
         {
             std::shared_lock lock(impl->hook_table_mutex_);
+            if (hook_vec.empty()) return std::nullopt;
             snapshot = hook_vec;
         }
         for (auto& entry : snapshot) {

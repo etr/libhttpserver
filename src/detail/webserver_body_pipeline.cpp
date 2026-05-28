@@ -40,7 +40,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#ifdef DEBUG
 #include <iostream>
+#endif  // DEBUG
 #include <optional>
 #include <span>
 #include <string>
@@ -75,13 +77,16 @@ bool fire_and_maybe_short_circuit_body_chunk(webserver_impl* impl,
                                              modded_request* mr,
                                              const char* upload_data,
                                              size_t upload_data_size) {
+    // ctx.offset is sourced from body_bytes_seen (not get_content().size())
+    // so it accumulates correctly even when put_processed_data_to_content
+    // is false and a post-processor is active (in that case grow_content
+    // is skipped, so get_content().size() would stay at 0 for every chunk).
     ::httpserver::body_chunk_ctx ctx{
         mr->dhr.get(),
-        std::span<const std::byte>(
-            reinterpret_cast<const std::byte*>(upload_data),
-            upload_data_size),
-        static_cast<std::uint64_t>(mr->dhr->get_content().size()),
+        std::as_bytes(std::span<const char>(upload_data, upload_data_size)),
+        mr->body_bytes_seen,
         /*is_final=*/false};
+    mr->body_bytes_seen += upload_data_size;
     auto sc = impl->fire_body_chunk(ctx);
     if (!sc) return false;
     mr->response_.emplace(std::move(*sc));
@@ -123,9 +128,7 @@ MHD_Result webserver_impl::requests_answer_first_step(MHD_Connection* connection
     // routes through complete_request -> finalize_answer, where the
     // skip_handler branch goes straight to materialize_and_queue_response.
     // No post-processor exists at this point, so no teardown is needed.
-    if (any_hooks_[static_cast<std::size_t>(
-                ::httpserver::hook_phase::request_received)]
-            .load(std::memory_order_relaxed)) {
+    if (has_hooks_for(::httpserver::hook_phase::request_received)) {
         ::httpserver::request_received_ctx ctx{
             mr->dhr.get(),
             std::chrono::steady_clock::now()};
@@ -177,9 +180,7 @@ MHD_Result webserver_impl::requests_answer_second_step(MHD_Connection* connectio
 
     // TASK-047 -- body_chunk hook fires per chunk BEFORE the bytes are
     // appended to mr->dhr / fed to MHD_post_process.
-    if (any_hooks_[static_cast<std::size_t>(
-                ::httpserver::hook_phase::body_chunk)]
-            .load(std::memory_order_relaxed)) {
+    if (has_hooks_for(::httpserver::hook_phase::body_chunk)) {
         if (fire_and_maybe_short_circuit_body_chunk(
                 this, mr, upload_data, *upload_data_size)) {
             *upload_data_size = 0;

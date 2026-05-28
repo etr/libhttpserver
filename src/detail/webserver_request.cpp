@@ -266,8 +266,7 @@ static void fire_route_resolved_gated(webserver_impl* impl,
                                       detail::modded_request* mr,
                                       bool found,
                                       const std::shared_ptr<http_resource>& hrm) {
-    if (!impl->any_hooks_[static_cast<std::size_t>(hook_phase::route_resolved)]
-            .load(std::memory_order_relaxed)) {
+    if (!impl->has_hooks_for(hook_phase::route_resolved)) {
         return;
     }
     std::optional<route_descriptor> desc;

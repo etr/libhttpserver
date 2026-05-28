@@ -254,6 +254,15 @@ class webserver_impl {
     std::array<std::atomic<bool>,
                static_cast<std::size_t>(hook_phase::count_)> any_hooks_{};
 
+    // Returns true iff at least one hook is registered for phase @p p.
+    // Reads the atomic gate with relaxed ordering -- the same semantics
+    // used at every firing site. Encapsulates the cast so call sites read
+    // as `has_hooks_for(hook_phase::X)` instead of the raw index expression.
+    bool has_hooks_for(::httpserver::hook_phase p) const noexcept {
+        return any_hooks_[static_cast<std::size_t>(p)].load(
+            std::memory_order_relaxed);
+    }
+
     std::vector<phase_entry<void(const ::httpserver::connection_open_ctx&)>>
         hooks_connection_opened_;
     std::vector<phase_entry<void(const ::httpserver::accept_ctx&)>>
