@@ -461,7 +461,7 @@ hooks_per_route_early_413_per_endpoint_SOURCES = integ/hooks_per_route_early_413
 hooks_per_route_resource_destroyed_first_SOURCES = integ/hooks_per_route_resource_destroyed_first.cpp
 hooks_per_route_concurrent_registration_SOURCES = integ/hooks_per_route_concurrent_registration.cpp
 
-noinst_HEADERS = littletest.hpp
+noinst_HEADERS = littletest.hpp integ/test_utils.hpp
 AM_CXXFLAGS += -Wall -fPIC -Wno-overloaded-virtual
 
 if COND_GCOV

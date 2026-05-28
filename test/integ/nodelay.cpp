@@ -25,18 +25,7 @@
 
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
-
-
-namespace {
-// TASK-023 test helper: wrap a stack-local http_resource& in a shared_ptr
-// with a no-op deleter. Preserves the "declare resource on the stack,
-// pass to register_path" pattern after the API moved to smart pointers.
-inline std::shared_ptr<httpserver::http_resource>
-as_shared(httpserver::http_resource& r) {
-    return std::shared_ptr<httpserver::http_resource>(
-        &r, [](httpserver::http_resource*){});
-}
-}  // namespace
+#include "./test_utils.hpp"
 
 using std::shared_ptr;
 
