@@ -523,7 +523,7 @@ EXTRA_DIST = libhttpserver.supp \
 #   3. Add a `<name>_LDADD = ...` line if it needs more than the
 #      default empty LDADD.
 #   4. Run `make bench` from the build directory.
-bench_targets = bench_sizeof_http_resource bench_get_headers bench_hook_overhead
+bench_targets = bench_sizeof_http_resource bench_get_headers bench_hook_overhead bench_route_lookup
 EXTRA_PROGRAMS = $(bench_targets)
 
 # bench_sizeof_http_resource: pure compile-time static_assert guard.
@@ -555,6 +555,18 @@ bench_get_headers_LDADD = $(LDADD) -lmicrohttpd
 # by test/unit/hook_api_shape_test.cpp.
 bench_hook_overhead_SOURCES = bench_hook_overhead.cpp
 bench_hook_overhead_LDADD = $(LDADD) -lmicrohttpd
+
+# bench_route_lookup (TASK-053): v2 dispatch performance acceptance.
+# Drives webserver_impl::lookup_v2() directly (no MHD daemon, no
+# sockets) and asserts two ceilings on the dispatch hot path:
+#   (a) cache-hit median <= 200 ns/lookup,
+#   (b) radix-tier median <= 5 us/lookup for an 8-segment
+#       parameterized path.
+# Defines HTTPSERVER_COMPILATION so the bench can reach
+# webserver_test_access, the same friend pattern used by
+# bench_hook_overhead.cpp and the unit tests.
+bench_route_lookup_SOURCES = bench_route_lookup.cpp
+bench_route_lookup_LDADD = $(LDADD) -lmicrohttpd
 
 bench: $(bench_targets)
 	@for p in $(bench_targets); do \
