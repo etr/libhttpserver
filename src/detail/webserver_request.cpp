@@ -241,6 +241,11 @@ MHD_Result webserver_impl::materialize_and_queue_response(MHD_Connection* connec
         // Belt-and-suspenders: even get_raw_response_with_fallback's
         // own try/catch couldn't produce a response. Force the
         // empty-body 500 fallback so MHD always has something to queue.
+        // DR-009 §5.2 point 4: library logs before sending hardcoded 500.
+        log_dispatch_error(
+            "materialize_and_queue_response: "
+            "get_raw_response_with_fallback returned null; "
+            "forcing hardcoded empty-body 500");
         mr->response_.emplace(internal_error_page(mr, "", /*force_our=*/true));
         raw_response = materialize_response(&*mr->response_);
     }
