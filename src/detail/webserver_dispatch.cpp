@@ -203,14 +203,17 @@ webserver_impl::lookup_v2(http_method method, const std::string& path) {
         }
     }  // table_lock released.
 
-    // Step 3: install into cache (cache mutex only). Move result.entry and
-    // result.captured_params into the cache_value to avoid a second copy
-    // of the shared_ptr ref-count bump and captured vector on the miss path.
-    // result is not used after this point.
+    // Step 3: install into cache (cache mutex only). Copy result.entry and
+    // result.captured_params into the cache_value — the caller (the v2
+    // resolver) consumes `result` after this returns, so a move-out of
+    // `result.entry` here would leave the caller's `std::get_if` reading a
+    // moved-from variant (the shared_ptr arm is null after a move, causing
+    // a false-negative 404). The copy is one shared_ptr ref-count bump and
+    // one std::vector copy on the miss path — cache hits are unaffected.
     if (result.found) {
         cache_value v;
-        v.entry = std::move(result.entry);
-        v.captured_params = std::move(result.captured_params);
+        v.entry = result.entry;
+        v.captured_params = result.captured_params;
         route_cache_v2.insert(key, std::move(v));
     }
 
@@ -291,6 +294,97 @@ void webserver_impl::apply_extracted_params(detail::modded_request* mr,
         if (chunks[i] < 0 || static_cast<size_t>(chunks[i]) >= url_pieces.size()) continue;
         mr->dhr->set_arg(url_pars[i], url_pieces[chunks[i]]);
     }
+}
+
+// TASK-053 step 2: v2 lookup-backed resolver. Routes finalize_answer
+// through lookup_v2 (the 3-tier v2 table fronted by route_cache_v2)
+// instead of the v1 registered_resources* maps. See header comment in
+// webserver_impl_dispatch.hpp for the full contract.
+//
+// The dispatch path used to do:
+//   v1: hash registered_resources_str -> walk registered_resources_regex
+//       (with LRU front-end route_cache_list / route_cache_map).
+// This path now does:
+//   v2: lookup_v2() walks route_cache_v2 -> exact_routes_ ->
+//       param_and_prefix_routes_ -> regex_routes_, returning a
+//       route_entry whose handler arm is always shared_ptr<http_resource>
+//       (the on_*/route entry points wrap user lambdas in lambda_resource
+//       before storing; the variant's lambda_handler arm is dead code).
+//
+// The parent->single_resource fast path is intentionally preserved
+// here: it reads the single registered endpoint directly from
+// registered_resources rather than falling through to lookup_v2 (which
+// would also work because single_resource installs a radix prefix at
+// "/"). Reading registered_resources avoids the captured-params /
+// route_entry plumbing for a configuration that has no parameters.
+bool webserver_impl::resolve_resource_for_request_v2(detail::modded_request* mr,
+        std::shared_ptr<http_resource>& hrm) {
+    // matched_path_template + matched_is_prefix feed the route_resolved
+    // and before_handler hook ctxs. Skip the heap allocation when no
+    // hook in either phase is registered. Mirrors the v1 resolver.
+    const bool need_path_template =
+        has_hooks_for(hook_phase::route_resolved) ||
+        has_hooks_for(hook_phase::before_handler);
+
+    // single_resource fast path: the one registered endpoint serves
+    // every URL. Read it directly from registered_resources to mirror
+    // the v1 resolver's behaviour. registered_resources_mutex protects
+    // a registration-time data store; under dispatch we still need a
+    // shared lock to make the read-then-copy atomic with respect to a
+    // concurrent unregister_path. (NOTE: single_resource webservers do
+    // not support runtime register/unregister in practice, but the lock
+    // is cheap when uncontended and the safety guarantee is worth it.)
+    if (parent->single_resource) {
+        std::shared_lock registered_resources_lock(registered_resources_mutex);
+        if (registered_resources.empty()) return false;
+        const auto& only = *registered_resources.begin();
+        hrm = only.second;
+        if (need_path_template) {
+            mr->matched_path_template = only.first.get_url_complete();
+            mr->matched_is_prefix = only.first.is_family_url();
+        }
+        return true;
+    }
+
+    // v2 lookup pipeline: cache -> exact -> radix -> regex.
+    lookup_result result = lookup_v2(mr->method_enum, mr->standardized_url);
+    if (!result.found) return false;
+
+    // Extract the shared_ptr<http_resource> arm of the route_entry's
+    // variant. The on_* / route entry points wrap user lambdas in a
+    // lambda_resource shim and store the shim as shared_ptr<http_resource>,
+    // so this arm is the only one populated in practice; treat the
+    // lambda_handler arm as unreachable (defensive nullptr check below).
+    auto* hp = std::get_if<std::shared_ptr<http_resource>>(&result.entry.handler);
+    if (hp == nullptr || *hp == nullptr) {
+        // Unreachable today: lookup_v2 only returns entries whose
+        // handler is a shared_ptr<http_resource>. If a future task
+        // stores a lambda_handler directly we will need to grow this
+        // path; until then, treat as a not-found miss.
+        return false;
+    }
+    hrm = *hp;
+
+    // Replay captured URL parameters into the request. This is the v2
+    // equivalent of apply_extracted_params (which the v1 resolver calls
+    // on regex-tier hits). Per-name set_arg matches the v1 behaviour
+    // exactly — duplicates with later wins, etc.
+    if (mr->dhr != nullptr) {
+        for (const auto& [name, value] : result.captured_params) {
+            mr->dhr->set_arg(name, value);
+        }
+    }
+
+    // Populate the hook ctx scratch slots when at least one hook is
+    // registered for the phases that read them. v2 cache_value does
+    // not store the matched URL template; fall back to standardized_url
+    // (matches the v1 cache-hit path; see resolve_resource_for_request
+    // ll. 348-353).
+    if (need_path_template) {
+        mr->matched_path_template = mr->standardized_url;
+        mr->matched_is_prefix = result.entry.is_prefix;
+    }
+    return true;
 }
 
 bool webserver_impl::resolve_resource_for_request(detail::modded_request* mr,

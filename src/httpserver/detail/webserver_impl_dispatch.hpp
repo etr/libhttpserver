@@ -299,6 +299,24 @@ struct regex_route_lookup {
 bool resolve_resource_for_request(modded_request* mr,
         std::shared_ptr<::httpserver::http_resource>& hrm);
 
+// TASK-053 step 2: v2 lookup-backed resolver. Same observable
+// contract as resolve_resource_for_request (returns true + sets
+// @p hrm on hit, sets @p mr->matched_path_template + matched_is_prefix
+// when the hook ctx needs them; sets URL captures via mr->dhr->set_arg
+// for parameterized routes), but consults lookup_v2() and the v2 3-tier
+// route table (exact_routes_ / param_and_prefix_routes_ / regex_routes_)
+// fronted by route_cache_v2 instead of the v1 maps (registered_resources*
+// + route_cache_list). Selected over the v1 path at finalize_answer
+// per the use_lookup_v2_ flag on webserver_impl (default: true).
+//
+// Note: the parent->single_resource fast path is preserved here exactly
+// as in the v1 resolver — it reads registered_resources directly because
+// the configuration shape (one registered endpoint serves every URL) is
+// orthogonal to the route-table tier choice. (Folding it into lookup_v2
+// itself is cleaner long-term but would balloon the diff; deferred.)
+bool resolve_resource_for_request_v2(modded_request* mr,
+        std::shared_ptr<::httpserver::http_resource>& hrm);
+
 // LRU cache hit path: returns the cached match (hrm + url_pars +
 // chunks) and promotes the entry to the front of the list. Caller
 // must hold registered_resources_mutex (shared).

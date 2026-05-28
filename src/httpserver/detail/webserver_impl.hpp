@@ -229,6 +229,16 @@ class webserver_impl {
     // TASK-027 LRU front-end. 256 entries per architecture spec.
     route_cache route_cache_v2{ROUTE_CACHE_MAX_SIZE};
 
+    // TASK-053 step 2: transitional flag controlling whether
+    // finalize_answer routes its lookup through the v2 3-tier table
+    // (resolve_resource_for_request_v2 -> lookup_v2) or the legacy v1
+    // maps (resolve_resource_for_request). Default: v2.
+    //
+    // Step 3 of TASK-053 deletes this flag and the v1 resolver body in
+    // a separate commit so the diff stays reviewable in isolation. The
+    // flag exists only across step 2 / step 3.
+    bool use_lookup_v2_ = true;
+
     // tier_hit identifies which tier of the v2 route table answered a
     // lookup. Returned alongside the route_entry copy from lookup_v2()
     // so the dispatch site (and tests) can pin the lookup pipeline.

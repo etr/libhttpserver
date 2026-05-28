@@ -138,7 +138,16 @@ class route_cache {
         // Walk the bucket manually via equal_range on the raw bucket index.
         // unordered_map::bucket() + bucket_begin()/bucket_end() lets us
         // scan the correct bucket without constructing a full cache_key.
-        std::size_t b = map_.bucket_count() ? bucket_hash % map_.bucket_count() : 0;
+        // TASK-053: empty-cache early-out. On libc++ a default-constructed
+        // unordered_map has bucket_count() == 0 and calling cbegin(0) /
+        // cend(0) dereferences a null bucket-list pointer (UB). Before
+        // TASK-053 this path was only hit by tests; the TASK-053 dispatch
+        // cutover puts find_by_view on the request hot path, so the first
+        // request against a fresh server reliably reproduced the crash.
+        if (map_.bucket_count() == 0) {
+            return false;
+        }
+        std::size_t b = bucket_hash % map_.bucket_count();
         for (auto it = map_.cbegin(b), end = map_.cend(b); it != end; ++it) {
             if (it->first.method == method && it->first.path == path) {
                 // Promote: splice requires a mutable iterator from the main map.

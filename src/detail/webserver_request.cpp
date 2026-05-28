@@ -350,7 +350,12 @@ MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection,
     // alive until our local shared_ptr drops at the end of
     // finalize_answer.
     std::shared_ptr<http_resource> hrm;
-    bool found = resolve_resource_for_request(mr, hrm);
+    // TASK-053 step 2: route through the v2 3-tier table (default) or
+    // the legacy v1 maps (use_lookup_v2_=false). Step 3 deletes the
+    // branch and the v1 resolver body together.
+    bool found = use_lookup_v2_
+        ? resolve_resource_for_request_v2(mr, hrm)
+        : resolve_resource_for_request(mr, hrm);
 
     // TASK-051: capture the resolved resource on the request so the
     // tail-end firing helpers (fire_response_sent_gated /
