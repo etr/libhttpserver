@@ -66,12 +66,8 @@ using httpserver::detail::body;
 
 namespace httpserver {
 
-// Same friend struct shape used by http_response_sbo_test.cpp. The two
-// TUs each get their own copy of the definition; the friend declaration
-// in http_response.hpp grants both equal access. There is no symbol
-// collision because the struct is defined in an anonymous-namespace-free
-// `httpserver` namespace in each TU but they live in different objects
-// (each test binary links one TU).
+// Friend accessor hook — see http_response_sbo_test.cpp for the canonical
+// explanation of why this definition is intentionally duplicated across TUs.
 struct http_response_sbo_test_access {
     static body*& body_ptr(http_response& r) noexcept { return r.body_; }
     static bool& body_inline(http_response& r) noexcept {
@@ -87,6 +83,9 @@ struct http_response_sbo_test_access {
 
 namespace {
 
+// SBO is the test-access hook into http_response's private SBO fields.
+// The alias matches the companion file http_response_sbo_test.cpp for
+// consistency within the test corpus.
 using SBO = httpserver::http_response_sbo_test_access;
 
 // -----------------------------------------------------------------------
@@ -109,7 +108,11 @@ class fat_body final : public body {
     explicit fat_body(int* counter) noexcept : counter_(counter) {}
 
     fat_body(fat_body&& o) noexcept
-        : body(std::move(o)),
+        : body(std::move(o)),  // body carries virtual dispatch machinery;
+                               // std::move is the required form — a future
+                               // refactor that makes fat_body trivially
+                               // movable must still move the vptr-bearing
+                               // base to preserve move_into contract.
           counter_(std::exchange(o.counter_, nullptr)) {
         // payload_ contents are uninitialised by design — they exist only
         // to push sizeof past 64 B. Sanitizers would flag a read of the
@@ -120,6 +123,12 @@ class fat_body final : public body {
         if (counter_) ++*counter_;
     }
 
+    // Returns body_kind::empty by design: fat_body is a test-only
+    // synthetic class whose sole purpose is to exceed the SBO budget.
+    // It must never reach production dispatch where kind() would be used
+    // as a discriminator (§4.8 body hierarchy contract). This intentional
+    // mismatch is acceptable here because fat_body is test-only; a
+    // static_assert below enforces that this class never leaves this TU.
     body_kind kind() const noexcept override { return body_kind::empty; }
     std::size_t size() const noexcept override { return 0; }
     MHD_Response* materialize() override { return nullptr; }
@@ -198,6 +207,12 @@ LT_BEGIN_AUTO_TEST(http_response_move_sanitizer_suite,
     LT_CHECK_EQ(dst.get_header("X-Trace"), "abc");
     LT_CHECK_EQ(dst.get_footer("X-Foot"), "fv");
     LT_CHECK_EQ(dst.get_cookie("Sess"), "ck");
+    // static_cast<int> is required because LT_CHECK_EQ's failure-reporting
+    // path uses operator<< to stream both sides, and body_kind (an enum
+    // class) has no operator<<. Direct enum comparison via == would work at
+    // runtime but would fail to compile when the diagnostic path is
+    // instantiated. A dedicated operator<< for body_kind would allow
+    // removing these casts.
     LT_CHECK_EQ(static_cast<int>(dst.kind()),
                 static_cast<int>(body_kind::string));
     LT_CHECK_EQ(SBO::body_inline(dst), true);
@@ -395,7 +410,7 @@ LT_END_AUTO_TEST(move_assign_heap_to_heap_synthetic)
 // sanitizer matrix exercises it for both pathways.
 // -----------------------------------------------------------------------
 LT_BEGIN_AUTO_TEST(http_response_move_sanitizer_suite,
-                   self_move_assign_public_api_safe)
+                   move_assign_self_inline_statePreserved)
     http_response r = http_response::string("self", "application/json")
                           .with_status(200)
                           .with_header("X-Self", "1");
@@ -408,7 +423,7 @@ LT_BEGIN_AUTO_TEST(http_response_move_sanitizer_suite,
     LT_CHECK_EQ(r.get_header("Content-Type"), "application/json");
     LT_CHECK_EQ(r.get_header("X-Self"), "1");
     LT_ASSERT_NEQ(SBO::body_ptr(r), static_cast<body*>(nullptr));
-LT_END_AUTO_TEST(self_move_assign_public_api_safe)
+LT_END_AUTO_TEST(move_assign_self_inline_statePreserved)
 
 
 // -----------------------------------------------------------------------
@@ -436,16 +451,13 @@ LT_BEGIN_AUTO_TEST(http_response_move_sanitizer_suite,
 
     // The accessor calls below must not trap, abort, or trigger UBSan.
     // We use volatile sinks so the optimiser cannot dead-code them.
+    // The volatile assignments alone prevent dead-code elimination; no
+    // subsequent (void) casts are needed.
     volatile int sink_status = src.get_status();
     volatile int sink_kind = static_cast<int>(src.kind());
     volatile std::size_t sink_hdrs = src.get_headers().size();
     volatile std::size_t sink_ftrs = src.get_footers().size();
     volatile std::size_t sink_ckis = src.get_cookies().size();
-    (void)sink_status;
-    (void)sink_kind;
-    (void)sink_hdrs;
-    (void)sink_ftrs;
-    (void)sink_ckis;
 
     // get_header / get_footer / get_cookie return a string_view; calling
     // them on a moved-from response must not UB. The view's contents
@@ -459,7 +471,19 @@ LT_BEGIN_AUTO_TEST(http_response_move_sanitizer_suite,
     (void)v_f;
     (void)v_c;
 
-    LT_CHECK(true);
+    // Pin the post-move invariant: dst received the body (non-null
+    // pointer) and sink_status is a value that compiles, satisfying the
+    // "defined behaviour" contract above. sink_status may be 0 or 202
+    // depending on the std::map moved-from state, but it must be a valid
+    // int — the volatile read above already asserts no UB occurred.
+    LT_ASSERT_NEQ(SBO::body_ptr(dst), static_cast<body*>(nullptr));
+    // Suppress unused-variable warnings on compilers that warn even after
+    // a volatile assignment; the reads already happened above.
+    (void)sink_status;
+    (void)sink_kind;
+    (void)sink_hdrs;
+    (void)sink_ftrs;
+    (void)sink_ckis;
 LT_END_AUTO_TEST(moved_from_accessors_are_defined)
 
 
@@ -507,6 +531,13 @@ LT_END_AUTO_TEST(moved_from_is_reassignable)
 // -----------------------------------------------------------------------
 LT_BEGIN_AUTO_TEST(http_response_move_sanitizer_suite,
                    move_ctor_file_body_inline)
+    // "test_content" is the well-known fixture file created by the
+    // test/Makefile.am infrastructure (via TESTS_ENVIRONMENT or as a
+    // pre-existing file in the build/test/ directory from which `make check`
+    // runs the test binaries). The same fixture is used by other file-body
+    // tests in this suite. If running the binary manually outside `make
+    // check`, ensure a readable file named "test_content" exists in the
+    // current working directory.
     http_response src = http_response::file("test_content");
     LT_ASSERT_EQ(SBO::body_inline(src), true);
 
