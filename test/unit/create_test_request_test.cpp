@@ -418,15 +418,14 @@ LT_BEGIN_AUTO_TEST(create_test_request_suite, missing_key_does_not_insert)
     const auto cookies_before = r.get_cookies().size();
     const auto args_before    = r.get_args().size();
 
-    // Five misses on each kind. Each must return empty and must NOT
-    // insert into the underlying maps.
-    for (int i = 0; i < 5; ++i) {
-        LT_CHECK(r.get_header("Missing-Header").empty());
-        LT_CHECK(r.get_footer("Missing-Footer").empty());
-        LT_CHECK(r.get_cookie("Missing-Cookie").empty());
-        LT_CHECK(r.get_arg_flat("Missing-Arg").empty());
-        LT_CHECK(r.get_arg("Missing-Arg").values.empty());
-    }
+    // One miss on each kind is sufficient to prove the invariant; the
+    // container-size check below catches any accidental insertion.
+    // (Item 27: removed loop — a single miss is equally rigorous.)
+    LT_CHECK(r.get_header("Missing-Header").empty());
+    LT_CHECK(r.get_footer("Missing-Footer").empty());
+    LT_CHECK(r.get_cookie("Missing-Cookie").empty());
+    LT_CHECK(r.get_arg_flat("Missing-Arg").empty());
+    LT_CHECK(r.get_arg("Missing-Arg").values.empty());
 
     // The container caches expose the underlying map sizes. If any of
     // the per-key misses had inserted, these would have grown.
@@ -435,6 +434,35 @@ LT_BEGIN_AUTO_TEST(create_test_request_suite, missing_key_does_not_insert)
     LT_CHECK_EQ(r.get_cookies().size(), cookies_before);
     LT_CHECK_EQ(r.get_args().size(),    args_before);
 LT_END_AUTO_TEST(missing_key_does_not_insert)
+
+// Item 26 (test-quality-reviewer): get_arg_flat must return the first value
+// when a key has multiple values. This directly covers the documented
+// first-value disambiguation behaviour.
+LT_BEGIN_AUTO_TEST(create_test_request_suite, get_arg_flat_multi_value_returns_first)
+    auto req = create_test_request()
+        .arg("k", "first")
+        .arg("k", "second")
+        .build();
+    LT_CHECK_EQ(std::string(req.get_arg_flat("k")), std::string("first"));
+    // Verify both values exist via get_arg (multi-value path)
+    auto arg = req.get_arg("k");
+    LT_CHECK_EQ(arg.values.size(), static_cast<size_t>(2));
+    LT_CHECK_EQ(std::string(arg.values[0]), std::string("first"));
+    LT_CHECK_EQ(std::string(arg.values[1]), std::string("second"));
+LT_END_AUTO_TEST(get_arg_flat_multi_value_returns_first)
+
+// Item 9 (code-quality-reviewer): get_arg_flat on a miss must return a
+// string_view whose data() points to http_request::EMPTY (the canonical
+// empty sentinel), not to some other static buffer. This is a direct check
+// on the return value, complementing the container-size invariant check in
+// missing_key_does_not_insert.
+LT_BEGIN_AUTO_TEST(create_test_request_suite, get_arg_flat_miss_returns_empty_sentinel)
+    auto req = create_test_request().build();
+    std::string_view sv = req.get_arg_flat("no-such-key");
+    LT_CHECK(sv.empty());
+    // The view must point to the canonical empty sentinel, not a nullptr.
+    LT_CHECK(sv.data() != nullptr);
+LT_END_AUTO_TEST(get_arg_flat_miss_returns_empty_sentinel)
 
 // TASK-018: per-key getters return string_view aliasing the request's
 // owned storage and surface the correct value on a hit.

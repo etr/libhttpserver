@@ -127,6 +127,33 @@ static_assert(std::is_same_v<
                   std::string_view>,
               "get_querystring must return std::string_view");
 
+// (5) Const-qualifier lockdowns via method-pointer type matching.
+//     Item 28 (test-quality-reviewer): confirms that each per-key getter is
+//     declared `const` at the type-system level, not just invocable on a
+//     const& (which would also accept non-const overloads). Using
+//     std::is_same_v<decltype(&h::method), ReturnType (h::*)(ArgType) const>
+//     pins the const-qualifier into the type signature.
+static_assert(
+    std::is_same_v<decltype(&h::get_header),
+                   std::string_view (h::*)(std::string_view) const>,
+    "get_header must be a const member function returning std::string_view");
+static_assert(
+    std::is_same_v<decltype(&h::get_cookie),
+                   std::string_view (h::*)(std::string_view) const>,
+    "get_cookie must be a const member function returning std::string_view");
+static_assert(
+    std::is_same_v<decltype(&h::get_footer),
+                   std::string_view (h::*)(std::string_view) const>,
+    "get_footer must be a const member function returning std::string_view");
+static_assert(
+    std::is_same_v<decltype(&h::get_arg_flat),
+                   std::string_view (h::*)(std::string_view) const>,
+    "get_arg_flat must be a const member function returning std::string_view");
+static_assert(
+    std::is_same_v<decltype(&h::get_arg),
+                   httpserver::http_arg_value (h::*)(std::string_view) const>,
+    "get_arg must be a const member function returning http_arg_value");
+
 }  // namespace
 
 int main() { return 0; }
