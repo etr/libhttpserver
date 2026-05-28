@@ -189,8 +189,13 @@ std::string extract_x509_common_name(gnutls_x509_crt_t cert) {
     return cn;
 }
 
+// SHA-256 produces 32 bytes (256 bits). Named constant avoids the magic
+// number in the fingerprint buffer declaration and in the hex-length
+// computation below. (code-quality-reviewer / code-simplifier items)
+static constexpr size_t SHA256_DIGEST_BYTES = 32;
+
 std::string extract_x509_fingerprint_sha256(gnutls_x509_crt_t cert) {
-    unsigned char fingerprint[32];
+    unsigned char fingerprint[SHA256_DIGEST_BYTES];
     size_t fingerprint_size = sizeof(fingerprint);
     if (gnutls_x509_crt_get_fingerprint(cert, GNUTLS_DIG_SHA256, fingerprint,
                                         &fingerprint_size) != GNUTLS_E_SUCCESS) {
@@ -220,8 +225,12 @@ void http_request_impl::populate_all_cert_fields() const {
     if (client_cert_fields_cached) return;
     client_cert_fields_cached = true;
 
-    gnutls_session_t session = nullptr;
-    if (has_tls_session()) session = get_tls_session();
+    // get_tls_session() already handles the null-connection case and the
+    // no-TLS-session case (returns nullptr for both). A separate
+    // has_tls_session() call is redundant; calling get_tls_session()
+    // once is sufficient and halves the MHD_get_connection_info calls.
+    // (code-quality-reviewer / code-simplifier / performance-reviewer items)
+    gnutls_session_t session = get_tls_session();
 
     scoped_x509_cert cert;
     if (session != nullptr) cert.init_from_session(session);

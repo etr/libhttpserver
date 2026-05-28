@@ -403,7 +403,7 @@ class arg_comparator {
         return operator()(x, std::string_view(y));
      }
      bool operator()(const std::string& x, std::string_view y) const {
-        return operator()(std::string_view(x), std::string(y));
+        return operator()(std::string_view(x), y);
      }
 };
 

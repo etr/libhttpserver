@@ -125,6 +125,15 @@ static_assert(std::is_same_v<
 // The four string_view accessors are deliberately NOT noexcept because
 // they call populate_all_cert_fields() which can throw on allocation
 // failure; that exception path is allowed to propagate.
+//
+// NOTE on the noexcept try/catch sentinel path: the noexcept wrappers
+// in is_client_cert_verified, get_client_cert_not_before, and
+// get_client_cert_not_after each contain a try/catch block that returns
+// the documented sentinel (false / -1) on std::bad_alloc. This path is
+// NOT covered by automated tests because injecting std::bad_alloc inside
+// a GnuTLS context is impractical in CI. The sentinel values are trivially
+// correct on the else-branch, so the risk is very low.
+// (code-quality-reviewer items 12, 13)
 static_assert(noexcept(std::declval<cref>().has_tls_session()),
               "has_tls_session must be noexcept");
 static_assert(noexcept(std::declval<cref>().has_client_certificate()),
@@ -137,5 +146,15 @@ static_assert(noexcept(std::declval<cref>().get_client_cert_not_after()),
               "get_client_cert_not_after must be noexcept");
 
 }  // namespace
+
+// NOTE on no-GNUTLS build coverage: this file compiles with whatever
+// HAVE_GNUTLS setting the build system provides. The static_asserts above
+// verify the public surface in both modes (declarations are unconditional),
+// but there is no dedicated no-GNUTLS compile target in test/Makefile.am.
+// The no-GNUTLS runtime sentinel contract (all accessors return false/empty/-1)
+// is covered by the unconditional build_no_client_cert_returns_sentinels test
+// in test/unit/create_test_request_test.cpp, which runs on every build
+// including HAVE_GNUTLS-off builds.
+// (test-quality-reviewer item 31)
 
 int main() { return 0; }

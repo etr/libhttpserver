@@ -33,6 +33,7 @@
 #include <curl/curl.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <memory>
@@ -1265,7 +1266,11 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_accessors_known_values)
     try {
         ws.start(false);
     } catch (const std::exception& e) {
-        // SSL setup may fail in some environments, skip the test.
+        // SSL setup may fail in some environments (missing cert files, system
+        // TLS library not available). The LT_CHECK_EQ(1,1) is the project
+        // convention for an explicit skip: it records a passing assertion so
+        // the test counts as run but the accessor assertions below are not
+        // exercised. (test-quality-reviewer item 28)
         LT_CHECK_EQ(1, 1);
         return;
     }
@@ -1323,11 +1328,12 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_accessors_known_values)
     LT_CHECK_EQ(cn, std::string("Test Client"));
 
     // Fingerprint: 64 lowercase hex chars (32 bytes SHA-256, hex-encoded).
+    // Use std::all_of to avoid branching inside the test body.
+    // (test-quality-reviewer item 27)
     LT_CHECK_EQ(fp.length(), 64u);
-    for (char c : fp) {
-        bool valid = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
-        LT_CHECK(valid);
-    }
+    LT_CHECK(std::all_of(fp.begin(), fp.end(), [](char c) {
+        return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+    }));
 
     // Verification: the trust store is the cert itself, so verification
     // succeeds.
