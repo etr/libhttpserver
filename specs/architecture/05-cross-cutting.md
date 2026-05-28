@@ -17,10 +17,10 @@
 ### 5.2 Error propagation
 
 **Contract (committed in DR-9):**
-1. Handler throws `std::exception` → caught, logged via `error_logger`, `internal_error_handler` invoked with `e.what()`, response sent (default 500).
-2. Handler throws non-`std::exception` → caught with `catch (...)`, logged generically, `internal_error_handler` invoked with `"unknown exception"`.
+1. Handler throws `std::exception` → caught, logged via the `log_error` callback, `internal_error_handler` invoked with `e.what()`, response sent (default 500).
+2. Handler throws non-`std::exception` → caught with `catch (...)`, logged generically via `log_error`, `internal_error_handler` invoked with `"unknown exception"`.
 3. Library-internal exception in dispatch (allocation failure, body materialization error) → same path as (1)/(2).
-4. `internal_error_handler` itself throws → library logs and sends a hardcoded 500 with empty body.
+4. `internal_error_handler` itself throws → library logs via `log_error` and sends a hardcoded 500 with empty body.
 5. `feature_unavailable` is a normal `std::runtime_error`; no special status mapping. Users who care translate it explicitly.
 6. There is no throw-as-status idiom. Users wanting 404/400/etc. construct the response by value: `return http_response::empty().with_status(404);`.
 
