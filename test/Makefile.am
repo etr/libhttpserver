@@ -482,6 +482,7 @@ VALGRIND_SUPPRESSIONS_FILES = libhttpserver.supp
 EXTRA_DIST = libhttpserver.supp \
              tsan.supp \
              PERFORMANCE.md \
+             bench_harness.hpp \
              v1_baseline/README.md \
              v1_baseline/v1_constants.hpp \
              v1_baseline/measure_v1_sizes.cpp \
@@ -514,8 +515,14 @@ EXTRA_DIST = libhttpserver.supp \
 bench_targets = bench_sizeof_http_resource bench_get_headers bench_hook_overhead
 EXTRA_PROGRAMS = $(bench_targets)
 
-# bench_sizeof_http_resource: pure compile-time static_assert. Empty
-# LDADD: no symbols from libhttpserver are referenced at run time.
+# bench_sizeof_http_resource: pure compile-time static_assert guard.
+# Note: this binary's only meaningful check is compilation; the runtime
+# exit code carries no signal (main() returns 0 unconditionally). It is
+# listed under bench_targets rather than check_PROGRAMS because the
+# static_assert algebra references v1 baseline constants (from
+# v1_constants.hpp) that assume a release-mode ABI, making it a release-
+# validation step rather than a per-commit regression test.
+# Empty LDADD: no symbols from libhttpserver are referenced at run time.
 bench_sizeof_http_resource_SOURCES = bench_sizeof_http_resource.cpp
 bench_sizeof_http_resource_LDADD =
 
@@ -524,7 +531,7 @@ bench_sizeof_http_resource_LDADD =
 # iterations. Compares the median ns/call to the v1 baseline.
 # Needs -lmicrohttpd because create_test_request transitively
 # constructs an http_request whose impl includes <microhttpd.h>.
-bench_get_headers_SOURCES = bench_get_headers.cpp
+bench_get_headers_SOURCES = bench_get_headers.cpp bench_harness.hpp
 bench_get_headers_LDADD = $(LDADD) -lmicrohttpd
 
 # bench_hook_overhead (TASK-052): asserts the dispatch hot path's

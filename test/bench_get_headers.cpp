@@ -21,34 +21,21 @@
 // `http_request::get_headers()` is at least 10x faster than v1's
 // (PRD-REQ-REQ-001 / PRD §3.6 acceptance).
 //
-// v2.0's `get_headers()` returns a const reference to a memoised
-// `http::header_view_map`; first call populates the cache, all
-// subsequent calls are a branch + reference return. The bench warms
-// the cache up front, then times the hot path over 11 outer reps x
-// 1,000,000 inner iterations and compares the median ns/call to the
-// v1 baseline literal V1_GET_HEADERS_NS_PER_CALL.
-// OUTER=11 (odd) so samples_ns[OUTER/2] = samples_ns[5] is the true
-// median element with no tie-breaking required.
+// The bench measures the steady-state (warm-cache) cost: the path a real
+// consumer sees after the first call populates the memoised view map.
+// On failure (ratio < 10x) the binary prints the diagnostic and returns 1,
+// failing `make bench`.
 //
-// On failure (ratio < 10x) the binary prints the diagnostic and
-// returns 1, failing `make bench`.
-//
-// On sanitizer builds (ASan / UBSan / TSan / MSan) the per-call cost
-// is inflated by 10..50x; comparing to a release-mode baseline would
-// produce a false negative. The bench detects sanitizer instrumentation
-// at compile time and exits 0 with a skip message so `make bench`
-// remains green.
+// Sanitizer builds are skipped at runtime (see detect_sanitizer_build())
+// because ASan/MSan/TSan inflate per-call cost 10-50x relative to the
+// release-mode v1 baseline. The skip emits a "SKIP:" prefixed message.
 //
 // Wired into `make bench` via `EXTRA_PROGRAMS` in test/Makefile.am;
-// NOT part of `make check`.
+// NOT part of `make check`. See test/PERFORMANCE.md for methodology.
 
-#include <algorithm>
-#include <chrono>
 #include <cstdio>
-#include <cstdlib>
-#include <string>
-#include <vector>
 
+#include "bench_harness.hpp"
 #include "httpserver/create_test_request.hpp"
 #include "httpserver/http_request.hpp"
 #include "v1_baseline/v1_constants.hpp"
@@ -57,55 +44,46 @@ using httpserver::create_test_request;
 using httpserver::http_request;
 using httpserver::v1_baseline::V1_GET_HEADERS_NS_PER_CALL;
 
-// Defeat dead-store elimination. We feed the const reference's
-// address through an asm-volatile memory clobber so the compiler
-// can't elide the get_headers() call.
-template <typename T>
-[[gnu::always_inline]] inline void do_not_optimize(T const& value) {
-#if defined(__GNUC__) || defined(__clang__)
-    asm volatile("" : : "r,m"(&value) : "memory");
-#else
-    // MSVC fallback: take address via volatile sink.
-    volatile const void* sink = static_cast<const void*>(&value);
-    (void)sink;
-#endif
-}
-
 // Compile-time detection of any sanitizer instrumentation that
 // would distort the per-call cost beyond recognition.
-static constexpr bool kSanitizerBuild =
+// Wrapped in a constexpr function to avoid the awkward trailing-semicolon
+// pattern that multi-line conditional #if initialisers otherwise require.
+static constexpr bool detect_sanitizer_build() {
 #if defined(__SANITIZE_ADDRESS__) \
     || defined(__SANITIZE_THREAD__) \
     || defined(__SANITIZE_MEMORY__) \
     || defined(__SANITIZE_HWADDRESS__)
-    true
+    return true;
 #elif defined(__has_feature)
 #  if __has_feature(address_sanitizer) \
       || __has_feature(thread_sanitizer) \
       || __has_feature(memory_sanitizer) \
       || __has_feature(undefined_behavior_sanitizer)
-    true
+    return true;
 #  else
-    false
+    return false;
 #  endif
 #else
-    false
+    return false;
 #endif
-    ;  // NOLINT(whitespace/semicolon)
+}
+static constexpr bool kSanitizerBuild = detect_sanitizer_build();
 
 int main() {
     if constexpr (kSanitizerBuild) {
-        std::printf("bench_get_headers: skipped (sanitizer build "
-                    "would distort ns/call)\n");
+        // "SKIP:" sentinel prefix lets scripted harnesses distinguish a
+        // genuine skip from a PASS, and distinguishes it from silent exit 0.
+        // PERFORMANCE.md documents that bench results from sanitizer builds
+        // must be ignored.
+        std::printf("SKIP: bench_get_headers: sanitizer build detected; "
+                    "per-call cost is inflated 10-50x and cannot be compared "
+                    "to the release-mode v1 baseline.\n");
         return 0;
     }
 
-    // Build a 16-header request via create_test_request. The fixture
-    // populates `headers_local`; the first call to get_headers() on
-    // a connection-less request flows through the
-    // `connection_ == nullptr` branch in ensure_headerlike_cache,
-    // builds the view map, and sets headers_cache_built_=true.
-    // Subsequent calls return the cached reference (the warm path).
+    // Build a 16-header request; first call to get_headers() warms the cache.
+    // Subsequent calls exercise the warm (memoised) path — the path
+    // PRD-REQ-REQ-001 claims is >=10x faster than v1.
     create_test_request b;
     for (int i = 0; i < 16; ++i) {
         char k[32];
@@ -122,31 +100,21 @@ int main() {
         do_not_optimize(h);
     }
 
-    using clock = std::chrono::steady_clock;
     constexpr int OUTER = 11;
     constexpr int INNER = 1'000'000;
-    std::vector<double> samples_ns;
-    samples_ns.reserve(OUTER);
-    for (int r = 0; r < OUTER; ++r) {
-        auto t0 = clock::now();
-        for (int i = 0; i < INNER; ++i) {
-            const auto& h = req.get_headers();
-            do_not_optimize(h);
-        }
-        auto t1 = clock::now();
-        const double ns_per_call =
-            std::chrono::duration<double, std::nano>(t1 - t0).count() / INNER;
-        samples_ns.push_back(ns_per_call);
-    }
-    std::sort(samples_ns.begin(), samples_ns.end());
-    const double v2_median_ns = samples_ns[OUTER / 2];
+    // run_bench_median times OUTER*INNER calls and returns the median
+    // ns/call. OUTER=11 (odd) ensures samples[OUTER/2] is the true
+    // middle element.
+    const double v2_median_ns = run_bench_median([&]() {
+        const auto& h = req.get_headers();
+        do_not_optimize(h);
+    }, OUTER, INNER);
     const double v1_ns = V1_GET_HEADERS_NS_PER_CALL;
     const double ratio = v1_ns / v2_median_ns;
 
     std::printf("bench_get_headers v1=%.3fns v2=%.3fns ratio=%.2fx "
-                "(min=%.3fns max=%.3fns over %d reps x %d iters)\n",
-                v1_ns, v2_median_ns, ratio,
-                samples_ns.front(), samples_ns.back(), OUTER, INNER);
+                "(median over %d reps x %d iters)\n",
+                v1_ns, v2_median_ns, ratio, OUTER, INNER);
 
     constexpr double kMinRatio = 10.0;
     if (ratio < kMinRatio) {

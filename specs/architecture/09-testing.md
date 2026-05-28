@@ -8,5 +8,9 @@ The architecture itself does not prescribe test frameworks (out of architecture 
 4. **SBO size invariant** (DR-5): `static_assert(sizeof(detail::deferred_body) <= http_response::body_buf_size, ...)` at the end of `detail/body.hpp`. Compile-time guarantee.
 5. **Routing semantics preservation** (DR-7): the v1 routing-test corpus runs against v2.0 unchanged. Any regression is treated as a release-blocker.
 6. **Thread-safety contract** (DR-8): a stress test exercises `register_path` / `unregister_path` / `block_ip` / `unblock_ip` from within handlers, verifies no deadlock except for the documented `stop()` case. An opt-in negative test (`stop_from_handler_deadlocks_as_documented`, enabled via `HTTPSERVER_RUN_STOP_FROM_HANDLER=1`) confirms the deadlock contract by forking a child that calls `stop()` from inside a handler.
+7. **Performance acceptance gates** (PRD §3.6 / TASK-039): `make bench` verifies two numeric criteria:
+   - `get_headers()` warm-path cost ≥10× faster than v1 (PRD-REQ-REQ-001); checked by `test/bench_get_headers.cpp` at runtime.
+   - `sizeof(http_resource)` shrinks by at least the empty `std::map<std::string,bool>` footprint (PRD-REQ-REQ-003); checked by `test/bench_sizeof_http_resource.cpp` at compile time.
+   These benchmarks live in `EXTRA_PROGRAMS` (not `check_PROGRAMS`) so they do not run under sanitizer CI; they are gated on a quiet release-mode host as part of the release runbook.
 
 ---

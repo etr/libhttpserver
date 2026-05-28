@@ -56,31 +56,45 @@ namespace httpserver::v1_baseline {
 //
 // Using the correct per-stdlib baseline ensures the static_assert
 // algebra in bench_sizeof_http_resource.cpp holds on both platforms.
+//
+// IMPORTANT: if V1_HTTP_RESOURCE_SIZEOF is updated to the libstdc++ value
+// (56), V1_STD_MAP_STRING_BOOL_SIZEOF must also be updated to the libstdc++
+// value (48) simultaneously, and vice versa. The static_assert algebra
+// depends on both constants coming from the same ABI; mixing values from
+// different stdlibs would produce a spuriously tight or loose bound.
 #if defined(__GLIBCXX__)
 // libstdc++ (Linux): std::map is 48 bytes (node, allocator, comparator
 // each 16 bytes on 64-bit), vptr is 8 bytes.
 inline constexpr std::size_t V1_HTTP_RESOURCE_SIZEOF = 56;
 // sizeof(std::map<std::string, bool>) on a libstdc++ host.
 inline constexpr std::size_t V1_STD_MAP_STRING_BOOL_SIZEOF = 48;
-#else
+#elif defined(_LIBCPP_VERSION)
 // libc++ (macOS / Apple clang) — the maintainer reference host.
 // std::map is 24 bytes (three-pointer representation), vptr is 8 bytes.
 inline constexpr std::size_t V1_HTTP_RESOURCE_SIZEOF = 32;
 // sizeof(std::map<std::string, bool>) on the libc++ baseline host.
 // Three pointers: __begin_node_, __pair1_->__value_, __pair3_->__value_.
 inline constexpr std::size_t V1_STD_MAP_STRING_BOOL_SIZEOF = 24;
+#else
+// Unknown C++ standard library. The baseline values below are validated
+// only for libc++ and libstdc++. On MSVC STL or other toolchains these
+// numbers may be incorrect, producing a spuriously tight or loose bound.
+// Re-run test/v1_baseline/measure_v1_sizes.cpp on the target host and
+// update the constants here before relying on bench_sizeof_http_resource.
+#error "Unknown C++ stdlib: re-measure v1 baseline on this host and update v1_constants.hpp"
 #endif
 
 // Median v1 ns/call for `http_request::get_headers()` against a
 // 16-header request. Captured by
-// test/v1_baseline/measure_v1_get_headers.cpp, 10 outer reps x
-// 1,000,000 inner iterations, std::chrono::steady_clock, asm-volatile
+// test/v1_baseline/measure_v1_get_headers.cpp, 11 outer reps x
+// 1,000,000 inner iterations (OUTER=11, odd, consistent with
+// bench_get_headers.cpp), std::chrono::steady_clock, asm-volatile
 // sink to defeat dead-store elimination.
 //
 // Measured median on the baseline host: 767.665 ns/call (range
-// 756 .. 784 across the 10 reps). We commit the rounded median as a
-// conservative number; the >=10x assertion has comfortable margin
-// regardless of host jitter.
+// 756 .. 784 across the 11 reps). We commit the rounded lower end of
+// the observed range (756 ns rounded to 760 ns) as a conservative number;
+// the >=10x assertion has comfortable margin regardless of host jitter.
 inline constexpr double V1_GET_HEADERS_NS_PER_CALL = 760.0;
 
 }  // namespace httpserver::v1_baseline

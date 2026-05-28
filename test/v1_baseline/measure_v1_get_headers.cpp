@@ -43,26 +43,27 @@
 // header tree):
 //   c++ -std=c++20 -O3 \
 //       -I/opt/homebrew/include \
+//       -Itest \
 //       test/v1_baseline/measure_v1_get_headers.cpp \
 //       -o /tmp/measure_v1_get_headers
 //   /tmp/measure_v1_get_headers
+// The -Itest flag is needed because this file includes ../bench_harness.hpp.
 //
 // Expected output (libc++ on Darwin/arm64, master @ d8b055e):
 //   v1_get_headers_ns_per_call=~770
 //
 // Run on a quiet release-mode host: no concurrent load, no power
-// throttling. Take the median of 10 outer reps.
+// throttling. Take the median of 11 outer reps (OUTER=11, odd, so
+// samples_ns[OUTER/2] is the unambiguous true median — consistent with
+// bench_get_headers.cpp which also uses OUTER=11).
 
 #include <microhttpd.h>
 
-#include <algorithm>
-#include <chrono>
 #include <cstdio>
-#include <cstdlib>
 #include <map>
 #include <string>
-#include <string_view>
-#include <vector>
+
+#include "../bench_harness.hpp"
 
 namespace {
 
@@ -72,26 +73,29 @@ namespace {
 const char* g_keys[16];
 const char* g_vals[16];
 
-struct StaticHeaders {
-    std::vector<std::string> keys;
-    std::vector<std::string> vals;
-    StaticHeaders() {
-        keys.reserve(16);
-        vals.reserve(16);
-        for (int i = 0; i < 16; ++i) {
-            char k[32];
-            char v[32];
-            std::snprintf(k, sizeof(k), "X-Bench-%02d", i);
-            std::snprintf(v, sizeof(v), "v%02d", i);
-            keys.emplace_back(k);
-            vals.emplace_back(v);
-        }
-        for (int i = 0; i < 16; ++i) {
-            g_keys[i] = keys[i].c_str();
-            g_vals[i] = vals[i].c_str();
-        }
+// String backing-store for the g_keys / g_vals c_str() pointers.
+// Kept here so strings outlive main().
+std::vector<std::string> g_key_strings;
+std::vector<std::string> g_val_strings;
+
+// Fill g_keys and g_vals with 16 synthetic header (key, value) pairs.
+// Call once at the top of main() before timing.
+void init_synthetic_headers() {
+    g_key_strings.reserve(16);
+    g_val_strings.reserve(16);
+    for (int i = 0; i < 16; ++i) {
+        char k[32];
+        char v[32];
+        std::snprintf(k, sizeof(k), "X-Bench-%02d", i);
+        std::snprintf(v, sizeof(v), "v%02d", i);
+        g_key_strings.emplace_back(k);
+        g_val_strings.emplace_back(v);
     }
-} g_static_headers;
+    for (int i = 0; i < 16; ++i) {
+        g_keys[i] = g_key_strings[i].c_str();
+        g_vals[i] = g_val_strings[i].c_str();
+    }
+}
 
 }  // namespace
 
@@ -147,39 +151,27 @@ header_view_map get_headerlike_values(struct MHD_Connection* conn,
 
 }  // namespace v1
 
-template <typename T>
-[[gnu::always_inline]] inline void do_not_optimize(T const& value) {
-    asm volatile("" : : "r,m"(&value) : "memory");
-}
+// do_not_optimize and run_bench_median are provided by bench_harness.hpp.
 
 int main() {
-    using clock = std::chrono::steady_clock;
+    // Initialise g_keys / g_vals before any timed work.
+    init_synthetic_headers();
 
+    // Warmup: allocator-hot steady state + icache warming.
     for (int i = 0; i < 10000; ++i) {
         auto m = v1::get_headerlike_values(nullptr, MHD_HEADER_KIND);
         do_not_optimize(m);
     }
 
-    constexpr int OUTER = 10;
+    // OUTER=11 (odd): samples_ns[OUTER/2] is the unambiguous true median,
+    // consistent with bench_get_headers.cpp.
+    constexpr int OUTER = 11;
     constexpr int INNER = 1'000'000;
-    std::vector<double> samples_ns;
-    samples_ns.reserve(OUTER);
-    for (int r = 0; r < OUTER; ++r) {
-        auto t0 = clock::now();
-        for (int i = 0; i < INNER; ++i) {
-            auto m = v1::get_headerlike_values(nullptr, MHD_HEADER_KIND);
-            do_not_optimize(m);
-        }
-        auto t1 = clock::now();
-        double ns_per_call =
-            std::chrono::duration<double, std::nano>(t1 - t0).count() / INNER;
-        samples_ns.push_back(ns_per_call);
-    }
-    std::sort(samples_ns.begin(), samples_ns.end());
-    double median = samples_ns[OUTER / 2];
+    const double v1_median_ns = run_bench_median([&]() {
+        auto m = v1::get_headerlike_values(nullptr, MHD_HEADER_KIND);
+        do_not_optimize(m);
+    }, OUTER, INNER);
 
-    std::printf("v1_get_headers_ns_per_call=%.3f\n", median);
-    std::printf("  (min=%.3f max=%.3f)\n",
-                samples_ns.front(), samples_ns.back());
+    std::printf("v1_get_headers_ns_per_call=%.3f\n", v1_median_ns);
     return 0;
 }
