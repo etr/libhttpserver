@@ -364,8 +364,8 @@ std::shared_ptr<detail::lambda_resource>
                                   bool& fresh_out);
 void commit_handlers_to_shim(detail::lambda_resource& shim,
                              method_set methods,
-                             const std::function<::httpserver::http_response(
-                                 const ::httpserver::http_request&)>& handler);
+                             std::function<::httpserver::http_response(
+                                 const ::httpserver::http_request&)> handler);
 void insert_fresh_v1_entries(const detail::http_endpoint& idx,
                              std::shared_ptr<::httpserver::http_resource> shim);
 void upsert_v2_table_entry(const detail::http_endpoint& idx,
