@@ -185,19 +185,11 @@ void http_request::set_method(const std::string& method) {
 }
 
 const std::vector<std::string>& http_request::get_path_pieces() const {
-    // TASK-017: lazily populate the public-typed mirror cache from the
-    // (already-built) pmr-backed `path_pieces` and return it by const&.
-    // Two caches in lockstep -- the pmr one stays arena-friendly for any
-    // future internal consumer; the public one is what the API exposes.
+    // TASK-017: lazily populate both caches and return the public-typed
+    // mirror by const&. All cache-maintenance logic lives inside the impl
+    // class (code-quality-reviewer-iter1-4 / code-simplifier-iter1-8).
     impl_->ensure_path_pieces_cached(path);
-    if (!impl_->path_pieces_public_built_) {
-        impl_->path_pieces_public_.clear();
-        impl_->path_pieces_public_.reserve(impl_->path_pieces.size());
-        for (const auto& p : impl_->path_pieces) {
-            impl_->path_pieces_public_.emplace_back(p.data(), p.size());
-        }
-        impl_->path_pieces_public_built_ = true;
-    }
+    impl_->ensure_path_pieces_public_cached();
     return impl_->path_pieces_public_;
 }
 
@@ -269,23 +261,10 @@ std::string_view http_request::get_arg_flat(std::string_view key) const {
 }
 
 const http::arg_view_map& http_request::get_args() const {
-    // TASK-017: lazily populate the args view-map cache from the pmr-backed
-    // `unescaped_args` (which is itself populated lazily by populate_args()).
+    // TASK-017: lazily populate the args view-map cache. All build logic
+    // lives inside the impl class (code-simplifier-iter1-9).
     impl_->populate_args();
-    if (!impl_->args_view_cache_built_) {
-        impl_->args_view_cached_.clear();
-        for (const auto& [key, value] : impl_->unescaped_args) {
-            // The string_view keys/values alias the pmr-backed strings owned
-            // by `unescaped_args` -- same lifetime as the request.
-            auto& arg_values = impl_->args_view_cached_[
-                std::string_view(key.data(), key.size())];
-            arg_values.values.reserve(value.size());
-            for (const auto& v : value) {
-                arg_values.values.emplace_back(v.data(), v.size());
-            }
-        }
-        impl_->args_view_cache_built_ = true;
-    }
+    impl_->ensure_args_view_cached();
     return impl_->args_view_cached_;
 }
 

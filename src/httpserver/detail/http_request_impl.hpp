@@ -233,8 +233,20 @@ class http_request_impl {
 
     // Public-typed mirror of `path_pieces` (the pmr::vector<pmr::string>
     // already kept above). Two caches in lockstep: the pmr version stays
-    // arena-friendly for any future internal consumer; the public version
-    // is what get_path_pieces() returns by const&.
+    // arena-friendly for any future internal consumer (e.g. radix-tree
+    // route matching that must allocate on the per-connection arena);
+    // the public version is what get_path_pieces() returns by const&.
+    //
+    // Deliberate dual-cache design (architecture-alignment-checker-iter1-1 /
+    // code-quality-reviewer-iter1-5 / performance-reviewer-iter1-13):
+    //   - The pmr::vector<pmr::string> cannot be returned as const
+    //     vector<string>& without an ABI change, so the public mirror
+    //     exists as a forward-compatible layer.
+    //   - No current internal consumer uses path_pieces post-PIMPL;
+    //     if none materialises before TASK-018 lands the two caches can
+    //     be collapsed to a single std::vector<std::string>.
+    //   - TODO(post-018): evaluate collapsing to a single cache if no
+    //     internal arena consumer has emerged.
     mutable std::vector<std::string> path_pieces_public_;
     mutable bool path_pieces_public_built_ = false;
 
@@ -270,6 +282,20 @@ class http_request_impl {
     const http::header_view_map& ensure_headerlike_cache(MHD_ValueKind kind) const;
     void populate_args() const;
     void ensure_path_pieces_cached(std::string_view path) const;
+
+    // TASK-017: populates the public-typed mirror of path_pieces and marks
+    // path_pieces_public_built_. Called from get_path_pieces() after
+    // ensure_path_pieces_cached() so all cache-maintenance logic for the
+    // public mirror lives inside the impl class (analogous to
+    // ensure_headerlike_cache / ensure_path_pieces_cached).
+    // (code-quality-reviewer-iter1-4 / code-simplifier-iter1-8)
+    void ensure_path_pieces_public_cached() const;
+
+    // TASK-017: populates the arg view-map cache from unescaped_args.
+    // Called from get_args() so the build loop lives inside the impl
+    // class, keeping all cache-maintenance code in one place.
+    // (code-simplifier-iter1-9)
+    void ensure_args_view_cached() const;
 
     void set_arg(const std::string& key, const std::string& value, std::size_t content_size_limit);
     void set_arg(const char* key, const char* value, std::size_t size, std::size_t content_size_limit);
