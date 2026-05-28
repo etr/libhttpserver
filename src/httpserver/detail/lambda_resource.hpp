@@ -89,13 +89,20 @@ class lambda_resource final : public ::httpserver::http_resource {
         return is_allowed(method);
     }
 
-    // These seven overrides are mechanical delegations to invoke_().
-    // Each differs only by the http_method enum constant forwarded.
-    // They are required by the http_resource base-class interface and
-    // cannot be collapsed further without changing that interface.
-    // render_connect and render_trace intentionally fall back to the
-    // base-class default (no slot wired, no set_allowing call); they
-    // return the -1 sentinel and route through internal_error_page.
+    // These seven overrides correspond to the seven on_* entry points exposed
+    // by webserver (get, post, put, delete, patch, options, head). Each is a
+    // mechanical delegation to invoke_() and differs only by the http_method
+    // enum constant forwarded. They cannot be collapsed further without
+    // changing the http_resource base-class interface.
+    //
+    // render_connect and render_trace are intentionally NOT overridden here:
+    // no on_connect / on_trace API is offered, so those slots are never
+    // populated. The is_allowed gate in finalize_answer prevents dispatch from
+    // ever reaching the base-class render_connect / render_trace on a
+    // lambda_resource shim (disallow_all() in the constructor clears the full
+    // mask). The claim that "these seven are required by the base-class
+    // interface" was misleading — the base class has nine render_* overrides;
+    // seven are wired here by deliberate design choice, not interface mandate.
     ::httpserver::http_response
     render_get(const ::httpserver::http_request& r) override {
         return invoke_(http_method::get, r);
@@ -136,7 +143,19 @@ class lambda_resource final : public ::httpserver::http_resource {
         // set_allowing(method, true); the finalize_answer 405 path fires
         // before reaching invoke_ unless has_slot is true. A populated
         // slot is therefore guaranteed here.
+        //
+        // assert fires in debug builds; the explicit check beneath it is
+        // the defensive release-build path (CWE-617: assert compiled away
+        // under NDEBUG). An empty std::function would otherwise throw
+        // std::bad_function_call, which is undefined behavior inside an
+        // MHD callback. The check branch is predicted-not-taken and has
+        // negligible runtime cost.
         assert(slot);
+        if (!slot) {
+            return ::httpserver::http_response::string(
+                "Internal Server Error: unregistered method slot invoked")
+                .with_status(500);
+        }
         // TASK-036: lambda_handler returns http_response by value; the
         // dispatch path in webserver_impl::finalize_answer moves the
         // returned value into modded_request::response — the single

@@ -34,6 +34,7 @@
 
 #include <curl/curl.h>
 
+#include <cstring>
 #include <functional>
 #include <memory>
 #include <stdexcept>
@@ -75,7 +76,7 @@ size_t header_func(char* buffer, size_t size, size_t nitems, void* userdata) {
     std::string line(buffer, size * nitems);
     constexpr const char* kAllowPrefix = "Allow:";
     if (line.rfind(kAllowPrefix, 0) == 0) {
-        std::string val = line.substr(std::string(kAllowPrefix).size());
+        std::string val = line.substr(std::strlen(kAllowPrefix));
         // strip leading spaces and trailing CRLF.
         size_t start = val.find_first_not_of(" \t");
         size_t end = val.find_last_not_of(" \t\r\n");
