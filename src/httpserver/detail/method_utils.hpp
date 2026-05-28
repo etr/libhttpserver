@@ -53,12 +53,17 @@ namespace detail {
 // is "HEAD, POST" which is preserved by enum order.
 inline std::string format_allow_header(method_set allowed) {
     std::string header_value;
+    // Pre-size for 9 methods * ~8 chars each (finding #27: avoid
+    // reallocation across the 9-method upper bound).
+    header_value.reserve(64);
     for (std::uint8_t i = 0;
             i < static_cast<std::uint8_t>(http_method::count_); ++i) {
         auto m = static_cast<http_method>(i);
         if (!allowed.contains(m)) continue;
         if (!header_value.empty()) header_value += ", ";
-        header_value += std::string(to_string(m));
+        // to_string returns string_view; operator+= on std::string accepts
+        // string_view directly -- no temporary std::string needed.
+        header_value += to_string(m);
     }
     return header_value;
 }

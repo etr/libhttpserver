@@ -23,6 +23,16 @@
 //      the TASK-048 aliases which DO push +1).
 //   3. ws.add_hook(handler_exception, fn) appends to the user vector and
 //      leaves the alias slot independent.
+//
+// Finding #41 (test-quality-reviewer): the tests reach into
+// webserver_impl::handler_exception_alias_ and hooks_handler_exception_
+// directly via the webserver_test_access friend bridge. This coupling is
+// intentional and is the established project-wide pattern for pinning
+// structural invariants (DR-012 §4.10 last-position slot). If the
+// implementation is refactored to rename or merge these fields, ALL three
+// sub-tests below must be updated in lockstep with the implementation.
+// Port 0 is used (no start() is ever called, so OS port assignment is
+// irrelevant) to avoid any potential bind-collision (finding #18).
 
 #include <functional>
 #include <string_view>
@@ -55,7 +65,7 @@ LT_END_SUITE(hooks_handler_exception_slot_suite)
 
 LT_BEGIN_AUTO_TEST(hooks_handler_exception_slot_suite,
                    baseline_no_alias_slot_empty_and_vector_empty)
-    webserver ws{create_webserver(8233)};
+    webserver ws{create_webserver(0)};
     auto* impl = impl_of(ws);
     LT_CHECK(!impl->handler_exception_alias_);
     LT_CHECK_EQ(impl->hooks_handler_exception_.size(),
@@ -68,7 +78,7 @@ LT_BEGIN_AUTO_TEST(hooks_handler_exception_slot_suite,
                       std::string_view) -> http_response {
         return http_response::string("500");
     };
-    webserver ws{create_webserver(8233)
+    webserver ws{create_webserver(0)
         .internal_error_handler(handler)};
     auto* impl = impl_of(ws);
     LT_CHECK(static_cast<bool>(impl->handler_exception_alias_));
@@ -85,7 +95,7 @@ LT_BEGIN_AUTO_TEST(hooks_handler_exception_slot_suite,
                       std::string_view) -> http_response {
         return http_response::string("500");
     };
-    webserver ws{create_webserver(8233)
+    webserver ws{create_webserver(0)
         .internal_error_handler(handler)};
     auto* impl = impl_of(ws);
 

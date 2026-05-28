@@ -249,6 +249,22 @@ struct before_handler_ctx {
 struct handler_exception_ctx {
     const http_request* request = nullptr;
     std::exception_ptr exception{};
+    /**
+     * Human-readable description of the exception. For `std::exception`
+     * throws this is `e.what()`; for non-std throws this is the sentinel
+     * string @c "unknown exception".
+     *
+     * @security This value originates from application exception text and
+     * MAY contain internal detail (DB connection strings, file paths,
+     * user-supplied input). Hook implementations and internal_error_handler
+     * callbacks MUST NOT forward this value into HTTP response bodies
+     * without sanitization (CWE-209: Information Exposure Through an Error
+     * Message). (Finding #32 / security-reviewer.)
+     *
+     * @note The view is valid only for the synchronous duration of the hook
+     * call chain — it aliases the live exception object's storage. Do NOT
+     * store it past the hook's return. (Finding #34 / security-reviewer.)
+     */
     std::string_view message{};
 };
 

@@ -393,8 +393,12 @@ void handle_dispatch_exception(
         impl->handler_exception_alias_;
 
     if (server_chain || per_route) {
-        handler_exception_ctx ctx{mr->dhr.get(),
-            std::current_exception(), message};
+        // Capture the live exception_ptr before constructing the ctx so
+        // the side-effectful call is separated from the struct literal.
+        // (Finding #24 / code-simplifier: naming the capture makes clear
+        // we are taking a reference to the in-flight exception object.)
+        auto current_exc = std::current_exception();
+        handler_exception_ctx ctx{mr->dhr.get(), current_exc, message};
         if (server_chain) {
             if (auto sc = impl->fire_handler_exception(ctx)) {
                 mr->response.emplace(std::move(*sc));
@@ -419,6 +423,11 @@ void handle_dispatch_exception(
         return;
     }
     // Backwards-compat fast path: no hook chain at all.
+    // Finding #40 (test-quality-reviewer): this path (no hooks, no alias,
+    // handler throws) is covered by the pre-existing integ tests in
+    // test/integ/basic.cpp (response_throws_runtime_error and
+    // response_throws_non_std_exception test groups; see basic.cpp around
+    // the "AC2" acceptance-criteria block). No new test is needed here.
     mr->response.emplace(
         impl->run_internal_error_handler_safely(mr, message));
 }
@@ -473,8 +482,15 @@ void webserver_impl::dispatch_resource_handler(detail::modded_request* mr,
         // TASK-049 routes the exception through the handler_exception
         // hook chain (with the internal_error_handler alias as the
         // last-position fallback) inside handle_dispatch_exception.
-        log_dispatch_error(std::string("dispatch: handler threw "
-                                       "std::exception: ") + e.what());
+        //
+        // Finding #29 (performance-reviewer): only build the heap string
+        // when a log_error callback is actually wired; log_dispatch_error
+        // also checks this but the concatenation happens at the call site.
+        if (parent->log_error) {
+            log_dispatch_error(
+                std::string("dispatch: handler threw std::exception: ")
+                    .append(e.what()));
+        }
         handle_dispatch_exception(this, mr, std::string_view{e.what()});
     } catch (...) {
         // §5.2 point 3: handler threw non-std::exception. Same flow as

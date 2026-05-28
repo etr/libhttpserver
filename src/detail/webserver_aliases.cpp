@@ -55,6 +55,7 @@
 #include "httpserver/webserver.hpp"
 #include "httpserver/detail/webserver_impl.hpp"
 
+#include <cassert>
 #include <functional>
 #include <memory>
 #include <string>
@@ -77,35 +78,44 @@ namespace httpserver {
 
 namespace {
 
-// TASK-049: build the std::function stored in
-// webserver_impl::handler_exception_alias_ from a (non-null) user-supplied
-// internal_error_handler callable. Extracted from
-// install_default_alias_hooks_ to keep that function under the CCN bar.
-std::function<hook_action(const handler_exception_ctx&)>
-make_internal_error_alias_(internal_error_handler_t user_handler) {
-    return [user_handler = std::move(user_handler)](
-                   const handler_exception_ctx& ctx) -> hook_action {
-        if (ctx.request == nullptr) {
-            // Defensive: caller always passes a non-null request, but
-            // stay benign if a future call site changes that contract.
-            return hook_action::pass();
-        }
-        return hook_action::respond_with(
-            user_handler(*ctx.request, ctx.message));
-    };
-}
-
 // TASK-049: install the internal_error_handler alias into the dedicated
 // last-position slot on webserver_impl. Extracted from
 // install_default_alias_hooks_ so the added `if` does not push the host
 // function over the CCN bar. See webserver_impl::handler_exception_alias_
 // for the lifetime contract (write-once-at-construction).
-void install_internal_error_alias_(
+//
+// Naming: no trailing underscore -- this is a file-scope free function in
+// an anonymous namespace, not a private member function. Matches the
+// naming convention of install_log_access_alias_ (which itself follows
+// the same pattern). (TASK-049 review findings #20/#22.)
+//
+// Also sets any_hooks_[handler_exception] so the gate is the single source
+// of truth even when only the alias is wired (finding #4). A future caller
+// that checks only any_hooks_ (e.g., a stats collector) then observes the
+// correct true value without also needing to know about the alias slot.
+void install_internal_error_alias(
         detail::webserver_impl* impl,
         internal_error_handler_t user_handler) {
     if (user_handler == nullptr) return;
     impl->handler_exception_alias_ =
-        make_internal_error_alias_(std::move(user_handler));
+        [user_handler = std::move(user_handler)](
+                const handler_exception_ctx& ctx) -> hook_action {
+            // mr->dhr is always non-null at the call site in
+            // handle_dispatch_exception; this guard is purely defensive for
+            // any future call site that relaxes that invariant. If that
+            // invariant is violated in debug builds, assert fires first.
+            // (Findings #5, #8, #9: assert in debug, guard stays for safety.)
+            assert(ctx.request != nullptr &&
+                   "handler_exception_ctx::request must be non-null");
+            if (ctx.request == nullptr) return hook_action::pass();
+            return hook_action::respond_with(
+                user_handler(*ctx.request, ctx.message));
+        };
+    // Set the any_hooks_ gate so it remains the canonical zero-cost fast-
+    // check for handler_exception, regardless of whether hooks are in the
+    // vector or only in the alias slot (finding #4 / DR-012 §4.10).
+    impl->any_hooks_[static_cast<std::size_t>(hook_phase::handler_exception)]
+        .store(true, std::memory_order_release);
 }
 
 // SECURITY (CWE-117): sanitize a string_view for use in an access-log line.
@@ -189,7 +199,10 @@ void webserver::install_default_alias_hooks_() {
         // before comparing against auth_skip_paths).
         webserver* ws_ptr = this;
         detail::webserver_impl* impl_ptr = impl_.get();
-        std::move(add_hook(hook_phase::before_handler,
+        // add_hook returns a prvalue hook_handle; .detach() is called
+        // directly on it -- std::move() on a prvalue is a no-op and
+        // is omitted here (finding #19).
+        add_hook(hook_phase::before_handler,
             std::function<hook_action(before_handler_ctx&)>(
                 [ws_ptr, impl_ptr](before_handler_ctx& ctx) -> hook_action {
                     if (ctx.request == nullptr) return hook_action::pass();
@@ -212,7 +225,7 @@ void webserver::install_default_alias_hooks_() {
                     // Auth failed: short-circuit with the rejection response.
                     return hook_action::respond_with(
                         std::move(*auth_rejection_response));
-                })))
+                }))
             .detach();
     }
 
@@ -230,7 +243,7 @@ void webserver::install_default_alias_hooks_() {
     // ----------------------------------------------------------------
     if (method_not_allowed_handler != nullptr) {
         webserver* ws_ptr = this;
-        std::move(add_hook(hook_phase::before_handler,
+        add_hook(hook_phase::before_handler,
             std::function<hook_action(before_handler_ctx&)>(
                 [ws_ptr](before_handler_ctx& ctx) -> hook_action {
                     // Only fire when the resource is known (route hit).
@@ -257,7 +270,7 @@ void webserver::install_default_alias_hooks_() {
                         }
                     }
                     return hook_action::respond_with(std::move(resp));
-                })))
+                }))
             .detach();
     }
 
@@ -275,7 +288,7 @@ void webserver::install_default_alias_hooks_() {
     // hook count is observable and the architectural seat is reserved.
     // ----------------------------------------------------------------
     if (not_found_handler != nullptr) {
-        std::move(add_hook(hook_phase::route_resolved,
+        add_hook(hook_phase::route_resolved,
             std::function<void(const route_resolved_ctx&)>(
                 [](const route_resolved_ctx&) {
                     // Observation stub. The actual 404 synthesis lives
@@ -284,7 +297,7 @@ void webserver::install_default_alias_hooks_() {
                     // Route_resolved_ctx does not carry mr->response so
                     // the spec's "stash into mr->response" is structurally
                     // deferred (see TASK-048 spec §action item 3 note).
-                })))
+                }))
             .detach();
     }
 
@@ -315,7 +328,16 @@ void webserver::install_default_alias_hooks_() {
     // callable (it has already been seen to throw on this request --
     // calling it a second time would observably invoke the user code
     // twice for one logical exception). See webserver_dispatch.cpp.
-    install_internal_error_alias_(impl_.get(), internal_error_handler);
+    //
+    // Re-registration semantics (finding #35 / spec-alignment): the
+    // task spec says "re-registration replaces the existing alias hook".
+    // At v2.0 there is no runtime re-registration path -- the slot is
+    // written exactly once at construction (write-once-at-construction
+    // contract). If a future task adds a runtime setter, it must
+    // overwrite handler_exception_alias_ under hook_table_mutex_
+    // exclusive and update any_hooks_ accordingly; "replace" semantics
+    // are then enforced by the plain std::function overwrite.
+    install_internal_error_alias(impl_.get(), internal_error_handler);
 
     // ----------------------------------------------------------------
     // log_access -> response_sent alias slot. [TASK-050]

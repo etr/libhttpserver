@@ -63,6 +63,13 @@ typedef std::function<http_response(const http_request&)> error_handler;
  * `"unknown exception"`. The view is valid only for the duration of the
  * call; copy if you need to retain it.
  *
+ * @security The `message` parameter originates from application exception
+ * text and MAY contain internal detail (DB connection strings, file paths,
+ * or attacker-influenced data that triggered the exception). Implementations
+ * MUST NOT forward this value into HTTP response bodies without sanitization
+ * (CWE-209: Information Exposure Through an Error Message). See also
+ * @ref handler_exception_ctx::message. (Finding #32 / security-reviewer.)
+ *
  * Full contract: DR-009 §5.2 (see @ref webserver class-level block).
  */
 typedef std::function<http_response(const http_request&, std::string_view message)> internal_error_handler_t;
