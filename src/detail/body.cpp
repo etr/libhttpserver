@@ -42,13 +42,10 @@ namespace detail {
 
 // ---------------------------------------------------------------------------
 // Layout-pinning static_asserts for iovec_entry → MHD_IoVec / struct iovec.
-// Duplicated from src/iovec_response.cpp during the M2 transition: the
-// asserts must live next to every cast site, and TASK-013 will delete
-// iovec_response.cpp once http_response::iovec() lands. Duplicate
-// static_asserts on identical layouts are harmless.
-//
-// LIBHTTPSERVER_TODO_TASK013: drop the originals from iovec_response.cpp
-// when iovec_response is removed.
+// These live here, next to the cast site in iovec_body::materialize(), which
+// is the only production code that reinterpret_casts iovec_entry arrays.
+// iovec_response.cpp was removed in TASK-013 (the subclass hierarchy was
+// replaced by http_response value-type factories in TASK-010).
 //
 // The POSIX `struct iovec` asserts are gated on !_WIN32 (no <sys/uio.h> on
 // MSYS2/mingw); the MHD_IoVec asserts run everywhere because that's the

@@ -54,11 +54,6 @@
 #include "./littletest.hpp"
 
 LT_BEGIN_SUITE(header_hygiene_iovec_suite)
-    void set_up() {
-    }
-
-    void tear_down() {
-    }
 LT_END_SUITE(header_hygiene_iovec_suite)
 
 // Verify that iovec_entry is accessible and sizeof/alignof are non-zero
@@ -72,7 +67,12 @@ LT_BEGIN_AUTO_TEST(header_hygiene_iovec_suite, iovec_entry_visible_without_sys_u
                   "iovec_entry must have non-zero size without sys/uio.h");
     static_assert(alignof(httpserver::iovec_entry) > 0,
                   "iovec_entry must have non-zero alignment without sys/uio.h");
-    LT_CHECK_EQ(true, true);  // TU compiled clean: no sys/uio.h leak detected
+    // Runtime confirmation: the type is accessible and constructable with no
+    // POSIX headers in scope. Successful compilation is the primary assertion;
+    // this exercises the type at runtime to confirm it is not an empty stub.
+    httpserver::iovec_entry e{};
+    LT_CHECK_EQ(e.base, nullptr);
+    LT_CHECK_EQ(e.len, 0u);
 LT_END_AUTO_TEST(iovec_entry_visible_without_sys_uio)
 
 LT_BEGIN_AUTO_TEST_ENV()
