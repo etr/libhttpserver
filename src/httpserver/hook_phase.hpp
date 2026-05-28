@@ -88,20 +88,20 @@ static_assert(static_cast<std::size_t>(hook_phase::count_) == 11u,
  */
 constexpr std::string_view to_string(hook_phase p) noexcept {
     switch (p) {
-    case hook_phase::connection_opened:  return std::string_view{"connection_opened"};
-    case hook_phase::accept_decision:    return std::string_view{"accept_decision"};
-    case hook_phase::request_received:   return std::string_view{"request_received"};
-    case hook_phase::body_chunk:         return std::string_view{"body_chunk"};
-    case hook_phase::route_resolved:     return std::string_view{"route_resolved"};
-    case hook_phase::before_handler:     return std::string_view{"before_handler"};
-    case hook_phase::handler_exception:  return std::string_view{"handler_exception"};
-    case hook_phase::after_handler:      return std::string_view{"after_handler"};
-    case hook_phase::response_sent:      return std::string_view{"response_sent"};
-    case hook_phase::request_completed:  return std::string_view{"request_completed"};
-    case hook_phase::connection_closed:  return std::string_view{"connection_closed"};
-    case hook_phase::count_:             return std::string_view{};
+    case hook_phase::connection_opened:  return "connection_opened";
+    case hook_phase::accept_decision:    return "accept_decision";
+    case hook_phase::request_received:   return "request_received";
+    case hook_phase::body_chunk:         return "body_chunk";
+    case hook_phase::route_resolved:     return "route_resolved";
+    case hook_phase::before_handler:     return "before_handler";
+    case hook_phase::handler_exception:  return "handler_exception";
+    case hook_phase::after_handler:      return "after_handler";
+    case hook_phase::response_sent:      return "response_sent";
+    case hook_phase::request_completed:  return "request_completed";
+    case hook_phase::connection_closed:  return "connection_closed";
+    case hook_phase::count_:             return {};
     }
-    return std::string_view{};
+    return {};
 }
 
 }  // namespace httpserver

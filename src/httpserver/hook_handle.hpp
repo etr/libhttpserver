@@ -64,6 +64,24 @@ class http_resource;
  * of the phase vector cannot invalidate this handle: `remove()` walks
  * the vector linearly looking for `slot_id`; a not-found result is
  * the idempotent no-op path.
+ *
+ * @warning **Lifetime requirement:** A `hook_handle` produced by
+ * `webserver::add_hook` holds a raw non-owning pointer to the
+ * webserver's implementation object. A non-detached handle **must not
+ * outlive the webserver that produced it**. Destroying an armed
+ * `hook_handle` after its webserver has been destroyed is undefined
+ * behavior (use-after-free). CWE-416.
+ *
+ * Safe patterns:
+ * - Store handles as members of a class that also owns the `webserver`.
+ * - Call `h.detach()` if you want the registration to persist for the
+ *   webserver's entire lifetime without the handle.
+ * - Call `h.remove()` explicitly before destroying the webserver.
+ *
+ * Per-route handles (`http_resource::add_hook`) hold a
+ * `weak_ptr<resource_hook_table>` instead of a raw pointer; their
+ * `remove()` is safe even after the resource is destroyed (the
+ * weak_ptr expires and the call becomes a no-op).
  */
 class hook_handle {
  public:

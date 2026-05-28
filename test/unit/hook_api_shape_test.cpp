@@ -24,6 +24,7 @@
 //   - detach() disarms the destructor.
 
 #include <functional>
+#include <stdexcept>
 #include <type_traits>
 #include <utility>
 
@@ -87,6 +88,16 @@ static_assert(std::is_same_v<
 // ANY of the eleven add_hook overloads must NOT be invocable as
 // add_hook. This pins the "wrong signature fails to compile"
 // acceptance criterion via SFINAE rather than a should-fail TU.
+//
+// Note on design: the SFINAE gate tests that callables with the wrong
+// TYPE are rejected at compile time. A callable with the RIGHT signature
+// but tagged with the wrong hook_phase enum value (e.g., passing a
+// connection_open_ctx callable to the accept_decision overload) is NOT
+// rejected at compile time — it is rejected at runtime in register_hook_impl
+// by the requested != expected guard. This is the deliberate design choice:
+// a raw lambda with the right signature that is accidentally passed with the
+// wrong phase enum throws std::invalid_argument at the registration site.
+// See add_hook_throws_on_phase_mismatch runtime test below.
 template <class FnT, class = void>
 struct add_hook_is_callable : std::false_type {};
 template <class FnT>
@@ -109,6 +120,29 @@ static_assert(!add_hook_is_callable<std::function<void(int&)>>::value,
 static_assert(add_hook_is_callable<
         std::function<void(const httpserver::response_sent_ctx&)>>::value,
     "add_hook must accept the response_sent signature");
+
+// Pinned-phase negative: response_sent_ctx callable is NOT accepted by the
+// accept_decision overload. The all-phases SFINAE gate above checks that
+// the callable fails ALL overloads. This check uses a helper that directly
+// tests a specific (phase, callable) pair to guard against a future change
+// that accidentally widens one overload. (TASK-045 review, finding #34.)
+//
+// Implementation note: since add_hook overloads are non-template member
+// functions distinguished by their std::function argument type, we can
+// check invocability directly: calling add_hook(phase, wrong_fn_type) must
+// fail to compile.
+template <class FnT, class = void>
+struct accept_decision_hook_callable : std::false_type {};
+template <class FnT>
+struct accept_decision_hook_callable<FnT, std::void_t<
+    decltype(std::declval<webserver&>().add_hook(
+        hook_phase::accept_decision, std::declval<FnT>()))>>
+    : std::true_type {};
+
+// response_sent callable must NOT be accepted by the accept_decision overload.
+static_assert(!accept_decision_hook_callable<
+        std::function<void(const httpserver::response_sent_ctx&)>>::value,
+    "accept_decision overload must not accept a response_sent callable");
 
 // ---- runtime tests ------------------------------------------------------
 
@@ -145,7 +179,10 @@ LT_BEGIN_AUTO_TEST(hook_api_shape_suite, hook_action_pass_and_respond_with)
     LT_CHECK_EQ(b.is_pass(), false);
 
     http_response r = std::move(b).take_response();
-    (void)r;  // moved-out token; not used further
+    // Verify the response was correctly transferred (not default-constructed).
+    // A 200 status confirms respond_with() stored and take_response() returned
+    // the actual response rather than a default-constructed empty one.
+    LT_CHECK_EQ(r.get_status(), 200);
 LT_END_AUTO_TEST(hook_action_pass_and_respond_with)
 
 LT_BEGIN_AUTO_TEST(hook_api_shape_suite, add_then_explicit_remove)
@@ -172,12 +209,16 @@ LT_END_AUTO_TEST(add_then_explicit_remove)
 
 LT_BEGIN_AUTO_TEST(hook_api_shape_suite, double_remove_is_noop)
     webserver ws = make_ws();
+    auto* impl = httpserver::webserver_test_access::impl(ws);
     auto h = ws.add_hook(hook_phase::after_handler,
         std::function<hook_action(httpserver::after_handler_ctx&)>(
             [](httpserver::after_handler_ctx&) { return hook_action{}; }));
     h.remove();
     h.remove();  // must not crash, must not double-erase
-    LT_CHECK_EQ(true, true);
+    // Verify the gate and vector are consistently empty after both removes.
+    LT_CHECK_EQ(any_hook(impl, hook_phase::after_handler), false);
+    LT_CHECK_EQ(phase_size(impl, hook_phase::after_handler),
+                static_cast<std::size_t>(0));
 LT_END_AUTO_TEST(double_remove_is_noop)
 
 LT_BEGIN_AUTO_TEST(hook_api_shape_suite, raii_destruction_removes)
@@ -203,10 +244,15 @@ LT_BEGIN_AUTO_TEST(hook_api_shape_suite, detach_disarms_destructor)
         auto h = ws.add_hook(hook_phase::connection_opened,
             std::function<void(const httpserver::connection_open_ctx&)>(
                 [](const httpserver::connection_open_ctx&) {}));
-        std::move(h).detach();
-        // Local h is now in the disarmed (none) state; dtor must NOT
+        // Capture the disarmed return value. Calling remove() on it must
+        // be a no-op (the registration was intentionally left alive).
+        hook_handle detached = std::move(h).detach();
+        // The detached handle is disarmed: remove() must be a no-op.
+        detached.remove();
+        // Local h is now in the disarmed (moved-from) state; dtor must NOT
         // re-take the lock or erase the slot.
     }
+    // The registration persists even after the disarmed handles are gone.
     LT_CHECK_EQ(phase_size(impl, hook_phase::connection_opened),
                 static_cast<std::size_t>(1));
     LT_CHECK_EQ(any_hook(impl, hook_phase::connection_opened), true);
@@ -239,45 +285,82 @@ LT_END_AUTO_TEST(any_hooks_flips_on_first_and_last)
 
 LT_BEGIN_AUTO_TEST(hook_api_shape_suite, default_constructed_handle_is_inert)
     hook_handle h;
-    h.remove();  // no-op
+    h.remove();  // no-op on default-constructed handle
+    h.remove();  // idempotent: second call is also a no-op
+    // Absence of crash + two successful remove() calls demonstrate inert state.
     LT_CHECK_EQ(true, true);
 LT_END_AUTO_TEST(default_constructed_handle_is_inert)
+
+// Runtime throw paths in register_hook_impl. (TASK-045 review, finding #11.)
+//
+// Note: wrong-phase+right-signature triggers a runtime throw (the phase
+// mismatch is detected inside register_hook_impl, not at compile time).
+// Wrong-signature callables are rejected at compile time via the SFINAE
+// gate above. The SFINAE gate covers compile-time rejection; these two
+// tests cover the runtime guards. See spec comment in hook_api_shape_test.cpp
+// finding #29.
+LT_BEGIN_AUTO_TEST(hook_api_shape_suite, add_hook_throws_on_phase_mismatch)
+    webserver ws = make_ws();
+    // The connection_opened overload expects hook_phase::connection_opened
+    // as the runtime tag. Passing accept_decision triggers the mismatch guard.
+    LT_CHECK_THROW(ws.add_hook(hook_phase::accept_decision,
+        std::function<void(const httpserver::connection_open_ctx&)>(
+            [](const httpserver::connection_open_ctx&) {})));
+LT_END_AUTO_TEST(add_hook_throws_on_phase_mismatch)
+
+LT_BEGIN_AUTO_TEST(hook_api_shape_suite, add_hook_throws_on_empty_callable)
+    webserver ws = make_ws();
+    // An empty (null) std::function is rejected before the vector push.
+    LT_CHECK_THROW(ws.add_hook(hook_phase::response_sent,
+        std::function<void(const httpserver::response_sent_ctx&)>{}));
+LT_END_AUTO_TEST(add_hook_throws_on_empty_callable)
+
+// Move-assignment must remove the target's existing registration before
+// taking over the source's. Validates the remove()-before-take-over logic
+// in hook_handle::operator=. (TASK-045 review, finding #14.)
+LT_BEGIN_AUTO_TEST(hook_api_shape_suite, move_assign_removes_target_registration)
+    webserver ws = make_ws();
+    auto* impl = httpserver::webserver_test_access::impl(ws);
+
+    auto h1 = ws.add_hook(hook_phase::response_sent,
+        std::function<void(const httpserver::response_sent_ctx&)>(
+            [](const httpserver::response_sent_ctx&) {}));
+    auto h2 = ws.add_hook(hook_phase::request_completed,
+        std::function<void(const httpserver::request_completed_ctx&)>(
+            [](const httpserver::request_completed_ctx&) {}));
+
+    LT_CHECK_EQ(phase_size(impl, hook_phase::response_sent),
+                static_cast<std::size_t>(1));
+    LT_CHECK_EQ(phase_size(impl, hook_phase::request_completed),
+                static_cast<std::size_t>(1));
+
+    // Move-assign h1 into h2. h2's request_completed registration must be
+    // removed by operator= before it takes over h1's response_sent slot.
+    h2 = std::move(h1);
+
+    LT_CHECK_EQ(phase_size(impl, hook_phase::response_sent),
+                static_cast<std::size_t>(1));   // h1's slot still present (now owned by h2)
+    LT_CHECK_EQ(phase_size(impl, hook_phase::request_completed),
+                static_cast<std::size_t>(0));   // h2's old registration removed
+
+    // h2 still armed — destructor should clean up the transferred slot.
+LT_END_AUTO_TEST(move_assign_removes_target_registration)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()
 
-// ---- phase_size helper (out-of-line so the switch lives in one place) ---
+// ---- phase_size helper — delegates to webserver_impl::phase_hook_count -----
+//
+// Calling phase_hook_count() through the impl pointer decouples the test
+// from the exact names of the per-phase vector members. A rename or
+// structural reorganisation of the vectors only requires updating the
+// single switch in webserver_impl::phase_hook_count; this test remains
+// correct without modification. (TASK-045 review, finding #4.)
 namespace {
 
 std::size_t phase_size(webserver_impl* impl, hook_phase p) {
-    switch (p) {
-    case hook_phase::connection_opened:
-        return impl->hooks_connection_opened_.size();
-    case hook_phase::accept_decision:
-        return impl->hooks_accept_decision_.size();
-    case hook_phase::request_received:
-        return impl->hooks_request_received_.size();
-    case hook_phase::body_chunk:
-        return impl->hooks_body_chunk_.size();
-    case hook_phase::route_resolved:
-        return impl->hooks_route_resolved_.size();
-    case hook_phase::before_handler:
-        return impl->hooks_before_handler_.size();
-    case hook_phase::handler_exception:
-        return impl->hooks_handler_exception_.size();
-    case hook_phase::after_handler:
-        return impl->hooks_after_handler_.size();
-    case hook_phase::response_sent:
-        return impl->hooks_response_sent_.size();
-    case hook_phase::request_completed:
-        return impl->hooks_request_completed_.size();
-    case hook_phase::connection_closed:
-        return impl->hooks_connection_closed_.size();
-    case hook_phase::count_:
-        return 0;
-    }
-    return 0;
+    return impl->phase_hook_count(p);
 }
 
 }  // namespace

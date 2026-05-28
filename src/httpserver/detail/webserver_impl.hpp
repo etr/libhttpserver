@@ -248,11 +248,21 @@ class webserver_impl {
     //     phase vectors. Writers (add_hook, hook_handle::remove) take
     //     a unique_lock; future firing sites (TASK-046+) will take
     //     a shared_lock to snapshot a phase vector before iterating.
-    //   - `any_hooks_[i]` is a short-circuit gate read with relaxed/
-    //     acquire semantics on the dispatch hot path so a phase with
-    //     no registrations costs one atomic load. Set on first
-    //     registration of a phase and cleared when the phase's vector
-    //     drops to empty (memory_order_release on both edges).
+    //   - `any_hooks_[i]` is a short-circuit gate read with
+    //     memory_order_acquire semantics on the dispatch hot path so a
+    //     phase with no registrations costs one atomic load. The correct
+    //     hot-path pattern is:
+    //       if (any_hooks_[i].load(std::memory_order_acquire)) {
+    //           std::shared_lock lk(hook_table_mutex_); /* iterate */ }
+    //     The acquire pairs with the memory_order_release store in
+    //     register_hook_impl / hook_handle::remove(), providing the
+    //     full happens-before the vector contents require. Do NOT use
+    //     memory_order_relaxed here: a relaxed load gives no ordering
+    //     guarantee and could observe any_hooks_[phase]==true while
+    //     seeing a stale (empty or partially-written) phase vector.
+    //     Set on first registration of a phase and cleared when the
+    //     phase's vector drops to empty (memory_order_release on both
+    //     edges).
     //   - `next_slot_id_` is a monotonic 64-bit counter. It is never
     //     reused, so a hook_handle whose slot has already been erased
     //     simply finds no match in remove() -- the idempotent no-op
@@ -363,6 +373,42 @@ class webserver_impl {
         sni_credentials_cache;
     mutable std::shared_mutex sni_credentials_mutex;
 #endif  // HAVE_GNUTLS && MHD_OPTION_HTTPS_CERT_CALLBACK
+
+    // TASK-045 review: single accessor for the per-phase vector size.
+    // Exposes the per-phase registration count through one switch rather
+    // than requiring callers (e.g., test code) to name individual per-phase
+    // vector members. The HTTPSERVER_COMPILATION friend bridge in
+    // webserver.hpp (webserver_test_access) gives test TUs access to impl*.
+    [[nodiscard]] std::size_t phase_hook_count(
+            ::httpserver::hook_phase p) const noexcept {
+        switch (p) {
+        case ::httpserver::hook_phase::connection_opened:
+            return hooks_connection_opened_.size();
+        case ::httpserver::hook_phase::accept_decision:
+            return hooks_accept_decision_.size();
+        case ::httpserver::hook_phase::request_received:
+            return hooks_request_received_.size();
+        case ::httpserver::hook_phase::body_chunk:
+            return hooks_body_chunk_.size();
+        case ::httpserver::hook_phase::route_resolved:
+            return hooks_route_resolved_.size();
+        case ::httpserver::hook_phase::before_handler:
+            return hooks_before_handler_.size();
+        case ::httpserver::hook_phase::handler_exception:
+            return hooks_handler_exception_.size();
+        case ::httpserver::hook_phase::after_handler:
+            return hooks_after_handler_.size();
+        case ::httpserver::hook_phase::response_sent:
+            return hooks_response_sent_.size();
+        case ::httpserver::hook_phase::request_completed:
+            return hooks_request_completed_.size();
+        case ::httpserver::hook_phase::connection_closed:
+            return hooks_connection_closed_.size();
+        case ::httpserver::hook_phase::count_:
+            return 0;
+        }
+        return 0;
+    }
 
     // Dispatch helpers, start helpers, MHD trampolines, and the route /
     // upload sub-types live in a sibling header to keep this class

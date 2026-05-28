@@ -363,6 +363,13 @@ template <class Vec, class Fn>
     {
         std::unique_lock lock(impl->hook_table_mutex_);
         vec.push_back({id, std::move(fn)});
+        // Store under the unique_lock. memory_order_release here is
+        // technically redundant because the subsequent mutex unlock also
+        // acts as a release fence. It is kept for clarity, but dispatch
+        // hot-path readers MUST use memory_order_acquire on the load, and
+        // they pair with the MUTEX RELEASE (unlock), not this store. See
+        // webserver_impl.hpp comment on any_hooks_ for the full pairing
+        // rationale.
         impl->any_hooks_[static_cast<std::size_t>(expected)].store(
             true, std::memory_order_release);
     }

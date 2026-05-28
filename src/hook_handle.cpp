@@ -132,9 +132,15 @@ void hook_handle::remove() noexcept {
     // Linear scan for the matching slot. Phase vectors are tiny in
     // practice (single-digit hook counts). A not-found result is the
     // idempotent no-op case: the slot was already erased by an earlier
-    // remove() or never inserted (defensive). Either way we still
-    // re-evaluate the any_hooks_ gate against the current vector
-    // emptiness.
+    // remove() or never inserted (defensive).
+    //
+    // erase_if_found returns true iff the slot was found and erased.
+    // We use the return value to skip reset_gate_if_empty on a no-op
+    // erase (the gate value is already consistent -- no erase happened).
+    // A false return from an armed handle would indicate a bug in
+    // register_hook_impl (slot never inserted); an assert catches this in
+    // debug builds. The !armed_ early-return above ensures that a second
+    // remove() on the same handle never reaches this code path.
     auto erase_if_found = [id](auto& vec) -> bool {
         for (auto it = vec.begin(); it != vec.end(); ++it) {
             if (it->slot_id == id) {
@@ -151,50 +157,67 @@ void hook_handle::remove() noexcept {
         }
     };
 
+    // Macro-like helper: erase then reset gate only if the slot was found.
+    // The two-lambda + switch pattern is intentional: each case selects a
+    // differently-typed vector. A type-erased unification would require
+    // additional indirection without a meaningful readability gain for
+    // eleven cases. (TODO: revisit in a future task if a compile-time
+    // indexed tuple or std::visit approach is adopted for the phase vectors.)
     switch (phase) {
     case hook_phase::connection_opened:
-        erase_if_found(impl->hooks_connection_opened_);
-        reset_gate_if_empty(impl->hooks_connection_opened_);
+        if (erase_if_found(impl->hooks_connection_opened_)) {
+            reset_gate_if_empty(impl->hooks_connection_opened_);
+        }
         break;
     case hook_phase::accept_decision:
-        erase_if_found(impl->hooks_accept_decision_);
-        reset_gate_if_empty(impl->hooks_accept_decision_);
+        if (erase_if_found(impl->hooks_accept_decision_)) {
+            reset_gate_if_empty(impl->hooks_accept_decision_);
+        }
         break;
     case hook_phase::request_received:
-        erase_if_found(impl->hooks_request_received_);
-        reset_gate_if_empty(impl->hooks_request_received_);
+        if (erase_if_found(impl->hooks_request_received_)) {
+            reset_gate_if_empty(impl->hooks_request_received_);
+        }
         break;
     case hook_phase::body_chunk:
-        erase_if_found(impl->hooks_body_chunk_);
-        reset_gate_if_empty(impl->hooks_body_chunk_);
+        if (erase_if_found(impl->hooks_body_chunk_)) {
+            reset_gate_if_empty(impl->hooks_body_chunk_);
+        }
         break;
     case hook_phase::route_resolved:
-        erase_if_found(impl->hooks_route_resolved_);
-        reset_gate_if_empty(impl->hooks_route_resolved_);
+        if (erase_if_found(impl->hooks_route_resolved_)) {
+            reset_gate_if_empty(impl->hooks_route_resolved_);
+        }
         break;
     case hook_phase::before_handler:
-        erase_if_found(impl->hooks_before_handler_);
-        reset_gate_if_empty(impl->hooks_before_handler_);
+        if (erase_if_found(impl->hooks_before_handler_)) {
+            reset_gate_if_empty(impl->hooks_before_handler_);
+        }
         break;
     case hook_phase::handler_exception:
-        erase_if_found(impl->hooks_handler_exception_);
-        reset_gate_if_empty(impl->hooks_handler_exception_);
+        if (erase_if_found(impl->hooks_handler_exception_)) {
+            reset_gate_if_empty(impl->hooks_handler_exception_);
+        }
         break;
     case hook_phase::after_handler:
-        erase_if_found(impl->hooks_after_handler_);
-        reset_gate_if_empty(impl->hooks_after_handler_);
+        if (erase_if_found(impl->hooks_after_handler_)) {
+            reset_gate_if_empty(impl->hooks_after_handler_);
+        }
         break;
     case hook_phase::response_sent:
-        erase_if_found(impl->hooks_response_sent_);
-        reset_gate_if_empty(impl->hooks_response_sent_);
+        if (erase_if_found(impl->hooks_response_sent_)) {
+            reset_gate_if_empty(impl->hooks_response_sent_);
+        }
         break;
     case hook_phase::request_completed:
-        erase_if_found(impl->hooks_request_completed_);
-        reset_gate_if_empty(impl->hooks_request_completed_);
+        if (erase_if_found(impl->hooks_request_completed_)) {
+            reset_gate_if_empty(impl->hooks_request_completed_);
+        }
         break;
     case hook_phase::connection_closed:
-        erase_if_found(impl->hooks_connection_closed_);
-        reset_gate_if_empty(impl->hooks_connection_closed_);
+        if (erase_if_found(impl->hooks_connection_closed_)) {
+            reset_gate_if_empty(impl->hooks_connection_closed_);
+        }
         break;
     case hook_phase::count_:
         // Unreachable: an armed handle always carries a valid phase.
@@ -210,7 +233,11 @@ hook_handle hook_handle::detach() && noexcept {
     out.impl_ = impl_;
     out.slot_id_ = slot_id_;
     out.phase_ = phase_;
-    out.armed_ = false;     // detach() = "destructor will not touch impl"
+    // detached: registration persists in the phase vector; destructor
+    // is disabled. This disarmed state is semantically distinct from a
+    // default-constructed (never-registered) handle: both have armed_==false,
+    // but here the backing slot is intentionally left alive.
+    out.armed_ = false;
     out.table_weak_ = table_weak_;
     // Disarm the source so its destructor is also a no-op.
     armed_ = false;

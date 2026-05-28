@@ -47,16 +47,19 @@ std::string peer_address::to_string() const {
         // Group as eight uint16_t big-endian words, colon-separated.
         // Skip zero-compression for simplicity at TASK-045; TASK-046
         // can refine when telemetry/log requirements firm up.
+        // Cast each byte to unsigned before shifting to avoid signed-int
+        // promotion UB on exotic 16-bit-int platforms and to match the
+        // unsigned int expected by '%x' (CWE-704 / finding #1 & #25).
         std::snprintf(buf, sizeof(buf),
                       "%x:%x:%x:%x:%x:%x:%x:%x",
-                      (bytes[0] << 8)  | bytes[1],
-                      (bytes[2] << 8)  | bytes[3],
-                      (bytes[4] << 8)  | bytes[5],
-                      (bytes[6] << 8)  | bytes[7],
-                      (bytes[8] << 8)  | bytes[9],
-                      (bytes[10] << 8) | bytes[11],
-                      (bytes[12] << 8) | bytes[13],
-                      (bytes[14] << 8) | bytes[15]);
+                      (static_cast<unsigned>(bytes[0])  << 8) | static_cast<unsigned>(bytes[1]),
+                      (static_cast<unsigned>(bytes[2])  << 8) | static_cast<unsigned>(bytes[3]),
+                      (static_cast<unsigned>(bytes[4])  << 8) | static_cast<unsigned>(bytes[5]),
+                      (static_cast<unsigned>(bytes[6])  << 8) | static_cast<unsigned>(bytes[7]),
+                      (static_cast<unsigned>(bytes[8])  << 8) | static_cast<unsigned>(bytes[9]),
+                      (static_cast<unsigned>(bytes[10]) << 8) | static_cast<unsigned>(bytes[11]),
+                      (static_cast<unsigned>(bytes[12]) << 8) | static_cast<unsigned>(bytes[13]),
+                      (static_cast<unsigned>(bytes[14]) << 8) | static_cast<unsigned>(bytes[15]));
         return std::string{buf};
     }
     case family::unspec:
