@@ -46,9 +46,8 @@
  * `register_path("/users/{id}")` matches `/users/42` but NOT
  * `/users/42/profile`.
  *
- * Templated unique_ptr<T> shim funnels into the shared_ptr overload
- * exactly the way TASK-023's pattern does, so calls with derived
- * types resolve unambiguously.
+ * Accepts a derived resource type; ownership is transferred to the
+ * webserver. Calls with derived types resolve unambiguously.
  *
  * Throws std::invalid_argument if the resource pointer is null,
  * if the path conflicts with single_resource mode (single_resource
@@ -91,8 +90,15 @@ void register_path(const std::string& path,
  * `register_prefix("/static")` matches `/static`, `/static/x`,
  * `/static/anything/here`, etc.
  *
- * Templated unique_ptr<T> shim funnels into the shared_ptr overload
- * exactly the way TASK-023's pattern does.
+ * Accepts a derived resource type; ownership is transferred to the
+ * webserver.
+ *
+ * **Catch-all semantics:** `register_prefix("")` or
+ * `register_prefix("/")` registers a catch-all handler that matches
+ * every URL not covered by a more specific registration. This is
+ * intentional but can be surprising — ensure it is what you want
+ * before registering an empty or bare root prefix outside of
+ * single_resource mode.
  *
  * Throws std::invalid_argument if the resource pointer is null,
  * or if a resource is already registered at the same path.
@@ -122,10 +128,8 @@ void register_prefix(const std::string& path,
                      std::shared_ptr<http_resource> res);
 
 /**
- * Deprecated alias for register_path. Forwards to register_path so
- * existing TASK-023-era call sites keep compiling. The 3-arg
- * `bool family` overload from before TASK-024 has been removed --
- * use register_prefix() for prefix matching instead.
+ * Deprecated alias for register_path(). Kept for backward compatibility;
+ * use register_path() for exact match or register_prefix() for prefix match.
  *
  * @param path The url pointing to the resource.
  * @param res  unique_ptr to the http_resource (or any derived type).

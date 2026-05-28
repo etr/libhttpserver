@@ -86,6 +86,7 @@ struct fetch_result {
 fetch_result fetch(const std::string& url) {
     fetch_result fr{0, {}};
     CURL* curl = curl_easy_init();
+    if (!curl) return fr;
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
@@ -269,22 +270,46 @@ LT_END_AUTO_TEST(register_path_then_unregister_path_404s)
 // assertion well-defined.
 LT_BEGIN_AUTO_TEST(webserver_register_path_prefix_suite,
                    unregister_resource_alias_handles_both_kinds)
+    // Arrange: two different URLs, one registered as prefix and one as exact.
     webserver ws{create_webserver(PORT + 5)};
     ws.register_prefix("/p", std::make_shared<ok_resource>());
     ws.register_path("/x", std::make_shared<ok_resource>());
     ws.start(false);
 
+    // Assert (before): both are reachable before any unregister call.
     LT_CHECK_EQ(fetch("localhost:8185/p/child").response_code, 200);
     LT_CHECK_EQ(fetch("localhost:8185/x").response_code, 200);
 
+    // Act: unregister_resource removes whichever kind is registered.
     ws.unregister_resource("/p");
     ws.unregister_resource("/x");
 
+    // Assert (after): both routes are gone.
     LT_CHECK_EQ(fetch("localhost:8185/p/child").response_code, 404);
     LT_CHECK_EQ(fetch("localhost:8185/x").response_code, 404);
 
     ws.stop();
 LT_END_AUTO_TEST(unregister_resource_alias_handles_both_kinds)
+
+// The deprecated register_resource(path, ptr) forwarder must still compile
+// and behave like register_path (exact match, no longer-URL match).
+// Suppress the deprecation warning locally so the test binary still
+// builds with -Werror.
+LT_BEGIN_AUTO_TEST(webserver_register_path_prefix_suite,
+                   register_resource_deprecated_forwarder_behaves_like_register_path)
+    webserver ws{create_webserver(PORT + 6)};
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+    ws.register_resource("/d", std::make_shared<ok_resource>());
+#pragma GCC diagnostic pop
+    ws.start(false);
+
+    LT_CHECK_EQ(fetch("localhost:8186/d").response_code, 200);
+    // Exact-match behaviour: a longer URL must 404.
+    LT_CHECK_EQ(fetch("localhost:8186/d/extra").response_code, 404);
+
+    ws.stop();
+LT_END_AUTO_TEST(register_resource_deprecated_forwarder_behaves_like_register_path)
 
 // unregister_resource on a path registered as BOTH prefix and exact must
 // remove BOTH entries in a single call. After the call, neither the exact
@@ -313,26 +338,6 @@ LT_BEGIN_AUTO_TEST(webserver_register_path_prefix_suite,
 
     ws.stop();
 LT_END_AUTO_TEST(unregister_resource_removes_both_path_and_prefix_registrations)
-
-// The deprecated register_resource(path, ptr) forwarder must still compile
-// and behave like register_path (exact match, no longer-URL match).
-// Suppress the deprecation warning locally so the test binary still
-// builds with -Werror.
-LT_BEGIN_AUTO_TEST(webserver_register_path_prefix_suite,
-                   register_resource_deprecated_forwarder_behaves_like_register_path)
-    webserver ws{create_webserver(PORT + 6)};
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-    ws.register_resource("/d", std::make_shared<ok_resource>());
-#pragma GCC diagnostic pop
-    ws.start(false);
-
-    LT_CHECK_EQ(fetch("localhost:8186/d").response_code, 200);
-    // Exact-match behaviour: a longer URL must 404.
-    LT_CHECK_EQ(fetch("localhost:8186/d/extra").response_code, 404);
-
-    ws.stop();
-LT_END_AUTO_TEST(register_resource_deprecated_forwarder_behaves_like_register_path)
 
 // ---- normalize_path / should_skip_auth (finding test-quality-reviewer-iter1-2) ---
 //
@@ -440,6 +445,98 @@ LT_BEGIN_AUTO_TEST(webserver_register_path_prefix_suite,
 
     ws.stop();
 LT_END_AUTO_TEST(auth_skip_excess_dot_dot_clamps_to_root)
+
+// ---- unique_ptr ownership-transfer runtime tests (finding test-quality-reviewer-iter1-1) ---
+//
+// The static_asserts above verify that the unique_ptr overloads exist and
+// return void. These runtime tests verify that ownership is actually
+// transferred — i.e., the resource is correctly served through the
+// webserver after the unique_ptr is moved in. Mirrors the
+// unique_ptr_overload_compiles_and_serves test in
+// webserver_register_smartptr_test.cpp for the new register_path /
+// register_prefix API surface.
+
+LT_BEGIN_AUTO_TEST(webserver_register_path_prefix_suite,
+                   register_path_unique_ptr_transfers_ownership_and_serves)
+    webserver ws{create_webserver(PORT + 13)};
+    // Arrange: move a unique_ptr into register_path.
+    ws.register_path("/up", std::make_unique<ok_resource>());
+    ws.start(false);
+
+    // Assert: the resource is served at its exact path.
+    LT_CHECK_EQ(fetch("localhost:8193/up").response_code, 200);
+    LT_CHECK_EQ(fetch("localhost:8193/up").body, std::string("OK"));
+    // Exact-match only: a child URL must 404.
+    LT_CHECK_EQ(fetch("localhost:8193/up/child").response_code, 404);
+
+    ws.stop();
+LT_END_AUTO_TEST(register_path_unique_ptr_transfers_ownership_and_serves)
+
+LT_BEGIN_AUTO_TEST(webserver_register_path_prefix_suite,
+                   register_prefix_unique_ptr_transfers_ownership_and_serves)
+    webserver ws{create_webserver(PORT + 14)};
+    // Arrange: move a unique_ptr into register_prefix.
+    ws.register_prefix("/pfx", std::make_unique<ok_resource>());
+    ws.start(false);
+
+    // Assert: the resource is served at the registered path and children.
+    LT_CHECK_EQ(fetch("localhost:8194/pfx").response_code, 200);
+    LT_CHECK_EQ(fetch("localhost:8194/pfx/child/deep").response_code, 200);
+    LT_CHECK_EQ(fetch("localhost:8194/pfx/child/deep").body, std::string("OK"));
+
+    ws.stop();
+LT_END_AUTO_TEST(register_prefix_unique_ptr_transfers_ownership_and_serves)
+
+// ---- Error-path tests for register_prefix (findings 9 / 32) -------------
+//
+// register_resource (deprecated alias) is tested for null / duplicate in
+// webserver_register_smartptr_test.cpp. The tests below pin the same
+// invariants on the new register_prefix API surface so this TU is
+// self-contained.
+
+LT_BEGIN_AUTO_TEST(webserver_register_path_prefix_suite,
+                   register_prefix_null_shared_ptr_throws)
+    webserver ws{create_webserver(PORT + 15)};
+    // Passing a null shared_ptr must throw std::invalid_argument.
+    LT_CHECK_THROW(ws.register_prefix("/null", std::shared_ptr<http_resource>{}));
+LT_END_AUTO_TEST(register_prefix_null_shared_ptr_throws)
+
+LT_BEGIN_AUTO_TEST(webserver_register_path_prefix_suite,
+                   register_prefix_duplicate_throws)
+    webserver ws{create_webserver(PORT + 16)};
+    ws.register_prefix("/dup", std::make_shared<ok_resource>());
+    // A second register_prefix on the same path must throw.
+    LT_CHECK_THROW(ws.register_prefix("/dup", std::make_shared<ok_resource>()));
+LT_END_AUTO_TEST(register_prefix_duplicate_throws)
+
+// ---- Cross-kind selectivity test (finding test-quality-reviewer-iter1-3) ---
+//
+// unregister_path must remove only the exact registration on a path;
+// a prefix registration at the same path must survive and continue serving
+// child URLs. Likewise (by symmetry) unregister_prefix must leave the
+// exact registration intact. This pins the isolation invariant between
+// the two registration kinds.
+
+LT_BEGIN_AUTO_TEST(webserver_register_path_prefix_suite,
+                   unregister_path_leaves_prefix_registration_intact)
+    webserver ws{create_webserver(PORT + 17)};
+    // Arrange: same path registered as both exact and prefix.
+    ws.register_path("/q", std::make_shared<ok_resource>());
+    ws.register_prefix("/q", std::make_shared<ok_resource>());
+    ws.start(false);
+
+    // Assert (before): exact URL and child URL both served.
+    LT_CHECK_EQ(fetch("localhost:8197/q").response_code, 200);
+    LT_CHECK_EQ(fetch("localhost:8197/q/child").response_code, 200);
+
+    // Act: remove only the exact registration.
+    ws.unregister_path("/q");
+
+    // Assert (after): child URL via prefix registration still served.
+    LT_CHECK_EQ(fetch("localhost:8197/q/child").response_code, 200);
+
+    ws.stop();
+LT_END_AUTO_TEST(unregister_path_leaves_prefix_registration_intact)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

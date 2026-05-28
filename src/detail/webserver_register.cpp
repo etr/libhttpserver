@@ -97,10 +97,10 @@ using detail::route_tier_result;
 
 // ----- Resource registration --------------------------------------------
 
-// TASK-024: register_path / register_prefix split. Both public methods
-// funnel into this private helper, which carries the validation and
-// insertion logic. Keeping the work in one place prevents drift between
-// the two registration kinds.
+// register_path / register_prefix split. Both public methods funnel into
+// this private helper, which carries the validation and insertion logic.
+// Keeping the work in one place prevents drift between the two registration
+// kinds.
 void webserver::register_impl_(const std::string& resource,
                                std::shared_ptr<http_resource> res,
                                bool family) {
@@ -137,6 +137,9 @@ void webserver::register_impl_(const std::string& resource,
             {idx.get_url_complete(), result.first->second});
     }
     if (idx.is_regex_compiled()) {
+        // res is also passed to register_v2_route below; copy the shared_ptr
+        // here (one extra ref-count increment) rather than moving it, since
+        // shared_ptr copies are cheaper than the regex scan they help avoid.
         impl_->registered_resources_regex.insert({idx, res});
     }
     // Release the write lock before invalidating the cache.
@@ -145,6 +148,12 @@ void webserver::register_impl_(const std::string& resource,
     // lock order documented in webserver_impl.hpp (cache mutex is always
     // acquired AFTER table mutex, never while table mutex is held).
     registered_resources_lock.unlock();
+    // Unlocking before invalidate_route_cache() is intentional: it preserves
+    // lock-order discipline (registered_resources_mutex released before
+    // route_cache_mutex_ is acquired inside invalidate_route_cache).
+    // A reader can transiently see the new entry without a warm cache, causing
+    // one extra regex scan on the first hit. This is a harmless read-stale
+    // effect — the resource is already visible to readers under the shared lock.
 
     impl_->register_v2_route(idx, std::move(res), family);
     impl_->invalidate_route_cache();
@@ -199,25 +208,23 @@ void webserver::register_prefix(const std::string& path,
     register_impl_(path, std::move(res), /*family=*/true);
 }
 
-// Deprecated TASK-023-era forwarder. The 3-arg `bool family` overload is
-// gone; users that wanted prefix matching must migrate to
-// register_prefix.
+// Deprecated forwarder kept for backward compatibility. Users that want
+// prefix matching must call register_prefix().
 void webserver::register_resource(const std::string& resource,
                                   std::shared_ptr<http_resource> res) {
     register_path(resource, std::move(res));
 }
 
-// TASK-025/TASK-026: lambda registration plumbing.
-//
-// All seven public on_* overloads and both public route() overloads
-// forward to on_methods_, which:
-//   1. Validates the handler, the method set (non-empty, no count_
 void webserver::unregister_impl_(const string& resource, bool family) {
     detail::http_endpoint he(resource, family, true, regex_checking);
 
     {
         std::unique_lock registered_resources_lock(impl_->registered_resources_mutex);
         impl_->registered_resources.erase(he);
+        // Prefix routes are never stored in the regex chain (only paths with
+        // regex metacharacters go there, and register_prefix does not set
+        // is_regex_compiled). The erase below is therefore a safe no-op for
+        // the family=true path but is harmless to call unconditionally.
         impl_->registered_resources_regex.erase(he);
         // The string-keyed fast-path map only ever holds exact (non-family)
         // entries (see register_impl_). A prefix unregister has nothing to
@@ -227,9 +234,11 @@ void webserver::unregister_impl_(const string& resource, bool family) {
         }
     }
 
-    // TASK-027: mirror the erasure into the v2 3-tier table. Lock order:
-    // registered_resources_mutex released above; take route_table_mutex_
-    // next, then invalidate_route_cache() takes route_cache_mutex_.
+    // TASK-027: mirror the erasure into the v2 3-tier table.
+    // Lock ordering: registered_resources_mutex (released above) ->
+    // route_table_mutex_ -> route_cache_mutex_ (inside invalidate_route_cache).
+    // Do not acquire route_cache_mutex_ without holding route_table_mutex_ or
+    // registered_resources_mutex first.
     // This matches the pattern used in register_impl_ / on_methods_:
     // table lock released before cache is cleared.
     {
@@ -268,9 +277,10 @@ void webserver::unregister_resource(const string& resource) {
     detail::http_endpoint he_prefix(resource, /*family=*/true,  true, regex_checking);
 
     {
-        // Hold a single write-lock across both v1 erasures so no request thread
-        // can observe a partially-unregistered state (CWE-367 TOCTOU fix: the
-        // exact entry and the prefix entry are removed atomically).
+        // Hold a single write-lock across both v1 erasures AND the cache
+        // key removal below so no request thread can observe a
+        // partially-unregistered state (CWE-367 TOCTOU fix: the exact entry
+        // and the prefix entry are removed atomically).
         std::unique_lock registered_resources_lock(impl_->registered_resources_mutex);
         impl_->registered_resources.erase(he_exact);
         impl_->registered_resources.erase(he_prefix);
