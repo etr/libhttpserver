@@ -118,8 +118,8 @@ namespace {
 // set in @p methods, invoking @p fn for each. Used by the on_methods_
 // pre-check loop and the commit loop; pulling the scaffolding into a
 // single helper dedupes the iteration boilerplate. The order matches
-// http_method::count_'s enum order (TASK-021), which is also the
-// serialization order for the `Allow:` header.
+// http_method enum-declaration order, which is also the serialization
+// order for the `Allow:` header.
 template <typename Fn>
 void for_each_requested_method(method_set methods, Fn&& fn) {
     for (std::uint8_t i = 0;

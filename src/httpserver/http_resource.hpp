@@ -326,12 +326,11 @@ class http_resource {
 #endif
 };
 
-// TASK-021 acceptance: http_resource was a vptr plus a 32-bit method_set
-// plus padding. TASK-051 added one `shared_ptr<resource_hook_table>` to
-// host the per-resource hook table PIMPL; the cap below reflects the
-// growth (vptr + shared_ptr + method_set + padding). Documented growth,
-// not silent drift -- PRD-REQ-REQ-002 / PRD-REQ-REQ-003 still hold (the
-// v1 std::map cost was much larger than this single shared_ptr slot).
+// Ensure http_resource stays small enough for stack allocation in hot paths.
+// Originally vptr + uint32_t method_set + padding; the per-resource hook
+// table PIMPL (shared_ptr<resource_hook_table>) was added later, growing the
+// cap to vptr + shared_ptr + method_set + padding. The v1 std::map-based
+// allow-list was much larger; this bound documents intentional, measured growth.
 static_assert(sizeof(http_resource) <=
                   sizeof(void*) * 3 + sizeof(method_set) * 2,
               "http_resource should be approximately vptr + shared_ptr + "

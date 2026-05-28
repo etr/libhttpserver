@@ -250,7 +250,7 @@ LT_BEGIN_AUTO_TEST(webserver_route_suite,
     LT_CHECK_EQ(post.response_code, 405);
     // Enum order is HEAD before GET? No: get=0, head=1, so 'get' fires
     // first in the enum sweep, then 'head'. Allow lists in that order.
-    // (Matches TASK-021 / TASK-025 contract.)
+    // (Enum-declaration order: GET before HEAD per http_method enum.)
     LT_CHECK_EQ(post.allow_header, std::string("GET, HEAD"));
 
     ws.stop();

@@ -40,13 +40,11 @@ class simple_resource : public http_resource {
      }
 };
 
-// TASK-021 acceptance: http_resource shrinks by at least the cost of
-// an empty std::map<std::string, bool>. Empty std::map is typically
-// ~48 bytes on libstdc++/libc++; the v1 resource was ~56-64 bytes.
-// The new resource is just vptr + uint32_t + padding, so a generous
-// 32-byte ceiling cleanly distinguishes the new layout from the old.
-// TASK-039 will measure formally; this assertion makes the shrink
-// observable now.
+// http_resource should be smaller than a map-based v1 resource
+// (vptr + uint32_t + padding). Empty std::map is typically ~48 bytes
+// on libstdc++/libc++; the v1 resource was ~56-64 bytes. The new
+// resource is just vptr + uint32_t + padding, so a generous 32-byte
+// ceiling cleanly distinguishes the new layout from the old.
 static_assert(sizeof(http_resource) <= 32,
               "http_resource should be vptr + method_set padding");
 

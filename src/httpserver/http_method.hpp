@@ -129,7 +129,7 @@ constexpr std::string_view to_string(http_method m) noexcept {
     // Indexed by the underlying enum value (0..count_-1). Out-of-range
     // values (only producible via static_cast) return an empty view.
     // The order MUST stay aligned with the http_method enum declaration
-    // (TASK-021); a static_assert on count_ catches drift.
+    // a static_assert on count_ catches drift.
     constexpr std::array<std::string_view, static_cast<std::size_t>(http_method::count_)> names{
         std::string_view{"GET"},
         std::string_view{"HEAD"},
