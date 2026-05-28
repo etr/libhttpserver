@@ -58,11 +58,14 @@ namespace detail {
 // it without picking up a TU boundary; previously a static helper in an
 // anonymous namespace inside webserver.cpp, lifted here when the file was
 // decomposed.
-enum class route_tier_kind { exact, radix, regex_ };
+// 'pattern' names the regex tier — avoids the trailing underscore that was
+// needed to escape the reserved token 'regex'. The label is self-describing:
+// routes in this tier match by compiled regex pattern. (finding #4)
+enum class route_tier_kind { exact, radix, pattern };
 
 struct route_tier_result {
     route_tier_kind kind = route_tier_kind::exact;
-    std::optional<std::regex> re;  // populated iff kind == regex_
+    std::optional<std::regex> re;  // populated iff kind == pattern
 };
 
 inline route_tier_result classify_route_tier(const detail::http_endpoint& idx) {
@@ -94,7 +97,7 @@ inline route_tier_result classify_route_tier(const detail::http_endpoint& idx) {
         if (std::regex_match(idx.get_url_complete(), re)) {
             res.kind = route_tier_kind::exact;
         } else {
-            res.kind = route_tier_kind::regex_;
+            res.kind = route_tier_kind::pattern;
             res.re   = std::move(re);
         }
         return res;

@@ -191,7 +191,7 @@ void webserver_impl::insert_fresh_v1_entries(const detail::http_endpoint& idx,
     }
 }
 
-void webserver_impl::upsert_v2_param_route(const std::string& key,
+void webserver_impl::upsert_v2_radix_route(const std::string& key,
         method_set methods, std::shared_ptr<http_resource> shim) {
     // Read-merge-reinsert: radix_tree::insert always overwrites the
     // terminus, so we must fold any existing entry's methods in first.
@@ -213,7 +213,7 @@ void webserver_impl::insert_fresh_v2_entry(const detail::http_endpoint& idx,
     switch (tier.kind) {
     case route_tier_kind::radix:
         // Unreachable: upsert_v2_table_entry routes url_pars-non-empty paths
-        // through upsert_v2_param_route before calling insert_fresh_v2_entry.
+        // through upsert_v2_radix_route before calling insert_fresh_v2_entry.
         __builtin_unreachable();
         break;
     case route_tier_kind::exact: {
@@ -221,7 +221,7 @@ void webserver_impl::insert_fresh_v2_entry(const detail::http_endpoint& idx,
         exact_routes_.emplace(idx.get_url_complete(), std::move(entry));
         break;
     }
-    case route_tier_kind::regex_: {
+    case route_tier_kind::pattern: {
         detail::route_entry entry{methods, std::move(shim), /*is_prefix=*/false};
         regex_routes_.push_back(
             {idx.get_url_complete(), std::move(*tier.re), std::move(entry)});
@@ -265,7 +265,7 @@ void webserver_impl::upsert_v2_table_entry(const detail::http_endpoint& idx,
     std::unique_lock table_lock(route_table_mutex_);
     const std::string& key = idx.get_url_complete();
     if (!idx.get_url_pars().empty()) {
-        upsert_v2_param_route(key, methods, std::move(shim));
+        upsert_v2_radix_route(key, methods, std::move(shim));
     } else if (fresh) {
         insert_fresh_v2_entry(idx, methods, std::move(shim));
     } else {

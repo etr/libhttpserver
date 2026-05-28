@@ -167,7 +167,7 @@ void webserver_impl::register_v2_route(const detail::http_endpoint& idx,
         param_and_prefix_routes_.insert(idx.get_url_complete(), std::move(entry),
                                         /*is_prefix=*/false);
         break;
-    case route_tier_kind::regex_:
+    case route_tier_kind::pattern:
         regex_routes_.push_back(
             {idx.get_url_complete(), std::move(*tier.re), std::move(entry)});
         break;

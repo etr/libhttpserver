@@ -283,6 +283,14 @@ const std::string http_utils::generate_random_upload_filename(const std::string&
 std::string http_utils::sanitize_upload_filename(const std::string& filename) {
     if (filename.empty()) return "";
 
+    // Reject filenames containing embedded null bytes. A name like
+    // "foo.txt\x00.php" would be silently truncated at the null when the
+    // concatenated path is passed to std::ofstream::open() (which calls
+    // c_str() and hands a const char* to the OS open() syscall), creating
+    // a file at the truncated location rather than the full path.
+    // (CWE-626 / null-byte injection, security finding #12)
+    if (filename.find('\0') != std::string::npos) return "";
+
     // Find the basename: take everything after the last '/' or '\'
     std::string::size_type pos = filename.find_last_of("/\\");
     std::string basename = (pos != std::string::npos) ? filename.substr(pos + 1) : filename;

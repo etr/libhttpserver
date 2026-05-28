@@ -113,6 +113,12 @@ static void send_control_frame(control_frame_encoder encode,
     if (encode(ws_stream, payload.c_str(), payload.size(), &frame, &frame_len) == MHD_WEBSOCKET_STATUS_OK) {
         if (!send_all(sock, frame, frame_len)) valid = false;
         MHD_websocket_free(ws_stream, frame);
+    } else {
+        // Encode failure (e.g. stream already in error state): treat as a
+        // closed session so callers stop issuing further frames on this
+        // connection. Previously encode failures were silently swallowed,
+        // leaving valid==true despite a broken stream. (finding #2)
+        valid = false;
     }
 }
 
