@@ -24,6 +24,7 @@
 #include <direct.h>
 #define MKDIR(path) _mkdir(path)
 #else
+#include <unistd.h>  // TASK-020: unlink/rmdir; previously reachable transitively via <httpserver.hpp> -> <sys/socket.h>
 #define MKDIR(path) mkdir(path, 0755)
 #endif
 #include <cassert>
@@ -43,6 +44,7 @@
 #include "./httpserver.hpp"
 #include "httpserver/string_utilities.hpp"
 #include "./littletest.hpp"
+#include "./test_utils.hpp"
 
 using std::string;
 using std::string_view;
@@ -54,8 +56,6 @@ using std::stringstream;
 using httpserver::http_resource;
 using httpserver::http_request;
 using httpserver::http_response;
-using httpserver::string_response;
-using httpserver::file_response;
 using httpserver::webserver;
 using httpserver::create_webserver;
 using httpserver::http::arg_map;
@@ -251,30 +251,35 @@ static std::tuple<bool, CURLcode, int32_t> send_file_via_put() {
 
 class print_file_upload_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_POST(const http_request& req) {
+     http_response render_post(const http_request& req) {
          content = req.get_content();
-         auto args_view = req.get_args();
-         // req may go out of scope, so we need to copy the values.
+         // TASK-017: get_args() now returns a const& -- read-only iteration
+         // here, so bind by const reference. The body still copies into the
+         // owning `args` member because req goes out of scope after render.
+         const auto& args_view = req.get_args();
          for (auto const& item : args_view) {
             for (auto const & value : item.second.get_all_values()) {
                 args[string(item.first)].push_back(string(value));
             }
          }
+         // Deliberate copy: req goes out of scope after render() returns,
+         // so we snapshot the file table into the resource's owning member.
          files = req.get_files();
-         return std::make_shared<string_response>("OK", 201, "text/plain");
+         return http_response::string("OK").with_status(201);
      }
 
-     shared_ptr<http_response> render_PUT(const http_request& req) {
+     http_response render_put(const http_request& req) {
          content = req.get_content();
-         auto args_view = req.get_args();
-         // req may go out of scope, so we need to copy the values.
+         const auto& args_view = req.get_args();
          for (auto const& item : args_view) {
             for (auto const & value : item.second.get_all_values()) {
                 args[string(item.first)].push_back(string(value));
             }
          }
+         // Deliberate copy: req goes out of scope after render() returns,
+         // so we snapshot the file table into the resource's owning member.
          files = req.get_files();
-         return std::make_shared<string_response>("OK", 200, "text/plain");
+         return http_response::string("OK");
      }
 
      const std::map<string, std::vector<string>, httpserver::http::arg_comparator> get_args() const {
@@ -327,7 +332,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+    ws->register_path("upload", as_shared(resource));
 
     auto res = send_file_to_webserver(false, false);
     LT_ASSERT_EQ(res.first, 0);
@@ -375,7 +380,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_via_put)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+    ws->register_path("upload", as_shared(resource));
 
     auto ret = send_file_via_put();
     LT_CHECK_EQ(std::get<1>(ret), 0);
@@ -406,7 +411,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_additional_par
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+    ws->register_path("upload", as_shared(resource));
 
     auto res = send_file_to_webserver(false, true);
     LT_ASSERT_EQ(res.first, 0);
@@ -459,7 +464,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_two_files)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+    ws->register_path("upload", as_shared(resource));
 
     auto res = send_file_to_webserver(true, false);
     LT_ASSERT_EQ(res.first, 0);
@@ -519,7 +524,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_disk_only)
     string upload_directory = ".";
 
     auto ws = std::make_unique<webserver>(create_webserver(PORT)
-                       .no_put_processed_data_to_content()
+                       .put_processed_data_to_content(false)
                        .file_upload_target(httpserver::FILE_UPLOAD_DISK_ONLY)
                        .file_upload_dir(upload_directory)
                        .generate_random_filename_on_upload());
@@ -527,7 +532,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_disk_only)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+    ws->register_path("upload", as_shared(resource));
 
     auto res = send_file_to_webserver(false, false);
     LT_ASSERT_EQ(res.first, 0);
@@ -567,7 +572,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_only_incl_content)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+    ws->register_path("upload", as_shared(resource));
 
     auto res = send_file_to_webserver(false, false);
     LT_ASSERT_EQ(res.first, 0);
@@ -597,7 +602,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_large_content)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+    ws->register_path("upload", as_shared(resource));
 
     // Upload a large file to trigger the chunking behavior of MHD.
     std::string file_content;
@@ -634,7 +639,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_large_content_with_args)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+    ws->register_path("upload", as_shared(resource));
 
     // Upload a large file to trigger the chunking behavior of MHD.
     // Include some additional args to make sure those are processed as well.
@@ -671,13 +676,13 @@ LT_END_AUTO_TEST(file_upload_large_content_with_args)
 
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_only_excl_content)
     auto ws = std::make_unique<webserver>(create_webserver(PORT)
-                       .no_put_processed_data_to_content()
+                       .put_processed_data_to_content(false)
                        .file_upload_target(httpserver::FILE_UPLOAD_MEMORY_ONLY));
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+    ws->register_path("upload", as_shared(resource));
 
     auto res = send_file_to_webserver(false, false);
     LT_ASSERT_EQ(res.first, 0);
@@ -720,7 +725,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_cleanup_callback_returns_true)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+    ws->register_path("upload", as_shared(resource));
 
     auto res = send_file_to_webserver(false, false);
     LT_ASSERT_EQ(res.first, 0);
@@ -763,7 +768,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_cleanup_callback_returns_false)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+    ws->register_path("upload", as_shared(resource));
 
     auto res = send_file_to_webserver(false, false);
     LT_ASSERT_EQ(res.first, 0);
@@ -804,7 +809,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_cleanup_callback_selective)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+    ws->register_path("upload", as_shared(resource));
 
     // Upload two files
     auto res = send_file_to_webserver(true, false);
@@ -850,7 +855,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_cleanup_callback_throws)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+    ws->register_path("upload", as_shared(resource));
 
     auto res = send_file_to_webserver(false, false);
     LT_ASSERT_EQ(res.first, 0);
@@ -878,7 +883,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_cleanup_no_callback_deletes)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+    ws->register_path("upload", as_shared(resource));
 
     auto res = send_file_to_webserver(false, false);
     LT_ASSERT_EQ(res.first, 0);
@@ -907,7 +912,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_original_filename)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+    ws->register_path("upload", as_shared(resource));
 
     auto res = send_file_to_webserver(false, false);
     LT_ASSERT_EQ(res.first, 0);
@@ -942,7 +947,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_with_content_type)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+    ws->register_path("upload", as_shared(resource));
 
     // Send file with explicit content-type "text/plain"
     auto res = send_file_with_content_type(port, "text/plain");
@@ -1005,7 +1010,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_path_traversal_rejected)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+    ws->register_path("upload", as_shared(resource));
 
     // Attempt path traversal with "../escape"
     send_file_with_traversal_name(port, "../escape");
@@ -1033,7 +1038,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_sanitize_keeps_basename)
     LT_CHECK_EQ(ws->is_running(), true);
 
     print_file_upload_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("upload", &resource));
+    ws->register_path("upload", as_shared(resource));
 
     // Upload with a path-like filename — should strip to just "myfile.txt"
     auto res = send_file_with_traversal_name(port, "some/path/myfile.txt");

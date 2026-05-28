@@ -1,6 +1,6 @@
 /*
      This file is part of libhttpserver
-     Copyright (C) 2011, 2012, 2013, 2014, 2015 Sebastiano Merlino
+     Copyright (C) 2011-2025 Sebastiano Merlino
 
      This library is free software; you can redistribute it and/or
      modify it under the terms of the GNU Lesser General Public
@@ -18,25 +18,23 @@
      USA
 */
 
-#include <memory>
+// minimal_ip_ban.cpp - demonstrate the v2.0 IP block API.
+//
+// TASK-029: the v2.0 public IP-control surface is the pair block_ip /
+// unblock_ip, usable under the default ACCEPT policy. The historical
+// allow_ip / disallow_ip pair (under REJECT) was dropped.
 
 #include <httpserver.hpp>
 
-class hello_world_resource : public httpserver::http_resource {
- public:
-     std::shared_ptr<httpserver::http_response> render(const httpserver::http_request&) {
-         return std::shared_ptr<httpserver::http_response>(new httpserver::string_response("Hello, World!"));
-     }
-};
-
 int main() {
-    httpserver::webserver ws = httpserver::create_webserver(8080).default_policy(httpserver::http::http_utils::REJECT);
+    httpserver::webserver ws{httpserver::create_webserver(8080)};
 
-    ws.allow_ip("127.0.0.1");
+    ws.block_ip("10.0.0.1");
 
-    hello_world_resource hwr;
-    ws.register_resource("/hello", &hwr);
+    ws.on_get("/hello", [](const httpserver::http_request&) {
+        return httpserver::http_response::string("Hello, World!");
+    });
+
     ws.start(true);
-
     return 0;
 }

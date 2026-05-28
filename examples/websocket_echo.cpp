@@ -19,6 +19,7 @@
 */
 
 #include <iostream>
+#include <memory>
 #include <string>
 #include <string_view>
 
@@ -33,7 +34,11 @@ class echo_handler : public httpserver::websocket_handler {
 
      void on_message(httpserver::websocket_session& session, std::string_view msg) override {
          std::cout << "Received: " << msg << std::endl;
-         session.send_text("Echo: " + std::string(msg));
+         std::string reply;
+         reply.reserve(6 + msg.size());
+         reply = "Echo: ";
+         reply += msg;
+         session.send_text(reply);
      }
 
      void on_close(httpserver::websocket_session& session, uint16_t code, const std::string& reason) override {
@@ -42,10 +47,12 @@ class echo_handler : public httpserver::websocket_handler {
 };
 
 int main() {
-    httpserver::webserver ws = httpserver::create_webserver(8080);
+    httpserver::webserver ws{httpserver::create_webserver(8080)};
 
-    echo_handler handler;
-    ws.register_ws_resource("/ws", &handler);
+    // TASK-035: smart-pointer ownership. The webserver takes ownership
+    // of the echo_handler via unique_ptr; its dtor runs when the
+    // webserver is destroyed.
+    ws.register_ws_resource("/ws", std::make_unique<echo_handler>());
     ws.start(true);
 
     return 0;

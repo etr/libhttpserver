@@ -1,5 +1,6 @@
 *.sw*
 *.*~
+*~
 *.in
 *.php
 *.pm
@@ -60,3 +61,5 @@ libtool
 .worktrees
 .claude
 CLAUDE.md
+.groundwork-plans/
+.DS_Store

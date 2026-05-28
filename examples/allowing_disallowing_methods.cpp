@@ -22,20 +22,25 @@
 
 #include <httpserver.hpp>
 
+// The class form is required here: disallow_all() and set_allowing() are
+// methods on http_resource that control which HTTP methods are accepted.
+// Lambda-registered routes (ws.on_get / ws.on_post / etc.) target a single
+// method by construction and do not expose these per-resource controls.
+// Use the class form whenever you need fine-grained per-instance method ACLs.
 class hello_world_resource : public httpserver::http_resource {
  public:
-     std::shared_ptr<httpserver::http_response> render(const httpserver::http_request&) {
-         return std::shared_ptr<httpserver::http_response>(new httpserver::string_response("Hello, World!"));
+     httpserver::http_response render(const httpserver::http_request&) override {
+         return httpserver::http_response::string("Hello, World!");
      }
 };
 
 int main() {
-    httpserver::webserver ws = httpserver::create_webserver(8080);
+    httpserver::webserver ws{httpserver::create_webserver(8080)};
 
-    hello_world_resource hwr;
-    hwr.disallow_all();
-    hwr.set_allowing("GET", true);
-    ws.register_resource("/hello", &hwr);
+    auto hwr = std::make_shared<hello_world_resource>();
+    hwr->disallow_all();
+    hwr->set_allowing(httpserver::http_method::get, true);
+    ws.register_path("/hello", hwr);
     ws.start(true);
 
     return 0;

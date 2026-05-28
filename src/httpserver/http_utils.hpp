@@ -25,9 +25,18 @@
 #ifndef SRC_HTTPSERVER_HTTP_UTILS_HPP_
 #define SRC_HTTPSERVER_HTTP_UTILS_HPP_
 
-#ifdef HAVE_GNUTLS
-#include <gnutls/gnutls.h>
-#endif
+// TASK-019 / TASK-020: backend headers (libmicrohttpd, GnuTLS, BSD-socket)
+// are deliberately NOT included from this public header.
+// The enums declared below previously took their integer values from
+// upstream macros (MHD_USE_*, MHD_DIGEST_AUTH_ALGO3_*, MHD_DAUTH_*,
+// GNUTLS_CRD_*), dragging the backend headers through the umbrella to
+// every downstream consumer. Those values are now hard-coded to match
+// the stable upstream ABI; static_assert blocks in src/webserver.cpp
+// and src/http_request.cpp (where the upstream headers are reachable)
+// pin the enum values to the upstream macros so any renumber breaks
+// the build at the right place. `struct sockaddr` is forward-declared
+// at file scope; the implementations live in src/http_utils.cpp where
+// the BSD-socket header is included directly.
 
 // needed to force Vista as a bare minimum to have inet_ntop (libmicro defines
 // this to include XP support as a lower version).
@@ -37,17 +46,8 @@
 #define _WIN32_WINNT 0x600
 #endif
 
-// needed to have the fd_set definition ahead of microhttpd.h import
-#if defined(__CYGWIN__)
-#include <sys/select.h>
-#endif
-
-#include <microhttpd.h>
 #include <stddef.h>
-
-#if !defined(__MINGW32__)
-#include <sys/socket.h>
-#endif
+#include <stdint.h>
 
 #include <algorithm>
 #include <cctype>
@@ -56,10 +56,15 @@
 #include <string>
 #include <vector>
 
+#include "httpserver/constants.hpp"
 #include "httpserver/http_arg_value.hpp"
 
-#define DEFAULT_MASK_VALUE 0xFFFF
-
+// Forward-declare the BSD-socket address family. Only pointer-to-incomplete
+// uses appear in this header; the .cpp side includes the BSD-socket header
+// directly. MinGW/Windows uses winsock2.h; the same forward declaration is
+// valid there since the canonical name `struct sockaddr` is the same across
+// POSIX and Win32.
+struct sockaddr;
 
 namespace httpserver {
 
@@ -88,21 +93,33 @@ struct generateFilenameException : public std::exception {
 
 class http_utils {
  public:
+     // TASK-019: hard-coded values matching gnutls_credentials_type_t
+     // (a stable public ABI). Values pinned to the GnuTLS macros via
+     // static_assert in src/webserver.cpp so an upstream renumber would
+     // break the build. The enum is unconditional (PRD-FLG-REQ-001
+     // forbids gating public-header declarations on HAVE_GNUTLS); when
+     // GnuTLS is disabled at build time, selecting one of these via
+     // create_webserver().cred_type(...) hits the existing
+     // feature-unavailable path on use_ssl(true).
      enum cred_type_T {
-         NONE = -1
-#ifdef HAVE_GNUTLS
-         , CERTIFICATE = GNUTLS_CRD_CERTIFICATE,
-         ANON = GNUTLS_CRD_ANON,
-         SRP = GNUTLS_CRD_SRP,
-         PSK = GNUTLS_CRD_PSK,
-         IA = GNUTLS_CRD_IA
-#endif
+         NONE = -1,
+         CERTIFICATE = 1,  // GNUTLS_CRD_CERTIFICATE
+         ANON = 2,         // GNUTLS_CRD_ANON
+         SRP = 3,          // GNUTLS_CRD_SRP
+         PSK = 4,          // GNUTLS_CRD_PSK
+         IA = 5            // GNUTLS_CRD_IA
      };
 
+     // TASK-020: hard-coded values mirroring libmicrohttpd's MHD_FLAG enum
+     // (MHD_USE_AUTO=65536, MHD_USE_SELECT_INTERNALLY=8,
+     //  MHD_USE_THREAD_PER_CONNECTION=4). Pinned to the upstream macros
+     // via static_assert in src/webserver.cpp so an upstream renumber
+     // breaks the build at the right place rather than silently mis-routing
+     // start-mode selection.
      enum start_method_T {
-         INTERNAL_SELECT = MHD_USE_SELECT_INTERNALLY | MHD_USE_AUTO,
-         THREAD_PER_CONNECTION = MHD_USE_THREAD_PER_CONNECTION | MHD_USE_AUTO,
-         EXTERNAL_SELECT = MHD_USE_AUTO
+         INTERNAL_SELECT = 65544,        // MHD_USE_SELECT_INTERNALLY | MHD_USE_AUTO
+         THREAD_PER_CONNECTION = 65540,  // MHD_USE_THREAD_PER_CONNECTION | MHD_USE_AUTO
+         EXTERNAL_SELECT = 65536         // MHD_USE_AUTO
      };
 
      enum policy_T {
@@ -115,33 +132,45 @@ class http_utils {
          IPV6 = 16
      };
 
-#ifdef HAVE_DAUTH
+     // TASK-020: hard-coded values mirroring libmicrohttpd's
+     // MHD_DigestAuthAlgo3 / MHD_DigestAuthResult enums. The integer
+     // values follow upstream's bitfield encoding
+     // (BASE_ALGO_X | NON_SESSION = X | 64 for the algorithms; the
+     // result codes are stable signed ints). Pinned via static_assert
+     // in src/http_request.cpp where <microhttpd.h> is reachable, so
+     // an upstream renumber breaks the build at the right place.
+     // The enums are unconditional (PRD-FLG-REQ-001 forbids gating
+     // public-header declarations on HAVE_DAUTH); when digest auth is
+     // disabled at build time, the corresponding methods on
+     // http_request hit the existing feature-unavailable path.
      enum class digest_algorithm {
-         MD5 = MHD_DIGEST_AUTH_ALGO3_MD5,
-         SHA256 = MHD_DIGEST_AUTH_ALGO3_SHA256,
-         SHA512_256 = MHD_DIGEST_AUTH_ALGO3_SHA512_256
+         MD5 = 65,         // MHD_DIGEST_BASE_ALGO_MD5 | MHD_DIGEST_AUTH_ALGO3_NON_SESSION
+         SHA256 = 66,      // MHD_DIGEST_BASE_ALGO_SHA256 | MHD_DIGEST_AUTH_ALGO3_NON_SESSION
+         SHA512_256 = 68   // MHD_DIGEST_BASE_ALGO_SHA512_256 | MHD_DIGEST_AUTH_ALGO3_NON_SESSION
      };
 
      enum class digest_auth_result {
-         OK = MHD_DAUTH_OK,
-         ERROR = MHD_DAUTH_ERROR,
-         WRONG_HEADER = MHD_DAUTH_WRONG_HEADER,
-         WRONG_USERNAME = MHD_DAUTH_WRONG_USERNAME,
-         WRONG_REALM = MHD_DAUTH_WRONG_REALM,
-         WRONG_URI = MHD_DAUTH_WRONG_URI,
-         WRONG_QOP = MHD_DAUTH_WRONG_QOP,
-         WRONG_ALGO = MHD_DAUTH_WRONG_ALGO,
-         TOO_LARGE = MHD_DAUTH_TOO_LARGE,
-         NONCE_STALE = MHD_DAUTH_NONCE_STALE,
-         NONCE_OTHER_COND = MHD_DAUTH_NONCE_OTHER_COND,
-         NONCE_WRONG = MHD_DAUTH_NONCE_WRONG,
-         RESPONSE_WRONG = MHD_DAUTH_RESPONSE_WRONG
+         OK = 1,                  // MHD_DAUTH_OK
+         // GENERIC_ERROR (not "ERROR") because <wingdi.h> on Windows
+         // unconditionally `#define`s ERROR to 0, which the preprocessor
+         // expands inside scoped-enum bodies just like anywhere else.
+         GENERIC_ERROR = 0,       // MHD_DAUTH_ERROR ("general error")
+         WRONG_HEADER = -1,       // MHD_DAUTH_WRONG_HEADER
+         WRONG_USERNAME = -2,     // MHD_DAUTH_WRONG_USERNAME
+         WRONG_REALM = -3,        // MHD_DAUTH_WRONG_REALM
+         WRONG_URI = -4,          // MHD_DAUTH_WRONG_URI
+         WRONG_QOP = -5,          // MHD_DAUTH_WRONG_QOP
+         WRONG_ALGO = -6,         // MHD_DAUTH_WRONG_ALGO
+         TOO_LARGE = -15,         // MHD_DAUTH_TOO_LARGE
+         NONCE_STALE = -17,       // MHD_DAUTH_NONCE_STALE
+         NONCE_OTHER_COND = -18,  // MHD_DAUTH_NONCE_OTHER_COND
+         NONCE_WRONG = -33,       // MHD_DAUTH_NONCE_WRONG
+         RESPONSE_WRONG = -34     // MHD_DAUTH_RESPONSE_WRONG
      };
 
      static constexpr size_t md5_digest_size = 16;
      static constexpr size_t sha256_digest_size = 32;
      static constexpr size_t sha512_256_digest_size = 32;
-#endif  // HAVE_DAUTH
 
      static const uint16_t http_method_connect_code;
      static const uint16_t http_method_delete_code;
@@ -292,7 +321,12 @@ class http_utils {
      static std::string sanitize_upload_filename(const std::string& filename);
 
      static const char* reason_phrase(unsigned int status_code);
-     static bool is_feature_supported(enum MHD_FEATURE feature);
+     // TASK-020: parameter is the integer value of an `MHD_FEATURE`
+     // enumerator. The signature is `int` rather than `enum MHD_FEATURE`
+     // so this header doesn't have to drag in <microhttpd.h>; callers
+     // can still pass an `MHD_FEATURE_*` enumerator directly because the
+     // enum's underlying type implicitly converts to int.
+     static bool is_feature_supported(int feature);
      static const char* get_mhd_version();
 };
 
@@ -311,18 +345,36 @@ class http_utils {
     return false; \
 }
 
+// ASCII-only uppercase helper for header name comparison.
+// HTTP header names are defined to be US-ASCII (RFC 7230 §3.2), so using
+// the locale-aware std::toupper on every character is unnecessary overhead.
+// This branchless helper folds a-z to A-Z and leaves all other bytes unchanged.
+// It is intentionally NOT locale-aware: non-ASCII bytes pass through as-is.
+inline int http_header_toupper(char c) {
+    return (c >= 'a' && c <= 'z') ? c - ('a' - 'A') : static_cast<unsigned char>(c);
+}
+
 class header_comparator {
  public:
+     // is_transparent enables heterogeneous lookup against header_map
+     // (std::map<std::string, std::string, header_comparator>): callers
+     // can pass std::string_view directly to find()/count() without
+     // constructing a std::string. Required by TASK-011's
+     // string_view-returning const accessors on http_response.
+     using is_transparent = std::true_type;
      /**
-      * Operator used to compare strings.
-      * @param first string
-      * @param second string
+      * Case-insensitive less-than comparison.
+      * @param x first string to compare.
+      * @param y second string to compare.
+      * @return `true` iff @p x sorts before @p y under case-insensitive
+      *         lexicographic order.
      **/
      bool operator()(std::string_view x, std::string_view y) const {
-         COMPARATOR(x, y, std::toupper);
+         COMPARATOR(x, y, http_header_toupper);
      }
+     /// @copydoc operator()(std::string_view, std::string_view) const
      bool operator()(const std::string& x, const std::string& y) const {
-         COMPARATOR(x, y, std::toupper);
+         COMPARATOR(x, y, http_header_toupper);
      }
 };
 
@@ -335,9 +387,15 @@ class arg_comparator {
  public:
      using is_transparent = std::true_type;
      /**
-      * Operator used to compare strings.
-      * @param first string
-      * @param second string
+      * Less-than comparison between two argument keys.
+      *
+      * Defaults to case-sensitive byte-wise ordering; if the library was
+      * built with `-DCASE_INSENSITIVE` it folds upper-case before
+      * comparing, matching arg_map's documented contract.
+      *
+      * @param x first string to compare.
+      * @param y second string to compare.
+      * @return `true` iff @p x sorts before @p y under the active mode.
      **/
      bool operator()(std::string_view x, std::string_view y) const {
 #ifdef CASE_INSENSITIVE
@@ -346,53 +404,49 @@ class arg_comparator {
          COMPARATOR(x, y,);  // NOLINT(whitespace/comma)
 #endif
      }
+     /// @copydoc operator()(std::string_view, std::string_view) const
      bool operator()(const std::string& x, const std::string& y) const {
         return operator()(std::string_view(x), std::string_view(y));
      }
+     /// @copydoc operator()(std::string_view, std::string_view) const
      bool operator()(std::string_view x, const std::string& y) const {
         return operator()(x, std::string_view(y));
      }
+     /// @copydoc operator()(std::string_view, std::string_view) const
      bool operator()(const std::string& x, std::string_view y) const {
-        return operator()(std::string_view(x), std::string(y));
+        return operator()(std::string_view(x), y);
      }
 };
 
 using header_map = std::map<std::string, std::string, http::header_comparator>;
+// WARNING: header_view_map keys and values are non-owning views (std::string_view).
+// Callers MUST NOT store a header_view_map beyond the lifetime of the header_map
+// whose strings it views, and MUST NOT mutate that source map while any view is
+// in use. Storing a header_view_map across response mutations is a use-after-free
+// bug (CWE-416). This type is used internally for diagnostic formatting only.
 using header_view_map = std::map<std::string_view, std::string_view, http::header_comparator>;
 using arg_map = std::map<std::string, http_arg_value, http::arg_comparator>;
 using arg_view_map = std::map<std::string_view, http_arg_value, http::arg_comparator>;
 
 
-struct ip_representation {
-    http_utils::IP_version_T ip_version;
-    uint16_t pieces[16];
-    uint16_t mask;
+}  // namespace http
+}  // namespace httpserver
 
-    explicit ip_representation(http_utils::IP_version_T ip_version) :
-        ip_version(ip_version) {
-            mask = DEFAULT_MASK_VALUE;
-            std::fill(pieces, pieces + 16, 0);
-    }
+// ip_representation lives in its own header; included here so existing
+// consumers of <httpserver/http_utils.hpp> still see the type.
+#include "httpserver/ip_representation.hpp"
 
-    explicit ip_representation(const std::string& ip);
-    explicit ip_representation(const struct sockaddr* ip);
-
-    bool operator<(const ip_representation& b) const;
-
-    int weight() const {
-        // variable-precision SWAR algorithm
-        uint16_t x = mask;
-        x = x - ((x >> 1) & 0x55555555);
-        x = (x & 0x33333333) + ((x >> 2) & 0x33333333);
-        return (((x + (x >> 4)) & 0x0F0F0F0F) * 0x01010101) >> 24;
-    }
-};
+namespace httpserver {
+namespace http {
 
 /**
- * Method used to get an ip in form of string from a sockaddr structure
- * @param sa The sockaddr object to find the ip address from
- * @param maxlen Maxlen of the address (automatically discovered if not passed)
- * @return string containing the ip address
+ * Method used to get an ip in form of string from a sockaddr structure.
+ *
+ * The buffer length is computed internally from the address family; the
+ * v1 `maxlen` parameter was removed in v2.0.
+ *
+ * @param sa The sockaddr object to find the ip address from.
+ * @return string containing the ip address.
 **/
 std::string get_ip_str(const struct sockaddr *sa);
 
@@ -410,6 +464,16 @@ uint16_t get_port(const struct sockaddr* sa);
  * @param map
 **/
 void dump_header_map(std::ostream& os, const std::string& prefix, const http::header_view_map& map);
+
+/**
+ * Overload that accepts the owning header_map directly, avoiding an O(n)
+ * copy into a temporary header_view_map. Preferred for diagnostic output
+ * (operator<<) where the source map is immediately available.
+ * @param os The ostream
+ * @param prefix Prefix to identify the map
+ * @param map
+**/
+void dump_header_map(std::ostream& os, const std::string& prefix, const http::header_map& map);
 
 /**
  * Method to output the contents of an arguments map to a std::ostream

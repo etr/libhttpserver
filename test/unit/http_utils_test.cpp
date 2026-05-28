@@ -31,6 +31,13 @@
 #endif
 
 #include <sys/stat.h>
+#include <unistd.h>  // TASK-020: unlink (was reachable transitively via httpserver/http_utils.hpp -> microhttpd.h)
+// Note: the hard-coded integer values for start_method_T, digest_algorithm,
+// and digest_auth_result are pinned to the upstream MHD macros via
+// static_assert blocks in src/http_utils.cpp (unconditional start_method_T
+// asserts) and src/http_utils.cpp under #ifdef HAVE_DAUTH (digest enums).
+// Those compile-time guards serve as the test coverage for enum value
+// correctness; no duplicate runtime assertions are needed here.
 #include <cstdio>
 #include <iostream>
 #include <map>
@@ -942,6 +949,96 @@ LT_BEGIN_AUTO_TEST(http_utils_suite, ip_representation_wildcard_weight)
     // More specific (higher weight) should be "greater than" less specific
     LT_CHECK_EQ(ip1.weight() > ip2.weight(), true);
 LT_END_AUTO_TEST(ip_representation_wildcard_weight)
+
+// ---- sanitize_upload_filename (finding test-quality-reviewer-iter1-1) -------
+//
+// sanitize_upload_filename is a pure public helper that extracts the basename
+// from an upload filename, rejecting path-traversal components ('.', '..').
+// A regression would silently permit path-traversal filenames in the upload
+// path.
+
+// Normal filename: returned as-is.
+LT_BEGIN_AUTO_TEST(http_utils_suite, sanitize_upload_filename_normal)
+    LT_CHECK_EQ(httpserver::http::http_utils::sanitize_upload_filename("report.pdf"),
+                std::string("report.pdf"));
+LT_END_AUTO_TEST(sanitize_upload_filename_normal)
+
+// Filename with leading Unix directory components: only the basename is returned.
+LT_BEGIN_AUTO_TEST(http_utils_suite, sanitize_upload_filename_unix_path)
+    LT_CHECK_EQ(httpserver::http::http_utils::sanitize_upload_filename("/tmp/uploads/report.pdf"),
+                std::string("report.pdf"));
+LT_END_AUTO_TEST(sanitize_upload_filename_unix_path)
+
+// Filename with Windows-style backslash separator: only the basename is returned.
+LT_BEGIN_AUTO_TEST(http_utils_suite, sanitize_upload_filename_windows_path)
+    LT_CHECK_EQ(httpserver::http::http_utils::sanitize_upload_filename("C:\\Users\\upload\\evil.exe"),
+                std::string("evil.exe"));
+LT_END_AUTO_TEST(sanitize_upload_filename_windows_path)
+
+// Empty string input: returns empty string.
+LT_BEGIN_AUTO_TEST(http_utils_suite, sanitize_upload_filename_empty)
+    LT_CHECK_EQ(httpserver::http::http_utils::sanitize_upload_filename(""),
+                std::string(""));
+LT_END_AUTO_TEST(sanitize_upload_filename_empty)
+
+// Bare dot "." is rejected: returns empty string.
+LT_BEGIN_AUTO_TEST(http_utils_suite, sanitize_upload_filename_dot)
+    LT_CHECK_EQ(httpserver::http::http_utils::sanitize_upload_filename("."),
+                std::string(""));
+LT_END_AUTO_TEST(sanitize_upload_filename_dot)
+
+// Bare double-dot ".." is rejected: returns empty string.
+LT_BEGIN_AUTO_TEST(http_utils_suite, sanitize_upload_filename_dot_dot)
+    LT_CHECK_EQ(httpserver::http::http_utils::sanitize_upload_filename(".."),
+                std::string(""));
+LT_END_AUTO_TEST(sanitize_upload_filename_dot_dot)
+
+// Path ending in "..": the basename portion ".." is rejected.
+LT_BEGIN_AUTO_TEST(http_utils_suite, sanitize_upload_filename_path_ending_dot_dot)
+    LT_CHECK_EQ(httpserver::http::http_utils::sanitize_upload_filename("/a/b/.."),
+                std::string(""));
+LT_END_AUTO_TEST(sanitize_upload_filename_path_ending_dot_dot)
+
+// Path ending in ".": the basename portion "." is rejected.
+LT_BEGIN_AUTO_TEST(http_utils_suite, sanitize_upload_filename_path_ending_dot)
+    LT_CHECK_EQ(httpserver::http::http_utils::sanitize_upload_filename("/a/b/."),
+                std::string(""));
+LT_END_AUTO_TEST(sanitize_upload_filename_path_ending_dot)
+
+// Trailing separator (e.g. "dir/"): basename after the last '/' is empty -> rejected.
+LT_BEGIN_AUTO_TEST(http_utils_suite, sanitize_upload_filename_trailing_slash)
+    LT_CHECK_EQ(httpserver::http::http_utils::sanitize_upload_filename("dir/"),
+                std::string(""));
+LT_END_AUTO_TEST(sanitize_upload_filename_trailing_slash)
+
+// Mixed separators: last component after backslash is taken.
+LT_BEGIN_AUTO_TEST(http_utils_suite, sanitize_upload_filename_mixed_separators)
+    LT_CHECK_EQ(httpserver::http::http_utils::sanitize_upload_filename("a/b\\c.txt"),
+                std::string("c.txt"));
+LT_END_AUTO_TEST(sanitize_upload_filename_mixed_separators)
+
+// Null byte in filename: CWE-626 null-byte injection. A multipart filename
+// like "foo.txt\x00.php" is passed to std::ofstream::open() whose c_str()
+// call truncates at the embedded null, creating the file at the truncated
+// location rather than the full std::string path. Reject such names by
+// returning "". (security finding #12)
+LT_BEGIN_AUTO_TEST(http_utils_suite, sanitize_upload_filename_null_byte_returns_empty)
+    std::string with_null("foo.txt");
+    with_null += '\0';
+    with_null += ".php";
+    LT_CHECK_EQ(httpserver::http::http_utils::sanitize_upload_filename(with_null),
+                std::string(""));
+LT_END_AUTO_TEST(sanitize_upload_filename_null_byte_returns_empty)
+
+// Null byte preceded by directory separator: the basename portion still
+// contains the null byte and must be rejected.
+LT_BEGIN_AUTO_TEST(http_utils_suite, sanitize_upload_filename_path_with_null_byte_returns_empty)
+    std::string with_null("/uploads/good");
+    with_null += '\0';
+    with_null += "bad.php";
+    LT_CHECK_EQ(httpserver::http::http_utils::sanitize_upload_filename(with_null),
+                std::string(""));
+LT_END_AUTO_TEST(sanitize_upload_filename_path_with_null_byte_returns_empty)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

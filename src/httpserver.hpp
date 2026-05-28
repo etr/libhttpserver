@@ -21,33 +21,35 @@
 #ifndef SRC_HTTPSERVER_HPP_
 #define SRC_HTTPSERVER_HPP_
 
-#if __cplusplus < 201703L
-#  error("libhttpserver requires C++17 or later.")
+#if __cplusplus < 202002L
+#  error("libhttpserver requires C++20 or later.")
 #endif
 
 #define _HTTPSERVER_HPP_INSIDE_
 
-#ifdef HAVE_BAUTH
-#include "httpserver/basic_auth_fail_response.hpp"
-#endif  // HAVE_BAUTH
-#include "httpserver/deferred_response.hpp"
-#ifdef HAVE_DAUTH
-#include "httpserver/digest_auth_fail_response.hpp"
-#endif  // HAVE_DAUTH
-#include "httpserver/empty_response.hpp"
-#include "httpserver/file_response.hpp"
+#include "httpserver/body_kind.hpp"
+#include "httpserver/constants.hpp"
+#include "httpserver/feature_unavailable.hpp"
+#include "httpserver/hook_action.hpp"
+#include "httpserver/hook_context.hpp"
+#include "httpserver/hook_handle.hpp"
+#include "httpserver/hook_phase.hpp"
 #include "httpserver/http_arg_value.hpp"
+#include "httpserver/http_method.hpp"
 #include "httpserver/http_request.hpp"
 #include "httpserver/http_resource.hpp"
 #include "httpserver/http_response.hpp"
 #include "httpserver/http_utils.hpp"
-#include "httpserver/iovec_response.hpp"
+#include "httpserver/ip_representation.hpp"
+#include "httpserver/iovec_entry.hpp"
 #include "httpserver/file_info.hpp"
-#include "httpserver/pipe_response.hpp"
-#include "httpserver/string_response.hpp"
 #include "httpserver/webserver.hpp"
-#ifdef HAVE_WEBSOCKET
+// TASK-034: included unconditionally. websocket_handler.hpp is safe to
+// include in both HAVE_WEBSOCKET-on and HAVE_WEBSOCKET-off builds; the
+// member-function bodies in src/websocket_handler.cpp handle the
+// disabled-build sentinel behaviour (PRD-FLG-REQ-001).
 #include "httpserver/websocket_handler.hpp"
-#endif  // HAVE_WEBSOCKET
+
+#undef _HTTPSERVER_HPP_INSIDE_
 
 #endif  // SRC_HTTPSERVER_HPP_

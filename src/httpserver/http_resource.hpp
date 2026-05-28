@@ -25,27 +25,53 @@
 #ifndef SRC_HTTPSERVER_HTTP_RESOURCE_HPP_
 #define SRC_HTTPSERVER_HTTP_RESOURCE_HPP_
 
-#ifdef DEBUG
-#include <iostream>
-#endif
-
-#include <map>
+#include <functional>
 #include <memory>
-#include <string>
-#include <utility>
-#include <vector>
+
+// TASK-036: render_* virtuals now return http_response by value; the
+// inline defaults call render(req) and forward the prvalue, which
+// requires http_response to be a complete type at every override site.
+// Hard-include is the simplest correct shape (the umbrella already
+// reaches both headers).
+#include "httpserver/http_method.hpp"
+#include "httpserver/http_response.hpp"
+
+// TASK-051: add_hook overloads on http_resource return hook_handle; the
+// public header is part of the umbrella surface (no MHD leak).
+#include "httpserver/hook_handle.hpp"
+#include "httpserver/hook_phase.hpp"
+#include "httpserver/hook_action.hpp"
+#include "httpserver/hook_context.hpp"
 
 namespace httpserver { class http_request; }
-namespace httpserver { class http_response; }
+namespace httpserver { class webserver; }
+namespace httpserver::detail { class webserver_impl; }
+namespace httpserver::detail { class resource_hook_table; }
 
 namespace httpserver {
 
-namespace details { std::shared_ptr<http_response> empty_render(const http_request& r); }
-
-void resource_init(std::map<std::string, bool>* res);
+// TASK-036 / DR-004 / PRD-RSP-REQ-007: render_* virtuals return
+// http_response by value. The webserver dispatch path moves the value
+// into mr->response (an std::optional<http_response> living on the
+// per-connection modded_request, see §5.3) and keeps it alive until
+// MHD fires request_completed. The default render() returns a
+// default-constructed http_response whose status_code_ == -1 is the
+// v1-compatible sentinel for "handler did not produce a response"; the
+// dispatch path routes the sentinel through the internal-error handler.
 
 /**
  * Class representing a callable http resource.
+ *
+ * Subclass this and override one or more `render_*` methods to handle
+ * specific HTTP verbs. Overriding `render()` catches all verbs not
+ * covered by a more-specific override; the default implementation
+ * returns a sentinel `http_response{}` that the dispatch path
+ * translates to a 405 Method Not Allowed.
+ *
+ * @par Thread-safety (DR-008 §5.1)
+ * A single registered instance may be invoked concurrently from
+ * multiple libmicrohttpd worker threads. All state accessed by
+ * `render_*` overrides must be externally synchronized.
 **/
 class http_resource {
  public:
@@ -59,8 +85,10 @@ class http_resource {
       * @param req Request passed through http
       * @return A http_response object
      **/
-     virtual std::shared_ptr<http_response> render(const http_request& req) {
-         return details::empty_render(req);
+     virtual http_response render(const http_request& req) {
+         (void)req;
+         // status_code_ == -1 sentinel; see class-level comment above.
+         return http_response{};
      }
 
      /**
@@ -68,7 +96,7 @@ class http_resource {
       * @param req Request passed through http
       * @return A http_response object
      **/
-     virtual std::shared_ptr<http_response> render_GET(const http_request& req) {
+     virtual http_response render_get(const http_request& req) {
          return render(req);
      }
 
@@ -77,7 +105,7 @@ class http_resource {
       * @param req Request passed through http
       * @return A http_response object
      **/
-     virtual std::shared_ptr<http_response> render_POST(const http_request& req) {
+     virtual http_response render_post(const http_request& req) {
          return render(req);
      }
 
@@ -86,7 +114,7 @@ class http_resource {
       * @param req Request passed through http
       * @return A http_response object
      **/
-     virtual std::shared_ptr<http_response> render_PUT(const http_request& req) {
+     virtual http_response render_put(const http_request& req) {
          return render(req);
      }
 
@@ -95,7 +123,7 @@ class http_resource {
       * @param req Request passed through http
       * @return A http_response object
      **/
-     virtual std::shared_ptr<http_response> render_HEAD(const http_request& req) {
+     virtual http_response render_head(const http_request& req) {
          return render(req);
      }
 
@@ -104,7 +132,7 @@ class http_resource {
       * @param req Request passed through http
       * @return A http_response object
      **/
-     virtual std::shared_ptr<http_response> render_DELETE(const http_request& req) {
+     virtual http_response render_delete(const http_request& req) {
          return render(req);
      }
 
@@ -113,7 +141,7 @@ class http_resource {
       * @param req Request passed through http
       * @return A http_response object
      **/
-     virtual std::shared_ptr<http_response> render_TRACE(const http_request& req) {
+     virtual http_response render_trace(const http_request& req) {
          return render(req);
      }
 
@@ -122,7 +150,7 @@ class http_resource {
       * @param req Request passed through http
       * @return A http_response object
      **/
-     virtual std::shared_ptr<http_response> render_OPTIONS(const http_request& req) {
+     virtual http_response render_options(const http_request& req) {
          return render(req);
      }
 
@@ -131,7 +159,7 @@ class http_resource {
       * @param req Request passed through http
       * @return A http_response object
      **/
-     virtual std::shared_ptr<http_response> render_PATCH(const http_request& req) {
+     virtual http_response render_patch(const http_request& req) {
          return render(req);
      }
 
@@ -140,86 +168,115 @@ class http_resource {
       * @param req Request passed through http
       * @return A http_response object
      **/
-     virtual std::shared_ptr<http_response> render_CONNECT(const http_request& req) {
+     virtual http_response render_connect(const http_request& req) {
          return render(req);
      }
 
      /**
-      * Method used to set if a specific method is allowed or not on this request
-      * @param method method to set permission on
-      * @param allowed boolean indicating if the method is allowed or not
+      * Toggle whether a specific http_method is allowed on this resource.
+      * @param method enum identifying the method (no string lookup)
+      * @param allow true to enable the method, false to disable it
      **/
-     void set_allowing(const std::string& method, bool allowed) {
-         if (method_state.count(method)) {
-             method_state[method] = allowed;
-         }
-     }
-
-     /**
-      * Method used to implicitly allow all methods
-     **/
-     void allow_all() {
-         std::map<std::string, bool>::iterator it;
-         for (it=method_state.begin(); it != method_state.end(); ++it) {
-             method_state[(*it).first] = true;
-         }
-     }
-
-     /**
-      * Method used to implicitly disallow all methods
-     **/
-     void disallow_all() {
-         std::map<std::string, bool>::iterator it;
-         for (it=method_state.begin(); it != method_state.end(); ++it) {
-             method_state[(*it).first] = false;
-         }
-     }
-
-     /**
-      * Method used to discover if an http method is allowed or not for this resource
-      * @param method Method to discover allowings
-      * @return true if the method is allowed
-     **/
-     bool is_allowed(const std::string& method) {
-         if (method_state.count(method)) {
-             return method_state[method];
+     void set_allowing(http_method method, bool allow) noexcept {
+         if (method == http_method::count_) return;  // sentinel; never settable
+         if (allow) {
+             methods_allowed_.set(method);
          } else {
-#ifdef DEBUG
-             std::map<std::string, bool>::iterator it;
-             for (it = method_state.begin(); it != method_state.end(); ++it) {
-                 std::cout << (*it).first << " -> " << (*it).second << std::endl;
-             }
-#endif  // DEBUG
-             return false;
+             methods_allowed_.clear(method);
          }
      }
 
      /**
-      * Method used to return a list of currently allowed HTTP methods for this resource
-      * @return vector of strings
+      * Allow every defined http_method on this resource.
      **/
-     std::vector<std::string> get_allowed_methods() {
-         std::vector<std::string> allowed_methods;
-
-         for (auto it = method_state.cbegin(); it != method_state.cend(); ++it) {
-             if ( (*it).second ) {
-                 allowed_methods.push_back((*it).first);
-             }
-         }
-
-         return allowed_methods;
+     void allow_all() noexcept {
+         methods_allowed_.set_all();
      }
+
+     /**
+      * Disallow every http_method on this resource.
+     **/
+     void disallow_all() noexcept {
+         methods_allowed_.clear_all();
+     }
+
+     /**
+      * Test whether `method` is allowed on this resource. Const-noexcept
+      * because the answer is a single bitmask test on a trivial member;
+      * no string lookup, no allocation.
+      * @param method enum identifying the method to query
+      * @return true if the method is currently allowed
+     **/
+     bool is_allowed(http_method method) const noexcept {
+         return methods_allowed_.contains(method);
+     }
+
+     /**
+      * Return the full allow-mask by value. The returned method_set is
+      * trivially copyable (sizeof == 4) so by-value is the natural ABI.
+     **/
+     method_set get_allowed_methods() const noexcept {
+         return methods_allowed_;
+     }
+
+     /**
+      * @brief Register a per-resource hook on one of the five
+      * post-route-resolution phases.
+      *
+      * TASK-051 / DR-012 / PRD-HOOK-REQ-006. The five permitted phases
+      * are:
+      *
+      *   - `hook_phase::before_handler`     (short-circuit-capable)
+      *   - `hook_phase::handler_exception`  (short-circuit-capable)
+      *   - `hook_phase::after_handler`      (short-circuit-capable)
+      *   - `hook_phase::response_sent`      (observation-only)
+      *   - `hook_phase::request_completed`  (observation-only)
+      *
+      * The six rejected phases — `connection_opened`,
+      * `accept_decision`, `connection_closed`, `request_received`,
+      * `body_chunk`, and `route_resolved` — fire BEFORE the resource
+      * is known, so per-route registration is structurally impossible.
+      * Passing any of them (or `hook_phase::count_`) throws
+      * `std::invalid_argument` naming the rejected phase. Passing an
+      * empty `std::function` also throws `std::invalid_argument`.
+      *
+      * Per-route hooks fire AFTER the server-wide chain at the same
+      * phase, and only if the server-wide chain did not
+      * short-circuit. The returned `hook_handle` owns the
+      * registration: destroying it (or calling `remove()`) erases the
+      * entry. If the resource is destroyed before the handle, the
+      * handle's destructor / `remove()` become no-ops.
+      *
+      * @param phase one of: before_handler, handler_exception,
+      *              after_handler, response_sent, request_completed.
+      * @param fn    non-empty callable matching the phase's signature.
+      * @return move-only hook_handle owning the registration.
+      */
+     hook_handle add_hook(hook_phase phase,
+         std::function<hook_action(before_handler_ctx&)> fn);
+     hook_handle add_hook(hook_phase phase,
+         std::function<hook_action(const handler_exception_ctx&)> fn);
+     hook_handle add_hook(hook_phase phase,
+         std::function<hook_action(after_handler_ctx&)> fn);
+     hook_handle add_hook(hook_phase phase,
+         std::function<void(const response_sent_ctx&)> fn);
+     hook_handle add_hook(hook_phase phase,
+         std::function<void(const request_completed_ctx&)> fn);
 
  protected:
      /**
-      * Constructor of the class
+      * Constructor of the class. The default state allows every defined
+      * http_method, matching the v1 behaviour where `resource_init`
+      * marked all nine methods true.
      **/
-     http_resource() {
-         resource_init(&method_state);
-     }
+     http_resource() = default;
 
      /**
-      * Copy constructor
+      * Copy / move special members. Note that copying an http_resource
+      * shallow-copies the hook_table_ shared_ptr, meaning the copy shares
+      * the same per-route hook table as the original. Hooks registered on
+      * the original will also fire for the copy. If independent hook tables
+      * are needed, register hooks on the copy separately after construction.
      **/
      http_resource(const http_resource& b) = default;
      http_resource(http_resource&& b) noexcept = default;
@@ -228,9 +285,57 @@ class http_resource {
 
  private:
      friend class webserver;
-     friend void resource_init(std::map<std::string, bool>* res);
-     std::map<std::string, bool> method_state;
+     friend class detail::webserver_impl;  // TASK-014: dispatch helpers
+
+     // Default-allow every valid method. method_set::set_all() is
+     // constexpr, so the chained call is a constant expression and the
+     // default member initialiser stays well-formed.
+     method_set methods_allowed_ = method_set{}.set_all();
+
+     // TASK-051: per-resource hook bus storage (PIMPL). Lazily allocated
+     // on first add_hook() call; resources that never register a hook
+     // pay zero allocation cost and only sizeof(shared_ptr) of nullptr
+     // storage. shared_ptr lets the hook_handle hold a weak_ptr that
+     // expires cleanly when the resource is destroyed (handle.remove()
+     // then becomes a no-op without dereferencing freed memory).
+     //
+     // `mutable` because hook firing on `const http_resource&` (from the
+     // const path through dispatch) needs to read this pointer; the
+     // logical const-ness of the resource is preserved (the firing path
+     // only reads the table; only the public add_hook(non-const) writes).
+     mutable std::shared_ptr<detail::resource_hook_table> hook_table_;
+
+// Internal-only accessor: only visible to translation units that define
+// HTTPSERVER_COMPILATION (i.e., the library's own .cpp files). User-facing
+// translation units that include <httpserver.hpp> see only the public
+// add_hook() surface; this symbol is intentionally hidden from them.
+#if defined(HTTPSERVER_COMPILATION)
+
+ public:
+     // Internal accessor for the dispatch path (webserver_impl). The
+     // pointer is null when no hook has ever been registered on this
+     // resource (the dispatch hot path treats null as "no per-route
+     // hooks for any phase"). Public-but-HTTPSERVER_COMPILATION-gated
+     // for the same reason webserver::make_hook_handle_ is: the symbol
+     // is reachable only from within the library translation units.
+     detail::resource_hook_table* hook_table_raw_() const noexcept {
+         return hook_table_.get();
+     }
+
+ private:
+#endif
 };
+
+// TASK-021 acceptance: http_resource was a vptr plus a 32-bit method_set
+// plus padding. TASK-051 added one `shared_ptr<resource_hook_table>` to
+// host the per-resource hook table PIMPL; the cap below reflects the
+// growth (vptr + shared_ptr + method_set + padding). Documented growth,
+// not silent drift -- PRD-REQ-REQ-002 / PRD-REQ-REQ-003 still hold (the
+// v1 std::map cost was much larger than this single shared_ptr slot).
+static_assert(sizeof(http_resource) <=
+                  sizeof(void*) * 3 + sizeof(method_set) * 2,
+              "http_resource should be approximately vptr + shared_ptr + "
+              "method_set after TASK-051");
 
 }  // namespace httpserver
 #endif  // SRC_HTTPSERVER_HTTP_RESOURCE_HPP_

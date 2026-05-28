@@ -25,61 +25,148 @@
 #ifndef SRC_HTTPSERVER_WEBSERVER_HPP_
 #define SRC_HTTPSERVER_WEBSERVER_HPP_
 
-#define NOT_FOUND_ERROR "Not Found"
-#define METHOD_ERROR "Method not Allowed"
-#define NOT_METHOD_ERROR "Method not Acceptable"
-#define GENERIC_ERROR "Internal Error"
-
-#include <microhttpd.h>
-#include <pthread.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdlib.h>
 
-#if !defined(__MINGW32__)
-#include <sys/socket.h>
-#endif
-
-#include <list>
-#include <map>
+#include <functional>
 #include <memory>
-#include <mutex>
-#include <set>
-#include <shared_mutex>
 #include <string>
-#include <unordered_map>
+#include <string_view>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
-#ifdef HAVE_GNUTLS
-#include <gnutls/gnutls.h>
-#endif  // HAVE_GNUTLS
-
+#include "httpserver/constants.hpp"
+#include "httpserver/hook_action.hpp"
+#include "httpserver/hook_context.hpp"
+#include "httpserver/hook_handle.hpp"
+#include "httpserver/hook_phase.hpp"
+#include "httpserver/http_method.hpp"
 #include "httpserver/http_utils.hpp"
 #include "httpserver/create_webserver.hpp"
-#include "httpserver/details/http_endpoint.hpp"
 
-namespace httpserver { class http_resource; }
-namespace httpserver { class http_response; }
-#ifdef HAVE_WEBSOCKET
-namespace httpserver { class websocket_handler; }
-#endif  // HAVE_WEBSOCKET
-namespace httpserver { namespace details { struct modded_request; } }
+// TASK-020 / TASK-020-review: socket-layer types used by pointer only.
+// The BSD-socket and select headers are deliberately NOT included from
+// this public header. Forward declarations below avoid the transitive
+// drag of those backend headers into every consumer TU. For individual
+// method ABI notes see the get_fdset and add_connection Doxygen blocks.
+// (struct sockaddr / struct sockaddr_storage are transitively available
+// via http_utils.hpp which is included above; they are not redeclared
+// here. struct fd_set is a plain struct on all POSIX platforms and on
+// Windows via winsock2.h and can be forward-declared safely.)
+struct fd_set;
 
-struct MHD_Connection;
+// Forward declarations: backend (MHD) types are intentionally NOT pulled in.
+// The libmicrohttpd and pthread headers live behind the PIMPL
+// boundary in detail/webserver_impl.hpp (TASK-014).
+namespace httpserver {
+class http_resource;
+class http_response;
+// TASK-034: forward-declared unconditionally so the public surface of
+// webserver is identical in HAVE_WEBSOCKET-on and HAVE_WEBSOCKET-off
+// builds (PRD-FLG-REQ-001). When HAVE_WEBSOCKET is undefined the
+// class definition in websocket_handler.hpp is still included via the
+// umbrella header; member-function bodies live in src/websocket_handler.cpp.
+class websocket_handler;
+namespace detail {
+struct modded_request;
+class webserver_impl;
+}  // namespace detail
+}  // namespace httpserver
 
 namespace httpserver {
 
 /**
  * Class representing the webserver. Main class of the apis.
+ *
+ * ### Threading contract (DR-008 / §5.1)
+ *
+ * The webserver dispatches each request on one of libmicrohttpd's worker
+ * threads. The thread-safety contract:
+ *
+ *   1. Public registration / un-registration methods (@ref register_path,
+ *      @ref register_prefix, @ref register_resource, the @ref on_get
+ *      family, @ref route, @ref unregister_path, @ref unregister_prefix,
+ *      @ref unregister_resource, @ref register_ws_resource,
+ *      @ref unregister_ws_resource, @ref block_ip, @ref unblock_ip) are
+ *      thread-safe and re-entrant from inside a request handler.
+ *   2. The exceptions are @ref stop, @ref stop_and_wait, and the
+ *      destructor: each joins libmicrohttpd's worker threads and
+ *      therefore deadlocks (or aborts with "Failed to join a thread."
+ *      on some libmicrohttpd versions) when called from within a
+ *      handler thread. Call them from the thread that owns the
+ *      webserver instance.
+ *   3. `http_request` is single-threaded per request: it is owned by
+ *      the worker thread servicing that request and MUST NOT be
+ *      retained beyond the handler's return.
+ *   4. `http_response` is a value type with exclusive ownership; no
+ *      cross-thread sharing.
+ *   5. User-supplied callbacks invoked from MHD worker threads --
+ *      @ref create_webserver::log_access, @ref create_webserver::log_error,
+ *      @ref create_webserver::not_found_handler,
+ *      @ref create_webserver::method_not_allowed_handler,
+ *      @ref create_webserver::internal_error_handler,
+ *      @ref create_webserver::file_cleanup_callback, the PSK / SNI / ALPN
+ *      callbacks, any registered @ref http_resource render method, and
+ *      any registered lifecycle hook (@ref add_hook / @ref http_resource::add_hook )
+ *      -- may run concurrently on multiple threads. Implementations MUST be thread-safe.
+ *
+ * See specs/architecture/11-decisions/DR-008.md and §5.1 for the
+ * decision record.
+ *
+ * ### Handler error-propagation contract (DR-009 / §5.2 / PRD-FLG-REQ-002)
+ *
+ * Every registered request handler is invoked from the dispatch path under
+ * a two-branch try/catch. The contract:
+ *
+ *   1. The handler call is wrapped in
+ *      `try { ... } catch (const std::exception& e) { ... } catch (...) { ... }`.
+ *   2. On `std::exception`: the message is logged via the configured
+ *      `log_error` callback, then `internal_error_handler` is invoked with
+ *      `e.what()`. The response it returns is sent on the wire (default
+ *      500 with the message in the body when no handler is configured).
+ *   3. On non-`std::exception` (e.g. `throw 42`): same path with the
+ *      message replaced by the literal string `"unknown exception"`.
+ *   4. If `internal_error_handler` itself throws while servicing 2 or 3,
+ *      the failure is logged generically and a hardcoded 500 with an
+ *      EMPTY body is sent. No exception ever escapes into libmicrohttpd.
+ *   5. `feature_unavailable` (a `std::runtime_error` subclass) is NOT
+ *      mapped to a special status: it lands as a generic 500 like any
+ *      other `std::exception`.
+ *   6. The `log_error` callback may be invoked concurrently from multiple
+ *      MHD worker threads; user implementations MUST be thread-safe.
+ *   7. Hook layering (DR-012 §4.10):
+ *      @ref hook_phase::handler_exception hooks fire BEFORE this alias;
+ *      throwing hooks are caught and the chain continues; (4) fires
+ *      without re-invoking the alias on full chain failure.
+ *
+ * Resources are encouraged to throw rather than synthesise 500s.
 **/
 class webserver {
  public:
-     // Keeping this non explicit on purpose to easy construction through builder class.
-     webserver(const create_webserver& params);  // NOLINT(runtime/explicit)
+     // PRD-NAM-REQ-004: explicit to forbid implicit conversion from
+     // create_webserver. Callers must direct-init: webserver ws{cw};
+     explicit webserver(const create_webserver& params);
      /**
-      * Destructor of the class
+      * Destructor.
+      *
+      * Calls stop() unconditionally, which joins libmicrohttpd's
+      * worker threads. For the same reason as stop(), destroying a
+      * webserver from inside a handler thread deadlocks (or, on some
+      * libmicrohttpd versions, aborts with "Failed to join a thread.").
+      * Destroy the webserver from the thread that constructed it.
+      *
+      * See specs/architecture/11-decisions/DR-008.md and §5.1.
+      *
+      * @see stop() for the threading constraints that apply equally here.
      **/
      ~webserver();
+     // PIMPL-owned: copy/move would slice the backing impl object.
+     webserver(const webserver&) = delete;
+     webserver& operator=(const webserver&) = delete;
+     webserver(webserver&&) = delete;
+     webserver& operator=(webserver&&) = delete;
      /**
       * Method used to start the webserver.
       * This method can be blocking or not.
@@ -88,8 +175,22 @@ class webserver {
      **/
      bool start(bool blocking = false);
      /**
-      * Method used to stop the webserver.
-      * @return true if the webserver is stopped.
+      * Stop the webserver.
+      *
+      * Joins libmicrohttpd's worker threads before returning. Safe to
+      * call from any thread *except* a handler thread: stop() blocks
+      * until every worker (including the calling one) drains, so a
+      * call from inside a handler self-joins and deadlocks (or, on
+      * some libmicrohttpd versions, aborts with "Failed to join a
+      * thread."). This is the documented DR-008 contract — see
+      * specs/architecture/11-decisions/DR-008.md and §5.1.
+      *
+      * For the same reason, ~webserver() (which calls stop())
+      * deadlocks if it runs on a handler thread; destroy the
+      * webserver from the thread that constructed it.
+      *
+      * @return true if the daemon was running and is now stopped;
+      *         false if it was already stopped.
      **/
      bool stop();
      /**
@@ -97,48 +198,85 @@ class webserver {
       * @return true if the webserver is running
      **/
      bool is_running();
+     // Registration, on_* shortcuts, route(), and unregister_* live in
+     // a sibling header to keep this class under the project per-file
+     // LOC ceiling. The inner gate forces the header to be included
+     // only from within this class body.
+#define SRC_HTTPSERVER_WEBSERVER_HPP_INSIDE_CLASS_
+#include "httpserver/webserver_routes.hpp"
+#undef SRC_HTTPSERVER_WEBSERVER_HPP_INSIDE_CLASS_
+
      /**
-      * Method used to register a resource with the webserver.
-      * @param resource The url pointing to the resource. This url could be also parametrized in the form /path/to/url/{par1}/and/{par2}
-      *                 or a regular expression.
-      * @param http_resource http_resource pointer to register.
-      * @param family boolean indicating whether the resource is registered for the endpoint and its child or not.
-      * @return true if the resource was registered
+      * Add @p ip (or a range, e.g. "127.0.0.*") to the IP block list.
+      * Connections from a matching address are refused at the policy
+      * callback. Intended for use under the default ACCEPT policy.
+      * No-op semantics are preserved when the same IP is added twice;
+      * a more specific entry replaces a previously-recorded wildcard.
+      *
+      * @param ip an IP literal or wildcard pattern.
+      * @see unblock_ip
      **/
-     bool register_resource(const std::string& resource, http_resource* res, bool family = false);
+     void block_ip(std::string_view ip);
 
-     void unregister_resource(const std::string& resource);
-     void ban_ip(const std::string& ip);
-     void allow_ip(const std::string& ip);
-     void unban_ip(const std::string& ip);
-     void disallow_ip(const std::string& ip);
+     /**
+      * Remove @p ip from the IP block list. Idempotent: removing an IP
+      * that is not currently blocked is a no-op.
+      *
+      * @param ip an IP literal or wildcard pattern previously passed to @ref block_ip.
+      * @see block_ip
+     **/
+     void unblock_ip(std::string_view ip);
 
+     /// Returns the configured access-log callback; null if none was set.
+     /// The callback may be invoked concurrently from MHD worker threads.
      log_access_ptr get_access_logger() const {
          return log_access;
      }
 
+     /// Returns the configured error-log callback; null if none was set.
+     /// The callback may be invoked concurrently from MHD worker threads.
      log_error_ptr get_error_logger() const {
          return log_error;
      }
 
+     /// Returns the configured request-validator callback; null if none was set.
+     /// The callback may be invoked concurrently from MHD worker threads.
      validator_ptr get_request_validator() const {
          return validator;
      }
 
+     /// Returns the configured URL-unescaper callback; null if none was set.
+     /// The callback may be invoked concurrently from MHD worker threads.
      unescaper_ptr get_unescaper() const {
          return unescaper;
      }
 
      /**
-      * Method used to kill the webserver waiting for it to terminate
+      * Stop the webserver and wait for in-flight handlers to complete
+      * before returning.
+      *
+      * The wait guarantee is provided by @c MHD_stop_daemon(), which is a
+      * blocking call that drains all active connections and joins
+      * libmicrohttpd's worker threads before returning.  @c stop() calls
+      * @c MHD_stop_daemon() internally, and this wrapper delegates to it,
+      * so the two entry-points are behaviourally equivalent today.
+      * @c stop_and_wait() exists as a semantically richer named entry-point;
+      * any future quiesce or application-level waiting logic should be added
+      * here rather than in @c stop().
+      *
+      * @see stop()
      **/
-     void sweet_kill();
+     void stop_and_wait();
 
      /**
       * Run the webserver's event loop once (non-blocking).
       * For use with external event loops when the server is started
       * without internal threading.
       * @return true on success, false on error
+      * @note Handler exceptions are caught on the dispatch path and
+      *       routed through `internal_error_handler`; no exception
+      *       propagates out of this call.
+      * @see webserver (DR-009 §5.2 / handler error-propagation contract)
      **/
      bool run();
 
@@ -147,18 +285,27 @@ class webserver {
       * or the timeout expires.
       * @param millisec timeout in milliseconds (-1 for indefinite)
       * @return true on success, false on error
+      * @note Handler exceptions are caught on the dispatch path and
+      *       routed through `internal_error_handler`; no exception
+      *       propagates out of this call.
+      * @see webserver (DR-009 §5.2 / handler error-propagation contract)
      **/
      bool run_wait(int32_t millisec);
 
      /**
       * Get the file descriptor sets for select()-based event loop integration.
+      * `struct fd_set` is forward-declared at file scope so this header does
+      * not need to include `<sys/select.h>`. The typed parameters restore
+      * compile-time type safety: the compiler rejects non-fd_set* arguments
+      * that the previous void* signature silently accepted (CWE-704).
       * @param read_fd_set set of FDs to watch for reading
       * @param write_fd_set set of FDs to watch for writing
       * @param except_fd_set set of FDs to watch for exceptions
       * @param max_fd highest FD number set in any of the sets
       * @return true on success, false on error
      **/
-     bool get_fdset(fd_set* read_fd_set, fd_set* write_fd_set, fd_set* except_fd_set, int* max_fd);
+     bool get_fdset(struct fd_set* read_fd_set, struct fd_set* write_fd_set,
+                    struct fd_set* except_fd_set, int* max_fd);
 
      /**
       * Get the timeout until the next MHD action is needed.
@@ -169,12 +316,17 @@ class webserver {
 
      /**
       * Add an externally-accepted socket connection.
+      * `addrlen` is typed as `unsigned int` rather than `socklen_t` so
+      * this header does not have to include the BSD-socket header. POSIX
+      * guarantees `socklen_t` is an unsigned integer of at least 32 bits;
+      * `unsigned int` is wider on every supported platform. The
+      * implementation passes the value directly to MHD_add_connection.
       * @param client_socket the accepted client socket
-      * @param addr the client address
-      * @param addrlen length of the address
+      * @param addr the client address (forward-declared `struct sockaddr*`)
+      * @param addrlen length of the address (in bytes)
       * @return true on success, false on error
      **/
-     bool add_connection(int client_socket, const struct sockaddr* addr, socklen_t addrlen);
+     bool add_connection(int client_socket, const struct sockaddr* addr, unsigned int addrlen);
 
      /**
       * Quiesce the daemon: stop accepting new connections while letting
@@ -202,12 +354,37 @@ class webserver {
      **/
      uint16_t get_bound_port() const;
 
-#ifdef HAVE_WEBSOCKET
-     bool register_ws_resource(const std::string& resource, websocket_handler* handler);
-#endif  // HAVE_WEBSOCKET
+     /**
+      * Reports build-time feature availability (PRD-FLG-REQ-003).
+      *
+      * The four boolean fields of the returned struct reflect the
+      * HAVE_BAUTH / HAVE_DAUTH / HAVE_GNUTLS / HAVE_WEBSOCKET macros at
+      * the time libhttpserver was compiled. Use this at runtime to
+      * decide whether to register a feature-dependent handler or to
+      * surface the configuration to the operator.
+      *
+      * The values are determined at library build time (not consumer
+      * build time): linking against a TLS-disabled libhttpserver always
+      * reports `tls == false`, even when the consumer TU was compiled
+      * with HAVE_GNUTLS defined.
+      *
+      * Safe to call before start() and from any thread; never throws.
+      **/
+     struct features {
+         bool basic_auth;
+         bool digest_auth;
+         bool tls;
+         bool websocket;
+     };
+     static features features() noexcept;
 
- protected:
-     webserver& operator=(const webserver& other);
+     // Websocket registration surface and lifecycle hook bus (TASK-045)
+     // live in sibling headers to keep this class under the project
+     // per-file LOC ceiling.
+#define SRC_HTTPSERVER_WEBSERVER_HPP_INSIDE_CLASS_
+#include "httpserver/webserver_websocket.hpp"
+#include "httpserver/webserver_hooks.hpp"
+#undef SRC_HTTPSERVER_WEBSERVER_HPP_INSIDE_CLASS_
 
  private:
      const uint16_t port;
@@ -224,9 +401,6 @@ class webserver {
      unescaper_ptr unescaper;
      const struct sockaddr* bind_address;
      std::shared_ptr<struct sockaddr_storage> bind_address_storage;
-     /* Changed type to MHD_socket because this type will always reflect the
-     platform's actual socket type (e.g. SOCKET on windows, int on unixes)*/
-     MHD_socket bind_socket;
      const int max_thread_stack_size;
      const bool use_ssl;
      const bool use_ipv6;
@@ -241,11 +415,10 @@ class webserver {
      const psk_cred_handler_callback psk_cred_handler;
      const std::string digest_auth_random;
      const int nonce_nc_size;
-     bool running;
      const http::http_utils::policy_T default_policy;
-#ifdef HAVE_BAUTH
+     // TASK-034: stored unconditionally. webserver(create_webserver const&)
+     // throws feature_unavailable when this is true but HAVE_BAUTH is off.
      const bool basic_auth_enabled;
-#endif  // HAVE_BAUTH
      const bool digest_auth_enabled;
      const bool regex_checking;
      const bool ban_system_enabled;
@@ -257,11 +430,9 @@ class webserver {
      const bool deferred_enabled;
      const bool single_resource;
      const bool tcp_nodelay;
-     pthread_mutex_t mutexwait;
-     pthread_cond_t mutexcond;
-     const render_ptr not_found_resource;
-     const render_ptr method_not_allowed_resource;
-     const render_ptr internal_error_resource;
+     const error_handler not_found_handler;
+     const error_handler method_not_allowed_handler;
+     const internal_error_handler_t internal_error_handler;
      const file_cleanup_callback_ptr file_cleanup_callback;
      const auth_handler_ptr auth_handler;
      const std::vector<std::string> auth_skip_paths;
@@ -280,103 +451,73 @@ class webserver {
      const std::string https_priorities_append;
      const bool no_alpn;
      const int client_discipline_level;
-     std::shared_mutex registered_resources_mutex;
-     std::map<details::http_endpoint, http_resource*> registered_resources;
-     std::map<std::string, http_resource*> registered_resources_str;
-     std::map<details::http_endpoint, http_resource*> registered_resources_regex;
 
-     struct route_cache_entry {
-         details::http_endpoint matched_endpoint;
-         http_resource* resource;
-     };
-     static constexpr size_t ROUTE_CACHE_MAX_SIZE = 256;
-     std::mutex route_cache_mutex;
-     std::list<std::pair<std::string, route_cache_entry>> route_cache_list;
-     std::unordered_map<std::string, std::list<std::pair<std::string, route_cache_entry>>::iterator> route_cache_map;
+     // Shared registration helper. Both register_path and register_prefix
+     // funnel through here so the validation/insertion logic lives in one
+     // place. `family=true` is prefix-matching; `family=false` is
+     // exact-matching.
+     void register_impl_(const std::string& path,
+                         std::shared_ptr<http_resource> res,
+                         bool family);
 
-     std::shared_mutex bans_mutex;
-     std::set<http::ip_representation> bans;
+     // Shared unregistration helper. Erases a single registration of the
+     // requested kind.
+     void unregister_impl_(const std::string& path, bool family);
 
-     std::shared_mutex allowances_mutex;
-     std::set<http::ip_representation> allowances;
+     // TASK-025/TASK-026: shared lambda-registration helper. Builds-or-
+     // merges a hidden detail::lambda_resource shim at @p path, sets every
+     // bit in @p methods on it, and stores @p handler into each of those
+     // method slots. All seven public on_* overloads and both public
+     // route() overloads forward to this single entry point so the
+     // merge-and-conflict logic lives in one place. Validation is
+     // atomic: if any requested method already has a slot on the path,
+     // no slot is mutated and the call throws -- callers therefore see
+     // either a fully-installed registration or no change at all.
+     // Throws std::invalid_argument if @p methods is empty, if @p
+     // handler is empty, if the path conflicts with single_resource
+     // mode, if a class-based resource is already registered at the
+     // path, or if a lambda is already registered for any requested
+     // (method, path).
+     void on_methods_(method_set methods,
+                      const std::string& path,
+                      std::function<http_response(const http_request&)> handler);
 
-     struct MHD_Daemon* daemon;
+     // PIMPL: backend-coupled state (MHD daemon, pthread mutexes, route
+     // table, ban set, route cache, websocket registry, GnuTLS SNI cache,
+     // and the dispatch helpers / MHD trampolines that operate on those)
+     // lives behind this pointer in detail/webserver_impl.hpp. The public
+     // header carries no <microhttpd.h>/<pthread.h>/<gnutls/...> baggage.
+     std::unique_ptr<detail::webserver_impl> impl_;
 
-#ifdef HAVE_WEBSOCKET
-     std::map<std::string, websocket_handler*> registered_ws_handlers;
-#endif  // HAVE_WEBSOCKET
-
-     std::shared_ptr<http_response> method_not_allowed_page(details::modded_request* mr) const;
-     std::shared_ptr<http_response> internal_error_page(details::modded_request* mr, bool force_our = false) const;
-     std::shared_ptr<http_response> not_found_page(details::modded_request* mr) const;
-     bool should_skip_auth(const std::string& path) const;
-
-     static void request_completed(void *cls,
-             struct MHD_Connection *connection, void **con_cls,
-             enum MHD_RequestTerminationCode toe);
-
-     static MHD_Result answer_to_connection(void* cls, MHD_Connection* connection, const char* url,
-             const char* method, const char* version, const char* upload_data,
-             size_t* upload_data_size, void** con_cls);
-
-     static MHD_Result post_iterator(void *cls, enum MHD_ValueKind kind, const char *key,
-             const char *filename, const char *content_type, const char *transfer_encoding,
-             const char *data, uint64_t off, size_t size);
-
-#ifdef HAVE_WEBSOCKET
-     struct ws_upgrade_data {
-         webserver* ws;
-         websocket_handler* handler;
-     };
-
-     static void upgrade_handler(void *cls, struct MHD_Connection* connection,
-                                 void *req_cls, const char *extra_in,
-                                 size_t extra_in_size, MHD_socket sock,
-                                 struct MHD_UpgradeResponseHandle *urh);
-#endif  // HAVE_WEBSOCKET
-
-     MHD_Result requests_answer_first_step(MHD_Connection* connection, struct details::modded_request* mr);
-
-     MHD_Result requests_answer_second_step(MHD_Connection* connection,
-             const char* method, const char* version, const char* upload_data,
-             size_t* upload_data_size, struct details::modded_request* mr);
-
-     MHD_Result finalize_answer(MHD_Connection* connection, struct details::modded_request* mr, const char* method);
-
-     struct MHD_Response* get_raw_response_with_fallback(details::modded_request* mr);
-
-     MHD_Result complete_request(MHD_Connection* connection, struct details::modded_request* mr, const char* version, const char* method);
-
-     void invalidate_route_cache();
-
-#ifdef HAVE_GNUTLS
-     // MHD_PskServerCredentialsCallback signature
-     static int psk_cred_handler_func(void* cls,
-                                       struct MHD_Connection* connection,
-                                       const char* username,
-                                       void** psk,
-                                       size_t* psk_size);
-
-#ifdef MHD_OPTION_HTTPS_CERT_CALLBACK
-     // SNI certificate callback function (libmicrohttpd 0.9.71+)
-     static int sni_cert_callback_func(void* cls,
-                                        struct MHD_Connection* connection,
-                                        const char* server_name,
-                                        gnutls_certificate_credentials_t* creds);
-
-     // Cache for loaded credentials per server name
-     mutable std::map<std::string, gnutls_certificate_credentials_t> sni_credentials_cache;
-     mutable std::shared_mutex sni_credentials_mutex;
-#endif  // MHD_OPTION_HTTPS_CERT_CALLBACK
-#endif  // HAVE_GNUTLS
-
-     friend MHD_Result policy_callback(void *cls, const struct sockaddr* addr, socklen_t addrlen);
-     friend void error_log(void* cls, const char* fmt, va_list ap);
-     friend void access_log(webserver* cls, std::string uri);
-     friend void* uri_log(void* cls, const char* uri);
-     friend size_t unescaper_func(void * cls, struct MHD_Connection *c, char *s);
+     // detail::webserver_impl reads the const config bag above (tcp_nodelay,
+     // unescaper, regex_checking, auth_handler, etc.) when servicing
+     // requests, and houses the MHD trampolines / dispatch helpers so
+     // <microhttpd.h> stays out of this public header. Granting friendship
+     // is preferable to introducing a long list of trivial public getters
+     // that cross the PIMPL boundary in both directions.
+     friend class detail::webserver_impl;
      friend class http_response;
+#if defined(HTTPSERVER_COMPILATION)
+     // TASK-027: test-only hook so unit tests in test/unit/ can poke
+     // at the v2 route-table impl (lookup_v2, the three tier maps)
+     // without widening the public API. The pattern matches the SBO
+     // test access friend used by http_response. Gated on
+     // HTTPSERVER_COMPILATION so it never appears in installed headers.
+     friend struct webserver_test_access;
+#endif
 };
+
+#if defined(HTTPSERVER_COMPILATION)
+// Forward-declared friend giving test code (which compiles with
+// HTTPSERVER_COMPILATION via test/Makefile.am AM_CPPFLAGS) a thin
+// pointer to the otherwise-private impl_. Defined inline so any TU
+// including this header in COMPILATION mode can use it.
+struct webserver_test_access {
+    static detail::webserver_impl* impl(webserver& w) noexcept {
+        return w.impl_.get();
+    }
+};
+#endif
 
 }  // namespace httpserver
 #endif  // SRC_HTTPSERVER_WEBSERVER_HPP_

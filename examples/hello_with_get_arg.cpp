@@ -1,6 +1,6 @@
 /*
      This file is part of libhttpserver
-     Copyright (C) 2011, 2012, 2013, 2014, 2015 Sebastiano Merlino
+     Copyright (C) 2011-2025 Sebastiano Merlino
 
      This library is free software; you can redistribute it and/or
      modify it under the terms of the GNU Lesser General Public
@@ -18,24 +18,32 @@
      USA
 */
 
-#include <memory>
+// hello_with_get_arg.cpp - read a query-string argument inside a lambda
+// handler. Try: curl 'http://localhost:8080/hello?name=world'
+//
+// NOTE: The response is plain text. If you adapt this for an HTML response,
+// you must HTML-entity-encode user-supplied input before inserting it into
+// the document body — raw reflection into HTML introduces reflected XSS
+// (CWE-79). The explicit "text/plain" content type below signals that
+// context and prevents browsers from sniffing the body as HTML.
+
 #include <string>
 
 #include <httpserver.hpp>
 
-class hello_world_resource : public httpserver::http_resource {
- public:
-     std::shared_ptr<httpserver::http_response> render(const httpserver::http_request& req) {
-         return std::shared_ptr<httpserver::http_response>(new httpserver::string_response("Hello: " + std::string(req.get_arg("name"))));
-     }
-};
-
 int main() {
-    httpserver::webserver ws = httpserver::create_webserver(8080);
+    httpserver::webserver ws{httpserver::create_webserver(8080)};
 
-    hello_world_resource hwr;
-    ws.register_resource("/hello", &hwr);
+    ws.on_get("/hello", [](const httpserver::http_request& req) {
+        // Explicit "text/plain" avoids browser content-type sniffing.
+        // Never reflect user input into an HTML response without encoding.
+        std::string body;
+        body.reserve(7 + req.get_arg("name").get_flat_value().size());
+        body = "Hello: ";
+        body += req.get_arg("name");
+        return httpserver::http_response::string(body, "text/plain");
+    });
+
     ws.start(true);
-
     return 0;
 }

@@ -29,13 +29,13 @@
 
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
+#include "./test_utils.hpp"
 
 using std::shared_ptr;
 
 using httpserver::http_resource;
 using httpserver::http_request;
 using httpserver::http_response;
-using httpserver::string_response;
 using httpserver::webserver;
 using httpserver::create_webserver;
 
@@ -51,8 +51,8 @@ using httpserver::create_webserver;
 
 class ok_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_GET(const http_request&) {
-         return std::make_shared<string_response>("OK", 200, "text/plain");
+     http_response render_get(const http_request&) {
+         return http_response::string("OK");
      }
 };
 
@@ -79,7 +79,7 @@ LT_END_SUITE(threaded_suite)
 LT_BEGIN_AUTO_TEST(threaded_suite, base)
 #ifndef _WINDOWS
     ok_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_path("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
     CURL* curl;

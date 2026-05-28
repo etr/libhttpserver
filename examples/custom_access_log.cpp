@@ -1,6 +1,6 @@
 /*
      This file is part of libhttpserver
-     Copyright (C) 2011, 2012, 2013, 2014, 2015 Sebastiano Merlino
+     Copyright (C) 2011-2025 Sebastiano Merlino
 
      This library is free software; you can redistribute it and/or
      modify it under the terms of the GNU Lesser General Public
@@ -18,30 +18,30 @@
      USA
 */
 
+// custom_access_log.cpp - install a per-request access-log callback via
+// create_webserver().log_access(). The callback is server-wide; the
+// handler itself is a plain lambda.
+
 #include <iostream>
-#include <memory>
 #include <string>
 
 #include <httpserver.hpp>
 
 void custom_access_log(const std::string& url) {
+    // NOTE: In production, sanitize the URL before writing to a terminal or
+    // log file — raw URLs may contain ANSI escape sequences or control
+    // characters that can corrupt terminal output (CWE-117).
     std::cout << "ACCESSING: " << url << std::endl;
 }
 
-class hello_world_resource : public httpserver::http_resource {
- public:
-     std::shared_ptr<httpserver::http_response> render(const httpserver::http_request&) {
-         return std::shared_ptr<httpserver::http_response>(new httpserver::string_response("Hello, World!"));
-     }
-};
-
 int main() {
-    httpserver::webserver ws = httpserver::create_webserver(8080)
-        .log_access(custom_access_log);
+    httpserver::webserver ws{httpserver::create_webserver(8080)
+                                 .log_access(custom_access_log)};
 
-    hello_world_resource hwr;
-    ws.register_resource("/hello", &hwr);
+    ws.on_get("/hello", [](const httpserver::http_request&) {
+        return httpserver::http_response::string("Hello, World!");
+    });
+
     ws.start(true);
-
     return 0;
 }

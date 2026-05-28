@@ -20,224 +20,218 @@
 */
 
 #include "httpserver/http_request.hpp"
+
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+#include <algorithm>
+#include <atomic>
 #include <iostream>
 #include <map>
+#include <memory>
+#include <memory_resource>
 #include <string>
+#include <tuple>
+#include <utility>
 #include <vector>
+
+// TASK-016: pull in connection_state to read the per-connection arena
+// out of MHD on impl construction. Both headers are gated by
+// HTTPSERVER_COMPILATION so this stays internal.
+#include "httpserver/detail/http_request_impl.hpp"
+#include "httpserver/detail/webserver_impl.hpp"
 #include "httpserver/http_utils.hpp"
 #include "httpserver/string_utilities.hpp"
-
-#ifdef HAVE_GNUTLS
-#include <gnutls/x509.h>
-
-// RAII wrapper for gnutls_x509_crt_t to ensure proper cleanup
-class scoped_x509_cert {
- public:
-    scoped_x509_cert() : cert_(nullptr), valid_(false) {}
-
-    ~scoped_x509_cert() {
-        if (cert_ != nullptr) {
-            gnutls_x509_crt_deinit(cert_);
-        }
-    }
-
-    // Initialize from a TLS session's peer certificate
-    // Returns true if certificate was successfully loaded
-    bool init_from_session(gnutls_session_t session) {
-        unsigned int list_size = 0;
-        const gnutls_datum_t* cert_list = gnutls_certificate_get_peers(session, &list_size);
-
-        if (cert_list == nullptr || list_size == 0) {
-            return false;
-        }
-
-        if (gnutls_x509_crt_init(&cert_) != GNUTLS_E_SUCCESS) {
-            cert_ = nullptr;
-            return false;
-        }
-
-        if (gnutls_x509_crt_import(cert_, &cert_list[0], GNUTLS_X509_FMT_DER) != GNUTLS_E_SUCCESS) {
-            gnutls_x509_crt_deinit(cert_);
-            cert_ = nullptr;
-            return false;
-        }
-
-        valid_ = true;
-        return true;
-    }
-
-    bool is_valid() const { return valid_; }
-    gnutls_x509_crt_t get() const { return cert_; }
-
-    // Movable
-    scoped_x509_cert(scoped_x509_cert&& other) noexcept
-        : cert_(other.cert_), valid_(other.valid_) {
-        other.cert_ = nullptr;
-        other.valid_ = false;
-    }
-    scoped_x509_cert& operator=(scoped_x509_cert&& other) noexcept {
-        if (this != &other) {
-            if (cert_ != nullptr) gnutls_x509_crt_deinit(cert_);
-            cert_ = other.cert_;
-            valid_ = other.valid_;
-            other.cert_ = nullptr;
-            other.valid_ = false;
-        }
-        return *this;
-    }
-
-    // Non-copyable
-    scoped_x509_cert(const scoped_x509_cert&) = delete;
-    scoped_x509_cert& operator=(const scoped_x509_cert&) = delete;
-
- private:
-    gnutls_x509_crt_t cert_;
-    bool valid_;
-};
-#endif  // HAVE_GNUTLS
 
 namespace httpserver {
 
 const char http_request::EMPTY[] = "";
 
-struct arguments_accumulator {
-    unescaper_ptr unescaper;
-    std::map<std::string, std::vector<std::string>, http::arg_comparator>* arguments;
-};
+// (arguments_accumulator moved to http_request_impl.hpp so unit tests
+// can drive build_request_args directly; see security-reviewer-iter1-2.)
+
+
+// ============================================================================
+// http_request: public-API forwarders + small outer-state setters.
+// ============================================================================
+
+namespace detail {
+
+// Heap-deleter. The impl was allocated by std::make_unique (= operator
+// new), so destruction goes through operator delete: the same as v1.
+static void delete_impl_heap(http_request_impl* p) noexcept {
+    delete p;
+}
+
+// Arena-deleter. The impl was placement-constructed inside a
+// std::pmr::monotonic_buffer_resource. We must run its destructor (so
+// every contained pmr::string/vector/map releases external resources
+// like file_info disk handles) but MUST NOT call operator delete: the
+// memory is owned by the arena and will be reclaimed wholesale by
+// arena_.release() in webserver_impl::request_completed.
+static void destroy_impl_arena(http_request_impl* p) noexcept {
+    if (p != nullptr) {
+        p->~http_request_impl();
+    }
+}
+
+// http_request_impl_deleter::operator() lives in
+// src/detail/http_request_impl.cpp alongside the impl method bodies.
+
+}  // namespace detail
+
+namespace {
+
+// TASK-016: pick the right memory resource for an http_request_impl.
+// On the live request path (a real MHD_Connection*), look up the
+// per-connection arena set by webserver_impl::connection_notify and use
+// it. If nothing is registered (test paths, very old MHD versions, or
+// connection_notify hasn't fired yet for some reason), fall back to the
+// default heap resource so behavior matches v1.
+//
+// performance-reviewer-iter1-4: the fallback is intentionally silent in
+// production (to preserve v1 behaviour), but in debug builds we log a
+// warning and increment a counter so integration tests can observe
+// misconfiguration (e.g. MHD_OPTION_NOTIFY_CONNECTION not wired).
+// Access the counter via httpserver::detail::arena_fallback_count().
+static std::atomic<std::uint64_t> g_arena_fallback_count{0};
+
+std::pmr::memory_resource* pick_resource(struct MHD_Connection* connection) {
+    if (connection == nullptr) {
+        return std::pmr::get_default_resource();
+    }
+    const MHD_ConnectionInfo* ci =
+        MHD_get_connection_info(connection, MHD_CONNECTION_INFO_SOCKET_CONTEXT);
+    if (ci == nullptr || ci->socket_context == nullptr) {
+#ifndef NDEBUG
+        ++g_arena_fallback_count;
+        // Emit a single-line diagnostic so integration tests and CI logs
+        // surface misconfiguration without crashing.
+        fprintf(stderr,
+                "[libhttpserver] WARN: connection %p has no arena "
+                "socket_context; falling back to heap allocation "
+                "(fallback count: %" PRIu64 ")\n",
+                static_cast<void*>(connection),
+                g_arena_fallback_count.load());
+#endif
+        return std::pmr::get_default_resource();
+    }
+    auto* cs = static_cast<httpserver::detail::connection_state*>(ci->socket_context);
+    return &cs->arena_;
+}
+
+}  // namespace
+
+http_request::http_request(struct MHD_Connection* underlying_connection, unescaper_ptr unescaper)
+    : impl_(nullptr, detail::http_request_impl_deleter{nullptr}) {
+    auto* res = pick_resource(underlying_connection);
+    if (res == std::pmr::get_default_resource()) {
+        // Heap-fallback: matches v1 lifetime exactly; deleter frees via
+        // operator delete.
+        impl_.reset(new detail::http_request_impl(underlying_connection, unescaper));
+        impl_.get_deleter().fn = &detail::delete_impl_heap;
+    } else {
+        // Arena-backed: allocate and construct via polymorphic_allocator
+        // so the impl's pmr-aware members propagate the arena allocator.
+        // Reclamation is by destructor only; arena_.release() in
+        // webserver_impl::request_completed reclaims the bytes.
+        std::pmr::polymorphic_allocator<detail::http_request_impl> alloc(res);
+        auto* p = alloc.new_object<detail::http_request_impl>(
+            underlying_connection, unescaper, std::pmr::polymorphic_allocator<>(res));
+        impl_.reset(p);
+        impl_.get_deleter().fn = &detail::destroy_impl_arena;
+    }
+
+    // TASK-018: assemble the querystring eagerly on the live-MHD path so
+    // the public reader can be `noexcept`. On the test-request path
+    // (connection_ == nullptr) the create_test_request builder is the
+    // sole writer of impl_->querystring; leave it untouched here.
+    // Allocations during assembly land on the per-connection arena (or
+    // the heap fallback) and may throw -- that's permitted during
+    // construction.
+    if (impl_->connection_ != nullptr) {
+        MHD_get_connection_values(
+            impl_->connection_, MHD_GET_ARGUMENT_KIND,
+            &detail::http_request_impl::build_request_querystring,
+            reinterpret_cast<void*>(&impl_->querystring));
+    }
+}
+
+http_request::~http_request() {
+    if (impl_) {
+        for (const auto& [key, by_filename] : impl_->files_) {
+            for (const auto& [fname, finfo] : by_filename) {
+                bool should_delete = true;
+                if (impl_->file_cleanup_callback_ != nullptr) {
+                    try {
+                        should_delete = impl_->file_cleanup_callback_(key, fname, finfo);
+                    } catch (...) {
+                        // If callback throws, default to deleting the file.
+                        should_delete = true;
+                    }
+                }
+                if (should_delete) {
+                    // C++17 has std::filesystem::remove()
+                    remove(finfo.get_file_system_file_name().c_str());
+                }
+            }
+        }
+    }
+}
 
 void http_request::set_method(const std::string& method) {
     this->method = method;
 }
 
-#ifdef HAVE_DAUTH
-http::http_utils::digest_auth_result http_request::check_digest_auth(
-    const std::string& realm,
-    const std::string& password,
-    unsigned int nonce_timeout,
-    uint32_t max_nc,
-    http::http_utils::digest_algorithm algo) const {
-    std::string_view digested_user = get_digested_user();
-
-    enum MHD_DigestAuthResult result = MHD_digest_auth_check3(
-        underlying_connection,
-        realm.c_str(),
-        digested_user.data(),
-        password.c_str(),
-        nonce_timeout,
-        max_nc,
-        MHD_DIGEST_AUTH_MULT_QOP_ANY_NON_INT,
-        static_cast<MHD_DigestAuthMultiAlgo3>(algo));
-
-    return static_cast<http::http_utils::digest_auth_result>(result);
+const std::vector<std::string>& http_request::get_path_pieces() const {
+    // TASK-017: lazily populate both caches and return the public-typed
+    // mirror by const&. All cache-maintenance logic lives inside the impl
+    // class (code-quality-reviewer-iter1-4 / code-simplifier-iter1-8).
+    impl_->ensure_path_pieces_cached(path);
+    impl_->ensure_path_pieces_public_cached();
+    return impl_->path_pieces_public_;
 }
 
-http::http_utils::digest_auth_result http_request::check_digest_auth_digest(
-    const std::string& realm,
-    const void* userdigest,
-    size_t userdigest_size,
-    unsigned int nonce_timeout,
-    uint32_t max_nc,
-    http::http_utils::digest_algorithm algo) const {
-    std::string_view digested_user = get_digested_user();
-
-    enum MHD_DigestAuthResult result = MHD_digest_auth_check_digest3(
-        underlying_connection,
-        realm.c_str(),
-        digested_user.data(),
-        userdigest,
-        userdigest_size,
-        nonce_timeout,
-        max_nc,
-        MHD_DIGEST_AUTH_MULT_QOP_ANY_NON_INT,
-        static_cast<MHD_DigestAuthMultiAlgo3>(algo));
-
-    return static_cast<http::http_utils::digest_auth_result>(result);
-}
-#endif  // HAVE_DAUTH
-
-std::string_view http_request::get_connection_value(std::string_view key, enum MHD_ValueKind kind) const {
-    const char* header_c = MHD_lookup_connection_value(underlying_connection, kind, key.data());
-
-    if (header_c == nullptr) return EMPTY;
-
-    return header_c;
+const std::string http_request::get_path_piece(int index) const {
+    impl_->ensure_path_pieces_cached(path);
+    if (static_cast<int>(impl_->path_pieces.size()) > index) {
+        const auto& p = impl_->path_pieces[index];
+        return std::string(p.data(), p.size());
+    }
+    return EMPTY;
 }
 
-MHD_Result http_request::build_request_header(void *cls, enum MHD_ValueKind kind, const char *key, const char *value) {
-    // Parameters needed to respect MHD interface, but not used in the implementation.
-    std::ignore = kind;
-
-    http::header_view_map* dhr = static_cast<http::header_view_map*>(cls);
-    (*dhr)[key] = value;
-    return MHD_YES;
-}
-
-const http::header_view_map http_request::get_headerlike_values(enum MHD_ValueKind kind) const {
-    http::header_view_map headers;
-
-    MHD_get_connection_values(underlying_connection, kind, &build_request_header, reinterpret_cast<void*>(&headers));
-
-    return headers;
-}
 
 std::string_view http_request::get_header(std::string_view key) const {
-    return get_connection_value(key, MHD_HEADER_KIND);
+    return impl_->get_connection_value(key, MHD_HEADER_KIND);
 }
 
-const http::header_view_map http_request::get_headers() const {
-    return get_headerlike_values(MHD_HEADER_KIND);
+const http::header_view_map& http_request::get_headers() const {
+    return impl_->ensure_headerlike_cache(MHD_HEADER_KIND);
 }
 
 std::string_view http_request::get_footer(std::string_view key) const {
-    return get_connection_value(key, MHD_FOOTER_KIND);
+    return impl_->get_connection_value(key, MHD_FOOTER_KIND);
 }
 
-const http::header_view_map http_request::get_footers() const {
-    return get_headerlike_values(MHD_FOOTER_KIND);
+const http::header_view_map& http_request::get_footers() const {
+    return impl_->ensure_headerlike_cache(MHD_FOOTER_KIND);
 }
 
 std::string_view http_request::get_cookie(std::string_view key) const {
-    return get_connection_value(key, MHD_COOKIE_KIND);
+    return impl_->get_connection_value(key, MHD_COOKIE_KIND);
 }
 
-const http::header_view_map http_request::get_cookies() const {
-    return get_headerlike_values(MHD_COOKIE_KIND);
-}
-
-void http_request::populate_args() const {
-    if (cache->args_populated) {
-        return;
-    }
-    arguments_accumulator aa;
-    aa.unescaper = unescaper;
-    aa.arguments = &cache->unescaped_args;
-    MHD_get_connection_values(underlying_connection, MHD_GET_ARGUMENT_KIND, &build_request_args, reinterpret_cast<void*>(&aa));
-
-    cache->args_populated = true;
-}
-
-
-void http_request::grow_last_arg(const std::string& key, const std::string& value) {
-    auto it = cache->unescaped_args.find(key);
-
-    if (it != cache->unescaped_args.end()) {
-        if (!it->second.empty()) {
-            it->second.back() += value;
-        } else {
-            it->second.push_back(value);
-        }
-    } else {
-        cache->unescaped_args[key] = {value};
-    }
+const http::header_view_map& http_request::get_cookies() const {
+    return impl_->ensure_headerlike_cache(MHD_COOKIE_KIND);
 }
 
 http_arg_value http_request::get_arg(std::string_view key) const {
-    populate_args();
+    impl_->populate_args();
 
-    auto it = cache->unescaped_args.find(key);
-    if (it != cache->unescaped_args.end()) {
+    auto it = impl_->unescaped_args.find(key);
+    if (it != impl_->unescaped_args.end()) {
         http_arg_value arg;
         arg.values.reserve(it->second.size());
         for (const auto& value : it->second) {
@@ -249,306 +243,131 @@ http_arg_value http_request::get_arg(std::string_view key) const {
 }
 
 std::string_view http_request::get_arg_flat(std::string_view key) const {
-    auto const it = cache->unescaped_args.find(key);
+    impl_->populate_args();
 
-    if (it != cache->unescaped_args.end()) {
+    auto const it = impl_->unescaped_args.find(key);
+
+    if (it != impl_->unescaped_args.end()) {
         return it->second[0];
     }
 
-    return get_connection_value(key, MHD_GET_ARGUMENT_KIND);
+    // Return EMPTY directly: populate_args() has already iterated over all
+    // MHD_GET_ARGUMENT_KIND values and stored them in unescaped_args.  If the
+    // key is absent after that pass, MHD will also not have it, so calling
+    // get_connection_value(key, MHD_GET_ARGUMENT_KIND) is redundant and
+    // would bypass unescaping, returning a raw (non-unescaped) value.
+    // (Items 4, 12, 18: code-simplifier / code-quality / performance.)
+    return EMPTY;
 }
 
-const http::arg_view_map http_request::get_args() const {
-    populate_args();
-
-    http::arg_view_map arguments;
-    for (const auto& [key, value] : cache->unescaped_args) {
-        auto& arg_values = arguments[key];
-        for (const auto& v : value) {
-            arg_values.values.push_back(v);
-        }
-    }
-    return arguments;
+const http::arg_view_map& http_request::get_args() const {
+    // TASK-017: lazily populate the args view-map cache. All build logic
+    // lives inside the impl class (code-simplifier-iter1-9).
+    impl_->populate_args();
+    impl_->ensure_args_view_cached();
+    return impl_->args_view_cached_;
 }
 
 const std::map<std::string_view, std::string_view, http::arg_comparator> http_request::get_args_flat() const {
-    populate_args();
+    impl_->populate_args();
     std::map<std::string_view, std::string_view, http::arg_comparator> ret;
-    for (const auto&[key, val] : cache->unescaped_args) {
+    for (const auto& [key, val] : impl_->unescaped_args) {
         ret[key] = val[0];
     }
     return ret;
 }
 
 http::file_info& http_request::get_or_create_file_info(const std::string& key, const std::string& upload_file_name) {
-    return files[key][upload_file_name];
+    return impl_->files_[key][upload_file_name];
 }
 
-std::string_view http_request::get_querystring() const {
-    if (!cache->querystring.empty()) {
-        return cache->querystring;
-    }
-
-    MHD_get_connection_values(underlying_connection, MHD_GET_ARGUMENT_KIND, &build_request_querystring, reinterpret_cast<void*>(&cache->querystring));
-
-    return cache->querystring;
+const std::map<std::string, std::map<std::string, http::file_info>>& http_request::get_files() const noexcept {
+    return impl_->files_;
 }
 
-MHD_Result http_request::build_request_args(void *cls, enum MHD_ValueKind kind, const char *key, const char *arg_value) {
-    // Parameters needed to respect MHD interface, but not used in the implementation.
-    std::ignore = kind;
-
-    arguments_accumulator* aa = static_cast<arguments_accumulator*>(cls);
-    std::string value = ((arg_value == nullptr) ? "" : arg_value);
-
-    http::base_unescaper(&value, aa->unescaper);
-    (*aa->arguments)[key].push_back(value);
-    return MHD_YES;
+std::string_view http_request::get_querystring() const noexcept {
+    // TASK-018: querystring is assembled eagerly during construction (live
+    // MHD path) or set directly by create_test_request (test path), so the
+    // reader is a trivial member access -- genuinely noexcept.
+    // impl_ is always non-null on live requests; the default constructor is
+    // private and only callable by create_test_request, which constructs a
+    // valid impl_ before build() returns. (Item 5.)
+    return impl_->querystring;
 }
 
-MHD_Result http_request::build_request_querystring(void *cls, enum MHD_ValueKind kind, const char *key_value, const char *arg_value) {
-    // Parameters needed to respect MHD interface, but not used in the implementation.
-    std::ignore = kind;
-
-    std::string* querystring = static_cast<std::string*>(cls);
-
-    std::string_view key = key_value;
-    std::string_view value = ((arg_value == nullptr) ? "" : arg_value);
-
-    // Limit to a single allocation.
-    querystring->reserve(querystring->size() + key.size() + value.size() + 3);
-
-    *querystring += ((*querystring == "") ? "?" : "&");
-    *querystring += key;
-    *querystring += "=";
-    *querystring += value;
-
-    return MHD_YES;
-}
-
-#ifdef HAVE_BAUTH
-void http_request::fetch_user_pass() const {
-    struct MHD_BasicAuthInfo* info = MHD_basic_auth_get_username_password3(underlying_connection);
-
-    if (info != nullptr) {
-        cache->username.assign(info->username, info->username_len);
-        if (info->password != nullptr) {
-            cache->password.assign(info->password, info->password_len);
-        }
-        MHD_free(info);
-    }
-}
-
-std::string_view http_request::get_user() const {
-    if (!cache->username.empty()) {
-        return cache->username;
-    }
-    fetch_user_pass();
-    return cache->username;
-}
-
-std::string_view http_request::get_pass() const {
-    if (!cache->password.empty()) {
-        return cache->password;
-    }
-    fetch_user_pass();
-    return cache->password;
-}
-#endif  // HAVE_BAUTH
-
-#ifdef HAVE_DAUTH
-std::string_view http_request::get_digested_user() const {
-    if (!cache->digested_user.empty()) {
-        return cache->digested_user;
-    }
-
-    struct MHD_DigestAuthUsernameInfo* info = MHD_digest_auth_get_username3(underlying_connection);
-
-    cache->digested_user = EMPTY;
-    if (info != nullptr) {
-        if (info->username != nullptr) {
-            cache->digested_user.assign(info->username, info->username_len);
-        }
-        MHD_free(info);
-    }
-
-    return cache->digested_user;
-}
-#endif  // HAVE_DAUTH
-
-#ifdef HAVE_GNUTLS
-bool http_request::has_tls_session() const {
-    const MHD_ConnectionInfo * conninfo = MHD_get_connection_info(underlying_connection, MHD_CONNECTION_INFO_GNUTLS_SESSION);
-    return (conninfo != nullptr);
-}
-
-gnutls_session_t http_request::get_tls_session() const {
-    const MHD_ConnectionInfo * conninfo = MHD_get_connection_info(underlying_connection, MHD_CONNECTION_INFO_GNUTLS_SESSION);
-
-    if (conninfo == nullptr) {
-        return nullptr;
-    }
-
-    return static_cast<gnutls_session_t>(conninfo->tls_session);
-}
-
-bool http_request::has_client_certificate() const {
-    if (!has_tls_session()) {
-        return false;
-    }
-
-    gnutls_session_t session = get_tls_session();
-    unsigned int list_size = 0;
-    const gnutls_datum_t* cert_list = gnutls_certificate_get_peers(session, &list_size);
-
-    return (cert_list != nullptr && list_size > 0);
-}
-
-void http_request::populate_all_cert_fields() const {
-    if (cache->client_cert_fields_cached) {
-        return;
-    }
-
-    cache->client_cert_fields_cached = true;
-
-    gnutls_session_t session = nullptr;
-    if (has_tls_session()) {
-        session = get_tls_session();
-    }
-
-    scoped_x509_cert cert;
-    if (session != nullptr) {
-        cert.init_from_session(session);
-    }
-
-    if (!cert.is_valid()) {
-        // Default values (empty strings and -1) are already set by the
-        // cache struct initializers; client_cert_verified defaults to false.
-        return;
-    }
-
-    // Client certificate verification
-    {
-        unsigned int status = 0;
-        if (gnutls_certificate_verify_peers2(session, &status) == GNUTLS_E_SUCCESS) {
-            cache->client_cert_verified = (status == 0);
-        }
-    }
-
-    // Subject DN
-    {
-        size_t dn_size = 0;
-        gnutls_x509_crt_get_dn(cert.get(), nullptr, &dn_size);
-        std::string dn(dn_size, '\0');
-        if (gnutls_x509_crt_get_dn(cert.get(), &dn[0], &dn_size) == GNUTLS_E_SUCCESS) {
-            if (!dn.empty() && dn.back() == '\0') dn.pop_back();
-            cache->client_cert_dn = dn;
-        }
-    }
-
-    // Issuer DN
-    {
-        size_t dn_size = 0;
-        gnutls_x509_crt_get_issuer_dn(cert.get(), nullptr, &dn_size);
-        std::string dn(dn_size, '\0');
-        if (gnutls_x509_crt_get_issuer_dn(cert.get(), &dn[0], &dn_size) == GNUTLS_E_SUCCESS) {
-            if (!dn.empty() && dn.back() == '\0') dn.pop_back();
-            cache->client_cert_issuer_dn = dn;
-        }
-    }
-
-    // Common Name
-    {
-        size_t cn_size = 0;
-        gnutls_x509_crt_get_dn_by_oid(cert.get(), GNUTLS_OID_X520_COMMON_NAME, 0, 0, nullptr, &cn_size);
-        if (cn_size > 0) {
-            std::string cn(cn_size, '\0');
-            if (gnutls_x509_crt_get_dn_by_oid(cert.get(), GNUTLS_OID_X520_COMMON_NAME, 0, 0, &cn[0], &cn_size) == GNUTLS_E_SUCCESS) {
-                if (!cn.empty() && cn.back() == '\0') cn.pop_back();
-                cache->client_cert_cn = cn;
-            }
-        }
-    }
-
-    // SHA-256 fingerprint
-    {
-        unsigned char fingerprint[32];
-        size_t fingerprint_size = sizeof(fingerprint);
-        if (gnutls_x509_crt_get_fingerprint(cert.get(), GNUTLS_DIG_SHA256, fingerprint, &fingerprint_size) == GNUTLS_E_SUCCESS) {
-            std::string hex_fingerprint;
-            hex_fingerprint.reserve(fingerprint_size * 2);
-            for (size_t i = 0; i < fingerprint_size; ++i) {
-                char hex[3];
-                snprintf(hex, sizeof(hex), "%02x", fingerprint[i]);
-                hex_fingerprint += hex;
-            }
-            cache->client_cert_fingerprint_sha256 = hex_fingerprint;
-        }
-    }
-
-    // Validity times
-    cache->client_cert_not_before = gnutls_x509_crt_get_activation_time(cert.get());
-    cache->client_cert_not_after = gnutls_x509_crt_get_expiration_time(cert.get());
-}
-
-std::string http_request::get_client_cert_dn() const {
-    populate_all_cert_fields();
-    return cache->client_cert_dn;
-}
-
-std::string http_request::get_client_cert_issuer_dn() const {
-    populate_all_cert_fields();
-    return cache->client_cert_issuer_dn;
-}
-
-std::string http_request::get_client_cert_cn() const {
-    populate_all_cert_fields();
-    return cache->client_cert_cn;
-}
-
-bool http_request::is_client_cert_verified() const {
-    populate_all_cert_fields();
-    return cache->client_cert_verified;
-}
-
-std::string http_request::get_client_cert_fingerprint_sha256() const {
-    populate_all_cert_fields();
-    return cache->client_cert_fingerprint_sha256;
-}
-
-time_t http_request::get_client_cert_not_before() const {
-    populate_all_cert_fields();
-    return cache->client_cert_not_before;
-}
-
-time_t http_request::get_client_cert_not_after() const {
-    populate_all_cert_fields();
-    return cache->client_cert_not_after;
-}
-#endif  // HAVE_GNUTLS
 
 std::string_view http_request::get_requestor() const {
-    if (!cache->requestor_ip.empty()) {
-        return cache->requestor_ip;
+    // Single consolidated early-return covers both the cache-hit path
+    // (requestor_ip_cached == true after first call on a live connection)
+    // and the test-request path (connection_ == nullptr, requestor_ip was
+    // set directly by create_test_request). Using a dedicated boolean instead
+    // of checking requestor_ip.empty() is consistent with the args_populated /
+    // path_pieces_cached / user_pass_fetched pattern and is robust if the
+    // connection layer ever returns an empty IP string.
+    // (code-simplifier-iter1 findings #7 + #8/#9 / major+minor review items)
+    if (impl_->requestor_ip_cached || impl_->connection_ == nullptr) {
+        return impl_->requestor_ip;
     }
 
-    const MHD_ConnectionInfo * conninfo = MHD_get_connection_info(underlying_connection, MHD_CONNECTION_INFO_CLIENT_ADDRESS);
+    const MHD_ConnectionInfo* conninfo = MHD_get_connection_info(impl_->connection_, MHD_CONNECTION_INFO_CLIENT_ADDRESS);
 
-    cache->requestor_ip = http::get_ip_str(conninfo->client_addr);
-    return cache->requestor_ip;
+    if (conninfo == nullptr) {
+        return EMPTY;
+    }
+
+    auto ip = http::get_ip_str(conninfo->client_addr);
+    impl_->requestor_ip.assign(ip.data(), ip.size());
+    impl_->requestor_ip_cached = true;
+    return impl_->requestor_ip;
 }
 
 uint16_t http_request::get_requestor_port() const {
-    const MHD_ConnectionInfo * conninfo = MHD_get_connection_info(underlying_connection, MHD_CONNECTION_INFO_CLIENT_ADDRESS);
+    // Test-request path: connection_ is null, use local port.
+    if (impl_->connection_ == nullptr) {
+        return impl_->requestor_port_local;
+    }
+
+    const MHD_ConnectionInfo* conninfo = MHD_get_connection_info(impl_->connection_, MHD_CONNECTION_INFO_CLIENT_ADDRESS);
+
+    if (conninfo == nullptr) {
+        return 0;
+    }
 
     return http::get_port(conninfo->client_addr);
 }
 
-std::ostream &operator<< (std::ostream &os, const http_request &r) {
+// ----- Private setters used by webserver_impl dispatch. ---------------------
+
+void http_request::set_arg(const std::string& key, const std::string& value) {
+    impl_->set_arg(key, value, content_size_limit);
+}
+
+void http_request::set_arg(const char* key, const char* value, size_t size) {
+    impl_->set_arg(key, value, size, content_size_limit);
+}
+
+void http_request::set_arg_flat(const std::string& key, const std::string& value) {
+    impl_->set_arg_flat(key, value, content_size_limit);
+}
+
+void http_request::set_args(const std::map<std::string, std::string>& args) {
+    impl_->set_args(args, content_size_limit);
+}
+
+void http_request::grow_last_arg(const std::string& key, const std::string& value) {
+    impl_->grow_last_arg(key, value);
+}
+
+void http_request::set_file_cleanup_callback(file_cleanup_callback_ptr callback) {
+    impl_->file_cleanup_callback_ = callback;
+}
+
+std::ostream& operator<< (std::ostream& os, const http_request& r) {
     os << r.get_method() << " Request [";
-#ifdef HAVE_BAUTH
+    // TASK-034: get_user/get_pass are unconditional; they return empty
+    // on HAVE_BAUTH-off builds, so the dump prints two empty quoted
+    // strings in that case (harmless).
     os << "user:\"" << r.get_user() << "\" pass:\"" << r.get_pass() << "\"";
-#endif  // HAVE_BAUTH
     os << "] path:\"" << r.get_path() << "\"" << std::endl;
 
     http::dump_header_map(os, "Headers", r.get_headers());
@@ -560,26 +379,6 @@ std::ostream &operator<< (std::ostream &os, const http_request &r) {
        << " ] Port [ " << r.get_requestor_port() << " ]" << std::endl;
 
     return os;
-}
-
-http_request::~http_request() {
-    for (const auto& file_key : get_files()) {
-        for (const auto& files : file_key.second) {
-            bool should_delete = true;
-            if (file_cleanup_callback != nullptr) {
-                try {
-                    should_delete = file_cleanup_callback(file_key.first, files.first, files.second);
-                } catch (...) {
-                    // If callback throws, default to deleting the file
-                    should_delete = true;
-                }
-            }
-            if (should_delete) {
-                // C++17 has std::filesystem::remove()
-                remove(files.second.get_file_system_file_name().c_str());
-            }
-        }
-    }
 }
 
 }  // namespace httpserver

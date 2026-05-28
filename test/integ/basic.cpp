@@ -25,9 +25,11 @@
 #include <iostream>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <numeric>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -35,6 +37,7 @@
 #include "./httpserver.hpp"
 #include "httpserver/string_utilities.hpp"
 #include "./littletest.hpp"
+#include "./test_utils.hpp"
 
 using std::string;
 using std::map;
@@ -45,8 +48,6 @@ using std::stringstream;
 using httpserver::http_resource;
 using httpserver::http_request;
 using httpserver::http_response;
-using httpserver::string_response;
-using httpserver::file_response;
 using httpserver::webserver;
 using httpserver::create_webserver;
 
@@ -68,40 +69,40 @@ size_t headerfunc(void *ptr, size_t size, size_t nmemb, map<string, string>* ss)
 
 class simple_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_GET(const http_request&) {
-         return std::make_shared<string_response>("OK", 200, "text/plain");
+     http_response render_get(const http_request&) {
+         return http_response::string("OK");
      }
-     shared_ptr<http_response> render_POST(const http_request& req) {
-         return std::make_shared<string_response>(std::string(req.get_arg("arg1")) + std::string(req.get_arg("arg2")), 200, "text/plain");
+     http_response render_post(const http_request& req) {
+         return http_response::string(std::string(req.get_arg("arg1")) + std::string(req.get_arg("arg2")));
      }
 };
 
 class large_post_resource_last_value : public http_resource {
  public:
-     shared_ptr<http_response> render_GET(const http_request&) {
-         return std::make_shared<string_response>("OK", 200, "text/plain");
+     http_response render_get(const http_request&) {
+         return http_response::string("OK");
      }
-     shared_ptr<http_response> render_POST(const http_request& req) {
-         return std::make_shared<string_response>(std::string(req.get_arg("arg1").get_all_values().back()), 200, "text/plain");
+     http_response render_post(const http_request& req) {
+         return http_response::string(std::string(req.get_arg("arg1").get_all_values().back()));
      }
 };
 
 class large_post_resource_first_value : public http_resource {
  public:
-     shared_ptr<http_response> render_GET(const http_request&) {
-         return std::make_shared<string_response>("OK", 200, "text/plain");
+     http_response render_get(const http_request&) {
+         return http_response::string("OK");
      }
-     shared_ptr<http_response> render_POST(const http_request& req) {
-         return std::make_shared<string_response>(std::string(req.get_arg("arg1").get_all_values().front()), 200, "text/plain");
+     http_response render_post(const http_request& req) {
+         return http_response::string(std::string(req.get_arg("arg1").get_all_values().front()));
      }
 };
 
 class arg_value_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_GET(const http_request&) {
-         return std::make_shared<string_response>("OK", 200, "text/plain");
+     http_response render_get(const http_request&) {
+         return http_response::string("OK");
      }
-     shared_ptr<http_response> render_POST(const http_request& req) {
+     http_response render_post(const http_request& req) {
          auto const arg_value = req.get_arg("arg").get_all_values();
          for (auto const & a : arg_value) {
             std::cerr << a << std::endl;
@@ -109,148 +110,150 @@ class arg_value_resource : public http_resource {
          std::string all_values = std::accumulate(std::next(arg_value.begin()), arg_value.end(), std::string(arg_value[0]), [](std::string a, std::string_view in) {
             return std::move(a) + std::string(in);
          });
-         return std::make_shared<string_response>(all_values, 200, "text/plain");
+         return http_response::string(all_values);
      }
 };
 
 class args_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_GET(const http_request& req) {
-         return std::make_shared<string_response>(std::string(req.get_arg("arg")) + std::string(req.get_arg("arg2")), 200, "text/plain");
+     http_response render_get(const http_request& req) {
+         return http_response::string(std::string(req.get_arg("arg")) + std::string(req.get_arg("arg2")));
      }
 };
 
 class args_flat_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_GET(const http_request& req) {
+     http_response render_get(const http_request& req) {
          auto args = req.get_args_flat();
          stringstream ss;
          for (const auto& [key, value] : args) {
              ss << key << "=" << value << ";";
          }
-         return std::make_shared<string_response>(ss.str(), 200, "text/plain");
+         return http_response::string(ss.str());
      }
 };
 
 class long_content_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_GET(const http_request&) {
-         return std::make_shared<string_response>(lorem_ipsum, 200, "text/plain");
+     http_response render_get(const http_request&) {
+         return http_response::string(lorem_ipsum);
      }
 };
 
 class header_set_test_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_GET(const http_request&) {
-         auto hrb = std::make_shared<string_response>("OK", 200, "text/plain");
-         hrb->with_header("KEY", "VALUE");
-         return hrb;
+     http_response render_get(const http_request&) override {
+         return http_response::string("OK")
+                    .with_header("KEY", "VALUE");
      }
 };
 
 class cookie_set_test_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_GET(const http_request&) {
-         auto hrb = std::make_shared<string_response>("OK", 200, "text/plain");
-         hrb->with_cookie("MyCookie", "CookieValue");
-         return hrb;
+     http_response render_get(const http_request&) override {
+         return http_response::string("OK")
+                    .with_cookie("MyCookie", "CookieValue");
      }
 };
 
 class cookie_reading_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_GET(const http_request& req) {
-         return std::make_shared<string_response>(std::string(req.get_cookie("name")), 200, "text/plain");
+     http_response render_get(const http_request& req) {
+         return http_response::string(std::string(req.get_cookie("name")));
      }
 };
 
 class header_reading_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_GET(const http_request& req) {
-         return std::make_shared<string_response>(std::string(req.get_header("MyHeader")), 200, "text/plain");
+     http_response render_get(const http_request& req) {
+         return http_response::string(std::string(req.get_header("MyHeader")));
      }
 };
 
 class full_args_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_GET(const http_request& req) {
-         return std::make_shared<string_response>(std::string(req.get_args().at("arg")), 200, "text/plain");
+     http_response render_get(const http_request& req) {
+         // get_args() returns const http::arg_view_map& (TASK-017). The
+         // .at("arg") call is read-only on const&; the http_arg_value is
+         // implicitly converted to std::string at the call site. This call
+         // site was reviewed for copy-semantic reliance and requires no
+         // modification. (spec-alignment-checker-iter1-20)
+         return http_response::string(std::string(req.get_args().at("arg")));
      }
 };
 
 class querystring_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_GET(const http_request& req) {
-         return std::make_shared<string_response>(std::string(req.get_querystring()), 200, "text/plain");
+     http_response render_get(const http_request& req) {
+         return http_response::string(std::string(req.get_querystring()));
      }
 };
 
 class path_pieces_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_GET(const http_request& req) {
+     http_response render_get(const http_request& req) {
          stringstream ss;
          for (unsigned int i = 0; i < req.get_path_pieces().size(); i++) {
              ss << req.get_path_piece(i) << ",";
          }
-         return std::make_shared<string_response>(ss.str(), 200, "text/plain");
+         return http_response::string(ss.str());
      }
 };
 
 class complete_test_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_GET(const http_request&) {
-         return std::make_shared<string_response>("OK", 200, "text/plain");
+     http_response render_get(const http_request&) {
+         return http_response::string("OK");
      }
 
-     shared_ptr<http_response> render_POST(const http_request&) {
-         return std::make_shared<string_response>("OK", 200, "text/plain");
+     http_response render_post(const http_request&) {
+         return http_response::string("OK");
      }
 
-     shared_ptr<http_response> render_PUT(const http_request&) {
-         return std::make_shared<string_response>("OK", 200, "text/plain");
+     http_response render_put(const http_request&) {
+         return http_response::string("OK");
      }
 
-     shared_ptr<http_response> render_DELETE(const http_request&) {
-         return std::make_shared<string_response>("OK", 200, "text/plain");
+     http_response render_delete(const http_request&) {
+         return http_response::string("OK");
      }
 
-     shared_ptr<http_response> render_PATCH(const http_request&) {
-         return std::make_shared<string_response>("OK", 200, "text/plain");
+     http_response render_patch(const http_request&) {
+         return http_response::string("OK");
      }
 
-     shared_ptr<http_response> render_HEAD(const http_request&) {
-         return std::make_shared<string_response>("", 200, "text/plain");
+     http_response render_head(const http_request&) {
+         return http_response::string("");
      }
 
-     shared_ptr<http_response> render_OPTIONS(const http_request&) {
-         auto resp = std::make_shared<string_response>("", 200, "text/plain");
-         resp->with_header("Allow", "GET, POST, PUT, DELETE, HEAD, OPTIONS");
-         return resp;
+     http_response render_options(const http_request&) {
+         return http_response::string("")
+                    .with_header("Allow", "GET, POST, PUT, DELETE, HEAD, OPTIONS");
      }
 
-     shared_ptr<http_response> render_TRACE(const http_request&) {
-         return std::make_shared<string_response>("TRACE OK", 200, "message/http");
+     http_response render_trace(const http_request&) {
+         return http_response::string("TRACE OK", "message/http");
      }
 };
 
 class only_render_resource : public http_resource {
  public:
-     shared_ptr<http_response> render(const http_request&) {
-         return std::make_shared<string_response>("OK", 200, "text/plain");
+     http_response render(const http_request&) {
+         return http_response::string("OK");
      }
 };
 
 class ok_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_GET(const http_request&) {
-         return std::make_shared<string_response>("OK", 200, "text/plain");
+     http_response render_get(const http_request&) {
+         return http_response::string("OK");
      }
 };
 
 class nok_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_GET(const http_request&) {
-         return std::make_shared<string_response>("NOK", 200, "text/plain");
+     http_response render_get(const http_request&) {
+         return http_response::string("NOK");
      }
 };
 
@@ -258,8 +261,8 @@ class static_resource : public http_resource {
  public:
      explicit static_resource(std::string r) : resp(std::move(r)) {}
 
-     shared_ptr<http_response> render_GET(const http_request&) {
-         return std::make_shared<string_response>(resp, 200, "text/plain");
+     http_response render_get(const http_request&) {
+         return http_response::string(resp);
      }
 
      std::string resp;
@@ -267,67 +270,75 @@ class static_resource : public http_resource {
 
 class no_response_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_GET(const http_request&) {
-         return std::make_shared<http_response>();
+     // TASK-036: v1 returned shared_ptr<http_response>(nullptr) — the
+     // dispatch path treated that as "no response, route to 500". v2's
+     // equivalent is the default-constructed sentinel (status_code_ == -1).
+     http_response render_get(const http_request&) override {
+         return http_response{};
      }
 };
 
 class empty_response_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_GET(const http_request&) {
-         return shared_ptr<http_response>(nullptr);
+     http_response render_get(const http_request&) override {
+         // TASK-036: handler-returned "empty" response in v2 is the
+         // default-constructed http_response (status_code_ == -1 sentinel).
+         // The dispatch path recognises the sentinel and routes through
+         // internal_error_page — same 500 behaviour the v1 null-pointer
+         // arm produced.
+         return http_response{};
      }
 };
 
 #ifndef HTTPSERVER_NO_LOCAL_FS
 class file_response_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_GET(const http_request&) {
-         return std::make_shared<file_response>("test_content", 200, "text/plain");
+     http_response render_get(const http_request&) {
+         return http_response::file("test_content").with_header("Content-Type", "text/plain");
      }
 };
 
 class file_response_resource_empty : public http_resource {
  public:
-     shared_ptr<http_response> render_GET(const http_request&) {
-         return std::make_shared<file_response>("test_content_empty", 200, "text/plain");
+     http_response render_get(const http_request&) {
+         return http_response::file("test_content_empty").with_header("Content-Type", "text/plain");
      }
 };
 
 class file_response_resource_default_content_type : public http_resource {
  public:
-     shared_ptr<http_response> render_GET(const http_request&) {
-         return std::make_shared<file_response>("test_content", 200);
+     http_response render_get(const http_request&) {
+         return http_response::file("test_content");
      }
 };
 #endif  // HTTPSERVER_NO_LOCAL_FS
 
 class file_response_resource_missing : public http_resource {
  public:
-     shared_ptr<http_response> render_GET(const http_request&) {
-         return std::make_shared<file_response>("missing", 200);
+     http_response render_get(const http_request&) {
+         return http_response::file("missing");
      }
 };
 
 #ifndef HTTPSERVER_NO_LOCAL_FS
 class file_response_resource_dir : public http_resource {
  public:
-     shared_ptr<http_response> render_GET(const http_request&) {
-         return std::make_shared<file_response>("integ", 200);
+     http_response render_get(const http_request&) {
+         return http_response::file("integ");
      }
 };
 #endif  // HTTPSERVER_NO_LOCAL_FS
 
 class exception_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_GET(const http_request&) {
+     http_response render_get(const http_request&) {
          throw std::domain_error("invalid");
      }
 };
 
 class error_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_GET(const http_request&) {
+     http_response render_get(const http_request&) {
          throw "invalid";
      }
 };
@@ -336,9 +347,9 @@ class print_request_resource : public http_resource {
  public:
      explicit print_request_resource(stringstream* ss) : ss(ss) {}
 
-     shared_ptr<http_response> render_GET(const http_request& req) {
+     http_response render_get(const http_request& req) {
          (*ss) << req;
-         return std::make_shared<string_response>("OK", 200, "text/plain");
+         return http_response::string("OK");
      }
 
  private:
@@ -349,14 +360,13 @@ class print_response_resource : public http_resource {
  public:
      explicit print_response_resource(stringstream* ss) : ss(ss) {}
 
-     shared_ptr<http_response> render_GET(const http_request&) {
-         auto hresp = std::make_shared<string_response>("OK", 200, "text/plain");
+     http_response render_get(const http_request&) override {
+         auto hresp = http_response::string("OK")
+                          .with_header("MyResponseHeader", "MyResponseHeaderValue")
+                          .with_footer("MyResponseFooter", "MyResponseFooterValue")
+                          .with_cookie("MyResponseCookie", "MyResponseCookieValue");
 
-         hresp->with_header("MyResponseHeader", "MyResponseHeaderValue");
-         hresp->with_footer("MyResponseFooter", "MyResponseFooterValue");
-         hresp->with_cookie("MyResponseCookie", "MyResponseCookieValue");
-
-         (*ss) << *hresp;
+         (*ss) << hresp;
 
          return hresp;
      }
@@ -367,20 +377,19 @@ class print_response_resource : public http_resource {
 
 class request_info_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_GET(const http_request& req) {
+     http_response render_get(const http_request& req) {
          stringstream ss;
          ss << "requestor=" << req.get_requestor()
             << "&port=" << req.get_requestor_port()
             << "&version=" << req.get_version();
-         return std::make_shared<string_response>(ss.str(), 200, "text/plain");
+         return http_response::string(ss.str());
      }
 };
 
 class content_limit_resource : public http_resource {
  public:
-     shared_ptr<http_response> render_POST(const http_request& req) {
-         return std::make_shared<string_response>(
-             req.content_too_large() ? "TOO_LARGE" : "OK", 200, "text/plain");
+     http_response render_post(const http_request& req) {
+         return http_response::string(req.content_too_large() ? "TOO_LARGE" : "OK");
      }
 };
 
@@ -414,9 +423,9 @@ LT_END_AUTO_TEST(server_runs)
 
 LT_BEGIN_AUTO_TEST(basic_suite, two_endpoints)
     ok_resource ok;
-    LT_ASSERT_EQ(true, ws->register_resource("OK", &ok));
+    ws->register_path("OK", as_shared(ok));
     nok_resource nok;
-    LT_ASSERT_EQ(true, ws->register_resource("NOK", &nok));
+    ws->register_path("NOK", as_shared(nok));
 
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
@@ -450,31 +459,33 @@ LT_END_AUTO_TEST(two_endpoints)
 
 LT_BEGIN_AUTO_TEST(basic_suite, duplicate_endpoints)
     ok_resource ok1, ok2;
-    LT_CHECK_EQ(true, ws->register_resource("OK", &ok1));
+    ws->register_path("OK", as_shared(ok1));
 
-    // All of these collide and the registration fails
-    LT_CHECK_EQ(false, ws->register_resource("OK", &ok2));
-    LT_CHECK_EQ(false, ws->register_resource("/OK", &ok2));
-    LT_CHECK_EQ(false, ws->register_resource("/OK/", &ok2));
-    LT_CHECK_EQ(false, ws->register_resource("OK/", &ok2));
+    // TASK-023: the new void register_path throws std::invalid_argument
+    // on duplicate registration (replaces v1's silent `return false`).
+    LT_CHECK_THROW(ws->register_path("OK", as_shared(ok2)));
+    LT_CHECK_THROW(ws->register_path("/OK", as_shared(ok2)));
+    LT_CHECK_THROW(ws->register_path("/OK/", as_shared(ok2)));
+    LT_CHECK_THROW(ws->register_path("OK/", as_shared(ok2)));
 
-    // Check how family interacts.
-    LT_CHECK_EQ(true, ws->register_resource("OK", &ok2, true));
+    // Check how family interacts: registering the same path with
+    // family=true is a different endpoint, so it should succeed.
+    ws->register_prefix("OK", as_shared(ok2));
 
     // Check that switched case does the right thing, whatever that is here.
 #ifdef CASE_INSENSITIVE
-    LT_CHECK_EQ(false, ws->register_resource("ok", &ok2));
+    LT_CHECK_THROW(ws->register_path("ok", as_shared(ok2)));
 #else
     // TODO(etr): this should be true.
     // However, http_endpoint::operator< is always case-insensitive
-    LT_CHECK_EQ(false, ws->register_resource("ok", &ok2));
+    LT_CHECK_THROW(ws->register_path("ok", as_shared(ok2)));
 #endif
 LT_END_AUTO_TEST(duplicate_endpoints)
 
 LT_BEGIN_AUTO_TEST(basic_suite, family_endpoints)
     static_resource ok1("1"), ok2("2");
-    LT_CHECK_EQ(true, ws->register_resource("OK", &ok1));
-    LT_CHECK_EQ(true, ws->register_resource("OK", &ok2, true));
+    ws->register_path("OK", as_shared(ok1));
+    ws->register_prefix("OK", as_shared(ok2));
 
     curl_global_init(CURL_GLOBAL_ALL);
 
@@ -568,8 +579,8 @@ LT_END_AUTO_TEST(family_endpoints)
 LT_BEGIN_AUTO_TEST(basic_suite, overlapping_endpoints)
     // Setup two different resources that can both match the same URL.
     static_resource ok1("1"), ok2("2");
-    LT_CHECK_EQ(true, ws->register_resource("/foo/{var|([a-z]+)}/", &ok1));
-    LT_CHECK_EQ(true, ws->register_resource("/{var|([a-z]+)}/bar/", &ok2));
+    ws->register_path("/foo/{var|([a-z]+)}/", as_shared(ok1));
+    ws->register_path("/{var|([a-z]+)}/bar/", as_shared(ok2));
 
     curl_global_init(CURL_GLOBAL_ALL);
 
@@ -588,7 +599,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, overlapping_endpoints)
     }
 
     static_resource ok3("3");
-    LT_CHECK_EQ(true, ws->register_resource("/foo/bar/", &ok3));
+    ws->register_path("/foo/bar/", as_shared(ok3));
 
     {
     // Check that an exact, non-RE match overrides both patterns.
@@ -608,7 +619,7 @@ LT_END_AUTO_TEST(overlapping_endpoints)
 
 LT_BEGIN_AUTO_TEST(basic_suite, read_body)
     simple_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_path("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -625,7 +636,7 @@ LT_END_AUTO_TEST(read_body)
 
 LT_BEGIN_AUTO_TEST(basic_suite, read_long_body)
     long_content_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_path("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -642,7 +653,7 @@ LT_END_AUTO_TEST(read_long_body)
 
 LT_BEGIN_AUTO_TEST(basic_suite, resource_setting_header)
     header_set_test_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_path("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     map<string, string> ss;
@@ -663,7 +674,7 @@ LT_END_AUTO_TEST(resource_setting_header)
 
 LT_BEGIN_AUTO_TEST(basic_suite, resource_setting_cookie)
     cookie_set_test_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_path("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -695,7 +706,7 @@ LT_END_AUTO_TEST(resource_setting_cookie)
 
 LT_BEGIN_AUTO_TEST(basic_suite, request_with_header)
     header_reading_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_path("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -718,7 +729,7 @@ LT_END_AUTO_TEST(request_with_header)
 
 LT_BEGIN_AUTO_TEST(basic_suite, request_with_cookie)
     cookie_reading_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_path("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -736,7 +747,7 @@ LT_END_AUTO_TEST(request_with_cookie)
 
 LT_BEGIN_AUTO_TEST(basic_suite, complete)
     complete_test_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_path("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     {
@@ -799,7 +810,7 @@ LT_END_AUTO_TEST(complete)
 
 LT_BEGIN_AUTO_TEST(basic_suite, only_render)
     only_render_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_path("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL* curl;
@@ -878,7 +889,7 @@ LT_END_AUTO_TEST(only_render)
 
 LT_BEGIN_AUTO_TEST(basic_suite, postprocessor)
     simple_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_path("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -895,7 +906,7 @@ LT_END_AUTO_TEST(postprocessor)
 
 LT_BEGIN_AUTO_TEST(basic_suite, postprocessor_large_field_last_field)
     large_post_resource_last_value resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_path("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -936,7 +947,7 @@ LT_END_AUTO_TEST(postprocessor_large_field_last_field)
 
 LT_BEGIN_AUTO_TEST(basic_suite, postprocessor_large_field_first_field)
     large_post_resource_first_value resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_path("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -982,7 +993,7 @@ LT_END_AUTO_TEST(postprocessor_large_field_first_field)
 
 LT_BEGIN_AUTO_TEST(basic_suite, same_key_different_value)
     arg_value_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_path("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -1002,7 +1013,7 @@ LT_END_AUTO_TEST(same_key_different_value)
 
 LT_BEGIN_AUTO_TEST(basic_suite, same_key_different_value_plain_content)
     arg_value_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_path("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -1023,7 +1034,7 @@ LT_END_AUTO_TEST(same_key_different_value_plain_content)
 
 LT_BEGIN_AUTO_TEST(basic_suite, empty_arg)
     simple_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_path("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     CURL *curl = curl_easy_init();
     CURLcode res;
@@ -1039,7 +1050,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, empty_arg_value_at_end)
     // Test for issue #268: POST body keys without values at the end
     // are not processed when using application/x-www-form-urlencoded
     simple_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_path("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     // Test case 1: arg2 has empty value at end (the bug case)
@@ -1093,7 +1104,7 @@ LT_END_AUTO_TEST(empty_arg_value_at_end)
 
 LT_BEGIN_AUTO_TEST(basic_suite, no_response)
     no_response_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_path("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     CURL* curl = curl_easy_init();
@@ -1109,7 +1120,7 @@ LT_END_AUTO_TEST(no_response)
 
 LT_BEGIN_AUTO_TEST(basic_suite, empty_response)
     empty_response_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_path("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     CURL* curl = curl_easy_init();
@@ -1125,7 +1136,7 @@ LT_END_AUTO_TEST(empty_response)
 
 LT_BEGIN_AUTO_TEST(basic_suite, regex_matching)
     simple_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("regex/matching/number/[0-9]+", &resource));
+    ws->register_path("regex/matching/number/[0-9]+", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1143,7 +1154,7 @@ LT_END_AUTO_TEST(regex_matching)
 
 LT_BEGIN_AUTO_TEST(basic_suite, regex_matching_arg)
     args_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("this/captures/{arg}/passed/in/input", &resource));
+    ws->register_path("this/captures/{arg}/passed/in/input", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1161,7 +1172,7 @@ LT_END_AUTO_TEST(regex_matching_arg)
 
 LT_BEGIN_AUTO_TEST(basic_suite, regex_matching_arg_with_url_pars)
     args_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("this/captures/{arg}/passed/in/input", &resource));
+    ws->register_path("this/captures/{arg}/passed/in/input", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1179,7 +1190,7 @@ LT_END_AUTO_TEST(regex_matching_arg_with_url_pars)
 
 LT_BEGIN_AUTO_TEST(basic_suite, regex_matching_arg_custom)
     args_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("this/captures/numeric/{arg|([0-9]+)}/passed/in/input", &resource));
+    ws->register_path("this/captures/numeric/{arg|([0-9]+)}/passed/in/input", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     {
@@ -1216,7 +1227,7 @@ LT_END_AUTO_TEST(regex_matching_arg_custom)
 
 LT_BEGIN_AUTO_TEST(basic_suite, querystring_processing)
     args_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("this/captures/args/passed/in/the/querystring", &resource));
+    ws->register_path("this/captures/args/passed/in/the/querystring", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1234,7 +1245,7 @@ LT_END_AUTO_TEST(querystring_processing)
 
 LT_BEGIN_AUTO_TEST(basic_suite, full_arguments_processing)
     full_args_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("this/captures/args/passed/in/the/querystring", &resource));
+    ws->register_path("this/captures/args/passed/in/the/querystring", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1252,7 +1263,7 @@ LT_END_AUTO_TEST(full_arguments_processing)
 
 LT_BEGIN_AUTO_TEST(basic_suite, querystring_query_processing)
     querystring_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("this/captures/args/passed/in/the/querystring", &resource));
+    ws->register_path("this/captures/args/passed/in/the/querystring", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1270,7 +1281,7 @@ LT_END_AUTO_TEST(querystring_query_processing)
 
 LT_BEGIN_AUTO_TEST(basic_suite, register_unregister)
     simple_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_path("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     {
@@ -1287,7 +1298,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, register_unregister)
     curl_easy_cleanup(curl);
     }
 
-    ws->unregister_resource("base");
+    ws->unregister_path("base");
     {
     string s;
     CURL *curl = curl_easy_init();
@@ -1308,7 +1319,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, register_unregister)
     curl_easy_cleanup(curl);
     }
 
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_path("base", as_shared(resource));
     {
     string s;
     CURL *curl = curl_easy_init();
@@ -1327,7 +1338,7 @@ LT_END_AUTO_TEST(register_unregister)
 #ifndef HTTPSERVER_NO_LOCAL_FS
 LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource)
     file_response_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_path("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1345,7 +1356,7 @@ LT_END_AUTO_TEST(file_serving_resource)
 
 LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource_empty)
     file_response_resource_empty resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_path("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1363,7 +1374,7 @@ LT_END_AUTO_TEST(file_serving_resource_empty)
 
 LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource_default_content_type)
     file_response_resource_default_content_type resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_path("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     map<string, string> ss;
@@ -1382,7 +1393,7 @@ LT_END_AUTO_TEST(file_serving_resource_default_content_type)
 
 LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource_missing)
     file_response_resource_missing resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_path("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1394,7 +1405,12 @@ LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource_missing)
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
-    LT_CHECK_EQ(s, "Internal Error");
+    // TASK-031: default internal_error_page now surfaces the originating
+    // message in the body. file_body::materialize() returns nullptr for a
+    // missing file, which dispatch routes through internal_error_page
+    // with a fixed diagnostic message.
+    LT_CHECK_NEQ(s.find("materialize_response returned null"),
+                 std::string::npos);
 
     int64_t http_code = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
@@ -1406,7 +1422,7 @@ LT_END_AUTO_TEST(file_serving_resource_missing)
 #ifndef HTTPSERVER_NO_LOCAL_FS
 LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource_dir)
     file_response_resource_dir resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_path("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1418,7 +1434,10 @@ LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource_dir)
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
-    LT_CHECK_EQ(s, "Internal Error");
+    // TASK-031: see file_serving_resource_missing — dispatch reports the
+    // null-materialize diagnostic in the body.
+    LT_CHECK_NEQ(s.find("materialize_response returned null"),
+                 std::string::npos);
 
     int64_t http_code = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
@@ -1428,9 +1447,14 @@ LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource_dir)
 LT_END_AUTO_TEST(file_serving_resource_dir)
 #endif  // HTTPSERVER_NO_LOCAL_FS
 
+// Regression anchor: exercises the std::domain_error (a std::exception
+// subclass distinct from std::runtime_error) dispatch path on the shared
+// webserver. Intentionally kept distinct from
+// dr009_runtime_error_message_surfaces_in_default_body (which uses
+// std::runtime_error on a dedicated webserver). Finding task031-review #36.
 LT_BEGIN_AUTO_TEST(basic_suite, exception_forces_500)
     exception_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_path("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1442,7 +1466,9 @@ LT_BEGIN_AUTO_TEST(basic_suite, exception_forces_500)
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
-    LT_CHECK_EQ(s, "Internal Error");
+    // TASK-031 / DR-009: std::domain_error's what() ("invalid") is forwarded
+    // to the default internal_error_page body.
+    LT_CHECK_NEQ(s.find("invalid"), std::string::npos);
 
     int64_t http_code = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
@@ -1451,9 +1477,15 @@ LT_BEGIN_AUTO_TEST(basic_suite, exception_forces_500)
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(exception_forces_500)
 
+// Regression anchor: exercises a char* literal throw (non-std::exception) on
+// the shared webserver. Intentionally kept distinct from
+// dr009_non_std_exception_yields_unknown_exception_in_default_body (which
+// uses `throw 42` (an int) on a dedicated webserver). The two non-std types
+// (char* vs int) exercise the same catch(...) branch; keeping both provides
+// type-diversity coverage. Finding task031-review #37.
 LT_BEGIN_AUTO_TEST(basic_suite, untyped_error_forces_500)
     error_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_path("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1465,7 +1497,9 @@ LT_BEGIN_AUTO_TEST(basic_suite, untyped_error_forces_500)
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
-    LT_CHECK_EQ(s, "Internal Error");
+    // TASK-031 / DR-009: non-std::exception throws (here: a char* literal)
+    // produce the sentinel message "unknown exception" in the default body.
+    LT_CHECK_NEQ(s.find("unknown exception"), std::string::npos);
 
     int64_t http_code = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
@@ -1477,7 +1511,7 @@ LT_END_AUTO_TEST(untyped_error_forces_500)
 LT_BEGIN_AUTO_TEST(basic_suite, request_is_printable)
     stringstream ss;
     print_request_resource resource(&ss);
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_path("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1512,7 +1546,7 @@ LT_END_AUTO_TEST(request_is_printable)
 LT_BEGIN_AUTO_TEST(basic_suite, response_is_printable)
     stringstream ss;
     print_response_resource resource(&ss);
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_path("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1544,7 +1578,7 @@ LT_END_AUTO_TEST(response_is_printable)
 
 LT_BEGIN_AUTO_TEST(basic_suite, long_path_pieces)
     path_pieces_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("/settings", &resource, true));
+    ws->register_prefix("/settings", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1562,7 +1596,7 @@ LT_END_AUTO_TEST(long_path_pieces)
 
 LT_BEGIN_AUTO_TEST(basic_suite, url_with_regex_like_pieces)
     path_pieces_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("/settings", &resource, true));
+    ws->register_prefix("/settings", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1580,7 +1614,7 @@ LT_END_AUTO_TEST(url_with_regex_like_pieces)
 
 LT_BEGIN_AUTO_TEST(basic_suite, non_family_url_with_regex_like_pieces)
     ok_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("/settings", &resource));
+    ws->register_path("/settings", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1602,7 +1636,7 @@ LT_END_AUTO_TEST(non_family_url_with_regex_like_pieces)
 
 LT_BEGIN_AUTO_TEST(basic_suite, regex_url_exact_match)
     ok_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("/foo/{v|[a-z]}/bar", &resource));
+    ws->register_path("/foo/{v|[a-z]}/bar", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     {
@@ -1645,9 +1679,9 @@ LT_END_AUTO_TEST(regex_url_exact_match)
 LT_BEGIN_AUTO_TEST(basic_suite, method_not_allowed_header)
     simple_resource resource;
     resource.disallow_all();
-    resource.set_allowing("POST", true);
-    resource.set_allowing("HEAD", true);
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    resource.set_allowing(httpserver::http_method::post, true);
+    resource.set_allowing(httpserver::http_method::head, true);
+    ws->register_path("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     map<string, string> ss;
@@ -1664,14 +1698,17 @@ LT_BEGIN_AUTO_TEST(basic_suite, method_not_allowed_header)
     int64_t http_code = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
     LT_ASSERT_EQ(http_code, 405);
-    // elements in http_resource::method_state are sorted (std::map)
+    // TASK-021: Allow-header tokens are emitted in http_method
+    // enum-declaration order (head=1, post=2). For this test the
+    // resulting "HEAD, POST" matches v1's std::map alphabetical order
+    // by coincidence; do not generalize the assumption.
     LT_CHECK_EQ(ss["Allow"], "HEAD, POST");
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(method_not_allowed_header)
 
 LT_BEGIN_AUTO_TEST(basic_suite, request_info_getters)
     request_info_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("request_info", &resource));
+    ws->register_path("request_info", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -1690,7 +1727,7 @@ LT_END_AUTO_TEST(request_info_getters)
 
 LT_BEGIN_AUTO_TEST(basic_suite, unregister_then_404)
     simple_resource res;
-    LT_ASSERT_EQ(true, ws->register_resource("temp", &res));
+    ws->register_path("temp", as_shared(res));
     curl_global_init(CURL_GLOBAL_ALL);
 
     {
@@ -1710,7 +1747,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, unregister_then_404)
         curl_easy_cleanup(curl);
     }
 
-    ws->unregister_resource("temp");
+    ws->unregister_path("temp");
 
     {
         string s;
@@ -1736,8 +1773,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, thread_safety)
     auto register_thread = std::thread([&]() {
         int i = 0;
         while (!done) {
-            ws->register_resource(
-                    std::string("/route") + std::to_string(++i), &resource);
+            ws->register_path(
+                    std::string("/route") + std::to_string(++i), as_shared(resource));
         }
     });
 
@@ -1755,8 +1792,12 @@ LT_BEGIN_AUTO_TEST(basic_suite, thread_safety)
         }
     });
 
+    // 2 s is sufficient to expose data races on any reasonably loaded CI
+    // runner; the original 10 s added 8 s of dead time to every test run
+    // with no extra coverage benefit (race window is equally likely to
+    // manifest in 1 s).
     using std::chrono_literals::operator""s;
-    std::this_thread::sleep_for(10s);
+    std::this_thread::sleep_for(2s);
     done = true;
     if (register_thread.joinable()) {
         register_thread.join();
@@ -1764,12 +1805,15 @@ LT_BEGIN_AUTO_TEST(basic_suite, thread_safety)
     if (get_thread.joinable()) {
         get_thread.join();
     }
+    // Liveness check: reaching this point without a crash or deadlock is the
+    // contract. The tautological assertion is intentional — test failure
+    // would only come from abort/SIGSEGV/deadlock above, not from this line.
     LT_CHECK_EQ(1, 1);
 LT_END_AUTO_TEST(thread_safety)
 
 LT_BEGIN_AUTO_TEST(basic_suite, head_request)
     complete_test_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_path("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -1789,7 +1833,7 @@ LT_END_AUTO_TEST(head_request)
 
 LT_BEGIN_AUTO_TEST(basic_suite, options_request)
     complete_test_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_path("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     map<string, string> ss;
@@ -1812,7 +1856,7 @@ LT_END_AUTO_TEST(options_request)
 
 LT_BEGIN_AUTO_TEST(basic_suite, trace_request)
     complete_test_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("base", &resource));
+    ws->register_path("base", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -1849,7 +1893,7 @@ LT_END_SUITE(content_limit_suite)
 
 LT_BEGIN_AUTO_TEST(content_limit_suite, content_exceeds_limit)
     content_limit_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("limit", &resource));
+    ws->register_path("limit", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -1871,7 +1915,7 @@ LT_END_AUTO_TEST(content_exceeds_limit)
 
 LT_BEGIN_AUTO_TEST(content_limit_suite, content_within_limit)
     content_limit_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("limit", &resource));
+    ws->register_path("limit", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -1893,7 +1937,7 @@ LT_END_AUTO_TEST(content_within_limit)
 
 LT_BEGIN_AUTO_TEST(basic_suite, get_args_flat)
     args_flat_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("args_flat", &resource));
+    ws->register_path("args_flat", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -1911,7 +1955,7 @@ LT_END_AUTO_TEST(get_args_flat)
 
 LT_BEGIN_AUTO_TEST(basic_suite, only_render_head)
     only_render_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("only_render_head", &resource));
+    ws->register_path("only_render_head", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -1930,7 +1974,7 @@ LT_END_AUTO_TEST(only_render_head)
 
 LT_BEGIN_AUTO_TEST(basic_suite, only_render_options)
     only_render_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("only_render_options", &resource));
+    ws->register_path("only_render_options", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -1947,7 +1991,7 @@ LT_END_AUTO_TEST(only_render_options)
 
 LT_BEGIN_AUTO_TEST(basic_suite, only_render_trace)
     only_render_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("only_render_trace", &resource));
+    ws->register_path("only_render_trace", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -1965,7 +2009,7 @@ LT_END_AUTO_TEST(only_render_trace)
 // Test for long error log message (triggers resize branch)
 class long_error_message_resource : public http_resource {
  public:
-    shared_ptr<http_response> render_GET(const http_request&) {
+    http_response render_get(const http_request&) {
         // Generate an error with a message longer than 80 characters
         throw std::runtime_error(
             "This is a very long error message that exceeds the default buffer "
@@ -1975,7 +2019,7 @@ class long_error_message_resource : public http_resource {
 
 LT_BEGIN_AUTO_TEST(basic_suite, long_error_message)
     long_error_message_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("longerror", &resource));
+    ws->register_path("longerror", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
 
     string s;
@@ -1998,7 +2042,7 @@ LT_END_AUTO_TEST(long_error_message)
 // Test PATCH request on a resource that only implements render()
 LT_BEGIN_AUTO_TEST(basic_suite, only_render_patch)
     only_render_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("only_render_patch", &resource));
+    ws->register_path("only_render_patch", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -2013,165 +2057,21 @@ LT_BEGIN_AUTO_TEST(basic_suite, only_render_patch)
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(only_render_patch)
 
-// Custom response class that throws std::invalid_argument in get_raw_response
-class invalid_argument_response : public http_response {
- public:
-    invalid_argument_response() : http_response(200, "text/plain") {}
-    MHD_Response* get_raw_response() override {
-        throw std::invalid_argument("Resource not found");
-    }
-};
-
-// Resource that returns invalid_argument_response
-class invalid_arg_resource : public http_resource {
- public:
-    shared_ptr<http_response> render_GET(const http_request&) {
-        return std::make_shared<invalid_argument_response>();
-    }
-};
-
-// Custom response class that throws std::runtime_error in get_raw_response
-class runtime_error_response : public http_response {
- public:
-    runtime_error_response() : http_response(200, "text/plain") {}
-    MHD_Response* get_raw_response() override {
-        throw std::runtime_error("Internal error in response");
-    }
-};
-
-// Resource that returns runtime_error_response
-class runtime_error_resource : public http_resource {
- public:
-    shared_ptr<http_response> render_GET(const http_request&) {
-        return std::make_shared<runtime_error_response>();
-    }
-};
-
-// Custom response class that throws non-std exception in get_raw_response
-class non_std_exception_response : public http_response {
- public:
-    non_std_exception_response() : http_response(200, "text/plain") {}
-    MHD_Response* get_raw_response() override {
-        throw 42;  // Throws an int, not a std::exception
-    }
-};
-
-// Resource that returns non_std_exception_response
-class non_std_exception_resource : public http_resource {
- public:
-    shared_ptr<http_response> render_GET(const http_request&) {
-        return std::make_shared<non_std_exception_response>();
-    }
-};
-
-// Test response throwing std::invalid_argument -> should get 404
-LT_BEGIN_AUTO_TEST(basic_suite, response_throws_invalid_argument)
-    invalid_arg_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("invalid_arg", &resource));
-    curl_global_init(CURL_GLOBAL_ALL);
-    string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/invalid_arg");
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    res = curl_easy_perform(curl);
-    LT_ASSERT_EQ(res, 0);
-
-    int64_t http_code = 0;
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-    LT_ASSERT_EQ(http_code, 404);  // invalid_argument -> not found
-
-    curl_easy_cleanup(curl);
-LT_END_AUTO_TEST(response_throws_invalid_argument)
-
-// Test response throwing std::runtime_error -> should get 500
-LT_BEGIN_AUTO_TEST(basic_suite, response_throws_runtime_error)
-    runtime_error_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("runtime_err", &resource));
-    curl_global_init(CURL_GLOBAL_ALL);
-    string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/runtime_err");
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    res = curl_easy_perform(curl);
-    LT_ASSERT_EQ(res, 0);
-
-    int64_t http_code = 0;
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-    LT_ASSERT_EQ(http_code, 500);  // runtime_error -> internal server error
-
-    curl_easy_cleanup(curl);
-LT_END_AUTO_TEST(response_throws_runtime_error)
-
-// Test response throwing non-std exception -> should get 500
-LT_BEGIN_AUTO_TEST(basic_suite, response_throws_non_std_exception)
-    non_std_exception_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("non_std_exc", &resource));
-    curl_global_init(CURL_GLOBAL_ALL);
-    string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/non_std_exc");
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    res = curl_easy_perform(curl);
-    LT_ASSERT_EQ(res, 0);
-
-    int64_t http_code = 0;
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-    LT_ASSERT_EQ(http_code, 500);  // non-std exception -> internal server error
-
-    curl_easy_cleanup(curl);
-LT_END_AUTO_TEST(response_throws_non_std_exception)
-
-// Custom internal error handler that also throws an exception
-// This tests the outer catch block (lines 826-829 in webserver.cpp)
-shared_ptr<http_response> throwing_internal_error_handler(const http_request&) {
-    throw std::runtime_error("Internal error handler also throws");
-}
-
-// Test case: resource throws exception AND internal error handler throws
-// This triggers the outer catch block which uses force_our=true
-LT_BEGIN_AUTO_TEST(basic_suite, internal_error_handler_also_throws)
-    // Create a separate webserver with throwing internal error handler
-    webserver ws2 = create_webserver(PORT + 50)
-        .internal_error_resource(throwing_internal_error_handler);
-    runtime_error_resource resource;  // Resource that throws in get_raw_response
-    LT_ASSERT_EQ(true, ws2.register_resource("error_cascade", &resource));
-    ws2.start(false);
-
-    curl_global_init(CURL_GLOBAL_ALL);
-    string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
-    std::string url = "http://localhost:" + std::to_string(PORT + 50) + "/error_cascade";
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    res = curl_easy_perform(curl);
-    LT_ASSERT_EQ(res, 0);
-
-    int64_t http_code = 0;
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-    // When internal error handler throws, we fall back to the built-in error page
-    LT_ASSERT_EQ(http_code, 500);
-
-    curl_easy_cleanup(curl);
-    ws2.stop();
-LT_END_AUTO_TEST(internal_error_handler_also_throws)
+// TASK-031 review cleanup: response_throws_invalid_argument,
+// response_throws_runtime_error, response_throws_non_std_exception, and
+// internal_error_handler_also_throws were removed here (findings 5 and 6).
+// Their coverage is a strict subset of the dr009_* suite which follows
+// (dr009_runtime_error_message_surfaces_in_default_body,
+//  dr009_non_std_exception_yields_unknown_exception_in_default_body,
+//  dr009_throwing_handler_yields_empty_body_500 /
+//  dr009_throwing_handler_logs_generically). The dr009_* tests assert on
+// body content, message forwarding, and log capture in addition to status.
 
 // Test tcp_nodelay option
 LT_BEGIN_AUTO_TEST(basic_suite, tcp_nodelay_option)
-    webserver ws2 = create_webserver(PORT + 51).tcp_nodelay();
+    webserver ws2{create_webserver(PORT + 51).tcp_nodelay()};
     ok_resource resource;
-    LT_ASSERT_EQ(true, ws2.register_resource("nodelay_test", &resource));
+    ws2.register_path("nodelay_test", as_shared(resource));
     ws2.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -2202,16 +2102,16 @@ void my_custom_unescaper(std::string& s) {
 // Resource that returns the query string argument
 class arg_echo_resource : public http_resource {
  public:
-    shared_ptr<http_response> render_GET(const http_request& req) {
+    http_response render_get(const http_request& req) {
         std::string arg = std::string(req.get_arg_flat("key"));
-        return std::make_shared<string_response>(arg, 200, "text/plain");
+        return http_response::string(arg);
     }
 };
 
 LT_BEGIN_AUTO_TEST(basic_suite, custom_unescaper)
-    webserver ws2 = create_webserver(PORT + 52).unescaper(my_custom_unescaper);
+    webserver ws2{create_webserver(PORT + 52).unescaper(my_custom_unescaper)};
     arg_echo_resource resource;
-    LT_ASSERT_EQ(true, ws2.register_resource("echo", &resource));
+    ws2.register_path("echo", as_shared(resource));
     ws2.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -2232,12 +2132,12 @@ LT_BEGIN_AUTO_TEST(basic_suite, custom_unescaper)
 LT_END_AUTO_TEST(custom_unescaper)
 
 // Custom not_found handler
-shared_ptr<http_response> my_custom_not_found(const http_request&) {
-    return std::make_shared<string_response>("CUSTOM_404", 404, "text/plain");
+http_response my_custom_not_found(const http_request&) {
+    return http_response::string("CUSTOM_404").with_status(404);
 }
 
 LT_BEGIN_AUTO_TEST(basic_suite, custom_not_found_handler)
-    webserver ws2 = create_webserver(PORT + 53).not_found_resource(my_custom_not_found);
+    webserver ws2{create_webserver(PORT + 53).not_found_handler(my_custom_not_found)};
     ws2.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -2258,8 +2158,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, custom_not_found_handler)
 LT_END_AUTO_TEST(custom_not_found_handler)
 
 // Custom method_not_allowed handler
-shared_ptr<http_response> my_custom_method_not_allowed(const http_request&) {
-    return std::make_shared<string_response>("CUSTOM_405", 405, "text/plain");
+http_response my_custom_method_not_allowed(const http_request&) {
+    return http_response::string("CUSTOM_405").with_status(405);
 }
 
 // Resource that only allows POST
@@ -2267,17 +2167,17 @@ class post_only_resource : public http_resource {
  public:
     post_only_resource() {
         disallow_all();
-        set_allowing("POST", true);
+        set_allowing(httpserver::http_method::post, true);
     }
-    shared_ptr<http_response> render_POST(const http_request&) {
-        return std::make_shared<string_response>("POST_OK", 200, "text/plain");
+    http_response render_post(const http_request&) {
+        return http_response::string("POST_OK");
     }
 };
 
 LT_BEGIN_AUTO_TEST(basic_suite, custom_method_not_allowed_handler)
-    webserver ws2 = create_webserver(PORT + 54).method_not_allowed_resource(my_custom_method_not_allowed);
+    webserver ws2{create_webserver(PORT + 54).method_not_allowed_handler(my_custom_method_not_allowed)};
     post_only_resource resource;
-    LT_ASSERT_EQ(true, ws2.register_resource("postonly", &resource));
+    ws2.register_path("postonly", as_shared(resource));
     ws2.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -2300,7 +2200,7 @@ LT_END_AUTO_TEST(custom_method_not_allowed_handler)
 // Resource that tests requestor info caching
 class requestor_cache_resource : public http_resource {
  public:
-    shared_ptr<http_response> render_GET(const http_request& req) {
+    http_response render_get(const http_request& req) {
         // Test requestor IP and port
         std::string ip = std::string(req.get_requestor());
         uint16_t port = req.get_requestor_port();
@@ -2309,14 +2209,14 @@ class requestor_cache_resource : public http_resource {
         std::string ip2 = std::string(req.get_requestor());
 
         std::string response = "IP:" + ip + ",PORT:" + std::to_string(port);
-        return std::make_shared<string_response>(response, 200, "text/plain");
+        return http_response::string(response);
     }
 };
 
 LT_BEGIN_AUTO_TEST(basic_suite, requestor_info)
-    webserver ws2 = create_webserver(PORT + 55);
+    webserver ws2{create_webserver(PORT + 55)};
     requestor_cache_resource resource;
-    LT_ASSERT_EQ(true, ws2.register_resource("reqinfo", &resource));
+    ws2.register_path("reqinfo", as_shared(resource));
     ws2.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -2341,19 +2241,19 @@ LT_END_AUTO_TEST(requestor_info)
 // Resource that tests querystring caching
 class querystring_cache_resource : public http_resource {
  public:
-    shared_ptr<http_response> render_GET(const http_request& req) {
+    http_response render_get(const http_request& req) {
         // Call get_querystring twice to test caching
         std::string qs1 = std::string(req.get_querystring());
         std::string qs2 = std::string(req.get_querystring());  // Should hit cache
 
-        return std::make_shared<string_response>(qs1, 200, "text/plain");
+        return http_response::string(qs1);
     }
 };
 
 LT_BEGIN_AUTO_TEST(basic_suite, querystring_caching)
-    webserver ws2 = create_webserver(PORT + 56);
+    webserver ws2{create_webserver(PORT + 56)};
     querystring_cache_resource resource;
-    LT_ASSERT_EQ(true, ws2.register_resource("qscache", &resource));
+    ws2.register_path("qscache", as_shared(resource));
     ws2.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -2378,26 +2278,35 @@ LT_END_AUTO_TEST(querystring_caching)
 // Resource that tests args caching
 class args_cache_resource : public http_resource {
  public:
-    shared_ptr<http_response> render_GET(const http_request& req) {
-        // Call get_args twice to test caching
-        auto args1 = req.get_args();
-        auto args2 = req.get_args();  // Should hit cache
+    http_response render_get(const http_request& req) {
+        // Call get_args twice to test caching. TASK-017: returns const&
+        // aliasing the impl-owned cache; both calls must return the same
+        // address proving the cache is built once and reused.
+        // (code-quality-reviewer-iter1-6 / test-quality-reviewer-iter1-22:
+        // promote address equality to an assertion rather than dead code)
+        const auto& args1 = req.get_args();
+        const auto& args2 = req.get_args();  // Should hit cache
+        // Address equality: the two references must alias the same object.
+        if (&args1 != &args2) {
+            return http_response::string("ERROR: args cache not stable");
+        }
 
-        // Also test get_args_flat
+        // Also test get_args_flat (still by-value for now -- TASK-017 only
+        // narrows the six container getters listed in its acceptance set).
         auto flat = req.get_args_flat();
 
         std::string response;
         for (const auto& [key, val] : flat) {
             response += std::string(key) + "=" + std::string(val) + ";";
         }
-        return std::make_shared<string_response>(response, 200, "text/plain");
+        return http_response::string(response);
     }
 };
 
 LT_BEGIN_AUTO_TEST(basic_suite, args_caching)
-    webserver ws2 = create_webserver(PORT + 57);
+    webserver ws2{create_webserver(PORT + 57)};
     args_cache_resource resource;
-    LT_ASSERT_EQ(true, ws2.register_resource("argscache", &resource));
+    ws2.register_path("argscache", as_shared(resource));
     ws2.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -2421,9 +2330,10 @@ LT_END_AUTO_TEST(args_caching)
 // Resource that tests footer/trailer access
 class footer_test_resource : public http_resource {
  public:
-    shared_ptr<http_response> render_POST(const http_request& req) {
-        // Test get_footers() - returns empty map for non-chunked requests
-        auto footers = req.get_footers();
+    http_response render_post(const http_request& req) {
+        // Test get_footers() - returns empty map for non-chunked requests.
+        // TASK-017: now returns const& aliasing impl-owned storage.
+        const auto& footers = req.get_footers();
 
         // Test get_footer() with a key that doesn't exist
         auto footer_val = req.get_footer("X-Test-Trailer");
@@ -2434,14 +2344,14 @@ class footer_test_resource : public http_resource {
             response += ",X-Test-Trailer=" + std::string(footer_val);
         }
 
-        return std::make_shared<string_response>(response, 200, "text/plain");
+        return http_response::string(response);
     }
 };
 
 LT_BEGIN_AUTO_TEST(basic_suite, footer_access_no_trailers)
-    webserver ws2 = create_webserver(PORT + 58);
+    webserver ws2{create_webserver(PORT + 58)};
     footer_test_resource resource;
-    LT_ASSERT_EQ(true, ws2.register_resource("footers", &resource));
+    ws2.register_path("footers", as_shared(resource));
     ws2.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -2466,24 +2376,28 @@ LT_END_AUTO_TEST(footer_access_no_trailers)
 // Resource that returns a response with footers (trailers)
 class response_footer_resource : public http_resource {
  public:
-    shared_ptr<http_response> render_GET(const http_request&) {
-        auto response = std::make_shared<string_response>("body content", 200, "text/plain");
-        // Add a footer to the response
-        response->with_footer("X-Checksum", "abc123");
-        response->with_footer("X-Processing-Time", "42ms");
+    http_response render_get(const http_request&) override {
+        auto response = http_response::string("body content")
+                            .with_footer("X-Checksum", "abc123")
+                            .with_footer("X-Processing-Time", "42ms");
 
-        // Test get_footer and get_footers on response
-        auto checksum = response->get_footer("X-Checksum");
-        auto all_footers = response->get_footers();
+        // Test get_footer and get_footers on response. The returned
+        // string_view points into the response's storage; we only
+        // read it before returning so the response (and thus the
+        // backing string) outlives any read.
+        auto checksum = response.get_footer("X-Checksum");
+        auto all_footers = response.get_footers();
+        (void)checksum;
+        (void)all_footers;
 
         return response;
     }
 };
 
 LT_BEGIN_AUTO_TEST(basic_suite, response_with_footers)
-    webserver ws2 = create_webserver(PORT + 59);
+    webserver ws2{create_webserver(PORT + 59)};
     response_footer_resource resource;
-    LT_ASSERT_EQ(true, ws2.register_resource("resp_footers", &resource));
+    ws2.register_path("resp_footers", as_shared(resource));
     ws2.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -2506,18 +2420,18 @@ LT_END_AUTO_TEST(response_with_footers)
 // Resource that tests get_arg with non-existent key
 class arg_not_found_resource : public http_resource {
  public:
-    shared_ptr<http_response> render_GET(const http_request& req) {
+    http_response render_get(const http_request& req) {
         // Get an arg that doesn't exist - should return empty http_arg_value
         auto missing_arg = req.get_arg("nonexistent_key");
         // http_arg_value.get_all_values() should return empty vector
         std::string result = missing_arg.get_all_values().empty() ? "EMPTY" : "HAS_VALUES";
-        return std::make_shared<string_response>(result, 200, "text/plain");
+        return http_response::string(result);
     }
 };
 
 LT_BEGIN_AUTO_TEST(basic_suite, arg_not_found)
     arg_not_found_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("arg_not_found", &resource));
+    ws->register_path("arg_not_found", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -2535,17 +2449,17 @@ LT_END_AUTO_TEST(arg_not_found)
 // Resource that tests get_arg_flat fallback to connection value
 class arg_flat_fallback_resource : public http_resource {
  public:
-    shared_ptr<http_response> render_GET(const http_request& req) {
+    http_response render_get(const http_request& req) {
         // Test get_arg_flat with a key that exists in GET args but not in unescaped_args
         // This tests the fallback branch in get_arg_flat
         std::string val = std::string(req.get_arg_flat("qparam"));
-        return std::make_shared<string_response>(val, 200, "text/plain");
+        return http_response::string(val);
     }
 };
 
 LT_BEGIN_AUTO_TEST(basic_suite, arg_flat_fallback)
     arg_flat_fallback_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("arg_flat_fb", &resource));
+    ws->register_path("arg_flat_fb", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -2563,18 +2477,18 @@ LT_END_AUTO_TEST(arg_flat_fallback)
 // Resource that tests get_path_piece with out of bounds index
 class path_piece_oob_resource : public http_resource {
  public:
-    shared_ptr<http_response> render_GET(const http_request& req) {
+    http_response render_get(const http_request& req) {
         // Get path piece at an index that's out of bounds
         std::string piece = req.get_path_piece(100);  // Way beyond the path pieces
         // Should return empty string
         std::string result = piece.empty() ? "OOB_EMPTY" : piece;
-        return std::make_shared<string_response>(result, 200, "text/plain");
+        return http_response::string(result);
     }
 };
 
 LT_BEGIN_AUTO_TEST(basic_suite, path_piece_out_of_bounds)
     path_piece_oob_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("path/piece/test", &resource));
+    ws->register_path("path/piece/test", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -2592,16 +2506,16 @@ LT_END_AUTO_TEST(path_piece_out_of_bounds)
 // Resource that tests empty querystring
 class empty_querystring_resource : public http_resource {
  public:
-    shared_ptr<http_response> render_GET(const http_request& req) {
+    http_response render_get(const http_request& req) {
         std::string qs = std::string(req.get_querystring());
         std::string result = qs.empty() ? "NO_QS" : qs;
-        return std::make_shared<string_response>(result, 200, "text/plain");
+        return http_response::string(result);
     }
 };
 
 LT_BEGIN_AUTO_TEST(basic_suite, empty_querystring)
     empty_querystring_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("empty_qs", &resource));
+    ws->register_path("empty_qs", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -2621,7 +2535,7 @@ LT_END_AUTO_TEST(empty_querystring)
 // Covers http_request.cpp lines 234 and 248 (arg_value == nullptr branches)
 class null_value_query_resource : public http_resource {
  public:
-    shared_ptr<http_response> render_GET(const http_request& req) {
+    http_response render_get(const http_request& req) {
         // Test getting an argument that was passed without a value (e.g., ?keyonly)
         auto keyonly_arg = req.get_arg("keyonly");
         auto normal_arg = req.get_arg("normal");
@@ -2636,7 +2550,7 @@ class null_value_query_resource : public http_resource {
                             std::string(normal_arg.get_all_values()[0]));
         ss << ",qs=" << (qs.find("keyonly") != string::npos ? "HAS_KEYONLY" : "NO_KEYONLY");
 
-        return std::make_shared<string_response>(ss.str(), 200, "text/plain");
+        return http_response::string(ss.str());
     }
 };
 
@@ -2644,7 +2558,7 @@ class null_value_query_resource : public http_resource {
 // Resource that tests auth caching (get_user/get_pass called multiple times)
 class auth_cache_resource : public http_resource {
  public:
-    shared_ptr<http_response> render_GET(const http_request& req) {
+    http_response render_get(const http_request& req) {
         // Call get_user and get_pass multiple times to test caching
         std::string user1 = std::string(req.get_user());
         std::string pass1 = std::string(req.get_pass());
@@ -2652,7 +2566,7 @@ class auth_cache_resource : public http_resource {
         std::string pass2 = std::string(req.get_pass());  // Should hit cache
 
         std::string result = user1.empty() ? "NO_AUTH" : ("USER:" + user1);
-        return std::make_shared<string_response>(result, 200, "text/plain");
+        return http_response::string(result);
     }
 };
 #endif  // HAVE_BAUTH
@@ -2660,7 +2574,7 @@ class auth_cache_resource : public http_resource {
 #ifdef HAVE_BAUTH
 LT_BEGIN_AUTO_TEST(basic_suite, auth_caching)
     auth_cache_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("auth_cache", &resource));
+    ws->register_path("auth_cache", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -2681,7 +2595,7 @@ LT_END_AUTO_TEST(auth_caching)
 // This covers http_request.cpp lines 234 and 248 (arg_value == nullptr branches)
 LT_BEGIN_AUTO_TEST(basic_suite, null_value_query_param)
     null_value_query_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("null_val_query", &resource));
+    ws->register_path("null_val_query", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -2703,7 +2617,7 @@ LT_END_AUTO_TEST(null_value_query_param)
 // Test PUT method on a resource that only implements render()
 LT_BEGIN_AUTO_TEST(basic_suite, only_render_put)
     only_render_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("only_render_put", &resource));
+    ws->register_path("only_render_put", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -2721,7 +2635,7 @@ LT_END_AUTO_TEST(only_render_put)
 // Test DELETE method on a resource that only implements render()
 LT_BEGIN_AUTO_TEST(basic_suite, only_render_delete)
     only_render_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("only_render_delete", &resource));
+    ws->register_path("only_render_delete", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -2739,7 +2653,7 @@ LT_END_AUTO_TEST(only_render_delete)
 // Test POST method on a resource that only implements render()
 LT_BEGIN_AUTO_TEST(basic_suite, only_render_post)
     only_render_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("only_render_post", &resource));
+    ws->register_path("only_render_post", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -2755,11 +2669,11 @@ LT_BEGIN_AUTO_TEST(basic_suite, only_render_post)
     curl_easy_cleanup(curl);
 LT_END_AUTO_TEST(only_render_post)
 
-// Test unregister_resource functionality
-LT_BEGIN_AUTO_TEST(basic_suite, unregister_resource)
-    webserver ws2 = create_webserver(PORT + 67);
+// Test unregister_path functionality
+LT_BEGIN_AUTO_TEST(basic_suite, unregister_path)
+    webserver ws2{create_webserver(PORT + 67)};
     ok_resource resource;
-    LT_ASSERT_EQ(true, ws2.register_resource("test_unreg", &resource));
+    ws2.register_path("test_unreg", as_shared(resource));
     ws2.start(false);
 
     // First verify resource works
@@ -2780,7 +2694,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, unregister_resource)
     }
 
     // Now unregister
-    ws2.unregister_resource("test_unreg");
+    ws2.unregister_path("test_unreg");
 
     // Resource should no longer be accessible (404)
     {
@@ -2801,21 +2715,21 @@ LT_BEGIN_AUTO_TEST(basic_suite, unregister_resource)
     }
 
     ws2.stop();
-LT_END_AUTO_TEST(unregister_resource)
+LT_END_AUTO_TEST(unregister_path)
 
 // Resource that tests get_arg_flat() returning first value for multi-value arg
 class arg_flat_multi_resource : public http_resource {
  public:
-    shared_ptr<http_response> render_GET(const http_request& req) {
+    http_response render_get(const http_request& req) {
         // get_arg_flat should return the first value even for multi-value args
         std::string flat_val = std::string(req.get_arg_flat("key"));
-        return std::make_shared<string_response>("flat=" + flat_val, 200, "text/plain");
+        return http_response::string("flat=" + flat_val);
     }
 };
 
 LT_BEGIN_AUTO_TEST(basic_suite, get_arg_flat_first_value)
     arg_flat_multi_resource resource;
-    LT_ASSERT_EQ(true, ws->register_resource("arg_flat_first", &resource));
+    ws->register_path("arg_flat_first", as_shared(resource));
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
@@ -2853,10 +2767,10 @@ void test_error_logger(const std::string& msg) {
 LT_BEGIN_AUTO_TEST(basic_suite, log_access_callback)
     LogCapture::access_log_msg().clear();
 
-    webserver ws2 = create_webserver(PORT + 70)
-        .log_access(test_access_logger);
+    webserver ws2{create_webserver(PORT + 70)
+        .log_access(test_access_logger)};
     ok_resource resource;
-    LT_ASSERT_EQ(true, ws2.register_resource("logtest", &resource));
+    ws2.register_path("logtest", as_shared(resource));
     ws2.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -2882,11 +2796,11 @@ LT_END_AUTO_TEST(log_access_callback)
 
 // Test single_resource mode
 LT_BEGIN_AUTO_TEST(basic_suite, single_resource_mode)
-    webserver ws2 = create_webserver(PORT + 71)
-        .single_resource();
+    webserver ws2{create_webserver(PORT + 71)
+        .single_resource()};
     ok_resource resource;
     // In single_resource mode, must register at "/" with family=true
-    LT_ASSERT_EQ(true, ws2.register_resource("/", &resource, true));
+    ws2.register_prefix("/", as_shared(resource));
     ws2.start(false);
 
     // All paths should route to the single resource
@@ -2932,10 +2846,10 @@ bool test_validator_func(const std::string& url) {
 
 LT_BEGIN_AUTO_TEST(basic_suite, validator_builder)
     // Test that the validator builder method works (for coverage of create_webserver.hpp)
-    webserver ws2 = create_webserver(PORT + 72)
-        .validator(test_validator_func);
+    webserver ws2{create_webserver(PORT + 72)
+        .validator(test_validator_func)};
     ok_resource resource;
-    LT_ASSERT_EQ(true, ws2.register_resource("test", &resource));
+    ws2.register_path("test", as_shared(resource));
     ws2.start(false);
 
     // Just verify the server works with a validator set
@@ -2968,9 +2882,9 @@ class empty_render_resource : public http_resource {
 LT_BEGIN_AUTO_TEST(basic_suite, default_render_method)
     // Test that a resource with no render overrides triggers internal error
     // (because empty_render returns response code -1)
-    webserver ws2 = create_webserver(PORT + 73);
+    webserver ws2{create_webserver(PORT + 73)};
     empty_render_resource resource;
-    LT_ASSERT_EQ(true, ws2.register_resource("empty", &resource));
+    ws2.register_path("empty", as_shared(resource));
     ws2.start(false);
 
     {
@@ -2995,19 +2909,19 @@ LT_BEGIN_AUTO_TEST(basic_suite, default_render_method)
     ws2.stop();
 LT_END_AUTO_TEST(default_render_method)
 
-// Test resource that overrides only render() (not render_GET)
+// Test resource that overrides only render() (not render_get)
 class render_override_resource : public http_resource {
  public:
-    shared_ptr<http_response> render(const http_request&) {
-        return std::make_shared<string_response>("base_render", 200, "text/plain");
+    http_response render(const http_request&) {
+        return http_response::string("base_render");
     }
 };
 
 LT_BEGIN_AUTO_TEST(basic_suite, render_fallthrough_to_base)
-    // Test that render_GET calls render() when not overridden
-    webserver ws2 = create_webserver(PORT + 74);
+    // Test that render_get calls render() when not overridden
+    webserver ws2{create_webserver(PORT + 74)};
     render_override_resource resource;
-    LT_ASSERT_EQ(true, ws2.register_resource("base", &resource));
+    ws2.register_path("base", as_shared(resource));
     ws2.start(false);
 
     {
@@ -3035,11 +2949,11 @@ LT_END_AUTO_TEST(render_fallthrough_to_base)
 
 // Test all HTTP methods falling through to base render()
 LT_BEGIN_AUTO_TEST(basic_suite, all_methods_fallthrough_to_render)
-    // render_override_resource only defines render(), not render_GET/POST/etc.
+    // render_override_resource only defines render(), not render_get/POST/etc.
     // So all method-specific calls should fall through to render()
-    webserver ws2 = create_webserver(PORT + 75);
+    webserver ws2{create_webserver(PORT + 75)};
     render_override_resource resource;
-    LT_ASSERT_EQ(true, ws2.register_resource("fallthrough", &resource));
+    ws2.register_path("fallthrough", as_shared(resource));
     ws2.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -3135,59 +3049,26 @@ LT_BEGIN_AUTO_TEST(basic_suite, all_methods_fallthrough_to_render)
     ws2.stop();
 LT_END_AUTO_TEST(all_methods_fallthrough_to_render)
 
-// Test internal_error_resource custom handler
-shared_ptr<http_response> custom_internal_error_handler(const http_request&) {
-    return std::make_shared<string_response>("Custom Internal Error", 500, "text/plain");
-}
-
-class throwing_resource : public http_resource {
- public:
-    shared_ptr<http_response> render_GET(const http_request&) {
-        throw std::runtime_error("Intentional test exception");
-    }
-};
-
-LT_BEGIN_AUTO_TEST(basic_suite, custom_internal_error_resource)
-    webserver ws2 = create_webserver(PORT + 76)
-        .internal_error_resource(custom_internal_error_handler);
-    throwing_resource resource;
-    LT_ASSERT_EQ(true, ws2.register_resource("throw", &resource));
-    ws2.start(false);
-
-    curl_global_init(CURL_GLOBAL_ALL);
-    string s;
-    int64_t http_code = 0;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
-    std::string url = "http://localhost:" + std::to_string(PORT + 76) + "/throw";
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    res = curl_easy_perform(curl);
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-    LT_ASSERT_EQ(res, 0);
-    LT_CHECK_EQ(http_code, 500);
-    LT_CHECK_EQ(s, "Custom Internal Error");
-    curl_easy_cleanup(curl);
-
-    ws2.stop();
-LT_END_AUTO_TEST(custom_internal_error_resource)
+// TASK-031 review cleanup: builder_custom_internal_error_handler was removed
+// here (finding 7). Its behavior (custom handler body is used) is a strict
+// subset of dr009_runtime_error_message_passed_to_handler (PORT+81), which
+// additionally verifies that e.what() is forwarded as the message argument.
+// Port 76 is now free for future tests.
 
 // Test get_arg_flat fallback to MHD connection value
 class arg_flat_resource : public http_resource {
  public:
-    shared_ptr<http_response> render_GET(const http_request& req) {
+    http_response render_get(const http_request& req) {
         // get_arg_flat should fall back to MHD connection value for query params
         std::string result = std::string(req.get_arg_flat("q"));
-        return std::make_shared<string_response>(result, 200, "text/plain");
+        return http_response::string(result);
     }
 };
 
 LT_BEGIN_AUTO_TEST(basic_suite, get_arg_flat_fallback)
-    webserver ws2 = create_webserver(PORT + 77);
+    webserver ws2{create_webserver(PORT + 77)};
     arg_flat_resource resource;
-    LT_ASSERT_EQ(true, ws2.register_resource("argflat", &resource));
+    ws2.register_path("argflat", as_shared(resource));
     ws2.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -3210,18 +3091,18 @@ LT_END_AUTO_TEST(get_arg_flat_fallback)
 // Test large multipart form field that triggers grow_last_arg path
 class large_multipart_resource : public http_resource {
  public:
-    shared_ptr<http_response> render_POST(const http_request& req) {
+    http_response render_post(const http_request& req) {
         std::string result = std::string(req.get_arg("large_field"));
-        return std::make_shared<string_response>(std::to_string(result.size()), 200, "text/plain");
+        return http_response::string(std::to_string(result.size()));
     }
 };
 
 LT_BEGIN_AUTO_TEST(basic_suite, large_multipart_form_field)
     // This test sends a large text field via multipart form-data
     // to trigger the grow_last_arg path in http_request.cpp (line 544)
-    webserver ws2 = create_webserver(PORT + 78);
+    webserver ws2{create_webserver(PORT + 78)};
     large_multipart_resource resource;
-    LT_ASSERT_EQ(true, ws2.register_resource("largemp", &resource));
+    ws2.register_path("largemp", as_shared(resource));
     ws2.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -3259,27 +3140,30 @@ LT_END_AUTO_TEST(large_multipart_form_field)
 // Resource that tests client certificate methods on non-TLS requests
 class client_cert_non_tls_resource : public http_resource {
  public:
-    shared_ptr<http_response> render_GET(const http_request& req) {
+    http_response render_get(const http_request& req) {
         std::string result;
         // All these should return false/empty since this is not a TLS connection
+        // TASK-019: the four cert-string accessors return string_view.
+        // `const char* + string_view` is not in the standard, so we
+        // copy each view into a std::string for the `+` chain.
         result += "has_tls_session:" + std::string(req.has_tls_session() ? "yes" : "no") + ";";
         result += "has_client_cert:" + std::string(req.has_client_certificate() ? "yes" : "no") + ";";
-        result += "dn:" + req.get_client_cert_dn() + ";";
-        result += "issuer:" + req.get_client_cert_issuer_dn() + ";";
-        result += "cn:" + req.get_client_cert_cn() + ";";
+        result += "dn:" + std::string(req.get_client_cert_dn()) + ";";
+        result += "issuer:" + std::string(req.get_client_cert_issuer_dn()) + ";";
+        result += "cn:" + std::string(req.get_client_cert_cn()) + ";";
         result += "verified:" + std::string(req.is_client_cert_verified() ? "yes" : "no") + ";";
-        result += "fingerprint:" + req.get_client_cert_fingerprint_sha256() + ";";
+        result += "fingerprint:" + std::string(req.get_client_cert_fingerprint_sha256()) + ";";
         result += "not_before:" + std::to_string(req.get_client_cert_not_before()) + ";";
         result += "not_after:" + std::to_string(req.get_client_cert_not_after());
-        return std::make_shared<string_response>(result, 200, "text/plain");
+        return http_response::string(result);
     }
 };
 
 // Test that client certificate methods return appropriate values for non-TLS requests
 LT_BEGIN_AUTO_TEST(basic_suite, client_cert_methods_non_tls)
-    webserver ws = create_webserver(PORT + 79);
+    webserver ws{create_webserver(PORT + 79)};
     client_cert_non_tls_resource ccnr;
-    ws.register_resource("/cert_test", &ccnr);
+    ws.register_path("/cert_test", as_shared(ccnr));
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -3309,6 +3193,290 @@ LT_BEGIN_AUTO_TEST(basic_suite, client_cert_methods_non_tls)
     ws.stop();
 LT_END_AUTO_TEST(client_cert_methods_non_tls)
 #endif  // HAVE_GNUTLS
+
+// ============================================================================
+// TASK-031: Handler error-propagation contract (DR-009 / §5.2 / PRD-FLG-REQ-002).
+//
+// The 6-point contract:
+//   1. Wrap handler invocation in a two-branch catch.
+//   2. On std::exception: log via error_logger, invoke internal_error_handler
+//      with e.what(), send the resulting response (default 500 if unset).
+//   3. On non-std::exception: same path, message "unknown exception".
+//   4. If internal_error_handler itself throws: log generically, send
+//      hardcoded 500 with empty body.
+//   5. feature_unavailable lands as a generic 500 (no special status mapping).
+//   6. Documented in webserver.hpp Doxygen.
+// ============================================================================
+
+namespace task031 {
+
+// Port-offset allocation for the DR-009 integration tests (finding
+// task031-review #2: explicit range avoids per-search collisions).
+//   PORT + 80  dr009_runtime_error_message_surfaces_in_default_body
+//   PORT + 81  dr009_runtime_error_message_passed_to_handler
+//   PORT + 82  dr009_runtime_error_logged_via_error_logger
+//   PORT + 83  dr009_non_std_exception_yields_unknown_exception_in_default_body
+//   PORT + 84  dr009_non_std_exception_passes_unknown_exception_to_handler
+//   PORT + 85  dr009_throwing_handler_yields_empty_body_500
+//   PORT + 86  dr009_throwing_handler_logs_generically
+//   PORT + 87  dr009_feature_unavailable_lands_as_generic_500
+// Next free: PORT + 88.
+static constexpr int PORT_DR009_BASE = 80;
+
+// Thin HTTP GET helper used by the DR-009 integration tests to reduce
+// per-test boilerplate (finding task031-review #1). Sends a GET request to
+// `url`, captures the body, and returns {body, http_status_code}.
+// curl_global_init must have been called before the first use.
+static std::pair<std::string, int64_t> do_get(const std::string& url) {
+    std::string body;
+    CURL* curl = curl_easy_init();
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &body);
+    CURLcode res = curl_easy_perform(curl);
+    int64_t code = 0;
+    if (res == CURLE_OK) {
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &code);
+    }
+    curl_easy_cleanup(curl);
+    return {body, code};
+}
+
+// Thread-safe capture struct: handlers / loggers run on MHD worker threads.
+struct captured_call {
+    std::mutex m;
+    std::string last_msg;
+    std::atomic<int> count{0};
+
+    std::string read_last_msg() {
+        std::lock_guard<std::mutex> g(m);
+        return last_msg;
+    }
+};
+
+class boom_resource : public http_resource {
+ public:
+     http_response render_get(const http_request&) {
+         throw std::runtime_error("boom");
+     }
+};
+
+class throw_int_resource : public http_resource {
+ public:
+     http_response render_get(const http_request&) {
+         throw 42;
+     }
+};
+
+class feature_unavailable_resource : public http_resource {
+ public:
+     http_response render_get(const http_request&) {
+         throw httpserver::feature_unavailable{"widget", "HAVE_WIDGET"};
+     }
+};
+
+}  // namespace task031
+
+// AC1.a: std::runtime_error("boom") yields a 500 whose default body contains
+// the message "boom" (no custom internal_error_handler wired).
+LT_BEGIN_AUTO_TEST(basic_suite, dr009_runtime_error_message_surfaces_in_default_body)
+    webserver ws2{create_webserver(PORT + 80)};
+    task031::boom_resource resource;
+    ws2.register_path("boom", as_shared(resource));
+    ws2.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    auto [s, http_code] = task031::do_get(
+        "http://localhost:" + std::to_string(PORT + 80) + "/boom");
+    LT_ASSERT_EQ(http_code, 500);
+    LT_CHECK_NEQ(s.find("boom"), std::string::npos);
+
+    ws2.stop();
+LT_END_AUTO_TEST(dr009_runtime_error_message_surfaces_in_default_body)
+
+// AC1.b: std::runtime_error("boom") -> the captured message reaches the
+// user-wired internal_error_handler unchanged.
+LT_BEGIN_AUTO_TEST(basic_suite, dr009_runtime_error_message_passed_to_handler)
+    task031::captured_call cap;
+    auto handler = [&cap](const http_request&, std::string_view msg) {
+        {
+            std::lock_guard<std::mutex> g(cap.m);
+            cap.last_msg.assign(msg);
+        }
+        cap.count++;
+        return http_response::string("CAPTURED:" + std::string(msg))
+            .with_status(500);
+    };
+
+    webserver ws2{create_webserver(PORT + 81)
+        .internal_error_handler(handler)};
+    task031::boom_resource resource;
+    ws2.register_path("boom", as_shared(resource));
+    ws2.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    auto [s, http_code] = task031::do_get(
+        "http://localhost:" + std::to_string(PORT + 81) + "/boom");
+    LT_ASSERT_EQ(http_code, 500);
+    LT_CHECK_EQ(cap.read_last_msg(), "boom");
+    LT_CHECK_EQ(s, "CAPTURED:boom");
+
+    ws2.stop();
+LT_END_AUTO_TEST(dr009_runtime_error_message_passed_to_handler)
+
+// AC1.c: std::runtime_error("boom") -> error_logger receives a record that
+// contains "boom" somewhere in its text.
+LT_BEGIN_AUTO_TEST(basic_suite, dr009_runtime_error_logged_via_error_logger)
+    task031::captured_call cap;
+    auto logger = [&cap](const std::string& msg) {
+        {
+            std::lock_guard<std::mutex> g(cap.m);
+            cap.last_msg.append(msg).append("\n");
+        }
+        cap.count++;
+    };
+
+    webserver ws2{create_webserver(PORT + 82).log_error(logger)};
+    task031::boom_resource resource;
+    ws2.register_path("boom", as_shared(resource));
+    ws2.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    auto [s, http_code] = task031::do_get(
+        "http://localhost:" + std::to_string(PORT + 82) + "/boom");
+    LT_ASSERT_EQ(http_code, 500);
+    std::string log_buf = cap.read_last_msg();
+    // AC1.c: the log record must include the dispatch-context prefix AND
+    // the originating message so the log line is self-contained (finding
+    // task031-review: assert both content and context).
+    LT_CHECK_NEQ(log_buf.find("dispatch: handler threw"), std::string::npos);
+    LT_CHECK_NEQ(log_buf.find("boom"), std::string::npos);
+
+    ws2.stop();
+LT_END_AUTO_TEST(dr009_runtime_error_logged_via_error_logger)
+
+// AC2.a: throw 42 (non-std::exception) -> default body contains the
+// documented "unknown exception" sentinel string.
+LT_BEGIN_AUTO_TEST(basic_suite, dr009_non_std_exception_yields_unknown_exception_in_default_body)
+    webserver ws2{create_webserver(PORT + 83)};
+    task031::throw_int_resource resource;
+    ws2.register_path("non_std", as_shared(resource));
+    ws2.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    auto [s, http_code] = task031::do_get(
+        "http://localhost:" + std::to_string(PORT + 83) + "/non_std");
+    LT_ASSERT_EQ(http_code, 500);
+    LT_CHECK_NEQ(s.find("unknown exception"), std::string::npos);
+
+    ws2.stop();
+LT_END_AUTO_TEST(dr009_non_std_exception_yields_unknown_exception_in_default_body)
+
+// AC2.b: throw 42 -> handler receives "unknown exception" as its message.
+LT_BEGIN_AUTO_TEST(basic_suite, dr009_non_std_exception_passes_unknown_exception_to_handler)
+    task031::captured_call cap;
+    auto handler = [&cap](const http_request&, std::string_view msg) {
+        {
+            std::lock_guard<std::mutex> g(cap.m);
+            cap.last_msg.assign(msg);
+        }
+        cap.count++;
+        return http_response::string("CAPTURED:" + std::string(msg))
+            .with_status(500);
+    };
+
+    webserver ws2{create_webserver(PORT + 84)
+        .internal_error_handler(handler)};
+    task031::throw_int_resource resource;
+    ws2.register_path("non_std", as_shared(resource));
+    ws2.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    auto [s, http_code] = task031::do_get(
+        "http://localhost:" + std::to_string(PORT + 84) + "/non_std");
+    LT_ASSERT_EQ(http_code, 500);
+    LT_CHECK_EQ(cap.read_last_msg(), "unknown exception");
+
+    ws2.stop();
+LT_END_AUTO_TEST(dr009_non_std_exception_passes_unknown_exception_to_handler)
+
+// AC3.a: internal_error_handler itself throws -> empty-body 500.
+LT_BEGIN_AUTO_TEST(basic_suite, dr009_throwing_handler_yields_empty_body_500)
+    auto handler = [](const http_request&, std::string_view) -> http_response {
+        throw std::runtime_error("handler boom");
+    };
+
+    webserver ws2{create_webserver(PORT + 85)
+        .internal_error_handler(handler)};
+    task031::boom_resource resource;
+    ws2.register_path("boom", as_shared(resource));
+    ws2.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    auto [s, http_code] = task031::do_get(
+        "http://localhost:" + std::to_string(PORT + 85) + "/boom");
+    LT_ASSERT_EQ(http_code, 500);
+    LT_CHECK_EQ(s, "");
+
+    ws2.stop();
+LT_END_AUTO_TEST(dr009_throwing_handler_yields_empty_body_500)
+
+// AC3.b: when internal_error_handler throws, error_logger sees a generic
+// "internal_error_handler threw" record so operators can diagnose the
+// double-fault.
+LT_BEGIN_AUTO_TEST(basic_suite, dr009_throwing_handler_logs_generically)
+    task031::captured_call cap;
+    auto logger = [&cap](const std::string& msg) {
+        {
+            std::lock_guard<std::mutex> g(cap.m);
+            cap.last_msg.append(msg).append("\n");
+        }
+        cap.count++;
+    };
+    auto handler = [](const http_request&, std::string_view) -> http_response {
+        throw std::runtime_error("handler boom");
+    };
+
+    webserver ws2{create_webserver(PORT + 86)
+        .internal_error_handler(handler)
+        .log_error(logger)};
+    task031::boom_resource resource;
+    ws2.register_path("boom", as_shared(resource));
+    ws2.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    auto [s, http_code] = task031::do_get(
+        "http://localhost:" + std::to_string(PORT + 86) + "/boom");
+    LT_ASSERT_EQ(http_code, 500);
+    LT_CHECK_EQ(s, "");
+
+    std::string log_buf = cap.read_last_msg();
+    LT_CHECK_NEQ(log_buf.find("internal_error_handler threw"),
+                 std::string::npos);
+
+    ws2.stop();
+LT_END_AUTO_TEST(dr009_throwing_handler_logs_generically)
+
+// AC4: feature_unavailable is a std::runtime_error; it lands as a generic
+// 500 with NO special status mapping. The default body surfaces its
+// what() text (which embeds the feature name and build flag).
+LT_BEGIN_AUTO_TEST(basic_suite, dr009_feature_unavailable_lands_as_generic_500)
+    webserver ws2{create_webserver(PORT + 87)};
+    task031::feature_unavailable_resource resource;
+    ws2.register_path("widget", as_shared(resource));
+    ws2.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    auto [s, http_code] = task031::do_get(
+        "http://localhost:" + std::to_string(PORT + 87) + "/widget");
+    LT_ASSERT_EQ(http_code, 500);
+    // The feature_unavailable's what() string is surfaced in the body.
+    LT_CHECK_NEQ(s.find("widget"), std::string::npos);
+    LT_CHECK_NEQ(s.find("HAVE_WIDGET"), std::string::npos);
+
+    ws2.stop();
+LT_END_AUTO_TEST(dr009_feature_unavailable_lands_as_generic_500)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

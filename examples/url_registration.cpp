@@ -1,6 +1,6 @@
 /*
      This file is part of libhttpserver
-     Copyright (C) 2011, 2012, 2013, 2014, 2015 Sebastiano Merlino
+     Copyright (C) 2011-2025 Sebastiano Merlino
 
      This library is free software; you can redistribute it and/or
      modify it under the terms of the GNU Lesser General Public
@@ -18,47 +18,63 @@
      USA
 */
 
+// url_registration.cpp - all four routing flavors: exact path, prefix
+// match, plain regex, and parametric segments with optional constraints.
+//
+// The exact-path and parametric-arg endpoints register a stateless lambda
+// directly. The prefix and regex endpoints share a small class because
+// they want the same handler logic on multiple paths and on_* does not
+// accept a precompiled-regex form for prefix matching.
+
 #include <memory>
 #include <string>
 
 #include <httpserver.hpp>
 
-class hello_world_resource : public httpserver::http_resource {
+class echo_path_resource : public httpserver::http_resource {
  public:
-     std::shared_ptr<httpserver::http_response> render(const httpserver::http_request&) {
-         return std::shared_ptr<httpserver::http_response>(new httpserver::string_response("Hello, World!"));
-     }
-};
-
-class handling_multiple_resource : public httpserver::http_resource {
- public:
-     std::shared_ptr<httpserver::http_response> render(const httpserver::http_request& req) {
-         return std::shared_ptr<httpserver::http_response>(new httpserver::string_response("Your URL: " + std::string(req.get_path())));
-     }
-};
-
-class url_args_resource : public httpserver::http_resource {
- public:
-     std::shared_ptr<httpserver::http_response> render(const httpserver::http_request& req) {
-         return std::shared_ptr<httpserver::http_response>(new httpserver::string_response("ARGS: " + std::string(req.get_arg("arg1")) + " and " + std::string(req.get_arg("arg2"))));
-     }
+    httpserver::http_response render(const httpserver::http_request& req) override {
+        return httpserver::http_response::string(
+            "Your URL: " + std::string(req.get_path()));
+    }
 };
 
 int main() {
-    httpserver::webserver ws = httpserver::create_webserver(8080);
+    httpserver::webserver ws{httpserver::create_webserver(8080)};
 
-    hello_world_resource hwr;
-    ws.register_resource("/hello", &hwr);
+    // Exact path, stateless: the lambda form is the v2.0 recommended idiom.
+    ws.on_get("/hello", [](const httpserver::http_request&) {
+        return httpserver::http_response::string("Hello, World!");
+    });
 
-    handling_multiple_resource hmr;
-    ws.register_resource("/family", &hmr, true);
-    ws.register_resource("/with_regex_[0-9]+", &hmr);
+    // Prefix-match and regex registration still go through the resource
+    // API. The same instance is registered against two routes.
+    auto echo = std::make_shared<echo_path_resource>();
+    ws.register_prefix("/family", echo);       // /family and /family/*
+    ws.register_path("/with_regex_[0-9]+", echo);
 
-    url_args_resource uar;
-    ws.register_resource("/url/with/{arg1}/and/{arg2}", &uar);
-    ws.register_resource("/url/with/parametric/args/{arg1|[0-9]+}/and/{arg2|[A-Z]+}", &uar);
+    // Parametric segments with per-segment regex constraints (preferred form).
+    // The regex restricts arg1 to digits and arg2 to uppercase ASCII, so the
+    // router rejects invalid input before the handler is even invoked.
+    ws.on_get("/url/with/parametric/args/{arg1|[0-9]+}/and/{arg2|[A-Z]+}",
+              [](const httpserver::http_request& req) {
+        return httpserver::http_response::string(
+            "ARGS: " + std::string(req.get_arg("arg1"))
+            + " and " + std::string(req.get_arg("arg2")));
+    });
+
+    // Unconstrained parametric segments (accepts any bytes in the URL slot).
+    // SECURITY NOTE: with no per-segment constraint the handler receives
+    // arbitrary input. Validate or sanitize before using in HTML, SQL, or
+    // system calls — raw reflection into an HTML response is reflected XSS
+    // (CWE-79); passing directly to a shell or DB is injection (CWE-89/78).
+    ws.on_get("/url/with/{arg1}/and/{arg2}",
+              [](const httpserver::http_request& req) {
+        return httpserver::http_response::string(
+            "ARGS: " + std::string(req.get_arg("arg1"))
+            + " and " + std::string(req.get_arg("arg2")));
+    });
 
     ws.start(true);
-
     return 0;
 }

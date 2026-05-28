@@ -20,8 +20,16 @@
 
 #include "httpserver/http_utils.hpp"
 
+// TASK-020: <microhttpd.h> is no longer pulled in transitively by
+// <httpserver/http_utils.hpp>. Include it directly here so the
+// MHD_*-using bodies below still compile.
+#include <microhttpd.h>  // TASK-020: needed directly; no longer reachable transitively
+
+// TASK-020: <sys/socket.h> (or its Windows equivalent) must also be
+// requested explicitly: it provides struct sockaddr's full definition
+// for get_ip_str / get_port / ip_representation::ip_representation.
 #if defined(_WIN32) && !defined(__CYGWIN__)
-#include <winsock2.h>
+#include <winsock2.h>    // TASK-020: needed directly; no longer reachable transitively
 #include <ws2tcpip.h>
 #include <io.h>
 #include <sys/stat.h>
@@ -31,7 +39,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <netinet/in.h>
-#include <sys/socket.h>
+#include <sys/socket.h>  // TASK-020: needed directly; no longer reachable transitively
 #include <sys/types.h>
 #endif  // WIN32 check
 
@@ -48,6 +56,7 @@
 #include <utility>
 #include <vector>
 
+#include "httpserver/constants.hpp"
 #include "httpserver/string_utilities.hpp"
 
 #pragma GCC diagnostic ignored "-Warray-bounds"
@@ -274,6 +283,14 @@ const std::string http_utils::generate_random_upload_filename(const std::string&
 std::string http_utils::sanitize_upload_filename(const std::string& filename) {
     if (filename.empty()) return "";
 
+    // Reject filenames containing embedded null bytes. A name like
+    // "foo.txt\x00.php" would be silently truncated at the null when the
+    // concatenated path is passed to std::ofstream::open() (which calls
+    // c_str() and hands a const char* to the OS open() syscall), creating
+    // a file at the truncated location rather than the full path.
+    // (CWE-626 / null-byte injection, security finding #12)
+    if (filename.find('\0') != std::string::npos) return "";
+
     // Find the basename: take everything after the last '/' or '\'
     std::string::size_type pos = filename.find_last_of("/\\");
     std::string basename = (pos != std::string::npos) ? filename.substr(pos + 1) : filename;
@@ -286,32 +303,9 @@ std::string http_utils::sanitize_upload_filename(const std::string& filename) {
     return basename;
 }
 
-std::string get_ip_str(const struct sockaddr *sa) {
-    if (!sa) throw std::invalid_argument("socket pointer is null");
-
-    char to_ret[NI_MAXHOST];
-    if (AF_INET6 == sa->sa_family) {
-        inet_ntop(AF_INET6, &((reinterpret_cast<const sockaddr_in6*>(sa))->sin6_addr), to_ret, INET6_ADDRSTRLEN);
-        return to_ret;
-    } else if (AF_INET == sa->sa_family) {
-        inet_ntop(AF_INET, &((reinterpret_cast<const sockaddr_in*>(sa))->sin_addr), to_ret, INET_ADDRSTRLEN);
-        return to_ret;
-    } else {
-        throw std::invalid_argument("IP family must be either AF_INET or AF_INET6");
-    }
-}
-
-uint16_t get_port(const struct sockaddr* sa) {
-    if (!sa) throw std::invalid_argument("socket pointer is null");
-
-    if (sa->sa_family == AF_INET) {
-        return (reinterpret_cast<const struct sockaddr_in*>(sa))->sin_port;
-    } else if (sa->sa_family == AF_INET6) {
-        return (reinterpret_cast<const struct sockaddr_in6*>(sa))->sin6_port;
-    } else {
-        throw std::invalid_argument("IP family must be either AF_INET or AF_INET6");
-    }
-}
+// get_ip_str / get_port and the entire ip_representation impl live in
+// src/detail/ip_representation.cpp to keep this TU under the project
+// per-file LOC ceiling. See FILE_LOC_MAX in scripts/check-file-size.sh.
 
 static inline int hex_digit_value(char c) {
     if (c >= '0' && c <= '9') return c - '0';
@@ -358,165 +352,6 @@ size_t http_unescape(std::string* val) {
     return wpos;  // = strlen(val)
 }
 
-ip_representation::ip_representation(const struct sockaddr* ip) {
-    std::fill(pieces, pieces + 16, 0);
-    if (ip->sa_family == AF_INET) {
-        ip_version = http_utils::IPV4;
-        const in_addr* sin_addr_pt = &((reinterpret_cast<const struct sockaddr_in*>(ip))->sin_addr);
-        for (int i = 0; i < 4; i++) {
-            pieces[12 + i] = (reinterpret_cast<const u_char*>(sin_addr_pt))[i];
-        }
-    } else {
-        ip_version = http_utils::IPV6;
-        const in6_addr* sin_addr6_pt = &((reinterpret_cast<const struct sockaddr_in6*>(ip))->sin6_addr);
-        for (int i = 0; i < 16; i++) {
-            pieces[i] = (reinterpret_cast<const u_char*>(sin_addr6_pt))[i];
-        }
-    }
-    mask = DEFAULT_MASK_VALUE;
-}
-
-ip_representation::ip_representation(const std::string& ip) {
-    std::vector<std::string> parts;
-    mask = DEFAULT_MASK_VALUE;
-    std::fill(pieces, pieces + 16, 0);
-    if (ip.find(':') != std::string::npos) {  // IPV6
-        ip_version = http_utils::IPV6;
-        parts = string_utilities::string_split(ip, ':', false);
-        if (parts.size() > 8) {
-            throw std::invalid_argument("IP is badly formatted. Max 8 parts in IPV6.");
-        }
-
-        unsigned int omitted = 8 - (parts.size() - 1);
-        if (omitted != 0) {
-            int empty_count = 0;
-            for (unsigned int i = 0; i < parts.size(); i++) {
-                if (parts[i].size() == 0) empty_count++;
-            }
-
-            if (empty_count > 1) {
-                if (parts[parts.size() - 1].find(".") != std::string::npos) omitted -= 1;
-
-                if (empty_count == 2 && parts[0] == "" && parts[1] == "") {
-                    omitted += 1;
-                    parts = std::vector<std::string>(parts.begin() + 1, parts.end());
-                } else {
-                    throw std::invalid_argument("IP is badly formatted. Cannot have more than one omitted segment in IPV6.");
-                }
-            }
-        }
-
-        int y = 0;
-        for (unsigned int i = 0; i < parts.size(); i++) {
-            if (parts[i] != "*") {
-                if (parts[i].size() == 0) {
-                    for (unsigned int omitted_idx = 0; omitted_idx < omitted; omitted_idx++) {
-                        pieces[y] = 0;
-                        pieces[y+1] = 0;
-                        y += 2;
-                    }
-
-                    continue;
-                }
-
-                if (parts[i].size() < 4) {
-                    std::stringstream ss;
-                    ss << std::setfill('0') << std::setw(4) << parts[i];
-                    parts[i] = ss.str();
-                }
-
-                if (parts[i].size() == 4) {
-                    pieces[y] = strtol((parts[i].substr(0, 2)).c_str(), nullptr, 16);
-                    pieces[y+1] = strtol((parts[i].substr(2, 2)).c_str(), nullptr, 16);
-
-                    y += 2;
-                } else {
-                    if (parts[i].find('.') != std::string::npos) {
-                        if (y != 12) {
-                            throw std::invalid_argument("IP is badly formatted. Missing parts before nested IPV4.");
-                        }
-
-                        if (i != parts.size() - 1) {
-                            throw std::invalid_argument("IP is badly formatted. Nested IPV4 should be at the end");
-                        }
-
-                        std::vector<std::string> subparts = string_utilities::string_split(parts[i], '.');
-                        if (subparts.size() == 4) {
-                            for (unsigned int k = 0; k < 10; k++) {
-                                if (pieces[k] != 0) throw std::invalid_argument("IP is badly formatted. Nested IPV4 can be preceded only by 0 (and, optionally, two 255 octects)");
-                            }
-
-                            if ((pieces[10] != 0 && pieces[10] != 255) || (pieces[11] != 0 && pieces[11] != 255)) {
-                                throw std::invalid_argument("IP is badly formatted. Nested IPV4 can be preceded only by 0 (and, optionally, two 255 octects)");
-                            }
-
-                            for (unsigned int ii = 0; ii < subparts.size(); ii++) {
-                                if (subparts[ii] != "*") {
-                                    pieces[y+ii] = strtol(subparts[ii].c_str(), nullptr, 10);
-                                    if (pieces[y+ii] > 255) throw std::invalid_argument("IP is badly formatted. 255 is max value for ip part.");
-                                } else {
-                                    CLEAR_BIT(mask, y+ii);
-                                }
-                            }
-                        } else {
-                            throw std::invalid_argument("IP is badly formatted. Nested IPV4 can have max 4 parts.");
-                        }
-                    } else {
-                        throw std::invalid_argument("IP is badly formatted. IPV6 parts can have max 4 characters (or nest an IPV4)");
-                    }
-                }
-            } else {
-                CLEAR_BIT(mask, y);
-                CLEAR_BIT(mask, y+1);
-                y+=2;
-            }
-        }
-    } else {  // IPV4
-        ip_version = http_utils::IPV4;
-        parts = string_utilities::string_split(ip, '.');
-        if (parts.size() == 4) {
-            for (unsigned int i = 0; i < parts.size(); i++) {
-                if (parts[i] != "*") {
-                    pieces[12+i] = strtol(parts[i].c_str(), nullptr, 10);
-                    if (pieces[12+i] > 255) throw std::invalid_argument("IP is badly formatted. 255 is max value for ip part.");
-                } else {
-                    CLEAR_BIT(mask, 12+i);
-                }
-            }
-        } else {
-            throw std::invalid_argument("IP is badly formatted. Max 4 parts in IPV4.");
-        }
-    }
-}
-
-bool ip_representation::operator <(const ip_representation& b) const {
-    int64_t this_score = 0;
-    int64_t b_score = 0;
-    for (int i = 0; i < 16; i++) {
-        if (i == 10 || i == 11) continue;
-
-        if (CHECK_BIT(mask, i) && CHECK_BIT(b.mask, i)) {
-            this_score += (16 - i) * pieces[i];
-            b_score += (16 - i) * b.pieces[i];
-        }
-    }
-
-    if (this_score == b_score &&
-            ((pieces[10] == 0x00 || pieces[10] == 0xFF) && (b.pieces[10] == 0x00 || b.pieces[10] == 0xFF)) &&
-            ((pieces[11] == 0x00 || pieces[11] == 0xFF) && (b.pieces[11] == 0x00 || b.pieces[11] == 0xFF))) {
-        return false;
-    }
-
-    for (int i = 10; i < 12; i++) {
-        if (CHECK_BIT(mask, i) && CHECK_BIT(b.mask, i)) {
-            this_score += (16 - i) * pieces[i];
-            b_score += (16 - i) * b.pieces[i];
-        }
-    }
-
-    return this_score < b_score;
-}
-
 const std::string load_file(const std::string& filename) {
     std::ifstream fp(filename.c_str(), std::ios::in | std::ios::binary | std::ios::ate);
     if (fp.is_open()) {
@@ -541,6 +376,16 @@ void dump_header_map(std::ostream& os, const std::string& prefix, const http::he
         os << "    " << prefix << " [";
         for (; it != end; ++it) {
             os << (*it).first << ":\"" << (*it).second << "\" ";
+        }
+        os << "]" << std::endl;
+    }
+}
+
+void dump_header_map(std::ostream& os, const std::string& prefix, const http::header_map& map) {
+    if (!map.empty()) {
+        os << "    " << prefix << " [";
+        for (const auto& item : map) {
+            os << item.first << ":\"" << item.second << "\" ";
         }
         os << "]" << std::endl;
     }
@@ -580,13 +425,90 @@ const char* http_utils::reason_phrase(unsigned int status_code) {
     return MHD_get_reason_phrase_for(status_code);
 }
 
-bool http_utils::is_feature_supported(enum MHD_FEATURE feature) {
-    return MHD_is_feature_supported(feature) == MHD_YES;
+bool http_utils::is_feature_supported(int feature) {
+    return MHD_is_feature_supported(static_cast<enum MHD_FEATURE>(feature)) == MHD_YES;
 }
 
 const char* http_utils::get_mhd_version() {
     return MHD_get_version();
 }
+
+// TASK-020: pin start_method_T to libmicrohttpd's MHD_FLAG enum and
+// digest_algorithm / digest_auth_result to MHD_DigestAuthAlgo3 /
+// MHD_DigestAuthResult. The public-header values are hard-coded so the
+// umbrella does not transitively include <microhttpd.h>; these asserts
+// guard against an upstream renumber by failing the build at the right
+// place rather than silently mis-routing start-mode selection or
+// digest-auth result codes.
+static_assert(
+    static_cast<int>(http_utils::INTERNAL_SELECT)
+        == (MHD_USE_SELECT_INTERNALLY | MHD_USE_AUTO),
+    "start_method_T::INTERNAL_SELECT diverged from MHD_USE_SELECT_INTERNALLY|MHD_USE_AUTO");
+static_assert(
+    static_cast<int>(http_utils::THREAD_PER_CONNECTION)
+        == (MHD_USE_THREAD_PER_CONNECTION | MHD_USE_AUTO),
+    "start_method_T::THREAD_PER_CONNECTION diverged from MHD_USE_THREAD_PER_CONNECTION|MHD_USE_AUTO");
+static_assert(
+    static_cast<int>(http_utils::EXTERNAL_SELECT) == MHD_USE_AUTO,
+    "start_method_T::EXTERNAL_SELECT diverged from MHD_USE_AUTO");
+
+// digest_algorithm and digest_auth_result: pinned only when HAVE_DAUTH is set
+// because the MHD_DIGEST_AUTH_ALGO3_* and MHD_DAUTH_* macros are only defined
+// by <microhttpd.h> in digest-auth-enabled builds.
+#ifdef HAVE_DAUTH
+static_assert(
+    static_cast<int>(http_utils::digest_algorithm::MD5)
+        == static_cast<int>(MHD_DIGEST_AUTH_ALGO3_MD5),
+    "digest_algorithm::MD5 diverged from MHD_DIGEST_AUTH_ALGO3_MD5");
+static_assert(
+    static_cast<int>(http_utils::digest_algorithm::SHA256)
+        == static_cast<int>(MHD_DIGEST_AUTH_ALGO3_SHA256),
+    "digest_algorithm::SHA256 diverged from MHD_DIGEST_AUTH_ALGO3_SHA256");
+static_assert(
+    static_cast<int>(http_utils::digest_algorithm::SHA512_256)
+        == static_cast<int>(MHD_DIGEST_AUTH_ALGO3_SHA512_256),
+    "digest_algorithm::SHA512_256 diverged from MHD_DIGEST_AUTH_ALGO3_SHA512_256");
+
+static_assert(
+    static_cast<int>(http_utils::digest_auth_result::OK) == MHD_DAUTH_OK,
+    "digest_auth_result::OK diverged from MHD_DAUTH_OK");
+static_assert(
+    static_cast<int>(http_utils::digest_auth_result::GENERIC_ERROR) == MHD_DAUTH_ERROR,
+    "digest_auth_result::GENERIC_ERROR diverged from MHD_DAUTH_ERROR");
+static_assert(
+    static_cast<int>(http_utils::digest_auth_result::WRONG_HEADER) == MHD_DAUTH_WRONG_HEADER,
+    "digest_auth_result::WRONG_HEADER diverged from MHD_DAUTH_WRONG_HEADER");
+static_assert(
+    static_cast<int>(http_utils::digest_auth_result::WRONG_USERNAME) == MHD_DAUTH_WRONG_USERNAME,
+    "digest_auth_result::WRONG_USERNAME diverged from MHD_DAUTH_WRONG_USERNAME");
+static_assert(
+    static_cast<int>(http_utils::digest_auth_result::WRONG_REALM) == MHD_DAUTH_WRONG_REALM,
+    "digest_auth_result::WRONG_REALM diverged from MHD_DAUTH_WRONG_REALM");
+static_assert(
+    static_cast<int>(http_utils::digest_auth_result::WRONG_URI) == MHD_DAUTH_WRONG_URI,
+    "digest_auth_result::WRONG_URI diverged from MHD_DAUTH_WRONG_URI");
+static_assert(
+    static_cast<int>(http_utils::digest_auth_result::WRONG_QOP) == MHD_DAUTH_WRONG_QOP,
+    "digest_auth_result::WRONG_QOP diverged from MHD_DAUTH_WRONG_QOP");
+static_assert(
+    static_cast<int>(http_utils::digest_auth_result::WRONG_ALGO) == MHD_DAUTH_WRONG_ALGO,
+    "digest_auth_result::WRONG_ALGO diverged from MHD_DAUTH_WRONG_ALGO");
+static_assert(
+    static_cast<int>(http_utils::digest_auth_result::TOO_LARGE) == MHD_DAUTH_TOO_LARGE,
+    "digest_auth_result::TOO_LARGE diverged from MHD_DAUTH_TOO_LARGE");
+static_assert(
+    static_cast<int>(http_utils::digest_auth_result::NONCE_STALE) == MHD_DAUTH_NONCE_STALE,
+    "digest_auth_result::NONCE_STALE diverged from MHD_DAUTH_NONCE_STALE");
+static_assert(
+    static_cast<int>(http_utils::digest_auth_result::NONCE_OTHER_COND) == MHD_DAUTH_NONCE_OTHER_COND,
+    "digest_auth_result::NONCE_OTHER_COND diverged from MHD_DAUTH_NONCE_OTHER_COND");
+static_assert(
+    static_cast<int>(http_utils::digest_auth_result::NONCE_WRONG) == MHD_DAUTH_NONCE_WRONG,
+    "digest_auth_result::NONCE_WRONG diverged from MHD_DAUTH_NONCE_WRONG");
+static_assert(
+    static_cast<int>(http_utils::digest_auth_result::RESPONSE_WRONG) == MHD_DAUTH_RESPONSE_WRONG,
+    "digest_auth_result::RESPONSE_WRONG diverged from MHD_DAUTH_RESPONSE_WRONG");
+#endif  // HAVE_DAUTH
 
 }  // namespace http
 }  // namespace httpserver

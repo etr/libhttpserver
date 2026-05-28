@@ -26,45 +26,48 @@
 
 class file_upload_resource : public httpserver::http_resource {
  public:
-     std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request&) {
-         std::string get_response = "<html>\n";
-         get_response += "  <body>\n";
-         get_response += "    <form method=\"POST\" enctype=\"multipart/form-data\">\n";
-         get_response += "      <h1>Upload 1 (key is 'files', multiple files can be selected)</h1><br>\n";
-         get_response += "      <input type=\"file\" name=\"files\" multiple>\n";
-         get_response += "      <br><br>\n";
-         get_response += "      <h1>Upload 2 (key is 'files2', multiple files can be selected)</h1><br>\n";
-         get_response += "      <input type=\"file\" name=\"files2\" multiple><br><br>\n";
-         get_response += "      <input type=\"submit\" value=\"Upload\">\n";
-         get_response += "    </form>\n";
-         get_response += "  </body>\n";
-         get_response += "</html>\n";
-
-         return std::shared_ptr<httpserver::http_response>(new httpserver::string_response(get_response, 200, "text/html"));
+     httpserver::http_response render_get(const httpserver::http_request&) override {
+         return httpserver::http_response::string(R"html(<html>
+  <body>
+    <form method="POST" enctype="multipart/form-data">
+      <h1>Upload 1 (key is 'files', multiple files can be selected)</h1><br>
+      <input type="file" name="files" multiple>
+      <br><br>
+      <h1>Upload 2 (key is 'files2', multiple files can be selected)</h1><br>
+      <input type="file" name="files2" multiple><br><br>
+      <input type="submit" value="Upload">
+    </form>
+  </body>
+</html>
+)html", "text/html");
      }
 
-     std::shared_ptr<httpserver::http_response> render_POST(const httpserver::http_request& req) {
-        std::string post_response = "<html>\n";
-        post_response += "<head>\n";
-        post_response += "  <style>\n";
-        post_response += "    table, th, td {\n";
-        post_response += "      border: 1px solid black;\n";
-        post_response += "      border-collapse: collapse;\n";
-        post_response += "    }\n";
-        post_response += "  </style>\n";
-        post_response += "</head>\n";
-        post_response += "<body>\n";
-        post_response += "  Uploaded files:\n";
-        post_response += "  <br><br>\n";
-        post_response += "  <table>\n";
-        post_response += "    <tr>\n";
-        post_response += "      <th>Key</th>\n";
-        post_response += "      <th>Uploaded filename</th>\n";
-        post_response += "      <th>File system path</th>\n";
-        post_response += "      <th>File size</th>\n";
-        post_response += "      <th>Content type</th>\n";
-        post_response += "      <th>Transfer encoding</th>\n";
-        post_response += "    </tr>\n";
+     httpserver::http_response render_post(const httpserver::http_request& req) override {
+        // Static header built from a raw string literal to avoid per-append
+        // reallocations. The dynamic rows are appended after an upfront reserve.
+        std::string post_response = R"html(<html>
+<head>
+  <style>
+    table, th, td {
+      border: 1px solid black;
+      border-collapse: collapse;
+    }
+  </style>
+</head>
+<body>
+  Uploaded files:
+  <br><br>
+  <table>
+    <tr>
+      <th>Key</th>
+      <th>Uploaded filename</th>
+      <th>File system path</th>
+      <th>File size</th>
+      <th>Content type</th>
+      <th>Transfer encoding</th>
+    </tr>
+)html";
+        post_response.reserve(post_response.size() + 512);
 
         for (auto &file_key : req.get_files()) {
             for (auto &files : file_key.second) {
@@ -87,7 +90,7 @@ class file_upload_resource : public httpserver::http_resource {
         post_response += "  </table><br><br>\n";
         post_response += "  <a href=\"/\">back</a>\n";
         post_response += "</body>\n</html>";
-        return std::shared_ptr<httpserver::http_response>(new httpserver::string_response(post_response, 201, "text/html"));
+        return httpserver::http_response::string(post_response, "text/html").with_status(201);
     }
 };
 
@@ -104,14 +107,14 @@ int main(int argc, char** argv) {
     std::cout << "These files won't be deleted at termination" << std::endl;
     std::cout << "Please make sure, that the given directory exists and is writeable" << std::endl;
 
-    httpserver::webserver ws = httpserver::create_webserver(8080)
-                              .no_put_processed_data_to_content()
+    httpserver::webserver ws{httpserver::create_webserver(8080)
+                              .put_processed_data_to_content(false)
                               .file_upload_dir(std::string(argv[1]))
                               .generate_random_filename_on_upload()
-                              .file_upload_target(httpserver::FILE_UPLOAD_DISK_ONLY);
+                              .file_upload_target(httpserver::FILE_UPLOAD_DISK_ONLY)};
 
-    file_upload_resource fur;
-    ws.register_resource("/", &fur);
+    auto fur = std::make_shared<file_upload_resource>();
+    ws.register_path("/", fur);
     ws.start(true);
 
     return 0;

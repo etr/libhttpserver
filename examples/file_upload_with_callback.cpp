@@ -27,40 +27,44 @@
 
 class file_upload_resource : public httpserver::http_resource {
  public:
-     std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request&) {
-         std::string get_response = "<html>\n";
-         get_response += "  <body>\n";
-         get_response += "    <h1>File Upload with Cleanup Callback Demo</h1>\n";
-         get_response += "    <p>Uploaded files will be moved to the permanent directory.</p>\n";
-         get_response += "    <form method=\"POST\" enctype=\"multipart/form-data\">\n";
-         get_response += "      <input type=\"file\" name=\"file\" multiple>\n";
-         get_response += "      <br><br>\n";
-         get_response += "      <input type=\"submit\" value=\"Upload\">\n";
-         get_response += "    </form>\n";
-         get_response += "  </body>\n";
-         get_response += "</html>\n";
-
-         return std::shared_ptr<httpserver::http_response>(new httpserver::string_response(get_response, 200, "text/html"));
+     httpserver::http_response render_get(const httpserver::http_request&) override {
+         return httpserver::http_response::string(R"html(<html>
+  <body>
+    <h1>File Upload with Cleanup Callback Demo</h1>
+    <p>Uploaded files will be moved to the permanent directory.</p>
+    <form method="POST" enctype="multipart/form-data">
+      <input type="file" name="file" multiple>
+      <br><br>
+      <input type="submit" value="Upload">
+    </form>
+  </body>
+</html>
+)html", "text/html");
      }
 
-     std::shared_ptr<httpserver::http_response> render_POST(const httpserver::http_request& req) {
-        std::string post_response = "<html>\n";
-        post_response += "<body>\n";
-        post_response += "  <h1>Upload Complete</h1>\n";
-        post_response += "  <p>Files have been moved to permanent storage:</p>\n";
-        post_response += "  <ul>\n";
+     httpserver::http_response render_post(const httpserver::http_request& req) override {
+        std::string post_response = R"html(<html>
+<body>
+  <h1>Upload Complete</h1>
+  <p>Files have been moved to permanent storage:</p>
+  <ul>
+)html";
+        post_response.reserve(post_response.size() + 256);
 
         for (auto &file_key : req.get_files()) {
             for (auto &files : file_key.second) {
-                post_response += "    <li>" + files.first + " (" +
-                                 std::to_string(files.second.get_file_size()) + " bytes)</li>\n";
+                post_response += "    <li>";
+                post_response += files.first;
+                post_response += " (";
+                post_response += std::to_string(files.second.get_file_size());
+                post_response += " bytes)</li>\n";
             }
         }
 
         post_response += "  </ul>\n";
         post_response += "  <a href=\"/\">Upload more</a>\n";
         post_response += "</body>\n</html>";
-        return std::shared_ptr<httpserver::http_response>(new httpserver::string_response(post_response, 201, "text/html"));
+        return httpserver::http_response::string(post_response, "text/html").with_status(201);
     }
 };
 
@@ -82,7 +86,7 @@ int main(int argc, char** argv) {
     std::cout << std::endl;
     std::cout << "Open http://localhost:8080 in your browser to upload files." << std::endl;
 
-    httpserver::webserver ws = httpserver::create_webserver(8080)
+    httpserver::webserver ws{httpserver::create_webserver(8080)
         .file_upload_target(httpserver::FILE_UPLOAD_DISK_ONLY)
         .file_upload_dir(temp_dir)
         .generate_random_filename_on_upload()
@@ -101,10 +105,10 @@ int main(int argc, char** argv) {
                 std::cerr << "Failed to move " << filename << ", will be deleted" << std::endl;
                 return true;  // Delete the temp file on failure
             }
-        });
+        })};
 
-    file_upload_resource fur;
-    ws.register_resource("/", &fur);
+    auto fur = std::make_shared<file_upload_resource>();
+    ws.register_path("/", fur);
     ws.start(true);
 
     return 0;

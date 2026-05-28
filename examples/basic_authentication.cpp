@@ -1,6 +1,6 @@
 /*
      This file is part of libhttpserver
-     Copyright (C) 2011, 2012, 2013, 2014, 2015 Sebastiano Merlino
+     Copyright (C) 2011-2025 Sebastiano Merlino
 
      This library is free software; you can redistribute it and/or
      modify it under the terms of the GNU Lesser General Public
@@ -18,28 +18,31 @@
      USA
 */
 
-#include <memory>
+// basic_authentication.cpp - per-request HTTP Basic auth check inside a
+// lambda handler. For centralized auth that intercepts every request,
+// see centralized_authentication.cpp.
+//
+// NOTE: Credentials are hardcoded here for illustration only. In production,
+// load expected values from environment variables or a secrets store — never
+// from source code. Never reflect the password in the response body.
+
 #include <string>
 
 #include <httpserver.hpp>
 
-class user_pass_resource : public httpserver::http_resource {
- public:
-     std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request& req) {
-         if (req.get_user() != "myuser" || req.get_pass() != "mypass") {
-             return std::shared_ptr<httpserver::basic_auth_fail_response>(new httpserver::basic_auth_fail_response("FAIL", "test@example.com"));
-         }
-
-         return std::shared_ptr<httpserver::string_response>(new httpserver::string_response(std::string(req.get_user()) + " " + std::string(req.get_pass()), 200, "text/plain"));
-     }
-};
-
 int main() {
-    httpserver::webserver ws = httpserver::create_webserver(8080);
+    httpserver::webserver ws{httpserver::create_webserver(8080)};
 
-    user_pass_resource hwr;
-    ws.register_resource("/hello", &hwr);
+    ws.on_get("/hello", [](const httpserver::http_request& req) {
+        if (req.get_user() != "myuser" || req.get_pass() != "mypass") {
+            return httpserver::http_response::unauthorized(
+                "Basic", "test@example.com", "FAIL");
+        }
+        // Only echo the username — never reflect the password back to the client.
+        return httpserver::http_response::string(
+            "Hello, " + std::string(req.get_user()) + "!");
+    });
+
     ws.start(true);
-
     return 0;
 }

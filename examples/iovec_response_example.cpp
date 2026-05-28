@@ -1,6 +1,6 @@
 /*
      This file is part of libhttpserver
-     Copyright (C) 2011-2019 Sebastiano Merlino
+     Copyright (C) 2011-2025 Sebastiano Merlino
 
      This library is free software; you can redistribute it and/or
      modify it under the terms of the GNU Lesser General Public
@@ -18,33 +18,33 @@
      USA
 */
 
-#include <memory>
-#include <string>
-#include <utility>
+// iovec_response_example.cpp - build a response body from multiple
+// borrowed buffers without copying. The buffers must outlive the
+// response; static-lifetime literals satisfy that contract trivially.
+
 #include <vector>
 
 #include <httpserver.hpp>
 
-class iovec_resource : public httpserver::http_resource {
- public:
-     std::shared_ptr<httpserver::http_response> render_GET(const httpserver::http_request&) {
-         // Build a response from multiple separate buffers without copying
-         std::vector<std::string> parts;
-         parts.push_back("{\"header\": \"value\", ");
-         parts.push_back("\"items\": [1, 2, 3], ");
-         parts.push_back("\"footer\": \"end\"}");
-
-         return std::make_shared<httpserver::iovec_response>(
-                 std::move(parts), 200, "application/json");
-     }
-};
+static const char kPart1[] = "{\"header\": \"value\", ";
+static const char kPart2[] = "\"items\": [1, 2, 3], ";
+static const char kPart3[] = "\"footer\": \"end\"}";
 
 int main() {
-    httpserver::webserver ws = httpserver::create_webserver(8080);
+    httpserver::webserver ws{httpserver::create_webserver(8080)};
 
-    iovec_resource ir;
-    ws.register_resource("/data", &ir);
+    ws.on_get("/data", [](const httpserver::http_request&) {
+        std::vector<httpserver::iovec_entry> parts = {
+            { kPart1, sizeof(kPart1) - 1 },
+            { kPart2, sizeof(kPart2) - 1 },
+            { kPart3, sizeof(kPart3) - 1 },
+        };
+        return httpserver::http_response::iovec(parts)
+                   .with_header("Content-Type", "application/json")
+                   // defense-in-depth: prevent browsers from sniffing content type
+                   .with_header("X-Content-Type-Options", "nosniff");
+    });
+
     ws.start(true);
-
     return 0;
 }
