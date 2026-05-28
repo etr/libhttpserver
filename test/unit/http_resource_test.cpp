@@ -211,12 +211,12 @@ LT_BEGIN_AUTO_TEST(http_resource_suite, render_only_resource_methods_allowed)
     LT_CHECK_EQ(ror.is_allowed(http_method::patch), true);
 LT_END_AUTO_TEST(render_only_resource_methods_allowed)
 
-LT_BEGIN_AUTO_TEST(http_resource_suite, default_state_all_methods_set)
+LT_BEGIN_AUTO_TEST(http_resource_suite, resource_init_sets_all_methods)
     simple_resource sr;
     // The default-constructed resource has every valid method bit set.
     method_set allowed = sr.get_allowed_methods();
     LT_CHECK_EQ(allowed.bits, method_set{}.set_all().bits);
-LT_END_AUTO_TEST(default_state_all_methods_set)
+LT_END_AUTO_TEST(resource_init_sets_all_methods)
 
 LT_BEGIN_AUTO_TEST(http_resource_suite, get_allowed_methods_only_returns_set)
     simple_resource sr;
