@@ -123,7 +123,7 @@ void webserver_impl::add_base_mhd_options(std::vector<MHD_OptionItem>& iov) cons
     iov.push_back(make_option(MHD_OPTION_UNESCAPE_CALLBACK,
                               (intptr_t) &webserver_impl::unescaper_func, parent));
     iov.push_back(make_option(MHD_OPTION_CONNECTION_TIMEOUT, parent->connection_timeout));
-    if (bind_socket != 0) {
+    if (bind_socket != MHD_INVALID_SOCKET) {
         iov.push_back(make_option(MHD_OPTION_LISTEN_SOCKET, bind_socket));
     }
     if (parent->max_threads != 0) {
@@ -330,8 +330,22 @@ bool webserver::stop() {
     pthread_mutex_unlock(&impl_->mutexwait);
 
     MHD_stop_daemon(impl_->daemon);
+    // Reset after stop so the daemon != nullptr guards in get_bound_port(),
+    // get_listen_fd(), run(), etc. correctly treat the daemon as absent on
+    // any subsequent (unsupported) call after stop().
+    impl_->daemon = nullptr;
 
-    shutdown(impl_->bind_socket, 2);
+    // Only shut down the pre-bound socket if one was actually provided.
+    // MHD_INVALID_SOCKET (-1 on POSIX, INVALID_SOCKET on Windows) is the
+    // sentinel written by the webserver_impl constructor when no pre-bound
+    // socket was passed via create_webserver().bind_socket(). Without this
+    // guard, the unconditional shutdown() call would operate on fd MHD_INVALID_SOCKET
+    // which on POSIX could be interpreted as fd -1 (implementation-defined)
+    // and previously (before the fix) the sentinel was 0 which would have
+    // shut down stdin (fd 0).
+    if (impl_->bind_socket != MHD_INVALID_SOCKET) {
+        shutdown(impl_->bind_socket, 2);
+    }
 
     return true;
 }

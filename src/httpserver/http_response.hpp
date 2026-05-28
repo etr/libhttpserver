@@ -48,14 +48,10 @@ namespace httpserver {
 // destructor / move-op definition sites only; those live in the .cpp.
 namespace detail { class body; }
 
-// Forward declaration so http_response can grant `friend class webserver;`
-// without pulling webserver.hpp (and its libmicrohttpd surface) into this
-// public header. The friendship lets webserver dispatch reach the private
-// body_ pointer to call body_->materialize() without widening the public
-// API by one byte (TASK-013). After TASK-014 the dispatch helpers moved
-// behind the PIMPL boundary, so the friendship is also extended to
-// detail::webserver_impl. The pre-TASK-014 `friend class webserver;`
-// remains for backward compatibility within the translation unit.
+// Forward declarations needed for the friend grants in http_response.
+// body_/kind_/status_code_ are private; detail::webserver_impl dispatch
+// helpers need direct access to materialise wire responses without
+// widening the public API.
 class webserver;
 namespace detail { class webserver_impl; }
 
@@ -392,15 +388,13 @@ class http_response final {
      // does not widen the public API.
      friend struct http_response_sbo_test_access;
 
-     // TASK-013: the dispatch path in webserver.cpp reaches the private
-     // body_ pointer to call body_->materialize() and read kind_/status_
-     // when constructing the wire response. A friend declaration is
-     // cheaper than exposing a public materialize_for_dispatch_() method
-     // on the value type and keeps the public API minimal. Forward-
-     // declared as `class webserver;` near the top of this header.
-     // TASK-014: the dispatch helpers moved behind the PIMPL boundary.
-     // detail::webserver_impl is the actual reader of body_/kind_/status_
-     // now; webserver itself no longer touches the response wire path.
+     // body_ is private; detail::webserver_impl dispatch helpers need
+     // direct access to materialise wire responses and fire the
+     // response_sent hook (body_->size()). webserver is retained here
+     // for forward-compatibility -- it does not currently read body_
+     // directly but may need to in future public-layer helpers.
+     // TODO: remove friend class webserver once confirmed it is
+     // no longer needed at the public layer.
      friend class webserver;
      friend class detail::webserver_impl;
 };

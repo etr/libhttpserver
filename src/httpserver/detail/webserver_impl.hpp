@@ -110,7 +110,12 @@ class lambda_resource;
 // its own impl.
 class webserver_impl {
  public:
-    explicit webserver_impl(webserver* parent);
+    // `bind_socket_val` is the caller-supplied pre-bound socket from
+    // create_webserver().bind_socket(), or MHD_INVALID_SOCKET if none was
+    // provided. Initialised here so the impl is fully constructed from the
+    // parent's member-initialiser list with no post-construction mutations.
+    explicit webserver_impl(webserver* parent,
+                            MHD_socket bind_socket_val = MHD_INVALID_SOCKET);
     ~webserver_impl();
     webserver_impl(const webserver_impl&) = delete;
     webserver_impl& operator=(const webserver_impl&) = delete;
@@ -123,7 +128,11 @@ class webserver_impl {
     webserver* parent = nullptr;
 
     struct MHD_Daemon* daemon = nullptr;
-    MHD_socket bind_socket = 0;
+    // MHD_socket (int on POSIX, SOCKET on Windows) for a caller-supplied
+    // pre-bound socket passed via create_webserver().bind_socket().
+    // MHD_INVALID_SOCKET (-1 on POSIX, INVALID_SOCKET on Windows) is the
+    // sentinel meaning "no pre-bound socket was provided".
+    MHD_socket bind_socket = MHD_INVALID_SOCKET;
 
     pthread_mutex_t mutexwait;
     pthread_cond_t  mutexcond;

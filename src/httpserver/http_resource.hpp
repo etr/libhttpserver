@@ -45,8 +45,8 @@
 
 namespace httpserver { class http_request; }
 namespace httpserver { class webserver; }
-namespace httpserver { namespace detail { class webserver_impl; } }
-namespace httpserver { namespace detail { class resource_hook_table; } }
+namespace httpserver::detail { class webserver_impl; }
+namespace httpserver::detail { class resource_hook_table; }
 
 namespace httpserver {
 
