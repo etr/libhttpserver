@@ -50,10 +50,13 @@ namespace httpserver {
  * The library throws `feature_unavailable` from these sites; each one
  * pairs the feature label with the `HAVE_*` build flag that gates it:
  *
- *   - @ref webserver::webserver — when constructing from a builder that
- *     enables `use_ssl(true)` on a `HAVE_GNUTLS`-off build, or
- *     `basic_auth(true)` on a `HAVE_BAUTH`-off build, or
- *     `digest_auth(true)` on a `HAVE_DAUTH`-off build.
+ *   - @ref webserver::webserver — thrown at webserver construction time
+ *     when consuming the builder: `use_ssl(true)` on a
+ *     `HAVE_GNUTLS`-off build, `basic_auth(true)` on a
+ *     `HAVE_BAUTH`-off build, or `digest_auth(true)` on a
+ *     `HAVE_DAUTH`-off build. The `create_webserver` setters accept all
+ *     values without throwing; feature-unavailability is validated
+ *     lazily at `webserver` construction, not at the setter call.
  *   - @ref webserver::register_ws_resource and
  *     @ref webserver::unregister_ws_resource — on a `HAVE_WEBSOCKET`-off
  *     build (every websocket entry point throws this).

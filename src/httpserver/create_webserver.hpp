@@ -60,8 +60,11 @@ typedef std::function<http_response(const http_request&)> error_handler;
  * The handler receives the originating exception's message as a non-owning
  * `std::string_view` — for `std::exception` derivatives this is `e.what()`;
  * for non-`std::exception` throws (`throw 42`) it is the literal string
- * `"unknown exception"`. The view is valid only for the duration of the
- * call; copy if you need to retain it.
+ * `"unknown exception"`.
+ *
+ * @note The `message` view is valid only for the duration of the call.
+ *       Copy it into a `std::string` if you need to retain it beyond
+ *       the handler's return.
  *
  * Full contract: DR-009 §5.2 (see @ref webserver class-level block).
  */
@@ -207,7 +210,8 @@ class create_webserver {
       *
       * On a `HAVE_BAUTH`-off build, constructing a @ref webserver from a
       * builder with `basic_auth(true)` throws @ref feature_unavailable.
-      * Default value depends on the build flag (see TASK-034).
+      * Default: `true` when `HAVE_BAUTH` is defined (auth-on build),
+      * `false` otherwise.
       *
       * @param enable `true` to enable Basic auth, `false` to disable.
       * @return reference to this builder for chaining.
@@ -218,7 +222,8 @@ class create_webserver {
       *
       * On a `HAVE_DAUTH`-off build, constructing a @ref webserver from a
       * builder with `digest_auth(true)` throws @ref feature_unavailable.
-      * Default value depends on the build flag.
+      * Default: `true` when `HAVE_DAUTH` is defined (auth-on build),
+      * `false` otherwise.
       *
       * @param enable `true` to enable Digest auth, `false` to disable.
       * @return reference to this builder for chaining.
@@ -231,10 +236,38 @@ class create_webserver {
      create_webserver& put_processed_data_to_content(bool enable = true) { _put_processed_data_to_content = enable; return *this; }
 
      create_webserver& file_upload_target(const file_upload_target_T& v) { _file_upload_target = v; return *this; }
+     /**
+      * Set the directory where uploaded files are written to disk.
+      *
+      * @warning The default upload directory is `/tmp`, which is world-
+      *          readable on most POSIX systems. Uploaded files with
+      *          predictable names can be read by any local user until
+      *          the request destructor removes them. Set this to a
+      *          private directory AND enable
+      *          `generate_random_filename_on_upload(true)` whenever
+      *          uploaded files may contain sensitive content.
+      *
+      * @param v path to the upload staging directory; must not be empty.
+      * @return reference to this builder for chaining.
+      * @see generate_random_filename_on_upload
+      */
      create_webserver& file_upload_dir(const std::string& v) {
          if (v.empty()) throw std::invalid_argument("file_upload_dir: must not be empty");
          _file_upload_dir = v; return *this;
      }
+     /**
+      * When enabled, uploaded files are stored under a randomly-generated
+      * filename rather than the client-supplied filename.
+      *
+      * @note Combine with a non-world-readable `file_upload_dir` to
+      *       reduce the window in which uploaded sensitive content is
+      *       accessible to other local users.
+      *
+      * @param enable `true` to randomise filenames, `false` to use the
+      *               client-supplied name.
+      * @return reference to this builder for chaining.
+      * @see file_upload_dir
+      */
      create_webserver& generate_random_filename_on_upload(bool enable = true) { _generate_random_filename_on_upload = enable; return *this; }
      create_webserver& single_resource(bool enable = true) { _single_resource = enable; return *this; }
      create_webserver& tcp_nodelay(bool enable = true) { _tcp_nodelay = enable; return *this; }
@@ -280,27 +313,15 @@ class create_webserver {
       * Install the handler invoked when a registered request handler
       * throws (HTTP 500 by default).
       *
-      * This is the load-bearing extension point for the dispatch
-      * error-propagation contract (DR-009 §5.2 / PRD-FLG-REQ-002). The
-      * contract — full statement on the @ref webserver class block — is:
+      * The @p h callback receives the exception message (from `e.what()`
+      * for `std::exception`, or `"unknown exception"` otherwise) and the
+      * originating @ref http_request, and returns the response to send.
+      * If null, a default 500 with the message in the body is sent.
+      * The callback must be thread-safe (may be invoked concurrently
+      * from multiple MHD worker threads).
       *
-      *   1. The handler call is wrapped in `try/catch (std::exception&) / catch (...)`.
-      *   2. On `std::exception`: the message is logged via @ref log_error,
-      *      then @p h is invoked with `e.what()` as the @ref internal_error_handler_t
-      *      `message` argument.
-      *   3. On non-`std::exception`: same path with the message replaced
-      *      by the literal string `"unknown exception"`.
-      *   4. If @p h itself throws while servicing the above, the failure
-      *      is logged generically and a hardcoded 500 with an EMPTY body
-      *      is sent. No exception ever escapes into libmicrohttpd.
-      *   5. @ref feature_unavailable (a `std::runtime_error` subclass) is
-      *      NOT mapped specially: it lands as a generic 500 like any
-      *      other `std::exception`.
-      *   6. May run concurrently from multiple MHD worker threads;
-      *      implementations MUST be thread-safe.
-      *
-      * If @p h is null, the default response is a 500 with the message
-      * in the body (see DR-009).
+      * For the full six-point dispatch exception contract see the
+      * @ref webserver class-level block (DR-009 §5.2 / PRD-FLG-REQ-002).
       *
       * @note This is an alias. Calling it with a non-null callable
       *       installs the callable as a LAST-position hook at
@@ -322,7 +343,7 @@ class create_webserver {
       *
       * @param h @ref internal_error_handler_t callback; pass `nullptr` to clear.
       * @return reference to this builder for chaining.
-      * @see webserver, not_found_handler, method_not_allowed_handler, feature_unavailable
+      * @see webserver (DR-009 §5.2 contract), not_found_handler, method_not_allowed_handler
       */
      create_webserver& internal_error_handler(internal_error_handler_t h) { _internal_error_handler = std::move(h); return *this; }
      create_webserver& file_cleanup_callback(file_cleanup_callback_ptr v) { _file_cleanup_callback = v; return *this; }
@@ -373,6 +394,18 @@ class create_webserver {
      create_webserver& tcp_fastopen_queue_size(int v) { check_non_negative("tcp_fastopen_queue_size", v); _tcp_fastopen_queue_size = v; return *this; }
      create_webserver& sigpipe_handled_by_app(bool enable = true) { _sigpipe_handled_by_app = enable; return *this; }
      create_webserver& https_mem_dhparams(const std::string& v) { _https_mem_dhparams = v; return *this; }
+     /**
+      * Set the passphrase for the TLS private key (PEM decryption).
+      *
+      * @warning The passphrase is stored as a plain `std::string` for the
+      *          lifetime of this builder and the @ref webserver constructed
+      *          from it. Callers who need to minimise key-material exposure
+      *          should overwrite or destroy the builder after
+      *          `webserver ws{create_webserver{...}.https_key_password(pw)}`.
+      *
+      * @param v the PEM passphrase string.
+      * @return reference to this builder for chaining.
+      */
      create_webserver& https_key_password(const std::string& v) { _https_key_password = v; return *this; }
      create_webserver& https_priorities_append(const std::string& v) { _https_priorities_append = v; return *this; }
      create_webserver& client_discipline_level(int v) {

@@ -231,18 +231,26 @@ class webserver {
      **/
      void unblock_ip(std::string_view ip);
 
+     /// Returns the configured access-log callback; null if none was set.
+     /// The callback may be invoked concurrently from MHD worker threads.
      log_access_ptr get_access_logger() const {
          return log_access;
      }
 
+     /// Returns the configured error-log callback; null if none was set.
+     /// The callback may be invoked concurrently from MHD worker threads.
      log_error_ptr get_error_logger() const {
          return log_error;
      }
 
+     /// Returns the configured request-validator callback; null if none was set.
+     /// The callback may be invoked concurrently from MHD worker threads.
      validator_ptr get_request_validator() const {
          return validator;
      }
 
+     /// Returns the configured URL-unescaper callback; null if none was set.
+     /// The callback may be invoked concurrently from MHD worker threads.
      unescaper_ptr get_unescaper() const {
          return unescaper;
      }
@@ -258,6 +266,10 @@ class webserver {
       * For use with external event loops when the server is started
       * without internal threading.
       * @return true on success, false on error
+      * @note Handler exceptions are caught on the dispatch path and
+      *       routed through `internal_error_handler`; no exception
+      *       propagates out of this call.
+      * @see webserver (DR-009 §5.2 / handler error-propagation contract)
      **/
      bool run();
 
@@ -266,6 +278,10 @@ class webserver {
       * or the timeout expires.
       * @param millisec timeout in milliseconds (-1 for indefinite)
       * @return true on success, false on error
+      * @note Handler exceptions are caught on the dispatch path and
+      *       routed through `internal_error_handler`; no exception
+      *       propagates out of this call.
+      * @see webserver (DR-009 §5.2 / handler error-propagation contract)
      **/
      bool run_wait(int32_t millisec);
 
