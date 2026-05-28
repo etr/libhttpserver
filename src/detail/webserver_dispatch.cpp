@@ -382,6 +382,8 @@ void handle_dispatch_exception(
         std::string_view message) {
     // TASK-051: per-route handler_exception. weak_ptr was set on mr in
     // finalize_answer before dispatch_resource_handler was called.
+    // res keeps the resource alive while rtable is in use (the shared_ptr
+    // must not go out of scope before the rtable firing loop finishes).
     auto res = mr->resource_weak_.lock();
     auto* rtable = res ? res->hook_table_raw_() : nullptr;
     const bool per_route = rtable != nullptr &&

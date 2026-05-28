@@ -6,8 +6,10 @@
 
 The allow-mask (formerly `std::map<std::string, bool> method_state`) becomes `method_set methods_allowed_;` — a `uint32_t` bitmask wrapper (DR-6). `is_allowed(http_method)` and `get_allowed_methods()` are `const` and return without allocation.
 
+**Per-resource hook bus (TASK-051):** `http_resource` also hosts a per-route hook bus via `add_hook()`, restricted to the five post-route-resolution phases (`before_handler`, `handler_exception`, `after_handler`, `response_sent`, `request_completed`). Hook storage uses a lazy PIMPL — a `std::shared_ptr<detail::resource_hook_table>` that is null until the first `add_hook()` call, so resources that never register a hook pay zero allocation cost. The full per-route hook bus design is documented in §4.10.
+
 **Lifetime:** owned by the `webserver` via `unique_ptr` or `shared_ptr` (PRD-HDL-REQ-003). Raw-pointer registration is gone (PRD-HDL-REQ-005).
 
-**Related requirements:** PRD-HDL-REQ-003, PRD-HDL-REQ-005, PRD-REQ-REQ-002, PRD-REQ-REQ-003.
+**Related requirements:** PRD-HDL-REQ-003, PRD-HDL-REQ-005, PRD-REQ-REQ-002, PRD-REQ-REQ-003, PRD-HOOK-REQ-006.
 
 ---

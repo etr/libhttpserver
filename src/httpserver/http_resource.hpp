@@ -265,8 +265,11 @@ class http_resource {
      http_resource() = default;
 
      /**
-      * Copy / move special members are trivial — the only data member
-      * is method_set (a 32-bit aggregate).
+      * Copy / move special members. Note that copying an http_resource
+      * shallow-copies the hook_table_ shared_ptr, meaning the copy shares
+      * the same per-route hook table as the original. Hooks registered on
+      * the original will also fire for the copy. If independent hook tables
+      * are needed, register hooks on the copy separately after construction.
      **/
      http_resource(const http_resource& b) = default;
      http_resource(http_resource&& b) noexcept = default;
@@ -295,6 +298,10 @@ class http_resource {
      // only reads the table; only the public add_hook(non-const) writes).
      mutable std::shared_ptr<detail::resource_hook_table> hook_table_;
 
+// Internal-only accessor: only visible to translation units that define
+// HTTPSERVER_COMPILATION (i.e., the library's own .cpp files). User-facing
+// translation units that include <httpserver.hpp> see only the public
+// add_hook() surface; this symbol is intentionally hidden from them.
 #if defined(HTTPSERVER_COMPILATION)
 
  public:

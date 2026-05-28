@@ -177,7 +177,7 @@ LT_BEGIN_AUTO_TEST(hook_api_shape_suite, double_remove_is_noop)
             [](httpserver::after_handler_ctx&) { return hook_action{}; }));
     h.remove();
     h.remove();  // must not crash, must not double-erase
-    LT_CHECK_EQ(true, true);
+    // Reaching this point means no crash and no double-erase.
 LT_END_AUTO_TEST(double_remove_is_noop)
 
 LT_BEGIN_AUTO_TEST(hook_api_shape_suite, raii_destruction_removes)
@@ -239,8 +239,7 @@ LT_END_AUTO_TEST(any_hooks_flips_on_first_and_last)
 
 LT_BEGIN_AUTO_TEST(hook_api_shape_suite, default_constructed_handle_is_inert)
     hook_handle h;
-    h.remove();  // no-op
-    LT_CHECK_EQ(true, true);
+    h.remove();  // no-op -- reaching this point means no crash
 LT_END_AUTO_TEST(default_constructed_handle_is_inert)
 
 LT_BEGIN_AUTO_TEST_ENV()
