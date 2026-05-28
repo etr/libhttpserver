@@ -68,6 +68,13 @@
 // throws, that exception propagates to the caller. Callers in the
 // handler-throw path use run_internal_error_handler_safely() to
 // contain that double-fault.
+//
+// Call sites:
+//   - run_internal_error_handler_safely (double-fault arm, force_our=true)
+//   - get_raw_response_with_fallback (null-materializer path)
+//   - materialize_and_queue_response (belt-and-suspenders fallback,
+//     force_our=true, after get_raw_response_with_fallback returned null)
+//   - dispatch_resource_handler (null-sentinel response from handler)
 ::httpserver::http_response internal_error_page(
     modded_request* mr,
     std::string_view msg,
