@@ -24,6 +24,7 @@
 // detail/body.hpp directly (for the subclasses) — header-hygiene from
 // the consumer perspective is asserted separately by header_hygiene_*.
 
+#include <fcntl.h>          // O_RDONLY
 #include <microhttpd.h>
 #include <sys/types.h>      // ssize_t
 #include <unistd.h>         // pipe, close
@@ -120,6 +121,16 @@ LT_BEGIN_AUTO_TEST(body_suite, empty_body_kind_size_and_materialize)
     MHD_destroy_response(r);
 LT_END_AUTO_TEST(empty_body_kind_size_and_materialize)
 
+// Cover the explicit empty_body(int flags) constructor path.
+LT_BEGIN_AUTO_TEST(body_suite, empty_body_with_flags_materializes)
+    // MHD_RF_HTTP_1_0_SERVER is a harmless non-zero flag value.
+    httpserver::detail::empty_body b(static_cast<int>(MHD_RF_HTTP_1_0_SERVER));
+    LT_CHECK_EQ(b.size(), 0u);
+    MHD_Response* r = b.materialize();
+    LT_ASSERT_NEQ(r, static_cast<MHD_Response*>(nullptr));
+    MHD_destroy_response(r);
+LT_END_AUTO_TEST(empty_body_with_flags_materializes)
+
 // -----------------------------------------------------------------------
 // string_body
 // -----------------------------------------------------------------------
@@ -151,6 +162,8 @@ LT_BEGIN_AUTO_TEST(body_suite, file_body_kind_and_materialize_existing_file)
                 static_cast<int>(httpserver::body_kind::file));
     MHD_Response* r = b.materialize();
     LT_ASSERT_NEQ(r, static_cast<MHD_Response*>(nullptr));
+    // Pin the size-caching side-effect: size() must reflect the on-disk size.
+    LT_CHECK_GT(b.size(), 0u);
     MHD_destroy_response(r);
 LT_END_AUTO_TEST(file_body_kind_and_materialize_existing_file)
 
@@ -168,9 +181,47 @@ LT_END_AUTO_TEST(file_body_size_known_before_materialize)
 
 LT_BEGIN_AUTO_TEST(body_suite, file_body_returns_null_on_missing_file)
     httpserver::detail::file_body b("/no/such/path/should/exist");
-    // Mirrors v1 file_response::get_raw_response semantics.
+    // Constructor error: size() must be 0 and materialize() must return nullptr.
+    LT_CHECK_EQ(b.size(), 0u);
     LT_CHECK_EQ(b.materialize(), static_cast<MHD_Response*>(nullptr));
 LT_END_AUTO_TEST(file_body_returns_null_on_missing_file)
+
+// file_body rejects non-regular files (S_ISREG check in constructor).
+// Passing a directory path must leave fd_ = -1, so size() == 0 and
+// materialize() returns nullptr — covering the !S_ISREG branch.
+LT_BEGIN_AUTO_TEST(body_suite, file_body_returns_null_for_non_regular_file)
+    httpserver::detail::file_body b("/tmp");
+    LT_CHECK_EQ(b.size(), 0u);
+    LT_CHECK_EQ(b.materialize(), static_cast<MHD_Response*>(nullptr));
+LT_END_AUTO_TEST(file_body_returns_null_for_non_regular_file)
+
+#ifndef _WIN32
+// Parallel of pipe_body_destructor_closes_fd_when_not_materialized: the
+// ownership contract states 'if materialize() is never called, ~file_body()
+// must close fd_'. Verify via EBADF on a second ::close() of the same fd.
+//
+// Technique: open the file to get a known fd number, close it, then construct
+// file_body (which re-opens and gets the same slot). After file_body goes out
+// of scope without materialize(), the slot must be closed — EBADF confirms it.
+LT_BEGIN_AUTO_TEST(body_suite, file_body_destructor_closes_fd_when_not_materialized)
+    // Step 1: open the file to get a stable fd slot number, then close it.
+    int anchor = ::open("test_content", O_RDONLY);
+    LT_ASSERT_GTE(anchor, 0);
+    ::close(anchor);  // release — file_body's open() will reclaim this slot
+
+    // Step 2: construct file_body (it opens test_content, gets `anchor` slot).
+    {
+        httpserver::detail::file_body b("test_content");
+        LT_ASSERT_GT(b.size(), 0u);  // open must have succeeded
+        // Do NOT call materialize() — destructor must close fd_.
+    }
+
+    // Step 3: after ~file_body(), `anchor` must be EBADF.
+    int second = ::close(anchor);
+    LT_CHECK_EQ(second, -1);
+    LT_CHECK_EQ(errno, EBADF);
+LT_END_AUTO_TEST(file_body_destructor_closes_fd_when_not_materialized)
+#endif  // !_WIN32
 
 // -----------------------------------------------------------------------
 // iovec_body
@@ -192,8 +243,11 @@ LT_END_AUTO_TEST(iovec_body_size_is_sum_of_entry_lengths)
 LT_BEGIN_AUTO_TEST(body_suite, iovec_body_empty_entries_materializes)
     httpserver::detail::iovec_body b(std::vector<httpserver::iovec_entry>{});
     LT_CHECK_EQ(b.size(), 0u);
-    // MHD may or may not accept a zero-iovec response; we only assert that
-    // size() is correct and that constructing/destroying does not crash.
+    // Call materialize() and pin the observable result. MHD accepts a
+    // zero-iovec call and returns a valid response on current libmicrohttpd.
+    MHD_Response* r = b.materialize();
+    LT_ASSERT_NEQ(r, static_cast<MHD_Response*>(nullptr));
+    MHD_destroy_response(r);
 LT_END_AUTO_TEST(iovec_body_empty_entries_materializes)
 
 // -----------------------------------------------------------------------

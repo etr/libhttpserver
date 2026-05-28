@@ -93,6 +93,12 @@ class body {
     // placement-move-construct into a target buffer. The base move-assign
     // stays deleted because inline relocation never assigns into an
     // existing instance — it always destroys-and-reconstructs.
+    // Move ctor is provided so subclasses can offer their own noexcept move
+    // ctors. However, the body base class is NOT movable in the usual sense:
+    // http_response stores bodies inline via placement-new (DR-005) and
+    // relocates them by calling move_into(dst) rather than std::move. Callers
+    // MUST NOT move-construct a body into an externally-owned heap object;
+    // use move_into() to relocate an inline-stored body across SBO buffers.
     body(body&&) noexcept = default;
     body& operator=(body&&) = delete;
 };
@@ -150,14 +156,14 @@ class string_body final : public body {
 
 // ---------------------------------------------------------------------------
 // file_body — opens the file and runs fstat at construction so that:
-//   * size() is accurate immediately (no need to call materialize() first)
-//   * materialize() avoids the lseek TOCTOU race (security-reviewer-iter1-1):
-//     st_size from fstat is used directly, the fd position is never changed
-//     before being handed to MHD_create_response_from_fd.
-//   * repeated open/fstat syscalls on re-materialize are eliminated
-//     (performance-reviewer-iter1-2).
+//   * size() is accurate immediately (no need to call materialize() first),
+//     because the on-disk size is known from fstat, not from seek/tell.
+//   * materialize() avoids the TOCTOU race on file size: st_size from the
+//     already-obtained fstat is used directly; the fd position is never
+//     changed before being handed to MHD_create_response_from_fd (CWE-367).
+//   * No repeated open/fstat syscalls on a hypothetical second materialize().
 //
-// Caller path contract (security-reviewer-iter1-2 / CWE-23):
+// Caller path contract (CWE-23):
 //   path_ is assumed to be a validated, canonicalized path. O_NOFOLLOW
 //   blocks the final component being a symlink, but intermediate components
 //   are still followed. Callers supplying user-derived paths MUST canonicalize
@@ -285,6 +291,8 @@ class pipe_body final : public body {
 
  private:
     int fd_ = -1;
+    // suppresses ~pipe_body's close — MHD owns fd_ after a successful
+    // materialize() (mirrors the analogous field in file_body).
     bool materialized_ = false;
 };
 

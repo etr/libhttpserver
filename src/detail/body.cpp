@@ -99,13 +99,13 @@ MHD_Response* empty_body::materialize() {
 // string_body
 // ---------------------------------------------------------------------------
 MHD_Response* string_body::materialize() {
-    // PERSISTENT, not MUST_COPY: content_ is owned by *this and outlives the
-    // returned MHD_Response (TASK-009 anchors the lifetime). This matches v1
-    // string_response::get_raw_response.
-    return MHD_create_response_from_buffer(
+    // _static variant: accepts const void* directly, no const_cast needed,
+    // and documents the same PERSISTENT ownership semantics — the buffer is
+    // owned by *this and outlives the MHD_Response (TASK-009). Requires
+    // MHD >= 0x00097701, well below the project minimum 0x01000000.
+    return MHD_create_response_from_buffer_static(
         content_.size(),
-        const_cast<void*>(static_cast<const void*>(content_.data())),
-        MHD_RESPMEM_PERSISTENT);
+        static_cast<const void*>(content_.data()));
 }
 
 // ---------------------------------------------------------------------------
@@ -132,6 +132,19 @@ file_body::file_body(std::string path) noexcept
 
     // Use fstat's st_size directly — no lseek, no TOCTOU, no fd-position
     // side-effect (security-reviewer-iter1-1 / performance-reviewer-iter1-4).
+    //
+    // CWE-190 guard: on 32-bit platforms std::size_t is 32 bits while off_t
+    // can be 64 bits; a file larger than 4 GiB would silently truncate via
+    // the cast. Reject oversized files so MHD_create_response_from_fd always
+    // receives the correct size.  On 64-bit targets the comparison is a
+    // compile-time no-op and the branch is dead.
+    if (sb.st_size < 0 ||
+        static_cast<uint64_t>(sb.st_size) >
+            static_cast<uint64_t>(std::numeric_limits<std::size_t>::max())) {
+        ::close(fd_);
+        fd_ = -1;
+        return;
+    }
     size_ = static_cast<std::size_t>(sb.st_size);
 }
 
@@ -165,12 +178,14 @@ MHD_Response* file_body::materialize() {
         }
         return r;
     }
-    // Zero-byte file: serve empty response without giving the fd to MHD.
+    // Zero-byte file: serve an empty response without giving the fd to MHD.
+    // Close the fd first, then set fd_ = -1 so ~file_body's guard
+    // (`!materialized_ && fd_ != -1`) cannot reach ::close() on an already-
+    // closed descriptor. fd_ == -1 is the sole sentinel here; there is no
+    // need to also set materialized_ = true in this branch.
     ::close(fd_);
     fd_ = -1;
-    materialized_ = true;  // suppress ~file_body's close (already closed)
-    return MHD_create_response_from_buffer(
-        0, nullptr, MHD_RESPMEM_PERSISTENT);
+    return MHD_create_response_from_buffer_static(0, nullptr);
 }
 
 // ---------------------------------------------------------------------------
