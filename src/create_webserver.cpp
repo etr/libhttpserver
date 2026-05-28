@@ -51,11 +51,10 @@ bool create_webserver::basic_auth_default() noexcept {
 #endif
 }
 
-// security-reviewer-iter1-1 / PRD-FLG-REQ-001: same pattern as
-// basic_auth_default(). Returns true on HAVE_DAUTH-on builds
-// (preserving historical behaviour) and false on HAVE_DAUTH-off builds
-// so that an unmodified builder doesn't trip the feature_unavailable
-// throw added to webserver::webserver() for HAVE_DAUTH-off builds.
+// PRD-FLG-REQ-001: same pattern as basic_auth_default(). Returns true
+// on HAVE_DAUTH-on builds (preserving historical behaviour) and false
+// on HAVE_DAUTH-off builds so an unmodified builder doesn't trip the
+// feature_unavailable guard in webserver::webserver().
 bool create_webserver::digest_auth_default() noexcept {
 #ifdef HAVE_DAUTH
     return true;

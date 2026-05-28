@@ -667,6 +667,24 @@ LT_BEGIN_AUTO_TEST(create_webserver_suite,
 LT_END_AUTO_TEST(basic_auth_false_does_not_throw_when_no_bauth)
 #endif  // !HAVE_BAUTH
 
+// TASK-034 cleanup: on HAVE_BAUTH-on builds, constructing a webserver with
+// basic_auth(true) must succeed (the guard fires only on HAVE_BAUTH-off).
+// Guards the inverse of basic_auth_true_throws_feature_unavailable_when_no_bauth.
+#ifdef HAVE_BAUTH
+LT_BEGIN_AUTO_TEST(create_webserver_suite,
+                   basic_auth_true_succeeds_when_bauth_available)
+    // Construction must not throw; listen_socket(false) avoids binding a port.
+    bool threw = false;
+    try {
+        httpserver::webserver ws{create_webserver(8085).basic_auth(true).listen_socket(false)};
+        (void)ws;
+    } catch (...) {
+        threw = true;
+    }
+    LT_CHECK(!threw);
+LT_END_AUTO_TEST(basic_auth_true_succeeds_when_bauth_available)
+#endif  // HAVE_BAUTH
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

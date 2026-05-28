@@ -3,7 +3,7 @@
 | Build flag | When disabled | Public-API behavior |
 |---|---|---|
 | `HAVE_BAUTH` | Basic-auth disabled | `get_user`, `get_pass` return empty `string_view`; `webserver::features().basic_auth == false`; `create_webserver::basic_auth(true)` throws `feature_unavailable` at `webserver` construction time (consistent with other feature flags) |
-| `HAVE_DAUTH` | Digest-auth disabled | `get_digested_user` returns empty; `check_digest_auth` returns a sentinel result; features().digest_auth == false |
+| `HAVE_DAUTH` | Digest-auth disabled | `get_digested_user` returns empty; `check_digest_auth` returns a sentinel result; features().digest_auth == false; `create_webserver::digest_auth(true)` throws `feature_unavailable` at `webserver` construction time (consistent with `HAVE_BAUTH` and `HAVE_GNUTLS`) |
 | `HAVE_GNUTLS` | TLS disabled | All `get_client_cert_*` return empty / -1 / false; features().tls == false; `create_webserver::use_ssl(true)` throws `feature_unavailable` |
 | `HAVE_WEBSOCKET` | WebSocket disabled | `register_ws_resource` throws `feature_unavailable`; features().websocket == false |
 

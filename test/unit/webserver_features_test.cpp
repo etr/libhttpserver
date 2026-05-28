@@ -66,29 +66,40 @@ LT_BEGIN_SUITE(webserver_features_suite)
     }
 LT_END_SUITE(webserver_features_suite)
 
-// AC: each field reflects the HAVE_* that the library was built with.
-LT_BEGIN_AUTO_TEST(webserver_features_suite, fields_match_build_flags)
-    auto f = httpserver::webserver::features();
+// Compile-time expected values — one #ifdef per flag, declared outside the
+// test body so there is no internal branching inside the test assertion
+// sequence (test-quality-reviewer finding: internal-branching-in-test).
 #ifdef HAVE_BAUTH
-    LT_CHECK_EQ(f.basic_auth, true);
+constexpr bool k_expected_bauth = true;
 #else
-    LT_CHECK_EQ(f.basic_auth, false);
+constexpr bool k_expected_bauth = false;
 #endif
 #ifdef HAVE_DAUTH
-    LT_CHECK_EQ(f.digest_auth, true);
+constexpr bool k_expected_dauth = true;
 #else
-    LT_CHECK_EQ(f.digest_auth, false);
+constexpr bool k_expected_dauth = false;
 #endif
 #ifdef HAVE_GNUTLS
-    LT_CHECK_EQ(f.tls, true);
+constexpr bool k_expected_tls = true;
 #else
-    LT_CHECK_EQ(f.tls, false);
+constexpr bool k_expected_tls = false;
 #endif
 #ifdef HAVE_WEBSOCKET
-    LT_CHECK_EQ(f.websocket, true);
+constexpr bool k_expected_ws = true;
 #else
-    LT_CHECK_EQ(f.websocket, false);
+constexpr bool k_expected_ws = false;
 #endif
+
+// AC: each field reflects the HAVE_* that the library was built with.
+// The four assertions below are unconditional: each compares the runtime
+// value against its compile-time expected constant so the intent is clear
+// and both true and false branches are visible in every build.
+LT_BEGIN_AUTO_TEST(webserver_features_suite, fields_match_build_flags)
+    auto f = httpserver::webserver::features();
+    LT_CHECK_EQ(f.basic_auth, k_expected_bauth);
+    LT_CHECK_EQ(f.digest_auth, k_expected_dauth);
+    LT_CHECK_EQ(f.tls, k_expected_tls);
+    LT_CHECK_EQ(f.websocket, k_expected_ws);
 LT_END_AUTO_TEST(fields_match_build_flags)
 
 LT_BEGIN_AUTO_TEST_ENV()
