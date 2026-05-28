@@ -211,6 +211,8 @@ LT_BEGIN_AUTO_TEST(http_response_factories_suite, iovec_factory_empty_span)
     LT_CHECK_EQ(static_cast<int>(r.kind()),
                 static_cast<int>(body_kind::iovec));
     LT_CHECK_EQ(r.get_status(), 200);
+    // iovec_body fits in the 64-byte SBO buffer — verify inline placement.
+    LT_CHECK_EQ(SBO::body_inline(r), true);
 LT_END_AUTO_TEST(iovec_factory_empty_span)
 
 LT_BEGIN_AUTO_TEST(http_response_factories_suite, iovec_factory_single_entry)
@@ -221,6 +223,8 @@ LT_BEGIN_AUTO_TEST(http_response_factories_suite, iovec_factory_single_entry)
     LT_CHECK_EQ(static_cast<int>(r.kind()),
                 static_cast<int>(body_kind::iovec));
     LT_CHECK_EQ(r.get_status(), 200);
+    // iovec_body fits in the 64-byte SBO buffer — verify inline placement.
+    LT_CHECK_EQ(SBO::body_inline(r), true);
 LT_END_AUTO_TEST(iovec_factory_single_entry)
 
 // -----------------------------------------------------------------------
@@ -309,6 +313,8 @@ LT_END_AUTO_TEST(unauthorized_basic_status_and_header)
 LT_BEGIN_AUTO_TEST(http_response_factories_suite,
                    unauthorized_digest_scheme_renders_in_header)
     auto r = http_response::unauthorized("Digest", "myrealm");
+    // Status must be 401 for the Digest scheme, same as Basic.
+    LT_CHECK_EQ(r.get_status(), 401);
     LT_CHECK_EQ(r.get_header(httpserver::http::http_utils::http_header_www_authenticate),
                 std::string(R"(Digest realm="myrealm")"));
 LT_END_AUTO_TEST(unauthorized_digest_scheme_renders_in_header)

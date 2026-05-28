@@ -184,8 +184,14 @@ void webserver_impl::decorate_mhd_response(MHD_Response* response,
         MHD_add_response_footer(response, k.c_str(), v.c_str());
     }
     for (const auto& [k, v] : resp.get_cookies()) {
-        MHD_add_response_header(response, "Set-Cookie",
-                                (k + "=" + v).c_str());
+        // Use reserve+append to avoid two heap allocations per cookie
+        // that `k + "=" + v` would cause (performance-reviewer finding #19).
+        std::string cookie_hdr;
+        cookie_hdr.reserve(k.size() + 1 + v.size());
+        cookie_hdr = k;
+        cookie_hdr += '=';
+        cookie_hdr += v;
+        MHD_add_response_header(response, "Set-Cookie", cookie_hdr.c_str());
     }
 }
 
@@ -252,6 +258,15 @@ MHD_Result webserver_impl::materialize_and_queue_response(MHD_Connection* connec
         // empty-body 500 fallback so MHD always has something to queue.
         mr->response.emplace(internal_error_page(mr, "", /*force_our=*/true));
         raw_response = materialize_response(&*mr->response);
+        if (raw_response == nullptr) {
+            // Last-resort guard: internal_error_page's materialization
+            // also returned null (e.g. under extreme memory pressure).
+            // Cannot call decorate_mhd_response(nullptr, ...) — that would
+            // pass a null MHD_Response to MHD_add_response_header, causing
+            // a null-dereference (CWE-476). Return MHD_NO so the connection
+            // is terminated gracefully rather than crashing the server.
+            return (MHD_Result) MHD_NO;
+        }
     }
     decorate_mhd_response(raw_response, *mr->response);
     int to_ret = MHD_queue_response(connection, mr->response->get_status(), raw_response);

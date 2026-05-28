@@ -341,6 +341,16 @@ class create_webserver {
       *       dispatch path; the hook registration is the
       *       alias-equivalence story.
       *
+      * @note **Auth is not applied to unmatched (404) paths.** The handler
+      *       is only invoked when a registered resource was found for the
+      *       request URL. Requests to URLs with no registered resource fall
+      *       through to the 404 page without auth, allowing unauthenticated
+      *       clients to distinguish 404 from 401 and enumerate which routes
+      *       exist. If uniform 401 behaviour for all paths (including
+      *       unregistered ones) is required to prevent route enumeration,
+      *       use a wildcard resource registered at "/" or implement the
+      *       check inside the `not_found_handler`.
+      *
       * @param v auth_handler_ptr callback; pass `nullptr` to clear.
       * @return reference to this builder for chaining.
       */

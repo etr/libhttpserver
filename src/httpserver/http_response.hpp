@@ -180,16 +180,23 @@ class http_response final {
      [[nodiscard]] static http_response deferred(
          std::function<ssize_t(std::uint64_t, char*, std::size_t)> producer);
 
-     // Construct a 401 Unauthorized response with a WWW-Authenticate
-     // header of the form `<scheme> realm="<realm>"`. Replaces v1's
-     // basic_auth_fail_response and digest_auth_fail_response.
-     //
-     // Note: for "Digest" the response carries a static
-     // WWW-Authenticate challenge but does NOT participate in
-     // libmicrohttpd's nonce/opaque digest-auth state machine — that
-     // was v1's MHD_queue_auth_required_response3-driven path which
-     // requires connection-time state. Callers needing full digest
-     // auth should reach for the dedicated MHD APIs directly.
+     /// Construct a 401 Unauthorized response with a WWW-Authenticate
+     /// header of the form `<scheme> realm="<realm>"`. Replaces v1's
+     /// basic_auth_fail_response and digest_auth_fail_response.
+     ///
+     /// @warning **Digest scheme produces a non-RFC-compliant stub.**
+     /// When `scheme == "Digest"` this factory emits only a static
+     /// `WWW-Authenticate: Digest realm="<realm>"` challenge — it does
+     /// NOT set `nonce`, `opaque`, `algorithm`, or `qop`, which RFC 7616
+     /// §3.3 requires in every 401 Digest challenge.  The response
+     /// provides *no replay protection* and will be rejected outright by
+     /// strict RFC 7616 parsers.  This is because the Digest handshake
+     /// requires per-connection nonce state managed by libmicrohttpd
+     /// internally (the v1 `MHD_queue_auth_required_response3` path),
+     /// which is incompatible with libhttpserver's value-typed response
+     /// model (DR-013).  Callers needing fully RFC-compliant Digest auth
+     /// must call the MHD APIs directly.  Use `"Basic"` if a compliant
+     /// challenge is required.
      [[nodiscard]] static http_response unauthorized(
          std::string_view scheme,
          std::string_view realm,

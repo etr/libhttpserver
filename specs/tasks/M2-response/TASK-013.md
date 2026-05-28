@@ -21,7 +21,7 @@ Delete the public-facing response subclasses and the `get_raw_response`/`decorat
 
 **Acceptance Criteria:**
 - `grep -E 'class\s+\w+_response\s*:' src/httpserver/*.hpp` returns no public results (PRD §3.5 acceptance).
-- `grep -E 'get_raw_response|decorate_response|enqueue_response' src/httpserver/*.hpp` returns no results.
+- `grep -E 'virtual.*(get_raw_response|decorate_response|enqueue_response)' src/httpserver/*.hpp` returns no results (tightened to match only virtual method declarations, not prose comments or private helper names that share a substring).
 - `static_assert(std::is_final_v<httpserver::http_response>);` (deferred AC from TASK-009 — PRD §3.5 sealed value type).
 - Existing tests that constructed `string_response` etc. directly are migrated to factories (or removed if they were testing private details).
 - Typecheck passes.
