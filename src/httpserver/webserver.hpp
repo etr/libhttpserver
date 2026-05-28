@@ -452,16 +452,16 @@ class webserver {
      const bool no_alpn;
      const int client_discipline_level;
 
-     // TASK-024: shared registration helper. Both register_path and
-     // register_prefix funnel through here so the validation/insertion
-     // logic lives in one place. `family=true` is prefix-matching;
-     // `family=false` is exact-matching.
+     // Shared registration helper. Both register_path and register_prefix
+     // funnel through here so the validation/insertion logic lives in one
+     // place. `family=true` is prefix-matching; `family=false` is
+     // exact-matching.
      void register_impl_(const std::string& path,
                          std::shared_ptr<http_resource> res,
                          bool family);
 
-     // TASK-024: shared unregistration helper. Erases a single
-     // registration of the requested kind.
+     // Shared unregistration helper. Erases a single registration of the
+     // requested kind.
      void unregister_impl_(const std::string& path, bool family);
 
      // TASK-025/TASK-026: shared lambda-registration helper. Builds-or-
