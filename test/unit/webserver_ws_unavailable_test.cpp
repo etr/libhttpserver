@@ -53,6 +53,10 @@ LT_BEGIN_AUTO_TEST(webserver_ws_unavailable_suite,
     bool caught = false;
     std::string msg;
     try {
+        // The null unique_ptr is used for compile convenience only — the
+        // HAVE_WEBSOCKET-off branch throws feature_unavailable before
+        // reaching any null check. On a HAVE_WEBSOCKET-on build the same
+        // null argument would throw std::invalid_argument instead.
         ws.register_ws_resource(
             "/ws", std::unique_ptr<httpserver::websocket_handler>{});
     } catch (const httpserver::feature_unavailable& e) {

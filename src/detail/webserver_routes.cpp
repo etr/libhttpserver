@@ -390,9 +390,9 @@ void webserver::register_ws_resource(const std::string& resource,
     if (!handler) {
         throw std::invalid_argument("The websocket_handler pointer cannot be null");
     }
-    std::string key = http_utils::standardize_url(resource);
+    std::string url_key = http_utils::standardize_url(resource);
     std::unique_lock lock(impl_->registered_resources_mutex);
-    auto result = impl_->registered_ws_handlers.emplace(std::move(key),
+    auto result = impl_->registered_ws_handlers.emplace(std::move(url_key),
                                                         std::move(handler));
     if (!result.second) {
         // Mirror TASK-023's throw-on-duplicate. v1's operator[]-based

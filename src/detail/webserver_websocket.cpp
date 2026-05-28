@@ -227,15 +227,26 @@ webserver_impl::complete_websocket_upgrade(MHD_Connection* connection,
 
     // Compute Sec-WebSocket-Accept from client's key (RFC 6455 §4.2.2).
     // Base64 of SHA-1 = 28 chars + null.
+    // RFC 6455 §4.2.2: the Sec-WebSocket-Accept header is required; if the
+    // library call fails treat it as a fatal handshake error and abort.
     char accept_header[29];
-    if (MHD_websocket_create_accept_header(ws_key, accept_header) == MHD_WEBSOCKET_STATUS_OK) {
-        MHD_add_response_header(response, "Sec-WebSocket-Accept", accept_header);
+    if (MHD_websocket_create_accept_header(ws_key, accept_header) != MHD_WEBSOCKET_STATUS_OK) {
+        MHD_destroy_response(response);
+        return std::nullopt;
     }
+    MHD_add_response_header(response, "Sec-WebSocket-Accept", accept_header);
     MHD_Result to_ret = (MHD_Result) MHD_queue_response(connection,
                                                        MHD_HTTP_SWITCHING_PROTOCOLS,
                                                        response);
     MHD_destroy_response(response);
-    data_guard.release();  // MHD now owns; upgrade_handler will delete.
+    if (to_ret == MHD_YES) {
+        // Transfer ownership to MHD: upgrade_handler receives data_guard.get()
+        // as cls and wraps it in unique_ptr for cleanup. Only release after a
+        // confirmed successful queue; if MHD_queue_response returns MHD_NO the
+        // upgrade callback will never fire, so data_guard's destructor frees the
+        // allocation instead.
+        data_guard.release();
+    }
     return to_ret;
 }
 
