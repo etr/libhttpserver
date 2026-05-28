@@ -296,10 +296,8 @@ bool webserver_impl::resolve_resource_for_request(detail::modded_request* mr,
     // of which are gated by their respective any_hooks_ entries. Skip the
     // heap allocation on every matched request when no hooks are registered.
     const bool need_path_template =
-        any_hooks_[static_cast<std::size_t>(hook_phase::route_resolved)]
-            .load(std::memory_order_relaxed) ||
-        any_hooks_[static_cast<std::size_t>(hook_phase::before_handler)]
-            .load(std::memory_order_relaxed);
+        has_hooks_for(hook_phase::route_resolved) ||
+        has_hooks_for(hook_phase::before_handler);
 
     std::shared_lock registered_resources_lock(registered_resources_mutex);
 
@@ -387,9 +385,7 @@ void handle_dispatch_exception(
     const bool per_route = rtable != nullptr &&
         rtable->any_hooks(hook_phase::handler_exception);
     const bool server_chain =
-        impl->any_hooks_[static_cast<std::size_t>(
-                hook_phase::handler_exception)]
-            .load(std::memory_order_relaxed) ||
+        impl->has_hooks_for(hook_phase::handler_exception) ||
         impl->handler_exception_alias_;
 
     if (server_chain || per_route) {

@@ -90,9 +90,7 @@ resource_hook_table* per_route_table(detail::modded_request* mr,
 bool webserver_impl::fire_before_handler_gated(
         detail::modded_request* mr,
         const std::shared_ptr<http_resource>& hrm) {
-    const bool server_gate =
-        any_hooks_[static_cast<std::size_t>(hook_phase::before_handler)]
-            .load(std::memory_order_relaxed);
+    const bool server_gate = has_hooks_for(hook_phase::before_handler);
     auto* per_route_table = hrm->hook_table_raw_();
     const bool per_route_gate = per_route_table != nullptr &&
         per_route_table->any_hooks(hook_phase::before_handler);
@@ -140,9 +138,7 @@ bool webserver_impl::fire_before_handler_gated(
 // The pre-handler short-circuit branch (mr->skip_handler) is handled
 // upstream in finalize_answer and never reaches this site.
 void webserver_impl::fire_after_handler_gated(detail::modded_request* mr) {
-    const bool server_gate =
-        any_hooks_[static_cast<std::size_t>(hook_phase::after_handler)]
-            .load(std::memory_order_relaxed);
+    const bool server_gate = has_hooks_for(hook_phase::after_handler);
     std::shared_ptr<http_resource> res;
     auto* rtable = per_route_table(mr, res);
     const bool route_gate = rtable != nullptr &&
@@ -182,9 +178,7 @@ void webserver_impl::fire_after_handler_gated(detail::modded_request* mr) {
 // size from http_response::body_->size(); for deferred/pipe bodies this
 // is 0 and consumers should fall back to the Content-Length header.
 void webserver_impl::fire_response_sent_gated(detail::modded_request* mr) {
-    const bool server_gate =
-        any_hooks_[static_cast<std::size_t>(hook_phase::response_sent)]
-            .load(std::memory_order_relaxed);
+    const bool server_gate = has_hooks_for(hook_phase::response_sent);
     std::shared_ptr<http_resource> res;
     auto* rtable = per_route_table(mr, res);
     const bool route_gate = rtable != nullptr &&
@@ -226,9 +220,7 @@ void webserver_impl::fire_response_sent_gated(detail::modded_request* mr) {
 void webserver_impl::fire_request_completed_gated(
         detail::modded_request* mr,
         enum MHD_RequestTerminationCode toe) {
-    const bool server_gate =
-        any_hooks_[static_cast<std::size_t>(hook_phase::request_completed)]
-            .load(std::memory_order_relaxed);
+    const bool server_gate = has_hooks_for(hook_phase::request_completed);
 
     // TASK-051: per-route gate. lock() may return null if the resource
     // was unregistered between dispatch and completion (per the action

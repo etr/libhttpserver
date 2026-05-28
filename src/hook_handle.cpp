@@ -359,7 +359,11 @@ fire_short_circuit_hooks_for_phase(
         snapshot.clear();
         {
             std::shared_lock lock(impl->hook_table_mutex_);
+<<<<<<< HEAD
             if (hook_vec.empty()) return std::nullopt;  // early-exit: no hooks, no allocation
+=======
+            if (hook_vec.empty()) return std::nullopt;
+>>>>>>> fix/task-047-review-cleanup
             snapshot = hook_vec;
         }
         for (auto& entry : snapshot) {

@@ -83,6 +83,16 @@ struct modded_request {
     // modded_request destructor.
     bool skip_handler = false;
 
+    // TASK-047 review: monotone counter of body bytes delivered to this
+    // request's body_chunk hook. Incremented on every chunk regardless of
+    // whether grow_content() is called (which is gated on pp == nullptr ||
+    // put_processed_data_to_content). Using get_content().size() for the
+    // hook's ctx.offset was wrong when put_processed_data_to_content is
+    // false and a post-processor is active -- grow_content is skipped so
+    // the content buffer stays empty while bytes DO arrive. This field
+    // accumulates independently and is the source of truth for ctx.offset.
+    std::uint64_t body_bytes_seen = 0;
+
     // TASK-048: captured by resolve_resource_for_request when a route
     // matched. The pair populates route_descriptor for both the
     // route_resolved and before_handler firing sites. Lifetime is the
