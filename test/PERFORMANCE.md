@@ -27,15 +27,18 @@ versions change materially.
 
 ## Baseline values
 
-| Quantity | v1 value | Source |
-|---|---|---|
-| `sizeof(http_resource)` | 32 bytes | `v1_baseline/measure_v1_sizes.cpp` |
-| `sizeof(std::map<std::string,bool>)` | 24 bytes | `v1_baseline/measure_v1_sizes.cpp` |
-| `get_headers()` median ns/call (16 headers) | ~768 ns (committed: 760 ns, conservative) | `v1_baseline/measure_v1_get_headers.cpp` |
+| Quantity | v1 value (libc++ / macOS) | v1 value (libstdc++ / Linux) | Source |
+|---|---|---|---|
+| `sizeof(http_resource)` | 32 bytes | 56 bytes | `v1_baseline/measure_v1_sizes.cpp` |
+| `sizeof(std::map<std::string,bool>)` | 24 bytes | 48 bytes | `v1_baseline/measure_v1_sizes.cpp` |
+| `get_headers()` median ns/call (16 headers) | ~768 ns (committed: 760 ns, conservative) | (not re-measured; gate uses libc++ constant) | `v1_baseline/measure_v1_get_headers.cpp` |
 
-The committed `V1_GET_HEADERS_NS_PER_CALL = 760.0` is the rounded
-**lower** end of the observed 756–784 ns range so the ratio
-assertion remains conservative under host jitter.
+The committed `V1_GET_HEADERS_NS_PER_CALL = 760.0` and the sizeof constants are selected at compile time by `v1_baseline/v1_constants.hpp` based on the detected C++ stdlib, so the acceptance gates are correct on both macOS and Linux.
+
+The committed `V1_GET_HEADERS_NS_PER_CALL = 760.0` is the rounded lower end
+of the observed 756–784 ns range so the ratio assertion remains conservative
+under host jitter. The sizeof constants are selected per-stdlib in
+`v1_baseline/v1_constants.hpp`; see the table above for both platform values.
 
 ## v2.0 measured values (re-run `make bench` to refresh)
 
@@ -106,18 +109,23 @@ destroy) without conflating it with MHD network noise.
 
   ```cpp
   static_assert(sizeof(http_resource) + V1_STD_MAP_STRING_BOOL_SIZEOF
-                <= V1_HTTP_RESOURCE_SIZEOF + sizeof(method_set) * 2,
+                <= V1_HTTP_RESOURCE_SIZEOF + sizeof(method_set) * 2
+                    + sizeof(void*) * 2,
                 "...");
   ```
 
-  With macOS / libc++ numbers (v1=32, map=24, v2=16, method_set=4):
-  `16 + 24 = 40 <= 32 + 4*2 = 40` — passes tight.
+  The `sizeof(method_set) * 2` factor is a conservative upper bound:
+  own_size + max_alignment_padding <= 2 * own_size (valid when alignment
+  <= sizeof(member)). It accounts for the new `method_set` field's own
+  size plus the worst-case alignment padding it could force; it is not
+  an exact count. The `sizeof(void*) * 2` term covers the
+  `shared_ptr<detail::resource_hook_table>` hook_table_ member added in
+  TASK-051. See `test/bench_sizeof_http_resource.cpp` for the full
+  per-platform derivation.
 
-  With Linux / libstdc++ numbers (v1=56, map=48, v2=16,
-  method_set=4): `16 + 48 = 64 <= 56 + 4*2 = 64` — also passes tight.
-
-- A second `static_assert` requires `sizeof(http_resource) <
-  V1_HTTP_RESOURCE_SIZEOF` (strict shrinkage) as belt-and-suspenders.
+- A second `static_assert` requires `sizeof(http_resource) <=
+  V1_HTTP_RESOURCE_SIZEOF + sizeof(void*) * 2` (bounded by v1 + hook
+  slot) as belt-and-suspenders.
 
 - If a future refactor reintroduces a per-resource heap container
   or grows the bitmask storage, the build breaks. This is the
@@ -144,7 +152,9 @@ papering over the new field's cost.
 ## How to re-run on this branch
 
 ```sh
-# From the build directory (must be release mode):
+# From a release-mode build directory (./configure --enable-debug=no, i.e. -O3,
+# NDEBUG). Running make bench from a debug build inflates v2 ns/call by 20-50×
+# and may fail the 10× gate even though release performance is fine.
 cd build
 make bench
 
@@ -171,9 +181,11 @@ See [`test/v1_baseline/README.md`](v1_baseline/README.md).
   The verify-build CI matrix runs `make check` under sanitizers; we
   keep `bench` out of that path so the matrix never reports a false
   ratio failure. The bench TU additionally guards itself with
-  `__SANITIZE_*` / `__has_feature(*_sanitizer)` and prints "skipped"
-  if invoked under sanitizers, so direct `./bench_get_headers`
-  invocations on a sanitizer build are no-ops.
+  `__SANITIZE_*` / `__has_feature(*_sanitizer)` and prints a `SKIP:`
+  prefixed message if invoked under sanitizers, so direct
+  `./bench_get_headers` invocations on a sanitizer build are no-ops.
+  The `SKIP:` prefix lets scripted harnesses distinguish a genuine skip
+  from a PASS; bench results from sanitizer builds must be ignored.
 - **Noise sensitivity:** running bench on every contributor laptop
   (or every CI runner under variable background load) would produce
   flaky CI. Release-readiness is gated on `make bench` succeeding
@@ -184,9 +196,9 @@ See [`test/v1_baseline/README.md`](v1_baseline/README.md).
 
 | Source | Mitigation |
 |---|---|
-| CPU frequency scaling | Pin with `taskset` (Linux) or run on AC power (macOS); not enforced. |
+| CPU frequency scaling | Pin with `taskset` (Linux) or run on AC power (macOS); not enforced. The gate is robust: even at 10× clock throttling (v2 degrades from ~3 ns to ~30 ns), the ratio remains >25×, well above the 10× gate. |
 | Page faults / first-touch | Warmup phase covers this. |
-| Other tenants on the host | Median (not mean) over 10 reps. |
+| Other tenants on the host | Median (not mean) over 11 reps. |
 | libstdc++ ABI changes | If you upgrade GCC across a major version, re-run `measure_v1_sizes.cpp` and update the constants. |
 | libmicrohttpd callback overhead changes | If libmicrohttpd's `MHD_get_connection_values` signature or per-call cost changes substantially, the v1 baseline ns/call number may drift; re-run `measure_v1_get_headers.cpp`. |
 

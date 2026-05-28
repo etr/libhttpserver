@@ -53,8 +53,11 @@ using httpserver::v1_baseline::V1_STD_MAP_STRING_BOOL_SIZEOF;
 //   reduction + sizeof(method_set) * 2 + sizeof(void*) * 2
 //        >= V1_STD_MAP_STRING_BOOL_SIZEOF
 //
-// The `sizeof(method_set) * 2` term captures the new method_set member
-// and its alignment padding; `sizeof(void*) * 2` captures the
+// The `sizeof(method_set) * 2` term is a conservative upper bound:
+// own_size + max_padding <= 2 * own_size (when alignment <= sizeof(member)).
+// It is not an exact count but a worst-case allowance for the new field's
+// own size plus the largest possible alignment padding it could force.
+// `sizeof(void*) * 2` captures the
 // shared_ptr<detail::resource_hook_table> hook_table_ member added in
 // TASK-051 (PIMPL slot for per-route lifecycle hooks).
 //
@@ -64,13 +67,8 @@ using httpserver::v1_baseline::V1_STD_MAP_STRING_BOOL_SIZEOF;
 //
 // The V1_* constants are selected at compile time by the detected
 // C++ standard library (libc++ vs. libstdc++) in v1_constants.hpp,
-// so the assertion is correct on both macOS and Linux:
-//
-//   macOS / libc++  (v1=32, map=24, v2=32, method_set=4):
-//       `32 + 24 = 56 <= 32 + 8 + 16 = 56` (tight, passes).
-//
-//   Linux / libstdc++ (v1=56, map=48, v2=32, method_set=4):
-//       `32 + 48 = 80 <= 56 + 8 + 16 = 80` (tight, passes).
+// so the assertion is correct on both macOS and Linux.
+// See test/PERFORMANCE.md for the full per-platform derivation.
 //
 // If a future refactor reintroduces a per-resource heap container or
 // grows the bitmask storage beyond what TASK-051's hook PIMPL needed,
@@ -88,5 +86,7 @@ static_assert(sizeof(http_resource) <=
               "http_resource grew beyond v1 + TASK-051 hook PIMPL slot");
 
 int main() {
+    // All checks are compile-time static_asserts above; this binary succeeds
+    // by compiling. The runtime exit code carries no additional signal.
     return 0;
 }
