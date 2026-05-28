@@ -32,7 +32,8 @@
 # .editorconfig should enforce this; if RELEASE_NOTES.md is ever saved with
 # CRLF, the A1/A5 string matches and table-row extractor will silently see
 # a trailing \r on every line, which will surface as confusing pair-not-found
-# failures rather than a clear "CRLF detected" error.
+# failures rather than a clear "CRLF detected" error. A dedicated CRLF guard
+# near A1 catches this early with an explicit diagnostic.
 #
 # Exits non-zero on the first violation.
 
@@ -48,6 +49,8 @@ fail() {
 
 # Helper: check that every token in the given array appears at least once in
 # the target file.  Usage: check_tokens_present <label> <file> "${ARRAY[@]}"
+# Calls fail() (which calls exit 1) directly — intended for fail-fast use only,
+# not for tolerate-and-accumulate loops.
 check_tokens_present() {
     local label="$1" file="$2"; shift 2
     local missing=()
@@ -55,18 +58,19 @@ check_tokens_present() {
         grep -qE "$tok" "$file" || missing+=("$tok")
     done
     if [ "${#missing[@]}" -gt 0 ]; then
-        echo "check-release-notes: FAIL: ${label}: missing tokens:" >&2
-        printf '  %s\n' "${missing[@]}" >&2
-        exit 1
+        fail "${label}: missing tokens:"$'\n'"$(printf '  %s\n' "${missing[@]}")"
     fi
 }
 
 # Helper: extract body of a named section (between its H2 heading and the next H2/EOF).
-# $1 = file, $2 = regex matching the heading line (case-insensitive).
+# $1 = file, $2 = regex matching the heading line.
+# The heading_re is matched case-insensitively via tolower(); callers need not
+# pre-lowercase their pattern.  The re value is passed via -v and must not
+# contain backslashes or double-quotes (all current call sites use string literals).
 extract_section_body() {
     awk -v re="$2" '
         BEGIN { in_section = 0 }
-        /^##[ \t]+/ {
+        /^##[[:space:]]+/ {
             if (in_section) { exit }
             if (tolower($0) ~ tolower(re)) { in_section = 1; next }
         }
@@ -89,10 +93,20 @@ check_section_cites() {
 
 [ -f "$NOTES" ] || fail "A1: RELEASE_NOTES.md does not exist at $NOTES"
 
+# Guard against CRLF line endings: a trailing \r on every line causes A5 pair
+# checks to fail with confusing 'pair-not-found' errors rather than a clear
+# diagnostic.  Catch it early.
+if grep -qP '\r' "$NOTES" 2>/dev/null; then
+    fail "A1: CRLF line endings detected in RELEASE_NOTES.md — convert to LF before committing"
+fi
+
 # ---- A2: required v1-era tokens appear (porting source list) ----------------
 # The rename/removal source-of-truth. Mirrors V1_TOKENS in check-readme.sh,
 # but inverted polarity: here every name MUST appear at least once so v1
 # users can grep for it.
+# Note: the no_* setter family is spot-checked (no_ssl, no_basic_auth,
+# no_digest_auth); the remaining nine no_* names are documented in prose but
+# not individually checked here — intentional partial coverage.
 
 REQUIRED_V1_TOKENS=(
     '\bsweet_kill\b'
@@ -130,14 +144,18 @@ REQUIRED_V1_TOKENS=(
     '\bdecorate_response\b'
     '\benqueue_response\b'
     '\bHAVE_GNUTLS\b'
+    '\bHAVE_BAUTH\b'
+    '\bHAVE_DAUTH\b'
+    '\bregister_resource\b'
 )
 
 check_tokens_present "A2: RELEASE_NOTES.md is missing required v1-era tokens" "$NOTES" "${REQUIRED_V1_TOKENS[@]}"
 
 # ---- A3: required v2-era tokens appear --------------------------------------
-# Replacement list. Deliberately duplicated from check-readme.sh A3 (not sourced)
-# to keep each script independently runnable without cross-script dependencies;
-# with only two consumers a shared lib would be over-engineering.
+# Replacement list. Kept in lock-step with check-readme.sh A3 (shared core).
+# Note: check-readme.sh may carry additional tokens not required in RELEASE_NOTES.md
+# (e.g. tokens that appear in README.md code examples but not in release notes prose).
+# When adding a new v2 surface, update both scripts.
 
 REQUIRED_V2_TOKENS=(
     '\bon_get\b'
@@ -168,7 +186,9 @@ REQUIRED_V2_TOKENS=(
     '\biovec_entry\b'
     '\badd_hook\b'
     '\bhook_phase\b'
+    '\bhook_action\b'
     '\bhook_handle\b'
+    '\bhttpserver::constants\b'
 )
 
 check_tokens_present "A3: RELEASE_NOTES.md is missing required v2 tokens" "$NOTES" "${REQUIRED_V2_TOKENS[@]}"
@@ -194,6 +214,9 @@ fi
 
 # ---- A4: required H2 sections present ---------------------------------------
 
+# REQUIRED_SECTIONS must remain a fully-static, hardcoded list.  The values are
+# interpolated directly into grep ERE patterns; any ERE metacharacters in a
+# section name would silently change match semantics instead of failing loudly.
 REQUIRED_SECTIONS=(
     'tl;dr'
     "what's gone"
@@ -202,11 +225,13 @@ REQUIRED_SECTIONS=(
     'what changed semantically'
     'build prerequisites'
     'soversion'
+    'threading'
+    'error propagation'
 )
 
 missing_sections=()
 for sec in "${REQUIRED_SECTIONS[@]}"; do
-    if ! grep -qiE "^##[ \t]+.*${sec}" "$NOTES"; then
+    if ! grep -qiE "^##[[:space:]]+.*${sec}" "$NOTES"; then
         missing_sections+=("$sec")
     fi
 done
@@ -227,12 +252,22 @@ fi
 # explanation, NOT by per-pair grep. The setter-name replacement (drop the
 # no_ prefix and pass a bool) does not have a single mechanical pair.
 
+# IMPORTANT: v2 values may use ERE alternation groups intentionally (e.g.
+# '(block_ip|unblock_ip)').  Any new pair must be valid ERE on both sides.
+#
+# Word-boundary anchors (\b) on v1 values prevent false matches where the v1
+# token appears as a substring of a different, longer token on the same line.
+# Example: '\ballow_ip\b' prevents the 'disallow_ip' prose line from
+# satisfying the allow_ip pair check (the 'disallow_ip' line already contains
+# 'block_ip'/'unblock_ip', which would be a false positive without \b).
+# 'disallow_ip' needs no \b because no shorter token contains it as a
+# substring — the asymmetry is intentional, not an oversight.
 RENAME_PAIRS=(
     'sweet_kill;stop_and_wait'
     '\bban_ip\b;block_ip'
     'unban_ip;unblock_ip'
     '\ballow_ip\b;(block_ip|unblock_ip)'
-    'disallow_ip;(block_ip|unblock_ip)'
+    'disallow_ip;(block_ip|unblock_ip)'  # no \b needed — no shorter token contains disallow_ip as a substring
     'not_found_resource;not_found_handler'
     'method_not_allowed_resource;method_not_allowed_handler'
     'internal_error_resource;internal_error_handler'
@@ -274,12 +309,12 @@ fi
 # ---- A6: threading & error sections cite architecture sources ---------------
 
 check_section_cites "A6" "$NOTES" \
-    '^##[ \t]+.*threading' \
+    '^##[[:space:]]+.*threading' \
     '(DR-008|§[[:space:]]*5\.1|specs/architecture/05-cross-cutting\.md|specs/architecture/11-decisions/DR-008)' \
     'Threading'
 
 check_section_cites "A6" "$NOTES" \
-    '^##[ \t]+.*error[ \t-]+propag' \
+    '^##[[:space:]]+.*error[[:space:]-]+propag' \
     '(DR-009|§[[:space:]]*5\.2|specs/architecture/05-cross-cutting\.md|specs/architecture/11-decisions/DR-009)' \
     'Error propagation'
 
