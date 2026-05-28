@@ -263,9 +263,9 @@ jobs:
           # (preprocesses <httpserver.hpp> against the staged install and greps
           # for forbidden backend headers). Surfaces this gate as its own named
           # GitHub Actions check so reviewers see header-hygiene status
-          # independently of the broader `make check` log. Until M5 lands the
-          # check is informational (HEADER_HYGIENE_STRICT defaults to "no");
-          # TASK-020 flips it to strict.
+          # independently of the broader `make check` log. HEADER_HYGIENE_STRICT
+          # defaults to "yes" (flipped from "no" at TASK-020 close); any leak
+          # of forbidden backend headers through the umbrella fails CI loudly.
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
@@ -870,8 +870,8 @@ jobs:
       # TASK-007: dedicated public-header hygiene gate. Runs the
       # preprocessor-grep target (Layer 2) against a staged install and
       # reports any forbidden backend headers reaching <httpserver.hpp>.
-      # Currently informational (HEADER_HYGIENE_STRICT=no) -- TASK-020
-      # flips this to strict when M5 closes the umbrella.
+      # HEADER_HYGIENE_STRICT defaults to "yes" (set at TASK-020 close);
+      # any leak of forbidden backend headers through the umbrella fails CI.
       run: |
         cd build
         make check-hygiene
@@ -882,7 +882,7 @@ jobs:
       run: |
         cd build ;
         cat test/test-suite.log ;
-      if: ${{ failure() && matrix.build-type != 'iwyu' && matrix.compiler-family != 'arm-cross' }}
+      if: ${{ failure() && matrix.build-type != 'iwyu' && matrix.compiler-family != 'arm-cross' && matrix.build-type != 'header-hygiene' }}
 
     - name: Run Valgrind checks
       run: |
