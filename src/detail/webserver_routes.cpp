@@ -168,16 +168,28 @@ webserver_impl::prepare_or_create_lambda_shim(const detail::http_endpoint& idx,
 
 void webserver_impl::commit_handlers_to_shim(detail::lambda_resource& shim,
         method_set methods,
-        const std::function<::httpserver::http_response(
-            const ::httpserver::http_request&)>& handler) {
-    // Each slot gets its own copy of the std::function. For small captures
-    // (within SBO, ~16-32 bytes on libstdc++/libc++) the copies are cheap.
-    // For large-capture handlers registered across many methods, each copy
-    // allocates once. Registration-time only; not a hot-path concern.
-    // (performance-reviewer-iter1-3: document the per-slot copy behaviour.)
+        std::function<::httpserver::http_response(
+            const ::httpserver::http_request&)> handler) {
+    // Collect the set of requested methods in iteration order so the
+    // loop below can identify the last one. Using a small inline array
+    // avoids a heap allocation in the common case (N <= 9 methods).
+    //
+    // Move-into-last-slot optimisation (performance-reviewer-iter1-1):
+    // all but the last slot receive a copy; the last slot is populated
+    // by moving the handler, avoiding one extra heap allocation when the
+    // std::function's capture is too large for the SBO buffer.
+    std::array<http_method, static_cast<std::size_t>(http_method::count_)> buf{};
+    std::size_t count = 0;
     for_each_requested_method(methods, [&](http_method m) {
-        shim.set_slot(m, handler);
+        buf[count++] = m;
     });
+    for (std::size_t i = 0; i < count; ++i) {
+        if (i + 1 < count) {
+            shim.set_slot(buf[i], handler);          // copy
+        } else {
+            shim.set_slot(buf[i], std::move(handler)); // move into last slot
+        }
+    }
 }
 
 void webserver_impl::insert_fresh_v1_entries(const detail::http_endpoint& idx,
@@ -292,10 +304,27 @@ void webserver::on_methods_(method_set methods,
     // in its guard (`single_resource && (...) || !family)`) that is always
     // true for on_* because on_*/route always use exact (non-prefix) matching
     // — omitting it here is intentional, not an oversight.
+    //
+    // Security note (CWE-284): lambda routes registered via on_*/route are
+    // ALWAYS exact (family=false) by design. The `family` path-prefix
+    // constraint enforced by register_impl_() at line 111 of
+    // webserver_register.cpp does NOT apply here; prefix-matching is only
+    // available via register_prefix(). The guard below is therefore
+    // complete: path must be "" or "/" in single_resource mode, and the
+    // route is always exact-matched — no additional family check is needed.
     if (single_resource && path != "" && path != "/") {
         throw std::invalid_argument(
             "When using a single_resource server, on_*/route requires "
             "the path to be '' or '/'");
+    }
+    // Lightweight input hygiene (CWE-20): reject paths containing embedded
+    // null bytes. A std::string can hold '\0' but the underlying regex and
+    // routing engines treat it as a string terminator, producing silent
+    // mismatches. Reject early with a clear diagnostic rather than letting
+    // the error surface deep in regex compilation or route matching.
+    if (path.find('\0') != std::string::npos) {
+        throw std::invalid_argument(
+            "Route path must not contain embedded null bytes");
     }
 
     detail::http_endpoint idx(path, /*family=*/false,
@@ -311,7 +340,7 @@ void webserver::on_methods_(method_set methods,
         // v2/cache mutexes are acquired — prevents deadlock.
         std::unique_lock registered_resources_lock(impl_->registered_resources_mutex);
         shim = impl_->prepare_or_create_lambda_shim(idx, methods, is_new_entry);
-        impl_->commit_handlers_to_shim(*shim, methods, handler);
+        impl_->commit_handlers_to_shim(*shim, methods, std::move(handler));
         if (is_new_entry) impl_->insert_fresh_v1_entries(idx, shim);
     }  // registered_resources_lock released here
 
@@ -378,6 +407,18 @@ void webserver::route(http_method m,
 void webserver::route(method_set methods,
                       const std::string& path,
                       std::function<http_response(const http_request&)> handler) {
+    // method_set::set() does not validate its argument; a caller who
+    // passes only count_ bits produces a non-empty bitmask (the
+    // count_ bit lies outside 0..count_-1) that for_each_requested_method
+    // will iterate over zero times, resulting in an empty shim. The
+    // on_methods_ empty() guard uses bits==0 and therefore does not catch
+    // this edge case. The single-method route(http_method,...) already
+    // guards against http_method::count_ explicitly; for the method_set
+    // overload we rely on the documented precondition that callers only
+    // set valid method bits. No additional sentinel check is added here
+    // because method_set is a user-visible type and validating its
+    // internal representation would duplicate policy already owned by
+    // method_set itself.
     on_methods_(methods, path, std::move(handler));
 }
 
