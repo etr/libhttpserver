@@ -124,7 +124,7 @@ void install_internal_error_alias(
 // or carriage-returns in the request path or method. Appends directly to
 // `out` rather than returning a heap-allocated copy, avoiding an extra
 // std::string allocation on every request.
-static void append_sanitized(std::string& out, std::string_view sv) {
+void append_sanitized(std::string& out, std::string_view sv) {
     for (unsigned char c : sv) {
         out += (c < 0x20 || c == 0x7f) ? '-' : static_cast<char>(c);
     }
@@ -350,18 +350,8 @@ void webserver::install_default_alias_hooks_() {
     // issues #281 and #69 asked for) should call
     // add_hook(hook_phase::response_sent, ...) directly.
     //
-    // Format compatibility: the pre-TASK-050 access log was emitted by
-    // webserver_impl::access_log(parent, complete_uri + " METHOD: " +
-    // method) at request-arrival time from inside answer_to_connection.
-    // The existing log_access_callback integ test (test/integ/basic.cpp)
-    // asserts the substrings "/logtest" AND "METHOD" appear in the
-    // logged line. To keep that test passing without modification we
-    // emit a line that contains both, formatted as:
-    //     <path> METHOD: <method>
-    // using ctx.request->get_path() and ctx.request->get_method(). The
-    // alias body is null-safe (early-returns if ctx.request is null),
-    // which is structurally impossible at the fire site but the guard
-    // costs nothing and documents the contract.
+    // Format: '<path> METHOD: <method>' -- mirrors v1 access_log to keep
+    // basic.cpp log_access_callback test passing without modification.
     install_log_access_alias_(impl_.get(), log_access);
 }
 

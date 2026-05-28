@@ -106,9 +106,8 @@ LT_BEGIN_AUTO_TEST(hooks_request_completed_fires_on_early_failure_suite,
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &code);
     curl_easy_cleanup(curl);
 
-    // Give request_completed a moment to fire from MHD's worker thread.
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-
+    // ws.stop() drains all pending MHD worker-thread callbacks (including
+    // request_completed) before returning, so no post-stop sleep is needed.
     ws.stop();
 
     LT_CHECK_EQ(res, CURLE_OK);

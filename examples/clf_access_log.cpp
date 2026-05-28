@@ -81,6 +81,10 @@ std::string sanitize_clf(std::string_view sv) {
 }
 
 void emit_clf_line(const hs::response_sent_ctx& ctx) {
+    // ctx.request is guaranteed non-null at the response_sent fire site
+    // (documented in response_sent_ctx). Guard here for defence-in-depth.
+    if (ctx.request == nullptr) return;
+
     std::time_t now = std::time(nullptr);
     char ts[32];
     std::tm tm_buf;
@@ -93,12 +97,11 @@ void emit_clf_line(const hs::response_sent_ctx& ctx) {
 
     int64_t ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                      ctx.elapsed).count();
-    std::string method, path;
-    if (ctx.request != nullptr) {
-        // Sanitize before embedding in the CLF line to prevent log injection.
-        method = sanitize_clf(ctx.request->get_method());
-        path   = sanitize_clf(ctx.request->get_path());
-    }
+    // Sanitize before embedding in the CLF line to prevent log injection.
+    // Hardcode 'HTTP/1.1' -- ctx does not expose the protocol version;
+    // the intentional simplification keeps the example self-contained.
+    const std::string method = sanitize_clf(ctx.request->get_method());
+    const std::string path   = sanitize_clf(ctx.request->get_path());
     std::printf("- - - [%s] \"%s %s HTTP/1.1\" %d %zu %lld\n",
                 ts,
                 method.c_str(),

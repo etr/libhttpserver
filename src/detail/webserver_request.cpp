@@ -339,6 +339,8 @@ MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection,
     // TASK-047: a pre-handler short-circuit hook (request_received or
     // body_chunk) already populated mr->response. Skip route lookup,
     // auth, and handler dispatch -- go straight to the response queue.
+    // NOTE: after_handler is NOT fired on this path (no handler ran);
+    // response_sent fires unconditionally in materialize_and_queue_response.
     if (mr->skip_handler) {
         return materialize_and_queue_response(connection, mr);
     }
@@ -372,6 +374,9 @@ MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection,
     // chain short-circuited, mr->response is already populated and we
     // route straight to materialize.
     if (found && fire_before_handler_gated(mr, hrm)) {
+        // NOTE: after_handler was NOT fired on this path (before_handler
+        // short-circuit); response_sent fires unconditionally in
+        // materialize_and_queue_response below.
         return materialize_and_queue_response(connection, mr);
     }
 
@@ -396,8 +401,8 @@ MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection,
 }
 
 MHD_Result webserver_impl::complete_request(MHD_Connection* connection, struct detail::modded_request* mr, const char* version, const char* method) {
-    mr->ws = parent;
-
+    // mr->ws is pre-populated in answer_to_connection (hoisted there for
+    // early-path request_completed coverage); no need to set it again here.
     mr->dhr->set_path(mr->standardized_url);
     mr->dhr->set_method(method);
     mr->dhr->set_version(version);
@@ -487,13 +492,7 @@ MHD_Result webserver_impl::answer_to_connection(void* cls, MHD_Connection* conne
     mr->standardized_url = http_utils::standardize_url(t_url);
     mr->has_body = false;
 
-    // TASK-050: log_access is now a response_sent alias (see
-    // src/detail/webserver_aliases.cpp). The pre-TASK-050 inline call
-    // here fired BEFORE the request was handled and had no access to
-    // status / bytes / timing -- exactly what issues #281 and #69
-    // complained about. The alias gives users the same per-request
-    // log line AFTER the response has been queued, with the full
-    // structured context available via add_hook(response_sent, ...).
+    // log_access is now a response_sent alias (see webserver_aliases.cpp).
     resolve_method_callback(method, mr);
 
     return impl->requests_answer_first_step(connection, mr);

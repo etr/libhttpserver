@@ -10,12 +10,12 @@
 | `accept_decision` | `detail/webserver_callbacks_lifecycle.cpp:policy_callback` — after YES/NO decision | no | no |
 | `request_received` | `webserver_body_pipeline.cpp:requests_answer_first_step` — post header-parse, pre body-read | **yes** | no (route not yet known) |
 | `body_chunk` | `webserver_body_pipeline.cpp:requests_answer_second_step` — per chunk | **yes** | no |
-| `route_resolved` | `webserver.cpp:resolve_resource_for_request` — after lookup | no | n/a (boundary phase) |
-| `before_handler` | `webserver.cpp:dispatch_resource_handler` — start | **yes** | yes |
-| `handler_exception` | `webserver.cpp:dispatch_resource_handler` — each catch arm | **yes** (maps exception to response) | yes |
-| `after_handler` | between handler return and `materialize_and_queue_response` | **yes** (replaces response) | yes |
-| `response_sent` | `webserver_request.cpp:materialize_and_queue_response` — post `MHD_queue_response` | no | yes |
-| `request_completed` | `webserver_callbacks.cpp:request_completed` — NOTIFY_COMPLETED | no | yes |
+| `route_resolved` | `webserver_request.cpp:fire_route_resolved_gated` — called from `webserver_request.cpp:finalize_answer`, after lookup | no | n/a (boundary phase) |
+| `before_handler` | `webserver_finalize.cpp:fire_before_handler_gated` — called from `webserver_request.cpp:finalize_answer`, before dispatch | **yes** | yes |
+| `handler_exception` | `webserver_dispatch.cpp:dispatch_resource_handler` — each catch arm | **yes** (maps exception to response) | yes |
+| `after_handler` | `webserver_finalize.cpp:fire_after_handler_gated` — called from `webserver_request.cpp:finalize_answer` | **yes** (replaces response) | yes |
+| `response_sent` | `webserver_finalize.cpp:fire_response_sent_gated` — called from `webserver_request.cpp:materialize_and_queue_response`, post `MHD_queue_response` | no | yes |
+| `request_completed` | `webserver_finalize.cpp:fire_request_completed_gated` — called from `webserver_callbacks.cpp:request_completed`, NOTIFY_COMPLETED | no | yes |
 | `connection_closed` | `detail/webserver_callbacks_lifecycle.cpp:connection_notify` — NOTIFY_CLOSED | no | no |
 
 **Implementation.** Each phase has its own `std::vector<std::function<...>>` in `webserver_impl`, guarded by a single `std::shared_mutex hook_table_mutex_`. A per-phase `std::atomic<bool> any_hooks_[hook_phase::count_]` flag short-circuits the dispatch site to a relaxed atomic load and a compare-with-zero when no subscribers exist — the only hook-related cost on the hot request path for a server with zero hooks registered.
@@ -59,8 +59,8 @@ class hook_handle {
 // handler_exception_ctx, after_handler_ctx, response_sent_ctx,
 // request_completed_ctx, connection_open_ctx, connection_close_ctx.
 // All libhttpserver-defined; never expose MHD types (PRD-HDR-REQ-001).
-// Observation-only contexts pass `const http_request&` / `const http_response&`;
-// mutating contexts (`after_handler_ctx`) expose `http_response&`.
+// Observation-only contexts carry `const http_request*` / `const http_response*`;
+// mutating contexts (`after_handler_ctx`) expose `http_response*` (mutable).
 
 // On webserver — one add_hook overload per phase. Phase tag in the
 // hook_phase enum selects the overload; the callable's signature is
@@ -82,6 +82,8 @@ hook_handle http_resource::add_hook(hook_phase, std::function<...>);
 **Exception policy.** A throwing hook lands in the DR-009 §5.2 path — no new error contract. Practically: a hook throwing `std::exception` is caught, logged via `log_error`, and routed to the `handler_exception` chain (which itself is hookable — a `handler_exception` hook throwing recurses one level to the `internal_error_handler` alias and then to the hardcoded empty-body 500).
 
 **Zero-cost-when-unused.** Per-phase `std::atomic<bool> any_hooks_` flag. Verified by `bench_hook_overhead` (acceptance criterion of TASK-052) — a server with zero hooks should be within microbench noise of the pre-hook-system baseline.
+
+**`after_handler` firing rules.** `after_handler` fires on the normal handler-return path and on the synthesised-404 path (no matching route), but NOT on the `before_handler` short-circuit path or on `request_received`/`body_chunk` short-circuit paths (no handler ran). By contrast, `response_sent` fires unconditionally after `MHD_queue_response` regardless of how the response was produced. Hook authors who need a uniform post-response observation point should use `response_sent`; authors who need to mutate the handler's response should use `after_handler`.
 
 **v1 aliases.** The following v1-derived setters remain on `create_webserver` for ergonomic call sites; the Doxygen comment on each setter, the corresponding README section, and `RELEASE_NOTES.md` identify them as sugar that internally registers a hook at the indicated phase:
 

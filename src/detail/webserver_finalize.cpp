@@ -18,25 +18,10 @@
      USA
 */
 
-// TASK-050: hook firing helpers + ctx builders for the three tail-end
-// lifecycle phases (after_handler, response_sent, request_completed).
-//
-// Carved out of webserver_request.cpp + webserver_callbacks.cpp to keep
-// each host TU under the project per-file LOC ceiling (FILE_LOC_MAX in
-// scripts/check-file-size.sh). Mirrors the TASK-046 carve-out
-// (webserver_callbacks_lifecycle.cpp) and TASK-047
-// (webserver_body_pipeline.cpp).
-//
-// Each helper performs the gated-fire dance:
-//   - Read the relaxed any_hooks_[phase] atomic; early-return if false.
-//   - For the alias-only slots (log_access_alias_): also check the slot
-//     pointer before short-circuiting.
-//   - Aggregate-init the ctx struct.
-//   - Call the corresponding fire_X helper on webserver_impl.
-//   - On respond_with short-circuit (after_handler only): emplace the
-//     new response into mr->response, replacing the in-flight one
-//     (DR-010: emplace destroys the old http_response so any deferred
-//     captures are released here, not later in ~modded_request).
+// Gated hook-firing helpers for the after_handler, response_sent, and
+// request_completed lifecycle phases. Carved out of webserver_request.cpp
+// and webserver_callbacks.cpp to keep each TU under the project LOC
+// ceiling. See per-function comments for behavioral details.
 
 #include "httpserver/webserver.hpp"
 #include "httpserver/detail/webserver_impl.hpp"
@@ -185,19 +170,25 @@ void webserver_impl::fire_response_sent_gated(detail::modded_request* mr) {
         rtable->any_hooks(hook_phase::response_sent);
 
     if (!server_gate && !route_gate && !log_access_alias_) return;
+    // mr->response_ is null only if materialize_and_queue_response's
+    // belt-and-suspenders fallback also failed; fire nothing rather than crash.
     if (!mr->response) return;
 
-    const std::size_t bytes = (mr->response->body_ != nullptr)
+    // 0 for deferred/pipe bodies -- see response_sent_ctx docs.
+    const std::size_t bytes_queued = (mr->response->body_ != nullptr)
         ? mr->response->body_->size() : 0;
     // elapsed is consumed by user hooks (server-wide + per-route), not
-    // by the log_access alias. Skip the steady_clock::now() call when
-    // only the alias slot is going to fire.
+    // by the log_access alias (which does not read ctx.elapsed).
+    // Reuse gate: skip the steady_clock::now() call when only the alias
+    // slot fires, to avoid a gratuitous clock syscall on the common path.
+    // NOTE: the alias body MUST NOT read ctx.elapsed; any future change
+    // that needs elapsed in the alias must also remove this optimisation.
     const auto elapsed = (server_gate || route_gate)
         ? std::chrono::duration_cast<std::chrono::nanoseconds>(
               std::chrono::steady_clock::now() - mr->start_time)
         : std::chrono::nanoseconds::zero();
     response_sent_ctx ctx{mr->dhr.get(), &*mr->response,
-        mr->response->get_status(), bytes, elapsed};
+        mr->response->get_status(), bytes_queued, elapsed};
     fire_response_sent(ctx);
     // TASK-051: per-route chain AFTER server-wide + its alias slot.
     // response_sent is observation-only; no short-circuit logic.
@@ -241,17 +232,24 @@ void webserver_impl::fire_request_completed_gated(
     }
     const http_response* resp_ptr =
         mr->response ? &*mr->response : nullptr;
-    // mr->start_time may be epoch if answer_to_connection never ran
-    // (uri_log created mr but the connection failed before
-    // answer_to_connection). In that case `duration` is meaninglessly
-    // large; documented in the ctx field doc -- no observable test
-    // failure because request_completed without a response is a degenerate
-    // path that consumers rarely care about.
+    // mr->start_time may be epoch (default-constructed) if
+    // answer_to_connection never ran (e.g., a port scan: uri_log created
+    // mr but MHD closed the connection before dispatching). In that case
+    // the subtraction produces a duration in the billions of nanoseconds.
+    // Emit nanoseconds{-1} as a sentinel so hook authors can distinguish
+    // the degenerate case from a real (but very slow) request.
+    const auto raw_duration =
+        std::chrono::steady_clock::now() - mr->start_time;
+    const auto duration =
+        (mr->start_time == std::chrono::steady_clock::time_point{})
+            ? std::chrono::nanoseconds{-1}
+            : std::chrono::duration_cast<std::chrono::nanoseconds>(
+                  raw_duration);
     request_completed_ctx ctx{
         /*request=*/mr->dhr.get(),
         /*resp=*/resp_ptr,
         /*succeeded=*/(toe == MHD_REQUEST_TERMINATED_COMPLETED_OK),
-        /*duration=*/std::chrono::steady_clock::now() - mr->start_time,
+        /*duration=*/duration,
     };
     if (server_gate) {
         fire_request_completed(ctx);

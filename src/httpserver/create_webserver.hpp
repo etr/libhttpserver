@@ -166,6 +166,8 @@ class create_webserver {
       *       for a Common Log Format example.
       *
       * @param v log_access_ptr callback; pass `nullptr` to clear.
+      *        The callable is stored in a `std::function` and MUST be
+      *        CopyConstructible. Move-only callables are not accepted.
       * @return reference to this builder for chaining.
       * @see webserver, not_found_handler, internal_error_handler
       */

@@ -296,6 +296,10 @@ struct after_handler_ctx {
  * @note `elapsed` is `steady_clock::now()` at the fire site minus
  *   `modded_request::start_time` (captured on the first invocation of
  *   `answer_to_connection`). Granularity is nanoseconds.
+ * @note `elapsed` is `nanoseconds::zero()` when only the `log_access`
+ *   alias slot fires (no `add_hook(response_sent, ...)` hooks registered).
+ *   The alias lambda does not read this field; the zero avoids a
+ *   gratuitous `steady_clock::now()` call on that code path.
  * @attention The `response` pointer is non-null at the fire site.
  *   Hooks MUST NOT capture it past their return — the `http_response`
  *   is destroyed in `~modded_request` immediately after
@@ -330,6 +334,10 @@ struct response_sent_ctx {
  *   ordinary completion.
  * @note `duration` is `steady_clock::now()` at the fire site minus
  *   `modded_request::start_time`; mirrors `response_sent_ctx::elapsed`.
+ *   On degenerate paths where `answer_to_connection` never ran (e.g.,
+ *   a port scan), `start_time` is epoch and `duration` is set to
+ *   `nanoseconds{-1}` as a sentinel so hook authors can distinguish
+ *   this case from a real (but very slow) request.
  * @attention Hooks MUST NOT capture `request` or `resp` past their
  *   return — both are destroyed in `~modded_request` immediately after
  *   this fire.
