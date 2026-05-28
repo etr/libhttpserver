@@ -29,7 +29,12 @@
 
 #include "httpserver/detail/resource_hook_table.hpp"
 
+#include <array>
+#include <atomic>
+#include <cstddef>
+#include <cstdint>
 #include <exception>
+#include <functional>
 #include <mutex>
 #include <optional>
 #include <shared_mutex>
@@ -47,6 +52,29 @@ namespace httpserver {
 namespace detail {
 
 namespace {
+
+// append_impl -- shared body for all five append_* methods.
+// Each public overload delegates here with its phase constant and
+// target vector. Mirrors the DRY pattern already applied to fire_* in
+// fire_short_circuit_impl / fire_void_impl below.
+template <hook_phase P, typename Sig>
+std::uint64_t append_impl(
+        std::atomic<std::uint64_t>& next_slot_id,
+        std::shared_mutex& mtx,
+        std::vector<resource_hook_table::entry<Sig>>& vec,
+        std::array<std::atomic<bool>,
+                   static_cast<std::size_t>(hook_phase::count_)>& any_hooks,
+        std::function<Sig> fn) {
+    const std::uint64_t id =
+        next_slot_id.fetch_add(1, std::memory_order_relaxed);
+    {
+        std::unique_lock lock(mtx);
+        vec.push_back({id, std::move(fn)});
+        any_hooks[static_cast<std::size_t>(P)]
+            .store(true, std::memory_order_release);
+    }
+    return id;
+}
 
 // fire_short_circuit_impl -- shared dispatch for the three hook_action-
 // returning phases. Snapshots the vector, releases the lock, then
@@ -131,70 +159,43 @@ void fire_void_impl(std::shared_mutex& mtx,
 }  // namespace
 
 // ---- append_* -----------------------------------------------------------
+// Each public overload delegates to the shared append_impl<P> template
+// (see the anonymous namespace above). The only per-overload variation
+// is the hook_phase constant and the target vector.
 
 std::uint64_t resource_hook_table::append_before_handler(
         std::function<hook_action(before_handler_ctx&)> fn) {
-    const std::uint64_t id =
-        next_slot_id_.fetch_add(1, std::memory_order_relaxed);
-    {
-        std::unique_lock lock(hook_table_mutex_);
-        hooks_before_handler_.push_back({id, std::move(fn)});
-        any_hooks_[static_cast<std::size_t>(hook_phase::before_handler)]
-            .store(true, std::memory_order_release);
-    }
-    return id;
+    return append_impl<hook_phase::before_handler>(
+        next_slot_id_, hook_table_mutex_,
+        hooks_before_handler_, any_hooks_, std::move(fn));
 }
 
 std::uint64_t resource_hook_table::append_handler_exception(
         std::function<hook_action(const handler_exception_ctx&)> fn) {
-    const std::uint64_t id =
-        next_slot_id_.fetch_add(1, std::memory_order_relaxed);
-    {
-        std::unique_lock lock(hook_table_mutex_);
-        hooks_handler_exception_.push_back({id, std::move(fn)});
-        any_hooks_[static_cast<std::size_t>(hook_phase::handler_exception)]
-            .store(true, std::memory_order_release);
-    }
-    return id;
+    return append_impl<hook_phase::handler_exception>(
+        next_slot_id_, hook_table_mutex_,
+        hooks_handler_exception_, any_hooks_, std::move(fn));
 }
 
 std::uint64_t resource_hook_table::append_after_handler(
         std::function<hook_action(after_handler_ctx&)> fn) {
-    const std::uint64_t id =
-        next_slot_id_.fetch_add(1, std::memory_order_relaxed);
-    {
-        std::unique_lock lock(hook_table_mutex_);
-        hooks_after_handler_.push_back({id, std::move(fn)});
-        any_hooks_[static_cast<std::size_t>(hook_phase::after_handler)]
-            .store(true, std::memory_order_release);
-    }
-    return id;
+    return append_impl<hook_phase::after_handler>(
+        next_slot_id_, hook_table_mutex_,
+        hooks_after_handler_, any_hooks_, std::move(fn));
 }
 
 std::uint64_t resource_hook_table::append_response_sent(
         std::function<void(const response_sent_ctx&)> fn) {
-    const std::uint64_t id =
-        next_slot_id_.fetch_add(1, std::memory_order_relaxed);
-    {
-        std::unique_lock lock(hook_table_mutex_);
-        hooks_response_sent_.push_back({id, std::move(fn)});
-        any_hooks_[static_cast<std::size_t>(hook_phase::response_sent)]
-            .store(true, std::memory_order_release);
-    }
-    return id;
+    return append_impl<hook_phase::response_sent>(
+        next_slot_id_, hook_table_mutex_,
+        hooks_response_sent_, any_hooks_, std::move(fn));
 }
 
 std::uint64_t resource_hook_table::append_request_completed(
         std::function<void(const request_completed_ctx&)> fn) {
-    const std::uint64_t id =
-        next_slot_id_.fetch_add(1, std::memory_order_relaxed);
-    {
-        std::unique_lock lock(hook_table_mutex_);
-        hooks_request_completed_.push_back({id, std::move(fn)});
-        any_hooks_[static_cast<std::size_t>(hook_phase::request_completed)]
-            .store(true, std::memory_order_release);
-    }
-    return id;
+    return append_impl<hook_phase::request_completed>(
+        next_slot_id_, hook_table_mutex_,
+        hooks_request_completed_, any_hooks_, std::move(fn));
 }
 
 // ---- remove_slot --------------------------------------------------------

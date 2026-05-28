@@ -64,7 +64,7 @@ LT_BEGIN_AUTO_TEST(hooks_per_route_resource_destroyed_first_suite,
     h.remove();
     // A second remove() (idempotent path) must also be a no-op.
     h.remove();
-    LT_CHECK_EQ(true, true);  // reaching here means no crash
+    // Reaching this point means no crash / no UAF (validated under ASan).
 LT_END_AUTO_TEST(explicit_remove_after_destroy_is_noop)
 
 // Path 2: RAII destruction of the handle after the resource is gone.
@@ -83,7 +83,7 @@ LT_BEGIN_AUTO_TEST(hooks_per_route_resource_destroyed_first_suite,
         // ~hook_handle() fires at the close of THIS scope, after the
         // resource is destroyed. Must not crash / UAF.
     }
-    LT_CHECK_EQ(true, true);
+    // Reaching this point means no crash / no UAF (validated under ASan).
 LT_END_AUTO_TEST(raii_destruction_after_destroy_is_noop)
 
 // Path 3: handle moved THEN the source resource destroyed.
@@ -99,7 +99,7 @@ LT_BEGIN_AUTO_TEST(hooks_per_route_resource_destroyed_first_suite,
         // h1 is disarmed.
     }
     h2.remove();
-    LT_CHECK_EQ(true, true);
+    // Reaching this point means no crash / no UAF (validated under ASan).
 LT_END_AUTO_TEST(move_then_destroy_then_remove_is_noop)
 
 // Path 4: registration on a resource that is then DROPPED inside a
@@ -118,8 +118,7 @@ LT_BEGIN_AUTO_TEST(hooks_per_route_resource_destroyed_first_suite,
     }
     // Reaching this line means the resource was destroyed cleanly even
     // though the handle is still armed. ~hook_handle() will fire at end
-    // of this test and must safely no-op.
-    LT_CHECK_EQ(true, true);
+    // of this test and must safely no-op (validated under ASan).
 LT_END_AUTO_TEST(handle_outlives_resource)
 
 LT_BEGIN_AUTO_TEST_ENV()

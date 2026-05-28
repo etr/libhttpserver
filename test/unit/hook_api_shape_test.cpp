@@ -287,8 +287,7 @@ LT_BEGIN_AUTO_TEST(hook_api_shape_suite, default_constructed_handle_is_inert)
     hook_handle h;
     h.remove();  // no-op on default-constructed handle
     h.remove();  // idempotent: second call is also a no-op
-    // Absence of crash + two successful remove() calls demonstrate inert state.
-    LT_CHECK_EQ(true, true);
+    // Two successful remove() calls + absence of crash demonstrate inert state.
 LT_END_AUTO_TEST(default_constructed_handle_is_inert)
 
 // Runtime throw paths in register_hook_impl. (TASK-045 review, finding #11.)

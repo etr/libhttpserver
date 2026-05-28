@@ -133,10 +133,18 @@ class resource_hook_table {
     // any_hooks_ gate: one slot per phase value. Only the five permitted
     // phase positions are ever flipped to true; the others stay false
     // forever. Indexed by static_cast<std::size_t>(hook_phase) so the
-    // dispatch hot path's lookup is a plain array index.
+    // dispatch hot path's lookup is a plain array index. The six unused
+    // slots (for the pre-route phases) are always false -- the array
+    // shape trades a small amount of memory for constant-time indexed access.
     std::array<std::atomic<bool>,
                static_cast<std::size_t>(hook_phase::count_)> any_hooks_{};
 
+    // Five named vectors, one per permitted phase. The spec described the
+    // primary design as a single std::array<std::vector<...>, count_>; the
+    // implementation uses named vectors instead for type safety at the
+    // append_*/fire_* call sites (each vector's element type differs), at
+    // the cost of six empty-but-unused conceptual slots (the pre-route
+    // phases are never represented here). See DR-012 "Per-route storage".
     std::vector<entry<hook_action(before_handler_ctx&)>>
         hooks_before_handler_;
     std::vector<entry<hook_action(const handler_exception_ctx&)>>

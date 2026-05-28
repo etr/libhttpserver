@@ -55,9 +55,13 @@ namespace {
 // the request's resource_weak_ slot. Holds the shared_ptr<http_resource>
 // alive in `res_out` so the caller can keep the table pointer valid.
 // Returns nullptr when no per-route table exists for this request.
+//
+// Uses a direct lock() rather than expired()+lock() to avoid the TOCTOU
+// window: lock() is atomic -- it either succeeds or returns null. The
+// shared_ptr in res_out keeps the resource (and its hook table) alive
+// for the duration of the caller's firing loop.
 resource_hook_table* per_route_table(detail::modded_request* mr,
                                      std::shared_ptr<http_resource>& res_out) {
-    if (mr->resource_weak_.expired()) return nullptr;
     res_out = mr->resource_weak_.lock();
     if (!res_out) return nullptr;
     return res_out->hook_table_raw_();
@@ -76,9 +80,18 @@ bool webserver_impl::fire_before_handler_gated(
         detail::modded_request* mr,
         const std::shared_ptr<http_resource>& hrm) {
     const bool server_gate = has_hooks_for(hook_phase::before_handler);
-    auto* per_route_table = hrm->hook_table_raw_();
-    const bool per_route_gate = per_route_table != nullptr &&
-        per_route_table->any_hooks(hook_phase::before_handler);
+    // Note: rtable comes from hrm directly (already resolved from the
+    // route table lock); no need for the per_route_table() helper here.
+    // hrm keeps the resource alive for the duration of this function.
+    //
+    // Memory-order: hrm was acquired from resolve_resource_for_request
+    // under the route_table_mutex_ shared_lock, which provides the acquire
+    // barrier needed to observe the hook_table_ pointer written by any prior
+    // add_hook() call (ensure_table stores with acq_rel). hook_table_raw_()
+    // reads the shared_ptr with the guarantee inherited from that acquire.
+    auto* rtable = hrm->hook_table_raw_();
+    const bool per_route_gate = rtable != nullptr &&
+        rtable->any_hooks(hook_phase::before_handler);
     if (!server_gate && !per_route_gate) return false;
 
     std::optional<route_descriptor> desc;
@@ -100,7 +113,7 @@ bool webserver_impl::fire_before_handler_gated(
         }
     }
     if (per_route_gate) {
-        if (auto sc = per_route_table->fire_before_handler(ctx,
+        if (auto sc = rtable->fire_before_handler(ctx,
                 [this](std::string_view m) {
                     log_dispatch_error(std::string(m));
                 })) {
@@ -213,17 +226,12 @@ void webserver_impl::fire_request_completed_gated(
         enum MHD_RequestTerminationCode toe) {
     const bool server_gate = has_hooks_for(hook_phase::request_completed);
 
-    // TASK-051: per-route gate. lock() may return null if the resource
-    // was unregistered between dispatch and completion (per the action
-    // item contract: skip the per-route chain in that case).
+    // TASK-051: per-route gate. per_route_table() returns null if the
+    // resource was unregistered between dispatch and completion (per the
+    // action-item contract: skip the per-route chain in that case).
+    // res keeps the resource alive while rtable is in use.
     std::shared_ptr<http_resource> res;
-    detail::resource_hook_table* rtable = nullptr;
-    if (!mr->resource_weak_.expired()) {
-        res = mr->resource_weak_.lock();
-        if (res) {
-            rtable = res->hook_table_raw_();
-        }
-    }
+    auto* rtable = per_route_table(mr, res);
     const bool per_route_present = rtable != nullptr &&
         rtable->any_hooks(hook_phase::request_completed);
 
