@@ -130,6 +130,7 @@ class http_response final {
      // header defaults to "text/plain"; pass a different value (for
      // example "application/json") to override. The body string is
      // stored by move so callers retain no aliasing.
+     // Throws std::invalid_argument if content_type contains CR, LF, or NUL.
      [[nodiscard]] static http_response string(
          std::string body,
          std::string content_type = "text/plain");
@@ -242,7 +243,7 @@ class http_response final {
      [[nodiscard]] std::string_view get_cookie(std::string_view key) const;
 
      /**
-      * Method used to get all headers passed with the request.
+      * Method used to get all response headers.
       * @return a map<string,string> containing all headers.
      **/
      [[nodiscard]] const http::header_map& get_headers() const noexcept {
@@ -250,13 +251,17 @@ class http_response final {
      }
 
      /**
-      * Method used to get all footers passed with the request.
+      * Method used to get all response footers.
       * @return a map<string,string> containing all footers.
      **/
      [[nodiscard]] const http::header_map& get_footers() const noexcept {
          return footers_;
      }
 
+     /**
+      * Method used to get all response cookies.
+      * @return a map<string,string> containing all cookies.
+     **/
      [[nodiscard]] const http::header_map& get_cookies() const noexcept {
          return cookies_;
      }
@@ -306,6 +311,13 @@ class http_response final {
      // A structured cookie type with first-class attribute fields is
      // intentionally deferred to a follow-up task; it can be added as a
      // non-breaking overload alongside this string-pair API.
+     //
+     // Security warning: the value is rendered verbatim. A semicolon in the
+     // value will inject synthetic cookie attributes into the same Set-Cookie
+     // header (attribute injection). Callers MUST NOT pass attacker-controlled
+     // data as the value without first ensuring it does not contain semicolons
+     // or other Set-Cookie syntax characters. The pre-formatted attribute style
+     // above is intended for trusted, developer-supplied strings only.
      //
      // Note on with_status: status replaces the stored code outright,
      // including any flag bits set by shoutCAST() (which ORs

@@ -381,6 +381,16 @@ void dump_header_map(std::ostream& os, const std::string& prefix, const http::he
     }
 }
 
+void dump_header_map(std::ostream& os, const std::string& prefix, const http::header_map& map) {
+    if (!map.empty()) {
+        os << "    " << prefix << " [";
+        for (const auto& item : map) {
+            os << item.first << ":\"" << item.second << "\" ";
+        }
+        os << "]" << std::endl;
+    }
+}
+
 void dump_arg_map(std::ostream& os, const std::string& prefix, const http::arg_view_map &map) {
     auto it = map.begin();
     auto end = map.end();

@@ -14,7 +14,7 @@ Make read accessors callable on `const http_response&`, returning views without 
 - [x] `int get_status() const noexcept;`
 - [x] `body_kind kind() const noexcept;`
 - [x] Remove any v1 accessor that inserted on miss (e.g., `headers[key]` patterns).
-- [x] Audit `string_view` returns: the storage must outlive the view. Document lifetime contract on each accessor (views invalidated by mutation of the response, e.g., `with_header` may rehash the map).
+- [x] Audit `string_view` returns: the storage must outlive the view. Document lifetime contract on each accessor (views invalidated when `with_header` reassigns or erases the same key; std::map node stability means adding or removing OTHER keys does NOT invalidate views of unrelated keys).
 
 **Dependencies:**
 - Blocked by: TASK-009

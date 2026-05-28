@@ -48,23 +48,23 @@ LT_BEGIN_AUTO_TEST(http_response_suite, factory_status_404)
     LT_CHECK_EQ(resp.get_status(), 404);
 LT_END_AUTO_TEST(factory_status_404)
 
-LT_BEGIN_AUTO_TEST(http_response_suite, header_operations)
+LT_BEGIN_AUTO_TEST(http_response_suite, get_header_returns_value_set_via_with_header)
     http_response resp = http_response::string("body");
     resp.with_header("X-Custom-Header", "HeaderValue");
     LT_CHECK_EQ(resp.get_header("X-Custom-Header"), "HeaderValue");
-LT_END_AUTO_TEST(header_operations)
+LT_END_AUTO_TEST(get_header_returns_value_set_via_with_header)
 
-LT_BEGIN_AUTO_TEST(http_response_suite, footer_operations)
+LT_BEGIN_AUTO_TEST(http_response_suite, get_footer_returns_value_set_via_with_footer)
     http_response resp = http_response::string("body");
     resp.with_footer("X-Footer", "FooterValue");
     LT_CHECK_EQ(resp.get_footer("X-Footer"), "FooterValue");
-LT_END_AUTO_TEST(footer_operations)
+LT_END_AUTO_TEST(get_footer_returns_value_set_via_with_footer)
 
-LT_BEGIN_AUTO_TEST(http_response_suite, cookie_operations)
+LT_BEGIN_AUTO_TEST(http_response_suite, get_cookie_returns_value_set_via_with_cookie)
     http_response resp = http_response::string("body");
     resp.with_cookie("SessionId", "abc123");
     LT_CHECK_EQ(resp.get_cookie("SessionId"), "abc123");
-LT_END_AUTO_TEST(cookie_operations)
+LT_END_AUTO_TEST(get_cookie_returns_value_set_via_with_cookie)
 
 LT_BEGIN_AUTO_TEST(http_response_suite, get_headers)
     http_response resp = http_response::string("body");
@@ -145,27 +145,6 @@ LT_BEGIN_AUTO_TEST(http_response_suite, ostream_operator_full)
     LT_CHECK_EQ(output.find("SessionId") != string::npos, true);
     LT_CHECK_EQ(output.find("UserId") != string::npos, true);
 LT_END_AUTO_TEST(ostream_operator_full)
-
-// Test get_header with nonexistent key
-LT_BEGIN_AUTO_TEST(http_response_suite, get_header_nonexistent)
-    http_response resp = http_response::string("body");
-    auto header = resp.get_header("NonExistent");
-    LT_CHECK_EQ(header.empty(), true);
-LT_END_AUTO_TEST(get_header_nonexistent)
-
-// Test get_footer with nonexistent key
-LT_BEGIN_AUTO_TEST(http_response_suite, get_footer_nonexistent)
-    http_response resp = http_response::string("body");
-    auto footer = resp.get_footer("NonExistent");
-    LT_CHECK_EQ(footer.empty(), true);
-LT_END_AUTO_TEST(get_footer_nonexistent)
-
-// Test get_cookie with nonexistent key
-LT_BEGIN_AUTO_TEST(http_response_suite, get_cookie_nonexistent)
-    http_response resp = http_response::string("body");
-    auto cookie = resp.get_cookie("NonExistent");
-    LT_CHECK_EQ(cookie.empty(), true);
-LT_END_AUTO_TEST(get_cookie_nonexistent)
 
 // Test multiple headers
 LT_BEGIN_AUTO_TEST(http_response_suite, multiple_headers)
@@ -348,14 +327,6 @@ LT_BEGIN_AUTO_TEST(http_response_suite, get_cookie_no_insert_on_miss)
     LT_CHECK_EQ(resp.get_cookies().size(), before);
 LT_END_AUTO_TEST(get_cookie_no_insert_on_miss)
 
-LT_BEGIN_AUTO_TEST(http_response_suite, get_header_returns_empty_view_on_miss)
-    http_response resp = http_response::string("body");
-    const http_response& cref = resp;
-    std::string_view v = cref.get_header("Nope");
-    LT_CHECK_EQ(v.empty(), true);
-    LT_CHECK_EQ(v.size(), static_cast<std::size_t>(0));
-LT_END_AUTO_TEST(get_header_returns_empty_view_on_miss)
-
 // AC #3: read back a header set via with_header from a `const&` reference.
 LT_BEGIN_AUTO_TEST(http_response_suite, get_header_const_reference_after_with_header)
     http_response resp = http_response::string("body");
@@ -384,20 +355,25 @@ LT_BEGIN_AUTO_TEST(http_response_suite, kind_const_callable)
     LT_CHECK_EQ(cref.kind() == httpserver::body_kind::string, true);
 LT_END_AUTO_TEST(kind_const_callable)
 
-LT_BEGIN_AUTO_TEST(http_response_suite, get_headers_returns_const_ref_noexcept)
-    http_response resp = http_response::string("body");
+LT_BEGIN_AUTO_TEST(http_response_suite, map_accessors_are_noexcept)
     static_assert(noexcept(std::declval<const http_response&>().get_headers()),
                   "get_headers() must be noexcept");
     static_assert(noexcept(std::declval<const http_response&>().get_footers()),
                   "get_footers() must be noexcept");
     static_assert(noexcept(std::declval<const http_response&>().get_cookies()),
                   "get_cookies() must be noexcept");
+    // Runtime smoke check so the suite has at least one runtime assertion.
+    LT_CHECK_EQ(true, true);
+LT_END_AUTO_TEST(map_accessors_are_noexcept)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, get_headers_returns_stable_const_ref)
+    http_response resp = http_response::string("body");
     const http_response& cref = resp;
     // Returns by const reference: the same address comes back twice.
     const auto& m1 = cref.get_headers();
     const auto& m2 = cref.get_headers();
     LT_CHECK_EQ(&m1 == &m2, true);
-LT_END_AUTO_TEST(get_headers_returns_const_ref_noexcept)
+LT_END_AUTO_TEST(get_headers_returns_stable_const_ref)
 
 LT_BEGIN_AUTO_TEST(http_response_suite, single_key_accessors_take_string_view)
     // Direct invocability check via member function pointer types.
@@ -426,6 +402,22 @@ LT_BEGIN_AUTO_TEST(http_response_suite, header_lookup_is_case_insensitive)
     LT_CHECK_EQ(cref.get_header("X-FOO"), std::string_view("bar"));
 LT_END_AUTO_TEST(header_lookup_is_case_insensitive)
 
+LT_BEGIN_AUTO_TEST(http_response_suite, footer_lookup_is_case_insensitive)
+    http_response resp = http_response::string("body");
+    resp.with_footer("X-Footer", "baz");
+    const http_response& cref = resp;
+    LT_CHECK_EQ(cref.get_footer("x-footer"), std::string_view("baz"));
+    LT_CHECK_EQ(cref.get_footer("X-FOOTER"), std::string_view("baz"));
+LT_END_AUTO_TEST(footer_lookup_is_case_insensitive)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, cookie_lookup_is_case_insensitive)
+    http_response resp = http_response::string("body");
+    resp.with_cookie("SessionId", "token42");
+    const http_response& cref = resp;
+    LT_CHECK_EQ(cref.get_cookie("sessionid"), std::string_view("token42"));
+    LT_CHECK_EQ(cref.get_cookie("SESSIONID"), std::string_view("token42"));
+LT_END_AUTO_TEST(cookie_lookup_is_case_insensitive)
+
 // View obtained after with_header replaces an existing key reflects the
 // new value. We do NOT assert anything about the *old* view's validity —
 // that would be testing undefined behaviour.
@@ -434,8 +426,22 @@ LT_BEGIN_AUTO_TEST(http_response_suite, get_header_view_reflects_replacement)
     resp.with_header("K", "v1");
     LT_CHECK_EQ(resp.get_header("K"), std::string_view("v1"));
     resp.with_header("K", "v2");
-    LT_CHECK_EQ(resp.get_header("K"), std::string_view("v2"));
+    // Also verify through a const reference (AC #3 for the replacement case).
+    const http_response& cref = resp;
+    LT_CHECK_EQ(cref.get_header("K"), std::string_view("v2"));
 LT_END_AUTO_TEST(get_header_view_reflects_replacement)
+
+// std::map node stability: adding a header for key B does NOT invalidate a
+// previously-obtained view for key A (only same-key re-assignment does).
+LT_BEGIN_AUTO_TEST(http_response_suite, get_header_view_stable_across_unrelated_mutation)
+    http_response resp = http_response::string("body");
+    resp.with_header("A", "alpha");
+    std::string_view va = resp.get_header("A");
+    // Mutate an unrelated key.
+    resp.with_header("B", "beta");
+    // View for A must still compare equal to its original value.
+    LT_CHECK_EQ(va, std::string_view("alpha"));
+LT_END_AUTO_TEST(get_header_view_stable_across_unrelated_mutation)
 
 // -----------------------------------------------------------------------
 // TASK-012: fluent with_* setters return http_response& / http_response&&
@@ -443,6 +449,9 @@ LT_END_AUTO_TEST(get_header_view_reflects_replacement)
 // -----------------------------------------------------------------------
 
 LT_BEGIN_AUTO_TEST(http_response_suite, factory_chain_compiles_and_works)
+    // Note: an SBO-inline counterpart of this chain exists in
+    // http_response_factories_test.cpp (factory_chain_keeps_body_inline_in_sbo).
+    // That test verifies the SBO invariant; this one pins the behavioral values.
     auto r = http_response::string("hi")
                  .with_header("X-Foo", "bar")
                  .with_status(201);
@@ -492,9 +501,9 @@ LT_BEGIN_AUTO_TEST(http_response_suite, with_setters_return_types_are_ref_qualif
     static_assert(std::is_same_v<
         decltype(std::declval<R&&>().with_status(0)),
         R&&>, "with_status() && must return http_response&&");
-    // Smoke runtime check so the suite still has at least one runtime
-    // assertion (a static_assert-only test would still pass if removed).
-    LT_CHECK_EQ(true, true);
+    // Runtime check: verify that the lvalue & overload returns *this address.
+    http_response r = http_response::empty();
+    LT_CHECK_EQ(&r.with_header("A", "1"), &r);
 LT_END_AUTO_TEST(with_setters_return_types_are_ref_qualified)
 
 LT_BEGIN_AUTO_TEST(http_response_suite, statement_form_with_setters_still_compile)
@@ -550,9 +559,10 @@ LT_BEGIN_AUTO_TEST(http_response_suite, with_header_moves_string_args)
     http_response r = http_response::empty();
     std::string key = "X-Long-Header-Name-To-Avoid-SSO";
     std::string value(64, 'v');  // > SSO threshold on libstdc++/libc++
+    const std::string expected(64, 'v');
     r.with_header(std::move(key), std::move(value));
     LT_CHECK_EQ(r.get_header("X-Long-Header-Name-To-Avoid-SSO"),
-                std::string_view(std::string(64, 'v')));
+                std::string_view(expected));
 LT_END_AUTO_TEST(with_header_moves_string_args)
 
 // -----------------------------------------------------------------------
@@ -562,187 +572,120 @@ LT_END_AUTO_TEST(with_header_moves_string_args)
 // contain CR (\r), LF (\n), or NUL (\0) — these characters allow
 // HTTP response-header injection (CWE-113). with_status must reject
 // codes outside [100, 599] per RFC 9110 §15.
+//
+// The LT_CHECK_THROW / LT_CHECK_NOTHROW macros from littletest.hpp are
+// used here in preference to manual bool threw = false; try { ... }
+// catch { threw = true; } patterns. The macros are immune to accidental
+// removal of the catch block and express intent in a single line.
 // -----------------------------------------------------------------------
 
 LT_BEGIN_AUTO_TEST(http_response_suite, with_header_rejects_crlf_in_value)
     http_response resp = http_response::string("body");
-    bool threw = false;
-    try {
-        resp.with_header("X-Foo", "bar\r\nSet-Cookie: evil=1");
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    LT_CHECK_EQ(threw, true);
+    LT_CHECK_THROW(resp.with_header("X-Foo", "bar\r\nSet-Cookie: evil=1"));
 LT_END_AUTO_TEST(with_header_rejects_crlf_in_value)
 
 LT_BEGIN_AUTO_TEST(http_response_suite, with_header_rejects_lf_in_value)
     http_response resp = http_response::string("body");
-    bool threw = false;
-    try {
-        resp.with_header("X-Foo", "bar\ninjected");
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    LT_CHECK_EQ(threw, true);
+    LT_CHECK_THROW(resp.with_header("X-Foo", "bar\ninjected"));
 LT_END_AUTO_TEST(with_header_rejects_lf_in_value)
 
 LT_BEGIN_AUTO_TEST(http_response_suite, with_header_rejects_nul_in_value)
     http_response resp = http_response::string("body");
-    bool threw = false;
-    try {
-        resp.with_header("X-Foo", std::string("bar\0baz", 7));
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    LT_CHECK_EQ(threw, true);
+    LT_CHECK_THROW(resp.with_header("X-Foo", std::string("bar\0baz", 7)));
 LT_END_AUTO_TEST(with_header_rejects_nul_in_value)
 
 LT_BEGIN_AUTO_TEST(http_response_suite, with_header_rejects_crlf_in_key)
     http_response resp = http_response::string("body");
-    bool threw = false;
-    try {
-        resp.with_header("X-Foo\r\nEvil", "value");
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    LT_CHECK_EQ(threw, true);
+    LT_CHECK_THROW(resp.with_header("X-Foo\r\nEvil", "value"));
 LT_END_AUTO_TEST(with_header_rejects_crlf_in_key)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, with_header_rejects_nul_in_key)
+    http_response resp = http_response::string("body");
+    LT_CHECK_THROW(resp.with_header(std::string("X\0Y", 3), "value"));
+LT_END_AUTO_TEST(with_header_rejects_nul_in_key)
 
 LT_BEGIN_AUTO_TEST(http_response_suite, with_footer_rejects_crlf_in_value)
     http_response resp = http_response::string("body");
-    bool threw = false;
-    try {
-        resp.with_footer("X-Footer", "val\r\ninjected");
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    LT_CHECK_EQ(threw, true);
+    LT_CHECK_THROW(resp.with_footer("X-Footer", "val\r\ninjected"));
 LT_END_AUTO_TEST(with_footer_rejects_crlf_in_value)
 
 LT_BEGIN_AUTO_TEST(http_response_suite, with_footer_rejects_lf_in_key)
     http_response resp = http_response::string("body");
-    bool threw = false;
-    try {
-        resp.with_footer("X-Footer\nEvil", "value");
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    LT_CHECK_EQ(threw, true);
+    LT_CHECK_THROW(resp.with_footer("X-Footer\nEvil", "value"));
 LT_END_AUTO_TEST(with_footer_rejects_lf_in_key)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, with_footer_rejects_nul_in_value)
+    http_response resp = http_response::string("body");
+    LT_CHECK_THROW(resp.with_footer("X-Footer", std::string("val\0ue", 6)));
+LT_END_AUTO_TEST(with_footer_rejects_nul_in_value)
 
 LT_BEGIN_AUTO_TEST(http_response_suite, with_cookie_rejects_crlf_in_value)
     http_response resp = http_response::string("body");
-    bool threw = false;
-    try {
-        resp.with_cookie("sid", "abc\r\nSet-Cookie: evil=1");
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    LT_CHECK_EQ(threw, true);
+    LT_CHECK_THROW(resp.with_cookie("sid", "abc\r\nSet-Cookie: evil=1"));
 LT_END_AUTO_TEST(with_cookie_rejects_crlf_in_value)
 
 LT_BEGIN_AUTO_TEST(http_response_suite, with_cookie_rejects_lf_in_name)
     http_response resp = http_response::string("body");
-    bool threw = false;
-    try {
-        resp.with_cookie("sid\nevil", "value");
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    LT_CHECK_EQ(threw, true);
+    LT_CHECK_THROW(resp.with_cookie("sid\nevil", "value"));
 LT_END_AUTO_TEST(with_cookie_rejects_lf_in_name)
 
 LT_BEGIN_AUTO_TEST(http_response_suite, with_cookie_rejects_nul_in_value)
     http_response resp = http_response::string("body");
-    bool threw = false;
-    try {
-        resp.with_cookie("sid", std::string("abc\0def", 7));
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    LT_CHECK_EQ(threw, true);
+    LT_CHECK_THROW(resp.with_cookie("sid", std::string("abc\0def", 7)));
 LT_END_AUTO_TEST(with_cookie_rejects_nul_in_value)
 
+// with_status boundary: 99 is the meaningful probe for the lower bound.
+// Negative values also fall below 100 but exercise no additional branch.
 LT_BEGIN_AUTO_TEST(http_response_suite, with_status_rejects_below_100)
     http_response resp = http_response::string("body");
-    bool threw = false;
-    try {
-        resp.with_status(99);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    LT_CHECK_EQ(threw, true);
+    LT_CHECK_THROW(resp.with_status(99));
 LT_END_AUTO_TEST(with_status_rejects_below_100)
 
 LT_BEGIN_AUTO_TEST(http_response_suite, with_status_rejects_above_599)
     http_response resp = http_response::string("body");
-    bool threw = false;
-    try {
-        resp.with_status(600);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    LT_CHECK_EQ(threw, true);
+    LT_CHECK_THROW(resp.with_status(600));
 LT_END_AUTO_TEST(with_status_rejects_above_599)
-
-LT_BEGIN_AUTO_TEST(http_response_suite, with_status_rejects_negative)
-    http_response resp = http_response::string("body");
-    bool threw = false;
-    try {
-        resp.with_status(-1);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    LT_CHECK_EQ(threw, true);
-LT_END_AUTO_TEST(with_status_rejects_negative)
-
-LT_BEGIN_AUTO_TEST(http_response_suite, with_status_rejects_zero)
-    http_response resp = http_response::string("body");
-    bool threw = false;
-    try {
-        resp.with_status(0);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    LT_CHECK_EQ(threw, true);
-LT_END_AUTO_TEST(with_status_rejects_zero)
 
 LT_BEGIN_AUTO_TEST(http_response_suite, with_status_accepts_boundary_100)
     http_response resp = http_response::string("body");
-    bool threw = false;
-    try {
-        resp.with_status(100);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    LT_CHECK_EQ(threw, false);
+    LT_CHECK_NOTHROW(resp.with_status(100));
     LT_CHECK_EQ(resp.get_status(), 100);
 LT_END_AUTO_TEST(with_status_accepts_boundary_100)
 
 LT_BEGIN_AUTO_TEST(http_response_suite, with_status_accepts_boundary_599)
     http_response resp = http_response::string("body");
-    bool threw = false;
-    try {
-        resp.with_status(599);
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    LT_CHECK_EQ(threw, false);
+    LT_CHECK_NOTHROW(resp.with_status(599));
     LT_CHECK_EQ(resp.get_status(), 599);
 LT_END_AUTO_TEST(with_status_accepts_boundary_599)
 
 LT_BEGIN_AUTO_TEST(http_response_suite, with_header_accepts_valid_value)
     http_response resp = http_response::string("body");
-    bool threw = false;
-    try {
-        resp.with_header("X-Foo", "valid value with spaces and colons: ok");
-    } catch (const std::invalid_argument&) {
-        threw = true;
-    }
-    LT_CHECK_EQ(threw, false);
+    LT_CHECK_NOTHROW(resp.with_header("X-Foo", "valid value with spaces and colons: ok"));
     LT_CHECK_EQ(resp.get_header("X-Foo"),
                 std::string_view("valid value with spaces and colons: ok"));
 LT_END_AUTO_TEST(with_header_accepts_valid_value)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, with_footer_accepts_valid_value)
+    http_response resp = http_response::string("body");
+    LT_CHECK_NOTHROW(resp.with_footer("X-Footer", "valid-footer-value"));
+    LT_CHECK_EQ(resp.get_footer("X-Footer"),
+                std::string_view("valid-footer-value"));
+LT_END_AUTO_TEST(with_footer_accepts_valid_value)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, with_cookie_accepts_valid_value)
+    http_response resp = http_response::string("body");
+    LT_CHECK_NOTHROW(resp.with_cookie("sid", "abc123"));
+    LT_CHECK_EQ(resp.get_cookie("sid"), std::string_view("abc123"));
+LT_END_AUTO_TEST(with_cookie_accepts_valid_value)
+
+LT_BEGIN_AUTO_TEST(http_response_suite, rvalue_chain_with_footer_and_cookie)
+    // Pin the && overloads of with_footer and with_cookie in an rvalue chain.
+    auto r = http_response::empty()
+                 .with_footer("X-F", "fval")
+                 .with_cookie("c", "cval");
+    LT_CHECK_EQ(r.get_footer("X-F"), std::string_view("fval"));
+    LT_CHECK_EQ(r.get_cookie("c"), std::string_view("cval"));
+LT_END_AUTO_TEST(rvalue_chain_with_footer_and_cookie)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

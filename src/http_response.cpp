@@ -174,23 +174,8 @@ void http_response::shoutCAST() {
 // -----------------------------------------------------------------------
 // Fluent with_* setters (TASK-012, PRD-RSP-REQ-004).
 //
-// Each setter has two ref-qualified overloads that delegate to a private
-// do_set_*() helper containing the validation + mutation logic. The
-// overloads differ only in their return statement: `& overload` returns
-// *this by lvalue reference; `&& overload` returns std::move(*this).
-// Centralising the mutation in a single helper means validation and
-// insert_or_assign are in exactly one place per setter, not duplicated
-// across every overload pair.
-//
-// Validation (security, TASK-012 review-pass):
-//   * with_header / with_footer: reject key or value containing CR,
-//     LF, or NUL — these characters can split an HTTP response and
-//     inject additional headers (CWE-113).
-//   * with_cookie: same CRLF/NUL rejection on name and value.
-//   * with_status: code must be in [100, 599] per RFC 9110 §15.
-//
-// insert_or_assign — rather than `m[k] = v` — is used so the by-value
-// `std::string` parameters can be moved into the map slot directly.
+// Validation helpers are in the anonymous namespace above; the & / &&
+// overload pairs delegate to do_set_*() private helpers.
 // -----------------------------------------------------------------------
 
 // Shared forbidden-character set for header/footer/cookie field names
@@ -199,34 +184,36 @@ void http_response::shoutCAST() {
 namespace {
 constexpr std::string_view kForbiddenFieldChars("\r\n\0", 3);
 
-void validate_header_field(std::string_view context,
-                           std::string_view key,
-                           std::string_view value) {
+// Validates any HTTP field name/value pair for forbidden control characters
+// (CR, LF, NUL — CWE-113). Used for headers, footers, and cookies.
+void validate_http_field(std::string_view setter_name,
+                         std::string_view key,
+                         std::string_view value) {
     if (key.find_first_of(kForbiddenFieldChars) != std::string_view::npos) {
         throw std::invalid_argument(
-            std::string(context) +
+            std::string(setter_name) +
             ": key contains forbidden control character (CR, LF, or NUL)");
     }
     if (value.find_first_of(kForbiddenFieldChars) != std::string_view::npos) {
         throw std::invalid_argument(
-            std::string(context) +
+            std::string(setter_name) +
             ": value contains forbidden control character (CR, LF, or NUL)");
     }
 }
 }  // namespace
 
 void http_response::do_set_header(std::string key, std::string value) {
-    validate_header_field("with_header", key, value);
+    validate_http_field("with_header", key, value);
     headers_.insert_or_assign(std::move(key), std::move(value));
 }
 
 void http_response::do_set_footer(std::string key, std::string value) {
-    validate_header_field("with_footer", key, value);
+    validate_http_field("with_footer", key, value);
     footers_.insert_or_assign(std::move(key), std::move(value));
 }
 
 void http_response::do_set_cookie(std::string key, std::string value) {
-    validate_header_field("with_cookie", key, value);
+    validate_http_field("with_cookie", key, value);
     cookies_.insert_or_assign(std::move(key), std::move(value));
 }
 
@@ -301,7 +288,7 @@ inline std::string_view header_map_find_view(const http::header_map& m,
                                              std::string_view key) {
     auto it = m.find(key);
     if (it == m.end()) return {};
-    return std::string_view(it->second);
+    return it->second;
 }
 }  // namespace
 
@@ -317,22 +304,12 @@ std::string_view http_response::get_cookie(std::string_view key) const {
     return header_map_find_view(cookies_, key);
 }
 
-namespace {
-inline http::header_view_map to_view_map(const http::header_map& hdr_map) {
-    http::header_view_map view_map;
-    for (const auto& item : hdr_map) {
-        view_map[std::string_view(item.first)] = std::string_view(item.second);
-    }
-    return view_map;
-}
-}
-
 std::ostream &operator<< (std::ostream& os, const http_response& r) {
     os << "Response [response_code:" << r.status_code_ << "]" << std::endl;
 
-    http::dump_header_map(os, "Headers", to_view_map(r.headers_));
-    http::dump_header_map(os, "Footers", to_view_map(r.footers_));
-    http::dump_header_map(os, "Cookies", to_view_map(r.cookies_));
+    http::dump_header_map(os, "Headers", r.headers_);
+    http::dump_header_map(os, "Footers", r.footers_);
+    http::dump_header_map(os, "Cookies", r.cookies_);
 
     return os;
 }
@@ -454,7 +431,7 @@ http_response http_response::unauthorized(std::string_view scheme,
     // caller error — callers must never pass untrusted user input as scheme
     // or realm without first validating it. Throw std::invalid_argument so
     // the error is visible and cannot be silently swallowed.
-    // kForbiddenFieldChars is the same constant used by validate_header_field
+    // kForbiddenFieldChars is the same constant used by validate_http_field
     // above — reused here to avoid a duplicate definition.
     if (scheme.find_first_of(kForbiddenFieldChars) != std::string_view::npos) {
         throw std::invalid_argument(

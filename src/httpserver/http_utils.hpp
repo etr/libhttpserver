@@ -346,6 +346,15 @@ class http_utils {
     return false; \
 }
 
+// ASCII-only uppercase helper for header name comparison.
+// HTTP header names are defined to be US-ASCII (RFC 7230 §3.2), so using
+// the locale-aware std::toupper on every character is unnecessary overhead.
+// This branchless helper folds a-z to A-Z and leaves all other bytes unchanged.
+// It is intentionally NOT locale-aware: non-ASCII bytes pass through as-is.
+inline int http_header_toupper(char c) {
+    return (c >= 'a' && c <= 'z') ? c - ('a' - 'A') : static_cast<unsigned char>(c);
+}
+
 class header_comparator {
  public:
      // is_transparent enables heterogeneous lookup against header_map
@@ -362,11 +371,11 @@ class header_comparator {
       *         lexicographic order.
      **/
      bool operator()(std::string_view x, std::string_view y) const {
-         COMPARATOR(x, y, std::toupper);
+         COMPARATOR(x, y, http_header_toupper);
      }
      /// @copydoc operator()(std::string_view, std::string_view) const
      bool operator()(const std::string& x, const std::string& y) const {
-         COMPARATOR(x, y, std::toupper);
+         COMPARATOR(x, y, http_header_toupper);
      }
 };
 
@@ -411,6 +420,11 @@ class arg_comparator {
 };
 
 using header_map = std::map<std::string, std::string, http::header_comparator>;
+// WARNING: header_view_map keys and values are non-owning views (std::string_view).
+// Callers MUST NOT store a header_view_map beyond the lifetime of the header_map
+// whose strings it views, and MUST NOT mutate that source map while any view is
+// in use. Storing a header_view_map across response mutations is a use-after-free
+// bug (CWE-416). This type is used internally for diagnostic formatting only.
 using header_view_map = std::map<std::string_view, std::string_view, http::header_comparator>;
 using arg_map = std::map<std::string, http_arg_value, http::arg_comparator>;
 using arg_view_map = std::map<std::string_view, http_arg_value, http::arg_comparator>;
@@ -451,6 +465,16 @@ uint16_t get_port(const struct sockaddr* sa);
  * @param map
 **/
 void dump_header_map(std::ostream& os, const std::string& prefix, const http::header_view_map& map);
+
+/**
+ * Overload that accepts the owning header_map directly, avoiding an O(n)
+ * copy into a temporary header_view_map. Preferred for diagnostic output
+ * (operator<<) where the source map is immediately available.
+ * @param os The ostream
+ * @param prefix Prefix to identify the map
+ * @param map
+**/
+void dump_header_map(std::ostream& os, const std::string& prefix, const http::header_map& map);
 
 /**
  * Method to output the contents of an arguments map to a std::ostream
