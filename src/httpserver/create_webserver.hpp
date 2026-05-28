@@ -159,9 +159,9 @@ class create_webserver {
       * @return reference to this builder for chaining.
       * @see webserver, not_found_handler, internal_error_handler
       */
-     create_webserver& log_access(log_access_ptr v) { _log_access = v; return *this; }
-     create_webserver& log_error(log_error_ptr v) { _log_error = v; return *this; }
-     create_webserver& validator(validator_ptr v) { _validator = v; return *this; }
+     create_webserver& log_access(log_access_ptr v) { _log_access = std::move(v); return *this; }
+     create_webserver& log_error(log_error_ptr v) { _log_error = std::move(v); return *this; }
+     create_webserver& validator(validator_ptr v) { _validator = std::move(v); return *this; }
      create_webserver& unescaper(unescaper_ptr v) { _unescaper = v; return *this; }
      create_webserver& bind_address(const struct sockaddr* v) { _bind_address = v; return *this; }
      create_webserver& bind_address(const std::string& ip);
@@ -182,6 +182,10 @@ class create_webserver {
      create_webserver& use_ssl(bool enable = true) { _use_ssl = enable; return *this; }
      create_webserver& use_ipv6(bool enable = true) { _use_ipv6 = enable; return *this; }
      create_webserver& use_dual_stack(bool enable = true) { _use_dual_stack = enable; return *this; }
+     // Security note (CWE-11): debug(true) routes verbose libmicrohttpd
+     // internal messages (connection details, MHD state) through the
+     // log_error callback. Must not be set in production builds. Guard
+     // with `#ifndef NDEBUG` or an explicit environment check.
      create_webserver& debug(bool enable = true) { _debug = enable; return *this; }
      create_webserver& pedantic(bool enable = true) { _pedantic = enable; return *this; }
 
@@ -191,10 +195,10 @@ class create_webserver {
      create_webserver& raw_https_mem_key(const std::string& v) { _https_mem_key = v; return *this; }
      create_webserver& raw_https_mem_cert(const std::string& v) { _https_mem_cert = v; return *this; }
      create_webserver& raw_https_mem_trust(const std::string& v) { _https_mem_trust = v; return *this; }
-     create_webserver& https_priorities(const std::string& v) { _https_priorities = v; return *this; }
+     create_webserver& https_priorities(std::string v) { _https_priorities = std::move(v); return *this; }
      create_webserver& cred_type(const http::http_utils::cred_type_T& v) { _cred_type = v; return *this; }
-     create_webserver& psk_cred_handler(psk_cred_handler_callback v) { _psk_cred_handler = v; return *this; }
-     create_webserver& digest_auth_random(const std::string& v) { _digest_auth_random = v; return *this; }
+     create_webserver& psk_cred_handler(psk_cred_handler_callback v) { _psk_cred_handler = std::move(v); return *this; }
+     create_webserver& digest_auth_random(std::string v) { _digest_auth_random = std::move(v); return *this; }
      create_webserver& nonce_nc_size(int v) { check_non_negative("nonce_nc_size", v); _nonce_nc_size = v; return *this; }
      create_webserver& default_policy(const http::http_utils::policy_T& v) { _default_policy = v; return *this; }
 
@@ -325,7 +329,7 @@ class create_webserver {
       * @see webserver, not_found_handler, method_not_allowed_handler, feature_unavailable
       */
      create_webserver& internal_error_handler(internal_error_handler_t h) { _internal_error_handler = std::move(h); return *this; }
-     create_webserver& file_cleanup_callback(file_cleanup_callback_ptr v) { _file_cleanup_callback = v; return *this; }
+     create_webserver& file_cleanup_callback(file_cleanup_callback_ptr v) { _file_cleanup_callback = std::move(v); return *this; }
      /**
       * Install the centralised auth handler invoked before every
       * dispatched request whose path is not on the @ref auth_skip_paths
@@ -354,9 +358,9 @@ class create_webserver {
       * @param v auth_handler_ptr callback; pass `nullptr` to clear.
       * @return reference to this builder for chaining.
       */
-     create_webserver& auth_handler(auth_handler_ptr v) { _auth_handler = v; return *this; }
-     create_webserver& auth_skip_paths(const std::vector<std::string>& v) { _auth_skip_paths = v; return *this; }
-     create_webserver& sni_callback(sni_callback_t v) { _sni_callback = v; return *this; }
+     create_webserver& auth_handler(auth_handler_ptr v) { _auth_handler = std::move(v); return *this; }
+     create_webserver& auth_skip_paths(std::vector<std::string> v) { _auth_skip_paths = std::move(v); return *this; }
+     create_webserver& sni_callback(sni_callback_t v) { _sni_callback = std::move(v); return *this; }
 
      // TASK-033: renamed from no_listen_socket()/no_thread_safety()/no_alpn();
      // public-API polarity is inverted (private field still stores the "no_"
@@ -372,9 +376,9 @@ class create_webserver {
      create_webserver& connection_memory_increment(size_t v) { _connection_memory_increment = v; return *this; }
      create_webserver& tcp_fastopen_queue_size(int v) { check_non_negative("tcp_fastopen_queue_size", v); _tcp_fastopen_queue_size = v; return *this; }
      create_webserver& sigpipe_handled_by_app(bool enable = true) { _sigpipe_handled_by_app = enable; return *this; }
-     create_webserver& https_mem_dhparams(const std::string& v) { _https_mem_dhparams = v; return *this; }
-     create_webserver& https_key_password(const std::string& v) { _https_key_password = v; return *this; }
-     create_webserver& https_priorities_append(const std::string& v) { _https_priorities_append = v; return *this; }
+     create_webserver& https_mem_dhparams(std::string v) { _https_mem_dhparams = std::move(v); return *this; }
+     create_webserver& https_key_password(std::string v) { _https_key_password = std::move(v); return *this; }
+     create_webserver& https_priorities_append(std::string v) { _https_priorities_append = std::move(v); return *this; }
      create_webserver& client_discipline_level(int v) {
          if (v < -1) throw_invalid("client_discipline_level", v, ">= -1");
          _client_discipline_level = v; return *this;
@@ -411,13 +415,13 @@ class create_webserver {
      bool _use_dual_stack = false;
      bool _debug = false;
      bool _pedantic = false;
-     std::string _https_mem_key = "";
-     std::string _https_mem_cert = "";
-     std::string _https_mem_trust = "";
-     std::string _https_priorities = "";
+     std::string _https_mem_key;
+     std::string _https_mem_cert;
+     std::string _https_mem_trust;
+     std::string _https_priorities;
      http::http_utils::cred_type_T _cred_type = http::http_utils::NONE;
      psk_cred_handler_callback _psk_cred_handler = nullptr;
-     std::string _digest_auth_random = "";
+     std::string _digest_auth_random;
      int _nonce_nc_size = 0;
      http::http_utils::policy_T _default_policy = http::http_utils::ACCEPT;
      // TASK-034: stored unconditionally. The default values are computed
@@ -458,9 +462,9 @@ class create_webserver {
      size_t _connection_memory_increment = 0;
      int _tcp_fastopen_queue_size = 0;
      bool _sigpipe_handled_by_app = false;
-     std::string _https_mem_dhparams = "";
-     std::string _https_key_password = "";
-     std::string _https_priorities_append = "";
+     std::string _https_mem_dhparams;
+     std::string _https_key_password;
+     std::string _https_priorities_append;
      bool _no_alpn = false;
      int _client_discipline_level = -1;
 
