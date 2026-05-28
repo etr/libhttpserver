@@ -44,6 +44,8 @@ namespace detail {
 // Layout-pinning static_asserts for iovec_entry → MHD_IoVec / struct iovec.
 // These asserts live next to the cast site (iovec_body::materialize below)
 // to catch platform layout drift at compile time rather than at runtime.
+// iovec_response.cpp was removed in TASK-013 (the subclass hierarchy was
+// replaced by http_response value-type factories in TASK-010).
 //
 // The POSIX `struct iovec` asserts are gated on !_WIN32 (no <sys/uio.h> on
 // MSYS2/mingw); the MHD_IoVec asserts run everywhere because that's the

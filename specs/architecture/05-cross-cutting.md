@@ -50,6 +50,9 @@ src/
 │   ├── websocket_handler.hpp
 │   ├── constants.hpp                     # NEW — httpserver::constants namespace (TASK-006)
 │   ├── http_method.hpp                   # NEW — http_method + method_set
+│   ├── feature_unavailable.hpp           # NEW — httpserver::feature_unavailable exception (TASK-003)
+│   ├── iovec_entry.hpp                   # NEW — httpserver::iovec_entry POD (TASK-004), pulled in by http_response.hpp
+│   ├── body_kind.hpp                     # NEW — body_kind discriminator enum (TASK-010)
 │   ├── http_arg_value.hpp
 │   ├── http_utils.hpp
 │   ├── string_utilities.hpp

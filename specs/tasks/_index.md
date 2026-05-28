@@ -91,7 +91,7 @@ Nominally: **13 sequential tasks**, each S–XL. Most other tasks parallelize of
 
 | # | Task | Milestone | Status | Blocked by |
 |---|------|-----------|--------|------------|
-| TASK-001 | Bump C++ standard floor to C++20 | M1 | In Progress | None |
+| TASK-001 | Bump C++ standard floor to C++20 | M1 | Done | None |
 | TASK-002 | Public/private header layout and inclusion guards | M1 | Done | TASK-001 |
 | TASK-003 | Add `httpserver::feature_unavailable` exception type | M1 | Done | TASK-002 |
 | TASK-004 | Library-defined `iovec_entry` POD with layout-pinning asserts | M1 | Done | TASK-002 |

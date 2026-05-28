@@ -41,6 +41,13 @@ static_assert(std::is_standard_layout_v<httpserver::iovec_entry>,
               "iovec_entry must be standard layout");
 static_assert(std::is_trivially_copyable_v<httpserver::iovec_entry>,
               "iovec_entry must be trivially copyable");
+// Trivial destruction is required for the reinterpret_cast array pattern:
+// iterating past element boundaries is only well-formed when the pointed-to
+// type has trivial destruction (no per-element teardown on the cast range).
+// Guards against future members with non-trivial destructors (e.g. a
+// reference-counting wrapper that would silently corrupt the cast semantics).
+static_assert(std::is_trivially_destructible_v<httpserver::iovec_entry>,
+              "iovec_entry must be trivially destructible for reinterpret_cast array pattern");
 
 // Member types as declared by the spec.
 static_assert(std::is_same_v<decltype(httpserver::iovec_entry::base),
@@ -51,11 +58,6 @@ static_assert(std::is_same_v<decltype(httpserver::iovec_entry::len),
               "iovec_entry::len must be std::size_t");
 
 LT_BEGIN_SUITE(iovec_entry_suite)
-    void set_up() {
-    }
-
-    void tear_down() {
-    }
 LT_END_SUITE(iovec_entry_suite)
 
 LT_BEGIN_AUTO_TEST(iovec_entry_suite, default_constructed_pod_holds_values)
