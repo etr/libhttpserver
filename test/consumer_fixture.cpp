@@ -18,26 +18,13 @@
      USA
 */
 
-// TASK-034 cycle F + TASK-037: compile-only consumer fixture.
+// Compile-only consumer fixture: touches every public symbol whose declaration
+// was previously guarded by #ifdef HAVE_* in the public headers.  This file
+// MUST compile and link with the library in every combination of
+// HAVE_BAUTH / HAVE_DAUTH / HAVE_GNUTLS / HAVE_WEBSOCKET.
 //
-// A single .cpp file that touches every public symbol whose declaration
-// was previously guarded by #ifdef HAVE_* in the public headers. It MUST
-// compile (and link) with the library no matter which combination of
-// HAVE_BAUTH / HAVE_DAUTH / HAVE_GNUTLS / HAVE_WEBSOCKET the library was
-// built with. AC #2 of TASK-034: "a consumer source file compiles
-// unchanged against TLS-on and TLS-off builds" (and, by extension, the
-// same for the other three flags).
-//
-// Runtime behaviour is irrelevant here: main() returns 0 immediately.
-// The point is the compile + link, exercised in CI by the TASK-037
-// build-flag-invariance matrix entries (.github/workflows/verify-build.yml).
-// TASK-037 extends the original fixture to also pin (a) every remaining
-// TLS cert accessor declared in http_request.hpp, (b) the DAUTH-gated
-// check_digest_auth() declaration via a member-function pointer (without
-// invoking it on a TLS-off build), and (c) the positive-`true` form of
-// the use_ssl / basic_auth / digest_auth setters on create_webserver,
-// again via member-function-pointer references so the fixture remains
-// constructor-safe in every HAVE_* combination.
+// Runtime behaviour is irrelevant; main() returns 0 immediately.
+// CI gate: PRD-FLG-REQ-001 / .github/workflows/verify-build.yml (TASK-037).
 
 #include <cstddef>
 #include <memory>
@@ -80,13 +67,7 @@ void touch_request_accessors(const httpserver::http_request& req) {
     (void)req.get_client_cert_not_before();
     (void)req.get_client_cert_not_after();
 
-    // TASK-037: pin the DAUTH-gated check_digest_auth() declaration via
-    // a member-function pointer rather than a call: taking the address
-    // proves the symbol is declared unconditionally and resolves at link
-    // time, without invoking a method that would throw on a build
-    // without HAVE_DAUTH. Pinning *both* overloads (string-password and
-    // pre-computed-digest) covers the full DAUTH surface that TASK-034
-    // unconditionalised.
+    // link-time proof that both check_digest_auth overloads are declared unconditionally.
     using check_pw_t = httpserver::http::http_utils::digest_auth_result
         (httpserver::http_request::*)(
             const std::string&, const std::string&, unsigned int, uint32_t,
@@ -101,19 +82,10 @@ void touch_request_accessors(const httpserver::http_request& req) {
     (void)cd_dg;
 }
 
-// TASK-037: pin the *positive*-`true` form of the three feature-flag
-// setters on create_webserver. Calling these with `true` on a build
-// without the corresponding HAVE_* would, at runtime, refuse to set the
-// flag or throw -- but the *compile* must succeed unconditionally, which
-// is what the build-flag-invariance gate asserts. A member-function-
-// pointer reference resolves at link time and proves the declaration is
-// unconditional without forcing the runtime path.
-//
-// Also call each TLS credential-material setter with a safe no-op value.
-// These were already unconditional before TASK-034 (no HAVE_GNUTLS guard
-// in create_webserver.hpp), but touching them here means any future
-// regression that re-introduces such a guard would be caught by the
-// flag-invariance CI gate.
+// Prove use_ssl/basic_auth/digest_auth are declared unconditionally via
+// member-function-pointer address-taking (no runtime invocation needed).
+// Also touch each TLS credential-material setter with a no-op value so any
+// future HAVE_GNUTLS guard regression is caught by the CI gate.
 void touch_create_webserver_setters() {
     using cw_setter = httpserver::create_webserver& (
         httpserver::create_webserver::*)(bool);
@@ -124,7 +96,7 @@ void touch_create_webserver_setters() {
     (void)s_bauth;
     (void)s_dauth;
 
-    // TLS credential-material setters (always unconditional in the public API).
+    // TLS credential-material setters -- always unconditional.
     httpserver::create_webserver cw{8080};
     cw.raw_https_mem_key("");
     cw.raw_https_mem_cert("");
