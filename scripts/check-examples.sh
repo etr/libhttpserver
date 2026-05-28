@@ -24,7 +24,7 @@
 #
 # Exits non-zero on the first violation.
 
-set -u
+set -eu
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 HELLO="$REPO_ROOT/examples/hello_world.cpp"

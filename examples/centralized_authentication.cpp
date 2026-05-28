@@ -25,10 +25,20 @@
 //
 // SECURITY NOTE: Credentials MUST NOT be hardcoded in source code (CWE-798).
 // This example loads AUTH_USER and AUTH_PASS from environment variables.
-// Set them before running:
-//   export AUTH_USER=myuser
-//   export AUTH_PASS=mysecretpassword
+//
+// Usage:
+//   # Set credentials and start the server
+//   export AUTH_USER=myuser AUTH_PASS=mysecretpassword
 //   ./centralized_authentication
+//
+//   # Without auth - should get 401 Unauthorized
+//   curl -v http://localhost:8080/api
+//
+//   # With valid auth - should get 200 OK
+//   curl -u myuser:mysecretpassword http://localhost:8080/api
+//
+//   # Health endpoint (skip path) - works without auth
+//   curl http://localhost:8080/health
 
 #include <cstdlib>
 #include <iostream>
@@ -72,17 +82,3 @@ int main() {
     ws.start(true);
     return 0;
 }
-
-// Usage:
-//   # Set credentials and start the server
-//   export AUTH_USER=myuser AUTH_PASS=mysecretpassword
-//   ./centralized_authentication
-//
-//   # Without auth - should get 401 Unauthorized
-//   curl -v http://localhost:8080/api
-//
-//   # With valid auth - should get 200 OK
-//   curl -u myuser:mysecretpassword http://localhost:8080/api
-//
-//   # Health endpoint (skip path) - works without auth
-//   curl http://localhost:8080/health

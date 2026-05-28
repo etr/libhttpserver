@@ -25,16 +25,11 @@
 class no_content_resource : public httpserver::http_resource {
  public:
      httpserver::http_response render_delete(const httpserver::http_request&) override {
-         // Return a 204 No Content response with no body
-         return
-             httpserver::http_response::empty();
+         return httpserver::http_response::empty();
      }
 
      httpserver::http_response render_head(const httpserver::http_request&) override {
-         // Return a 200 OK response with metadata headers and no body.
-         // libhttpserver already strips the body for HEAD requests, so
-         // http_response::empty() is the correct v2.0 idiom — no raw MHD
-         // flag is needed.
+         // libhttpserver strips the body automatically for HEAD requests.
          return httpserver::http_response::empty()
                     .with_status(httpserver::http::http_utils::http_ok)
                     .with_header("X-Total-Count", "42");

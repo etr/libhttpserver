@@ -29,7 +29,7 @@
 // Use the class form whenever you need fine-grained per-instance method ACLs.
 class hello_world_resource : public httpserver::http_resource {
  public:
-     httpserver::http_response render(const httpserver::http_request&) {
+     httpserver::http_response render(const httpserver::http_request&) override {
          return httpserver::http_response::string("Hello, World!");
      }
 };

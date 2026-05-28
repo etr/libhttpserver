@@ -51,8 +51,6 @@ static std::string generate_png_data() {
 int main() {
     httpserver::webserver ws{httpserver::create_webserver(8080)};
 
-    // Lambda form: stateless handlers need no class. generate_png_data()
-    // stays a plain static function; the lambda calls it per request.
     ws.on_get("/image", [](const httpserver::http_request&) {
         // The response sends the exact bytes in the string — the size is
         // tracked internally, so null bytes and non-printable characters

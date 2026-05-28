@@ -51,8 +51,9 @@ int main() {
         std::thread writer([fd = pipefd[1]]() {
             const char* messages[] = {"Hello ", "from ", "a pipe!\n"};
             for (const char* msg : messages) {
-                auto ret = write(fd, msg, strlen(msg));
-                (void)ret;
+                // return value ignored in this demo; production code must
+                // check it in a loop to handle partial writes and EINTR.
+                (void)write(fd, msg, strlen(msg));
             }
             close(fd);
         });

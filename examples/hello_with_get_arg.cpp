@@ -37,8 +37,11 @@ int main() {
     ws.on_get("/hello", [](const httpserver::http_request& req) {
         // Explicit "text/plain" avoids browser content-type sniffing.
         // Never reflect user input into an HTML response without encoding.
-        return httpserver::http_response::string(
-            "Hello: " + std::string(req.get_arg("name")), "text/plain");
+        std::string body;
+        body.reserve(7 + req.get_arg("name").get_flat_value().size());
+        body = "Hello: ";
+        body += req.get_arg("name");
+        return httpserver::http_response::string(body, "text/plain");
     });
 
     ws.start(true);
