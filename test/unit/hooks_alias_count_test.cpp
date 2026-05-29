@@ -24,6 +24,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 
 #include "./httpserver.hpp"
 #include "httpserver/detail/webserver_impl.hpp"
@@ -62,10 +63,12 @@ LT_BEGIN_AUTO_TEST(hooks_alias_count_suite, baseline_has_no_alias_hooks)
 LT_END_AUTO_TEST(baseline_has_no_alias_hooks)
 
 LT_BEGIN_AUTO_TEST(hooks_alias_count_suite, auth_handler_registers_one_before_handler)
+    // TASK-054: lambda now returns std::optional<http_response>.
+    // std::nullopt is the v2 "allow" sentinel (v1 used a null shared_ptr).
     webserver ws{create_webserver(8205)
         .auth_handler([](const http_request&)
-                          -> std::shared_ptr<http_response> {
-            return nullptr;
+                          -> std::optional<http_response> {
+            return std::nullopt;
         })};
     // Alias installed: +1 on before_handler.
     LT_CHECK_EQ(before_handler_count(ws), static_cast<std::size_t>(1));
@@ -95,8 +98,8 @@ LT_END_AUTO_TEST(not_found_handler_registers_one_route_resolved)
 LT_BEGIN_AUTO_TEST(hooks_alias_count_suite, all_three_aliases_stack)
     webserver ws{create_webserver(8205)
         .auth_handler([](const http_request&)
-                          -> std::shared_ptr<http_response> {
-            return nullptr;
+                          -> std::optional<http_response> {
+            return std::nullopt;
         })
         .method_not_allowed_handler([](const http_request&) {
             return http_response::string("405");
@@ -111,8 +114,8 @@ LT_END_AUTO_TEST(all_three_aliases_stack)
 LT_BEGIN_AUTO_TEST(hooks_alias_count_suite, user_add_hook_stacks_on_top_of_alias)
     webserver ws{create_webserver(8205)
         .auth_handler([](const http_request&)
-                          -> std::shared_ptr<http_response> {
-            return nullptr;
+                          -> std::optional<http_response> {
+            return std::nullopt;
         })};
     // Alias installed: +1.
     LT_CHECK_EQ(before_handler_count(ws), static_cast<std::size_t>(1));

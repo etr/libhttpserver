@@ -58,6 +58,7 @@
 #include <cassert>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -211,15 +212,18 @@ void webserver::install_default_alias_hooks_() {
                     if (impl_ptr->should_skip_auth(path)) {
                         return hook_action::pass();
                     }
-                    // Call the user-supplied auth_handler. Returns nullptr
-                    // to mean "allow" (pass-through); non-null means
-                    // "reject with this response". The shared_ptr<> is the
-                    // v1 nullable-optional pattern; see the TODO on
-                    // auth_handler_ptr in create_webserver.hpp for the
-                    // deferred migration plan.
-                    std::shared_ptr<http_response> auth_rejection_response =
+                    // Call the user-supplied auth_handler. TASK-054: the
+                    // return type is std::optional<http_response>. nullopt
+                    // means "allow"; an engaged optional carries the
+                    // rejection response. Compared to the v1
+                    // shared_ptr<http_response> shape this saves the
+                    // per-authenticated-request control-block allocation
+                    // (one heap alloc removed per request that runs through
+                    // this hook), and small responses ride the http_response
+                    // SBO with zero further allocs.
+                    std::optional<http_response> auth_rejection_response =
                         ws_ptr->auth_handler(*ctx.request);
-                    if (auth_rejection_response == nullptr) {
+                    if (!auth_rejection_response.has_value()) {
                         return hook_action::pass();
                     }
                     // Auth failed: short-circuit with the rejection response.

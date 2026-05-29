@@ -38,6 +38,7 @@
 #include <curl/curl.h>
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -354,11 +355,11 @@ LT_END_AUTO_TEST(unregister_resource_removes_both_path_and_prefix_registrations)
 
 namespace {
 
-// auth_handler_ptr is std::function<std::shared_ptr<http_response>(const http_request&)>.
-// Return a non-null 401 response to block the request.
-std::shared_ptr<httpserver::http_response> reject_auth(const httpserver::http_request&) {
-    return std::make_shared<httpserver::http_response>(
-        std::move(httpserver::http_response::string("blocked").with_status(401)));
+// auth_handler_ptr is std::function<std::optional<http_response>(const http_request&)>
+// (TASK-054). Return an engaged optional with a 401 response to block the request.
+std::optional<httpserver::http_response> reject_auth(const httpserver::http_request&) {
+    return std::optional<httpserver::http_response>(
+        httpserver::http_response::string("blocked").with_status(401));
 }
 
 // fetch_code: thin wrapper returning only the HTTP status code.

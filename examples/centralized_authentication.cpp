@@ -19,7 +19,7 @@
 */
 
 // centralized_authentication.cpp - install a server-wide auth_handler
-// that runs before every request. The handler returns nullptr to
+// that runs before every request. The handler returns std::nullopt to
 // accept, or an http_response to reject. auth_skip_paths lists routes
 // that bypass auth entirely.
 //
@@ -42,29 +42,30 @@
 
 #include <cstdlib>
 #include <iostream>
-#include <memory>
+#include <optional>
 #include <string>
 
 #include <httpserver.hpp>
 
-// Returns nullptr to allow the request, or an http_response to reject it.
-std::shared_ptr<httpserver::http_response> auth_handler(
+// Returns std::nullopt to allow the request, or an engaged optional
+// carrying an http_response to reject it (TASK-054).
+std::optional<httpserver::http_response> auth_handler(
         const httpserver::http_request& req) {
     const char* expected_user = std::getenv("AUTH_USER");
     const char* expected_pass = std::getenv("AUTH_PASS");
     if (!expected_user || !expected_pass) {
         std::cerr << "centralized_authentication: AUTH_USER and AUTH_PASS "
                      "environment variables must be set.\n";
-        return std::make_shared<httpserver::http_response>(
+        return std::optional<httpserver::http_response>(
             httpserver::http_response::string("Server configuration error")
                 .with_status(500));
     }
     if (req.get_user() != expected_user || req.get_pass() != expected_pass) {
-        return std::make_shared<httpserver::http_response>(
+        return std::optional<httpserver::http_response>(
             httpserver::http_response::unauthorized(
                 "Basic", "MyRealm", "Unauthorized"));
     }
-    return nullptr;
+    return std::nullopt;
 }
 
 int main() {

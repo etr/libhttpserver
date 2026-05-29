@@ -30,6 +30,7 @@
 #include <memory>
 #include <functional>
 #include <limits>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -89,15 +90,71 @@ namespace http { class file_info; }
 
 typedef std::function<bool(const std::string&, const std::string&, const http::file_info&)> file_cleanup_callback_ptr;
 
-// TODO(follow-up): migrate auth_handler_ptr to
-//   std::function<std::optional<http_response>(const http_request&)>
-// to complete the DR-004 value-return rollout to the auth hook (removing
-// the per-authenticated-request heap allocation for the shared_ptr control
-// block). This requires updating the call site in webserver_finalize.cpp,
-// the example in examples/centralized_authentication.cpp, and the
-// integration test in test/integ/authentication.cpp. Deferred from TASK-036
-// to avoid a cascading public-API break mid-milestone.
-typedef std::function<std::shared_ptr<http_response>(const http_request&)> auth_handler_ptr;
+/**
+ * Centralised authentication callback signature.
+ *
+ * Returning `std::nullopt` allows the request to proceed to dispatch.
+ * Returning an engaged `std::optional<http_response>` short-circuits the
+ * before_handler chain and sends that response on the wire (typically a
+ * 401 produced by `http_response::unauthorized(realm)`).
+ *
+ * Migrated from `std::function<std::shared_ptr<http_response>(...)>` to
+ * remove the per-authenticated-request control-block allocation; the
+ * by-value `http_response` carries small bodies via SBO without any heap
+ * traffic. See TASK-054, DR-009, PRD-RSP-REQ-007.
+ */
+typedef std::function<std::optional<http_response>(const http_request&)> auth_handler_ptr;
+
+namespace compat {
+
+/**
+ * One-transitional-build alias preserving the v1 auth callable shape
+ * (`std::function<std::shared_ptr<http_response>(const http_request&)>`).
+ *
+ * A v1 caller can migrate without an in-place call-site change by
+ * spelling the type as `httpserver::compat::auth_handler_v1_ptr`; the
+ * deprecated @ref create_webserver::auth_handler(compat::auth_handler_v1_ptr)
+ * overload wraps the callable via @ref compat::adapt_legacy_auth into the
+ * new @ref auth_handler_ptr shape. Both this alias and the overload emit
+ * a deprecation diagnostic; they will be removed in the next release.
+ *
+ * @deprecated Migrate to @ref auth_handler_ptr returning
+ *             `std::optional<http_response>`.
+ */
+using auth_handler_v1_ptr
+[[deprecated(
+"use auth_handler_ptr returning std::optional<http_response>; "
+"see RELEASE_NOTES.md 'auth handler migration' (TASK-054)")]]
+= std::function<std::shared_ptr<http_response>(const http_request&)>;
+
+/**
+ * Adapts a v1 auth callable (`std::shared_ptr<http_response>` return)
+ * into the v2 @ref auth_handler_ptr shape.
+ *
+ * The returned wrapper invokes @p legacy; a null `shared_ptr` maps to
+ * `std::nullopt` (allow); a non-null `shared_ptr` is dereferenced and
+ * its pointed-to @ref http_response is MOVED into the engaged optional
+ * (so response state — status, body, headers — is forwarded verbatim).
+ *
+ * @deprecated Provided for one transitional build. Migrate the callable's
+ *             return type to `std::optional<http_response>` and pass it
+ *             directly to @ref create_webserver::auth_handler.
+ */
+[[deprecated(
+    "v1 shared_ptr<http_response> auth signature is deprecated; "
+    "migrate to std::optional<http_response> (TASK-054)")]]
+inline auth_handler_ptr adapt_legacy_auth(
+        std::function<std::shared_ptr<http_response>(
+            const http_request&)> legacy) {
+    return [legacy = std::move(legacy)](const http_request& req)
+            -> std::optional<http_response> {
+        std::shared_ptr<http_response> ptr = legacy(req);
+        if (ptr == nullptr) return std::nullopt;
+        return std::optional<http_response>(std::move(*ptr));
+    };
+}
+
+}  // namespace compat
 
 /**
  * Fluent builder for @ref webserver instances (PRD-NAM-REQ-004,
@@ -363,9 +420,9 @@ class create_webserver {
      /**
       * Install the centralised auth handler invoked before every
       * dispatched request whose path is not on the @ref auth_skip_paths
-      * list. Returning a non-null `shared_ptr<http_response>` short-
-      * circuits dispatch and sends that response on the wire
-      * (typically a 401 or 403).
+      * list. Returning an engaged `std::optional<http_response>` short-
+      * circuits dispatch and sends that response on the wire (typically a
+      * 401 or 403). Returning `std::nullopt` allows the request to proceed.
       *
       * @note This is an alias. Calling it (with a non-null callable)
       *       installs a hook at @ref httpserver::hook_phase::before_handler.
@@ -385,10 +442,30 @@ class create_webserver {
       *       use a wildcard resource registered at "/" or implement the
       *       check inside the `not_found_handler`.
       *
-      * @param v auth_handler_ptr callback; pass `nullptr` to clear.
+      * @param v @ref auth_handler_ptr callback; pass `nullptr` to clear.
       * @return reference to this builder for chaining.
       */
      create_webserver& auth_handler(auth_handler_ptr v) { _auth_handler = std::move(v); return *this; }
+
+     /**
+      * Deprecated v1 overload: accepts a callable returning
+      * `std::shared_ptr<http_response>`, wraps it via
+      * @ref compat::adapt_legacy_auth, and stores it in the canonical
+      * @ref auth_handler_ptr shape. Provided for one transitional build
+      * so existing v1 call sites get a deprecation warning rather than
+      * a hard build break.
+      *
+      * @deprecated Migrate callables to return
+      *             `std::optional<http_response>` and use the canonical
+      *             @ref auth_handler(auth_handler_ptr) overload.
+      */
+     [[deprecated(
+         "v1 shared_ptr<http_response> auth signature is deprecated; "
+         "return std::optional<http_response> instead (TASK-054)")]]
+     create_webserver& auth_handler(compat::auth_handler_v1_ptr v) {
+         _auth_handler = compat::adapt_legacy_auth(std::move(v));
+         return *this;
+     }
      create_webserver& auth_skip_paths(std::vector<std::string> v) { _auth_skip_paths = std::move(v); return *this; }
      create_webserver& sni_callback(sni_callback_t v) { _sni_callback = std::move(v); return *this; }
 

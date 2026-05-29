@@ -32,6 +32,7 @@
 
 #include <curl/curl.h>
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "./httpserver.hpp"
@@ -625,13 +626,15 @@ class simple_resource : public http_resource {
      }
 };
 
-// Centralized authentication handler
-std::shared_ptr<http_response> centralized_auth_handler(const http_request& req) {
+// Centralized authentication handler (TASK-054 migration from
+// std::shared_ptr<http_response> to std::optional<http_response>: nullopt
+// allows the request; an engaged optional short-circuits with the value).
+std::optional<http_response> centralized_auth_handler(const http_request& req) {
     if (req.get_user() != "admin" || req.get_pass() != "secret") {
-        return std::make_shared<http_response>(
+        return std::optional<http_response>(
             http_response::unauthorized("Basic", "testrealm", "Unauthorized"));
     }
-    return nullptr;  // Allow request
+    return std::nullopt;  // Allow request
 }
 
 LT_BEGIN_AUTO_TEST(authentication_suite, centralized_auth_fail)
