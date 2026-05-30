@@ -103,7 +103,7 @@ class radix_tree {
     // (webserver_impl) is responsible for keeping the is_prefix argument
     // consistent with route_entry::is_prefix, which is the §4.7 source
     // of truth. Replaces an existing terminus of the same kind.
-    void insert(std::string_view path, T entry, bool is_prefix = false) {
+    void insert(const std::string& path, T entry, bool is_prefix = false) {
         radix_node<T>* node = root_.get();
         const auto segments = tokenize(path);
         for (const std::string& seg : segments) {
@@ -225,7 +225,7 @@ class radix_tree {
     // inserting a NEW exact terminus at /admin we need to refuse if a
     // prefix terminus is already registered at /admin (and vice versa)
     // — silent shadowing would corrupt the (method, path) cache key.
-    bool has_terminus_at(std::string_view path, bool is_prefix) const {
+    bool has_terminus_at(const std::string& path, bool is_prefix) const {
         const radix_node<T>* node = root_.get();
         const auto segments = tokenize(path);
         for (const std::string& seg : segments) {
@@ -249,7 +249,7 @@ class radix_tree {
     // NOTE: unlike find(), where descent uses the concrete request-path
     // segment value (e.g. "42"), remove() receives the registered pattern
     // (e.g. "{id}") and matches wildcard nodes by the placeholder shape.
-    bool remove(std::string_view path, bool is_prefix) {
+    bool remove(const std::string& path, bool is_prefix) {
         radix_node<T>* node = root_.get();
         const auto segments = tokenize(path);
         for (const std::string& seg : segments) {
@@ -285,10 +285,10 @@ class radix_tree {
     }
 
  private:
-    static std::vector<std::string> tokenize(std::string_view path) {
-        // tokenize_url takes a std::string by value via string_split; copy
-        // the view's contents to call it.
-        return ::httpserver::http::http_utils::tokenize_url(std::string{path});
+    static std::vector<std::string> tokenize(const std::string& path) {
+        // tokenize_url takes std::string by value; pass the already-owned
+        // string to avoid an extra copy when callers hold a const string&.
+        return ::httpserver::http::http_utils::tokenize_url(path);
     }
 
     static bool is_wildcard_segment(const std::string& seg) noexcept {

@@ -369,11 +369,15 @@ LT_BEGIN_AUTO_TEST(routing_regression_suite,
     }
     LT_CHECK(threw);
     // Original prefix entry must remain intact (atomicity contract).
+    // Verify via observable behaviour: /admin/anything resolves (prefix
+    // semantics) and /admin also resolves (the prefix terminates here).
     auto r = impl_of(ws).lookup_v2(
         ht::http_method::get, std::string("/admin/anything"));
     LT_CHECK(r.found);
-    LT_CHECK(r.tier == ht::detail::webserver_impl::tier_hit::radix);
-    LT_CHECK(r.entry.is_prefix);
+    // Bare path also resolves via prefix.
+    auto r2 = impl_of(ws).lookup_v2(
+        ht::http_method::get, std::string("/admin"));
+    LT_CHECK(r2.found);
 LT_END_AUTO_TEST(register_exact_after_prefix_does_not_collide)
 
 LT_BEGIN_AUTO_TEST(routing_regression_suite,
@@ -391,14 +395,12 @@ LT_BEGIN_AUTO_TEST(routing_regression_suite,
     }
     LT_CHECK(threw);
     // Original exact entry must remain intact: the bare path still
-    // resolves through the exact tier.
+    // resolves (observable behaviour — exact match exists).
     auto r = impl_of(ws).lookup_v2(
         ht::http_method::get, std::string("/admin"));
     LT_CHECK(r.found);
-    LT_CHECK(r.tier == ht::detail::webserver_impl::tier_hit::exact);
-    LT_CHECK(!r.entry.is_prefix);
     // And the failed prefix registration must NOT have planted a
-    // prefix terminus — /admin/sub must miss.
+    // prefix terminus — /admin/sub must miss (exact semantics preserved).
     auto sub = impl_of(ws).lookup_v2(
         ht::http_method::get, std::string("/admin/sub"));
     LT_CHECK(!sub.found);
@@ -417,10 +419,15 @@ LT_BEGIN_AUTO_TEST(routing_regression_suite,
         threw = true;
     }
     LT_CHECK(threw);
+    // Original prefix entry must remain intact: /static/x resolves
+    // (prefix semantics — deeper path matches), and /static itself also
+    // resolves (the prefix terminus is anchored here).
     auto r = impl_of(ws).lookup_v2(
         ht::http_method::get, std::string("/static/x"));
     LT_CHECK(r.found);
-    LT_CHECK(r.entry.is_prefix);
+    auto r2 = impl_of(ws).lookup_v2(
+        ht::http_method::get, std::string("/static"));
+    LT_CHECK(r2.found);
 LT_END_AUTO_TEST(register_path_after_prefix_does_not_collide)
 
 LT_BEGIN_AUTO_TEST(routing_regression_suite,
@@ -436,10 +443,14 @@ LT_BEGIN_AUTO_TEST(routing_regression_suite,
         threw = true;
     }
     LT_CHECK(threw);
+    // Original exact entry must remain intact: /static resolves, but
+    // /static/sub does NOT (exact semantics — no deeper path matches).
     auto r = impl_of(ws).lookup_v2(
         ht::http_method::get, std::string("/static"));
     LT_CHECK(r.found);
-    LT_CHECK(!r.entry.is_prefix);
+    auto sub = impl_of(ws).lookup_v2(
+        ht::http_method::get, std::string("/static/sub"));
+    LT_CHECK(!sub.found);
 LT_END_AUTO_TEST(register_prefix_after_path_does_not_collide)
 
 LT_BEGIN_AUTO_TEST(routing_regression_suite,
@@ -458,12 +469,16 @@ LT_BEGIN_AUTO_TEST(routing_regression_suite,
         threw = true;
     }
     LT_CHECK(threw);
-    // The original prefix entry must still match a deeper path.
+    // The original prefix entry must still match a deeper path
+    // (observable behaviour: /users/42/profile resolves via prefix).
     auto r = impl_of(ws).lookup_v2(
         ht::http_method::get, std::string("/users/42/profile"));
     LT_CHECK(r.found);
-    LT_CHECK(r.tier == ht::detail::webserver_impl::tier_hit::radix);
-    LT_CHECK(r.entry.is_prefix);
+    // The exact node itself also resolves (prefix captures /users/42 and
+    // any extension).
+    auto r2 = impl_of(ws).lookup_v2(
+        ht::http_method::get, std::string("/users/42"));
+    LT_CHECK(r2.found);
 LT_END_AUTO_TEST(parameterized_exact_after_parameterized_prefix_does_not_collide)
 
 LT_BEGIN_AUTO_TEST(routing_regression_suite,
@@ -480,11 +495,15 @@ LT_BEGIN_AUTO_TEST(routing_regression_suite,
         threw = true;
     }
     LT_CHECK(threw);
+    // Original exact entry must remain intact: /users/42 resolves.
     auto r = impl_of(ws).lookup_v2(
         ht::http_method::get, std::string("/users/42"));
     LT_CHECK(r.found);
-    LT_CHECK(r.tier == ht::detail::webserver_impl::tier_hit::radix);
-    LT_CHECK(!r.entry.is_prefix);
+    // The failed prefix registration must NOT have planted a prefix
+    // terminus — /users/42/profile must miss (exact semantics).
+    auto sub = impl_of(ws).lookup_v2(
+        ht::http_method::get, std::string("/users/42/profile"));
+    LT_CHECK(!sub.found);
 LT_END_AUTO_TEST(parameterized_prefix_after_parameterized_exact_does_not_collide)
 
 // ---------------------------------------------------------------------

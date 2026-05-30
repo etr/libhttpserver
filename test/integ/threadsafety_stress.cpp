@@ -755,7 +755,16 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
     // Gate: p99 must not exceed 10× the warmup median. With std::map
     // (O(log n) per probe), the ratio in practice is < 3×; the 10×
     // gate gives the test margin under CI noise.
-    LT_CHECK_LT(p99, warmup_median * 10);
+    //
+    // Zero-floor guard: on sub-microsecond hosts or with a coarse
+    // steady_clock quantum the OS may quantise all warmup samples to 0 ns,
+    // making warmup_median == 0 and therefore warmup_median * 10 == 0,
+    // which turns the gate into `p99 < 0` — an impossible assertion that
+    // always fails. Clamp the baseline to at least 1 µs so the gate
+    // remains a meaningful "no spike" check even on very fast hardware.
+    const int64_t baseline = std::max(warmup_median,
+                                      static_cast<int64_t>(1000));
+    LT_CHECK_LT(p99, baseline * 10);
 
     ws.stop();
 LT_END_AUTO_TEST(adversarial_segments_registration_no_latency_spike)

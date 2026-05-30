@@ -222,20 +222,20 @@ TASK-027 cleanup:
    collide on the cache key.
 
 **Action Items:**
-- [ ] Replace `std::unordered_map` with `std::map` (or a small
+- [x] Replace `std::unordered_map` with `std::map` (or a small
   flat_map) in the radix node child container. Benchmark the impact:
   acceptable if cache-miss path stays under 5 µs on the worst-case
   realistic tree depth.
-- [ ] Add the `is_prefix_match` guard at the call site of
+- [x] Add the `is_prefix_match` guard at the call site of
   `upsert_v2_param_route` so prefix-vs-exact terminus collisions are
   detected at registration time, not at lookup time.
-- [ ] Add a regression test
+- [x] Add a regression test
   `routing_regression_test.cpp::register_exact_after_prefix_does_not_collide`
   pinning the registration-time error.
-- [ ] Add a stress-test variant in `threadsafety_stress.cpp` that
+- [x] Add a stress-test variant in `threadsafety_stress.cpp` that
   hammers the registration path with adversarial path segments to
   confirm the new container is DoS-resistant.
-- [ ] Update `specs/architecture/04-components/routing.md` with the
+- [x] Update `specs/architecture/04-components/route-table.md` with the
   new container choice and rationale.
 
 **Dependencies:**
@@ -252,6 +252,8 @@ TASK-027 cleanup:
 
 **Related Findings:** task-027 #14, task-027 #18
 **Related Decisions:** §4.5 routing
+
+**Status:** Done
 
 ---
 
