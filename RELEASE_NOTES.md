@@ -159,6 +159,7 @@ and see the v2 replacement.
 | `deferred_response` | `http_response::deferred` |
 | `basic_auth_fail_response` | `http_response::unauthorized` |
 | `digest_auth_fail_response` | `http_response::unauthorized` |
+| `auth_handler_ptr` returning `std::shared_ptr<http_response>` | `auth_handler_ptr` returning `std::optional<http_response>` |
 
 > **Note:** `shoutCAST()` is the sole camelCase survivor in the v2 public API.
 > The name maps to the SHOUTcast streaming protocol and is intentionally
@@ -171,6 +172,16 @@ and see the v2 replacement.
   v2 returns a value. The framework moves it into the dispatch path. No
   heap allocation is required for small responses (small-buffer optimisation
   inside `http_response`).
+- **Centralized auth handler returns `std::optional<http_response>`.**
+  The `auth_handler` callback signature is now
+  `std::function<std::optional<http_response>(const http_request&)>`
+  (earlier v2 work-in-progress shipped
+  `std::function<std::shared_ptr<http_response>(const http_request&)>`).
+  Return `std::nullopt` to allow the request; return an `http_response`
+  to reject. The v1 `shared_ptr` shape still compiles for one
+  transitional build via `httpserver::compat::auth_handler_v1_ptr` and a
+  `[[deprecated]]` setter overload; both emit a deprecation warning.
+  Removes one heap allocation per authenticated request.
 - **`http_request` getters return `const&` / `string_view`.** v1's
   `get_header(name)` (and `get_arg`, `get_cookie`, `get_footer`) returned
   by value and inserted an empty entry into the request map on miss; v2's

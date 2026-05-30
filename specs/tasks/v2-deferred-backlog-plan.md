@@ -107,22 +107,22 @@ TODO comment marking this migration already lives at
 `src/httpserver/create_webserver.hpp:92-99`.
 
 **Action Items:**
-- [ ] Define `auth_handler_ptr` as
+- [x] Define `auth_handler_ptr` as
   `std::function<std::optional<http_response>(const http_request&)>` in
   `create_webserver.hpp`. Keep the old typedef alias for one transitional
   build with a `[[deprecated]]` attribute pointing at the new shape.
-- [ ] Update the auth short-circuit path in `webserver_dispatch.cpp` to
+- [x] Update the auth short-circuit path in `webserver_dispatch.cpp` to
   consume `optional<http_response>` instead of dereferencing a
   `shared_ptr`.
-- [ ] Update the documented v1 alias surface (`auth_handler` setter) to
+- [x] Update the documented v1 alias surface (`auth_handler` setter) to
   internally adapt v1 callers that still produce a `shared_ptr` (free
   function `compat::adapt_legacy_auth(...)`), with a `[[deprecated]]`
   warning.
-- [ ] Update `examples/centralized_authentication.cpp` to return
+- [x] Update `examples/centralized_authentication.cpp` to return
   `std::optional<http_response>` directly (drop `std::make_shared`).
-- [ ] Update Doxygen, README "Centralized authentication" section, and
+- [x] Update Doxygen, README "Centralized authentication" section, and
   RELEASE_NOTES.md "Migration notes" with the new signature.
-- [ ] Remove the TODO comment at `create_webserver.hpp:92-99`.
+- [x] Remove the TODO comment at `create_webserver.hpp:92-99`.
 
 **Dependencies:**
 - Blocked by: TASK-046 (by-value response cutover, Done)
@@ -140,6 +140,8 @@ TODO comment marking this migration already lives at
 
 **Related Findings:** task-036 #38, task-030 #18
 **Related Decisions:** DR-009, PRD-RSP-REQ-007
+
+**Status:** Done
 
 ---
 

@@ -19,6 +19,7 @@
 */
 
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -342,8 +343,9 @@ LT_END_AUTO_TEST(builder_unescaper)
 
 // Test auth_handler callback
 LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_auth_handler)
-    auto auth_handler = [](const http_request&) {
-        return std::shared_ptr<http_response>(nullptr);
+    // TASK-054: auth_handler returns std::optional<http_response>.
+    auto auth_handler = [](const http_request&) -> std::optional<http_response> {
+        return std::nullopt;
     };
     LT_CHECK_NOTHROW(create_webserver(8080).auth_handler(auth_handler));
 LT_END_AUTO_TEST(builder_auth_handler)

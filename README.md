@@ -618,9 +618,10 @@ build, `webserver(create_webserver{}.use_ssl(true))` throws
   digest auth.
 * **`.auth_handler(auth_handler_ptr cb)`** — install a centralized
   authentication handler that runs before every resource's `render_*`
-  call. The callback returns `nullptr` to allow the request to proceed,
-  or an `http_response` (typically `http_response::unauthorized(realm)`)
-  to reject it. Single source of truth for auth — see [Centralized
+  call. The callback returns `std::nullopt` to allow the request to
+  proceed, or an `http_response` (typically
+  `http_response::unauthorized(realm)`) to reject it. Single source of
+  truth for auth — see [Centralized
   authentication](#using-centralized-authentication).
 * **`.auth_skip_paths(const std::vector<std::string>& paths)`** — paths
   to bypass `auth_handler`. Exact match (`"/health"`) and wildcard
@@ -1226,14 +1227,13 @@ resource. Centralized authentication lets you define the policy once and
 have it applied automatically to every request:
 
 ```cpp
-// auth runs once per request before any render_*; return nullptr to allow
+// auth runs once per request before any render_*; return std::nullopt to allow
 auto auth = [](const httpserver::http_request& req)
-    -> std::shared_ptr<httpserver::http_response> {
+    -> std::optional<httpserver::http_response> {
     if (req.get_user() != "admin" || req.get_pass() != "secret") {
-        return std::make_shared<httpserver::http_response>(
-            httpserver::http_response::unauthorized("MyRealm"));
+        return httpserver::http_response::unauthorized("MyRealm");
     }
-    return nullptr;
+    return std::nullopt;
 };
 
 httpserver::webserver ws{httpserver::create_webserver(8080)
@@ -1248,9 +1248,10 @@ ws.start(true);
 The `auth_handler` callback runs for every request before the resource's
 render method. It receives the `http_request` and can:
 
-* Return `nullptr` to allow the request to proceed normally.
+* Return `std::nullopt` to allow the request to proceed normally.
 * Return an `http_response` (typically `http_response::unauthorized`) to
-  reject the request.
+  reject the request. The response is moved onto the wire by the
+  dispatcher; no heap allocation is required.
 
 `auth_skip_paths` accepts a vector of paths that should bypass the
 handler:
