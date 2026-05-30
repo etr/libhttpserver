@@ -114,6 +114,18 @@ LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_pedantic_toggle)
     LT_CHECK_NOTHROW(create_webserver(8080).pedantic(false));
 LT_END_AUTO_TEST(builder_pedantic_toggle)
 
+// TASK-055 / DR-009 Revision 1: the expose_exception_messages(bool) builder
+// toggle is the documented opt-in that restores the v1 / TASK-031 behaviour
+// of including the originating exception's e.what() text in the default
+// internal-server-error response body. Default is false (security-fix
+// default; CWE-209). Mirrors the existing builder_*_toggle pattern.
+LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_expose_exception_messages_toggle)
+    LT_CHECK_NOTHROW(create_webserver(8080).expose_exception_messages());
+    LT_CHECK_NOTHROW(create_webserver(8080).expose_exception_messages(false));
+    LT_CHECK_NOTHROW(create_webserver(8080)
+        .expose_exception_messages(true).expose_exception_messages(false));
+LT_END_AUTO_TEST(builder_expose_exception_messages_toggle)
+
 #ifdef HAVE_BAUTH
 LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_basic_auth_toggle)
     LT_CHECK_NOTHROW(create_webserver(8080).basic_auth());

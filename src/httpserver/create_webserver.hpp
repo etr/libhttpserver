@@ -257,6 +257,31 @@ class create_webserver {
      // with `#ifndef NDEBUG` or an explicit environment check.
      create_webserver& debug(bool enable = true) { _debug = enable; return *this; }
      create_webserver& pedantic(bool enable = true) { _pedantic = enable; return *this; }
+     /**
+      * Restore the v1 / pre-DR-009-Revision-1 behaviour of surfacing the
+      * originating exception message in the default internal-server-error
+      * response body.
+      *
+      * @warning CWE-209: exception messages routinely contain file paths,
+      *          SQL fragments, internal identifiers, and other detail that
+      *          should not cross a process boundary to an untrusted client.
+      *          Enable only in development or behind an explicit
+      *          `#ifndef NDEBUG` guard.
+      *
+      * Default is `false`: the default body is the fixed string
+      * `"Internal Server Error"`. The `log_error` callback continues to
+      * receive the originating message regardless of this flag; only the
+      * HTTP response body is affected.
+      *
+      * @param enable `true` to expose exception messages in the default
+      *               500 body (dev only), `false` for the sanitized
+      *               fixed-string default.
+      * @return reference to this builder for chaining.
+      * @see DR-009 Revision 1 (specs/architecture/11-decisions/DR-009.md)
+      */
+     create_webserver& expose_exception_messages(bool enable = true) {
+         _expose_exception_messages = enable; return *this;
+     }
 
      create_webserver& https_mem_key(const std::string& v) { _https_mem_key = http::load_file(v); return *this; }
      create_webserver& https_mem_cert(const std::string& v) { _https_mem_cert = http::load_file(v); return *this; }
@@ -386,7 +411,13 @@ class create_webserver {
       * The @p h callback receives the exception message (from `e.what()`
       * for `std::exception`, or `"unknown exception"` otherwise) and the
       * originating @ref http_request, and returns the response to send.
-      * If null, a default 500 with the message in the body is sent.
+      * If null, a default 500 with the fixed body
+      * `"Internal Server Error"` is sent (DR-009 Revision 1 / TASK-055,
+      * CWE-209 fix); the originating message is still surfaced via the
+      * configured `log_error` callback. The v1 behaviour of including
+      * the message in the default body is opt-in via
+      * @ref create_webserver::expose_exception_messages — development
+      * only.
       * The callback must be thread-safe (may be invoked concurrently
       * from multiple MHD worker threads).
       *
@@ -534,6 +565,10 @@ class create_webserver {
      bool _use_dual_stack = false;
      bool _debug = false;
      bool _pedantic = false;
+     // TASK-055 / DR-009 Revision 1: default false (CWE-209 fix). When
+     // true, internal_error_page surfaces the originating exception's
+     // message in the default 500 body (development-only behaviour).
+     bool _expose_exception_messages = false;
      std::string _https_mem_key;
      std::string _https_mem_cert;
      std::string _https_mem_trust;

@@ -61,6 +61,16 @@ inline constexpr std::string_view NOT_METHOD_ERROR = "Method not Acceptable";
 // Default body for a 500 response when no internal_error_handler is set.
 inline constexpr std::string_view GENERIC_ERROR = "Internal Error";
 
+// TASK-055 / DR-009 Revision 1: fixed, sanitized default body for the
+// "no internal_error_handler configured, and expose_exception_messages
+// is false" path in webserver_impl::internal_error_page. This is the
+// CWE-209 fix: the originating exception's e.what() text MUST NOT cross
+// a process boundary by default. The verbose body (carrying msg) is
+// restored only when expose_exception_messages(true) is set on the
+// builder, which is documented as development-only.
+inline constexpr std::string_view INTERNAL_SERVER_ERROR =
+    "Internal Server Error";
+
 }  // namespace httpserver::constants
 
 #endif  // SRC_HTTPSERVER_CONSTANTS_HPP_

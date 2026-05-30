@@ -639,6 +639,19 @@ build, `webserver(create_webserver{}.use_ssl(true))` throws
   dispatch. The handler signature is
   `http_response(const http_request&, std::string_view message)`. Load-bearing:
   see [Error propagation](#error-propagation).
+* **`.expose_exception_messages(bool = true)`** — restores the v1
+  behaviour of including the originating exception message in the
+  **default** 500 response body. Default is `false`: the default body
+  is the fixed string `"Internal Server Error"`
+  ([DR-009 Revision 1](specs/architecture/11-decisions/DR-009.md),
+  CWE-209 information-disclosure fix). The configured `log_error`
+  callback continues to receive the verbatim message regardless of
+  this flag — only the HTTP response body is affected.
+  **Warning:** exception messages routinely contain file paths, SQL
+  fragments, internal identifiers, and attacker-influenced input.
+  Enable only in development or behind an explicit `#ifndef NDEBUG`
+  guard. A configured `internal_error_handler` is unaffected — it
+  always receives the message and can build any body it wants.
 
 A worked example:
 
@@ -1664,9 +1677,20 @@ Distilled from
    invokes `internal_error_handler(request, e.what())`. The response
    returned by `internal_error_handler` is sent to the client; if no
    custom `internal_error_handler` is configured, a default 500 with
-   the message in the body is sent.
+   the **fixed body `"Internal Server Error"`** is sent
+   (DR-009 Revision 1, CWE-209 fix — exception text often contains
+   file paths, SQL fragments, or attacker-influenced input and must
+   not cross a process boundary to an untrusted client). To restore
+   the v1 behaviour of including the exception message in the body
+   for development, set `.expose_exception_messages(true)` on the
+   builder. The verbatim message is still surfaced via the
+   `log_error` callback and to any configured
+   `internal_error_handler` regardless of the flag.
 2. **A handler that throws something other than `std::exception`** is
    also caught, with `"unknown exception"` substituted for the message.
+   The same default body (`"Internal Server Error"`) applies; the
+   `"unknown exception"` sentinel reaches the wire only when
+   `.expose_exception_messages(true)` is set.
 3. **Library-internal failures during dispatch** (allocation, body
    materialisation) flow through the same `internal_error_handler` path.
 4. **If `internal_error_handler` itself throws**, the library logs and
@@ -1698,7 +1722,13 @@ httpserver::webserver ws{cfg};
 ```
 
 See [`examples/custom_error.cpp`](examples/custom_error.cpp) for a
-worked example.
+worked example. Note that the snippet above — which echoes `what`
+verbatim to the wire — is illustrative of the explicit-handler case;
+the **default** (no `internal_error_handler` configured) path now
+sends a fixed body, and only the `log_error` callback receives the
+verbatim message. To restore the v1 verbose-body default for
+development, chain `.expose_exception_messages(true)` on the builder
+(see [Custom error handlers](#custom-error-handlers)).
 
 [Back to TOC](#table-of-contents)
 

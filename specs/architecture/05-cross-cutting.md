@@ -16,9 +16,9 @@
 
 ### 5.2 Error propagation
 
-**Contract (committed in DR-9):**
-1. Handler throws `std::exception` → caught, logged via the `log_error` callback, `internal_error_handler` invoked with `e.what()`, response sent (default 500).
-2. Handler throws non-`std::exception` → caught with `catch (...)`, logged generically via `log_error`, `internal_error_handler` invoked with `"unknown exception"`.
+**Contract (committed in DR-9, revised 2026-05-29 — Revision 1):**
+1. Handler throws `std::exception` → caught, logged via the `log_error` callback, `internal_error_handler` invoked with `e.what()`, response sent. **Default 500** body is the fixed string `"Internal Server Error"` (DR-009 Revision 1 / CWE-209). The verbatim message is still surfaced via the `log_error` callback and to any configured `internal_error_handler`; the v1 behaviour of including it in the default body is opt-in via `create_webserver::expose_exception_messages(true)` (development only).
+2. Handler throws non-`std::exception` → caught with `catch (...)`, logged generically via `log_error`, `internal_error_handler` invoked with `"unknown exception"`. Default body is the same fixed string `"Internal Server Error"`; the `"unknown exception"` sentinel is on the wire only when `expose_exception_messages(true)` is set.
 3. Library-internal exception in dispatch (allocation failure, body materialization error) → same path as (1)/(2).
 4. `internal_error_handler` itself throws → library logs via `log_error` and sends a hardcoded 500 with empty body.
 5. `feature_unavailable` is a normal `std::runtime_error`; no special status mapping. Users who care translate it explicitly.

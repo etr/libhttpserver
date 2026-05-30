@@ -124,8 +124,12 @@ namespace httpserver {
  *      `try { ... } catch (const std::exception& e) { ... } catch (...) { ... }`.
  *   2. On `std::exception`: the message is logged via the configured
  *      `log_error` callback, then `internal_error_handler` is invoked with
- *      `e.what()`. The response it returns is sent on the wire (default
- *      500 with the message in the body when no handler is configured).
+ *      `e.what()`. The response it returns is sent on the wire. When no
+ *      handler is configured, the default 500 carries the fixed body
+ *      `"Internal Server Error"` (DR-009 Revision 1 / TASK-055 / CWE-209
+ *      fix); the originating message is still surfaced via the
+ *      `log_error` callback. The verbose v1 body (message in the body)
+ *      is opt-in via @ref create_webserver::expose_exception_messages.
  *   3. On non-`std::exception` (e.g. `throw 42`): same path with the
  *      message replaced by the literal string `"unknown exception"`.
  *   4. If `internal_error_handler` itself throws while servicing 2 or 3,
@@ -407,6 +411,11 @@ class webserver {
      const bool use_dual_stack;
      const bool debug;
      const bool pedantic;
+     // TASK-055 / DR-009 Revision 1: when true, the default
+     // internal_error_page surfaces the originating exception message in
+     // the 500 body (development-only behaviour; CWE-209). Default is
+     // false: the body is the fixed string "Internal Server Error".
+     const bool expose_exception_messages;
      const std::string https_mem_key;
      const std::string https_mem_cert;
      const std::string https_mem_trust;
