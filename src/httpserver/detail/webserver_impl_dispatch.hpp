@@ -385,6 +385,11 @@ void upsert_v2_table_entry(const detail::http_endpoint& idx,
 void upsert_v2_radix_route(const std::string& key,
                            method_set methods,
                            std::shared_ptr<::httpserver::http_resource> shim);
+// TASK-056: throw std::invalid_argument if registering a v2 entry of
+// the opposite prefix/exact kind at `key` would silently shadow an
+// existing entry. Must be called BEFORE any mutation of the route
+// table so atomicity holds. Caller holds route_table_mutex_.
+void reject_terminus_collision(const std::string& key, bool want_is_prefix);
 void insert_fresh_v2_entry(const detail::http_endpoint& idx,
                            method_set methods,
                            std::shared_ptr<::httpserver::http_resource> shim);

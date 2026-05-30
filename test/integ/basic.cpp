@@ -477,9 +477,12 @@ LT_BEGIN_AUTO_TEST(basic_suite, duplicate_endpoints)
     LT_CHECK_THROW(ws->register_path("/OK/", as_shared(ok2)));
     LT_CHECK_THROW(ws->register_path("OK/", as_shared(ok2)));
 
-    // Check how family interacts: registering the same path with
-    // family=true is a different endpoint, so it should succeed.
-    ws->register_prefix("OK", as_shared(ok2));
+    // TASK-056: registering the SAME path as both exact and prefix is
+    // now a collision (the (method, path) cache key can't discriminate
+    // the two), so the prefix call throws. Pre-TASK-056 it silently
+    // succeeded — see specs/architecture/04-components/route-table.md
+    // for the rationale.
+    LT_CHECK_THROW(ws->register_prefix("OK", as_shared(ok2)));
 
     // Check that switched case does the right thing, whatever that is here.
 #ifdef CASE_INSENSITIVE
@@ -493,8 +496,12 @@ LT_END_AUTO_TEST(duplicate_endpoints)
 
 LT_BEGIN_AUTO_TEST(basic_suite, family_endpoints)
     static_resource ok1("1"), ok2("2");
-    ws->register_path("OK", as_shared(ok1));
-    ws->register_prefix("OK", as_shared(ok2));
+    // TASK-056: pre-TASK-056 this test registered the SAME path "OK"
+    // as both exact and prefix; the collision guard now forbids that.
+    // The test still pins what it always did — exact serves the bare
+    // path, prefix serves arbitrary subpaths — but on distinct paths.
+    ws->register_path("EXA", as_shared(ok1));
+    ws->register_prefix("FAM", as_shared(ok2));
 
     curl_global_init(CURL_GLOBAL_ALL);
 
@@ -502,7 +509,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, family_endpoints)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/OK");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/EXA");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -516,7 +523,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, family_endpoints)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/OK/");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/EXA/");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -530,7 +537,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, family_endpoints)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/OK/go");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/FAM/go");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -541,11 +548,13 @@ LT_BEGIN_AUTO_TEST(basic_suite, family_endpoints)
     }
 
 #ifdef CASE_INSENSITIVE
+    // Case-insensitive matching probe: lowercase URLs hit the same
+    // registered (uppercase) keys.
     {
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/OK");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/exa");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -559,7 +568,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, family_endpoints)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/OK/");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/exa/");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -573,7 +582,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, family_endpoints)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/OK/go");
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/fam/go");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);

@@ -35,11 +35,12 @@
 #define SRC_HTTPSERVER_DETAIL_RADIX_TREE_HPP_
 
 #include <cstddef>
+#include <functional>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -63,7 +64,20 @@ struct radix_match {
 // ambiguous and rejected at registration time.
 template <typename T>
 struct radix_node {
-    std::unordered_map<std::string, std::unique_ptr<radix_node>> children_;
+    // TASK-056: per-segment children are kept in std::map rather than
+    // std::unordered_map for hash-flooding immunity (CWE-407). URL path
+    // segments are attacker-controlled and neither libc++ nor libstdc++
+    // seed std::hash<std::string> by default, so std::unordered_map is
+    // vulnerable to algorithmic-complexity DoS via crafted sibling keys.
+    // std::map (red-black tree) gives O(log n) worst-case per probe with
+    // no hashing in the loop. Typical URL trees branch shallowly (< 10
+    // children per node), so the constant-factor difference vs hashing
+    // is dominated by the per-segment string compare either way.
+    //
+    // std::less<> is the transparent comparator: it lets find() take a
+    // std::string_view directly and compare against the std::string keys
+    // without constructing a temporary std::string per probe.
+    std::map<std::string, std::unique_ptr<radix_node>, std::less<>> children_;
     std::unique_ptr<radix_node> wildcard_child_;
     std::string wildcard_name_;
     std::optional<T> exact_terminus_;
@@ -129,8 +143,8 @@ class radix_tree {
     // tokenize(), avoiding the std::vector<std::string> allocation and
     // per-segment string copies. Each segment is extracted as a
     // std::string_view and compared against children_ keys (std::string)
-    // by std::unordered_map::find(std::string_view) — valid because
-    // std::string is implicitly comparable to std::string_view.
+    // via the transparent comparator (std::less<>) on std::map — no
+    // temporary std::string is constructed per probe.
     // The wildcard path copies the segment into captures<string,string>
     // only when a wildcard node is taken.
     bool find(std::string_view path, radix_match<T>& out) const {
@@ -163,21 +177,10 @@ class radix_tree {
                 rest = rest.substr(slash + 1);
             }
 
-            // Prefer exact child over wildcard. std::unordered_map::find
-            // accepts a key_type const reference; we provide a temporary
-            // std::string constructed from the view only when the
-            // transparent lookup below fails.
-            //
-            // Use heterogeneous lookup: children_ is keyed by std::string
-            // and std::string is implicitly constructible from std::string_view,
-            // so passing a std::string_view to find() works via the key_equal
-            // (std::equal_to<std::string> compares against std::string_view
-            // through the implicit conversion on one side — but this requires
-            // a full std::string construction for the map lookup since
-            // std::unordered_map does not support heterogeneous lookup without
-            // a transparent hasher). Use string(seg) only here to avoid the
-            // full vector allocation while still performing the lookup.
-            auto it = node->children_.find(std::string(seg));
+            // Prefer exact child over wildcard. std::map's transparent
+            // comparator (std::less<>) accepts std::string_view directly
+            // — no temporary std::string is constructed on the hot path.
+            auto it = node->children_.find(seg);
             if (it != node->children_.end()) {
                 node = it->second.get();
             } else if (node->wildcard_child_) {
@@ -207,6 +210,38 @@ class radix_tree {
         out.captures = std::move(best_prefix_caps);
         out.is_prefix_match = true;
         return true;
+    }
+
+    // TASK-056: probe for a terminus of the specified kind at the EXACT
+    // node reached by tokenizing `path` (pattern-equality, not request-
+    // path matching). Unlike find(), this does NOT fall back to a
+    // prefix ancestor and does NOT descend the wildcard branch — the
+    // caller is asking "is there a `{name}` literal segment registered
+    // here?", so the same wildcard-shape matching rule as remove() is
+    // used. Returns true iff such a terminus exists.
+    //
+    // Designed for the registration-time collision guard added in
+    // TASK-056 (webserver_impl::reject_terminus_collision): when
+    // inserting a NEW exact terminus at /admin we need to refuse if a
+    // prefix terminus is already registered at /admin (and vice versa)
+    // — silent shadowing would corrupt the (method, path) cache key.
+    bool has_terminus_at(std::string_view path, bool is_prefix) const {
+        const radix_node<T>* node = root_.get();
+        const auto segments = tokenize(path);
+        for (const std::string& seg : segments) {
+            auto it = node->children_.find(seg);
+            if (it != node->children_.end()) {
+                node = it->second.get();
+                continue;
+            }
+            if (node->wildcard_child_ && is_wildcard_segment(seg)) {
+                node = node->wildcard_child_.get();
+                continue;
+            }
+            return false;
+        }
+        return is_prefix ? node->prefix_terminus_.has_value()
+                         : node->exact_terminus_.has_value();
     }
 
     // Remove the entry at `path`. is_prefix selects which terminus to

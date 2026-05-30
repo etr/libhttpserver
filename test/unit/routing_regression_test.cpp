@@ -341,6 +341,153 @@ LT_BEGIN_AUTO_TEST(routing_regression_suite,
 LT_END_AUTO_TEST(prefix_register_then_unregister_then_lookup_misses)
 
 // ---------------------------------------------------------------------
+// Prefix-vs-exact terminus collision (TASK-056).
+//
+// Two registrations on the SAME canonical path that disagree on the
+// prefix/exact dimension cannot coexist in the v2 table: the
+// route-cache key (method, path) cannot distinguish the two, and
+// lookup_v2 would silently shadow one of them in tier-priority order.
+// The contract introduced by TASK-056 is: the SECOND registration
+// throws std::invalid_argument at registration time and the original
+// entry is left intact (atomicity).
+//
+// Six shapes are pinned — every combination of {register_path,
+// register_prefix, on_get} where the two calls land on the same path
+// but with opposite prefix/exact polarity.
+// ---------------------------------------------------------------------
+
+LT_BEGIN_AUTO_TEST(routing_regression_suite,
+                   register_exact_after_prefix_does_not_collide)
+    ht::webserver ws{ht::create_webserver(8080)
+        .start_method(ht::http::http_utils::INTERNAL_SELECT)};
+    ws.register_prefix("/admin", std::make_shared<noop_resource>());
+    bool threw = false;
+    try {
+        ws.on_get("/admin", noop_handler);
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK(threw);
+    // Original prefix entry must remain intact (atomicity contract).
+    auto r = impl_of(ws).lookup_v2(
+        ht::http_method::get, std::string("/admin/anything"));
+    LT_CHECK(r.found);
+    LT_CHECK(r.tier == ht::detail::webserver_impl::tier_hit::radix);
+    LT_CHECK(r.entry.is_prefix);
+LT_END_AUTO_TEST(register_exact_after_prefix_does_not_collide)
+
+LT_BEGIN_AUTO_TEST(routing_regression_suite,
+                   register_prefix_after_exact_does_not_collide)
+    // Symmetric inverse: on_get first, then register_prefix on the
+    // same path. The prefix call is the one that must throw.
+    ht::webserver ws{ht::create_webserver(8080)
+        .start_method(ht::http::http_utils::INTERNAL_SELECT)};
+    ws.on_get("/admin", noop_handler);
+    bool threw = false;
+    try {
+        ws.register_prefix("/admin", std::make_shared<noop_resource>());
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK(threw);
+    // Original exact entry must remain intact: the bare path still
+    // resolves through the exact tier.
+    auto r = impl_of(ws).lookup_v2(
+        ht::http_method::get, std::string("/admin"));
+    LT_CHECK(r.found);
+    LT_CHECK(r.tier == ht::detail::webserver_impl::tier_hit::exact);
+    LT_CHECK(!r.entry.is_prefix);
+    // And the failed prefix registration must NOT have planted a
+    // prefix terminus — /admin/sub must miss.
+    auto sub = impl_of(ws).lookup_v2(
+        ht::http_method::get, std::string("/admin/sub"));
+    LT_CHECK(!sub.found);
+LT_END_AUTO_TEST(register_prefix_after_exact_does_not_collide)
+
+LT_BEGIN_AUTO_TEST(routing_regression_suite,
+                   register_path_after_prefix_does_not_collide)
+    // Class-based exact after class-based prefix on the same path.
+    ht::webserver ws{ht::create_webserver(8080)
+        .start_method(ht::http::http_utils::INTERNAL_SELECT)};
+    ws.register_prefix("/static", std::make_shared<noop_resource>());
+    bool threw = false;
+    try {
+        ws.register_path("/static", std::make_shared<noop_resource>());
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK(threw);
+    auto r = impl_of(ws).lookup_v2(
+        ht::http_method::get, std::string("/static/x"));
+    LT_CHECK(r.found);
+    LT_CHECK(r.entry.is_prefix);
+LT_END_AUTO_TEST(register_path_after_prefix_does_not_collide)
+
+LT_BEGIN_AUTO_TEST(routing_regression_suite,
+                   register_prefix_after_path_does_not_collide)
+    // Class-based prefix after class-based exact on the same path.
+    ht::webserver ws{ht::create_webserver(8080)
+        .start_method(ht::http::http_utils::INTERNAL_SELECT)};
+    ws.register_path("/static", std::make_shared<noop_resource>());
+    bool threw = false;
+    try {
+        ws.register_prefix("/static", std::make_shared<noop_resource>());
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK(threw);
+    auto r = impl_of(ws).lookup_v2(
+        ht::http_method::get, std::string("/static"));
+    LT_CHECK(r.found);
+    LT_CHECK(!r.entry.is_prefix);
+LT_END_AUTO_TEST(register_prefix_after_path_does_not_collide)
+
+LT_BEGIN_AUTO_TEST(routing_regression_suite,
+                   parameterized_exact_after_parameterized_prefix_does_not_collide)
+    // Parameterized path lands in the radix tier on BOTH calls. The
+    // collision is between an exact_terminus_ and a prefix_terminus_
+    // on the exact same radix node.
+    ht::webserver ws{ht::create_webserver(8080)
+        .start_method(ht::http::http_utils::INTERNAL_SELECT)};
+    ws.register_prefix("/users/{id}",
+                       std::make_shared<noop_resource>());
+    bool threw = false;
+    try {
+        ws.on_get("/users/{id}", noop_handler);
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK(threw);
+    // The original prefix entry must still match a deeper path.
+    auto r = impl_of(ws).lookup_v2(
+        ht::http_method::get, std::string("/users/42/profile"));
+    LT_CHECK(r.found);
+    LT_CHECK(r.tier == ht::detail::webserver_impl::tier_hit::radix);
+    LT_CHECK(r.entry.is_prefix);
+LT_END_AUTO_TEST(parameterized_exact_after_parameterized_prefix_does_not_collide)
+
+LT_BEGIN_AUTO_TEST(routing_regression_suite,
+                   parameterized_prefix_after_parameterized_exact_does_not_collide)
+    // Inverse of the above.
+    ht::webserver ws{ht::create_webserver(8080)
+        .start_method(ht::http::http_utils::INTERNAL_SELECT)};
+    ws.on_get("/users/{id}", noop_handler);
+    bool threw = false;
+    try {
+        ws.register_prefix("/users/{id}",
+                           std::make_shared<noop_resource>());
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK(threw);
+    auto r = impl_of(ws).lookup_v2(
+        ht::http_method::get, std::string("/users/42"));
+    LT_CHECK(r.found);
+    LT_CHECK(r.tier == ht::detail::webserver_impl::tier_hit::radix);
+    LT_CHECK(!r.entry.is_prefix);
+LT_END_AUTO_TEST(parameterized_prefix_after_parameterized_exact_does_not_collide)
+
+// ---------------------------------------------------------------------
 // Method-mismatched semantics (taxonomy row: method-mismatched).
 // The method_set bitmask is what dispatch uses for the 405 + Allow
 // decision after TASK-036 cuts dispatch over.

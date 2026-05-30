@@ -312,33 +312,68 @@ LT_BEGIN_AUTO_TEST(webserver_register_path_prefix_suite,
     ws.stop();
 LT_END_AUTO_TEST(register_resource_deprecated_forwarder_behaves_like_register_path)
 
-// unregister_resource on a path registered as BOTH prefix and exact must
-// remove BOTH entries in a single call. After the call, neither the exact
-// URL nor any child URL should be served. This pins the atomicity contract:
-// the exact-match entry and the prefix entry are gone together so there is
-// no window in which one is present and the other is not.
+// TASK-056: registering the SAME path as both exact and prefix is no
+// longer permitted (the (method, path) cache key cannot discriminate
+// the two kinds at lookup time, so the second call now throws
+// std::invalid_argument). The pre-TASK-056 version of this test
+// double-registered the same /admin path and observed both 200s; that
+// state shape is unreachable on the v2 contract.
+//
+// What survives as a meaningful pin: `unregister_resource` is an alias
+// for unregister_path AND unregister_prefix, so calling it on a path
+// registered as either kind must clear that registration. Pin both
+// halves with DISTINCT paths so the alias contract is still observed
+// without violating the new collision guard.
 LT_BEGIN_AUTO_TEST(webserver_register_path_prefix_suite,
                    unregister_resource_removes_both_path_and_prefix_registrations)
     webserver ws{create_webserver(PORT + 7)};
-    // Register the same path as both an exact handler and a prefix handler.
-    ws.register_path("/admin", std::make_shared<ok_resource>());
-    ws.register_prefix("/admin", std::make_shared<ok_resource>());
+    // Use distinct paths so the new TASK-056 collision guard does not
+    // fire. /alpha is the exact registration; /beta is the prefix
+    // registration. unregister_resource must clear EITHER kind.
+    ws.register_path("/alpha", std::make_shared<ok_resource>());
+    ws.register_prefix("/beta", std::make_shared<ok_resource>());
     ws.start(false);
 
     // Both must be reachable before unregister.
-    LT_CHECK_EQ(fetch("localhost:8187/admin").response_code, 200);
-    LT_CHECK_EQ(fetch("localhost:8187/admin/panel").response_code, 200);
+    LT_CHECK_EQ(fetch("localhost:8187/alpha").response_code, 200);
+    LT_CHECK_EQ(fetch("localhost:8187/beta/panel").response_code, 200);
 
-    // A single unregister_resource call must atomically remove both.
-    ws.unregister_resource("/admin");
+    // unregister_resource on the exact path clears the exact entry.
+    ws.unregister_resource("/alpha");
+    LT_CHECK_EQ(fetch("localhost:8187/alpha").response_code, 404);
 
-    // Exact URL must be gone.
-    LT_CHECK_EQ(fetch("localhost:8187/admin").response_code, 404);
-    // Child URL served by the prefix entry must also be gone.
-    LT_CHECK_EQ(fetch("localhost:8187/admin/panel").response_code, 404);
+    // unregister_resource on the prefix path clears the prefix entry.
+    ws.unregister_resource("/beta");
+    LT_CHECK_EQ(fetch("localhost:8187/beta/panel").response_code, 404);
 
     ws.stop();
 LT_END_AUTO_TEST(unregister_resource_removes_both_path_and_prefix_registrations)
+
+// TASK-056: paired sentinel for the new collision-detection contract.
+// At the v2 contract level, registering the same path as both exact
+// AND prefix throws std::invalid_argument from the second call. The
+// throw must leave the first registration intact (atomicity).
+LT_BEGIN_AUTO_TEST(webserver_register_path_prefix_suite,
+                   register_path_and_register_prefix_on_same_path_collide)
+    webserver ws{create_webserver(PORT + 27)};
+    ws.register_path("/gamma", std::make_shared<ok_resource>());
+    bool threw = false;
+    try {
+        ws.register_prefix("/gamma", std::make_shared<ok_resource>());
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK(threw);
+    ws.start(false);
+
+    // Original exact registration must still serve the bare path.
+    LT_CHECK_EQ(fetch("localhost:8207/gamma").response_code, 200);
+    // And the failed prefix registration must NOT have planted a
+    // prefix entry — /gamma/child must 404.
+    LT_CHECK_EQ(fetch("localhost:8207/gamma/child").response_code, 404);
+
+    ws.stop();
+LT_END_AUTO_TEST(register_path_and_register_prefix_on_same_path_collide)
 
 // ---- normalize_path / should_skip_auth (finding test-quality-reviewer-iter1-2) ---
 //
@@ -512,29 +547,32 @@ LT_END_AUTO_TEST(register_prefix_duplicate_throws)
 
 // ---- Cross-kind selectivity test (finding test-quality-reviewer-iter1-3) ---
 //
-// unregister_path must remove only the exact registration on a path;
-// a prefix registration at the same path must survive and continue serving
-// child URLs. Likewise (by symmetry) unregister_prefix must leave the
-// exact registration intact. This pins the isolation invariant between
-// the two registration kinds.
+// TASK-056: same-path exact+prefix coexistence is now forbidden (the
+// collision guard throws on the second registration). The pre-
+// TASK-056 version of this test set up that forbidden state; the
+// updated test pins the isolation invariant on DISTINCT paths
+// instead — unregister_path on /q must not touch the prefix
+// registration at /q-prefix.
 
 LT_BEGIN_AUTO_TEST(webserver_register_path_prefix_suite,
                    unregister_path_leaves_prefix_registration_intact)
     webserver ws{create_webserver(PORT + 17)};
-    // Arrange: same path registered as both exact and prefix.
+    // Arrange: distinct exact and prefix paths (TASK-056 forbids the
+    // same path being both kinds).
     ws.register_path("/q", std::make_shared<ok_resource>());
-    ws.register_prefix("/q", std::make_shared<ok_resource>());
+    ws.register_prefix("/qprefix", std::make_shared<ok_resource>());
     ws.start(false);
 
-    // Assert (before): exact URL and child URL both served.
+    // Assert (before): exact URL and prefix-child URL both served.
     LT_CHECK_EQ(fetch("localhost:8197/q").response_code, 200);
-    LT_CHECK_EQ(fetch("localhost:8197/q/child").response_code, 200);
+    LT_CHECK_EQ(fetch("localhost:8197/qprefix/child").response_code, 200);
 
     // Act: remove only the exact registration.
     ws.unregister_path("/q");
 
-    // Assert (after): child URL via prefix registration still served.
-    LT_CHECK_EQ(fetch("localhost:8197/q/child").response_code, 200);
+    // Assert (after): the unrelated prefix registration still serves
+    // child URLs — unregister_path did not touch it.
+    LT_CHECK_EQ(fetch("localhost:8197/qprefix/child").response_code, 200);
 
     ws.stop();
 LT_END_AUTO_TEST(unregister_path_leaves_prefix_registration_intact)
