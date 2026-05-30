@@ -66,7 +66,13 @@ LRU cache + radix scan) is not realised end-to-end.
   / `webserver_routes.cpp`.)
 - [ ] Run `test/bench_hook_overhead.cpp` and a new
   `test/bench_route_lookup.cpp` to confirm the cache-hit path is in the
-  expected 100ns ballpark and the radix tier is in the µs range.
+  expected 100ns ballpark and the radix tier is in the µs range. When
+  creating `bench_route_lookup.cpp` also verify the TASK-056 acceptance
+  criterion: the `std::map`-based radix node container introduced by
+  TASK-056 must show no regression worse than 2× on the cache-miss radix
+  path compared to the former `std::unordered_map` baseline (the 2× budget
+  was formally deferred from TASK-056 to this task because `lookup_v2` was
+  not yet wired into dispatch when TASK-056 landed).
 - [ ] Drop the "TODO(Cycle K): rename route_cache_v2 → route_lru_cache"
   comment in `webserver_impl.hpp:202` and do the rename now that v1 is
   gone.
@@ -245,9 +251,17 @@ TASK-027 cleanup:
 **Acceptance Criteria:**
 - `bench_route_lookup` shows no regression worse than 2× on the
   cache-miss radix path.
+  **DEFERRED to TASK-053** — `test/bench_route_lookup.cpp` does not
+  exist yet; TASK-053 already owns creating that benchmark as part of
+  wiring `lookup_v2` into the dispatch hot path. The 2× budget
+  established here applies to the `std::map`-based container swap and
+  must be verified by TASK-053's implementer against the TASK-056
+  baseline. Creating the benchmark in TASK-056 would pre-empt TASK-053's
+  scope and would benchmark a lookup path (`lookup_v2`) that is not yet
+  wired into dispatch.
 - New regression test passes.
-- A 60-second adversarial-segment stress run completes without dispatch
-  latency spikes > 10× baseline.
+- A 60-second adversarial-segment stress run completes without
+  registration latency spikes > 10× baseline.
 - Routing architecture doc reflects the new container.
 
 **Related Findings:** task-027 #14, task-027 #18
