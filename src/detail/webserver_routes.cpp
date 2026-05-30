@@ -220,27 +220,14 @@ void webserver_impl::reject_terminus_collision(const std::string& key,
     // Throws BEFORE any mutation so the atomicity guarantee pinned by
     // upsert_param_route_failed_duplicate_leaves_original_intact holds
     // for the new throw too.
-    const bool opposite_is_prefix = !want_is_prefix;
-    bool collision = false;
-    if (!want_is_prefix) {
-        // New exact entry: opposite kind is prefix. The only prefix
-        // storage is the radix prefix_terminus_.
-        collision = param_and_prefix_routes_.has_terminus_at(
-            key, /*is_prefix=*/true);
-    } else {
-        // New prefix entry: opposite kind is exact. Exact entries live
-        // in exact_routes_ (unparameterized) and in the radix tree's
-        // exact_terminus_ (parameterized). Probe both.
-        if (exact_routes_.find(key) != exact_routes_.end()) {
-            collision = true;
-        } else if (param_and_prefix_routes_.has_terminus_at(
-                       key, /*is_prefix=*/false)) {
-            collision = true;
-        }
-    }
+    const bool collision = !want_is_prefix
+        ? param_and_prefix_routes_.has_terminus_at(key, /*is_prefix=*/true)
+        : (exact_routes_.find(key) != exact_routes_.end()
+           || param_and_prefix_routes_.has_terminus_at(
+                  key, /*is_prefix=*/false));
     if (collision) {
         const char* incoming_kind = want_is_prefix ? "prefix" : "exact";
-        const char* existing_kind = opposite_is_prefix ? "prefix" : "exact";
+        const char* existing_kind = want_is_prefix ? "exact" : "prefix";
         throw std::invalid_argument(
             "Path '" + key + "' is already registered as a "
             + std::string(existing_kind)
