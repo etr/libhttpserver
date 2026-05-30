@@ -196,6 +196,19 @@ and see the v2 replacement.
   fluent assembly.
 - **`webserver(create_webserver const&)` is `explicit`.** Direct-init
   `webserver ws{cw};` rather than copy-init `webserver ws = cw;`.
+- **Default internal-error response body is now a fixed string.** v1's
+  default 500 body included the originating exception's `e.what()`
+  text. v2.0
+  ([DR-009 Revision 1](specs/architecture/11-decisions/DR-009.md))
+  sends `"Internal Server Error"` instead, eliminating a CWE-209
+  information-disclosure surface (exception messages routinely embed
+  file paths, SQL fragments, internal identifiers, and
+  attacker-influenced input). The `log_error` callback continues to
+  receive the verbatim message. To restore the v1 verbose-body
+  behaviour for development, set `.expose_exception_messages(true)`
+  on the builder. Configured `internal_error_handler` callbacks are
+  unaffected — they still receive the message and can build any body
+  they want.
 
 ## Threading
 
@@ -226,7 +239,11 @@ for the full statement. The load-bearing points for porters:
 - A handler that throws lands at the configured
   `internal_error_handler` (a `std::function<http_response(const http_request&, std::string_view)>`).
   The `string_view` carries `what()` from the caught exception. Default
-  behaviour: log and return `500`.
+  behaviour: log and return `500`. When no `internal_error_handler` is
+  configured, the default response body is the fixed string
+  `"Internal Server Error"` (DR-009 Revision 1, CWE-209 fix); set
+  `.expose_exception_messages(true)` on the builder to restore the v1
+  message-in-body behaviour for development.
 - Calling an API entry point whose backend feature is disabled at
   configure time (e.g. `ssl_cert(...)` on a `HAVE_GNUTLS=no` build)
   throws `feature_unavailable` — a public `std::runtime_error` subclass.

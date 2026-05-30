@@ -204,6 +204,7 @@ webserver::webserver(const create_webserver& params):
     use_dual_stack(params._use_dual_stack),
     debug(params._debug),
     pedantic(params._pedantic),
+    expose_exception_messages(params._expose_exception_messages),
     https_mem_key(params._https_mem_key),
     https_mem_cert(params._https_mem_cert),
     https_mem_trust(params._https_mem_trust),

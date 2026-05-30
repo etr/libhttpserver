@@ -408,7 +408,16 @@ LT_BEGIN_SUITE(basic_suite)
     std::unique_ptr<webserver> ws;
 
     void set_up() {
-        ws = std::make_unique<webserver>(create_webserver(PORT));
+        // TASK-055 / DR-009 Revision 1: the suite-shared `ws` opts into the
+        // verbose default-500-body path so the legacy tests that pre-date
+        // the CWE-209 sanitization fix continue to assert what they were
+        // written to assert. Affected tests: exception_forces_500,
+        // untyped_error_forces_500, file_serving_resource_missing,
+        // file_serving_resource_dir, long_error_message — all probe the
+        // message-forwarding path through the dispatcher (intentional
+        // regression coverage), not the default-body shape.
+        ws = std::make_unique<webserver>(
+            create_webserver(PORT).expose_exception_messages(true));
         ws->start(false);
     }
 
@@ -3212,16 +3221,20 @@ namespace task031 {
 
 // Port-offset allocation for the DR-009 integration tests (finding
 // task031-review #2: explicit range avoids per-search collisions).
-//   PORT + 80  dr009_runtime_error_message_surfaces_in_default_body
+// TASK-055 / DR-009 Revision 1: PORT+80 and PORT+83 are reused by the
+// post-revision "default body is fixed string" tests; PORT+88 and PORT+89
+// cover the verbose-mode opt-in for the same exception paths.
+//   PORT + 80  dr009_default_body_is_fixed_string                       (rev1)
 //   PORT + 81  dr009_runtime_error_message_passed_to_handler
 //   PORT + 82  dr009_runtime_error_logged_via_error_logger
-//   PORT + 83  dr009_non_std_exception_yields_unknown_exception_in_default_body
+//   PORT + 83  dr009_default_body_is_fixed_string_for_non_std_exception (rev1)
 //   PORT + 84  dr009_non_std_exception_passes_unknown_exception_to_handler
 //   PORT + 85  dr009_throwing_handler_yields_empty_body_500
 //   PORT + 86  dr009_throwing_handler_logs_generically
 //   PORT + 87  dr009_feature_unavailable_lands_as_generic_500
-// Next free: PORT + 88.
-static constexpr int PORT_DR009_BASE = 80;
+//   PORT + 88  dr009_verbose_body_surfaces_message_when_opted_in        (rev1)
+//   PORT + 89  dr009_verbose_body_surfaces_unknown_exception_when_opted_in (rev1)
+// Next free: PORT + 90.
 
 // Thin HTTP GET helper used by the DR-009 integration tests to reduce
 // per-test boilerplate (finding task031-review #1). Sends a GET request to
@@ -3278,9 +3291,12 @@ class feature_unavailable_resource : public http_resource {
 
 }  // namespace task031
 
-// AC1.a: std::runtime_error("boom") yields a 500 whose default body contains
-// the message "boom" (no custom internal_error_handler wired).
-LT_BEGIN_AUTO_TEST(basic_suite, dr009_runtime_error_message_surfaces_in_default_body)
+// AC1.a (DR-009 Revision 1 / TASK-055): std::runtime_error("boom") yields
+// a 500 whose default body is the fixed string "Internal Server Error" —
+// the originating message MUST NOT appear in the body (CWE-209 fix).
+// The verbose opt-in behaviour is covered by
+// dr009_verbose_body_surfaces_message_when_opted_in.
+LT_BEGIN_AUTO_TEST(basic_suite, dr009_default_body_is_fixed_string)
     webserver ws2{create_webserver(PORT + 80)};
     task031::boom_resource resource;
     ws2.register_path("boom", as_shared(resource));
@@ -3290,10 +3306,32 @@ LT_BEGIN_AUTO_TEST(basic_suite, dr009_runtime_error_message_surfaces_in_default_
     auto [s, http_code] = task031::do_get(
         "http://localhost:" + std::to_string(PORT + 80) + "/boom");
     LT_ASSERT_EQ(http_code, 500);
+    // The body is the fixed sanitized string ...
+    LT_CHECK_EQ(s, std::string("Internal Server Error"));
+    // ... and crucially does NOT carry the originating message (CWE-209).
+    LT_CHECK_EQ(s.find("boom"), std::string::npos);
+
+    ws2.stop();
+LT_END_AUTO_TEST(dr009_default_body_is_fixed_string)
+
+// AC1.a-verbose (DR-009 Revision 1 / TASK-055): with the
+// expose_exception_messages(true) opt-in, the default body restores the
+// pre-revision behaviour of surfacing the originating exception message.
+// This is the development-only round-trip of the v1 behaviour.
+LT_BEGIN_AUTO_TEST(basic_suite, dr009_verbose_body_surfaces_message_when_opted_in)
+    webserver ws2{create_webserver(PORT + 88).expose_exception_messages(true)};
+    task031::boom_resource resource;
+    ws2.register_path("boom", as_shared(resource));
+    ws2.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    auto [s, http_code] = task031::do_get(
+        "http://localhost:" + std::to_string(PORT + 88) + "/boom");
+    LT_ASSERT_EQ(http_code, 500);
     LT_CHECK_NEQ(s.find("boom"), std::string::npos);
 
     ws2.stop();
-LT_END_AUTO_TEST(dr009_runtime_error_message_surfaces_in_default_body)
+LT_END_AUTO_TEST(dr009_verbose_body_surfaces_message_when_opted_in)
 
 // AC1.b: std::runtime_error("boom") -> the captured message reaches the
 // user-wired internal_error_handler unchanged.
@@ -3356,9 +3394,13 @@ LT_BEGIN_AUTO_TEST(basic_suite, dr009_runtime_error_logged_via_error_logger)
     ws2.stop();
 LT_END_AUTO_TEST(dr009_runtime_error_logged_via_error_logger)
 
-// AC2.a: throw 42 (non-std::exception) -> default body contains the
-// documented "unknown exception" sentinel string.
-LT_BEGIN_AUTO_TEST(basic_suite, dr009_non_std_exception_yields_unknown_exception_in_default_body)
+// AC2.a (DR-009 Revision 1 / TASK-055): throw 42 (non-std::exception)
+// yields a 500 whose default body is the fixed string "Internal Server
+// Error" — the documented "unknown exception" sentinel is NOT exposed on
+// the wire any more (CWE-209 fix). The sentinel is still carried through
+// to the configured internal_error_handler and to the log_error callback;
+// it is the *default body* path alone that is sanitized.
+LT_BEGIN_AUTO_TEST(basic_suite, dr009_default_body_is_fixed_string_for_non_std_exception)
     webserver ws2{create_webserver(PORT + 83)};
     task031::throw_int_resource resource;
     ws2.register_path("non_std", as_shared(resource));
@@ -3368,10 +3410,30 @@ LT_BEGIN_AUTO_TEST(basic_suite, dr009_non_std_exception_yields_unknown_exception
     auto [s, http_code] = task031::do_get(
         "http://localhost:" + std::to_string(PORT + 83) + "/non_std");
     LT_ASSERT_EQ(http_code, 500);
+    LT_CHECK_EQ(s, std::string("Internal Server Error"));
+    LT_CHECK_EQ(s.find("unknown exception"), std::string::npos);
+
+    ws2.stop();
+LT_END_AUTO_TEST(dr009_default_body_is_fixed_string_for_non_std_exception)
+
+// AC2.a-verbose (DR-009 Revision 1 / TASK-055): with the
+// expose_exception_messages(true) opt-in, the default body restores the
+// pre-revision behaviour of surfacing the "unknown exception" sentinel
+// for the non-std::exception throw path.
+LT_BEGIN_AUTO_TEST(basic_suite, dr009_verbose_body_surfaces_unknown_exception_when_opted_in)
+    webserver ws2{create_webserver(PORT + 89).expose_exception_messages(true)};
+    task031::throw_int_resource resource;
+    ws2.register_path("non_std", as_shared(resource));
+    ws2.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    auto [s, http_code] = task031::do_get(
+        "http://localhost:" + std::to_string(PORT + 89) + "/non_std");
+    LT_ASSERT_EQ(http_code, 500);
     LT_CHECK_NEQ(s.find("unknown exception"), std::string::npos);
 
     ws2.stop();
-LT_END_AUTO_TEST(dr009_non_std_exception_yields_unknown_exception_in_default_body)
+LT_END_AUTO_TEST(dr009_verbose_body_surfaces_unknown_exception_when_opted_in)
 
 // AC2.b: throw 42 -> handler receives "unknown exception" as its message.
 LT_BEGIN_AUTO_TEST(basic_suite, dr009_non_std_exception_passes_unknown_exception_to_handler)
@@ -3461,8 +3523,13 @@ LT_END_AUTO_TEST(dr009_throwing_handler_logs_generically)
 // AC4: feature_unavailable is a std::runtime_error; it lands as a generic
 // 500 with NO special status mapping. The default body surfaces its
 // what() text (which embeds the feature name and build flag).
+// TASK-055 / DR-009 Revision 1: the verbose body opt-in is part of this
+// test's contract — the assertion intent is "the what() text of
+// feature_unavailable flows through the message-forwarding path to the
+// body", which is now the development-only verbose path. The
+// post-revision default body is sanitized.
 LT_BEGIN_AUTO_TEST(basic_suite, dr009_feature_unavailable_lands_as_generic_500)
-    webserver ws2{create_webserver(PORT + 87)};
+    webserver ws2{create_webserver(PORT + 87).expose_exception_messages(true)};
     task031::feature_unavailable_resource resource;
     ws2.register_path("widget", as_shared(resource));
     ws2.start(false);

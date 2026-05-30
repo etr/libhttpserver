@@ -84,13 +84,20 @@ http_response webserver_impl::internal_error_page(
     if (parent->internal_error_handler != nullptr) {
         return parent->internal_error_handler(*mr->dhr, msg);
     }
-    // No handler configured: surface the message in the default body so
-    // the unset-handler path is informative for debugging.
-    // WARNING (CWE-209): in production, always wire a constant-returning
-    // internal_error_handler to avoid leaking exception details (stack
-    // paths, database connection strings, etc.) to HTTP clients. The
-    // informative default is intentional for development only.
-    return http_response::string(std::string{msg})
+    // TASK-055 / DR-009 Revision 1: the default body is the fixed string
+    // "Internal Server Error" to avoid CWE-209 information disclosure of
+    // e.what() text (which routinely embeds file paths, SQL fragments,
+    // internal identifiers, attacker-influenced input). The originating
+    // message is still surfaced via the configured log_error callback
+    // (see log_dispatch_error). Application code that needs the v1
+    // verbose body (for development) must opt in via
+    // create_webserver::expose_exception_messages(true).
+    if (parent->expose_exception_messages) {
+        return http_response::string(std::string{msg})
+            .with_status(http_utils::http_internal_server_error);
+    }
+    return http_response::string(
+            std::string{constants::INTERNAL_SERVER_ERROR})
         .with_status(http_utils::http_internal_server_error);
 }
 
@@ -98,6 +105,11 @@ void webserver_impl::log_dispatch_error(std::string_view msg) const noexcept {
     if (parent->log_error == nullptr) {
         return;
     }
+    // DR-009 Revision 1 (TASK-055): msg is forwarded VERBATIM regardless
+    // of create_webserver::expose_exception_messages. The error log is
+    // the canonical destination for the verbatim exception text; only
+    // the HTTP response body path was sanitized by the revision.
+    //
     // Framework contract (CWE-532): msg may contain e.what() text from
     // a handler exception, which could include sensitive data (DB connection
     // strings, file paths, user-supplied input that triggered the exception).

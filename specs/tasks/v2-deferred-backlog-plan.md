@@ -162,22 +162,24 @@ untrusted client. The decision needs a coordinated revision: the default
 behaviour should be sanitized; the verbose form should be opt-in.
 
 **Action Items:**
-- [ ] Draft DR-009-rev1 in `specs/architecture/03-decisions.md` (or
-  equivalent file): default body is a fixed string ("Internal Server
-  Error") with the request id (if any) appended; verbose body is
-  opt-in via a `webserver_builder.expose_exception_messages(true)` flag
-  intended for development environments only.
-- [ ] Update `webserver_impl::internal_error_page` to consult the flag.
-- [ ] Update `log_dispatch_error` to log `e.what()` verbatim to the
+- [x] Draft DR-009-rev1 in `specs/architecture/11-decisions/DR-009.md`:
+  default body is a fixed string ("Internal Server Error"); the
+  "with the request id (if any) appended" clause was deferred (no
+  request-id concept exists in the codebase today; documented in
+  DR-009 Revision 1 "Consequences"). Verbose body is opt-in via
+  `create_webserver::expose_exception_messages(bool)` flag intended
+  for development environments only.
+- [x] Update `webserver_impl::internal_error_page` to consult the flag.
+- [x] Update `log_dispatch_error` to log `e.what()` verbatim to the
   server log (where it belongs) regardless of the flag; add a Doxygen
   note that handlers throwing exceptions with sensitive data should
   catch+sanitize before throwing.
-- [ ] Update the two regression tests that pin the current behaviour
+- [x] Update the two regression tests that pin the current behaviour
   (`dr009_runtime_error_message_surfaces_in_default_body` and sibling)
   to split into:
   - `dr009_default_body_is_fixed_string` (new contract)
   - `dr009_verbose_body_surfaces_message_when_opted_in`
-- [ ] Update README "Error handling" section + RELEASE_NOTES.md
+- [x] Update README "Error handling" section + RELEASE_NOTES.md
   "Behaviour change" note.
 
 **Dependencies:**
@@ -195,6 +197,8 @@ behaviour should be sanitized; the verbose form should be opt-in.
 
 **Related Findings:** task-031 #3, task-031 #4, task-036 #44, task-034 #24
 **Related Decisions:** DR-009 (revised), CWE-209
+
+**Status:** Done
 
 ---
 

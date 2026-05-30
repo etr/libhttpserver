@@ -85,6 +85,17 @@
 // re-enter the catch from inside its own catch. Marked noexcept because
 // the outer catch(...) absorbs any bad_alloc from std::string(msg)
 // construction, so no exception can escape (security-reviewer-iter1-8).
+//
+// DR-009 Revision 1 (TASK-055): @p msg is forwarded to the user
+// log_error callback UNCHANGED, regardless of
+// create_webserver::expose_exception_messages. The error log is the
+// canonical destination for verbatim exception text in v2; the HTTP
+// response body is the path that was sanitized. Handlers that may
+// throw exceptions containing sensitive data (DB connection strings,
+// credentials, attacker-influenced input) SHOULD catch and sanitize
+// the exception's what() before re-throwing if those values must not
+// appear in the server log either. See also @ref
+// internal_error_handler_t @security block in create_webserver.hpp.
 void log_dispatch_error(std::string_view msg) const noexcept;
 
 // TASK-046 -- Lifecycle hook firing helpers.
