@@ -285,13 +285,13 @@ production deploy leaks every Basic-auth password into their log
 aggregation pipeline.
 
 **Action Items:**
-- [ ] Replace the literal password emission with a fixed redaction token
+- [x] Replace the literal password emission with a fixed redaction token
   (`pass:"<redacted>"`). Same treatment for `digested_pass` and any
   other authentication secret on the stream.
-- [ ] Add an opt-in `webserver_builder.expose_credentials_in_logs(true)`
+- [x] Add an opt-in `webserver_builder.expose_credentials_in_logs(true)`
   flag for the rare developer who needs the verbose form locally.
-- [ ] Update Doxygen on the operator to call out the redaction policy.
-- [ ] Add a unit test
+- [x] Update Doxygen on the operator to call out the redaction policy.
+- [x] Add a unit test
   `http_request_test::operator_stream_redacts_credentials`.
 
 **Dependencies:**
@@ -307,6 +307,8 @@ aggregation pipeline.
 
 **Related Findings:** task-019 #22
 **Related Decisions:** none new; A09:2021
+
+**Status:** Done
 
 ---
 
