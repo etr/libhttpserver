@@ -205,6 +205,7 @@ webserver::webserver(const create_webserver& params):
     debug(params._debug),
     pedantic(params._pedantic),
     expose_exception_messages(params._expose_exception_messages),
+    expose_credentials_in_logs(params._expose_credentials_in_logs),
     https_mem_key(params._https_mem_key),
     https_mem_cert(params._https_mem_cert),
     https_mem_trust(params._https_mem_trust),

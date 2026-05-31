@@ -362,17 +362,90 @@ void http_request::set_file_cleanup_callback(file_cleanup_callback_ptr callback)
     impl_->file_cleanup_callback_ = callback;
 }
 
+void http_request::set_expose_credentials_in_logs(bool v) {
+    impl_->expose_credentials_in_logs_ = v;
+}
+
+namespace {
+
+// TASK-057: Authorization-class header names whose values carry
+// credential material (Basic / Digest / Bearer payloads). Matched
+// case-insensitively against the keys in the Headers / Footers maps
+// so that the redaction policy is robust to header-case variation.
+bool is_authorization_header_key(std::string_view key) noexcept {
+    constexpr std::string_view kAuth = "Authorization";
+    constexpr std::string_view kProxyAuth = "Proxy-Authorization";
+    if (key.size() != kAuth.size() && key.size() != kProxyAuth.size()) {
+        return false;
+    }
+    auto ieq = [](std::string_view a, std::string_view b) noexcept {
+        if (a.size() != b.size()) return false;
+        for (std::size_t i = 0; i < a.size(); ++i) {
+            const unsigned char ca = static_cast<unsigned char>(a[i]);
+            const unsigned char cb = static_cast<unsigned char>(b[i]);
+            if (std::tolower(ca) != std::tolower(cb)) return false;
+        }
+        return true;
+    };
+    return ieq(key, kAuth) || ieq(key, kProxyAuth);
+}
+
+constexpr std::string_view kRedacted = "<redacted>";
+
+// TASK-057: emit a Headers/Footers map with Authorization-class header
+// values replaced by the fixed redaction token. Mirrors the wire shape
+// of http::dump_header_map(header_view_map) for non-authorization
+// entries so the on-the-wire diagnostic format is unchanged.
+void dump_header_map_redacted(std::ostream& os, const std::string& prefix,
+                              const http::header_view_map& map) {
+    if (map.empty()) return;
+    os << "    " << prefix << " [";
+    for (const auto& kv : map) {
+        os << kv.first << ":\"";
+        if (is_authorization_header_key(kv.first)) {
+            os << kRedacted;
+        } else {
+            os << kv.second;
+        }
+        os << "\" ";
+    }
+    os << "]" << std::endl;
+}
+
+// TASK-057: cookie values are credential material by default (session
+// IDs, CSRF tokens, JWTs); redaction is unconditional on the keys
+// (which remain visible for log triage).
+void dump_cookie_map_redacted(std::ostream& os, const std::string& prefix,
+                              const http::header_view_map& map) {
+    if (map.empty()) return;
+    os << "    " << prefix << " [";
+    for (const auto& kv : map) {
+        os << kv.first << ":\"" << kRedacted << "\" ";
+    }
+    os << "]" << std::endl;
+}
+
+}  // namespace
+
 std::ostream& operator<< (std::ostream& os, const http_request& r) {
+    const bool expose = r.impl_->expose_credentials_in_logs_;
     os << r.get_method() << " Request [";
-    // TASK-034: get_user/get_pass are unconditional; they return empty
-    // on HAVE_BAUTH-off builds, so the dump prints two empty quoted
-    // strings in that case (harmless).
-    os << "user:\"" << r.get_user() << "\" pass:\"" << r.get_pass() << "\"";
+    if (expose) {
+        os << "user:\"" << r.get_user() << "\" pass:\"" << r.get_pass() << "\"";
+    } else {
+        os << "user:\"" << r.get_user() << "\" pass:\"" << kRedacted << "\"";
+    }
     os << "] path:\"" << r.get_path() << "\"" << std::endl;
 
-    http::dump_header_map(os, "Headers", r.get_headers());
-    http::dump_header_map(os, "Footers", r.get_footers());
-    http::dump_header_map(os, "Cookies", r.get_cookies());
+    if (expose) {
+        http::dump_header_map(os, "Headers", r.get_headers());
+        http::dump_header_map(os, "Footers", r.get_footers());
+        http::dump_header_map(os, "Cookies", r.get_cookies());
+    } else {
+        dump_header_map_redacted(os, "Headers", r.get_headers());
+        dump_header_map_redacted(os, "Footers", r.get_footers());
+        dump_cookie_map_redacted(os, "Cookies", r.get_cookies());
+    }
     http::dump_arg_map(os, "Query Args", r.get_args());
 
     os << "    Version [ " << r.get_version() << " ] Requestor [ " << r.get_requestor()

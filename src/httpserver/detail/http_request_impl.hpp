@@ -250,6 +250,15 @@ class http_request_impl {
     mutable std::vector<std::string> path_pieces_public_;
     mutable bool path_pieces_public_built_ = false;
 
+    // TASK-057: when true, http_request::operator<< streams credential
+    // material verbatim (v1 verbose form). Default false: the four
+    // credential surfaces (pass, Authorization / Proxy-Authorization
+    // header values, all cookie values) are replaced by the fixed
+    // token "<redacted>". Plumbed from webserver::expose_credentials_in_logs
+    // via webserver_impl::requests_answer_first_step, or directly via
+    // create_test_request::expose_credentials_in_logs() for unit tests.
+    bool expose_credentials_in_logs_ = false;
+
 #ifdef HAVE_GNUTLS
     // TASK-019: cache fields for the high-level cert accessors. The two
     // time fields are spelled std::int64_t (not std::time_t) so they

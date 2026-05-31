@@ -416,6 +416,11 @@ class webserver {
      // the 500 body (development-only behaviour; CWE-209). Default is
      // false: the body is the fixed string "Internal Server Error".
      const bool expose_exception_messages;
+     // TASK-057: when true, http_request::operator<< streams credential
+     // material verbatim (v1 verbose form; development-only behaviour;
+     // CWE-312 / CWE-532). Default is false: the four credential
+     // surfaces are replaced by the fixed token "<redacted>".
+     const bool expose_credentials_in_logs;
      const std::string https_mem_key;
      const std::string https_mem_cert;
      const std::string https_mem_trust;

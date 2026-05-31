@@ -123,6 +123,9 @@ MHD_Result webserver_impl::requests_answer_first_step(MHD_Connection* connection
     // site but explicit within the constructor. (spec-alignment-checker-iter1-2/3)
     mr->dhr.reset(new http_request(connection, parent->unescaper));
     mr->dhr->set_file_cleanup_callback(parent->file_cleanup_callback);
+    // TASK-057: propagate the redaction-bypass bit so operator<< honours
+    // the builder opt-in for every request the webserver dispatches.
+    mr->dhr->set_expose_credentials_in_logs(parent->expose_credentials_in_logs);
 
     // TASK-047 -- request_received hook. Fires after the http_request is
     // populated but before any body bytes are read (and before any

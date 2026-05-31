@@ -283,6 +283,34 @@ class create_webserver {
          _expose_exception_messages = enable; return *this;
      }
 
+     /**
+      * Restore the v1 / pre-TASK-057 behaviour of streaming credential
+      * material verbatim from @ref httpserver::operator<<(std::ostream&, const http_request&).
+      *
+      * @warning CWE-312 / CWE-532 (OWASP A09:2021): when this flag is
+      *          enabled and the dump is routed to a log aggregator
+      *          (`log_access`, `log_error`, stdout-capturing systemd, or
+      *          a centralised syslog / SIEM pipeline), every Basic-auth
+      *          password, every Authorization / Proxy-Authorization
+      *          header value, and every cookie / session token is
+      *          written in plaintext to the log store. Enable only in
+      *          development or behind an explicit `#ifndef NDEBUG`
+      *          guard.
+      *
+      * Default is `false`: `pass`, `Authorization`, `Proxy-Authorization`,
+      * and every cookie value are streamed as the fixed token
+      * `"<redacted>"`. The username (`user:"..."`) is never redacted —
+      * it is an identifier, not a secret (REMOTE_USER access-log
+      * convention).
+      *
+      * @param enable `true` to expose credentials in diagnostic dumps
+      *               (dev only), `false` for the default redaction.
+      * @return reference to this builder for chaining.
+      */
+     create_webserver& expose_credentials_in_logs(bool enable = true) {
+         _expose_credentials_in_logs = enable; return *this;
+     }
+
      create_webserver& https_mem_key(const std::string& v) { _https_mem_key = http::load_file(v); return *this; }
      create_webserver& https_mem_cert(const std::string& v) { _https_mem_cert = http::load_file(v); return *this; }
      create_webserver& https_mem_trust(const std::string& v) { _https_mem_trust = http::load_file(v); return *this; }
@@ -569,6 +597,11 @@ class create_webserver {
      // true, internal_error_page surfaces the originating exception's
      // message in the default 500 body (development-only behaviour).
      bool _expose_exception_messages = false;
+     // TASK-057: default false (CWE-312 / CWE-532 fix). When true,
+     // http_request::operator<< restores the v1 verbose form for the
+     // four credential surfaces (pass, Authorization /
+     // Proxy-Authorization header values, cookie values).
+     bool _expose_credentials_in_logs = false;
      std::string _https_mem_key;
      std::string _https_mem_cert;
      std::string _https_mem_trust;

@@ -525,12 +525,52 @@ class http_request {
 
      void set_file_cleanup_callback(file_cleanup_callback_ptr callback);
 
+     // TASK-057: set the redaction-bypass bit for diagnostic streaming.
+     // Plumbed from webserver::expose_credentials_in_logs at dispatch
+     // time and from create_test_request::build() for unit tests.
+     void set_expose_credentials_in_logs(bool v);
+
      friend class webserver;
      friend class detail::webserver_impl;  // TASK-014: PIMPL dispatch path
      friend struct detail::modded_request;
      friend class create_test_request;    // TASK-015: test builder accesses impl_
 };
 
+/**
+ * Stream-insert a human-readable dump of @p r into @p os for diagnostic
+ * logging.
+ *
+ * @section redaction Redaction policy (TASK-057, OWASP A09:2021 / CWE-312 / CWE-532)
+ * By default the following fields are emitted as the fixed token
+ * `"<redacted>"` instead of their plaintext values:
+ *   - The Basic-auth password (`pass:"<redacted>"`)
+ *   - The `Authorization` and `Proxy-Authorization` request headers
+ *     (and the same names in trailers / footers), case-insensitive
+ *   - Every cookie value (cookie keys are preserved for log triage)
+ *
+ * The username (`user:"..."`) is NOT redacted — it follows the REMOTE_USER
+ * access-log convention; it is an identifier, not a secret.
+ *
+ * Query-string arguments are streamed verbatim. Callers that put
+ * credential material in query parameters (`?token=...`) should
+ * sanitize before constructing the request URL; see the warning in
+ * the class-level block of @ref http_request.
+ *
+ * @section opt_in Restoring the verbose v1 form
+ * Call `create_webserver::expose_credentials_in_logs(true)` on the
+ * builder used to construct the parent @ref webserver. This restores
+ * the pre-TASK-057 plaintext-everywhere behaviour for every
+ * @ref http_request the webserver dispatches.
+ *
+ * @warning `expose_credentials_in_logs(true)` is DEVELOPMENT-ONLY.
+ *          When the dump is routed to a log aggregator (`log_access`,
+ *          `log_error`, stdout-capturing systemd, or a centralised
+ *          syslog/SIEM pipeline), enabling the flag in production
+ *          exposes every Basic-auth password, every Authorization
+ *          header, and every cookie/session token in plaintext to
+ *          anyone with read access to the log store. Guard with
+ *          `#ifndef NDEBUG` or an explicit environment check.
+ */
 std::ostream &operator<< (std::ostream &os, const http_request &r);
 
 }  // namespace httpserver
