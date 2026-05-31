@@ -489,9 +489,10 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, register_duplicate_resource_throws)
     // TASK-023: the second registration of the same path now throws
     // std::invalid_argument (replaces v1's silent `return false`).
     LT_CHECK_THROW(ws.register_path("/duplicate", as_shared(ok2)));
-    // But registering as a prefix at the same path is a different
-    // endpoint, so it should succeed.
-    ws.register_prefix("/duplicate", as_shared(ok2));
+    // TASK-056: registering as a prefix on the same path is now also
+    // forbidden — the (method, path) cache key cannot discriminate
+    // exact vs prefix. Pre-TASK-056 the call below silently succeeded.
+    LT_CHECK_THROW(ws.register_prefix("/duplicate", as_shared(ok2)));
 LT_END_AUTO_TEST(register_duplicate_resource_throws)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, thread_per_connection_fails_with_max_threads)

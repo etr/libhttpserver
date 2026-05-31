@@ -203,8 +203,48 @@ void webserver_impl::insert_fresh_v1_entries(const detail::http_endpoint& idx,
     }
 }
 
+void webserver_impl::reject_terminus_collision(const std::string& key,
+        bool want_is_prefix) {
+    // The route-cache key (method, path) cannot distinguish between an
+    // exact_terminus_ and a prefix_terminus_ at the same path, so the
+    // tiers must agree on the polarity at each canonical key. Probe
+    // BOTH storage locations for an existing entry of the OPPOSITE
+    // kind:
+    //   - want_is_prefix=true (new prefix): refuse if there's an exact
+    //     entry at `key` (either in exact_routes_ for unparameterized
+    //     paths, or as a radix exact_terminus_ for parameterized ones).
+    //   - want_is_prefix=false (new exact): refuse if there's a prefix
+    //     entry at `key` (radix prefix_terminus_ only — there is no
+    //     exact-tier storage for prefix routes).
+    //
+    // Throws BEFORE any mutation so the atomicity guarantee pinned by
+    // upsert_param_route_failed_duplicate_leaves_original_intact holds
+    // for the new throw too.
+    const bool collision = !want_is_prefix
+        ? param_and_prefix_routes_.has_terminus_at(key, /*is_prefix=*/true)
+        : (exact_routes_.find(key) != exact_routes_.end()
+           || param_and_prefix_routes_.has_terminus_at(
+                  key, /*is_prefix=*/false));
+    if (collision) {
+        const char* incoming_kind = want_is_prefix ? "prefix" : "exact";
+        const char* existing_kind = want_is_prefix ? "exact" : "prefix";
+        throw std::invalid_argument(
+            "Path '" + key + "' is already registered as a "
+            + std::string(existing_kind)
+            + " route; cannot also register it as a "
+            + std::string(incoming_kind)
+            + " route (the (method, path) cache key cannot "
+              "discriminate the two)");
+    }
+}
+
 void webserver_impl::upsert_v2_radix_route(const std::string& key,
         method_set methods, std::shared_ptr<http_resource> shim) {
+    // TASK-056: refuse to plant an exact terminus on a node that
+    // already carries a prefix terminus (or vice versa via the
+    // symmetric guard in register_v2_route). Must run BEFORE the
+    // read-merge below so a thrown exception leaves the table intact.
+    reject_terminus_collision(key, /*want_is_prefix=*/false);
     // Read-merge-reinsert: radix_tree::insert always overwrites the
     // terminus, so we must fold any existing entry's methods in first.
     detail::radix_match<detail::route_entry> existing;
@@ -229,11 +269,18 @@ void webserver_impl::insert_fresh_v2_entry(const detail::http_endpoint& idx,
         __builtin_unreachable();
         break;
     case route_tier_kind::exact: {
+        // TASK-056: refuse to plant an exact entry when a prefix entry
+        // for the same canonical path already lives in the radix tier.
+        reject_terminus_collision(idx.get_url_complete(),
+                                  /*want_is_prefix=*/false);
         detail::route_entry entry{methods, std::move(shim), /*is_prefix=*/false};
         exact_routes_.emplace(idx.get_url_complete(), std::move(entry));
         break;
     }
     case route_tier_kind::pattern: {
+        // Regex-tier routes do not conflict with prefix routes because
+        // a literal pattern with regex metacharacters is its own key
+        // (it never matches as a prefix lookup target).
         detail::route_entry entry{methods, std::move(shim), /*is_prefix=*/false};
         regex_routes_.push_back(
             {idx.get_url_complete(), std::move(*tier.re), std::move(entry)});
@@ -344,7 +391,30 @@ void webserver::on_methods_(method_set methods,
         if (is_new_entry) impl_->insert_fresh_v1_entries(idx, shim);
     }  // registered_resources_lock released here
 
-    impl_->upsert_v2_table_entry(idx, methods, shim, is_new_entry);
+    // TASK-056: upsert_v2_table_entry may throw std::invalid_argument
+    // when a prefix-vs-exact terminus collision is detected. Roll back
+    // the v1 inserts above on throw so the table stays consistent with
+    // the caller's mental model. The fresh-entry rollback is the only
+    // case that needs work: for the existing-entry path, on_methods_'s
+    // prepare_or_create_lambda_shim atomicity pre-check would have
+    // rejected duplicates BEFORE any mutation, so we never get here.
+    try {
+        impl_->upsert_v2_table_entry(idx, methods, shim, is_new_entry);
+    } catch (...) {
+        if (is_new_entry) {
+            std::unique_lock rollback_lock(
+                impl_->registered_resources_mutex);
+            impl_->registered_resources.erase(idx);
+            if (idx.get_url_pars().empty()) {
+                impl_->registered_resources_str.erase(
+                    idx.get_url_complete());
+            }
+            if (idx.is_regex_compiled()) {
+                impl_->registered_resources_regex.erase(idx);
+            }
+        }
+        throw;
+    }
     impl_->invalidate_route_cache();
 }
 

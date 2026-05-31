@@ -203,14 +203,23 @@ webserver_impl::lookup_v2(http_method method, const std::string& path) {
         }
     }  // table_lock released.
 
-    // Step 3: install into cache (cache mutex only). Move result.entry and
-    // result.captured_params into the cache_value to avoid a second copy
-    // of the shared_ptr ref-count bump and captured vector on the miss path.
-    // result is not used after this point.
+    // Step 3: install into cache (cache mutex only). Full copy of
+    // result.entry and result.captured_params into cache_value v, then
+    // return result by value (NRVO).
+    //
+    // Why copy and not move:
+    //   - result is returned by value on the next line; moving any field
+    //     out of it here would return a partially moved-from struct to
+    //     the caller, silently losing captured_params.
+    //   - result.entry carries a shared_ptr<http_resource> variant; the
+    //     copy atomically bumps the refcount once (unavoidable regardless
+    //     of move-or-copy for the cache slot).
+    // (The same defensive copy lands in TASK-053; if TASK-053 merges
+    // first this hunk becomes a benign duplicate.)
     if (result.found) {
         cache_value v;
-        v.entry = std::move(result.entry);
-        v.captured_params = std::move(result.captured_params);
+        v.entry = result.entry;
+        v.captured_params = result.captured_params;
         route_cache_v2.insert(key, std::move(v));
     }
 
