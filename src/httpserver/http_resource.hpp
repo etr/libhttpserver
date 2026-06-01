@@ -28,6 +28,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <shared_mutex>
 #include <string>
 
 // TASK-036: render_* virtuals now return http_response by value; the
@@ -234,9 +235,12 @@ class http_resource {
       * disallow_all, and allow_all all invalidate the cache implicitly,
       * without any explicit dependency on the mutation API.
       *
-      * Thread-safe: a per-resource std::mutex serialises the cache
-      * fill / read.  Once the cache is warm, the lock is uncontended
-      * on every subsequent call.
+      * Thread-safe: a per-resource std::shared_mutex allows concurrent
+      * warm-path reads (std::shared_lock) while the cache-fill path
+      * takes an exclusive std::unique_lock.  Under multi-threaded 405
+      * floods the warm path is fully concurrent; only a stale-mask
+      * fill serialises.  The methods_allowed_ snapshot is taken inside
+      * the lock to eliminate the TOCTOU data race.
       *
       * The returned reference is valid until the next mask mutation;
       * callers must not store it beyond a single dispatch invocation.
@@ -308,14 +312,15 @@ class http_resource {
       * are needed, register hooks on the copy separately after construction.
       *
       * TASK-058 step 3: cached_allow_mutex_ is non-copyable / non-movable
-      * (std::mutex has no copy or move).  The copy / move special members
-      * are therefore written by hand and skip the mutex member entirely --
-      * the copy / move target gets a freshly default-constructed mutex
-      * and an invalidated cache (cached_allow_valid_ = false), so the
-      * next get_allow_header() call on the target rebuilds the cache
-      * under its own (fresh) lock.  This is the correct semantic: copy /
-      * move is a structural operation; cache state is local to each
-      * instance and must not be shared by reference.
+      * (std::shared_mutex has no copy or move).  The copy / move special
+      * members are therefore written by hand and skip the mutex member
+      * entirely -- the copy / move target gets a freshly
+      * default-constructed mutex and an invalidated cache
+      * (cached_allow_valid_ = false), so the next get_allow_header()
+      * call on the target rebuilds the cache under its own (fresh) lock.
+      * This is the correct semantic: copy / move is a structural
+      * operation; cache state is local to each instance and must not be
+      * shared by reference.
      **/
      http_resource(const http_resource& b) noexcept;
      http_resource(http_resource&& b) noexcept;
@@ -361,14 +366,17 @@ class http_resource {
      //
      // Thread-safety: the dispatch path can call get_allow_header()
      // concurrently from multiple MHD worker threads against the same
-     // resource.  The mutex serialises the cache fill / read; once the
-     // cache is warm, the lock is uncontended on every subsequent 405.
+     // resource.  std::shared_mutex allows concurrent warm-path reads
+     // (std::shared_lock) while the cache-fill (miss/invalidate) path
+     // takes an exclusive std::unique_lock.  The methods_allowed_
+     // snapshot is taken INSIDE the lock (not before it) to eliminate
+     // the TOCTOU data race noted in security-reviewer-iter1-2.
      //
      // `mutable` for the same reason as hook_table_: the dispatch path
      // calls get_allow_header() on a `const http_resource&` (the cache
      // is logically const-observable -- the visible result is a stable
      // function of methods_allowed_).
-     mutable std::mutex cached_allow_mutex_;
+     mutable std::shared_mutex cached_allow_mutex_;
      mutable std::string cached_allow_header_;
      mutable method_set cached_allow_mask_{};
      mutable bool cached_allow_valid_ = false;
@@ -399,21 +407,21 @@ class http_resource {
 // table PIMPL (shared_ptr<resource_hook_table>) was added later, growing the
 // cap to vptr + shared_ptr + method_set + padding.
 //
-// TASK-058 step 3 added a lazy Allow-header cache: std::mutex +
-// std::string + method_set + bool.  std::mutex is a sizeof~64 storage on
-// pthread platforms (libc++/macOS) and ~40 on libstdc++/Linux; std::string
-// SBO adds ~24-32; the method_set / bool fields slot into existing padding.
-// The new ceiling is the old (3*void* + 2*method_set) plus the new cache
-// payload, padded for alignment.  See test/bench_sizeof_http_resource.cpp
-// for the v1-anchored algebra; the value here documents the
-// post-TASK-058 layout shape.
+// TASK-058 step 3 added a lazy Allow-header cache: std::shared_mutex +
+// std::string + method_set + bool.  std::shared_mutex is a sizeof~56
+// storage on pthread platforms (libc++/macOS) and ~56 on libstdc++/Linux
+// (similar to std::mutex); std::string SBO adds ~24-32; the method_set /
+// bool fields slot into existing padding.  The new ceiling is the old
+// (3*void* + 2*method_set) plus the new cache payload, padded for
+// alignment.  See test/bench_sizeof_http_resource.cpp for the v1-anchored
+// algebra; the value here documents the post-TASK-058 layout shape.
 static_assert(sizeof(http_resource) <=
                   sizeof(void*) * 3 + sizeof(method_set) * 2
-                  + sizeof(std::mutex) + sizeof(std::string)
+                  + sizeof(std::shared_mutex) + sizeof(std::string)
                   + sizeof(method_set) + sizeof(bool) * 8,
               "http_resource should be approximately vptr + shared_ptr + "
               "method_set (TASK-051) + Allow-header cache "
-              "(mutex + string + method_set + bool) after TASK-058 step 3");
+              "(shared_mutex + string + method_set + bool) after TASK-058 step 3");
 
 }  // namespace httpserver
 #endif  // SRC_HTTPSERVER_HTTP_RESOURCE_HPP_

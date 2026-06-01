@@ -49,7 +49,10 @@
 
 #include <memory>
 #include <mutex>
+#include <shared_mutex>
 #include <string>
+#include <thread>
+#include <vector>
 
 #include "./httpserver.hpp"
 #include "./httpserver/detail/method_utils.hpp"
@@ -144,6 +147,44 @@ LT_BEGIN_AUTO_TEST(http_resource_allow_cache_suite,
     LT_CHECK_EQ(first_data, second_data);
     LT_CHECK_EQ(first_size, second_size);
 LT_END_AUTO_TEST(consecutive_calls_return_same_buffer)
+
+// ---------------------------------------------------------------------
+// (3) Concurrency: concurrent reads from multiple threads must all
+// observe the same (correct) cached value.  This test will expose a
+// data race under TSAN if methods_allowed_ is read outside the mutex
+// (security-reviewer-iter1-2) or if the mutex is not acquired as a
+// shared lock on the warm path (performance-reviewer-iter1-1).
+// ---------------------------------------------------------------------
+LT_BEGIN_AUTO_TEST(http_resource_allow_cache_suite,
+                   concurrent_reads_all_return_correct_value)
+    allow_cache_resource r;
+    // Prime the cache in the main thread.
+    const std::string expected = r.get_allow_header();
+
+    constexpr int kThreads = 8;
+    constexpr int kIterations = 1000;
+
+    std::vector<bool> results(kThreads, true);
+    std::vector<std::thread> threads;
+    threads.reserve(kThreads);
+
+    for (int i = 0; i < kThreads; ++i) {
+        threads.emplace_back([&r, &results, &expected, i]() {
+            for (int j = 0; j < kIterations; ++j) {
+                const std::string& val = r.get_allow_header();
+                if (val != expected) {
+                    results[i] = false;
+                    return;
+                }
+            }
+        });
+    }
+    for (auto& t : threads) t.join();
+
+    for (int i = 0; i < kThreads; ++i) {
+        LT_CHECK(results[i]);
+    }
+LT_END_AUTO_TEST(concurrent_reads_all_return_correct_value)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

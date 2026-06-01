@@ -32,6 +32,7 @@
 
 #include <cstddef>
 #include <mutex>
+#include <shared_mutex>
 #include <string>
 
 #include "httpserver/http_method.hpp"
@@ -53,24 +54,29 @@ using httpserver::v1_baseline::V1_STD_MAP_STRING_BOOL_SIZEOF;
 //   reduction := V1_HTTP_RESOURCE_SIZEOF - sizeof(http_resource)
 // must satisfy
 //   reduction + sizeof(method_set) * 2 + sizeof(void*) * 2
-//             + sizeof(std::mutex) + sizeof(std::string)
+//             + sizeof(std::shared_mutex) + sizeof(std::string)
 //             + sizeof(method_set) + sizeof(bool) * 8
 //        >= V1_STD_MAP_STRING_BOOL_SIZEOF
 //
 // Terms:
-//   sizeof(method_set) * 2  -- own_size + worst-case alignment padding
-//                              for the methods_allowed_ member.
-//   sizeof(void*) * 2       -- shared_ptr<resource_hook_table> hook_table_
-//                              member (TASK-051 hook PIMPL slot).
-//   sizeof(std::mutex)      -- TASK-058 step 3: per-resource Allow-header
-//                              cache lock.  pthread_mutex_t on macOS
-//                              (libc++) is ~64 bytes; libstdc++ is ~40.
-//   sizeof(std::string)     -- TASK-058 step 3: cached Allow header
-//                              storage.  SBO header is ~24-32 bytes.
-//   sizeof(method_set)      -- TASK-058 step 3: cached mask snapshot.
-//   sizeof(bool) * 8        -- TASK-058 step 3: cached_allow_valid_ + worst-
-//                              case alignment padding (8 bytes; mutex
-//                              forces 8-byte alignment after a single bool).
+//   sizeof(method_set) * 2      -- own_size + worst-case alignment padding
+//                                  for the methods_allowed_ member.
+//   sizeof(void*) * 2           -- shared_ptr<resource_hook_table> hook_table_
+//                                  member (TASK-051 hook PIMPL slot).
+//   sizeof(std::shared_mutex)   -- TASK-058 step 3 / security-reviewer-iter1-2
+//                                  / performance-reviewer-iter1-1: per-resource
+//                                  Allow-header cache lock upgraded from
+//                                  std::mutex to std::shared_mutex to allow
+//                                  concurrent warm-path reads.
+//                                  macOS (libc++): ~168 bytes.
+//                                  Linux (libstdc++): ~56 bytes.
+//   sizeof(std::string)         -- TASK-058 step 3: cached Allow header
+//                                  storage.  SBO header is ~24-32 bytes.
+//   sizeof(method_set)          -- TASK-058 step 3: cached mask snapshot.
+//   sizeof(bool) * 8            -- TASK-058 step 3: cached_allow_valid_ +
+//                                  worst-case alignment padding (8 bytes;
+//                                  mutex forces 8-byte alignment after a
+//                                  single bool).
 //
 // The V1_* constants are selected at compile time by the detected
 // C++ standard library (libc++ vs. libstdc++) in v1_constants.hpp,
@@ -84,7 +90,7 @@ using httpserver::v1_baseline::V1_STD_MAP_STRING_BOOL_SIZEOF;
 static_assert(sizeof(http_resource) + V1_STD_MAP_STRING_BOOL_SIZEOF
               <= V1_HTTP_RESOURCE_SIZEOF + sizeof(method_set) * 2
                   + sizeof(void*) * 2
-                  + sizeof(std::mutex) + sizeof(std::string)
+                  + sizeof(std::shared_mutex) + sizeof(std::string)
                   + sizeof(method_set) + sizeof(bool) * 8,
               "http_resource grew beyond the documented PRD-REQ-REQ-003 / "
               "TASK-051 / TASK-058 step 3 envelope (method_set + per-route "
@@ -92,10 +98,11 @@ static_assert(sizeof(http_resource) + V1_STD_MAP_STRING_BOOL_SIZEOF
 
 // Belt-and-suspenders: regardless of v1 anchoring, v2.0 must be no
 // larger than v1 + the documented hook PIMPL slot + the TASK-058 step 3
-// Allow-header cache payload.
+// Allow-header cache payload (upgraded to std::shared_mutex for
+// security-reviewer-iter1-2 / performance-reviewer-iter1-1 fix).
 static_assert(sizeof(http_resource) <=
                   V1_HTTP_RESOURCE_SIZEOF + sizeof(void*) * 2
-                  + sizeof(std::mutex) + sizeof(std::string)
+                  + sizeof(std::shared_mutex) + sizeof(std::string)
                   + sizeof(method_set) + sizeof(bool) * 8,
               "http_resource grew beyond v1 + TASK-051 hook PIMPL slot + "
               "TASK-058 step 3 Allow cache payload");

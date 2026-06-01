@@ -28,6 +28,7 @@
 #include <atomic>
 #include <functional>
 #include <memory>
+#include <shared_mutex>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -100,10 +101,10 @@ ensure_table(std::shared_ptr<detail::resource_hook_table>& slot) {
 
 // ---- copy / move special members ----------------------------------------
 //
-// TASK-058 step 3 added std::mutex cached_allow_mutex_, which has no
-// copy or move.  The defaulted special members on the public class
-// declaration would therefore be implicitly deleted.  Implement them
-// here by-hand, skipping the mutex.  The copy / move target starts
+// TASK-058 step 3 added std::shared_mutex cached_allow_mutex_, which
+// has no copy or move.  The defaulted special members on the public
+// class declaration would therefore be implicitly deleted.  Implement
+// them here by-hand, skipping the mutex.  The copy / move target starts
 // with a fresh, default-constructed mutex and an invalidated Allow-
 // header cache (cached_allow_valid_ = false), which the next call to
 // get_allow_header() repopulates lazily.
@@ -120,7 +121,7 @@ http_resource::http_resource(http_resource&& b) noexcept
     : methods_allowed_(b.methods_allowed_),
       hook_table_(std::move(b.hook_table_)) {
     // Same rationale as the copy constructor: cache state is per-
-    // instance and is not transferred.  std::mutex has no move.
+    // instance and is not transferred.  std::shared_mutex has no move.
 }
 
 http_resource& http_resource::operator=(const http_resource& b) noexcept {
@@ -129,7 +130,7 @@ http_resource& http_resource::operator=(const http_resource& b) noexcept {
         methods_allowed_ = b.methods_allowed_;
         // Invalidate the local cache; do NOT touch the mutex (still
         // owned by *this).
-        std::lock_guard<std::mutex> lock(cached_allow_mutex_);
+        std::unique_lock<std::shared_mutex> lock(cached_allow_mutex_);
         cached_allow_valid_ = false;
         cached_allow_header_.clear();
     }
@@ -140,7 +141,7 @@ http_resource& http_resource::operator=(http_resource&& b) noexcept {
     if (this != &b) {
         hook_table_ = std::move(b.hook_table_);
         methods_allowed_ = b.methods_allowed_;
-        std::lock_guard<std::mutex> lock(cached_allow_mutex_);
+        std::unique_lock<std::shared_mutex> lock(cached_allow_mutex_);
         cached_allow_valid_ = false;
         cached_allow_header_.clear();
     }
@@ -204,22 +205,42 @@ hook_handle http_resource::add_hook(hook_phase phase,
 // TASK-058 step 3: lazy Allow-header cache.  See the header-side
 // declaration for the contract.  Implementation:
 //
-//   1. Snapshot the live mask once -- subsequent comparisons run against
-//      this local copy (avoids re-loading methods_allowed_ inside the
-//      critical section).
-//   2. Take the per-resource mutex.  Under contention this serialises
-//      cache-fill; under the warm-path (hit) case the lock is held for
-//      a single integer compare + reference return.
-//   3. If the cached snapshot matches the live mask, return the cached
-//      string by reference.  Otherwise rebuild via detail::format_allow_header
-//      (the same routine the pre-TASK-058 path used) and update the snapshot.
+//   Warm path (cache hit, the common case after the first 405):
+//     1. Take a shared lock.
+//     2. Read methods_allowed_ INSIDE the lock (eliminates the TOCTOU
+//        data race flagged in security-reviewer-iter1-2).
+//     3. Compare with the cached snapshot; if they match, return the
+//        cached string by reference while still holding the shared lock.
+//
+//   Cold / stale path (cache miss or mask changed):
+//     1. Release the shared lock.
+//     2. Take an exclusive (unique) lock.
+//     3. Re-check (double-checked locking) because another thread may
+//        have filled the cache between the two lock acquisitions.
+//     4. Rebuild via detail::format_allow_header and update the snapshot.
+//     5. Return the cached string by reference.
+//
+// Using std::shared_mutex allows N concurrent warm-path readers without
+// serialisation; only the cold fill path serialises
+// (performance-reviewer-iter1-1).
 //
 // The returned reference is stable until the next mask mutation; the
 // caller (dispatch_resource_handler) consumes it synchronously within
 // the current dispatch, so the reference outlives use.
 const std::string& http_resource::get_allow_header() const {
-    const method_set live = methods_allowed_;
-    std::lock_guard<std::mutex> lock(cached_allow_mutex_);
+    // Warm path: shared (read) lock.
+    {
+        std::shared_lock<std::shared_mutex> rlock(cached_allow_mutex_);
+        const method_set live = methods_allowed_;  // read inside lock
+        if (cached_allow_valid_ && cached_allow_mask_ == live) {
+            return cached_allow_header_;
+        }
+    }
+    // Cold / stale path: exclusive (write) lock.
+    std::unique_lock<std::shared_mutex> wlock(cached_allow_mutex_);
+    // Double-checked: another thread may have filled the cache while we
+    // waited for the exclusive lock.
+    const method_set live = methods_allowed_;  // re-read inside write lock
     if (!cached_allow_valid_ || cached_allow_mask_ != live) {
         cached_allow_header_ = detail::format_allow_header(live);
         cached_allow_mask_ = live;

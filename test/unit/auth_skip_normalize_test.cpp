@@ -143,6 +143,38 @@ LT_BEGIN_AUTO_TEST(auth_skip_normalize_suite,
     LT_CHECK(!impl_of(ws).should_skip_auth(""));
 LT_END_AUTO_TEST(empty_skip_list_returns_false_for_any_path)
 
+// ---------------------------------------------------------------------
+// TASK-058 / security-reviewer-iter1-1: global wildcard "/*" must skip
+// auth for every path.  Pre-fix the size() > 2 guard in should_skip_auth
+// excluded "/*" (size == 2), so it fell through to an exact-equality
+// check that never matched, silently doing nothing.
+// ---------------------------------------------------------------------
+LT_BEGIN_AUTO_TEST(auth_skip_normalize_suite,
+                   global_wildcard_skip_path_matches_any_path)
+    ht::webserver ws{ht::create_webserver(8080)
+        .start_method(ht::http::http_utils::INTERNAL_SELECT)
+        .auth_skip_paths({"/*"})};
+
+    LT_CHECK(impl_of(ws).should_skip_auth("/"));
+    LT_CHECK(impl_of(ws).should_skip_auth("/anything"));
+    LT_CHECK(impl_of(ws).should_skip_auth("/foo/bar/baz"));
+LT_END_AUTO_TEST(global_wildcard_skip_path_matches_any_path)
+
+// ---------------------------------------------------------------------
+// TASK-058 / security-reviewer-iter1-3: percent-encoded entries in
+// auth_skip_paths must be rejected at construction time.  Passing a
+// '%'-containing entry is a misconfiguration (the entry would silently
+// never match a decoded request path).  The expectation is that
+// normalize_auth_skip_paths throws std::invalid_argument.
+// ---------------------------------------------------------------------
+LT_BEGIN_AUTO_TEST(auth_skip_normalize_suite,
+                   percent_encoded_skip_path_throws_invalid_argument)
+    LT_CHECK_THROW(
+        ht::webserver{ht::create_webserver(8080)
+            .start_method(ht::http::http_utils::INTERNAL_SELECT)
+            .auth_skip_paths({"/public%2Ftest"})});
+LT_END_AUTO_TEST(percent_encoded_skip_path_throws_invalid_argument)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()
