@@ -245,12 +245,12 @@ class webserver_impl {
     // documented above. Returns lookup_result; populates `tier` even on
     // miss (tier_hit::none) so callers can branch deterministically.
     //
-    // NOTE (CWE-284 guard): lookup_v2 is a SHADOW TABLE only. The live
-    // HTTP dispatch path (finalize_answer -> resolve_resource_for_request)
-    // still uses the v1 registered_resources* maps. lookup_v2 is used
-    // by tests to pin the v2 tier pipeline and will be wired into
-    // finalize_answer at Cycle K dispatch cutover. Until then, any access
-    // control registered via the v2 table has NO effect on live traffic.
+    // NOTE (TASK-053): lookup_v2 is the live dispatch path. As of
+    // TASK-053 step 3, resolve_resource_for_request() calls lookup_v2()
+    // exclusively; all v1 helper functions were deleted. The v1
+    // registered_resources* maps survive only as registration-side
+    // bookkeeping (lambda/class conflict detection and WebSocket dispatch
+    // — see the 'Registration-side resource maps' section below).
     lookup_result lookup_v2(http_method method, const std::string& path);
 
     // TASK-045 -- Lifecycle hook bus (skeleton, no firing yet).

@@ -141,7 +141,7 @@ webserver_impl::lookup_result
 webserver_impl::lookup_v2(http_method method, const std::string& path) {
     lookup_result result;
 
-    const std::string lookup_path = canonicalize_lookup_path(path);
+    std::string lookup_path = canonicalize_lookup_path(path);
 
     // Step 1: cache. Cache under the canonical key so /foo and /foo/
     // share an entry. Use find_by_view to avoid copying lookup_path
@@ -155,16 +155,17 @@ webserver_impl::lookup_v2(http_method method, const std::string& path) {
         result.captured_params = std::move(cached.captured_params);
         return result;
     }
-    // Construct key only on the miss path, where we need to own the
-    // string for insertion into the cache.
-    cache_key key{method, lookup_path};
+    // Construct key by moving lookup_path into the cache_key, avoiding a
+    // second heap allocation. All subsequent tier lookups use key.path,
+    // which is the same std::string now owned by the key.
+    cache_key key{method, std::move(lookup_path)};
 
     // Step 2: walk the tiers under a shared lock.
     {
         std::shared_lock table_lock(route_table_mutex_);
 
         // 2a. Exact tier — single hash probe.
-        auto exact_it = exact_routes_.find(lookup_path);
+        auto exact_it = exact_routes_.find(key.path);
         if (exact_it != exact_routes_.end()) {
             result.found = true;
             result.tier = tier_hit::exact;
@@ -175,7 +176,7 @@ webserver_impl::lookup_v2(http_method method, const std::string& path) {
         // 2b. Radix tier — segment-trie walk.
         if (!result.found) {
             radix_match<route_entry> rm;
-            if (param_and_prefix_routes_.find(lookup_path, rm) && rm.entry) {
+            if (param_and_prefix_routes_.find(key.path, rm) && rm.entry) {
                 result.found = true;
                 result.tier = tier_hit::radix;
                 result.entry = *rm.entry;
@@ -188,7 +189,7 @@ webserver_impl::lookup_v2(http_method method, const std::string& path) {
         // and on_methods_), so no compilation cost is paid per lookup.
         if (!result.found) {
             for (const auto& rr : regex_routes_) {
-                if (std::regex_match(lookup_path, rr.compiled_re)) {
+                if (std::regex_match(key.path, rr.compiled_re)) {
                     result.found = true;
                     result.tier = tier_hit::regex;
                     result.entry = rr.entry;

@@ -149,12 +149,12 @@ class route_cache {
             return false;
         }
         std::size_t b = bucket_hash % map_.bucket_count();
-        for (auto it = map_.cbegin(b), end = map_.cend(b); it != end; ++it) {
+        for (auto it = map_.begin(b), end = map_.end(b); it != end; ++it) {
             if (it->first.method == method && it->first.path == path) {
-                // Promote: splice requires a mutable iterator from the main map.
-                auto main_it = map_.find(it->first);
-                list_.splice(list_.begin(), list_, main_it->second);
-                out = main_it->second->second;
+                // Promote using the mutable bucket iterator directly —
+                // avoids a second map_.find() call on every cache hit.
+                list_.splice(list_.begin(), list_, it->second);
+                out = it->second->second;
                 return true;
             }
         }

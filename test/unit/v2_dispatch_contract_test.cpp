@@ -54,6 +54,30 @@
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
 
+// wait_for_server_ready: poll the given port with an HTTP GET / until the
+// server responds (any status), or until the deadline elapses. This avoids
+// a fixed sleep that is either too short on slow/sanitizer CI builds or
+// wastes 50 ms of wall time on every test invocation.
+static void wait_for_server_ready(int port,
+                                  std::chrono::milliseconds deadline
+                                      = std::chrono::milliseconds(3000)) {
+    using clock = std::chrono::steady_clock;
+    auto end = clock::now() + deadline;
+    std::string url = "http://127.0.0.1:" + std::to_string(port) + "/";
+    while (clock::now() < end) {
+        CURL* c = curl_easy_init();
+        if (!c) break;
+        curl_easy_setopt(c, CURLOPT_URL, url.c_str());
+        curl_easy_setopt(c, CURLOPT_NOBODY, 1L);
+        curl_easy_setopt(c, CURLOPT_CONNECTTIMEOUT_MS, 50L);
+        curl_easy_setopt(c, CURLOPT_TIMEOUT_MS, 50L);
+        CURLcode rc = curl_easy_perform(c);
+        curl_easy_cleanup(c);
+        if (rc == CURLE_OK) return;
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+}
+
 using httpserver::create_webserver;
 using httpserver::hook_phase;
 using httpserver::http_request;
@@ -148,7 +172,7 @@ LT_BEGIN_AUTO_TEST(v2_dispatch_contract_suite, parameterized_route_extracts_capt
     auto resource = std::make_shared<echo_id_resource>();
     ws.register_path("/users/{id}", resource);
     ws.start(false);
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    wait_for_server_ready(PORT);
 
     response_capture r = do_get("/users/42");
     ws.stop();
@@ -182,7 +206,7 @@ LT_BEGIN_AUTO_TEST(v2_dispatch_contract_suite, prefix_route_marks_is_prefix_true
     auto resource = std::make_shared<hello_resource>();
     ws.register_prefix("/static", resource);
     ws.start(false);
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    wait_for_server_ready(PORT);
 
     response_capture r = do_get("/static/foo/bar");
     ws.stop();
@@ -217,7 +241,7 @@ LT_BEGIN_AUTO_TEST(v2_dispatch_contract_suite, exact_route_marks_is_prefix_false
     auto resource = std::make_shared<hello_resource>();
     ws.register_path("/exact", resource);
     ws.start(false);
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    wait_for_server_ready(PORT);
 
     response_capture r = do_get("/exact");
     ws.stop();
@@ -243,6 +267,8 @@ LT_BEGIN_AUTO_TEST(v2_dispatch_contract_suite, method_mismatch_still_resolves_ro
                 if (ctx.matched.has_value()) {
                     probe.last_matched_engaged.store(true,
                                                      std::memory_order_relaxed);
+                    probe.last_is_prefix.store(ctx.matched->is_prefix,
+                                               std::memory_order_relaxed);
                     probe.last_resource_non_null.store(
                         ctx.resource != nullptr,
                         std::memory_order_relaxed);
@@ -259,7 +285,7 @@ LT_BEGIN_AUTO_TEST(v2_dispatch_contract_suite, method_mismatch_still_resolves_ro
     resource->set_allowing(httpserver::http_method::get, true);
     ws.register_path("/get_only", resource);
     ws.start(false);
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    wait_for_server_ready(PORT);
 
     long post_status = do_post_status("/get_only");
     ws.stop();
@@ -267,6 +293,9 @@ LT_BEGIN_AUTO_TEST(v2_dispatch_contract_suite, method_mismatch_still_resolves_ro
     LT_CHECK_EQ(post_status, 405L);
     LT_CHECK(probe.last_matched_engaged.load());
     LT_CHECK(probe.last_resource_non_null.load());
+    // /get_only is an exact (non-prefix) route; is_prefix must be false
+    // in the 405 code path as well as in the 200 code path.
+    LT_CHECK_EQ(probe.last_is_prefix.load(), false);
 LT_END_AUTO_TEST(method_mismatch_still_resolves_route)
 
 LT_BEGIN_AUTO_TEST_ENV()

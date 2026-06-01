@@ -195,10 +195,13 @@ int main() {
     auto* impl = hs::webserver_test_access::impl(*ws);
 
     // ----- (a) cache-hit -----
+    // Pre-allocate the query path outside the timed region so the bench
+    // measures only the lookup machinery, not std::string construction.
+    static const std::string kCacheHitPath("/api/v1/users/me");
+
     // First call warms the cache. Subsequent calls hit it.
     {
-        auto warm = impl->lookup_v2(
-            hs::http_method::get, std::string("/api/v1/users/me"));
+        auto warm = impl->lookup_v2(hs::http_method::get, kCacheHitPath);
         do_not_optimize(warm);
     }
 
@@ -206,8 +209,7 @@ int main() {
     const double median_cache_ns = measure_median_ns(
         "cache-hit",
         [&]() {
-            auto r = impl->lookup_v2(
-                hs::http_method::get, std::string("/api/v1/users/me"));
+            auto r = impl->lookup_v2(hs::http_method::get, kCacheHitPath);
             do_not_optimize(r);
         },
         OUTER, INNER_CACHE);
