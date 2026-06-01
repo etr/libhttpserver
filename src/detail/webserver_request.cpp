@@ -67,6 +67,7 @@
 #include "httpserver/detail/http_endpoint.hpp"
 #include "httpserver/detail/lambda_resource.hpp"
 #include "httpserver/detail/modded_request.hpp"
+#include "httpserver/detail/path_normalize.hpp"
 #include "httpserver/detail/resource_hook_table.hpp"
 #include "httpserver/http_request.hpp"
 #include "httpserver/http_resource.hpp"
@@ -136,10 +137,61 @@ std::string normalize_path(const std::string& path) {
 
 }  // namespace
 
+// TASK-058 step 2: pre-normalize each auth_skip_paths entry once at
+// webserver construction time.  Entries ending in "/*" keep their
+// wildcard suffix; the prefix before the wildcard is normalized.
+// Callers (webserver::webserver) pass the raw config-bag list and
+// store the result on the webserver instance as a sibling to the
+// original `auth_skip_paths` list.  Pre-TASK-058 the skip list was
+// matched verbatim against a normalized request path, so non-
+// canonical inputs (e.g. "/public/", "/a/../b") silently never
+// matched -- the on-the-wire bug this normalization closes.
+std::vector<std::string> normalize_auth_skip_paths(
+        const std::vector<std::string>& raw) {
+    std::vector<std::string> out;
+    out.reserve(raw.size());
+    for (const auto& entry : raw) {
+        // Wildcard suffix: strip the trailing "/*", normalize the
+        // prefix, then re-append "/*".  Empty prefix (just "/*")
+        // canonicalises to "/" + "/*" -> "//*", which would never
+        // have matched anything sensible pre-fix either, so we keep
+        // the literal "/*" unchanged (matches the v1 wildcard
+        // behaviour at the dispatch site).
+        if (entry.size() > 2 && entry.back() == '*' &&
+            entry[entry.size() - 2] == '/') {
+            std::string prefix = entry.substr(0, entry.size() - 2);
+            std::string normalized_prefix = normalize_path(prefix);
+            if (normalized_prefix == "/") {
+                // "/" + "/*" -> "/*" (keep literal).
+                out.push_back("/*");
+            } else {
+                out.push_back(normalized_prefix + "/*");
+            }
+            continue;
+        }
+        out.push_back(normalize_path(entry));
+    }
+    return out;
+}
+
 bool webserver_impl::should_skip_auth(const std::string& path) const {
+    // TASK-058 step 2: empty-list early-out.  Servers with no
+    // auth_skip_paths configured pay zero normalization cost.  This
+    // is the production-typical case for any server whose auth
+    // surface either covers every route or has no auth_handler at
+    // all.
+    if (parent->auth_skip_paths_normalized.empty()) {
+        return false;
+    }
+
+    // TASK-058 step 2: compare against the pre-normalized list (built
+    // once at construction time) instead of re-normalizing skip-list
+    // entries on every request.  The per-request normalize_path call
+    // on @p path remains -- the inbound URL is per-request data and
+    // cannot be pre-normalized.
     std::string normalized = normalize_path(path);
 
-    for (const auto& skip_path : parent->auth_skip_paths) {
+    for (const auto& skip_path : parent->auth_skip_paths_normalized) {
         if (skip_path == normalized) return true;
         // Support wildcard suffix (e.g., "/public/*")
         if (skip_path.size() > 2 && skip_path.back() == '*' &&

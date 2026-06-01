@@ -70,6 +70,7 @@
 #include "httpserver/detail/http_endpoint.hpp"
 #include "httpserver/detail/lambda_resource.hpp"
 #include "httpserver/detail/modded_request.hpp"
+#include "httpserver/detail/path_normalize.hpp"
 #include "httpserver/http_request.hpp"
 #include "httpserver/http_resource.hpp"
 #include "httpserver/http_response.hpp"
@@ -235,6 +236,8 @@ webserver::webserver(const create_webserver& params):
     file_cleanup_callback(params._file_cleanup_callback),
     auth_handler(params._auth_handler),
     auth_skip_paths(params._auth_skip_paths),
+    auth_skip_paths_normalized(
+        detail::normalize_auth_skip_paths(params._auth_skip_paths)),
     sni_callback(params._sni_callback),
     no_listen_socket(params._no_listen_socket),
     no_thread_safety(params._no_thread_safety),
