@@ -26,7 +26,7 @@ LDADD += -lcurl
 
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/ -DHTTPSERVER_COMPILATION
 METASOURCES = AUTO
-check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver create_webserver_explicit new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories http_response_move_sanitizer webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_const_getters http_request_tls_accessors webserver_register_smartptr webserver_register_path_prefix webserver_on_methods webserver_route route_table lookup_pipeline route_table_concurrency routing_regression threadsafety_stress webserver_features webserver_ws_unavailable webserver_register_ws_smartptr webserver_dauth_unavailable consumer_fixture header_hygiene_hooks hook_api_shape hooks_no_firing hooks_accept_ctx_shape hooks_connection_lifecycle hooks_accept_decision_banned hooks_accept_decision_throwing hooks_body_chunk_ctx_shape hooks_request_received_short_circuit hooks_body_chunk_observes_progress hooks_body_chunk_short_circuit_no_leak hooks_before_handler_ctx_shape hooks_route_resolved_miss_and_hit hooks_before_handler_short_circuit hooks_alias_count hooks_alias_functional hooks_handler_exception_chain hooks_handler_exception_user_handler_throws_continues_chain hooks_handler_exception_fallback_to_hardcoded_500 hooks_handler_exception_slot hooks_response_sent_ctx_shape hooks_request_completed_ctx_shape hooks_after_handler_replaces_response hooks_after_handler_mutates_response_in_place hooks_response_sent_carries_status_bytes_timing hooks_request_completed_fires_on_early_failure hooks_log_access_alias_slot hooks_per_route_invalid_phase_throws hooks_per_route_order hooks_per_route_early_413_per_endpoint hooks_per_route_resource_destroyed_first hooks_per_route_concurrent_registration auth_handler_optional_signature auth_handler_legacy_shim
+check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver create_webserver_explicit new_response_types daemon_info uri_log feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories http_response_move_sanitizer webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_const_getters http_request_tls_accessors webserver_register_smartptr webserver_register_path_prefix webserver_on_methods webserver_route route_table lookup_pipeline route_table_concurrency routing_regression v2_dispatch_contract threadsafety_stress webserver_features webserver_ws_unavailable webserver_register_ws_smartptr webserver_dauth_unavailable consumer_fixture header_hygiene_hooks hook_api_shape hooks_no_firing hooks_accept_ctx_shape hooks_connection_lifecycle hooks_accept_decision_banned hooks_accept_decision_throwing hooks_body_chunk_ctx_shape hooks_request_received_short_circuit hooks_body_chunk_observes_progress hooks_body_chunk_short_circuit_no_leak hooks_before_handler_ctx_shape hooks_route_resolved_miss_and_hit hooks_before_handler_short_circuit hooks_alias_count hooks_alias_functional hooks_handler_exception_chain hooks_handler_exception_user_handler_throws_continues_chain hooks_handler_exception_fallback_to_hardcoded_500 hooks_handler_exception_slot hooks_response_sent_ctx_shape hooks_request_completed_ctx_shape hooks_after_handler_replaces_response hooks_after_handler_mutates_response_in_place hooks_response_sent_carries_status_bytes_timing hooks_request_completed_fires_on_early_failure hooks_log_access_alias_slot hooks_per_route_invalid_phase_throws hooks_per_route_order hooks_per_route_early_413_per_endpoint hooks_per_route_resource_destroyed_first hooks_per_route_concurrent_registration auth_handler_optional_signature auth_handler_legacy_shim
 
 MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
 
@@ -271,6 +271,17 @@ threadsafety_stress_SOURCES = integ/threadsafety_stress.cpp
 # carries microhttpd-typed members.
 routing_regression_SOURCES = unit/routing_regression_test.cpp
 routing_regression_LDADD = $(LDADD) -lmicrohttpd
+
+# v2_dispatch_contract: TASK-053. End-to-end safety net pinning the
+# observable invariants the dispatch path must satisfy AFTER finalize_answer
+# is cut over from resolve_resource_for_request (v1 maps) to
+# resolve_resource_for_request_v2 (lookup_v2-backed). Drives real HTTP
+# requests against the public webserver surface and asserts on response
+# body / status / hook context (parameterized capture replay, prefix vs
+# exact is_prefix flag, 405 method-mismatch still resolves the resource).
+# Default LDADD plus -lcurl is sufficient (already in LDADD); no PIMPL
+# friend access needed because the gate is the public observable contract.
+v2_dispatch_contract_SOURCES = unit/v2_dispatch_contract_test.cpp
 
 # webserver_features: TASK-034. Pins the public contract of
 # webserver::features() (PRD-FLG-REQ-003): nested `struct features` with
@@ -523,7 +534,7 @@ EXTRA_DIST = libhttpserver.supp \
 #   3. Add a `<name>_LDADD = ...` line if it needs more than the
 #      default empty LDADD.
 #   4. Run `make bench` from the build directory.
-bench_targets = bench_sizeof_http_resource bench_get_headers bench_hook_overhead
+bench_targets = bench_sizeof_http_resource bench_get_headers bench_hook_overhead bench_route_lookup
 EXTRA_PROGRAMS = $(bench_targets)
 
 # bench_sizeof_http_resource: pure compile-time static_assert guard.
@@ -555,6 +566,18 @@ bench_get_headers_LDADD = $(LDADD) -lmicrohttpd
 # by test/unit/hook_api_shape_test.cpp.
 bench_hook_overhead_SOURCES = bench_hook_overhead.cpp
 bench_hook_overhead_LDADD = $(LDADD) -lmicrohttpd
+
+# bench_route_lookup (TASK-053): v2 dispatch performance acceptance.
+# Drives webserver_impl::lookup_v2() directly (no MHD daemon, no
+# sockets) and asserts two ceilings on the dispatch hot path:
+#   (a) cache-hit median <= 200 ns/lookup,
+#   (b) radix-tier median <= 5 us/lookup for an 8-segment
+#       parameterized path.
+# Defines HTTPSERVER_COMPILATION so the bench can reach
+# webserver_test_access, the same friend pattern used by
+# bench_hook_overhead.cpp and the unit tests.
+bench_route_lookup_SOURCES = bench_route_lookup.cpp
+bench_route_lookup_LDADD = $(LDADD) -lmicrohttpd
 
 bench: $(bench_targets)
 	@for p in $(bench_targets); do \

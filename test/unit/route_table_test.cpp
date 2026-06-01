@@ -336,6 +336,28 @@ LT_BEGIN_AUTO_TEST(route_table_suite, radix_tree_remove_one_terminus_does_not_cl
     LT_CHECK(m.is_prefix_match);
 LT_END_AUTO_TEST(radix_tree_remove_one_terminus_does_not_clear_sibling)
 
+// find_by_view must promote the hit to the front of the LRU list,
+// just like find(). After a find_by_view hit on /a, inserting /d into a
+// capacity-3 cache must evict the true LRU entry (/b), not /a.
+LT_BEGIN_AUTO_TEST(route_table_suite, cache_find_by_view_promotes_to_front)
+    htd::route_cache cache(3);
+    htd::cache_value v;
+    cache.insert({ht::http_method::get, "/a"}, v);
+    cache.insert({ht::http_method::get, "/b"}, v);
+    cache.insert({ht::http_method::get, "/c"}, v);
+    // Promote /a to front via find_by_view.
+    htd::cache_value out;
+    std::string_view pv_a{"/a"};
+    LT_CHECK(cache.find_by_view(ht::http_method::get, pv_a, out));
+    // Insert /d -> evicts oldest non-A entry (/b).
+    cache.insert({ht::http_method::get, "/d"}, v);
+    htd::cache_value probe;
+    LT_CHECK(cache.find({ht::http_method::get, "/a"}, probe));
+    LT_CHECK(!cache.find({ht::http_method::get, "/b"}, probe));
+    LT_CHECK(cache.find({ht::http_method::get, "/c"}, probe));
+    LT_CHECK(cache.find({ht::http_method::get, "/d"}, probe));
+LT_END_AUTO_TEST(cache_find_by_view_promotes_to_front)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

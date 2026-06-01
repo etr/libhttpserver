@@ -26,11 +26,12 @@
 // the key so a path served by both on_get and on_post warms two distinct
 // cache entries.
 //
-// Concurrency: the cache uses its own plain std::mutex (route_cache_mutex_
-// in webserver_impl) — *not* a shared_mutex — because every cache touch,
+// Concurrency: the cache uses its own plain std::mutex (an internal
+// member of route_cache itself, owned by `route_lru_cache` on
+// webserver_impl) — *not* a shared_mutex — because every cache touch,
 // including the LRU promotion on a hit, is a write (std::list::splice).
 // Lock-order discipline: route_table_mutex_ is always acquired before
-// route_cache_mutex_ when both are held.
+// the cache's internal mutex when both are held.
 //
 // Internal header — only reachable when compiling libhttpserver.
 #if !defined(HTTPSERVER_COMPILATION)
@@ -138,23 +139,22 @@ class route_cache {
         // Walk the bucket manually via equal_range on the raw bucket index.
         // unordered_map::bucket() + bucket_begin()/bucket_end() lets us
         // scan the correct bucket without constructing a full cache_key.
-        // TASK-056 (drive-by): empty-cache early-out. On libc++ a
-        // default-constructed unordered_map has bucket_count() == 0 and
-        // calling cbegin(0) / cend(0) dereferences a null bucket-list
-        // pointer (UB) — reliably reproduced by every test that calls
-        // lookup_v2 before any cache insert has populated the buckets.
-        // The same fix landed in TASK-053; if TASK-053 merges first this
-        // hunk becomes a benign duplicate.
+        // TASK-053: empty-cache early-out. On libc++ a default-constructed
+        // unordered_map has bucket_count() == 0 and calling cbegin(0) /
+        // cend(0) dereferences a null bucket-list pointer (UB). Before
+        // TASK-053 this path was only hit by tests; the TASK-053 dispatch
+        // cutover puts find_by_view on the request hot path, so the first
+        // request against a fresh server reliably reproduced the crash.
         if (map_.bucket_count() == 0) {
             return false;
         }
         std::size_t b = bucket_hash % map_.bucket_count();
-        for (auto it = map_.cbegin(b), end = map_.cend(b); it != end; ++it) {
+        for (auto it = map_.begin(b), end = map_.end(b); it != end; ++it) {
             if (it->first.method == method && it->first.path == path) {
-                // Promote: splice requires a mutable iterator from the main map.
-                auto main_it = map_.find(it->first);
-                list_.splice(list_.begin(), list_, main_it->second);
-                out = main_it->second->second;
+                // Promote using the mutable bucket iterator directly —
+                // avoids a second map_.find() call on every cache hit.
+                list_.splice(list_.begin(), list_, it->second);
+                out = it->second->second;
                 return true;
             }
         }

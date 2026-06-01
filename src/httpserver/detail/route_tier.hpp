@@ -88,7 +88,8 @@ inline route_tier_result classify_route_tier(const detail::http_endpoint& idx) {
         std::regex re;
         try {
             re = std::regex(idx.get_url_normalized(),
-                            std::regex::extended | std::regex::icase);
+                            std::regex::extended | std::regex::icase
+                            | std::regex::nosubs);
         } catch (const std::regex_error& e) {
             throw std::invalid_argument(
                 std::string("invalid regex route pattern '")
