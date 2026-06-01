@@ -336,6 +336,7 @@ aggregation pipeline.
 **Milestone:** post-v2.0 (polish; not a release blocker)
 **Component:** `webserver_dispatch` / `webserver_request`
 **Estimate:** L (broken into ~4 sub-items)
+**Status:** Done
 
 **Goal:**
 Three perf items deferred during the manual-validation sweep all share
@@ -344,21 +345,50 @@ the same shape — a `std::string` is rebuilt on every request when a
 release-blocking but together they're worth 5–15% on the warm path.
 
 **Action Items:**
-- [ ] **canonicalize_lookup_path → string_view return.** Refactor
+- [x] **canonicalize_lookup_path → string_view return.** Refactor
   `src/detail/webserver_dispatch.cpp::canonicalize_lookup_path` to
   return a `string_view` into a caller-owned scratch buffer (or the
   request arena) instead of allocating a `std::string` on every call.
-- [ ] **normalize_path at registration time.** Move the
+  Done as step 1 (commit `e2f730d`): canonical-input fast path returns
+  the input view unchanged (zero allocation); non-canonical inputs
+  write into a caller-owned scratch `std::string`. Direct unit pin in
+  `test/unit/route_lookup_canonicalize_test.cpp`.
+- [x] **normalize_path at registration time.** Move the
   `normalize_path` call from `webserver_request.cpp::should_skip_auth`
   (where it runs per request) to the registration site, storing the
   normalized form in `route_entry`. Update the lookup to use the
   pre-normalized form.
-- [ ] **serialize_allow_methods caching.** `webserver_dispatch.cpp:363`
+  Done as step 2 (commit `51b5a37`). Interpretive deviation noted in
+  the commit message: the brief's `route_entry` framing doesn't map
+  onto `should_skip_auth`, which compares the request path against a
+  webserver-level `auth_skip_paths` list (not a per-route attribute);
+  the optimisation moves to the data's actual home —
+  `auth_skip_paths_normalized_` populated once at webserver
+  construction — plus an empty-list early-out for the production-
+  typical case. The empty-list early-out drops the per-request cost
+  from ~620 ns to ~3 ns. Bug-fix bonus: non-canonical skip-list
+  entries (`"/public/"`, `"/a/../b"`) now match canonical request paths.
+  Pinned in `test/unit/auth_skip_normalize_test.cpp`.
+- [x] **serialize_allow_methods caching.** `webserver_dispatch.cpp`
   rebuilds the Allow header value on every 405 response. Cache the
   serialized string on `route_entry` and invalidate on
   add/remove-method.
-- [ ] Add `test/bench_warm_path.cpp` measuring before/after per-request
+  Done as step 3 (commit `b22b0dd`). Interpretive deviation noted in
+  the commit message: the brief's `route_entry` framing would go stale
+  on `set_allowing` because `route_entry::methods` is the *registered*
+  mask, not the resource's runtime mask; the cache attaches to
+  `http_resource` instead (the same object that owns the mask) and
+  invalidates implicitly by comparing the live mask against a snapshot
+  at cache-fill time. Per-resource `std::mutex`. Pinned in
+  `test/unit/http_resource_allow_cache_test.cpp` (correctness +
+  identity / cache-hit-returns-same-buffer pin).
+- [x] Add `test/bench_warm_path.cpp` measuring before/after per-request
   cost so the next reviewer can verify the gain.
+  Done as step 0 (commit `18693a5`). Wired into `bench_targets` in
+  `test/Makefile.am` (not part of `make check`). Four measurements:
+  `canonicalize`, `should_skip_auth` (non-empty + empty), and
+  `serialize_allow_405`. Baseline numbers captured in the step-0
+  commit body; step-3 commit body holds the after-each-step deltas.
 
 **Dependencies:**
 - Blocked by: TASK-053 (must be the only caller of `canonicalize_lookup_path`)
