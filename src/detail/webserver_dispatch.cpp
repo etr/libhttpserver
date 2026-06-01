@@ -123,25 +123,57 @@ void webserver_impl::invalidate_route_cache() {
 // would never share an entry. Matches the v1 dispatch path, which
 // constructs a non-registration http_endpoint at lookup time and so
 // gets the same normalization for free.
-static std::string canonicalize_lookup_path(const std::string& path) {
+//
+// TASK-058 step 1: return a string_view so the happy path (input
+// already canonical) allocates zero heap memory.  On the rewrite
+// path the canonicalised form is written into the caller-owned
+// @p scratch buffer and a view into that buffer is returned.
+//
+// LIFETIME: the returned view is valid for the duration of the
+// call chain only; it points at either the immutable "/" literal,
+// the caller's @p path argument, or the caller's @p scratch buffer.
+// Any caller storing the view must copy it into an owning string
+// first.  The cache layer (cache_key constructed below) already
+// copies via std::string, so the contract is naturally respected.
+static std::string_view canonicalize_lookup_path(
+        std::string_view path, std::string& scratch) {
     if (path.empty()) {
-        return "/";
+        // Immutable canonical root -- no scratch usage.
+        return std::string_view{"/", 1};
     }
-    std::string out = path;
-    if (out.front() != '/') {
-        out.insert(out.begin(), '/');
+    const bool has_leading_slash = (path.front() == '/');
+    const bool has_trailing_slash = (path.size() > 1 && path.back() == '/');
+    if (has_leading_slash && !has_trailing_slash) {
+        // Already canonical: return the caller's view directly.
+        return path;
     }
-    if (out.size() > 1 && out.back() == '/') {
-        out.pop_back();
+    // Rewrite path: write the canonicalised form into the caller's
+    // scratch buffer and return a view into it.
+    scratch.clear();
+    scratch.reserve(path.size() + (has_leading_slash ? 0 : 1));
+    if (!has_leading_slash) {
+        scratch.push_back('/');
     }
-    return out;
+    if (has_trailing_slash) {
+        scratch.append(path.data(), path.size() - 1);
+    } else {
+        scratch.append(path.data(), path.size());
+    }
+    return std::string_view{scratch};
 }
 
 webserver_impl::lookup_result
 webserver_impl::lookup_v2(http_method method, const std::string& path) {
     lookup_result result;
 
-    std::string lookup_path = canonicalize_lookup_path(path);
+    // TASK-058 step 1: canonicalize_lookup_path returns a string_view
+    // into either @p path (already-canonical happy path -- no
+    // allocation), the immutable "/" literal (empty-input case), or
+    // @p canonicalize_scratch (rewrite case -- single allocation,
+    // bounded by the input size).
+    std::string canonicalize_scratch;
+    std::string_view lookup_path =
+        canonicalize_lookup_path(path, canonicalize_scratch);
 
     // Step 1: cache. Cache under the canonical key so /foo and /foo/
     // share an entry. Use find_by_view to avoid copying lookup_path
@@ -155,10 +187,11 @@ webserver_impl::lookup_v2(http_method method, const std::string& path) {
         result.captured_params = std::move(cached.captured_params);
         return result;
     }
-    // Construct key by moving lookup_path into the cache_key, avoiding a
-    // second heap allocation. All subsequent tier lookups use key.path,
-    // which is the same std::string now owned by the key.
-    cache_key key{method, std::move(lookup_path)};
+    // Construct key by copying lookup_path into the cache_key.  On the
+    // miss path we pay one std::string construction; the warm-cache
+    // path never reaches this line.  All subsequent tier lookups use
+    // key.path, which is the std::string now owned by the key.
+    cache_key key{method, std::string(lookup_path)};
 
     // Step 2: walk the tiers under a shared lock.
     {
@@ -420,9 +453,15 @@ void webserver_impl::dispatch_resource_handler(detail::modded_request* mr,
             }
             return;
         }
-        // Method not allowed: serialize the allow-mask into a header.
+        // Method not allowed: emit the Allow header.  TASK-058 step 3:
+        // read the resource's lazily-cached Allow header value instead
+        // of rebuilding the string from the mask on every 405.  The
+        // cache lives on http_resource (the same object that owns the
+        // mask), regenerates implicitly when the mask differs from the
+        // last-cached snapshot, and is thread-safe under a per-resource
+        // mutex held only across the cache-fill path.
         mr->response.emplace(method_not_allowed_page(mr));
-        std::string header_value = serialize_allow_methods(hrm->get_allowed_methods());
+        const std::string& header_value = hrm->get_allow_header();
         if (!header_value.empty()) {
             mr->response->with_header(http_utils::http_header_allow, header_value);
         }

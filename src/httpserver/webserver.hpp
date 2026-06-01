@@ -450,6 +450,13 @@ class webserver {
      const file_cleanup_callback_ptr file_cleanup_callback;
      const auth_handler_ptr auth_handler;
      const std::vector<std::string> auth_skip_paths;
+     // TASK-058 step 2: pre-normalized form of @ref auth_skip_paths,
+     // populated once at construction.  webserver_impl::should_skip_auth
+     // compares request paths against this list (not @ref auth_skip_paths)
+     // so non-canonical entries like "/public/" or "/a/../b" match the
+     // canonical request path the dispatch surface produces.  Built by
+     // detail::normalize_auth_skip_paths in webserver_request.cpp.
+     const std::vector<std::string> auth_skip_paths_normalized;
      const sni_callback_t sni_callback;
      const bool no_listen_socket;
      const bool no_thread_safety;

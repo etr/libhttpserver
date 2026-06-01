@@ -1,0 +1,281 @@
+/*
+     This file is part of libhttpserver
+     Copyright (C) 2011-2026 Sebastiano Merlino
+
+     This library is free software; you can redistribute it and/or
+     modify it under the terms of the GNU Lesser General Public
+     License as published by the Free Software Foundation; either
+     version 2.1 of the License, or (at your option) any later version.
+
+     This library is distributed in the hope that it will be useful,
+     but WITHOUT ANY WARRANTY; without even the implied warranty of
+     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+     Lesser General Public License for more details.
+
+     You should have received a copy of the GNU Lesser General Public
+     License along with this library; if not, write to the Free Software
+     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
+     USA
+*/
+// TASK-058 -- Warm-path allocation pass benchmark.
+//
+// Three measurements isolate the per-request allocations that TASK-058
+// targets:
+//   (1) canonicalize: lookup_v2() on a canonical path.  Pre-TASK-058 this
+//       allocated a std::string in canonicalize_lookup_path on every
+//       call; after step 1 the happy path returns a string_view into
+//       the caller's argument and allocates nothing.
+//   (2) should_skip_auth (non-empty list): drives the per-request
+//       normalize_path call when the skip-paths list is non-empty.
+//       After step 2 the list is pre-normalized at construction so the
+//       per-call cost drops to just the request-side normalize and a
+//       linear scan over (already-canonical) entries.
+//   (3) should_skip_auth (empty list): pre-TASK-058 still normalized
+//       the request path even when no skip paths were configured.
+//       After step 2 the empty-list early-out short-circuits before
+//       the normalize call.
+//   (4) serialize_allow_405: the cost of building the Allow: header
+//       value for a 405 response.  Pre-TASK-058 this rebuilds the
+//       string on every 405; after step 3 a per-resource cache returns
+//       the previously-computed std::string by reference.
+//
+// Wired into `make bench` via bench_targets in test/Makefile.am; not
+// part of `make check`.  Sanitizer builds skip with exit 0 so the
+// bench stays green on sanitizer hosts (same convention as
+// bench_route_lookup).  No pass/fail ceilings: the bench reports
+// numbers; reviewers compare before/after manually.
+
+#define HTTPSERVER_COMPILATION 1  // unlock webserver_test_access
+
+#include <algorithm>
+#include <chrono>
+#include <cstdio>
+#include <cstdlib>
+#include <memory>
+#include <string>
+#include <vector>
+
+#include "httpserver/create_webserver.hpp"
+#include "httpserver/http_resource.hpp"
+#include "httpserver/http_response.hpp"
+#include "httpserver/http_utils.hpp"
+#include "httpserver/webserver.hpp"
+#include "httpserver/detail/webserver_impl.hpp"
+
+namespace hs = httpserver;
+
+// Defeat dead-store elimination on the lookup_result.
+template <typename T>
+[[gnu::always_inline]] inline void do_not_optimize(T const& value) {
+#if defined(__GNUC__) || defined(__clang__)
+    asm volatile("" : : "r,m"(&value) : "memory");
+#else
+    volatile const void* sink = static_cast<const void*>(&value);
+    (void)sink;
+#endif
+}
+
+static constexpr bool kSanitizerBuild =
+#if defined(__SANITIZE_ADDRESS__) \
+    || defined(__SANITIZE_THREAD__) \
+    || defined(__SANITIZE_MEMORY__) \
+    || defined(__SANITIZE_HWADDRESS__)
+    true
+#elif defined(__has_feature)
+#  if __has_feature(address_sanitizer) \
+      || __has_feature(thread_sanitizer) \
+      || __has_feature(memory_sanitizer) \
+      || __has_feature(undefined_behavior_sanitizer)
+    true
+#  else
+    false
+#  endif
+#else
+    false
+#endif
+    ;  // NOLINT(whitespace/semicolon)
+
+namespace {
+
+class noop_resource : public hs::http_resource {
+ public:
+    hs::http_response render_get(const hs::http_request&) override {
+        return hs::http_response::string("ok");
+    }
+};
+
+double sort_and_median(std::vector<double>& v) {
+    std::sort(v.begin(), v.end());
+    return v[v.size() / 2];
+}
+
+double p99_of_sorted(std::vector<double>& v) {
+    const std::size_t idx = (v.size() * 99) / 100;
+    return v[std::min(idx, v.size() - 1)];
+}
+
+// Measure a no-arg lambda's median ns/call over OUTER rounds of
+// INNER iterations each.  Prints a one-line summary and returns the
+// median.
+template <typename F>
+double measure_median_ns(const char* label, F op,
+                         std::size_t outer, std::size_t inner) {
+    using clock = std::chrono::steady_clock;
+    std::vector<double> samples_ns;
+    samples_ns.reserve(outer);
+
+    // Warmup: prime instruction cache + branch predictor.
+    for (std::size_t i = 0; i < 10'000; ++i) {
+        op();
+    }
+
+    for (std::size_t r = 0; r < outer; ++r) {
+        const auto t0 = clock::now();
+        for (std::size_t i = 0; i < inner; ++i) {
+            op();
+        }
+        const auto t1 = clock::now();
+        const double ns_per_call =
+            std::chrono::duration<double, std::nano>(t1 - t0).count() / inner;
+        samples_ns.push_back(ns_per_call);
+    }
+
+    const double min_ns =
+        *std::min_element(samples_ns.begin(), samples_ns.end());
+    const double max_ns =
+        *std::max_element(samples_ns.begin(), samples_ns.end());
+    const double median = sort_and_median(samples_ns);
+    const double p99 = p99_of_sorted(samples_ns);
+    std::printf("  %s: median=%.3fns  p99=%.3fns  (min=%.3fns max=%.3fns)\n",
+                label, median, p99, min_ns, max_ns);
+    return median;
+}
+
+// Build a webserver with auth_handler_paths configured so the
+// auth-skip path is exercised.  We never start the daemon (no MHD,
+// no socket).
+std::unique_ptr<hs::webserver> make_bench_webserver(
+        std::vector<std::string> skip_paths) {
+    // A no-op auth_handler so the auth surface is engaged.
+    auto auth = [](const hs::http_request&)
+        -> std::optional<hs::http_response> { return std::nullopt; };
+    auto ws = std::make_unique<hs::webserver>(
+        hs::create_webserver(8080)
+            .start_method(hs::http::http_utils::INTERNAL_SELECT)
+            .auth_handler(auth)
+            .auth_skip_paths(std::move(skip_paths)));
+    ws->register_path("/api/v1/users/me", std::make_shared<noop_resource>());
+    // Resource with restricted method set so 405 path exercises
+    // serialize_allow_methods.  Only GET is allowed.
+    auto restricted = std::make_shared<noop_resource>();
+    restricted->disallow_all();
+    restricted->set_allowing(hs::http_method::get, true);
+    ws->register_path("/api/v1/restricted", restricted);
+    return ws;
+}
+
+}  // namespace
+
+int main() {
+    if constexpr (kSanitizerBuild) {
+        std::printf("bench_warm_path: skipped (sanitizer build "
+                    "would distort ns/call)\n");
+        return 0;
+    }
+
+    // Project convention: 11 outer rounds, 1M inner iterations
+    // (TASK-058 acceptance criterion).  serialize_allow_405 is more
+    // expensive than the other measurements, so 100K inner is enough
+    // to keep the wall time bounded.
+    constexpr std::size_t OUTER = 11;
+    constexpr std::size_t INNER = 1'000'000;
+    constexpr std::size_t INNER_405 = 100'000;
+
+    // ----- (1) canonicalize: lookup_v2 on a canonical path. -----
+    {
+        auto ws = make_bench_webserver({"/public", "/health"});
+        auto* impl = hs::webserver_test_access::impl(*ws);
+        static const std::string kPath("/api/v1/users/me");
+        // Warm the cache: subsequent lookups hit the cache tier, so
+        // canonicalize_lookup_path is what dominates the visible work.
+        {
+            auto warm = impl->lookup_v2(hs::http_method::get, kPath);
+            do_not_optimize(warm);
+        }
+        std::printf("bench_warm_path (1): canonicalize "
+                    "(/api/v1/users/me cache-hit)\n");
+        measure_median_ns(
+            "canonicalize",
+            [&]() {
+                auto r = impl->lookup_v2(hs::http_method::get, kPath);
+                do_not_optimize(r);
+            },
+            OUTER, INNER);
+    }
+
+    // ----- (2) should_skip_auth on a non-empty list. -----
+    {
+        auto ws = make_bench_webserver({"/public", "/health"});
+        auto* impl = hs::webserver_test_access::impl(*ws);
+        static const std::string kPath("/api/v1/users/me");
+        std::printf("bench_warm_path (2): should_skip_auth "
+                    "(non-empty skip list)\n");
+        measure_median_ns(
+            "should_skip_auth_nonempty",
+            [&]() {
+                bool r = impl->should_skip_auth(kPath);
+                do_not_optimize(r);
+            },
+            OUTER, INNER);
+    }
+
+    // ----- (3) should_skip_auth on an empty list (the common case
+    // for servers with no auth_handler configured -- but the bench
+    // still installs an auth_handler so the dispatch surface engages
+    // it).  This is the production-typical case for servers that
+    // either don't configure skip paths at all, or configure
+    // auth_skip_paths({}) explicitly. -----
+    {
+        auto ws = make_bench_webserver({});
+        auto* impl = hs::webserver_test_access::impl(*ws);
+        static const std::string kPath("/api/v1/users/me");
+        std::printf("bench_warm_path (3): should_skip_auth "
+                    "(empty skip list)\n");
+        measure_median_ns(
+            "should_skip_auth_empty",
+            [&]() {
+                bool r = impl->should_skip_auth(kPath);
+                do_not_optimize(r);
+            },
+            OUTER, INNER);
+    }
+
+    // ----- (4) serialize_allow_405: cost of building the Allow:
+    // header value on a 405.  Drive serialize_allow_methods directly
+    // to isolate the format cost without spinning up MHD. -----
+    {
+        auto ws = make_bench_webserver({});
+        auto* impl = hs::webserver_test_access::impl(*ws);
+        // Build a fresh resource with a non-trivial mask.
+        noop_resource r;
+        r.disallow_all();
+        r.set_allowing(hs::http_method::get, true);
+        r.set_allowing(hs::http_method::head, true);
+        r.set_allowing(hs::http_method::post, true);
+        std::printf("bench_warm_path (4): serialize_allow_405 "
+                    "(GET, HEAD, POST mask)\n");
+        measure_median_ns(
+            "serialize_allow_405",
+            [&]() {
+                std::string s = impl->serialize_allow_methods(
+                    r.get_allowed_methods());
+                do_not_optimize(s);
+            },
+            OUTER, INNER_405);
+    }
+
+    std::printf("\nbench_warm_path: no pass/fail ceiling -- numbers "
+                "reported above are the baseline; rerun after each "
+                "TASK-058 step and compare medians manually.\n");
+    return 0;
+}
