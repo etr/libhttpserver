@@ -544,7 +544,7 @@ EXTRA_DIST = libhttpserver.supp \
 #   3. Add a `<name>_LDADD = ...` line if it needs more than the
 #      default empty LDADD.
 #   4. Run `make bench` from the build directory.
-bench_targets = bench_sizeof_http_resource bench_get_headers bench_hook_overhead bench_route_lookup
+bench_targets = bench_sizeof_http_resource bench_get_headers bench_hook_overhead bench_route_lookup bench_warm_path
 EXTRA_PROGRAMS = $(bench_targets)
 
 # bench_sizeof_http_resource: pure compile-time static_assert guard.
@@ -588,6 +588,15 @@ bench_hook_overhead_LDADD = $(LDADD) -lmicrohttpd
 # bench_hook_overhead.cpp and the unit tests.
 bench_route_lookup_SOURCES = bench_route_lookup.cpp
 bench_route_lookup_LDADD = $(LDADD) -lmicrohttpd
+
+# bench_warm_path (TASK-058): per-request allocation pass.  Times
+# canonicalize_lookup_path, should_skip_auth (non-empty + empty list),
+# and serialize_allow_methods to verify the TASK-058 refactors land
+# without regressing the warm GET path.  Defines HTTPSERVER_COMPILATION
+# so the bench can reach webserver_test_access, the same friend
+# pattern used by bench_route_lookup.
+bench_warm_path_SOURCES = bench_warm_path.cpp
+bench_warm_path_LDADD = $(LDADD) -lmicrohttpd
 
 bench: $(bench_targets)
 	@for p in $(bench_targets); do \
