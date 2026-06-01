@@ -27,6 +27,8 @@
 
 #include <functional>
 #include <memory>
+#include <mutex>
+#include <string>
 
 // TASK-036: render_* virtuals now return http_response by value; the
 // inline defaults call render(req) and forward the prvalue, which
@@ -220,6 +222,33 @@ class http_resource {
      }
 
      /**
+      * @brief Return the cached comma-separated Allow header value for
+      * the current methods_allowed_ mask.
+      *
+      * TASK-058 step 3.  The 405 dispatch path reads this on every
+      * method-not-allowed response; pre-TASK-058 the value was rebuilt
+      * (heap-allocating) on every call via
+      * detail::format_allow_header().  This getter caches the result
+      * lazily and regenerates only when the mask differs from the
+      * snapshot taken at cache-fill time -- so set_allowing,
+      * disallow_all, and allow_all all invalidate the cache implicitly,
+      * without any explicit dependency on the mutation API.
+      *
+      * Thread-safe: a per-resource std::mutex serialises the cache
+      * fill / read.  Once the cache is warm, the lock is uncontended
+      * on every subsequent call.
+      *
+      * The returned reference is valid until the next mask mutation;
+      * callers must not store it beyond a single dispatch invocation.
+      *
+      * @return reference to the cached Allow-header string.  Empty
+      *         string iff methods_allowed_ is empty (no methods
+      *         allowed -- in which case there is no Allow header to
+      *         emit at all).
+      */
+     const std::string& get_allow_header() const;
+
+     /**
       * @brief Register a per-resource hook on one of the five
       * post-route-resolution phases.
       *
@@ -277,11 +306,21 @@ class http_resource {
       * the same per-route hook table as the original. Hooks registered on
       * the original will also fire for the copy. If independent hook tables
       * are needed, register hooks on the copy separately after construction.
+      *
+      * TASK-058 step 3: cached_allow_mutex_ is non-copyable / non-movable
+      * (std::mutex has no copy or move).  The copy / move special members
+      * are therefore written by hand and skip the mutex member entirely --
+      * the copy / move target gets a freshly default-constructed mutex
+      * and an invalidated cache (cached_allow_valid_ = false), so the
+      * next get_allow_header() call on the target rebuilds the cache
+      * under its own (fresh) lock.  This is the correct semantic: copy /
+      * move is a structural operation; cache state is local to each
+      * instance and must not be shared by reference.
      **/
-     http_resource(const http_resource& b) = default;
-     http_resource(http_resource&& b) noexcept = default;
-     http_resource& operator=(const http_resource& b) = default;
-     http_resource& operator=(http_resource&& b) = default;
+     http_resource(const http_resource& b) noexcept;
+     http_resource(http_resource&& b) noexcept;
+     http_resource& operator=(const http_resource& b) noexcept;
+     http_resource& operator=(http_resource&& b) noexcept;
 
  private:
      friend class webserver;
@@ -304,6 +343,35 @@ class http_resource {
      // logical const-ness of the resource is preserved (the firing path
      // only reads the table; only the public add_hook(non-const) writes).
      mutable std::shared_ptr<detail::resource_hook_table> hook_table_;
+
+     // TASK-058 step 3: lazy cache of the formatted Allow header value
+     // for the 405 dispatch path.  Built on first call to
+     // get_allow_header(); reused on subsequent calls as long as the
+     // resource's methods_allowed_ mask is unchanged.  Mask changes
+     // (set_allowing / disallow_all / allow_all) are detected implicitly
+     // by comparing the live mask against the snapshot taken when the
+     // cache was last filled -- the cache regenerates on next read
+     // without any explicit invalidation hook.  This sidesteps the
+     // maintenance trap of chasing every mutation site.
+     //
+     // The cost of the comparison (a single 32-bit equality test on
+     // method_set::bits) is dwarfed by the avoided heap allocation
+     // inside format_allow_header(), which reserves a 64-byte string and
+     // appends method tokens on every 405 dispatch pre-cache.
+     //
+     // Thread-safety: the dispatch path can call get_allow_header()
+     // concurrently from multiple MHD worker threads against the same
+     // resource.  The mutex serialises the cache fill / read; once the
+     // cache is warm, the lock is uncontended on every subsequent 405.
+     //
+     // `mutable` for the same reason as hook_table_: the dispatch path
+     // calls get_allow_header() on a `const http_resource&` (the cache
+     // is logically const-observable -- the visible result is a stable
+     // function of methods_allowed_).
+     mutable std::mutex cached_allow_mutex_;
+     mutable std::string cached_allow_header_;
+     mutable method_set cached_allow_mask_{};
+     mutable bool cached_allow_valid_ = false;
 
 // Internal-only accessor: only visible to translation units that define
 // HTTPSERVER_COMPILATION (i.e., the library's own .cpp files). User-facing
@@ -329,12 +397,23 @@ class http_resource {
 // Ensure http_resource stays small enough for stack allocation in hot paths.
 // Originally vptr + uint32_t method_set + padding; the per-resource hook
 // table PIMPL (shared_ptr<resource_hook_table>) was added later, growing the
-// cap to vptr + shared_ptr + method_set + padding. The v1 std::map-based
-// allow-list was much larger; this bound documents intentional, measured growth.
+// cap to vptr + shared_ptr + method_set + padding.
+//
+// TASK-058 step 3 added a lazy Allow-header cache: std::mutex +
+// std::string + method_set + bool.  std::mutex is a sizeof~64 storage on
+// pthread platforms (libc++/macOS) and ~40 on libstdc++/Linux; std::string
+// SBO adds ~24-32; the method_set / bool fields slot into existing padding.
+// The new ceiling is the old (3*void* + 2*method_set) plus the new cache
+// payload, padded for alignment.  See test/bench_sizeof_http_resource.cpp
+// for the v1-anchored algebra; the value here documents the
+// post-TASK-058 layout shape.
 static_assert(sizeof(http_resource) <=
-                  sizeof(void*) * 3 + sizeof(method_set) * 2,
+                  sizeof(void*) * 3 + sizeof(method_set) * 2
+                  + sizeof(std::mutex) + sizeof(std::string)
+                  + sizeof(method_set) + sizeof(bool) * 8,
               "http_resource should be approximately vptr + shared_ptr + "
-              "method_set after TASK-051");
+              "method_set (TASK-051) + Allow-header cache "
+              "(mutex + string + method_set + bool) after TASK-058 step 3");
 
 }  // namespace httpserver
 #endif  // SRC_HTTPSERVER_HTTP_RESOURCE_HPP_

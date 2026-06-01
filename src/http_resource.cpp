@@ -32,6 +32,7 @@
 #include <string>
 #include <utility>
 
+#include "httpserver/detail/method_utils.hpp"
 #include "httpserver/detail/resource_hook_table.hpp"
 #include "httpserver/hook_action.hpp"
 #include "httpserver/hook_context.hpp"
@@ -97,6 +98,55 @@ ensure_table(std::shared_ptr<detail::resource_hook_table>& slot) {
 
 }  // namespace
 
+// ---- copy / move special members ----------------------------------------
+//
+// TASK-058 step 3 added std::mutex cached_allow_mutex_, which has no
+// copy or move.  The defaulted special members on the public class
+// declaration would therefore be implicitly deleted.  Implement them
+// here by-hand, skipping the mutex.  The copy / move target starts
+// with a fresh, default-constructed mutex and an invalidated Allow-
+// header cache (cached_allow_valid_ = false), which the next call to
+// get_allow_header() repopulates lazily.
+
+http_resource::http_resource(const http_resource& b) noexcept
+    : methods_allowed_(b.methods_allowed_),
+      hook_table_(b.hook_table_) {
+    // cached_allow_mutex_ default-constructs.
+    // cached_allow_header_ / cached_allow_mask_ default-construct.
+    // cached_allow_valid_ stays false (member default).
+}
+
+http_resource::http_resource(http_resource&& b) noexcept
+    : methods_allowed_(b.methods_allowed_),
+      hook_table_(std::move(b.hook_table_)) {
+    // Same rationale as the copy constructor: cache state is per-
+    // instance and is not transferred.  std::mutex has no move.
+}
+
+http_resource& http_resource::operator=(const http_resource& b) noexcept {
+    if (this != &b) {
+        hook_table_ = b.hook_table_;
+        methods_allowed_ = b.methods_allowed_;
+        // Invalidate the local cache; do NOT touch the mutex (still
+        // owned by *this).
+        std::lock_guard<std::mutex> lock(cached_allow_mutex_);
+        cached_allow_valid_ = false;
+        cached_allow_header_.clear();
+    }
+    return *this;
+}
+
+http_resource& http_resource::operator=(http_resource&& b) noexcept {
+    if (this != &b) {
+        hook_table_ = std::move(b.hook_table_);
+        methods_allowed_ = b.methods_allowed_;
+        std::lock_guard<std::mutex> lock(cached_allow_mutex_);
+        cached_allow_valid_ = false;
+        cached_allow_header_.clear();
+    }
+    return *this;
+}
+
 // ---- add_hook overloads -------------------------------------------------
 
 hook_handle http_resource::add_hook(hook_phase phase,
@@ -147,6 +197,35 @@ hook_handle http_resource::add_hook(hook_phase phase,
     const std::uint64_t id = table->append_request_completed(std::move(fn));
     return hook_handle{std::weak_ptr<detail::resource_hook_table>(table),
                        hook_phase::request_completed, id};
+}
+
+// ---- get_allow_header ---------------------------------------------------
+//
+// TASK-058 step 3: lazy Allow-header cache.  See the header-side
+// declaration for the contract.  Implementation:
+//
+//   1. Snapshot the live mask once -- subsequent comparisons run against
+//      this local copy (avoids re-loading methods_allowed_ inside the
+//      critical section).
+//   2. Take the per-resource mutex.  Under contention this serialises
+//      cache-fill; under the warm-path (hit) case the lock is held for
+//      a single integer compare + reference return.
+//   3. If the cached snapshot matches the live mask, return the cached
+//      string by reference.  Otherwise rebuild via detail::format_allow_header
+//      (the same routine the pre-TASK-058 path used) and update the snapshot.
+//
+// The returned reference is stable until the next mask mutation; the
+// caller (dispatch_resource_handler) consumes it synchronously within
+// the current dispatch, so the reference outlives use.
+const std::string& http_resource::get_allow_header() const {
+    const method_set live = methods_allowed_;
+    std::lock_guard<std::mutex> lock(cached_allow_mutex_);
+    if (!cached_allow_valid_ || cached_allow_mask_ != live) {
+        cached_allow_header_ = detail::format_allow_header(live);
+        cached_allow_mask_ = live;
+        cached_allow_valid_ = true;
+    }
+    return cached_allow_header_;
 }
 
 }  // namespace httpserver

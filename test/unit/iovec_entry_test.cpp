@@ -58,6 +58,8 @@ static_assert(std::is_same_v<decltype(httpserver::iovec_entry::len),
               "iovec_entry::len must be std::size_t");
 
 LT_BEGIN_SUITE(iovec_entry_suite)
+    void set_up() {}
+    void tear_down() {}
 LT_END_SUITE(iovec_entry_suite)
 
 LT_BEGIN_AUTO_TEST(iovec_entry_suite, default_constructed_pod_holds_values)

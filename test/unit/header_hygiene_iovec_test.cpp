@@ -54,6 +54,8 @@
 #include "./littletest.hpp"
 
 LT_BEGIN_SUITE(header_hygiene_iovec_suite)
+    void set_up() {}
+    void tear_down() {}
 LT_END_SUITE(header_hygiene_iovec_suite)
 
 // Verify that iovec_entry is accessible and sizeof/alignof are non-zero

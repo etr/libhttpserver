@@ -453,9 +453,15 @@ void webserver_impl::dispatch_resource_handler(detail::modded_request* mr,
             }
             return;
         }
-        // Method not allowed: serialize the allow-mask into a header.
+        // Method not allowed: emit the Allow header.  TASK-058 step 3:
+        // read the resource's lazily-cached Allow header value instead
+        // of rebuilding the string from the mask on every 405.  The
+        // cache lives on http_resource (the same object that owns the
+        // mask), regenerates implicitly when the mask differs from the
+        // last-cached snapshot, and is thread-safe under a per-resource
+        // mutex held only across the cache-fill path.
         mr->response.emplace(method_not_allowed_page(mr));
-        std::string header_value = serialize_allow_methods(hrm->get_allowed_methods());
+        const std::string& header_value = hrm->get_allow_header();
         if (!header_value.empty()) {
             mr->response->with_header(http_utils::http_header_allow, header_value);
         }
