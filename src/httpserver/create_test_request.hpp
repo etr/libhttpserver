@@ -120,6 +120,15 @@ class create_test_request {
         return *this;
     }
 
+    // TASK-057: opt out of the default credential-redaction policy in
+    // http_request::operator<<. Mirrors the webserver-side builder
+    // setter @ref create_webserver::expose_credentials_in_logs for the
+    // unit-test scope (no webserver construction).
+    create_test_request& expose_credentials_in_logs(bool enable = true) {
+        _expose_credentials_in_logs = enable;
+        return *this;
+    }
+
     http_request build();
 
  private:
@@ -142,6 +151,10 @@ class create_test_request {
     std::string _requestor = "127.0.0.1";
     uint16_t _requestor_port = 0;
     bool _tls_enabled = false;
+    // TASK-057: default false (secure-by-default). When true, build()
+    // sets http_request_impl::expose_credentials_in_logs_ so the
+    // diagnostic dump streams the v1 verbose form.
+    bool _expose_credentials_in_logs = false;
 };
 
 }  // namespace httpserver

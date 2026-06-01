@@ -126,6 +126,18 @@ LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_expose_exception_messages_tog
         .expose_exception_messages(true).expose_exception_messages(false));
 LT_END_AUTO_TEST(builder_expose_exception_messages_toggle)
 
+// TASK-057: the expose_credentials_in_logs(bool) builder toggle is the
+// documented opt-in that restores the v1 verbose form of
+// http_request::operator<< (plaintext password, Authorization headers,
+// cookie values). Default is false (security-fix default; CWE-312 /
+// CWE-532). Mirrors the existing builder_*_toggle pattern.
+LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_expose_credentials_in_logs_toggle)
+    LT_CHECK_NOTHROW(create_webserver(8080).expose_credentials_in_logs());
+    LT_CHECK_NOTHROW(create_webserver(8080).expose_credentials_in_logs(false));
+    LT_CHECK_NOTHROW(create_webserver(8080)
+        .expose_credentials_in_logs(true).expose_credentials_in_logs(false));
+LT_END_AUTO_TEST(builder_expose_credentials_in_logs_toggle)
+
 #ifdef HAVE_BAUTH
 LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_basic_auth_toggle)
     LT_CHECK_NOTHROW(create_webserver(8080).basic_auth());

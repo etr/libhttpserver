@@ -103,6 +103,11 @@ http_request create_test_request::build() {
     req.impl_->tls_enabled_local = _tls_enabled;
 #endif  // HAVE_GNUTLS
 
+    // TASK-057: propagate the test-builder opt-in into the impl. The
+    // webserver-dispatch path does the equivalent assignment in
+    // webserver_impl::requests_answer_first_step.
+    req.set_expose_credentials_in_logs(_expose_credentials_in_logs);
+
     return req;
 }
 
