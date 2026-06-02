@@ -570,6 +570,13 @@ class http_request {
  *          header, and every cookie/session token in plaintext to
  *          anyone with read access to the log store. Guard with
  *          `#ifndef NDEBUG` or an explicit environment check.
+ *
+ * @warning Query-string arguments — including any `?token=...`,
+ *          `?api_key=...`, or other credential-bearing parameters —
+ *          are emitted verbatim regardless of the
+ *          `expose_credentials_in_logs` flag. Avoid routing credential
+ *          material through query strings, or strip the offending
+ *          parameters before the request reaches any logging path.
  */
 std::ostream &operator<< (std::ostream &os, const http_request &r);
 

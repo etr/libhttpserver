@@ -22,6 +22,16 @@ removed after the next release. Rationale: completes the
 PRD-RSP-REQ-007 value-typed response cutover (DR-009) onto the auth
 path, removing the per-authenticated-request control-block allocation.
 
+**`expose_credentials_in_logs` (TASK-057).** Security-opt-in builder
+setter that propagates to every `http_request` the webserver dispatches.
+Default `false` suppresses credential surfaces in `http_request::operator<<`
+(Basic-auth `pass`, `Authorization`/`Proxy-Authorization` headers and
+footers, cookie values) by emitting the fixed token `<redacted>`
+(CWE-312 / CWE-532). Setting `true` restores the v1 verbose form for
+local development; the flag must not be set in production. Shape
+mirrors `expose_exception_messages` (see §5.2.1 for the cross-cutting
+contract).
+
 **Related requirements:** PRD-CFG-REQ-001..004, PRD-RSP-REQ-007.
 
 ---

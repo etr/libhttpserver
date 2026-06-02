@@ -197,6 +197,13 @@ MHD_Result webserver_impl::requests_answer_second_step(MHD_Connection* connectio
     }
 
 #ifdef DEBUG
+    // WARNING (TASK-057): this emits the raw request body to stdout.
+    // If a client posts credentials in a form body
+    // (`application/x-www-form-urlencoded` with a `password=` field) or
+    // raw Basic-auth bytes, those values will appear verbatim in the
+    // debug stream. Must remain guarded by `#ifdef DEBUG` and must not
+    // be widened to release builds; the operator<< redaction policy
+    // does NOT cover this code path.
     std::cout << "Writing content: " << std::string(upload_data, *upload_data_size) << std::endl;
 #endif  // DEBUG
     // The post iterator is only created from the libmicrohttpd for content of type

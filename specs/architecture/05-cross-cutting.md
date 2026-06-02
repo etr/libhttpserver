@@ -24,6 +24,10 @@
 5. `feature_unavailable` is a normal `std::runtime_error`; no special status mapping. Users who care translate it explicitly.
 6. There is no throw-as-status idiom. Users wanting 404/400/etc. construct the response by value: `return http_response::empty().with_status(404);`.
 
+#### 5.2.1 Diagnostic redaction (TASK-057)
+
+`http_request::operator<<` redacts credential material by default (CWE-312 / CWE-532): the Basic-auth `pass` field, `Authorization` and `Proxy-Authorization` header/footer values (case-insensitive), and every cookie value are replaced with the fixed token `<redacted>`. The username (REMOTE_USER) and query-string arguments are emitted verbatim. The v1 verbose-everything behaviour is opt-in for development via `create_webserver::expose_credentials_in_logs(true)` — the same security opt-in shape as `expose_exception_messages` above.
+
 ### 5.3 Memory and allocation hot paths
 
 | Object | Allocations per instance | Notes |

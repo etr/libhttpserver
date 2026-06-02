@@ -123,7 +123,11 @@ class create_test_request {
     // TASK-057: opt out of the default credential-redaction policy in
     // http_request::operator<<. Mirrors the webserver-side builder
     // setter @ref create_webserver::expose_credentials_in_logs for the
-    // unit-test scope (no webserver construction).
+    // unit-test scope (no webserver construction). The no-argument form
+    // (`expose_credentials_in_logs()`) is shorthand for `enable=true`
+    // and must not appear outside test scope — it reinforces the
+    // development-only intent without forcing callers to type the
+    // boolean argument.
     create_test_request& expose_credentials_in_logs(bool enable = true) {
         _expose_credentials_in_logs = enable;
         return *this;

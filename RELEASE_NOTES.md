@@ -211,14 +211,15 @@ and see the v2 replacement.
   they want.
 - **`http_request::operator<<` redacts credentials by default.**
   v1 (and earlier v2 builds) emitted `pass:"<plaintext>"`,
-  `digested_pass:"<plaintext>"`, `Authorization`/`Proxy-Authorization`
-  header values, and cookie values verbatim into diagnostic output,
-  leaking every credential into any log aggregation pipeline that
-  captures operator-stream dumps (CWE-312, CWE-532, OWASP A09:2021).
-  v2.0 replaces those fields with the fixed token `<redacted>` in the
-  default stream output. To restore the v1 verbose form for local
-  development, call `.expose_credentials_in_logs(true)` on the
-  `create_webserver` builder — this flag is intended for development
+  `Authorization`/`Proxy-Authorization` header values, and cookie values
+  verbatim into diagnostic output, leaking every credential into any
+  log aggregation pipeline that captures operator-stream dumps
+  (CWE-312, CWE-532, OWASP A09:2021). Digest credentials are protected
+  through the same Authorization-header path (there was never a separate
+  `digested_pass` emit field). v2.0 replaces those fields with the fixed
+  token `<redacted>` in the default stream output. To restore the v1
+  verbose form for local development, call `.expose_credentials_in_logs(true)`
+  on the `create_webserver` builder — this flag is intended for development
   only and must not be set in production deployments.
 
 ## Threading

@@ -305,8 +305,10 @@ aggregation pipeline.
 
 **Action Items:**
 - [x] Replace the literal password emission with a fixed redaction token
-  (`pass:"<redacted>"`). Same treatment for `digested_pass` and any
-  other authentication secret on the stream.
+  (`pass:"<redacted>"`). Digest credentials are protected via
+  case-insensitive redaction of `Authorization` / `Proxy-Authorization`
+  header values (and footers) — there is no separate `digested_pass`
+  emit field in the operator stream.
 - [x] Add an opt-in `webserver_builder.expose_credentials_in_logs(true)`
   flag for the rare developer who needs the verbose form locally.
 - [x] Update Doxygen on the operator to call out the redaction policy.

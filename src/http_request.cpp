@@ -368,6 +368,19 @@ void http_request::set_expose_credentials_in_logs(bool v) {
 
 namespace {
 
+constexpr std::string_view kRedacted = "<redacted>";
+
+// Case-insensitive equality on ASCII bytes, reusing http_header_toupper
+// so the casing rule stays in lock-step with http::header_comparator
+// (which is what header_view_map orders keys by).
+bool iequal_ascii(std::string_view a, std::string_view b) noexcept {
+    if (a.size() != b.size()) return false;
+    return std::equal(a.begin(), a.end(), b.begin(),
+        [](char x, char y) {
+            return http::http_header_toupper(x) == http::http_header_toupper(y);
+        });
+}
+
 // TASK-057: Authorization-class header names whose values carry
 // credential material (Basic / Digest / Bearer payloads). Matched
 // case-insensitively against the keys in the Headers / Footers maps
@@ -375,22 +388,27 @@ namespace {
 bool is_authorization_header_key(std::string_view key) noexcept {
     constexpr std::string_view kAuth = "Authorization";
     constexpr std::string_view kProxyAuth = "Proxy-Authorization";
-    if (key.size() != kAuth.size() && key.size() != kProxyAuth.size()) {
-        return false;
-    }
-    auto ieq = [](std::string_view a, std::string_view b) noexcept {
-        if (a.size() != b.size()) return false;
-        for (std::size_t i = 0; i < a.size(); ++i) {
-            const unsigned char ca = static_cast<unsigned char>(a[i]);
-            const unsigned char cb = static_cast<unsigned char>(b[i]);
-            if (std::tolower(ca) != std::tolower(cb)) return false;
-        }
-        return true;
-    };
-    return ieq(key, kAuth) || ieq(key, kProxyAuth);
+    return iequal_ascii(key, kAuth) || iequal_ascii(key, kProxyAuth);
 }
 
-constexpr std::string_view kRedacted = "<redacted>";
+// TASK-057: shared redaction-aware dumper for the Headers, Footers, and
+// Cookies maps. ValueFor lets the caller decide per-entry whether to emit
+// the original value or the fixed redaction token, so the stream-output
+// boilerplate (empty-guard, prefix line, key/quote framing) lives in
+// exactly one place and cannot drift between sections. The prefix type
+// matches http::dump_header_map so all three helpers share one function-
+// pointer signature in operator<<.
+template <typename ValueFor>
+void dump_map_redacted(std::ostream& os, const std::string& prefix,
+                       const http::header_view_map& map,
+                       ValueFor value_for) {
+    if (map.empty()) return;
+    os << "    " << prefix << " [";
+    for (const auto& kv : map) {
+        os << kv.first << ":\"" << value_for(kv) << "\" ";
+    }
+    os << "]" << std::endl;
+}
 
 // TASK-057: emit a Headers/Footers map with Authorization-class header
 // values replaced by the fixed redaction token. Mirrors the wire shape
@@ -398,31 +416,21 @@ constexpr std::string_view kRedacted = "<redacted>";
 // entries so the on-the-wire diagnostic format is unchanged.
 void dump_header_map_redacted(std::ostream& os, const std::string& prefix,
                               const http::header_view_map& map) {
-    if (map.empty()) return;
-    os << "    " << prefix << " [";
-    for (const auto& kv : map) {
-        os << kv.first << ":\"";
-        if (is_authorization_header_key(kv.first)) {
-            os << kRedacted;
-        } else {
-            os << kv.second;
-        }
-        os << "\" ";
-    }
-    os << "]" << std::endl;
+    dump_map_redacted(os, prefix, map, [](const auto& kv) -> std::string_view {
+        return is_authorization_header_key(kv.first) ? kRedacted : kv.second;
+    });
 }
 
 // TASK-057: cookie values are credential material by default (session
 // IDs, CSRF tokens, JWTs); redaction is unconditional on the keys
-// (which remain visible for log triage).
+// (which remain visible for log triage). On HAVE_BAUTH-off / HAVE_DAUTH-off
+// builds the pass and digested-user surfaces are absent by construction,
+// so the redaction policy only meaningfully acts on Authorization headers
+// and cookies on those configurations.
 void dump_cookie_map_redacted(std::ostream& os, const std::string& prefix,
                               const http::header_view_map& map) {
-    if (map.empty()) return;
-    os << "    " << prefix << " [";
-    for (const auto& kv : map) {
-        os << kv.first << ":\"" << kRedacted << "\" ";
-    }
-    os << "]" << std::endl;
+    dump_map_redacted(os, prefix, map,
+                      [](const auto&) -> std::string_view { return kRedacted; });
 }
 
 }  // namespace
@@ -437,9 +445,12 @@ std::ostream& operator<< (std::ostream& os, const http_request& r) {
         ? static_cast<header_dumper>(&http::dump_header_map)
         : &dump_cookie_map_redacted;
 
+    const std::string_view pass_out = expose
+        ? std::string_view(r.get_pass())
+        : kRedacted;
     os << r.get_method() << " Request ["
        << "user:\"" << r.get_user() << "\" "
-       << "pass:\"" << (expose ? r.get_pass() : std::string(kRedacted)) << "\""
+       << "pass:\"" << pass_out << "\""
        << "] path:\"" << r.get_path() << "\"" << std::endl;
 
     dump_headers(os, "Headers", r.get_headers());
