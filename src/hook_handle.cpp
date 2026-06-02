@@ -141,90 +141,60 @@ void hook_handle::remove() noexcept {
     // register_hook_impl (slot never inserted); an assert catches this in
     // debug builds. The !armed_ early-return above ensures that a second
     // remove() on the same handle never reaches this code path.
-    auto erase_if_found = [id](auto& vec) -> bool {
+    // erase_and_reset: linear scan for the slot, erase if found, and
+    // clear the any_hooks_ gate if the vector becomes empty. The two
+    // operations stay together so a new phase only adds a one-line
+    // switch arm. Phase vectors are tiny in practice (single-digit
+    // hook counts), so linear scan is the right shape here.
+    auto erase_and_reset = [id, impl, phase](auto& vec) {
         for (auto it = vec.begin(); it != vec.end(); ++it) {
             if (it->slot_id == id) {
                 vec.erase(it);
-                return true;
+                if (vec.empty()) {
+                    impl->any_hooks_[static_cast<std::size_t>(phase)].store(
+                        false, std::memory_order_release);
+                }
+                return;
             }
-        }
-        return false;
-    };
-    auto reset_gate_if_empty = [impl, phase](const auto& vec) {
-        if (vec.empty()) {
-            impl->any_hooks_[static_cast<std::size_t>(phase)].store(
-                false, std::memory_order_release);
         }
     };
 
-    // Macro-like helper: erase then reset gate only if the slot was found.
-    // The two-lambda + switch pattern is intentional: each case selects a
-    // differently-typed vector. A type-erased unification would require
-    // additional indirection without a meaningful readability gain for
-    // eleven cases. (TODO: revisit in a future task if a compile-time
-    // indexed tuple or std::visit approach is adopted for the phase vectors.)
+    // The switch arms below cannot collapse into a table lookup because
+    // each phase vector is a differently-typed phase_entry<Sig> — a
+    // type-erased unification would either need std::visit over a
+    // tuple-of-vectors or boxing each callable, both of which add
+    // indirection on the hot path. One arm per phase is the safest
+    // shape until the phase set stabilises post-TASK-051.
     switch (phase) {
     case hook_phase::connection_opened:
-        if (erase_if_found(impl->hooks_connection_opened_)) {
-            reset_gate_if_empty(impl->hooks_connection_opened_);
-        }
-        break;
+        erase_and_reset(impl->hooks_connection_opened_); break;
     case hook_phase::accept_decision:
-        if (erase_if_found(impl->hooks_accept_decision_)) {
-            reset_gate_if_empty(impl->hooks_accept_decision_);
-        }
-        break;
+        erase_and_reset(impl->hooks_accept_decision_); break;
     case hook_phase::request_received:
-        if (erase_if_found(impl->hooks_request_received_)) {
-            reset_gate_if_empty(impl->hooks_request_received_);
-        }
-        break;
+        erase_and_reset(impl->hooks_request_received_); break;
     case hook_phase::body_chunk:
-        if (erase_if_found(impl->hooks_body_chunk_)) {
-            reset_gate_if_empty(impl->hooks_body_chunk_);
-        }
-        break;
+        erase_and_reset(impl->hooks_body_chunk_); break;
     case hook_phase::route_resolved:
-        if (erase_if_found(impl->hooks_route_resolved_)) {
-            reset_gate_if_empty(impl->hooks_route_resolved_);
-        }
-        break;
+        erase_and_reset(impl->hooks_route_resolved_); break;
     case hook_phase::before_handler:
-        if (erase_if_found(impl->hooks_before_handler_)) {
-            reset_gate_if_empty(impl->hooks_before_handler_);
-        }
-        break;
+        erase_and_reset(impl->hooks_before_handler_); break;
     case hook_phase::handler_exception:
-        if (erase_if_found(impl->hooks_handler_exception_)) {
-            reset_gate_if_empty(impl->hooks_handler_exception_);
-        }
         // Finding #6 (forward-looking): if a future task adds a runtime
-        // re-registration path for handler_exception_alias_, remove() will
-        // also need a path to clear that slot and re-evaluate any_hooks_
-        // (currently any_hooks_ remains true while the alias is wired;
-        // removing only a user-vector entry does not clear it if the alias
-        // is still set). Add that handling alongside the runtime setter.
-        break;
+        // re-registration path for handler_exception_alias_, remove()
+        // will also need a path to clear that slot and re-evaluate
+        // any_hooks_. Currently any_hooks_ remains true while the alias
+        // is wired; removing only a user-vector entry does not clear it
+        // if the alias is still set. Add that handling alongside the
+        // runtime setter.
+        erase_and_reset(impl->hooks_handler_exception_); break;
     case hook_phase::after_handler:
-        if (erase_if_found(impl->hooks_after_handler_)) {
-            reset_gate_if_empty(impl->hooks_after_handler_);
-        }
-        break;
+        erase_and_reset(impl->hooks_after_handler_); break;
     case hook_phase::response_sent:
-        if (erase_if_found(impl->hooks_response_sent_)) {
-            reset_gate_if_empty(impl->hooks_response_sent_);
-        }
-        break;
+        erase_and_reset(impl->hooks_response_sent_); break;
     case hook_phase::request_completed:
-        if (erase_if_found(impl->hooks_request_completed_)) {
-            reset_gate_if_empty(impl->hooks_request_completed_);
-        }
-        break;
+        erase_and_reset(impl->hooks_request_completed_); break;
     case hook_phase::connection_closed:
-        if (erase_if_found(impl->hooks_connection_closed_)) {
-            reset_gate_if_empty(impl->hooks_connection_closed_);
-        }
-        break;
+        erase_and_reset(impl->hooks_connection_closed_); break;
     case hook_phase::count_:
         // Unreachable: an armed handle always carries a valid phase.
         break;
@@ -284,6 +254,32 @@ hook_handle hook_handle::detach() && noexcept {
 // TASK-048 perf: the snapshot vector is thread_local so the per-template-
 // instantiation per-thread buffer is reused across calls — no heap
 // allocation after the first request on each thread (warm path).
+
+// One-allocation log helpers shared by fire_hooks_for_phase and
+// fire_short_circuit_hooks_for_phase (TASK-049 review). Free helpers
+// (not lambdas captured per-instance) so the two templates' inner
+// catch blocks can stay one-liners without divergent strings.
+static void log_hook_threw(detail::webserver_impl* impl,
+                           std::string_view phase_name,
+                           const char* what) {
+    impl->log_dispatch_error(
+        std::string("hook[").append(phase_name)
+            .append("] threw: ").append(what));
+}
+static void log_hook_threw_unknown(detail::webserver_impl* impl,
+                                   std::string_view phase_name) {
+    impl->log_dispatch_error(
+        std::string("hook[").append(phase_name)
+            .append("] threw unknown exception"));
+}
+static void log_snapshot_failed(detail::webserver_impl* impl,
+                                std::string_view template_name,
+                                std::string_view phase_name) {
+    impl->log_dispatch_error(
+        std::string(template_name).append("[").append(phase_name)
+            .append("]: snapshot copy failed"));
+}
+
 template <typename Ctx>
 static void fire_hooks_for_phase(
     detail::webserver_impl* impl,
@@ -303,25 +299,16 @@ static void fire_hooks_for_phase(
             try {
                 entry.fn(ctx);
             } catch (const std::exception& e) {
-                // TASK-049 review: avoid three intermediate heap strings.
-                // Use .append() chain on a pre-constructed string so only
-                // one allocation is needed (string is move-eligible).
-                impl->log_dispatch_error(
-                    std::string("hook[").append(phase_name)
-                        .append("] threw: ").append(e.what()));
+                log_hook_threw(impl, phase_name, e.what());
             } catch (...) {
-                impl->log_dispatch_error(
-                    std::string("hook[").append(phase_name)
-                        .append("] threw unknown exception"));
+                log_hook_threw_unknown(impl, phase_name);
             }
         }
     } catch (...) {
         // Snapshot copy itself failed (e.g. allocator threw). Nothing
         // more we can do at this layer; callers are noexcept so the
         // contract holds even if std::terminate triggers.
-        impl->log_dispatch_error(
-            std::string("fire_hooks_for_phase[").append(phase_name)
-                .append("]: snapshot copy failed"));
+        log_snapshot_failed(impl, "fire_hooks_for_phase", phase_name);
     }
 }
 
@@ -378,20 +365,14 @@ fire_short_circuit_hooks_for_phase(
                     return std::move(action).take_response();
                 }
             } catch (const std::exception& e) {
-                // TASK-049 review: avoid three intermediate heap strings.
-                impl->log_dispatch_error(
-                    std::string("hook[").append(phase_name)
-                        .append("] threw: ").append(e.what()));
+                log_hook_threw(impl, phase_name, e.what());
             } catch (...) {
-                impl->log_dispatch_error(
-                    std::string("hook[").append(phase_name)
-                        .append("] threw unknown exception"));
+                log_hook_threw_unknown(impl, phase_name);
             }
         }
     } catch (...) {
-        impl->log_dispatch_error(
-            std::string("fire_short_circuit_hooks_for_phase[")
-                .append(phase_name).append("]: snapshot copy failed"));
+        log_snapshot_failed(impl, "fire_short_circuit_hooks_for_phase",
+                            phase_name);
     }
     return std::nullopt;
 }

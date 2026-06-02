@@ -29,6 +29,7 @@
 
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
+#include "test/integ/curl_helpers.hpp"
 
 using httpserver::body_chunk_ctx;
 using httpserver::create_webserver;
@@ -42,10 +43,7 @@ using httpserver::webserver;
 
 namespace {
 
-size_t writefunc(void* ptr, size_t size, size_t nmemb, std::string* s) {
-    s->append(reinterpret_cast<char*>(ptr), size * nmemb);
-    return size * nmemb;
-}
+using httpserver_test::writefunc;
 
 class sink_resource : public httpserver::http_resource {
  public:

@@ -382,6 +382,18 @@ LT_BEGIN_AUTO_TEST(deferred_suite, deferred_producer_destroyed_in_request_comple
     // captures, then asserting the sentinel was destroyed after the server
     // is fully drained.
     //
+    // Two-concern note (TASK-036 review #10): this test asserts both
+    //   (a) body delivery ("okok" / 200) — the liveness gate
+    //   (b) the lifetime contract — the load-bearing pin
+    // A failed (a) short-circuits (b). That is intentional: (a) acts as a
+    // gating precondition — if the dispatch path doesn't deliver bytes
+    // we already know (b) is meaningless. The reviewer recommendation to
+    // split into two tests was weighed against duplicating the sentinel
+    // wiring (~40 LOC of producer + condvar plumbing) for the marginal
+    // benefit of pinpointing which of the two assertions broke. Test
+    // names already encode the primary contract; failure output makes
+    // the gating relationship obvious.
+    //
     // Synchronization: sentinel destructor signals destroyed_cv so the test
     // thread wakes immediately rather than spinning. Upper bound is 5 s to
     // catch a genuine DR-010 regression without hanging the CI suite.
