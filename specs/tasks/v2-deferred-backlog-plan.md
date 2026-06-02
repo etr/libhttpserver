@@ -421,15 +421,17 @@ the only outstanding supply-chain hardening item from the
 manual-validation review.
 
 **Action Items:**
-- [ ] Pin the current PMD release version (e.g. `7.2.0`) in the
-  workflow.
-- [ ] After `curl/wget` of the zip, run
-  `echo "<known-good-sha256>  pmd.zip" | sha256sum -c -` and fail the
+- [x] Pin the current PMD release version (`7.24.0`, already pinned via
+  `PMD_VERSION` in the workflow; kept rather than downgrading to the
+  example `7.2.0` from the original task wording).
+- [x] After `curl` of the zip, run
+  `echo "${PMD_SHA256}  /tmp/pmd.zip" | sha256sum -c -` and fail the
   step on mismatch.
-- [ ] Document the rotation procedure in the workflow comments: when
-  PMD releases a new version, update both the URL and the hash in the
-  same PR.
-- [ ] Remove the TODO comment now that the check is real.
+- [x] Document the rotation procedure in the workflow comments: when
+  PMD releases a new version, update both `PMD_VERSION` and
+  `PMD_SHA256` in the same PR.
+- [x] Remove the TODO comment now that the check is real — vacuously
+  satisfied; no TODO comment existed on the PMD step.
 
 **Dependencies:**
 - Blocked by: None
@@ -437,12 +439,18 @@ manual-validation review.
 
 **Acceptance Criteria:**
 - A modified `pmd.zip` (e.g. one byte flipped) causes the CI step to
-  fail.
-- The current good build still succeeds.
-- The TODO comment is gone.
+  fail — proven locally before commit by a wrong-hash rehearsal and a
+  one-byte-flipped rehearsal; both produced `sha256sum -c -` exit
+  status 1.
+- The current good build still succeeds — proven locally by the
+  pristine-zip check (exit 0); end-to-end CI confirmation comes from
+  the lint lane on the PR.
+- The TODO comment is gone — vacuously satisfied (none existed).
 
 **Related Findings:** manual-validation #10
 **Related Decisions:** none
+
+**Status:** Done
 
 ---
 

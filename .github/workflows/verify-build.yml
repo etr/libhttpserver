@@ -440,11 +440,23 @@ jobs:
       # CPD is shipped as part of the PMD distribution. The apt package
       # is pinned to PMD 6.x; we want the modern PMD 7 CLI (`pmd cpd ...`)
       # to match the script. Java is pre-installed on ubuntu-latest.
+      #
+      # Supply-chain: pmd.zip is sha256-pinned. To rotate PMD, update
+      # BOTH PMD_VERSION and PMD_SHA256 in the same PR. Obtain the new
+      # digest from the GitHub release page's pmd-dist-<ver>-bin.zip
+      # asset (or `sha256sum` the freshly downloaded zip and commit
+      # the resulting value here). For defence-in-depth, cross-check
+      # the digest against the pmd-dist-<ver>-bin.zip.sha256 sidecar
+      # published on the same release page, or verify the Maven Central
+      # / OSSRH attestation for the same version, in case the GitHub
+      # release itself is compromised at rotation time.
       run: |
         PMD_VERSION=7.24.0
+        PMD_SHA256=110934b36d39c19094d1b77386931978093f238f2c2f1851748822b69c7367ac
         curl -fsSL -o /tmp/pmd.zip \
           "https://github.com/pmd/pmd/releases/download/pmd_releases%2F${PMD_VERSION}/pmd-dist-${PMD_VERSION}-bin.zip"
-        sudo unzip -q -o /tmp/pmd.zip -d /opt
+        echo "${PMD_SHA256}  /tmp/pmd.zip" | sha256sum -c -
+        sudo unzip -q /tmp/pmd.zip -d /opt
         sudo ln -sf "/opt/pmd-bin-${PMD_VERSION}/bin/pmd" /usr/local/bin/pmd
         pmd --version
       if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
