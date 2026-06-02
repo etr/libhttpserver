@@ -18,20 +18,12 @@
      USA
 */
 
-// TASK-027: 256-entry LRU cache fronting the 3-tier route table.
+// TASK-027 LRU cache fronting the 3-tier route table.
 //
-// Per architecture §4.7 / Constraint 5, lookups consult this cache first
-// and on miss walk the tier chain (exact → radix → regex), promoting the
-// hit into the cache. The cache key is (method, path) — method is part of
-// the key so a path served by both on_get and on_post warms two distinct
-// cache entries.
-//
-// Concurrency: the cache uses its own plain std::mutex (an internal
-// member of route_cache itself, owned by `route_lru_cache` on
-// webserver_impl) — *not* a shared_mutex — because every cache touch,
-// including the LRU promotion on a hit, is a write (std::list::splice).
-// Lock-order discipline: route_table_mutex_ is always acquired before
-// the cache's internal mutex when both are held.
+// Plain std::mutex (not shared_mutex) because every cache touch — the
+// LRU promotion on a hit included — is a write (std::list::splice).
+// Lock-order discipline: route_table_mutex_ is always acquired BEFORE
+// the cache's internal mutex when both are held; see architecture §4.7.
 //
 // Internal header — only reachable when compiling libhttpserver.
 #if !defined(HTTPSERVER_COMPILATION)

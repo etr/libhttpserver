@@ -259,6 +259,16 @@ void webserver_impl::upsert_v2_radix_route(const std::string& key,
     param_and_prefix_routes_.insert(key, std::move(merged), /*is_prefix=*/false);
 }
 
+// Construct a non-prefix route_entry. Single helper for the two
+// branches of insert_fresh_v2_entry that build the same 3-field shape.
+// register_v2_route (webserver_register.cpp) constructs with set_all() +
+// caller-controlled is_prefix and stays open-coded; update_existing_v2_entry
+// merges into a target rather than constructing fresh.
+static detail::route_entry make_non_prefix_entry(
+        method_set methods, std::shared_ptr<http_resource> shim) {
+    return detail::route_entry{methods, std::move(shim), /*is_prefix=*/false};
+}
+
 void webserver_impl::insert_fresh_v2_entry(const detail::http_endpoint& idx,
         method_set methods, std::shared_ptr<http_resource> shim) {
     auto tier = classify_route_tier(idx);
@@ -268,24 +278,22 @@ void webserver_impl::insert_fresh_v2_entry(const detail::http_endpoint& idx,
         // through upsert_v2_radix_route before calling insert_fresh_v2_entry.
         __builtin_unreachable();
         break;
-    case route_tier_kind::exact: {
+    case route_tier_kind::exact:
         // TASK-056: refuse to plant an exact entry when a prefix entry
         // for the same canonical path already lives in the radix tier.
         reject_terminus_collision(idx.get_url_complete(),
                                   /*want_is_prefix=*/false);
-        detail::route_entry entry{methods, std::move(shim), /*is_prefix=*/false};
-        exact_routes_.emplace(idx.get_url_complete(), std::move(entry));
+        exact_routes_.emplace(idx.get_url_complete(),
+                              make_non_prefix_entry(methods, std::move(shim)));
         break;
-    }
-    case route_tier_kind::pattern: {
+    case route_tier_kind::pattern:
         // Regex-tier routes do not conflict with prefix routes because
         // a literal pattern with regex metacharacters is its own key
         // (it never matches as a prefix lookup target).
-        detail::route_entry entry{methods, std::move(shim), /*is_prefix=*/false};
         regex_routes_.push_back(
-            {idx.get_url_complete(), std::move(*tier.re), std::move(entry)});
+            {idx.get_url_complete(), std::move(*tier.re),
+             make_non_prefix_entry(methods, std::move(shim))});
         break;
-    }
     }
 }
 

@@ -184,12 +184,9 @@ class webserver_impl {
 
     // --- v2 3-tier route table (TASK-027, architecture §4.7) -------------
 
-    // TASK-027: 3-tier route table. The dispatch path (lookup_v2 ->
-    // resolve_resource_for_request) walks the tiers in order:
-    //   1. exact_routes_            (std::map, O(log n))
-    //   2. param_and_prefix_routes_ (segment-trie, parameterized + prefix)
-    //   3. regex_routes_            (linear regex chain, fallback)
-    // fronted by the LRU cache `route_lru_cache`.
+    // TASK-027 v2 3-tier route table fronted by `route_lru_cache`.
+    // Tier walk order and rationale live in lookup_v2's implementation
+    // comment (src/detail/webserver_dispatch.cpp); not duplicated here.
     //
     // **Lock order.** When both locks must be held, route_table_mutex_
     // is acquired BEFORE the cache's internal mutex. The lookup

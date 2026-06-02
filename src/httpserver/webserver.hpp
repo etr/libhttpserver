@@ -46,15 +46,10 @@
 #include "httpserver/http_utils.hpp"
 #include "httpserver/create_webserver.hpp"
 
-// TASK-020 / TASK-020-review: socket-layer types used by pointer only.
-// The BSD-socket and select headers are deliberately NOT included from
-// this public header. Forward declarations below avoid the transitive
-// drag of those backend headers into every consumer TU. For individual
-// method ABI notes see the get_fdset and add_connection Doxygen blocks.
-// (struct sockaddr / struct sockaddr_storage are transitively available
-// via http_utils.hpp which is included above; they are not redeclared
-// here. struct fd_set is a plain struct on all POSIX platforms and on
-// Windows via winsock2.h and can be forward-declared safely.)
+// TASK-020: socket-layer types are forward-declared here so this public
+// header does not transitively drag <sys/select.h> / <sys/socket.h>
+// into consumer TUs. See the get_fdset and add_connection Doxygen
+// blocks below for the per-method ABI rationale.
 struct fd_set;
 
 // Forward declarations: backend (MHD) types are intentionally NOT pulled in.
