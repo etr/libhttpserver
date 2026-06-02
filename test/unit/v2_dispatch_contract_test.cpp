@@ -85,7 +85,11 @@ using httpserver::http_response;
 using httpserver::route_resolved_ctx;
 using httpserver::webserver;
 
-#define PORT 8231
+// 8260 is unused elsewhere in the test/ tree as of TASK-053 validation
+// iter2; the prior 8231 collided with
+// test/integ/hooks_handler_exception_user_handler_throws_continues_chain.cpp
+// and caused intermittent EADDRINUSE under `make check -j`.
+#define PORT 8260
 
 namespace {
 

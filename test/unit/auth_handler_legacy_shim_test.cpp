@@ -57,7 +57,6 @@
 #include <utility>
 
 #include "./httpserver.hpp"
-#include "httpserver/detail/webserver_impl.hpp"
 #include "./littletest.hpp"
 
 // File-scope: this TU intentionally exercises [[deprecated]] surface.
@@ -142,11 +141,6 @@ fetch_result fetch(const std::string& url) {
     return fr;
 }
 
-std::size_t before_handler_count(webserver& ws) {
-    auto* impl = httpserver::webserver_test_access::impl(ws);
-    return impl->hooks_before_handler_.size();
-}
-
 }  // namespace
 
 LT_BEGIN_SUITE(auth_handler_legacy_shim_suite)
@@ -154,19 +148,9 @@ LT_BEGIN_SUITE(auth_handler_legacy_shim_suite)
     void tear_down() {}
 LT_END_SUITE(auth_handler_legacy_shim_suite)
 
-// 1. The deprecated overload accepts a v1-shaped callable AND installs
-//    one before_handler hook -- proving the shim runs through the same
-//    registration path as the canonical setter (not a separate code path).
-LT_BEGIN_AUTO_TEST(auth_handler_legacy_shim_suite,
-                   legacy_setter_registers_one_before_handler)
-    httpserver::compat::auth_handler_v1_ptr legacy =
-        [](const http_request&) -> std::shared_ptr<http_response> {
-            return nullptr;
-        };
-    webserver ws{create_webserver(PORT)
-        .auth_handler(legacy)};
-    LT_CHECK_EQ(before_handler_count(ws), static_cast<std::size_t>(1));
-LT_END_AUTO_TEST(legacy_setter_registers_one_before_handler)
+// The legacy setter's hook-count contract lives in hooks_alias_count_test.cpp
+// (legacy_auth_handler_registers_one_before_handler). This TU focuses on
+// compile-type pinning and end-to-end wire behaviour of the deprecated shim.
 
 // 2. Legacy callable returning nullptr -> 200 OK on the wire.
 LT_BEGIN_AUTO_TEST(auth_handler_legacy_shim_suite,

@@ -186,7 +186,7 @@ class webserver_impl {
 
     // TASK-027: 3-tier route table. The dispatch path (lookup_v2 ->
     // resolve_resource_for_request) walks the tiers in order:
-    //   1. exact_routes_            (hash, O(1))
+    //   1. exact_routes_            (std::map, O(log n))
     //   2. param_and_prefix_routes_ (segment-trie, parameterized + prefix)
     //   3. regex_routes_            (linear regex chain, fallback)
     // fronted by the LRU cache `route_lru_cache`.
@@ -197,8 +197,14 @@ class webserver_impl {
     // on the table to walk the tiers, releases it, then promotes/inserts
     // into the LRU cache. Registration takes a unique_lock on the table,
     // releases it, then clears the cache.
+    //
+    // **CWE-407 hash-flooding immunity.** exact_routes_ uses std::map
+    // (not std::unordered_map) so the keyed lookup on the dispatch hot
+    // path is hash-free. Same posture as the radix-tree per-segment
+    // child container (TASK-056). std::less<> enables transparent
+    // string_view lookup without constructing a temporary std::string.
     std::shared_mutex route_table_mutex_;
-    std::unordered_map<std::string, route_entry> exact_routes_;
+    std::map<std::string, route_entry, std::less<>> exact_routes_;
     radix_tree<route_entry> param_and_prefix_routes_;
     // Pre-compiled regex objects. Architecture §4.7 specifies this as a
     // vector of (compiled std::regex, route_entry) pairs so that lookup_v2

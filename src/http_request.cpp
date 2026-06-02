@@ -429,23 +429,22 @@ void dump_cookie_map_redacted(std::ostream& os, const std::string& prefix,
 
 std::ostream& operator<< (std::ostream& os, const http_request& r) {
     const bool expose = r.impl_->expose_credentials_in_logs_;
-    os << r.get_method() << " Request [";
-    if (expose) {
-        os << "user:\"" << r.get_user() << "\" pass:\"" << r.get_pass() << "\"";
-    } else {
-        os << "user:\"" << r.get_user() << "\" pass:\"" << kRedacted << "\"";
-    }
-    os << "] path:\"" << r.get_path() << "\"" << std::endl;
+    using header_dumper = void(*)(std::ostream&, const std::string&, const http::header_view_map&);
+    const header_dumper dump_headers = expose
+        ? static_cast<header_dumper>(&http::dump_header_map)
+        : &dump_header_map_redacted;
+    const header_dumper dump_cookies = expose
+        ? static_cast<header_dumper>(&http::dump_header_map)
+        : &dump_cookie_map_redacted;
 
-    if (expose) {
-        http::dump_header_map(os, "Headers", r.get_headers());
-        http::dump_header_map(os, "Footers", r.get_footers());
-        http::dump_header_map(os, "Cookies", r.get_cookies());
-    } else {
-        dump_header_map_redacted(os, "Headers", r.get_headers());
-        dump_header_map_redacted(os, "Footers", r.get_footers());
-        dump_cookie_map_redacted(os, "Cookies", r.get_cookies());
-    }
+    os << r.get_method() << " Request ["
+       << "user:\"" << r.get_user() << "\" "
+       << "pass:\"" << (expose ? r.get_pass() : std::string(kRedacted)) << "\""
+       << "] path:\"" << r.get_path() << "\"" << std::endl;
+
+    dump_headers(os, "Headers", r.get_headers());
+    dump_headers(os, "Footers", r.get_footers());
+    dump_cookies(os, "Cookies", r.get_cookies());
     http::dump_arg_map(os, "Query Args", r.get_args());
 
     os << "    Version [ " << r.get_version() << " ] Requestor [ " << r.get_requestor()

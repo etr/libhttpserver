@@ -357,7 +357,7 @@ LT_END_AUTO_TEST(prefix_register_then_unregister_then_lookup_misses)
 // ---------------------------------------------------------------------
 
 LT_BEGIN_AUTO_TEST(routing_regression_suite,
-                   register_exact_after_prefix_does_not_collide)
+                   register_exact_after_prefix_throws_collision)
     ht::webserver ws{ht::create_webserver(8080)
         .start_method(ht::http::http_utils::INTERNAL_SELECT)};
     ws.register_prefix("/admin", std::make_shared<noop_resource>());
@@ -378,10 +378,10 @@ LT_BEGIN_AUTO_TEST(routing_regression_suite,
     auto r2 = impl_of(ws).lookup_v2(
         ht::http_method::get, std::string("/admin"));
     LT_CHECK(r2.found);
-LT_END_AUTO_TEST(register_exact_after_prefix_does_not_collide)
+LT_END_AUTO_TEST(register_exact_after_prefix_throws_collision)
 
 LT_BEGIN_AUTO_TEST(routing_regression_suite,
-                   register_prefix_after_exact_does_not_collide)
+                   register_prefix_after_exact_throws_collision)
     // Symmetric inverse: on_get first, then register_prefix on the
     // same path. The prefix call is the one that must throw.
     ht::webserver ws{ht::create_webserver(8080)
@@ -404,10 +404,10 @@ LT_BEGIN_AUTO_TEST(routing_regression_suite,
     auto sub = impl_of(ws).lookup_v2(
         ht::http_method::get, std::string("/admin/sub"));
     LT_CHECK(!sub.found);
-LT_END_AUTO_TEST(register_prefix_after_exact_does_not_collide)
+LT_END_AUTO_TEST(register_prefix_after_exact_throws_collision)
 
 LT_BEGIN_AUTO_TEST(routing_regression_suite,
-                   register_path_after_prefix_does_not_collide)
+                   register_path_after_prefix_throws_collision)
     // Class-based exact after class-based prefix on the same path.
     ht::webserver ws{ht::create_webserver(8080)
         .start_method(ht::http::http_utils::INTERNAL_SELECT)};
@@ -428,10 +428,10 @@ LT_BEGIN_AUTO_TEST(routing_regression_suite,
     auto r2 = impl_of(ws).lookup_v2(
         ht::http_method::get, std::string("/static"));
     LT_CHECK(r2.found);
-LT_END_AUTO_TEST(register_path_after_prefix_does_not_collide)
+LT_END_AUTO_TEST(register_path_after_prefix_throws_collision)
 
 LT_BEGIN_AUTO_TEST(routing_regression_suite,
-                   register_prefix_after_path_does_not_collide)
+                   register_prefix_after_path_throws_collision)
     // Class-based prefix after class-based exact on the same path.
     ht::webserver ws{ht::create_webserver(8080)
         .start_method(ht::http::http_utils::INTERNAL_SELECT)};
@@ -451,10 +451,10 @@ LT_BEGIN_AUTO_TEST(routing_regression_suite,
     auto sub = impl_of(ws).lookup_v2(
         ht::http_method::get, std::string("/static/sub"));
     LT_CHECK(!sub.found);
-LT_END_AUTO_TEST(register_prefix_after_path_does_not_collide)
+LT_END_AUTO_TEST(register_prefix_after_path_throws_collision)
 
 LT_BEGIN_AUTO_TEST(routing_regression_suite,
-                   parameterized_exact_after_parameterized_prefix_does_not_collide)
+                   parameterized_exact_after_parameterized_prefix_throws_collision)
     // Parameterized path lands in the radix tier on BOTH calls. The
     // collision is between an exact_terminus_ and a prefix_terminus_
     // on the exact same radix node.
@@ -479,10 +479,10 @@ LT_BEGIN_AUTO_TEST(routing_regression_suite,
     auto r2 = impl_of(ws).lookup_v2(
         ht::http_method::get, std::string("/users/42"));
     LT_CHECK(r2.found);
-LT_END_AUTO_TEST(parameterized_exact_after_parameterized_prefix_does_not_collide)
+LT_END_AUTO_TEST(parameterized_exact_after_parameterized_prefix_throws_collision)
 
 LT_BEGIN_AUTO_TEST(routing_regression_suite,
-                   parameterized_prefix_after_parameterized_exact_does_not_collide)
+                   parameterized_prefix_after_parameterized_exact_throws_collision)
     // Inverse of the above.
     ht::webserver ws{ht::create_webserver(8080)
         .start_method(ht::http::http_utils::INTERNAL_SELECT)};
@@ -504,7 +504,7 @@ LT_BEGIN_AUTO_TEST(routing_regression_suite,
     auto sub = impl_of(ws).lookup_v2(
         ht::http_method::get, std::string("/users/42/profile"));
     LT_CHECK(!sub.found);
-LT_END_AUTO_TEST(parameterized_prefix_after_parameterized_exact_does_not_collide)
+LT_END_AUTO_TEST(parameterized_prefix_after_parameterized_exact_throws_collision)
 
 // ---------------------------------------------------------------------
 // Method-mismatched semantics (taxonomy row: method-mismatched).

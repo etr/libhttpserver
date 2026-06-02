@@ -30,6 +30,11 @@
 #include "httpserver/detail/webserver_impl.hpp"
 #include "./littletest.hpp"
 
+// File-scope: this TU intentionally exercises the [[deprecated]] v1
+// auth_handler shim in legacy_auth_handler_registers_one_before_handler
+// to pin the hook-count contract for the transitional shim.
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
 using httpserver::create_webserver;
 using httpserver::hook_phase;
 using httpserver::http_request;
@@ -74,6 +79,21 @@ LT_BEGIN_AUTO_TEST(hooks_alias_count_suite, auth_handler_registers_one_before_ha
     LT_CHECK_EQ(before_handler_count(ws), static_cast<std::size_t>(1));
     LT_CHECK_EQ(route_resolved_count(ws), static_cast<std::size_t>(0));
 LT_END_AUTO_TEST(auth_handler_registers_one_before_handler)
+
+LT_BEGIN_AUTO_TEST(hooks_alias_count_suite,
+                   legacy_auth_handler_registers_one_before_handler)
+    // TASK-054: the deprecated v1 setter must install exactly one
+    // before_handler hook through the same registration path as the
+    // canonical setter. Keeps hook-count contracts colocated here.
+    httpserver::compat::auth_handler_v1_ptr legacy =
+        [](const http_request&) -> std::shared_ptr<http_response> {
+            return nullptr;
+        };
+    webserver ws{create_webserver(8205)
+        .auth_handler(legacy)};
+    LT_CHECK_EQ(before_handler_count(ws), static_cast<std::size_t>(1));
+    LT_CHECK_EQ(route_resolved_count(ws), static_cast<std::size_t>(0));
+LT_END_AUTO_TEST(legacy_auth_handler_registers_one_before_handler)
 
 LT_BEGIN_AUTO_TEST(hooks_alias_count_suite,
                    method_not_allowed_handler_registers_one_before_handler)
