@@ -271,20 +271,9 @@ class radix_tree {
     // prefix terminus is already registered at /admin (and vice versa)
     // — silent shadowing would corrupt the (method, path) cache key.
     bool has_terminus_at(const std::string& path, bool is_prefix) const {
-        const radix_node<T>* node = root_.get();
-        const auto segments = tokenize(path);
-        for (const std::string& seg : segments) {
-            auto it = node->children_.find(seg);
-            if (it != node->children_.end()) {
-                node = it->second.get();
-                continue;
-            }
-            if (node->wildcard_child_ && is_wildcard_segment(seg)) {
-                node = node->wildcard_child_.get();
-                continue;
-            }
-            return false;
-        }
+        const radix_node<T>* node = walk_registered_pattern_(root_.get(),
+                                                             tokenize(path));
+        if (node == nullptr) return false;
         return is_prefix ? node->prefix_terminus_.has_value()
                          : node->exact_terminus_.has_value();
     }
@@ -295,23 +284,9 @@ class radix_tree {
     // segment value (e.g. "42"), remove() receives the registered pattern
     // (e.g. "{id}") and matches wildcard nodes by the placeholder shape.
     bool remove(const std::string& path, bool is_prefix) {
-        radix_node<T>* node = root_.get();
-        const auto segments = tokenize(path);
-        for (const std::string& seg : segments) {
-            auto it = node->children_.find(seg);
-            if (it != node->children_.end()) {
-                node = it->second.get();
-                continue;
-            }
-            // Walk wildcard child if seg matches the {name} placeholder
-            // shape. We compare the exact registered key, so removal of
-            // /users/{id} requires the same {id} string.
-            if (node->wildcard_child_ && is_wildcard_segment(seg)) {
-                node = node->wildcard_child_.get();
-                continue;
-            }
-            return false;
-        }
+        radix_node<T>* node = walk_registered_pattern_(root_.get(),
+                                                       tokenize(path));
+        if (node == nullptr) return false;
         if (is_prefix) {
             if (!node->prefix_terminus_.has_value()) return false;
             node->prefix_terminus_.reset();
@@ -335,6 +310,34 @@ class radix_tree {
         // owned string binds directly, avoiding the std::string{view}
         // temporary that the previous string_view overload required.
         return ::httpserver::http::http_utils::tokenize_url(path);
+    }
+
+    // Descend from `start` along `segments`, matching exact children
+    // first and falling back to a wildcard child when the segment has
+    // the {name} placeholder shape. Returns the terminal node or
+    // nullptr if any segment failed to match.
+    //
+    // Templated on Node (radix_node<T> or const radix_node<T>) so the
+    // const-correct mutable / const variants share one descent body --
+    // collapses the previous in-place duplicate descent loops in
+    // has_terminus_at and remove (PMD CPD finding).
+    template <class Node>
+    static Node* walk_registered_pattern_(Node* start,
+            const std::vector<std::string>& segments) {
+        Node* node = start;
+        for (const std::string& seg : segments) {
+            auto it = node->children_.find(seg);
+            if (it != node->children_.end()) {
+                node = it->second.get();
+                continue;
+            }
+            if (node->wildcard_child_ && is_wildcard_segment(seg)) {
+                node = node->wildcard_child_.get();
+                continue;
+            }
+            return nullptr;
+        }
+        return node;
     }
 
     static bool is_wildcard_segment(const std::string& seg) noexcept {

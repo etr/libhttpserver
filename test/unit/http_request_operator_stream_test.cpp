@@ -26,15 +26,16 @@
 // through create_test_request::expose_credentials_in_logs() for unit
 // scope) restores the v1 verbose form for development.
 
-// HAVE_BAUTH (config.h via HAVE_CONFIG_H) gates the username / password
-// surfaces that operator<< streams. On HAVE_BAUTH-off builds (Windows
-// MSYS2 lane, flag-invariance-off lane) get_user() / get_pass() return
-// empty string_views by contract, so the user:"admin" / pass:"hunter2"
-// expectations below do not hold; the BAUTH-off build path is covered
-// by webserver_dauth_unavailable / webserver_features tests instead.
-#if defined(HAVE_CONFIG_H)
-#include <config.h>
-#endif
+// HAVE_BAUTH gates the username / password surfaces that operator<<
+// streams. On HAVE_BAUTH-off builds (Windows MSYS2 lane, flag-invariance-
+// off lane) get_user() / get_pass() return empty string_views by
+// contract, so the user:"admin" / pass:"hunter2" expectations below do
+// not hold; the BAUTH-off build path is covered by
+// webserver_dauth_unavailable / webserver_features tests instead.
+// HAVE_BAUTH is forwarded into the test compile via -DHAVE_BAUTH on the
+// libtool command line; no explicit <config.h> include is needed (and
+// would clash with the -DDEBUG flag autotools sets on debug lanes,
+// since config.h re-defines DEBUG).
 
 #include <sstream>
 #include <string>
