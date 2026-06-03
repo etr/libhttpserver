@@ -367,12 +367,12 @@ void reject_terminus_collision(const std::string& key, bool want_is_prefix);
 void insert_fresh_v2_entry(const detail::http_endpoint& idx,
                            method_set methods,
                            std::shared_ptr<::httpserver::http_resource> shim);
-// NOLINTNEXTLINE(build/include_what_you_use) -- this file is included inside
-// the webserver_impl class body; transitive includes are owned by the parent
-// webserver_impl.hpp.
-void update_existing_v2_entry(const std::string& key,
+// This file is included inside the webserver_impl class body; transitive
+// includes are owned by the parent webserver_impl.hpp -- the
+// std::string / std::shared_ptr uses below need no header carried here.
+void update_existing_v2_entry(const std::string& key,  // NOLINT(build/include_what_you_use)
                               method_set methods,
-                              std::shared_ptr<::httpserver::http_resource> shim);
+                              std::shared_ptr<::httpserver::http_resource> shim);  // NOLINT(build/include_what_you_use)
 
 // Helpers carved out of post_iterator. The MHD post-iterator
 // trampoline is a static MHD callback; the orchestrator below
@@ -405,9 +405,8 @@ MHD_Result process_file_upload(modded_request* mr,
 // on_*/route path with methods merging): this is a one-shot insert
 // with method_set::set_all() and no merge. Takes route_table_mutex_
 // internally.
-// NOLINTNEXTLINE(build/include_what_you_use) -- see note above on transitive includes.
 void register_v2_route(const detail::http_endpoint& idx,
-                       std::shared_ptr<::httpserver::http_resource> res,
+                       std::shared_ptr<::httpserver::http_resource> res,  // NOLINT(build/include_what_you_use)
                        bool family);
 
 // Map a wire-string HTTP method to mr->callback (pointer-to-member

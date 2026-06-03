@@ -66,14 +66,13 @@
 template <typename T,
           typename = std::enable_if_t<
               std::is_base_of_v<websocket_handler, T>>>
-// NOLINTNEXTLINE(build/include_what_you_use) -- this file is included inside
-// the webserver class body; transitive <utility>/<memory>/<string> live in
-// the parent webserver.hpp.
-void register_ws_resource(const std::string& resource,
+// This file is included inside the webserver class body; transitive
+// <utility>/<memory>/<string> live in the parent webserver.hpp.
+void register_ws_resource(const std::string& resource,  // NOLINT(build/include_what_you_use)
                           std::unique_ptr<T> handler) {
     register_ws_resource(
         resource,
-        std::shared_ptr<websocket_handler>(std::move(handler)));
+        std::shared_ptr<websocket_handler>(std::move(handler)));  // NOLINT(build/include_what_you_use)
 }
 /**
  * Register a websocket handler at @p resource (shared_ptr overload).
@@ -87,9 +86,8 @@ void register_ws_resource(const std::string& resource,
  * @param handler  shared_ptr to the websocket_handler; the caller
  *                 retains a reference.
  **/
-// NOLINTNEXTLINE(build/include_what_you_use) -- see class-body include note above.
 void register_ws_resource(const std::string& resource,
-                          std::shared_ptr<websocket_handler> handler);
+                          std::shared_ptr<websocket_handler> handler);  // NOLINT(build/include_what_you_use)
 
 /**
  * Drop the websocket handler registered at @p resource (PRD-HDL-REQ-003).

@@ -223,11 +223,10 @@ http::http_utils::digest_auth_result check_digest_auth(
  * @param algo           digest hash algorithm; defaults to SHA-256.
  * @return one of the @ref httpserver::http::http_utils::digest_auth_result values.
 **/
-// NOLINTNEXTLINE(build/include_what_you_use) -- this file is included inside
-// the http_request class body; transitive <string> lives in
-// the parent http_request.hpp.
+// This file is included inside the http_request class body; transitive
+// <string> lives in the parent http_request.hpp.
 http::http_utils::digest_auth_result check_digest_auth_digest(
-    const std::string& realm,
+    const std::string& realm,  // NOLINT(build/include_what_you_use)
     const void* userdigest,
     size_t userdigest_size,
     unsigned int nonce_timeout = 0,

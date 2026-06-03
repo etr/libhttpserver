@@ -138,17 +138,15 @@ template <typename T,
           typename = std::enable_if_t<
               std::is_base_of_v<http_resource, T>>>
 [[deprecated("use register_path() for exact match or register_prefix() for prefix match")]]
-// NOLINTNEXTLINE(build/include_what_you_use) -- this file is included inside
-// the webserver class body; transitive <utility>/<memory>/<string> live in
-// the parent webserver.hpp.
-void register_resource(const std::string& path, std::unique_ptr<T> res) {
-    register_path(path, std::move(res));
+// This file is included inside the webserver class body; transitive
+// <utility>/<memory>/<string> live in the parent webserver.hpp.
+void register_resource(const std::string& path, std::unique_ptr<T> res) {  // NOLINT(build/include_what_you_use)
+    register_path(path, std::move(res));  // NOLINT(build/include_what_you_use)
 }
 /// @copydoc register_resource(const std::string&, std::unique_ptr<T>)
 [[deprecated("use register_path() for exact match or register_prefix() for prefix match")]]
-// NOLINTNEXTLINE(build/include_what_you_use) -- see note above.
 void register_resource(const std::string& path,
-                       std::shared_ptr<http_resource> res);
+                       std::shared_ptr<http_resource> res);  // NOLINT(build/include_what_you_use)
 
 /**
  * Register a lambda handler for HTTP GET on @p path.

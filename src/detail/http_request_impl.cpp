@@ -343,9 +343,7 @@ namespace {
 
 // Type alias to avoid repeating the verbose map type in every helper
 // signature and call site. (code-quality-reviewer-iter1-11)
-using args_map_t = std::pmr::map<std::pmr::string,
-    std::pmr::vector<std::pmr::string>,
-    http::arg_comparator>;
+using args_map_t = std::pmr::map<std::pmr::string, std::pmr::vector<std::pmr::string>, http::arg_comparator>;  // NOLINT(whitespace/line_length)
 
 // Helper: look up `key` via heterogeneous string_view (no alloc), insert
 // a pmr::string key + an empty vector if missing, then append `value`.
