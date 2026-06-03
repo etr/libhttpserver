@@ -188,7 +188,7 @@ void webserver_impl::commit_handlers_to_shim(detail::lambda_resource& shim,
         if (i + 1 < count) {
             shim.set_slot(buf[i], handler);          // copy
         } else {
-            shim.set_slot(buf[i], std::move(handler)); // move into last slot
+            shim.set_slot(buf[i], std::move(handler));  // move into last slot
         }
     }
 }

@@ -64,7 +64,7 @@ class hello_resource : public httpserver::http_resource {
     }
 };
 
-CURLcode hit_url(const std::string& path, long* http_code) {
+CURLcode hit_url(const std::string& path, long* http_code) {  // NOLINT(runtime/int)
     CURL* curl = curl_easy_init();
     if (curl == nullptr) return CURLE_FAILED_INIT;
     std::string url = "http://127.0.0.1:" + std::to_string(PORT) + path;
@@ -131,8 +131,8 @@ LT_BEGIN_AUTO_TEST(hooks_route_resolved_suite, two_hooks_observe_hit_and_miss)
     ws.start(false);
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-    long code_hit = 0;
-    long code_miss = 0;
+    long code_hit = 0;  // NOLINT(runtime/int)
+    long code_miss = 0;  // NOLINT(runtime/int)
     LT_CHECK_EQ(hit_url("/hit", &code_hit), CURLE_OK);
     LT_CHECK_EQ(hit_url("/miss", &code_miss), CURLE_OK);
     LT_CHECK_EQ(code_hit, 200L);

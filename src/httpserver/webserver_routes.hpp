@@ -138,11 +138,15 @@ template <typename T,
           typename = std::enable_if_t<
               std::is_base_of_v<http_resource, T>>>
 [[deprecated("use register_path() for exact match or register_prefix() for prefix match")]]
+// NOLINTNEXTLINE(build/include_what_you_use) -- this file is included inside
+// the webserver class body; transitive <utility>/<memory>/<string> live in
+// the parent webserver.hpp.
 void register_resource(const std::string& path, std::unique_ptr<T> res) {
     register_path(path, std::move(res));
 }
 /// @copydoc register_resource(const std::string&, std::unique_ptr<T>)
 [[deprecated("use register_path() for exact match or register_prefix() for prefix match")]]
+// NOLINTNEXTLINE(build/include_what_you_use) -- see note above.
 void register_resource(const std::string& path,
                        std::shared_ptr<http_resource> res);
 
@@ -264,6 +268,7 @@ void unregister_prefix(const std::string& path);
  * @param path the URL previously passed to @ref register_path or @ref register_prefix.
  * @see register_path, register_prefix, unregister_path, unregister_prefix
 **/
+// NOLINTNEXTLINE(build/include_what_you_use) -- see class-body include note above.
 void unregister_resource(const std::string& path);
 
 #endif  // SRC_HTTPSERVER_WEBSERVER_ROUTES_HPP_

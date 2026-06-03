@@ -58,11 +58,10 @@ as_shared(httpserver::http_resource& r) {
 
 }  // namespace test_utils
 
-// Pull as_shared into the anonymous namespace of the including TU so that
-// existing call sites (which use unqualified `as_shared(...)`) continue to
-// compile without modification.
-namespace {
-using test_utils::as_shared;
-}  // namespace
+// Pull as_shared into the file scope of the including TU so that existing
+// call sites (which use unqualified `as_shared(...)`) continue to compile
+// without modification. `inline` keeps it conformant per the cpp core
+// guidelines: each TU sees the same single declaration.
+using test_utils::as_shared;  // NOLINT(build/namespaces)
 
 #endif  // TEST_INTEG_TEST_UTILS_HPP_

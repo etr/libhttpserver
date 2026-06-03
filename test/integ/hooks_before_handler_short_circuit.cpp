@@ -89,7 +89,7 @@ LT_BEGIN_AUTO_TEST(hooks_before_handler_short_circuit_suite,
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &resp_body);
     CURLcode res = curl_easy_perform(curl);
-    long http_code = 0;
+    long http_code = 0;  // NOLINT(runtime/int)
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
     curl_easy_cleanup(curl);
 
@@ -135,7 +135,7 @@ LT_BEGIN_AUTO_TEST(hooks_before_handler_short_circuit_suite,
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &resp_body);
     CURLcode res = curl_easy_perform(curl);
-    long http_code = 0;
+    long http_code = 0;  // NOLINT(runtime/int)
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
     curl_easy_cleanup(curl);
 

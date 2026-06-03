@@ -1,3 +1,23 @@
+/*
+     This file is part of libhttpserver
+     Copyright (C) 2011-2026 Sebastiano Merlino
+
+     This library is free software; you can redistribute it and/or
+     modify it under the terms of the GNU Lesser General Public
+     License as published by the Free Software Foundation; either
+     version 2.1 of the License, or (at your option) any later version.
+
+     This library is distributed in the hope that it will be useful,
+     but WITHOUT ANY WARRANTY; without even the implied warranty of
+     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+     Lesser General Public License for more details.
+
+     You should have received a copy of the GNU Lesser General Public
+     License along with this library; if not, write to the Free Software
+     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
+     USA
+*/
+
 // Demonstrates the solution to issue #332: log every banned-IP rejection.
 //
 // Configure the daemon with an ACCEPT default policy, block the IPs you
@@ -11,12 +31,12 @@
 // Run, then attempt to connect from one of the blocked IPs to see
 // stderr show a "[BANNED] ..." line per attempt.
 
-#include <httpserver.hpp>
-
 #include <functional>
 #include <iostream>
 #include <memory>
 #include <string>
+
+#include <httpserver.hpp>
 
 namespace hs = httpserver;
 

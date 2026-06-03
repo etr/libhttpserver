@@ -35,7 +35,7 @@
 
 #include <cstdio>
 
-#include "bench_harness.hpp"
+#include "bench_harness.hpp"  // NOLINT(build/include_subdir)
 #include "httpserver/create_test_request.hpp"
 #include "httpserver/http_request.hpp"
 #include "v1_baseline/v1_constants.hpp"

@@ -50,13 +50,12 @@
 // storage that lives for the handler call frame only — see the
 // class-level lifetime contract in http_request.hpp.
 //
-// TODO (API-FLG milestone): ensure any remaining HAVE_BAUTH and
-// HAVE_DAUTH gates in the implementation side (.cpp files) are
-// addressed so the full PRD-FLG-REQ-001 "unconditional public symbols"
-// contract is completed. The declarations here are already unconditional;
-// verify that the http_request_auth.cpp implementations return the
-// documented sentinels on HAVE_BAUTH-off / HAVE_DAUTH-off builds.
-// (spec-alignment-checker item 25)
+// PRD-FLG-REQ-001 contract: every public symbol declared here is
+// unconditional. http_request_auth.cpp returns documented sentinels
+// (empty std::string_view for the BAUTH getters / get_digested_user;
+// digest_auth_result::WRONG_HEADER for the two check_digest_auth
+// overloads) on HAVE_BAUTH-off / HAVE_DAUTH-off builds. Any future
+// addition to this header must preserve that property.
 // -------------------------------------------------------------------
 
 /**
@@ -224,6 +223,9 @@ http::http_utils::digest_auth_result check_digest_auth(
  * @param algo           digest hash algorithm; defaults to SHA-256.
  * @return one of the @ref httpserver::http::http_utils::digest_auth_result values.
 **/
+// NOLINTNEXTLINE(build/include_what_you_use) -- this file is included inside
+// the http_request class body; transitive <string> lives in
+// the parent http_request.hpp.
 http::http_utils::digest_auth_result check_digest_auth_digest(
     const std::string& realm,
     const void* userdigest,

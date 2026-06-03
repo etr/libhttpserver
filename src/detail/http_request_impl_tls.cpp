@@ -30,11 +30,11 @@
 
 #include <stdio.h>
 
-#include <string>
+#include <gnutls/gnutls.h>  // NOLINT(build/include_order)
+#include <gnutls/x509.h>  // NOLINT(build/include_order)
+#include <microhttpd.h>  // NOLINT(build/include_order)
 
-#include <gnutls/gnutls.h>
-#include <gnutls/x509.h>
-#include <microhttpd.h>
+#include <string>
 
 #include "httpserver/detail/http_request_impl.hpp"
 

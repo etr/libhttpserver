@@ -18,6 +18,7 @@
 // reshapes accept_ctx must update this gate explicitly.
 
 #include <optional>
+#include <string>
 #include <string_view>
 #include <type_traits>
 

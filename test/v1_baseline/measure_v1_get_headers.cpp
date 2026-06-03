@@ -62,6 +62,7 @@
 #include <cstdio>
 #include <map>
 #include <string>
+#include <vector>
 
 #include "../bench_harness.hpp"
 

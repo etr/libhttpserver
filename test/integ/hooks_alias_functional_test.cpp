@@ -112,7 +112,7 @@ LT_BEGIN_AUTO_TEST(hooks_alias_functional_suite,
     std::string resp_body;
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &resp_body);
-    long http_code = 0;
+    long http_code = 0;  // NOLINT(runtime/int)
     curl_easy_perform(curl);
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
     curl_easy_cleanup(curl);

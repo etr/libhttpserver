@@ -66,6 +66,9 @@
 template <typename T,
           typename = std::enable_if_t<
               std::is_base_of_v<websocket_handler, T>>>
+// NOLINTNEXTLINE(build/include_what_you_use) -- this file is included inside
+// the webserver class body; transitive <utility>/<memory>/<string> live in
+// the parent webserver.hpp.
 void register_ws_resource(const std::string& resource,
                           std::unique_ptr<T> handler) {
     register_ws_resource(
@@ -84,6 +87,7 @@ void register_ws_resource(const std::string& resource,
  * @param handler  shared_ptr to the websocket_handler; the caller
  *                 retains a reference.
  **/
+// NOLINTNEXTLINE(build/include_what_you_use) -- see class-body include note above.
 void register_ws_resource(const std::string& resource,
                           std::shared_ptr<websocket_handler> handler);
 
@@ -101,6 +105,7 @@ void register_ws_resource(const std::string& resource,
  * @param resource the URL previously passed to @ref register_ws_resource.
  * @see register_ws_resource, feature_unavailable, features
  **/
+// NOLINTNEXTLINE(build/include_what_you_use) -- see class-body include note above.
 void unregister_ws_resource(const std::string& resource);
 
 #endif  // SRC_HTTPSERVER_WEBSERVER_WEBSOCKET_HPP_

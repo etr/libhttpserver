@@ -116,7 +116,7 @@ class hello_resource : public httpserver::http_resource {
 
 // Performs a GET and returns body + status code.
 struct response_capture {
-    long status = 0;
+    long status = 0;  // NOLINT(runtime/int)
     std::string body;
 };
 
@@ -134,8 +134,8 @@ response_capture do_get(const std::string& path) {
 }
 
 // Performs a POST with no body and returns the status code.
-long do_post_status(const std::string& path) {
-    long status = 0;
+long do_post_status(const std::string& path) {  // NOLINT(runtime/int)
+    long status = 0;  // NOLINT(runtime/int)
     CURL* curl = curl_easy_init();
     std::string url = "http://127.0.0.1:" + std::to_string(PORT) + path;
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
@@ -291,7 +291,7 @@ LT_BEGIN_AUTO_TEST(v2_dispatch_contract_suite, method_mismatch_still_resolves_ro
     ws.start(false);
     wait_for_server_ready(PORT);
 
-    long post_status = do_post_status("/get_only");
+    long post_status = do_post_status("/get_only");  // NOLINT(runtime/int)
     ws.stop();
 
     LT_CHECK_EQ(post_status, 405L);

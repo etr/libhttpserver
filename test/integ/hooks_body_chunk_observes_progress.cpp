@@ -96,7 +96,7 @@ LT_BEGIN_AUTO_TEST(hooks_body_chunk_observes_progress_suite,
     curl_easy_setopt(curl, CURLOPT_POST, 1L);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.data());
     curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE,
-                     static_cast<long>(body.size()));
+                     static_cast<long>(body.size()));  // NOLINT(runtime/int)
     std::string resp_body;
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &resp_body);

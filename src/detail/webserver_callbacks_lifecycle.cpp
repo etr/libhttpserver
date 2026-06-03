@@ -47,6 +47,7 @@
 #include <shared_mutex>
 #include <string_view>
 #include <tuple>
+#include <utility>
 
 #include "httpserver/hook_context.hpp"
 #include "httpserver/hook_phase.hpp"
@@ -162,12 +163,21 @@ void webserver_impl::connection_notify(void* cls, struct MHD_Connection* connect
     };
 
     switch (toe) {
-        case MHD_CONNECTION_NOTIFY_STARTED:
+        case MHD_CONNECTION_NOTIFY_STARTED: {
             // Allocate the per-connection state (and its embedded arena)
             // on connection start. The new is the only heap allocation
             // tied to a connection's lifetime; afterwards every request
             // on this connection draws its impl out of the arena.
-            *socket_context = new detail::connection_state();
+            auto* cs = new detail::connection_state();
+            // Copy the per-request args DoS limits from the owning
+            // webserver so populate_args() can size the
+            // arguments_accumulator from the socket_context. 0 means
+            // "use the compile-time defaults" -- see connection_state.hpp.
+            if (ws != nullptr) {
+                cs->max_args_count = ws->max_args_count;
+                cs->max_args_bytes = ws->max_args_bytes;
+            }
+            *socket_context = cs;
             // Fire connection_opened. Zero-cost when no hook is
             // registered: a single relaxed atomic load + branch.
             if (hooks_armed(::httpserver::hook_phase::connection_opened)) {
@@ -175,6 +185,7 @@ void webserver_impl::connection_notify(void* cls, struct MHD_Connection* connect
                 ws_impl->fire_connection_opened(ctx);
             }
             break;
+        }
         case MHD_CONNECTION_NOTIFY_CLOSED:
             // Fire connection_closed BEFORE the per-connection state is
             // deleted. The arena is not exposed through

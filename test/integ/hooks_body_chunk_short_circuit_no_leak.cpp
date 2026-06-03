@@ -99,7 +99,7 @@ LT_BEGIN_AUTO_TEST(hooks_body_chunk_short_circuit_no_leak_suite,
     curl_easy_setopt(curl, CURLOPT_POST, 1L);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.data());
     curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE,
-                     static_cast<long>(body.size()));
+                     static_cast<long>(body.size()));  // NOLINT(runtime/int)
     struct curl_slist* headers = nullptr;
     headers = curl_slist_append(headers,
                                 "Content-Type: application/x-www-form-urlencoded");
@@ -108,7 +108,7 @@ LT_BEGIN_AUTO_TEST(hooks_body_chunk_short_circuit_no_leak_suite,
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &resp_body);
     CURLcode res = curl_easy_perform(curl);
-    long http_code = 0;
+    long http_code = 0;  // NOLINT(runtime/int)
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
     curl_slist_free_all(headers);
     curl_easy_cleanup(curl);

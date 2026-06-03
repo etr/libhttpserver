@@ -21,6 +21,7 @@
 #include <memory>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "./httpserver.hpp"
@@ -52,7 +53,7 @@ class echo_resource : public http_resource {
 };
 
 // Helper: POST `body_size` bytes to `path` and return the http status.
-long post_bytes(int port, const std::string& path, std::size_t body_size) {
+long post_bytes(int port, const std::string& path, std::size_t body_size) {  // NOLINT(runtime/int)
     CURL* curl = curl_easy_init();
     if (!curl) return -1;
     std::string url = "http://127.0.0.1:" + std::to_string(port) + path;
@@ -60,12 +61,12 @@ long post_bytes(int port, const std::string& path, std::size_t body_size) {
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.c_str());
     curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE,
-                     static_cast<long>(body_size));
+                     static_cast<long>(body_size));  // NOLINT(runtime/int)
     std::string resp_body;
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &resp_body);
     CURLcode res = curl_easy_perform(curl);
-    long status = 0;
+    long status = 0;  // NOLINT(runtime/int)
     if (res == CURLE_OK) {
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
     }
@@ -95,7 +96,9 @@ LT_BEGIN_AUTO_TEST(hooks_per_route_early_413_per_endpoint_suite,
                 auto cl = ctx.request->get_header("Content-Length");
                 if (cl.empty()) return hook_action{};
                 std::size_t n = 0;
-                try { n = std::stoul(std::string(cl)); } catch (...) {}
+                try {
+                    n = std::stoul(std::string(cl));
+                } catch (...) {}
                 if (n > 1024) {
                     auto r = http_response::string("too big (small endpoint)");
                     r.with_status(413);
@@ -112,7 +115,9 @@ LT_BEGIN_AUTO_TEST(hooks_per_route_early_413_per_endpoint_suite,
                 auto cl = ctx.request->get_header("Content-Length");
                 if (cl.empty()) return hook_action{};
                 std::size_t n = 0;
-                try { n = std::stoul(std::string(cl)); } catch (...) {}
+                try {
+                    n = std::stoul(std::string(cl));
+                } catch (...) {}
                 if (n > static_cast<std::size_t>(1024) * 1024 * 1024) {
                     auto r = http_response::string("too big (large endpoint)");
                     r.with_status(413);
@@ -127,15 +132,15 @@ LT_BEGIN_AUTO_TEST(hooks_per_route_early_413_per_endpoint_suite,
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
     // 2 KB POST to /upload-small -> 413 (over the 1 KB cap).
-    long s1 = post_bytes(PORT, "/upload-small", 2048);
+    long s1 = post_bytes(PORT, "/upload-small", 2048);  // NOLINT(runtime/int)
     LT_CHECK_EQ(s1, 413L);
 
     // 2 KB POST to /upload-large -> 200 (well under 1 GB).
-    long s2 = post_bytes(PORT, "/upload-large", 2048);
+    long s2 = post_bytes(PORT, "/upload-large", 2048);  // NOLINT(runtime/int)
     LT_CHECK_EQ(s2, 200L);
 
     // 500 byte POST to /upload-small -> 200 (well under 1 KB).
-    long s3 = post_bytes(PORT, "/upload-small", 500);
+    long s3 = post_bytes(PORT, "/upload-small", 500);  // NOLINT(runtime/int)
     LT_CHECK_EQ(s3, 200L);
 
     ws.stop();

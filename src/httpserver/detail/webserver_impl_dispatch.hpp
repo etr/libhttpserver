@@ -367,6 +367,9 @@ void reject_terminus_collision(const std::string& key, bool want_is_prefix);
 void insert_fresh_v2_entry(const detail::http_endpoint& idx,
                            method_set methods,
                            std::shared_ptr<::httpserver::http_resource> shim);
+// NOLINTNEXTLINE(build/include_what_you_use) -- this file is included inside
+// the webserver_impl class body; transitive includes are owned by the parent
+// webserver_impl.hpp.
 void update_existing_v2_entry(const std::string& key,
                               method_set methods,
                               std::shared_ptr<::httpserver::http_resource> shim);
@@ -402,6 +405,7 @@ MHD_Result process_file_upload(modded_request* mr,
 // on_*/route path with methods merging): this is a one-shot insert
 // with method_set::set_all() and no merge. Takes route_table_mutex_
 // internally.
+// NOLINTNEXTLINE(build/include_what_you_use) -- see note above on transitive includes.
 void register_v2_route(const detail::http_endpoint& idx,
                        std::shared_ptr<::httpserver::http_resource> res,
                        bool family);

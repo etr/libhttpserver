@@ -29,10 +29,10 @@
 
 #include <stdint.h>
 
+#include <microhttpd.h>  // NOLINT(build/include_order)
+
 #include <string>
 #include <string_view>
-
-#include <microhttpd.h>
 
 #include "httpserver/detail/http_request_impl.hpp"
 #include "httpserver/http_utils.hpp"

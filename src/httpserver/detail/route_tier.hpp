@@ -31,6 +31,8 @@
 // Disabling lint error on regex (the only reason it errors is because the Chromium team prefers google/re2)
 #include <regex>  // NOLINT [build/c++11]
 #include <stdexcept>
+#include <string>
+#include <utility>
 
 #include "httpserver/detail/http_endpoint.hpp"
 

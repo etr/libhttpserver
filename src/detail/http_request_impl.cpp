@@ -25,6 +25,8 @@
 
 #include "httpserver/http_request.hpp"
 
+#include <microhttpd.h>  // NOLINT(build/include_order)
+
 #include <algorithm>
 #include <cassert>
 #include <map>
@@ -35,8 +37,7 @@
 #include <utility>
 #include <vector>
 
-#include <microhttpd.h>
-
+#include "httpserver/detail/connection_state.hpp"
 #include "httpserver/detail/http_request_impl.hpp"
 #include "httpserver/http_utils.hpp"
 
@@ -263,6 +264,21 @@ void http_request_impl::populate_args() const {
     arguments_accumulator aa;
     aa.unescaper = unescaper_;
     aa.arguments = &unescaped_args;
+    // Pick up the per-connection args DoS limits from connection_state if
+    // available (set by webserver_impl::connection_notify at STARTED).
+    // Falls back to the compile-time defaults when the socket_context
+    // isn't wired -- matches the heap-fallback behaviour for the arena.
+    const MHD_ConnectionInfo* ci = MHD_get_connection_info(
+        connection_, MHD_CONNECTION_INFO_SOCKET_CONTEXT);
+    if (ci != nullptr && ci->socket_context != nullptr) {
+        auto* cs = static_cast<connection_state*>(ci->socket_context);
+        if (cs->max_args_count != 0) {
+            aa.max_args_count = cs->max_args_count;
+        }
+        if (cs->max_args_bytes != 0) {
+            aa.max_args_bytes = cs->max_args_bytes;
+        }
+    }
     MHD_get_connection_values(connection_, MHD_GET_ARGUMENT_KIND,
                               &http_request_impl::build_request_args,
                               reinterpret_cast<void*>(&aa));
@@ -270,21 +286,23 @@ void http_request_impl::populate_args() const {
     args_populated = true;
 }
 
-void http_request_impl::ensure_path_pieces_public_cached() const {
-    // Populate the public-typed mirror of path_pieces (std::vector<std::string>)
-    // from the already-built pmr-backed path_pieces. Must be called after
-    // ensure_path_pieces_cached(). Building the mirror inside the impl class
-    // keeps all cache-maintenance logic in one place.
-    // (code-quality-reviewer-iter1-4 / code-simplifier-iter1-8)
-    if (path_pieces_public_built_) {
+void http_request_impl::ensure_args_flat_view_cached() const {
+    // Build the "first value per key" view map from unescaped_args. Keys
+    // and values are string_views aliasing the pmr-backed storage owned
+    // by unescaped_args -- same lifetime as the request.
+    if (args_flat_view_cache_built_) {
         return;
     }
-    path_pieces_public_.clear();
-    path_pieces_public_.reserve(path_pieces.size());
-    for (const auto& p : path_pieces) {
-        path_pieces_public_.emplace_back(p.data(), p.size());
+    args_flat_view_cached_.clear();
+    for (const auto& [key, values] : unescaped_args) {
+        if (values.empty()) {
+            continue;
+        }
+        args_flat_view_cached_.emplace(
+            std::string_view(key.data(), key.size()),
+            std::string_view(values[0].data(), values[0].size()));
     }
-    path_pieces_public_built_ = true;
+    args_flat_view_cache_built_ = true;
 }
 
 void http_request_impl::ensure_args_view_cached() const {
@@ -311,21 +329,14 @@ void http_request_impl::ensure_args_view_cached() const {
 }
 
 void http_request_impl::ensure_path_pieces_cached(std::string_view path) const {
-    if (path_pieces_cached) {
+    if (path_pieces_cache_built_) {
         return;
     }
-    // tokenize_url returns std::vector<std::string> (default-allocator).
-    // Copy element-wise into the pmr-backed cache so the stored strings
-    // live on the arena, not the heap.
-    auto tokens = http::http_utils::tokenize_url(std::string(path));
-    path_pieces.clear();
-    path_pieces.reserve(tokens.size());
-    for (auto& t : tokens) {
-        // Vector's allocator-propagating construct wires the inner
-        // pmr::string's allocator automatically.
-        path_pieces.emplace_back(t.data(), t.size());
-    }
-    path_pieces_cached = true;
+    // tokenize_url returns std::vector<std::string>; move the tokens
+    // straight into the cache (single heap-backed vector, returned by
+    // const& from http_request::get_path_pieces()).
+    path_pieces_cached_ = http::http_utils::tokenize_url(std::string(path));
+    path_pieces_cache_built_ = true;
 }
 
 namespace {
@@ -333,8 +344,8 @@ namespace {
 // Type alias to avoid repeating the verbose map type in every helper
 // signature and call site. (code-quality-reviewer-iter1-11)
 using args_map_t = std::pmr::map<std::pmr::string,
-                                 std::pmr::vector<std::pmr::string>,
-                                 http::arg_comparator>;
+    std::pmr::vector<std::pmr::string>,
+    http::arg_comparator>;
 
 // Helper: look up `key` via heterogeneous string_view (no alloc), insert
 // a pmr::string key + an empty vector if missing, then append `value`.

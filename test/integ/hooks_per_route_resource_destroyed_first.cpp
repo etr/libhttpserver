@@ -70,8 +70,7 @@ LT_END_AUTO_TEST(explicit_remove_after_destroy_is_noop)
 // Path 2: RAII destruction of the handle after the resource is gone.
 // The destructor must not crash or UAF.
 LT_BEGIN_AUTO_TEST(hooks_per_route_resource_destroyed_first_suite,
-                   raii_destruction_after_destroy_is_noop)
-    {
+                   raii_destruction_after_destroy_is_noop) {
         hook_handle h;
         {
             auto r = std::make_shared<trivial_resource>();

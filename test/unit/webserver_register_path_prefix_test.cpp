@@ -398,7 +398,7 @@ std::optional<httpserver::http_response> reject_auth(const httpserver::http_requ
 }
 
 // fetch_code: thin wrapper returning only the HTTP status code.
-long fetch_code(const std::string& url) {
+long fetch_code(const std::string& url) {  // NOLINT(runtime/int)
     return fetch(url).response_code;
 }
 

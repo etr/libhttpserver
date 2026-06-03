@@ -70,8 +70,7 @@ inline constexpr std::string_view GENERIC_ERROR = "Internal Error";
 // a process boundary by default. The verbose body (carrying msg) is
 // restored only when expose_exception_messages(true) is set on the
 // builder, which is documented as development-only.
-inline constexpr std::string_view INTERNAL_SERVER_ERROR =
-    "Internal Server Error";
+inline constexpr std::string_view INTERNAL_SERVER_ERROR = "Internal Server Error";
 
 }  // namespace httpserver::constants
 
