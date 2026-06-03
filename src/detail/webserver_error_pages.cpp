@@ -92,13 +92,13 @@ http_response webserver_impl::internal_error_page(
     // (see log_dispatch_error). Application code that needs the v1
     // verbose body (for development) must opt in via
     // create_webserver::expose_exception_messages(true).
+    const auto status = http_utils::http_internal_server_error;
     if (parent->expose_exception_messages) {
-        return http_response::string(std::string{msg})
-            .with_status(http_utils::http_internal_server_error);
+        return http_response::string(std::string{msg}).with_status(status);
     }
     return http_response::string(
             std::string{constants::INTERNAL_SERVER_ERROR})
-        .with_status(http_utils::http_internal_server_error);
+        .with_status(status);
 }
 
 void webserver_impl::log_dispatch_error(std::string_view msg) const noexcept {

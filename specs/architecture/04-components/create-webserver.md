@@ -22,6 +22,14 @@ removed after the next release. Rationale: completes the
 PRD-RSP-REQ-007 value-typed response cutover (DR-009) onto the auth
 path, removing the per-authenticated-request control-block allocation.
 
+**`expose_exception_messages` (TASK-055 / DR-009 Revision 1).**
+Security-opt-in builder setter. Default `false` makes the
+no-handler-set 500 path return the fixed string `"Internal Server Error"`
+as the response body — `e.what()` is logged via `log_error` but never
+crosses a process boundary on the wire (CWE-209). Setting `true`
+restores the v1 verbose body that surfaces the message. Intended
+for development only; must not be set in production.
+
 **`expose_credentials_in_logs` (TASK-057).** Security-opt-in builder
 setter that propagates to every `http_request` the webserver dispatches.
 Default `false` suppresses credential surfaces in `http_request::operator<<`

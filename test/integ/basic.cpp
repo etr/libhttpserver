@@ -520,6 +520,9 @@ LT_BEGIN_AUTO_TEST(basic_suite, family_endpoints)
     }
 
     {
+    // /EXA/ resolves to the exact route via trailing-slash path
+    // normalisation, not via a prefix match — there is no prefix
+    // registration at /EXA.
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
@@ -1505,9 +1508,12 @@ LT_END_AUTO_TEST(file_serving_resource_dir)
 
 // Regression anchor: exercises the std::domain_error (a std::exception
 // subclass distinct from std::runtime_error) dispatch path on the shared
-// webserver. Intentionally kept distinct from
-// dr009_runtime_error_message_surfaces_in_default_body (which uses
-// std::runtime_error on a dedicated webserver). Finding task031-review #36.
+// webserver. The shared ws is configured with
+// expose_exception_messages(true) (basic.cpp:420), so e.what() flows
+// through to the default body. Intentionally kept distinct from
+// dr009_default_body_is_fixed_string (DR-009 Revision 1), which pins
+// the default-off behaviour on a dedicated webserver. Finding
+// task031-review #36.
 LT_BEGIN_AUTO_TEST(basic_suite, exception_forces_500)
     exception_resource resource;
     ws->register_path("base", as_shared(resource));
@@ -1535,10 +1541,10 @@ LT_END_AUTO_TEST(exception_forces_500)
 
 // Regression anchor: exercises a char* literal throw (non-std::exception) on
 // the shared webserver. Intentionally kept distinct from
-// dr009_non_std_exception_yields_unknown_exception_in_default_body (which
-// uses `throw 42` (an int) on a dedicated webserver). The two non-std types
-// (char* vs int) exercise the same catch(...) branch; keeping both provides
-// type-diversity coverage. Finding task031-review #37.
+// dr009_default_body_is_fixed_string_for_non_std_exception (DR-009 Revision 1),
+// which uses `throw 42` (an int) on a dedicated webserver. The two non-std
+// types (char* vs int) exercise the same catch(...) branch; keeping both
+// provides type-diversity coverage. Finding task031-review #37.
 LT_BEGIN_AUTO_TEST(basic_suite, untyped_error_forces_500)
     error_resource resource;
     ws->register_path("base", as_shared(resource));
@@ -2127,8 +2133,10 @@ LT_END_AUTO_TEST(only_render_patch)
 // response_throws_runtime_error, response_throws_non_std_exception, and
 // internal_error_handler_also_throws were removed here (findings 5 and 6).
 // Their coverage is a strict subset of the dr009_* suite which follows
-// (dr009_runtime_error_message_surfaces_in_default_body,
-//  dr009_non_std_exception_yields_unknown_exception_in_default_body,
+// (dr009_default_body_is_fixed_string,
+//  dr009_default_body_is_fixed_string_for_non_std_exception,
+//  dr009_verbose_body_surfaces_message_when_opted_in,
+//  dr009_verbose_body_surfaces_unknown_exception_when_opted_in,
 //  dr009_throwing_handler_yields_empty_body_500 /
 //  dr009_throwing_handler_logs_generically). The dr009_* tests assert on
 // body content, message forwarding, and log capture in addition to status.
@@ -3468,7 +3476,6 @@ LT_BEGIN_AUTO_TEST(basic_suite, dr009_default_body_is_fixed_string_for_non_std_e
         "http://localhost:" + std::to_string(PORT + 83) + "/non_std");
     LT_ASSERT_EQ(http_code, 500);
     LT_CHECK_EQ(s, std::string("Internal Server Error"));
-    LT_CHECK_EQ(s.find("unknown exception"), std::string::npos);
 
     ws2.stop();
 LT_END_AUTO_TEST(dr009_default_body_is_fixed_string_for_non_std_exception)

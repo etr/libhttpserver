@@ -58,7 +58,9 @@ inline constexpr std::string_view METHOD_ERROR = "Method not Allowed";
 // Default body for a 406 response. Retained for v1 API parity.
 inline constexpr std::string_view NOT_METHOD_ERROR = "Method not Acceptable";
 
-// Default body for a 500 response when no internal_error_handler is set.
+// v1 API-parity constant. Retained for external consumers that may
+// reference the exact string "Internal Error"; the live 500 dispatch
+// path uses INTERNAL_SERVER_ERROR (DR-009 Revision 1), below.
 inline constexpr std::string_view GENERIC_ERROR = "Internal Error";
 
 // TASK-055 / DR-009 Revision 1: fixed, sanitized default body for the

@@ -21,6 +21,7 @@
 - Route registration grabs a writer lock; route lookup grabs a reader lock. The LRU cache (256 entries) is checked before the locks on the lookup path.
 - `~webserver()` joins MHD's internal threads before returning. Users who call `stop()` themselves still receive the same join behavior on destruction.
 - The constructor `webserver(const create_webserver&)` is `explicit` (PRD-NAM-REQ-004).
+- Default 500 body (no `internal_error_handler` configured) is the fixed string `"Internal Server Error"` (DR-009 Revision 1 / CWE-209). The originating `e.what()` is still surfaced via the `log_error` callback. The verbose body is opt-in via `create_webserver::expose_exception_messages(true)`. See §5.2 for the full contract.
 
 **Related requirements:** PRD-HDR-REQ-001..004, PRD-FLG-REQ-001..005, PRD-CFG-REQ-001..004, PRD-HDL-REQ-001..006, PRD-NAM-REQ-001..005.
 

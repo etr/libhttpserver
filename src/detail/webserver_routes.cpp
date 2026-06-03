@@ -230,9 +230,9 @@ void webserver_impl::reject_terminus_collision(const std::string& key,
         const char* existing_kind = want_is_prefix ? "exact" : "prefix";
         throw std::invalid_argument(
             "Path '" + key + "' is already registered as a "
-            + std::string(existing_kind)
+            + existing_kind
             + " route; cannot also register it as a "
-            + std::string(incoming_kind)
+            + incoming_kind
             + " route (the (method, path) cache key cannot "
               "discriminate the two)");
     }

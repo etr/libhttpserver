@@ -664,8 +664,11 @@ auto cfg = httpserver::create_webserver(8080)
         return httpserver::http_response::empty().with_status(405);
     })
     .internal_error_handler([](const httpserver::http_request&, std::string_view what) {
-        // In production, log 'what' internally and return a generic message to the client.
-        return httpserver::http_response::string(std::string{what}).with_status(500);
+        // CWE-209: 'what' may contain file paths, SQL fragments, or
+        // attacker-influenced input. Log it internally; do NOT echo
+        // it to the HTTP client.
+        (void)what;  // e.g. logger->error(what);
+        return httpserver::http_response::string("Internal Server Error").with_status(500);
     });
 httpserver::webserver ws{cfg};
 ```
@@ -1715,8 +1718,11 @@ auto cfg = httpserver::create_webserver(8080)
         return httpserver::http_response::empty().with_status(405);
     })
     .internal_error_handler([](const httpserver::http_request&, std::string_view what) {
-        // In production, log 'what' internally and return a generic message to the client.
-        return httpserver::http_response::string(std::string{what}).with_status(500);
+        // CWE-209: 'what' may contain file paths, SQL fragments, or
+        // attacker-influenced input. Log it internally; do NOT echo
+        // it to the HTTP client.
+        (void)what;  // e.g. logger->error(what);
+        return httpserver::http_response::string("Internal Server Error").with_status(500);
     });
 httpserver::webserver ws{cfg};
 ```

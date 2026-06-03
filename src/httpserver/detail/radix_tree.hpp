@@ -215,10 +215,10 @@ class radix_tree {
     // TASK-056: probe for a terminus of the specified kind at the EXACT
     // node reached by tokenizing `path` (pattern-equality, not request-
     // path matching). Unlike find(), this does NOT fall back to a
-    // prefix ancestor and does NOT descend the wildcard branch — the
-    // caller is asking "is there a `{name}` literal segment registered
-    // here?", so the same wildcard-shape matching rule as remove() is
-    // used. Returns true iff such a terminus exists.
+    // prefix ancestor; it DOES descend the wildcard child when the
+    // pattern segment is wildcard-shaped (same shape rule as remove()),
+    // because the caller passes the registered pattern, not a concrete
+    // request segment. Returns true iff such a terminus exists.
     //
     // Designed for the registration-time collision guard added in
     // TASK-056 (webserver_impl::reject_terminus_collision): when
@@ -286,8 +286,9 @@ class radix_tree {
 
  private:
     static std::vector<std::string> tokenize(const std::string& path) {
-        // tokenize_url takes std::string by value; pass the already-owned
-        // string to avoid an extra copy when callers hold a const string&.
+        // tokenize_url takes a const std::string&; passing the already-
+        // owned string binds directly, avoiding the std::string{view}
+        // temporary that the previous string_view overload required.
         return ::httpserver::http::http_utils::tokenize_url(path);
     }
 

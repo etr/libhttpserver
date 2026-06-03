@@ -60,9 +60,11 @@
 //   - force_our=true: return a hardcoded 500 with an EMPTY body
 //       (the "double-fault" fallback used when the user handler
 //       itself threw).
-//   - otherwise (no handler set, !force_our): return a default
-//       500 whose body surfaces @p msg, so the unset-handler
-//       default is informative.
+//   - otherwise (no handler set, !force_our): return a default 500
+//       whose body is the fixed string "Internal Server Error"
+//       (DR-009 Revision 1 / CWE-209). @p msg is forwarded into the
+//       body only when parent->expose_exception_messages is true
+//       (development opt-in).
 //
 // Throws nothing on its own; if parent->internal_error_handler
 // throws, that exception propagates to the caller. Callers in the
