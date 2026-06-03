@@ -32,6 +32,7 @@
 
 #include <curl/curl.h>
 
+#include <cstring>
 #include <functional>
 #include <stdexcept>
 #include <string>
@@ -482,24 +483,17 @@ LT_BEGIN_AUTO_TEST(webserver_route_suite, route_root_path_serves_get_request)
     ws.stop();
 LT_END_AUTO_TEST(route_root_path_serves_get_request)
 
-// Passing a method_set containing only the count_ sentinel bit results
-// in std::invalid_argument because on_methods_'s empty() check uses
-// bits==0, and count_ falls outside the valid-method window
-// (for_each_requested_method iterates 0..count_-1 only). The
-// method_set{}.set(count_) bit is outside that range, so no slots are
-// installed — effectively an empty registration. on_methods_ should
-// reject this. Currently the empty() guard does NOT catch a set with
-// only the count_ bit (bits == 512 != 0), so this test documents the
-// current behaviour: the call succeeds but registers no methods.
-// TODO (finding 29): add a guard for this edge case if required.
+// A method_set carrying only out-of-window bits (e.g. only the count_
+// sentinel bit, set via `method_set{}.set(http_method::count_)`) must be
+// rejected by on_methods_. method_set::empty() masks against
+// valid_method_mask(), so this set is reported empty and on_methods_
+// throws std::invalid_argument with the documented message.
+// (Originally finding 29: previously the empty() guard did NOT catch a
+// count_-only set; tightened so the registration cannot silently install
+// a route with no method slots.)
 LT_BEGIN_AUTO_TEST(webserver_route_suite,
                    route_method_set_count_sentinel_only_behavior)
     webserver ws{create_webserver(PORT + 18)};
-    // Behaviour: method_set{}.set(count_) is not caught by empty() today.
-    // The registration succeeds (no throw), but because for_each_requested_method
-    // iterates only 0..count_-1, no slot is populated and the resource returns
-    // 405 for every method.  Pinning the current behaviour so any future
-    // change to guard this case is visible in the test suite.
     bool threw = false;
     try {
         ws.route(method_set{}.set(http_method::count_), "/s",
@@ -509,9 +503,7 @@ LT_BEGIN_AUTO_TEST(webserver_route_suite,
     } catch (const std::invalid_argument&) {
         threw = true;
     }
-    // If a guard is added in future, `threw` will flip to true and this
-    // test should be updated to LT_CHECK(threw).
-    LT_CHECK(!threw);
+    LT_CHECK(threw);
 LT_END_AUTO_TEST(route_method_set_count_sentinel_only_behavior)
 
 LT_BEGIN_AUTO_TEST_ENV()

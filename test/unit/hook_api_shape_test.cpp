@@ -121,28 +121,13 @@ static_assert(add_hook_is_callable<
         std::function<void(const httpserver::response_sent_ctx&)>>::value,
     "add_hook must accept the response_sent signature");
 
-// Pinned-phase negative: response_sent_ctx callable is NOT accepted by the
-// accept_decision overload. The all-phases SFINAE gate above checks that
-// the callable fails ALL overloads. This check uses a helper that directly
-// tests a specific (phase, callable) pair to guard against a future change
-// that accidentally widens one overload. (TASK-045 review, finding #34.)
-//
-// Implementation note: since add_hook overloads are non-template member
-// functions distinguished by their std::function argument type, we can
-// check invocability directly: calling add_hook(phase, wrong_fn_type) must
-// fail to compile.
-template <class FnT, class = void>
-struct accept_decision_hook_callable : std::false_type {};
-template <class FnT>
-struct accept_decision_hook_callable<FnT, std::void_t<
-    decltype(std::declval<webserver&>().add_hook(
-        hook_phase::accept_decision, std::declval<FnT>()))>>
-    : std::true_type {};
-
-// response_sent callable must NOT be accepted by the accept_decision overload.
-static_assert(!accept_decision_hook_callable<
-        std::function<void(const httpserver::response_sent_ctx&)>>::value,
-    "accept_decision overload must not accept a response_sent callable");
+// The phase argument is a runtime value, not a compile-time discriminator:
+// every add_hook overload accepts a `hook_phase` regardless of which
+// callable signature it takes, and mismatches are reported at runtime as
+// std::invalid_argument (see register_hook_impl in src/webserver.cpp).
+// The runtime test add_hook_throws_on_phase_mismatch covers that
+// guarantee end-to-end; an SFINAE-style negative pin here cannot, because
+// the overload set is keyed on the callable type alone.
 
 // ---- runtime tests ------------------------------------------------------
 

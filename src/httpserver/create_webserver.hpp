@@ -237,6 +237,34 @@ class create_webserver {
      create_webserver& bind_socket(int v) { _bind_socket = v; return *this; }
      create_webserver& max_thread_stack_size(int v) { check_non_negative("max_thread_stack_size", v); _max_thread_stack_size = v; return *this; }
 
+     /**
+      * Per-request hard limit on the number of distinct GET argument keys.
+      *
+      * Caps how many unique `?key=value` pairs `populate_args()` will accept
+      * before returning MHD_NO. The guard mitigates arena exhaustion from
+      * crafted requests with thousands of unique parameters
+      * (security-reviewer-iter1-2). The same protection on a byte basis is
+      * provided by @ref max_args_bytes.
+      *
+      * Pass `0` to keep the compile-time default
+      * (@ref httpserver::detail::arguments_accumulator::DEFAULT_MAX_ARGS_COUNT,
+      * currently 64). POST argument limits are unaffected — those are bounded
+      * upstream by MHD_OPTION_CONNECTION_MEMORY_LIMIT
+      * (see @ref memory_limit / @ref content_size_limit).
+      */
+     create_webserver& max_args_count(std::size_t v) { _max_args_count = v; return *this; }
+
+     /**
+      * Per-request hard limit on the total bytes (sum of all key + value
+      * lengths) of GET arguments accepted before `populate_args()` returns
+      * MHD_NO. Complements @ref max_args_count; both guards must pass.
+      *
+      * Pass `0` to keep the compile-time default
+      * (@ref httpserver::detail::arguments_accumulator::DEFAULT_MAX_ARGS_BYTES,
+      * currently 64 KiB).
+      */
+     create_webserver& max_args_bytes(std::size_t v) { _max_args_bytes = v; return *this; }
+
      // Boolean flag setters (TASK-033 / PRD-CFG-REQ-001).
      /**
       * Enable TLS for the webserver (HTTPS).
@@ -522,7 +550,24 @@ class create_webserver {
          "v1 shared_ptr<http_response> auth signature is deprecated; "
          "return std::optional<http_response> instead (TASK-054)")]]
      create_webserver& auth_handler(compat::auth_handler_v1_ptr v) {
+         // This overload is itself deprecated and forwards to the
+         // equally-deprecated compat::adapt_legacy_auth. Suppress the
+         // duplicate -Wdeprecated-declarations at the forwarding call site
+         // so -Werror builds compile; the user-facing deprecation is the
+         // attribute on this overload, fired at the call site.
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#elif defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
          _auth_handler = compat::adapt_legacy_auth(std::move(v));
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#elif defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
          return *this;
      }
      create_webserver& auth_skip_paths(std::vector<std::string> v) { _auth_skip_paths = std::move(v); return *this; }
@@ -588,6 +633,10 @@ class create_webserver {
      std::shared_ptr<struct sockaddr_storage> _bind_address_storage;
      int _bind_socket = 0;
      int _max_thread_stack_size = 0;
+     // 0 = use the compile-time defaults
+     // (arguments_accumulator::DEFAULT_MAX_ARGS_COUNT / _BYTES).
+     std::size_t _max_args_count = 0;
+     std::size_t _max_args_bytes = 0;
      bool _use_ssl = false;
      bool _use_ipv6 = false;
      bool _use_dual_stack = false;

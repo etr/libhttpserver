@@ -573,9 +573,10 @@ jobs:
       with:
         path: libmicrohttpd-1.0.3
         key: ${{ matrix.os }}-${{ matrix.c-compiler }}-libmicrohttpd-1.0.3-pre-built-v2
-      # TASK-037: the flag-invariance-off lane rebuilds libmicrohttpd with
-      # every sub-feature disabled, so it must skip the stock cache fetch.
-      if: ${{ matrix.os-type != 'windows' && matrix.build-type != 'no-dauth' && matrix.build-type != 'flag-invariance-off' && matrix.compiler-family != 'arm-cross' }}
+      # TASK-037: flag-invariance-off and flag-invariance-on rebuild
+      # libmicrohttpd with bespoke flag sets (all features off / all on),
+      # so both lanes skip the stock cache fetch.
+      if: ${{ matrix.os-type != 'windows' && matrix.build-type != 'no-dauth' && matrix.build-type != 'flag-invariance-off' && matrix.build-type != 'flag-invariance-on' && matrix.compiler-family != 'arm-cross' }}
 
     - name: Build libmicrohttpd dependency (if not cached)
       run: |
@@ -585,9 +586,33 @@ jobs:
         cd libmicrohttpd-1.0.3 ;
         ./configure --disable-examples ;
         make ;
-      # TASK-037: as above -- flag-invariance-off has its own dedicated
-      # libmicrohttpd build step below.
-      if: ${{ matrix.os-type != 'windows' && matrix.build-type != 'no-dauth' && matrix.build-type != 'flag-invariance-off' && matrix.compiler-family != 'arm-cross' && steps.cache-libmicrohttpd.outputs.cache-hit != 'true' }}
+      # TASK-037: as above -- the flag-invariance-{on,off} lanes have
+      # their own dedicated libmicrohttpd build steps below.
+      if: ${{ matrix.os-type != 'windows' && matrix.build-type != 'no-dauth' && matrix.build-type != 'flag-invariance-off' && matrix.build-type != 'flag-invariance-on' && matrix.compiler-family != 'arm-cross' && steps.cache-libmicrohttpd.outputs.cache-hit != 'true' }}
+
+    - name: Fetch libmicrohttpd from cache (flag-invariance-on lane)
+      id: cache-libmicrohttpd-on
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+      with:
+        path: libmicrohttpd-1.0.3
+        key: ${{ matrix.os }}-${{ matrix.c-compiler }}-libmicrohttpd-1.0.3-flags-on-v1
+      if: ${{ matrix.build-type == 'flag-invariance-on' }}
+
+    - name: Build libmicrohttpd with all features on (TASK-037 flag-invariance-on lane)
+      # TASK-037 / PRD-FLG-REQ-001: rebuild libmicrohttpd with the
+      # websocket extension so HAVE_WEBSOCKET auto-detection can flip on.
+      # bauth/dauth are on by default in stock libmicrohttpd, so only
+      # --enable-experimental (which builds microhttpd_ws.h / libmicrohttpd_ws)
+      # has to be added explicitly. The matching invariant lane
+      # (flag-invariance-off) zeroes all four features.
+      run: |
+        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-1.0.3.tar.gz -o libmicrohttpd-1.0.3.tar.gz ;
+        echo "7816b57aae199cf5c3645e8770e1be5f0a4dfafbcb24b3772173dc4ee634126a  libmicrohttpd-1.0.3.tar.gz" | sha256sum -c ;
+        tar -xzf libmicrohttpd-1.0.3.tar.gz ;
+        cd libmicrohttpd-1.0.3 ;
+        ./configure --disable-examples --enable-experimental ;
+        make ;
+      if: ${{ matrix.build-type == 'flag-invariance-on' && steps.cache-libmicrohttpd-on.outputs.cache-hit != 'true' }}
 
     - name: Build libmicrohttpd without digest auth (no-dauth test)
       run: |

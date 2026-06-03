@@ -78,6 +78,18 @@ void check_fn(bool empty) {
 // callers each construct a fresh table; the CAS winner installs theirs,
 // the loser discards its local. At most one allocation is wasted under
 // contention (acceptable -- registration is rare).
+// TODO(C++20 cleanup): migrate hook_table_ to std::atomic<std::shared_ptr<T>>
+// and use the member functions. The free std::atomic_*_explicit overloads on
+// std::shared_ptr were deprecated in C++20 but remain functional through at
+// least C++23; clang -Wdeprecated-declarations flags them. Until the field
+// type is changed, suppress the warning at the only two call sites.
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#elif defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
 std::shared_ptr<detail::resource_hook_table>
 ensure_table(std::shared_ptr<detail::resource_hook_table>& slot) {
     auto existing = std::atomic_load_explicit(
@@ -96,6 +108,11 @@ ensure_table(std::shared_ptr<detail::resource_hook_table>& slot) {
     // Lost the race; `expected` was updated to the winning shared_ptr.
     return expected;
 }
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#elif defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
 
 }  // namespace
 
