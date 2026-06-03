@@ -18,50 +18,25 @@
      USA
 */
 
-// test_utils.hpp — shared helpers for integration-test translation units.
-//
-// Single include removes the need for per-file copies of widely-used
-// test idioms. Include after <memory> and before any test-specific code.
-
 #ifndef TEST_INTEG_TEST_UTILS_HPP_
 #define TEST_INTEG_TEST_UTILS_HPP_
 
-#include <memory>
-
-#include "./httpserver.hpp"
-
-namespace test_utils {
-
-// as_shared — wrap a stack-local http_resource& in a shared_ptr with a
-// no-op deleter.
+// Shared helpers for the integration test suite.
 //
-// Purpose: integration tests frequently declare an http_resource on the
-// stack (for brevity and automatic cleanup) and pass it to register_path /
-// register_prefix, which require a shared_ptr. The no-op deleter tells the
-// shared_ptr NOT to delete the pointed-to object, because the stack frame
-// owns its lifetime.
+// Historical note: this header previously exposed `as_shared(http_resource&)`,
+// a thin wrapper that returned a std::shared_ptr<http_resource> with a no-op
+// deleter pointing at a stack-allocated resource. That helper was incompatible
+// with MHD's request_completed callback, which fires from a daemon worker
+// thread during webserver::stop(). When the test body returned, the stack-
+// allocated resource was destroyed before stop() drained the daemon, so the
+// callback dereferenced freed memory through the still-live no-op-deleter
+// shared_ptr the webserver was holding. A wildcard valgrind suppression had
+// been masking the UAF.
 //
-// Safety contract: the caller MUST ensure the resource outlives the
-// webserver. In practice every test achieves this by calling ws.stop()
-// (which drains all in-flight requests) before the test body returns, so
-// the stack frame with the resource is still live when the webserver
-// releases its last reference. Declaring the resource object BEFORE the
-// webserver object also achieves the same guarantee via LIFO destruction.
-//
-// Use make_shared<T>() instead when the test does not specifically exercise
-// the stack-allocation pattern.
-inline std::shared_ptr<httpserver::http_resource>
-as_shared(httpserver::http_resource& r) {
-    return std::shared_ptr<httpserver::http_resource>(
-        &r, [](httpserver::http_resource*){});
-}
-
-}  // namespace test_utils
-
-// Pull as_shared into the file scope of the including TU so that existing
-// call sites (which use unqualified `as_shared(...)`) continue to compile
-// without modification. `inline` keeps it conformant per the cpp core
-// guidelines: each TU sees the same single declaration.
-using test_utils::as_shared;  // NOLINT(build/namespaces)
+// The fix: tests now register resources via `std::make_shared<T>(...)`. The
+// resource's storage lives on the heap and stays alive until the webserver
+// releases its last reference (which happens AFTER stop() has drained MHD).
+// The `as_shared` helper is gone -- there is no safe shape that preserves
+// stack-allocation as the storage strategy.
 
 #endif  // TEST_INTEG_TEST_UTILS_HPP_

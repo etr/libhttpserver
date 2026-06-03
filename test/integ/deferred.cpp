@@ -181,8 +181,8 @@ LT_END_SUITE(deferred_suite)
 
 LT_BEGIN_AUTO_TEST(deferred_suite, deferred_response_with_prefix_content)
     counter = 0;  // reset per-test; tear_down also resets but order may vary
-    deferred_resource resource;
-    ws->register_path("base", as_shared(resource));
+    auto resource = std::make_shared<deferred_resource>();
+    ws->register_path("base", resource);
     curl_global_init(CURL_GLOBAL_ALL);
 
     std::string s;
@@ -200,8 +200,8 @@ LT_END_AUTO_TEST(deferred_response_with_prefix_content)
 
 LT_BEGIN_AUTO_TEST(deferred_suite, deferred_response_with_data)
     counter = 0;  // reset per-test; tear_down also resets but order may vary
-    deferred_resource_with_data resource;
-    ws->register_path("base", as_shared(resource));
+    auto resource = std::make_shared<deferred_resource_with_data>();
+    ws->register_path("base", resource);
     curl_global_init(CURL_GLOBAL_ALL);
 
     std::string s;
@@ -219,8 +219,8 @@ LT_END_AUTO_TEST(deferred_response_with_data)
 
 LT_BEGIN_AUTO_TEST(deferred_suite, deferred_response_empty_content)
     counter = 0;  // reset per-test; tear_down also resets but order may vary
-    deferred_resource_empty_content resource;
-    ws->register_path("base", as_shared(resource));
+    auto resource = std::make_shared<deferred_resource_empty_content>();
+    ws->register_path("base", resource);
     curl_global_init(CURL_GLOBAL_ALL);
 
     std::string s;
@@ -354,8 +354,8 @@ LT_END_AUTO_TEST(on_post_lambda_returns_value)
 LT_BEGIN_AUTO_TEST(deferred_suite, class_render_get_returns_value)
     // AC-2: http_resource subclass with `http_response render_get(...)
     // override` works end-to-end.
-    by_value_class_resource resource;
-    ws->register_path("class_path", as_shared(resource));
+    auto resource = std::make_shared<by_value_class_resource>();
+    ws->register_path("class_path", resource);
     curl_global_init(CURL_GLOBAL_ALL);
 
     std::string body;

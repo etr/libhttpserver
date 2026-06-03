@@ -209,8 +209,12 @@ check-install-layout:
 	    if test "$(CHECK_INSTALL_SHARED)" != "yes"; then rm -rf $(CHECK_INSTALL_STAGE); fi; \
 	    exit 1; \
 	fi
-	@if ! test -L $(CHECK_INSTALL_STAGE)$(includedir)/httpserverpp; then \
-	    echo "FAIL: httpserverpp symlink not installed under $(includedir)"; \
+	@# Accept either a symlink (POSIX) or a regular file (MSYS2/mingw, where
+	@# `ln -s` falls back to a file copy unless MSYS=winsymlinks is set).
+	@# Either form satisfies the "includes #include <httpserverpp> resolve to
+	@# the umbrella" property the install hook is establishing.
+	@if ! test -e $(CHECK_INSTALL_STAGE)$(includedir)/httpserverpp; then \
+	    echo "FAIL: httpserverpp alias not installed under $(includedir)"; \
 	    if test "$(CHECK_INSTALL_SHARED)" != "yes"; then rm -rf $(CHECK_INSTALL_STAGE); fi; \
 	    exit 1; \
 	fi

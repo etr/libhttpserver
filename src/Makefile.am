@@ -54,7 +54,16 @@ libhttpserver_la_CXXFLAGS = $(AM_CXXFLAGS)
 libhttpserver_la_LDFLAGS = $(AM_LDFLAGS) -no-undefined -version-number @LHT_LDF_VERSION@
 
 install-data-hook:
-	(mkdir -p $(DESTDIR)$(includedir) && cd $(DESTDIR)$(includedir) && $(LN_S) -f httpserver.hpp httpserverpp)
+	@# Install an `<httpserverpp>` alias next to `<httpserver.hpp>`. On POSIX
+	@# this is a symlink. On MSYS2/mingw `ln -s` typically falls back to a
+	@# file copy (it produces a regular file, not a link); when even that
+	@# fails (e.g. tightened sandboxes, or `ln` missing the `-s` flag in
+	@# pristine mingw shells) we fall back to an explicit `cp`. The
+	@# downstream `check-install-layout` rule accepts either form.
+	mkdir -p $(DESTDIR)$(includedir)
+	cd $(DESTDIR)$(includedir) && \
+	    rm -f httpserverpp && \
+	    { $(LN_S) httpserver.hpp httpserverpp || cp httpserver.hpp httpserverpp; }
 
 uninstall-hook:
 	(cd $(DESTDIR)$(includedir) && rm -f httpserverpp)

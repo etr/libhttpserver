@@ -268,8 +268,12 @@ void accumulate_octet_score(const ip_representation& a,
                             const ip_representation& b, int i,
                             int64_t& a_score, int64_t& b_score) {
     if (!(CHECK_BIT(a.mask, i) && CHECK_BIT(b.mask, i))) return;
-    a_score += (16 - i) * a.pieces[i];
-    b_score += (16 - i) * b.pieces[i];
+    // Cast the (16 - i) factor to int64_t before the multiply so the product
+    // is computed in the destination type. Without the cast the multiplication
+    // happens in int and only the result is widened, which CodeQL flags as a
+    // potential overflow.
+    a_score += static_cast<int64_t>(16 - i) * a.pieces[i];
+    b_score += static_cast<int64_t>(16 - i) * b.pieces[i];
 }
 
 // True when both v4-mapped-prefix octets on a and b are 0x00 or 0xFF.

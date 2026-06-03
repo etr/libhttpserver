@@ -80,8 +80,8 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, accept_default_block_blocks)
     webserver ws{create_webserver(PORT).default_policy(http_utils::ACCEPT)};
     ws.start(false);
 
-    ok_resource resource;
-    ws.register_path("base", as_shared(resource));
+    auto resource = std::make_shared<ok_resource>();
+    ws.register_path("base", resource);
 
     curl_global_init(CURL_GLOBAL_ALL);
 
@@ -138,8 +138,8 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, reject_policy_neither_allowed_nor_blocked)
     webserver ws{create_webserver(PORT).default_policy(http_utils::REJECT)};
     ws.start(false);
 
-    ok_resource resource;
-    ws.register_path("base", as_shared(resource));
+    auto resource = std::make_shared<ok_resource>();
+    ws.register_path("base", resource);
 
     curl_global_init(CURL_GLOBAL_ALL);
 
@@ -164,8 +164,8 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, block_with_weight_comparison)
     webserver ws{create_webserver(PORT).default_policy(http_utils::ACCEPT)};
     ws.start(false);
 
-    ok_resource resource;
-    ws.register_path("base", as_shared(resource));
+    auto resource = std::make_shared<ok_resource>();
+    ws.register_path("base", resource);
 
     curl_global_init(CURL_GLOBAL_ALL);
 
@@ -198,8 +198,8 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, block_specific_then_wildcard)
     webserver ws{create_webserver(PORT).default_policy(http_utils::ACCEPT)};
     ws.start(false);
 
-    ok_resource resource;
-    ws.register_path("base", as_shared(resource));
+    auto resource = std::make_shared<ok_resource>();
+    ws.register_path("base", resource);
 
     curl_global_init(CURL_GLOBAL_ALL);
 

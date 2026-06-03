@@ -125,8 +125,8 @@ LT_END_SUITE(authentication_suite)
 LT_BEGIN_AUTO_TEST(authentication_suite, base_auth)
     webserver ws{create_webserver(PORT)};
 
-    user_pass_resource user_pass;
-    ws.register_path("base", as_shared(user_pass));
+    auto user_pass = std::make_shared<user_pass_resource>();
+    ws.register_path("base", user_pass);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -150,8 +150,8 @@ LT_END_AUTO_TEST(base_auth)
 LT_BEGIN_AUTO_TEST(authentication_suite, base_auth_fail)
     webserver ws{create_webserver(PORT)};
 
-    user_pass_resource user_pass;
-    ws.register_path("base", as_shared(user_pass));
+    auto user_pass = std::make_shared<user_pass_resource>();
+    ws.register_path("base", user_pass);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -247,8 +247,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth)
         .digest_auth_random("myrandom")
         .nonce_nc_size(300)};
 
-    digest_resource digest;
-    ws.register_path("base", as_shared(digest));
+    auto digest = std::make_shared<digest_resource>();
+    ws.register_path("base", digest);
     ws.start(false);
 
 #if defined(_WINDOWS)
@@ -294,8 +294,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_wrong_pass)
         .digest_auth_random("myrandom")
         .nonce_nc_size(300)};
 
-    digest_resource digest;
-    ws.register_path("base", as_shared(digest));
+    auto digest = std::make_shared<digest_resource>();
+    ws.register_path("base", digest);
     ws.start(false);
 
 #if defined(_WINDOWS)
@@ -339,8 +339,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5)
         .digest_auth_random("myrandom")
         .nonce_nc_size(300)};
 
-    digest_ha1_md5_resource digest_ha1;
-    ws.register_path("base", as_shared(digest_ha1));
+    auto digest_ha1 = std::make_shared<digest_ha1_md5_resource>();
+    ws.register_path("base", digest_ha1);
     ws.start(false);
 
 #if defined(_WINDOWS)
@@ -386,8 +386,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5_wrong_pass)
         .digest_auth_random("myrandom")
         .nonce_nc_size(300)};
 
-    digest_ha1_md5_resource digest_ha1;
-    ws.register_path("base", as_shared(digest_ha1));
+    auto digest_ha1 = std::make_shared<digest_ha1_md5_resource>();
+    ws.register_path("base", digest_ha1);
     ws.start(false);
 
 #if defined(_WINDOWS)
@@ -431,8 +431,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256)
         .digest_auth_random("myrandom")
         .nonce_nc_size(300)};
 
-    digest_ha1_sha256_resource digest_ha1;
-    ws.register_path("base", as_shared(digest_ha1));
+    auto digest_ha1 = std::make_shared<digest_ha1_sha256_resource>();
+    ws.register_path("base", digest_ha1);
     ws.start(false);
 
 #if defined(_WINDOWS)
@@ -478,8 +478,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256_wrong_pass)
         .digest_auth_random("myrandom")
         .nonce_nc_size(300)};
 
-    digest_ha1_sha256_resource digest_ha1;
-    ws.register_path("base", as_shared(digest_ha1));
+    auto digest_ha1 = std::make_shared<digest_ha1_sha256_resource>();
+    ws.register_path("base", digest_ha1);
     ws.start(false);
 
 #if defined(_WINDOWS)
@@ -550,8 +550,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_user_cache_no_auth)
         .digest_auth_random("myrandom")
         .nonce_nc_size(300)};
 
-    digest_user_cache_resource resource;
-    ws.register_path("cache_test", as_shared(resource));
+    auto resource = std::make_shared<digest_user_cache_resource>();
+    ws.register_path("cache_test", resource);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -581,8 +581,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_user_cache_with_auth)
         .digest_auth_random("myrandom")
         .nonce_nc_size(300)};
 
-    digest_user_cache_resource resource;
-    ws.register_path("cache_test", as_shared(resource));
+    auto resource = std::make_shared<digest_user_cache_resource>();
+    ws.register_path("cache_test", resource);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -637,8 +637,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, centralized_auth_fail)
     webserver ws{create_webserver(PORT)
         .auth_handler(centralized_auth_handler)};
 
-    simple_resource sr;
-    ws.register_path("protected", as_shared(sr));
+    auto sr = std::make_shared<simple_resource>();
+    ws.register_path("protected", sr);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -664,8 +664,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, centralized_auth_success)
     webserver ws{create_webserver(PORT)
         .auth_handler(centralized_auth_handler)};
 
-    simple_resource sr;
-    ws.register_path("protected", as_shared(sr));
+    auto sr = std::make_shared<simple_resource>();
+    ws.register_path("protected", sr);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -694,10 +694,10 @@ LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_paths)
         .auth_handler(centralized_auth_handler)
         .auth_skip_paths({"/health", "/public/*"})};
 
-    simple_resource sr;
-    ws.register_path("health", as_shared(sr));
-    ws.register_path("public/info", as_shared(sr));
-    ws.register_path("protected", as_shared(sr));
+    auto sr = std::make_shared<simple_resource>();
+    ws.register_path("health", sr);
+    ws.register_path("public/info", sr);
+    ws.register_path("protected", sr);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -759,8 +759,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_paths_no_partial_match)
         .auth_handler(centralized_auth_handler)
         .auth_skip_paths({"/public/*"})};
 
-    simple_resource sr;
-    ws.register_path("publicinfo", as_shared(sr));
+    auto sr = std::make_shared<simple_resource>();
+    ws.register_path("publicinfo", sr);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -789,8 +789,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_paths_deep_nested)
         .auth_handler(centralized_auth_handler)
         .auth_skip_paths({"/api/v1/public/*"})};
 
-    simple_resource sr;
-    ws.register_path("api/v1/public/users/list", as_shared(sr));
+    auto sr = std::make_shared<simple_resource>();
+    ws.register_path("api/v1/public/users/list", sr);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -826,8 +826,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, centralized_auth_post_method)
     webserver ws{create_webserver(PORT)
         .auth_handler(centralized_auth_handler)};
 
-    post_resource pr;
-    ws.register_path("data", as_shared(pr));
+    auto pr = std::make_shared<post_resource>();
+    ws.register_path("data", pr);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -874,8 +874,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, centralized_auth_wrong_credentials)
     webserver ws{create_webserver(PORT)
         .auth_handler(centralized_auth_handler)};
 
-    simple_resource sr;
-    ws.register_path("protected", as_shared(sr));
+    auto sr = std::make_shared<simple_resource>();
+    ws.register_path("protected", sr);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -921,8 +921,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, centralized_auth_not_found)
     webserver ws{create_webserver(PORT)
         .auth_handler(centralized_auth_handler)};
 
-    simple_resource sr;
-    ws.register_path("exists", as_shared(sr));
+    auto sr = std::make_shared<simple_resource>();
+    ws.register_path("exists", sr);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -950,8 +950,8 @@ LT_END_AUTO_TEST(centralized_auth_not_found)
 LT_BEGIN_AUTO_TEST(authentication_suite, no_auth_handler_default)
     webserver ws{create_webserver(PORT)};  // No auth_handler
 
-    simple_resource sr;
-    ws.register_path("open", as_shared(sr));
+    auto sr = std::make_shared<simple_resource>();
+    ws.register_path("open", sr);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -981,11 +981,11 @@ LT_BEGIN_AUTO_TEST(authentication_suite, auth_multiple_skip_paths)
         .auth_handler(centralized_auth_handler)
         .auth_skip_paths({"/health", "/metrics", "/status", "/public/*"})};
 
-    simple_resource sr;
-    ws.register_path("health", as_shared(sr));
-    ws.register_path("metrics", as_shared(sr));
-    ws.register_path("status", as_shared(sr));
-    ws.register_path("protected", as_shared(sr));
+    auto sr = std::make_shared<simple_resource>();
+    ws.register_path("health", sr);
+    ws.register_path("metrics", sr);
+    ws.register_path("status", sr);
+    ws.register_path("protected", sr);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1059,8 +1059,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_path_root)
         .auth_handler(centralized_auth_handler)
         .auth_skip_paths({"/"})};
 
-    simple_resource sr;
-    ws.register_prefix("/", as_shared(sr));
+    auto sr = std::make_shared<simple_resource>();
+    ws.register_prefix("/", sr);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1090,10 +1090,10 @@ LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_path_wildcard)
         .auth_handler(centralized_auth_handler)
         .auth_skip_paths({"/pub/*"})};
 
-    simple_resource sr;
-    ws.register_path("pub/anything", as_shared(sr));
-    ws.register_path("pub/nested/path", as_shared(sr));
-    ws.register_path("private/secret", as_shared(sr));
+    auto sr = std::make_shared<simple_resource>();
+    ws.register_path("pub/anything", sr);
+    ws.register_path("pub/nested/path", sr);
+    ws.register_path("private/secret", sr);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1152,8 +1152,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, auth_empty_skip_paths)
         .auth_handler(centralized_auth_handler)
         .auth_skip_paths({})};  // Empty skip paths
 
-    simple_resource sr;
-    ws.register_path("test", as_shared(sr));
+    auto sr = std::make_shared<simple_resource>();
+    ws.register_path("test", sr);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1183,9 +1183,9 @@ LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_path_traversal_bypass)
         .auth_handler(centralized_auth_handler)
         .auth_skip_paths({"/public/*"})};
 
-    simple_resource sr;
-    ws.register_path("protected", as_shared(sr));
-    ws.register_path("public/info", as_shared(sr));
+    auto sr = std::make_shared<simple_resource>();
+    ws.register_path("protected", sr);
+    ws.register_path("public/info", sr);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);

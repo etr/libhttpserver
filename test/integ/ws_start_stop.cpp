@@ -115,8 +115,8 @@ LT_END_SUITE(ws_start_stop_suite)
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, start_stop)
     { // NOLINT (internal scope opening - not method start)
     httpserver::webserver ws{httpserver::create_webserver(PORT)};
-    ok_resource ok;
-    ws.register_path("base", as_shared(ok));
+    auto ok = std::make_shared<ok_resource>();
+    ws.register_path("base", ok);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -137,8 +137,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, start_stop)
 
     {
     httpserver::webserver ws{httpserver::create_webserver(PORT).start_method(httpserver::http::http_utils::INTERNAL_SELECT)};
-    ok_resource ok;
-    ws.register_path("base", as_shared(ok));
+    auto ok = std::make_shared<ok_resource>();
+    ws.register_path("base", ok);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -159,8 +159,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, start_stop)
 
     {
     httpserver::webserver ws{httpserver::create_webserver(PORT).start_method(httpserver::http::http_utils::THREAD_PER_CONNECTION)};
-    ok_resource ok;
-    ws.register_path("base", as_shared(ok));
+    auto ok = std::make_shared<ok_resource>();
+    ws.register_path("base", ok);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -185,8 +185,8 @@ LT_END_AUTO_TEST(start_stop)
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ipv6)
     { // NOLINT (internal scope opening - not method start)
     httpserver::webserver ws{httpserver::create_webserver(PORT).use_ipv6()};
-    ok_resource ok;
-    ws.register_path("base", as_shared(ok));
+    auto ok = std::make_shared<ok_resource>();
+    ws.register_path("base", ok);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -210,8 +210,8 @@ LT_END_AUTO_TEST(ipv6)
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, dual_stack)
     { // NOLINT (internal scope opening - not method start)
     httpserver::webserver ws{httpserver::create_webserver(PORT).use_dual_stack()};
-    ok_resource ok;
-    ws.register_path("base", as_shared(ok));
+    auto ok = std::make_shared<ok_resource>();
+    ws.register_path("base", ok);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -236,8 +236,8 @@ LT_END_AUTO_TEST(dual_stack)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, stop_and_wait)
     httpserver::webserver ws{httpserver::create_webserver(PORT)};
-    ok_resource ok;
-    ws.register_path("base", as_shared(ok));
+    auto ok = std::make_shared<ok_resource>();
+    ws.register_path("base", ok);
     ws.start(false);
 
     {
@@ -286,8 +286,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, disable_options)
         .regex_checking(false)
         .ban_system(false)
         .post_process(false)};
-    ok_resource ok;
-    ws.register_path("base", as_shared(ok));
+    auto ok = std::make_shared<ok_resource>();
+    ws.register_path("base", ok);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -314,8 +314,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, enable_options)
         .regex_checking()
         .ban_system()
         .post_process()};
-    ok_resource ok;
-    ws.register_path("base", as_shared(ok));
+    auto ok = std::make_shared<ok_resource>();
+    ws.register_path("base", ok);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -349,8 +349,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_socket)
     listen(fd, 10000);
 
     httpserver::webserver ws{httpserver::create_webserver(-1).bind_socket(fd)};  // whatever port here doesn't matter
-    ok_resource ok;
-    ws.register_path("base", as_shared(ok));
+    auto ok = std::make_shared<ok_resource>();
+    ws.register_path("base", ok);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -371,8 +371,8 @@ LT_END_AUTO_TEST(custom_socket)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, bind_address_string)
     httpserver::webserver ws{httpserver::create_webserver(PORT).bind_address("127.0.0.1")};
-    ok_resource ok;
-    ws.register_path("base", as_shared(ok));
+    auto ok = std::make_shared<ok_resource>();
+    ws.register_path("base", ok);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -398,8 +398,8 @@ LT_END_AUTO_TEST(bind_address_string_invalid)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, single_resource)
     httpserver::webserver ws{httpserver::create_webserver(PORT).single_resource()};
-    ok_resource ok;
-    ws.register_prefix("/", as_shared(ok));
+    auto ok = std::make_shared<ok_resource>();
+    ws.register_prefix("/", ok);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -420,9 +420,9 @@ LT_END_AUTO_TEST(single_resource)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, single_resource_not_default_resource)
     httpserver::webserver ws{httpserver::create_webserver(PORT).single_resource()};
-    ok_resource ok;
-    LT_CHECK_THROW(ws.register_prefix("/other", as_shared(ok)));
-    LT_CHECK_THROW(ws.register_path("/", as_shared(ok)));
+    auto ok = std::make_shared<ok_resource>();
+    LT_CHECK_THROW(ws.register_prefix("/other", ok));
+    LT_CHECK_THROW(ws.register_path("/", ok));
     ws.start(false);
 
     ws.stop();
@@ -437,9 +437,9 @@ LT_END_AUTO_TEST(register_path_nullptr_throws)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, register_empty_resource_non_family)
     httpserver::webserver ws{httpserver::create_webserver(PORT)};
-    ok_resource ok;
+    auto ok = std::make_shared<ok_resource>();
     // Register empty resource as exact path (non-prefix)
-    ws.register_path("", as_shared(ok));
+    ws.register_path("", ok);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -460,9 +460,9 @@ LT_END_AUTO_TEST(register_empty_resource_non_family)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, register_path_with_url_params_non_family)
     httpserver::webserver ws{httpserver::create_webserver(PORT).regex_checking()};
-    ok_resource ok;
+    auto ok = std::make_shared<ok_resource>();
     // Register resource with URL parameters as exact path
-    ws.register_path("/user/{id}", as_shared(ok));
+    ws.register_path("/user/{id}", ok);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -483,16 +483,17 @@ LT_END_AUTO_TEST(register_path_with_url_params_non_family)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, register_duplicate_resource_throws)
     httpserver::webserver ws{httpserver::create_webserver(PORT)};
-    ok_resource ok1, ok2;
+    auto ok1 = std::make_shared<ok_resource>();
+    auto ok2 = std::make_shared<ok_resource>();
     // First registration should succeed.
-    ws.register_path("/duplicate", as_shared(ok1));
+    ws.register_path("/duplicate", ok1);
     // TASK-023: the second registration of the same path now throws
     // std::invalid_argument (replaces v1's silent `return false`).
-    LT_CHECK_THROW(ws.register_path("/duplicate", as_shared(ok2)));
+    LT_CHECK_THROW(ws.register_path("/duplicate", ok2));
     // TASK-056: registering as a prefix on the same path is now also
     // forbidden — the (method, path) cache key cannot discriminate
     // exact vs prefix. Pre-TASK-056 the call below silently succeeded.
-    LT_CHECK_THROW(ws.register_prefix("/duplicate", as_shared(ok2)));
+    LT_CHECK_THROW(ws.register_prefix("/duplicate", ok2));
 LT_END_AUTO_TEST(register_duplicate_resource_throws)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, thread_per_connection_fails_with_max_threads)
@@ -522,8 +523,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, tuning_options)
         .max_thread_stack_size(4*1024*1024)
         .nonce_nc_size(10)};
 
-    ok_resource ok;
-    ws.register_path("base", as_shared(ok));
+    auto ok = std::make_shared<ok_resource>();
+    ws.register_path("base", ok);
     LT_CHECK_NOTHROW(ws.start(false));
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -553,8 +554,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_base)
         .https_mem_key(ROOT "/key.pem")
         .https_mem_cert(ROOT "/cert.pem")};
 
-    ok_resource ok;
-    ws.register_path("base", as_shared(ok));
+    auto ok = std::make_shared<ok_resource>();
+    ws.register_path("base", ok);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -583,8 +584,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_with_protocol_priorities)
         .https_mem_cert(ROOT "/cert.pem")
         .https_priorities("NORMAL:-MD5")};
 
-    ok_resource ok;
-    ws.register_path("base", as_shared(ok));
+    auto ok = std::make_shared<ok_resource>();
+    ws.register_path("base", ok);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -612,8 +613,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_with_trust)
         .https_mem_cert(ROOT "/cert.pem")
         .https_mem_trust(ROOT "/test_root_ca.pem")};
 
-    ok_resource ok;
-    ws.register_path("base", as_shared(ok));
+    auto ok = std::make_shared<ok_resource>();
+    ws.register_path("base", ok);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -637,9 +638,9 @@ LT_END_AUTO_TEST(ssl_with_trust)
 
 void* start_ws_blocking(void* par) {
     httpserver::webserver* ws = (httpserver::webserver*) par;
-    ok_resource ok;
+    auto ok = std::make_shared<ok_resource>();
     try {
-        ws->register_path("base", as_shared(ok));
+        ws->register_path("base", ok);
         ws->start(true);
     } catch (...) {
         return PTHREAD_CANCELED;
@@ -682,8 +683,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_error_resources)
         .not_found_handler(not_found_custom)
         .method_not_allowed_handler(not_allowed_custom)};
 
-    ok_resource ok;
-    ws.register_path("base", as_shared(ok));
+    auto ok = std::make_shared<ok_resource>();
+    ws.register_path("base", ok);
     ws.start(false);
 
     {
@@ -722,7 +723,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_error_resources)
     }
 
     {
-    ok.set_allowing(httpserver::http_method::put, false);
+    ok->set_allowing(httpserver::http_method::put, false);
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -748,8 +749,8 @@ LT_END_AUTO_TEST(custom_error_resources)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ipv6_webserver)
     httpserver::webserver ws{httpserver::create_webserver(PORT + 20).use_ipv6()};
-    ok_resource ok;
-    ws.register_path("base", as_shared(ok));
+    auto ok = std::make_shared<ok_resource>();
+    ws.register_path("base", ok);
     try {
         ws.start(false);
     } catch (const std::exception& e) {
@@ -778,8 +779,8 @@ LT_END_AUTO_TEST(ipv6_webserver)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, dual_stack_webserver)
     httpserver::webserver ws{httpserver::create_webserver(PORT + 21).use_dual_stack()};
-    ok_resource ok;
-    ws.register_path("base", as_shared(ok));
+    auto ok = std::make_shared<ok_resource>();
+    ws.register_path("base", ok);
     try {
         ws.start(false);
     } catch (const std::exception& e) {
@@ -809,8 +810,8 @@ LT_END_AUTO_TEST(dual_stack_webserver)
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, bind_address_ipv4)
     int port = PORT + 22;
     httpserver::webserver ws{httpserver::create_webserver(port).bind_address("127.0.0.1")};
-    ok_resource ok;
-    ws.register_path("base", as_shared(ok));
+    auto ok = std::make_shared<ok_resource>();
+    ws.register_path("base", ok);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -837,8 +838,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, bind_address_ipv6_string)
     // Note: This may fail if IPv6 is not available on the system
     try {
         httpserver::webserver ws{httpserver::create_webserver(port).bind_address("::1")};
-        ok_resource ok;
-        ws.register_path("base", as_shared(ok));
+        auto ok = std::make_shared<ok_resource>();
+        ws.register_path("base", ok);
         ws.start(false);
         if (ws.is_running()) {
             curl_global_init(CURL_GLOBAL_ALL);
@@ -877,8 +878,8 @@ class tls_check_non_tls_resource : public httpserver::http_resource {
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, tls_session_on_non_tls_connection)
     int port = PORT + 25;
     httpserver::webserver ws{httpserver::create_webserver(port)};  // No SSL
-    tls_check_non_tls_resource tls_check;
-    ws.register_path("tls_check", as_shared(tls_check));
+    auto tls_check = std::make_shared<tls_check_non_tls_resource>();
+    ws.register_path("tls_check", tls_check);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -903,8 +904,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, https_webserver)
         .use_ssl()
         .https_mem_key(ROOT "/key.pem")
         .https_mem_cert(ROOT "/cert.pem")};
-    ok_resource ok;
-    ws.register_path("base", as_shared(ok));
+    auto ok = std::make_shared<ok_resource>();
+    ws.register_path("base", ok);
     try {
         ws.start(false);
     } catch (const std::exception& e) {
@@ -938,8 +939,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, tls_session_getters)
         .use_ssl()
         .https_mem_key(ROOT "/key.pem")
         .https_mem_cert(ROOT "/cert.pem")};
-    tls_info_resource tls_info;
-    ws.register_path("tls_info", as_shared(tls_info));
+    auto tls_info = std::make_shared<tls_info_resource>();
+    ws.register_path("tls_info", tls_info);
     try {
         ws.start(false);
     } catch (const std::exception& e) {
@@ -1005,8 +1006,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_no_certificate)
         .use_ssl()
         .https_mem_key(ROOT "/key.pem")
         .https_mem_cert(ROOT "/cert.pem")};
-    client_cert_info_resource cert_info;
-    ws.register_path("cert_info", as_shared(cert_info));
+    auto cert_info = std::make_shared<client_cert_info_resource>();
+    ws.register_path("cert_info", cert_info);
     try {
         ws.start(false);
     } catch (const std::exception& e) {
@@ -1040,8 +1041,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_with_certificate)
         .https_mem_key(ROOT "/key.pem")
         .https_mem_cert(ROOT "/cert.pem")
         .https_mem_trust(ROOT "/client_cert.pem")};  // Trust the client cert as CA
-    client_cert_info_resource cert_info;
-    ws.register_path("cert_info", as_shared(cert_info));
+    auto cert_info = std::make_shared<client_cert_info_resource>();
+    ws.register_path("cert_info", cert_info);
     try {
         ws.start(false);
     } catch (const std::exception& e) {
@@ -1080,8 +1081,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_dn_extraction)
         .https_mem_key(ROOT "/key.pem")
         .https_mem_cert(ROOT "/cert.pem")
         .https_mem_trust(ROOT "/client_cert.pem")};
-    client_cert_info_resource cert_info;
-    ws.register_path("cert_info", as_shared(cert_info));
+    auto cert_info = std::make_shared<client_cert_info_resource>();
+    ws.register_path("cert_info", cert_info);
     try {
         ws.start(false);
     } catch (const std::exception& e) {
@@ -1118,8 +1119,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_fingerprint)
         .https_mem_key(ROOT "/key.pem")
         .https_mem_cert(ROOT "/cert.pem")
         .https_mem_trust(ROOT "/client_cert.pem")};
-    client_cert_info_resource cert_info;
-    ws.register_path("cert_info", as_shared(cert_info));
+    auto cert_info = std::make_shared<client_cert_info_resource>();
+    ws.register_path("cert_info", cert_info);
     try {
         ws.start(false);
     } catch (const std::exception& e) {
@@ -1161,8 +1162,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_no_cn)
         .https_mem_key(ROOT "/key.pem")
         .https_mem_cert(ROOT "/cert.pem")
         .https_mem_trust(ROOT "/client_cert_no_cn.pem")};
-    client_cert_info_resource cert_info;
-    ws.register_path("cert_info", as_shared(cert_info));
+    auto cert_info = std::make_shared<client_cert_info_resource>();
+    ws.register_path("cert_info", cert_info);
     try {
         ws.start(false);
     } catch (const std::exception& e) {
@@ -1202,8 +1203,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_untrusted)
         .https_mem_key(ROOT "/key.pem")
         .https_mem_cert(ROOT "/cert.pem")
         .https_mem_trust(ROOT "/client_cert.pem")};  // Only trust the original client cert
-    client_cert_info_resource cert_info;
-    ws.register_path("cert_info", as_shared(cert_info));
+    auto cert_info = std::make_shared<client_cert_info_resource>();
+    ws.register_path("cert_info", cert_info);
     try {
         ws.start(false);
     } catch (const std::exception& e) {
@@ -1251,8 +1252,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_accessors_known_values)
         .https_mem_key(ROOT "/key.pem")
         .https_mem_cert(ROOT "/cert.pem")
         .https_mem_trust(ROOT "/client_cert.pem")};
-    client_cert_info_resource cert_info;
-    ws.register_path("cert_info", as_shared(cert_info));
+    auto cert_info = std::make_shared<client_cert_info_resource>();
+    ws.register_path("cert_info", cert_info);
     try {
         ws.start(false);
     } catch (const std::exception& e) {
@@ -1356,8 +1357,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, sni_callback_setup)
         .https_mem_cert(ROOT "/cert.pem")
         .sni_callback(sni_cb)};
 
-    ok_resource ok;
-    ws.register_path("base", as_shared(ok));
+    auto ok = std::make_shared<ok_resource>();
+    ws.register_path("base", ok);
     try {
         ws.start(false);
     } catch (const std::exception& e) {
@@ -1391,8 +1392,8 @@ LT_END_AUTO_TEST(sni_callback_setup)
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, pedantic_mode)
     int port = PORT + 26;
     httpserver::webserver ws{httpserver::create_webserver(port).pedantic()};
-    ok_resource ok;
-    ws.register_path("base", as_shared(ok));
+    auto ok = std::make_shared<ok_resource>();
+    ws.register_path("base", ok);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1418,8 +1419,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, digest_auth_random)
     int port = PORT + 27;
     httpserver::webserver ws{httpserver::create_webserver(port)
         .digest_auth_random("random_string_for_digest")};
-    ok_resource ok;
-    ws.register_path("base", as_shared(ok));
+    auto ok = std::make_shared<ok_resource>();
+    ws.register_path("base", ok);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1475,8 +1476,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_handler_setup)
         .cred_type(httpserver::http::http_utils::PSK)
         .psk_cred_handler(test_psk_handler)};
 
-    ok_resource ok;
-    ws.register_path("base", as_shared(ok));
+    auto ok = std::make_shared<ok_resource>();
+    ws.register_path("base", ok);
     try {
         ws.start(false);
     } catch (const std::exception& e) {
@@ -1502,8 +1503,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_handler_empty)
         .cred_type(httpserver::http::http_utils::PSK)
         .psk_cred_handler(empty_psk_handler)};
 
-    ok_resource ok;
-    ws.register_path("base", as_shared(ok));
+    auto ok = std::make_shared<ok_resource>();
+    ws.register_path("base", ok);
     try {
         ws.start(false);
     } catch (const std::exception& e) {
@@ -1527,8 +1528,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_no_handler)
         .https_mem_cert(ROOT "/cert.pem")
         .cred_type(httpserver::http::http_utils::PSK)};
 
-    ok_resource ok;
-    ws.register_path("base", as_shared(ok));
+    auto ok = std::make_shared<ok_resource>();
+    ws.register_path("base", ok);
     try {
         ws.start(false);
     } catch (const std::exception& e) {
@@ -1561,8 +1562,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_connection_success)
             .psk_cred_handler(test_psk_handler)
             .https_priorities("NORMAL:+PSK:+DHE-PSK")};
 
-        ok_resource ok;
-        ws.register_path("base", as_shared(ok));
+        auto ok = std::make_shared<ok_resource>();
+        ws.register_path("base", ok);
 
         ws.start(false);
 
@@ -1608,8 +1609,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_connection_unknown_user)
             .psk_cred_handler(test_psk_handler)
             .https_priorities("NORMAL:+PSK:+DHE-PSK")};
 
-        ok_resource ok;
-        ws.register_path("base", as_shared(ok));
+        auto ok = std::make_shared<ok_resource>();
+        ws.register_path("base", ok);
 
         ws.start(false);
 
@@ -1651,8 +1652,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_connection_empty_handler)
             .psk_cred_handler(empty_psk_handler)
             .https_priorities("NORMAL:+PSK:+DHE-PSK")};
 
-        ok_resource ok;
-        ws.register_path("base", as_shared(ok));
+        auto ok = std::make_shared<ok_resource>();
+        ws.register_path("base", ok);
 
         ws.start(false);
 
@@ -1694,8 +1695,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_connection_invalid_hex)
             .psk_cred_handler(invalid_hex_psk_handler)
             .https_priorities("NORMAL:+PSK:+DHE-PSK")};
 
-        ok_resource ok;
-        ws.register_path("base", as_shared(ok));
+        auto ok = std::make_shared<ok_resource>();
+        ws.register_path("base", ok);
 
         ws.start(false);
 
@@ -1737,8 +1738,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_connection_no_handler)
             // Note: NOT setting psk_cred_handler - handler is nullptr
             .https_priorities("NORMAL:+PSK:+DHE-PSK")};
 
-        ok_resource ok;
-        ws.register_path("base", as_shared(ok));
+        auto ok = std::make_shared<ok_resource>();
+        ws.register_path("base", ok);
 
         ws.start(false);
 
@@ -1770,8 +1771,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, max_threads_running)
     httpserver::webserver ws{httpserver::create_webserver(port)
         .max_threads(4)};
 
-    ok_resource ok;
-    ws.register_path("base", as_shared(ok));
+    auto ok = std::make_shared<ok_resource>();
+    ws.register_path("base", ok);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1797,8 +1798,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, max_connections_running)
     httpserver::webserver ws{httpserver::create_webserver(port)
         .max_connections(100)};
 
-    ok_resource ok;
-    ws.register_path("base", as_shared(ok));
+    auto ok = std::make_shared<ok_resource>();
+    ws.register_path("base", ok);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1824,8 +1825,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, memory_limit_running)
     httpserver::webserver ws{httpserver::create_webserver(port)
         .memory_limit(32 * 1024)};  // 32KB memory limit
 
-    ok_resource ok;
-    ws.register_path("base", as_shared(ok));
+    auto ok = std::make_shared<ok_resource>();
+    ws.register_path("base", ok);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1851,8 +1852,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, per_ip_limit_running)
     httpserver::webserver ws{httpserver::create_webserver(port)
         .per_IP_connection_limit(5)};
 
-    ok_resource ok;
-    ws.register_path("base", as_shared(ok));
+    auto ok = std::make_shared<ok_resource>();
+    ws.register_path("base", ok);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1878,8 +1879,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, thread_stack_size_running)
     httpserver::webserver ws{httpserver::create_webserver(port)
         .max_thread_stack_size(4 * 1024 * 1024)};  // 4MB stack size
 
-    ok_resource ok;
-    ws.register_path("base", as_shared(ok));
+    auto ok = std::make_shared<ok_resource>();
+    ws.register_path("base", ok);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1905,8 +1906,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, deferred_mode_running)
     httpserver::webserver ws{httpserver::create_webserver(port)
         .deferred()};
 
-    ok_resource ok;
-    ws.register_path("base", as_shared(ok));
+    auto ok = std::make_shared<ok_resource>();
+    ws.register_path("base", ok);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1932,8 +1933,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, debug_mode_running)
     httpserver::webserver ws{httpserver::create_webserver(port)
         .debug()};
 
-    ok_resource ok;
-    ws.register_path("base", as_shared(ok));
+    auto ok = std::make_shared<ok_resource>();
+    ws.register_path("base", ok);
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);

@@ -78,8 +78,8 @@ LT_END_SUITE(threaded_suite)
 
 LT_BEGIN_AUTO_TEST(threaded_suite, base)
 #ifndef _WINDOWS
-    ok_resource resource;
-    ws->register_path("base", as_shared(resource));
+    auto resource = std::make_shared<ok_resource>();
+    ws->register_path("base", resource);
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
     CURL* curl;

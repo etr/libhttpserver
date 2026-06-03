@@ -331,8 +331,8 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk)
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
 
-    print_file_upload_resource resource;
-    ws->register_path("upload", as_shared(resource));
+    auto resource = std::make_shared<print_file_upload_resource>();
+    ws->register_path("upload", resource);
 
     auto res = send_file_to_webserver(false, false);
     LT_ASSERT_EQ(res.first, 0);
@@ -340,17 +340,17 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk)
 
     ws->stop();
 
-    string actual_content = resource.get_content();
+    string actual_content = resource->get_content();
     LT_CHECK_EQ(actual_content.find(FILENAME_IN_GET_CONTENT) != string::npos, true);
     LT_CHECK_EQ(actual_content.find(TEST_CONTENT) != string::npos, true);
 
-    auto args = resource.get_args();
+    auto args = resource->get_args();
     LT_CHECK_EQ(args.size(), 1);
     auto arg = args.begin();
     LT_CHECK_EQ(arg->first, TEST_KEY);
     LT_CHECK_EQ(arg->second[0], TEST_CONTENT);
 
-    map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
+    map<string, map<string, httpserver::http::file_info>> files = resource->get_files();
     LT_CHECK_EQ(files.size(), 1);
     map<string, map<string, httpserver::http::file_info>>::iterator file_key = files.begin();
     LT_CHECK_EQ(file_key->first, TEST_KEY);
@@ -379,21 +379,21 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_via_put)
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
 
-    print_file_upload_resource resource;
-    ws->register_path("upload", as_shared(resource));
+    auto resource = std::make_shared<print_file_upload_resource>();
+    ws->register_path("upload", resource);
 
     auto ret = send_file_via_put();
     LT_CHECK_EQ(std::get<1>(ret), 0);
     LT_CHECK_EQ(std::get<2>(ret), 200);
     LT_ASSERT_EQ(std::get<0>(ret), true);
 
-    string actual_content = resource.get_content();
+    string actual_content = resource->get_content();
     LT_CHECK_EQ(actual_content, TEST_CONTENT);
 
-    auto args = resource.get_args();
+    auto args = resource->get_args();
     LT_CHECK_EQ(args.size(), 0);
 
-    map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
+    map<string, map<string, httpserver::http::file_info>> files = resource->get_files();
     LT_CHECK_EQ(files.size(), 0);
 
     ws->stop();
@@ -410,8 +410,8 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_additional_par
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
 
-    print_file_upload_resource resource;
-    ws->register_path("upload", as_shared(resource));
+    auto resource = std::make_shared<print_file_upload_resource>();
+    ws->register_path("upload", resource);
 
     auto res = send_file_to_webserver(false, true);
     LT_ASSERT_EQ(res.first, 0);
@@ -419,13 +419,13 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_additional_par
 
     ws->stop();
 
-    string actual_content = resource.get_content();
+    string actual_content = resource->get_content();
     LT_CHECK_EQ(actual_content.find(FILENAME_IN_GET_CONTENT) != string::npos, true);
     LT_CHECK_EQ(actual_content.find(TEST_CONTENT) != string::npos, true);
     LT_CHECK_EQ(actual_content.find(TEST_PARAM_KEY) != string::npos, true);
     LT_CHECK_EQ(actual_content.find(TEST_PARAM_VALUE) != string::npos, true);
 
-    auto args = resource.get_args();
+    auto args = resource->get_args();
     LT_CHECK_EQ(args.size(), 2);
     auto arg = args.begin();
     LT_CHECK_EQ(arg->first, TEST_KEY);
@@ -434,7 +434,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_additional_par
     LT_CHECK_EQ(arg->first, TEST_PARAM_KEY);
     LT_CHECK_EQ(arg->second[0], TEST_PARAM_VALUE);
 
-    map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
+    map<string, map<string, httpserver::http::file_info>> files = resource->get_files();
     LT_CHECK_EQ(files.size(), 1);
     map<string, map<string, httpserver::http::file_info>>::iterator file_key = files.begin();
     LT_CHECK_EQ(file_key->first, TEST_KEY);
@@ -463,8 +463,8 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_two_files)
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
 
-    print_file_upload_resource resource;
-    ws->register_path("upload", as_shared(resource));
+    auto resource = std::make_shared<print_file_upload_resource>();
+    ws->register_path("upload", resource);
 
     auto res = send_file_to_webserver(true, false);
     LT_ASSERT_EQ(res.first, 0);
@@ -472,13 +472,13 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_two_files)
 
     ws->stop();
 
-    string actual_content = resource.get_content();
+    string actual_content = resource->get_content();
     LT_CHECK_EQ(actual_content.find(FILENAME_IN_GET_CONTENT) != string::npos, true);
     LT_CHECK_EQ(actual_content.find(TEST_CONTENT) != string::npos, true);
     LT_CHECK_EQ(actual_content.find(FILENAME_IN_GET_CONTENT_2) != string::npos, true);
     LT_CHECK_EQ(actual_content.find(TEST_CONTENT_2) != string::npos, true);
 
-    auto args = resource.get_args();
+    auto args = resource->get_args();
     LT_CHECK_EQ(args.size(), 2);
     auto arg = args.begin();
     LT_CHECK_EQ(arg->first, TEST_KEY);
@@ -487,7 +487,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_two_files)
     LT_CHECK_EQ(arg->first, TEST_KEY_2);
     LT_CHECK_EQ(arg->second[0], TEST_CONTENT_2);
 
-    map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
+    map<string, map<string, httpserver::http::file_info>> files = resource->get_files();
     LT_CHECK_EQ(files.size(), 2);
     map<string, map<string, httpserver::http::file_info>>::iterator file_key = files.begin();
     LT_CHECK_EQ(file_key->first, TEST_KEY);
@@ -531,8 +531,8 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_disk_only)
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
 
-    print_file_upload_resource resource;
-    ws->register_path("upload", as_shared(resource));
+    auto resource = std::make_shared<print_file_upload_resource>();
+    ws->register_path("upload", resource);
 
     auto res = send_file_to_webserver(false, false);
     LT_ASSERT_EQ(res.first, 0);
@@ -540,13 +540,13 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_disk_only)
 
     ws->stop();
 
-    string actual_content = resource.get_content();
+    string actual_content = resource->get_content();
     LT_CHECK_EQ(actual_content.size(), 0);
 
-    auto args = resource.get_args();
+    auto args = resource->get_args();
     LT_CHECK_EQ(args.size(), 0);
 
-    map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
+    map<string, map<string, httpserver::http::file_info>> files = resource->get_files();
     LT_CHECK_EQ(files.size(), 1);
     map<string, map<string, httpserver::http::file_info>>::iterator file_key = files.begin();
     LT_CHECK_EQ(file_key->first, TEST_KEY);
@@ -571,25 +571,25 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_only_incl_content)
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
 
-    print_file_upload_resource resource;
-    ws->register_path("upload", as_shared(resource));
+    auto resource = std::make_shared<print_file_upload_resource>();
+    ws->register_path("upload", resource);
 
     auto res = send_file_to_webserver(false, false);
     LT_ASSERT_EQ(res.first, 0);
     LT_ASSERT_EQ(res.second, 201);
 
-    string actual_content = resource.get_content();
+    string actual_content = resource->get_content();
     LT_CHECK_EQ(actual_content.find(FILENAME_IN_GET_CONTENT) != string::npos, true);
     LT_CHECK_EQ(actual_content.find(TEST_CONTENT) != string::npos, true);
 
-    auto args = resource.get_args();
+    auto args = resource->get_args();
     LT_CHECK_EQ(args.size(), 1);
     auto arg = args.begin();
     LT_CHECK_EQ(arg->first, TEST_KEY);
     LT_CHECK_EQ(arg->second[0], TEST_CONTENT);
 
-    map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
-    LT_CHECK_EQ(resource.get_files().size(), 0);
+    map<string, map<string, httpserver::http::file_info>> files = resource->get_files();
+    LT_CHECK_EQ(resource->get_files().size(), 0);
 
     ws->stop();
 LT_END_AUTO_TEST(file_upload_memory_only_incl_content)
@@ -601,8 +601,8 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_large_content)
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
 
-    print_file_upload_resource resource;
-    ws->register_path("upload", as_shared(resource));
+    auto resource = std::make_shared<print_file_upload_resource>();
+    ws->register_path("upload", resource);
 
     // Upload a large file to trigger the chunking behavior of MHD.
     std::string file_content;
@@ -610,13 +610,13 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_large_content)
     LT_ASSERT_EQ(res.first, 0);
     LT_ASSERT_EQ(res.second, 201);
 
-    string actual_content = resource.get_content();
+    string actual_content = resource->get_content();
     LT_CHECK_EQ(actual_content.find(LARGE_FILENAME_IN_GET_CONTENT) != string::npos, true);
     LT_CHECK_EQ(actual_content.find(file_content) != string::npos, true);
 
     // The chunks of the file should be concatenated into the first
     // arg value of the key.
-    auto const args = resource.get_args();
+    auto const args = resource->get_args();
     LT_CHECK_EQ(args.size(), 1);
     auto const file_arg_iter = args.find(std::string_view(LARGE_KEY));
     if (file_arg_iter == args.end()) {
@@ -625,8 +625,8 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_large_content)
     LT_CHECK_EQ(file_arg_iter->second.size(), 1);
     LT_CHECK_EQ(file_arg_iter->second[0], file_content);
 
-    map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
-    LT_CHECK_EQ(resource.get_files().size(), 0);
+    map<string, map<string, httpserver::http::file_info>> files = resource->get_files();
+    LT_CHECK_EQ(resource->get_files().size(), 0);
 
     ws->stop();
 LT_END_AUTO_TEST(file_upload_large_content)
@@ -638,8 +638,8 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_large_content_with_args)
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
 
-    print_file_upload_resource resource;
-    ws->register_path("upload", as_shared(resource));
+    auto resource = std::make_shared<print_file_upload_resource>();
+    ws->register_path("upload", resource);
 
     // Upload a large file to trigger the chunking behavior of MHD.
     // Include some additional args to make sure those are processed as well.
@@ -648,11 +648,11 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_large_content_with_args)
     LT_ASSERT_EQ(res.first, 0);
     LT_ASSERT_EQ(res.second, 201);
 
-    string actual_content = resource.get_content();
+    string actual_content = resource->get_content();
     LT_CHECK_EQ(actual_content.find(LARGE_FILENAME_IN_GET_CONTENT) != string::npos, true);
     LT_CHECK_EQ(actual_content.find(file_content) != string::npos, true);
 
-    auto const args = resource.get_args();
+    auto const args = resource->get_args();
     LT_CHECK_EQ(args.size(), 2);
     auto const file_arg_iter = args.find(std::string_view(LARGE_KEY));
     if (file_arg_iter == args.end()) {
@@ -668,8 +668,8 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_large_content_with_args)
     LT_CHECK_EQ(other_arg_iter->second[0], "hello");
     LT_CHECK_EQ(other_arg_iter->second[1], "world");
 
-    map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
-    LT_CHECK_EQ(resource.get_files().size(), 0);
+    map<string, map<string, httpserver::http::file_info>> files = resource->get_files();
+    LT_CHECK_EQ(resource->get_files().size(), 0);
 
     ws->stop();
 LT_END_AUTO_TEST(file_upload_large_content_with_args)
@@ -681,23 +681,23 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_only_excl_content)
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
 
-    print_file_upload_resource resource;
-    ws->register_path("upload", as_shared(resource));
+    auto resource = std::make_shared<print_file_upload_resource>();
+    ws->register_path("upload", resource);
 
     auto res = send_file_to_webserver(false, false);
     LT_ASSERT_EQ(res.first, 0);
     LT_ASSERT_EQ(res.second, 201);
 
-    string actual_content = resource.get_content();
+    string actual_content = resource->get_content();
     LT_CHECK_EQ(actual_content.size(), 0);
 
-    auto args = resource.get_args();
+    auto args = resource->get_args();
     LT_CHECK_EQ(args.size(), 1);
     auto arg = args.begin();
     LT_CHECK_EQ(arg->first, TEST_KEY);
     LT_CHECK_EQ(arg->second[0], TEST_CONTENT);
 
-    map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
+    map<string, map<string, httpserver::http::file_info>> files = resource->get_files();
     LT_CHECK_EQ(files.size(), 0);
 
     ws->stop();
@@ -724,8 +724,8 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_cleanup_callback_returns_true)
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
 
-    print_file_upload_resource resource;
-    ws->register_path("upload", as_shared(resource));
+    auto resource = std::make_shared<print_file_upload_resource>();
+    ws->register_path("upload", resource);
 
     auto res = send_file_to_webserver(false, false);
     LT_ASSERT_EQ(res.first, 0);
@@ -740,7 +740,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_cleanup_callback_returns_true)
     LT_CHECK_EQ(std::get<2>(callback_invocations[0]), TEST_CONTENT_SIZE);
 
     // Verify file was deleted (callback returned true)
-    map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
+    map<string, map<string, httpserver::http::file_info>> files = resource->get_files();
     LT_CHECK_EQ(files.size(), 1);
     map<string, httpserver::http::file_info>::iterator file = files.begin()->second.begin();
     LT_CHECK_EQ(file_exists(file->second.get_file_system_file_name()), false);
@@ -767,8 +767,8 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_cleanup_callback_returns_false)
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
 
-    print_file_upload_resource resource;
-    ws->register_path("upload", as_shared(resource));
+    auto resource = std::make_shared<print_file_upload_resource>();
+    ws->register_path("upload", resource);
 
     auto res = send_file_to_webserver(false, false);
     LT_ASSERT_EQ(res.first, 0);
@@ -808,8 +808,8 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_cleanup_callback_selective)
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
 
-    print_file_upload_resource resource;
-    ws->register_path("upload", as_shared(resource));
+    auto resource = std::make_shared<print_file_upload_resource>();
+    ws->register_path("upload", resource);
 
     // Upload two files
     auto res = send_file_to_webserver(true, false);
@@ -818,7 +818,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_cleanup_callback_selective)
 
     ws->stop();
 
-    map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
+    map<string, map<string, httpserver::http::file_info>> files = resource->get_files();
     LT_CHECK_EQ(files.size(), 2);
 
     // First file should exist (callback returned false)
@@ -854,8 +854,8 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_cleanup_callback_throws)
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
 
-    print_file_upload_resource resource;
-    ws->register_path("upload", as_shared(resource));
+    auto resource = std::make_shared<print_file_upload_resource>();
+    ws->register_path("upload", resource);
 
     auto res = send_file_to_webserver(false, false);
     LT_ASSERT_EQ(res.first, 0);
@@ -864,7 +864,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_cleanup_callback_throws)
     ws->stop();
 
     // Verify file was deleted (exception causes default delete behavior)
-    map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
+    map<string, map<string, httpserver::http::file_info>> files = resource->get_files();
     LT_CHECK_EQ(files.size(), 1);
     map<string, httpserver::http::file_info>::iterator file = files.begin()->second.begin();
     LT_CHECK_EQ(file_exists(file->second.get_file_system_file_name()), false);
@@ -882,8 +882,8 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_cleanup_no_callback_deletes)
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
 
-    print_file_upload_resource resource;
-    ws->register_path("upload", as_shared(resource));
+    auto resource = std::make_shared<print_file_upload_resource>();
+    ws->register_path("upload", resource);
 
     auto res = send_file_to_webserver(false, false);
     LT_ASSERT_EQ(res.first, 0);
@@ -892,7 +892,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_cleanup_no_callback_deletes)
     ws->stop();
 
     // Verify file was deleted (default behavior)
-    map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
+    map<string, map<string, httpserver::http::file_info>> files = resource->get_files();
     LT_CHECK_EQ(files.size(), 1);
     map<string, httpserver::http::file_info>::iterator file = files.begin()->second.begin();
     LT_CHECK_EQ(file_exists(file->second.get_file_system_file_name()), false);
@@ -911,15 +911,15 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_original_filename)
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
 
-    print_file_upload_resource resource;
-    ws->register_path("upload", as_shared(resource));
+    auto resource = std::make_shared<print_file_upload_resource>();
+    ws->register_path("upload", resource);
 
     auto res = send_file_to_webserver(false, false);
     LT_ASSERT_EQ(res.first, 0);
     LT_ASSERT_EQ(res.second, 201);
 
     // Verify file was created with original name
-    map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
+    map<string, map<string, httpserver::http::file_info>> files = resource->get_files();
     LT_CHECK_EQ(files.size(), 1);
     map<string, httpserver::http::file_info>::iterator file = files.begin()->second.begin();
     // The filename should be upload_directory/test_content (the original name)
@@ -946,8 +946,8 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_with_content_type)
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
 
-    print_file_upload_resource resource;
-    ws->register_path("upload", as_shared(resource));
+    auto resource = std::make_shared<print_file_upload_resource>();
+    ws->register_path("upload", resource);
 
     // Send file with explicit content-type "text/plain"
     auto res = send_file_with_content_type(port, "text/plain");
@@ -955,7 +955,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_with_content_type)
     LT_ASSERT_EQ(res.second, 201);
 
     // Verify file_info has the correct content-type
-    map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
+    map<string, map<string, httpserver::http::file_info>> files = resource->get_files();
     LT_CHECK_EQ(files.size(), 1);
     auto file_key = files.find(TEST_KEY);
     LT_CHECK_EQ(file_key != files.end(), true);
@@ -1009,8 +1009,8 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_path_traversal_rejected)
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
 
-    print_file_upload_resource resource;
-    ws->register_path("upload", as_shared(resource));
+    auto resource = std::make_shared<print_file_upload_resource>();
+    ws->register_path("upload", resource);
 
     // Attempt path traversal with "../escape"
     send_file_with_traversal_name(port, "../escape");
@@ -1037,8 +1037,8 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_sanitize_keeps_basename)
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
 
-    print_file_upload_resource resource;
-    ws->register_path("upload", as_shared(resource));
+    auto resource = std::make_shared<print_file_upload_resource>();
+    ws->register_path("upload", resource);
 
     // Upload with a path-like filename — should strip to just "myfile.txt"
     auto res = send_file_with_traversal_name(port, "some/path/myfile.txt");
@@ -1046,7 +1046,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_sanitize_keeps_basename)
     LT_ASSERT_EQ(res.second, 201);
 
     // The file should be created with only the basename
-    map<string, map<string, httpserver::http::file_info>> files = resource.get_files();
+    map<string, map<string, httpserver::http::file_info>> files = resource->get_files();
     LT_CHECK_EQ(files.size(), 1);
     auto file = files.begin()->second.begin();
     string expected_path = upload_directory + "/myfile.txt";

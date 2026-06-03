@@ -3,36 +3,3 @@
    Memcheck:Cond
    fun:gnutls_session_get_data
 }
-{
-   per_route_table_resource_lifetime_window
-   #
-   # Tracked as a known valgrind finding on the deferred / overlapping-
-   # endpoints tests: MHD's request_completed callback fires from
-   # connection_reset on the daemon-internal MHD-single worker, which
-   # can race against the resource-side shared_ptr lifetime when the
-   # test driver returns to the stack frame that owned the resource
-   # before MHD has finished draining its connection.  The local
-   # `res_out = mr->resource_weak_.lock()` keeps the live path safe at
-   # runtime; valgrind sees the control-block load that happens BEFORE
-   # the refcount increment commits and flags it.  Functional tests on
-   # the lane pass; suppress the false-positive read here so the
-   # valgrind lane stays green until the per-route firing path is
-   # restructured to lock the resource via the daemon-owned slot
-   # rather than mr->resource_weak_.
-   #
-   # Use wildcard patterns rather than mangled names: the libstdc++
-   # __shared_ptr<T, _Lock_policy> mangling varies by inline-namespace
-   # version (libstdc++-13 vs libstdc++-14), so the literal frame
-   # symbols are not stable across the matrix lanes.
-   Memcheck:Addr8
-   fun:*shared_ptr*get*
-   fun:*http_resource*hook_table_raw*
-   fun:*per_route_table*
-}
-{
-   per_route_table_resource_lifetime_window_atomic_load
-   Memcheck:Addr1
-   fun:*atomic*load*
-   fun:*resource_hook_table*any_hooks*
-   fun:*fire_request_completed_gated*
-}

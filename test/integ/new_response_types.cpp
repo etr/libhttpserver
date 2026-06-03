@@ -106,16 +106,13 @@ class iovec_resource : public http_resource {
 };
 
 static webserver* ws_ptr = nullptr;
-static empty_resource er;
-static pipe_resource pr;
-static iovec_resource ir;
 
 LT_BEGIN_SUITE(response_types_suite)
     void set_up() {
         ws_ptr = new webserver(create_webserver(PORT));
-        ws_ptr->register_path("empty", as_shared(er));
-        ws_ptr->register_path("pipe", as_shared(pr));
-        ws_ptr->register_path("iovec", as_shared(ir));
+        ws_ptr->register_path("empty", std::make_shared<empty_resource>());
+        ws_ptr->register_path("pipe", std::make_shared<pipe_resource>());
+        ws_ptr->register_path("iovec", std::make_shared<iovec_resource>());
         ws_ptr->start(false);
     }
     void tear_down() {
