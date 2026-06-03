@@ -314,6 +314,12 @@ std::optional<MHD_Result> complete_websocket_upgrade(MHD_Connection* connection,
 bool resolve_resource_for_request(modded_request* mr,
         std::shared_ptr<::httpserver::http_resource>& hrm);
 
+// single_resource fast path extracted from resolve_resource_for_request
+// to keep the parent function under the project-wide CCN gate.
+bool resolve_single_resource_(modded_request* mr,
+        std::shared_ptr<::httpserver::http_resource>& hrm,
+        bool need_path_template);
+
 // Invoke the resource handler bound to @p mr, populating
 // mr->response. On is_allowed=false, queues a 405 with an Allow
 // header. On handler-throw, routes through the safe internal-error

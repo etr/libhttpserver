@@ -176,53 +176,17 @@ class radix_tree {
         std::vector<std::pair<std::string, std::string>> caps;
 
         while (!rest.empty()) {
-            // Extract the next segment up to the next '/' (or end).
-            std::string_view seg;
-            std::string_view::size_type slash = rest.find('/');
-            if (slash == std::string_view::npos) {
-                seg = rest;
-                rest = {};
-            } else {
-                seg = rest.substr(0, slash);
-                rest = rest.substr(slash + 1);
-            }
-
-            // Prefer exact child over wildcard. std::map's transparent
-            // comparator (std::less<>) accepts std::string_view directly
-            // — no temporary std::string is constructed on the hot path.
-            auto it = node->children_.find(seg);
-            if (it != node->children_.end()) {
-                node = it->second.get();
-            } else if (node->wildcard_child_) {
-                // Per-segment regex constraint enforcement: if the
-                // wildcard carries a `|regex` suffix, the actual
-                // segment must satisfy it; otherwise this branch is
-                // not taken and we fall back to a prefix candidate or
-                // 404, matching v1 semantics (the regex-map tier).
-                const radix_node<T>* candidate = node->wildcard_child_.get();
-                if (candidate->wildcard_constraint_.has_value()) {
-                    if (!std::regex_match(seg.begin(), seg.end(),
-                                          *candidate->wildcard_constraint_)) {
-                        break;
-                    }
-                }
-                node = candidate;
-                caps.emplace_back(node->wildcard_name_, std::string(seg));
-            } else {
-                // No way forward: best we can do is the deepest prefix
-                // candidate seen (or nothing).
-                break;
-            }
+            std::string_view seg = pop_next_segment_(rest);
+            const radix_node<T>* next = step_to_child_(node, seg, caps);
+            if (next == nullptr) break;
+            node = next;
             if (node->prefix_terminus_.has_value()) {
                 best_prefix = &node->prefix_terminus_.value();
                 best_prefix_caps = caps;
             }
-            // If we just consumed the last request segment AND this node
-            // carries an exact terminus, that beats any prefix candidate.
-            if (rest.empty() && node->exact_terminus_.has_value()) {
-                out.entry = &node->exact_terminus_.value();
-                out.captures = std::move(caps);
-                out.is_prefix_match = false;
+            // If we just consumed the last request segment, an exact
+            // terminus here beats any prefix candidate.
+            if (try_consume_exact_terminus_(rest, node, caps, out)) {
                 return true;
             }
         }
@@ -233,6 +197,66 @@ class radix_tree {
         out.is_prefix_match = true;
         return true;
     }
+
+ private:
+    // Pop the next '/'-delimited segment off `rest`, advancing rest past it
+    // (and past the separator). Extracted from find() so the per-segment
+    // logic stays a single statement.
+    static std::string_view pop_next_segment_(std::string_view& rest) {
+        std::string_view::size_type slash = rest.find('/');
+        if (slash == std::string_view::npos) {
+            std::string_view seg = rest;
+            rest = {};
+            return seg;
+        }
+        std::string_view seg = rest.substr(0, slash);
+        rest = rest.substr(slash + 1);
+        return seg;
+    }
+
+    // If `rest` is fully consumed and `node` carries an exact terminus,
+    // populate `out` and return true. Returns false otherwise (caller
+    // continues the descent or falls back to the best prefix candidate).
+    static bool try_consume_exact_terminus_(std::string_view rest,
+            const radix_node<T>* node,
+            std::vector<std::pair<std::string, std::string>>& caps,
+            radix_match<T>& out) {
+        if (!rest.empty() || !node->exact_terminus_.has_value()) return false;
+        out.entry = &node->exact_terminus_.value();
+        out.captures = std::move(caps);
+        out.is_prefix_match = false;
+        return true;
+    }
+
+    // Take one descent step from `node` along `seg`: prefer an exact child,
+    // fall back to a wildcard child (capturing into `caps` and enforcing
+    // any per-segment regex constraint). Returns the new node or nullptr
+    // when no descent is possible (caller falls back to a prefix candidate
+    // or returns 404).
+    static const radix_node<T>* step_to_child_(const radix_node<T>* node,
+            std::string_view seg,
+            std::vector<std::pair<std::string, std::string>>& caps) {
+        // Prefer exact child over wildcard. std::map's transparent
+        // comparator (std::less<>) accepts std::string_view directly --
+        // no temporary std::string is constructed on the hot path.
+        auto it = node->children_.find(seg);
+        if (it != node->children_.end()) return it->second.get();
+        if (!node->wildcard_child_) return nullptr;
+        // Per-segment regex constraint enforcement: if the wildcard
+        // carries a `|regex` suffix, the actual segment must satisfy
+        // it; otherwise the branch is not taken and we fall back to a
+        // prefix candidate or 404, matching v1 semantics.
+        const radix_node<T>* candidate = node->wildcard_child_.get();
+        if (candidate->wildcard_constraint_.has_value()
+                && !std::regex_match(seg.begin(), seg.end(),
+                                     *candidate->wildcard_constraint_)) {
+            return nullptr;
+        }
+        caps.emplace_back(candidate->wildcard_name_, std::string(seg));
+        return candidate;
+    }
+
+ public:
 
     // TASK-056: probe for a terminus of the specified kind at the EXACT
     // node reached by tokenizing `path` (pattern-equality, not request-

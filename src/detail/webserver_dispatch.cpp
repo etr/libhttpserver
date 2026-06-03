@@ -265,6 +265,28 @@ webserver_impl::lookup_v2(http_method method, const std::string& path) {
 // would also work because single_resource installs a radix prefix at
 // "/"). Reading registered_resources avoids the captured-params /
 // route_entry plumbing for a configuration that has no parameters.
+// single_resource fast path: the one registered endpoint serves every
+// URL. Read it directly from registered_resources.
+// registered_resources_mutex protects a registration-time data store;
+// under dispatch we still need a shared lock to make the read-then-copy
+// atomic with respect to a concurrent unregister_path. (single_resource
+// webservers do not support runtime register/unregister in practice,
+// but the lock is cheap when uncontended and the safety guarantee is
+// worth it.) Returns false when no resource is registered yet.
+bool webserver_impl::resolve_single_resource_(detail::modded_request* mr,
+        std::shared_ptr<http_resource>& hrm,
+        bool need_path_template) {
+    std::shared_lock registered_resources_lock(registered_resources_mutex);
+    if (registered_resources.empty()) return false;
+    const auto& only = *registered_resources.begin();
+    hrm = only.second;
+    if (need_path_template) {
+        mr->matched_path_template = only.first.get_url_complete();
+        mr->matched_is_prefix = only.first.is_family_url();
+    }
+    return true;
+}
+
 bool webserver_impl::resolve_resource_for_request(detail::modded_request* mr,
         std::shared_ptr<http_resource>& hrm) {
     // matched_path_template + matched_is_prefix feed the route_resolved
@@ -274,24 +296,8 @@ bool webserver_impl::resolve_resource_for_request(detail::modded_request* mr,
         has_hooks_for(hook_phase::route_resolved) ||
         has_hooks_for(hook_phase::before_handler);
 
-    // single_resource fast path: the one registered endpoint serves
-    // every URL. Read it directly from registered_resources.
-    // registered_resources_mutex protects a registration-time data
-    // store; under dispatch we still need a shared lock to make the
-    // read-then-copy atomic with respect to a concurrent
-    // unregister_path. (NOTE: single_resource webservers do not
-    // support runtime register/unregister in practice, but the lock
-    // is cheap when uncontended and the safety guarantee is worth it.)
     if (parent->single_resource) {
-        std::shared_lock registered_resources_lock(registered_resources_mutex);
-        if (registered_resources.empty()) return false;
-        const auto& only = *registered_resources.begin();
-        hrm = only.second;
-        if (need_path_template) {
-            mr->matched_path_template = only.first.get_url_complete();
-            mr->matched_is_prefix = only.first.is_family_url();
-        }
-        return true;
+        return resolve_single_resource_(mr, hrm, need_path_template);
     }
 
     // v2 lookup pipeline: cache -> exact -> radix -> regex.

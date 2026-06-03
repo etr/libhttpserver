@@ -136,6 +136,11 @@ static hook_handle make_hook_handle_(detail::webserver_impl* impl,
 // registrations are detach()-ed so they live for the webserver's
 // lifetime.
 void install_default_alias_hooks_();
+// Per-alias install helpers carved out of install_default_alias_hooks_
+// so the parent stays inside the project-wide CCN gate.
+void install_auth_alias_();
+void install_method_not_allowed_alias_();
+void install_not_found_alias_();
 #endif
 
 #endif  // SRC_HTTPSERVER_WEBSERVER_HOOKS_HPP_

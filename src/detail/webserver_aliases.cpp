@@ -159,156 +159,160 @@ void install_log_access_alias(
 
 }  // namespace
 
+// ----------------------------------------------------------------
+// auth_handler -> before_handler (registered first per DR-012 §4.10).
+//
+// This is an alias. Calling auth_handler(fn) registers a hook at
+// hook_phase::before_handler. Equivalent to
+// ws.add_hook(hook_phase::before_handler, ...).
+//
+// The hook IS the auth enforcement path — it replaces (and removes)
+// the former webserver_impl::apply_auth_short_circuit inline call.
+// It respects auth_skip_paths via should_skip_auth, calls the user-
+// supplied auth_handler callable, and returns
+// hook_action::respond_with(*resp) when auth fails, short-circuiting
+// the remaining before_handler chain AND dispatch_resource_handler.
+//
+// IMPORTANT: because before_handler fires from finalize_answer BEFORE
+// dispatch_resource_handler is called (see webserver_request.cpp:
+// fire_before_handler_gated), the auth hook fires for every request
+// that resolves to a registered route (route hit). It does NOT fire
+// for 404 paths (found==false), which is the correct semantic: there
+// is no resource to authenticate against.
+//
+// DO NOT remove or replace this hook registration without also
+// providing an equivalent enforcement mechanism. The hook IS the
+// security boundary; there is no separate apply_auth_short_circuit
+// fallback path remaining.
+//
+// Design note (security-reviewer-iter1-7 / CWE-200): the route-hit-only
+// firing above creates an auth oracle — requests to unregistered paths
+// get 404 without auth, while registered paths get 401 if blocked, so
+// 401-vs-404 distinguishes registered from unregistered routes.
+// Callers needing uniform authentication on all requests (including
+// 404s) should add a catch-all fallback route or register a
+// not_found_handler that applies equivalent auth logic.
+void webserver::install_auth_alias_() {
+    if (auth_handler == nullptr) return;
+    // Capture both the webserver* (for auth_handler callable) and the
+    // webserver_impl* (for should_skip_auth, which normalises the path
+    // before comparing against auth_skip_paths).
+    webserver* ws_ptr = this;
+    detail::webserver_impl* impl_ptr = impl_.get();
+    // add_hook returns a prvalue hook_handle; .detach() is called
+    // directly on it -- std::move() on a prvalue is a no-op and
+    // is omitted here (finding #19).
+    add_hook(hook_phase::before_handler,
+        std::function<hook_action(before_handler_ctx&)>(
+            [ws_ptr, impl_ptr](before_handler_ctx& ctx) -> hook_action {
+                if (ctx.request == nullptr) return hook_action::pass();
+                // Respect auth_skip_paths: skip auth for listed prefixes.
+                // Empty skip-list is the production-typical case — skip
+                // the std::string allocation entirely when there is
+                // nothing to compare against (TASK-054 review #21;
+                // should_skip_auth's own empty-list early-out from
+                // TASK-058 still fires for the non-empty path).
+                if (!ws_ptr->auth_skip_paths_normalized.empty()) {
+                    std::string path(ctx.request->get_path());
+                    if (impl_ptr->should_skip_auth(path)) {
+                        return hook_action::pass();
+                    }
+                }
+                // Call the user-supplied auth_handler. TASK-054: the
+                // return type is std::optional<http_response>. nullopt
+                // means "allow"; an engaged optional carries the
+                // rejection response. Compared to the v1
+                // shared_ptr<http_response> shape this saves the
+                // per-authenticated-request control-block allocation
+                // (one heap alloc removed per request that runs through
+                // this hook), and small responses ride the http_response
+                // SBO with zero further allocs.
+                auto rejection = ws_ptr->auth_handler(*ctx.request);
+                if (!rejection) {
+                    return hook_action::pass();
+                }
+                // Auth failed: short-circuit with the rejection response.
+                return hook_action::respond_with(std::move(*rejection));
+            }))
+        .detach();
+}
+
+// ----------------------------------------------------------------
+// method_not_allowed_handler -> before_handler (registered second).
+//
+// This is an alias. Calling method_not_allowed_handler(fn) registers
+// a hook at hook_phase::before_handler. Equivalent to
+// ws.add_hook(hook_phase::before_handler, ...).
+//
+// The hook checks whether the request method is in the resource's
+// allowed set. If not, it calls method_not_allowed_handler (or
+// synthesises a default 405 body), appends the Allow header, and
+// returns hook_action::respond_with(...) to short-circuit dispatch.
+void webserver::install_method_not_allowed_alias_() {
+    if (method_not_allowed_handler == nullptr) return;
+    webserver* ws_ptr = this;
+    add_hook(hook_phase::before_handler,
+        std::function<hook_action(before_handler_ctx&)>(
+            [ws_ptr](before_handler_ctx& ctx) -> hook_action {
+                // Only fire when the resource is known (route hit).
+                if (ctx.resource == nullptr) {
+                    return hook_action::pass();
+                }
+                if (ctx.resource->is_allowed(ctx.method)) {
+                    return hook_action::pass();
+                }
+                // Method not allowed: build the response.
+                http_response resp =
+                    ws_ptr->method_not_allowed_handler(*ctx.request);
+                // Append Allow header from the matched route descriptor.
+                // TASK-048 review cleanup: use the shared free function
+                // detail::format_allow_header (method_utils.hpp) instead of
+                // the former local duplicate serialize_allow_methods_local.
+                if (ctx.matched) {
+                    std::string allow_value =
+                        detail::format_allow_header(ctx.matched->methods);
+                    if (!allow_value.empty()) {
+                        resp.with_header(
+                            http::http_utils::http_header_allow,
+                            allow_value);
+                    }
+                }
+                return hook_action::respond_with(std::move(resp));
+            }))
+        .detach();
+}
+
+// ----------------------------------------------------------------
+// not_found_handler -> route_resolved (observation-only per DR-012).
+//
+// This is an alias. Calling not_found_handler(fn) registers a hook
+// at hook_phase::route_resolved. Equivalent to
+// ws.add_hook(hook_phase::route_resolved, ...).
+//
+// Structural note: route_resolved_ctx does not carry a mutable
+// response slot, so the 404 synthesis for user-provided handlers
+// remains in webserver_impl::not_found_page (called from
+// finalize_answer). The hook registers the alias in the bus so the
+// hook count is observable and the architectural seat is reserved.
+void webserver::install_not_found_alias_() {
+    if (not_found_handler == nullptr) return;
+    add_hook(hook_phase::route_resolved,
+        std::function<void(const route_resolved_ctx&)>(
+            [](const route_resolved_ctx&) {
+                // Observation stub. The actual 404 synthesis lives
+                // in webserver_impl::not_found_page, consulted from
+                // finalize_answer at the existing v1 call site.
+                // Route_resolved_ctx does not carry mr->response so
+                // the spec's "stash into mr->response" is structurally
+                // deferred (see TASK-048 spec §action item 3 note).
+            }))
+        .detach();
+}
+
 void webserver::install_default_alias_hooks_() {
-    // ----------------------------------------------------------------
-    // auth_handler -> before_handler (registered first per DR-012 §4.10).
-    //
-    // This is an alias. Calling auth_handler(fn) registers a hook at
-    // hook_phase::before_handler. Equivalent to
-    // ws.add_hook(hook_phase::before_handler, ...).
-    //
-    // The hook IS the auth enforcement path — it replaces (and removes)
-    // the former webserver_impl::apply_auth_short_circuit inline call.
-    // It respects auth_skip_paths via should_skip_auth, calls the user-
-    // supplied auth_handler callable, and returns
-    // hook_action::respond_with(*resp) when auth fails, short-circuiting
-    // the remaining before_handler chain AND dispatch_resource_handler.
-    //
-    // IMPORTANT: because before_handler fires from finalize_answer BEFORE
-    // dispatch_resource_handler is called (see webserver_request.cpp:
-    // fire_before_handler_gated), the auth hook fires for every request
-    // that resolves to a registered route (route hit). It does NOT fire
-    // for 404 paths (found==false), which is the correct semantic: there
-    // is no resource to authenticate against.
-    //
-    // DO NOT remove or replace this hook registration without also
-    // providing an equivalent enforcement mechanism. The hook IS the
-    // security boundary; there is no separate apply_auth_short_circuit
-    // fallback path remaining.
-    //
-    // Design note (security-reviewer-iter1-7 / CWE-200): the route-hit-only
-    // firing above creates an auth oracle — requests to unregistered paths
-    // get 404 without auth, while registered paths get 401 if blocked, so
-    // 401-vs-404 distinguishes registered from unregistered routes.
-    // Callers needing uniform authentication on all requests (including
-    // 404s) should add a catch-all fallback route or register a
-    // not_found_handler that applies equivalent auth logic.
-    // ----------------------------------------------------------------
-    if (auth_handler != nullptr) {
-        // Capture both the webserver* (for auth_handler callable) and the
-        // webserver_impl* (for should_skip_auth, which normalises the path
-        // before comparing against auth_skip_paths).
-        webserver* ws_ptr = this;
-        detail::webserver_impl* impl_ptr = impl_.get();
-        // add_hook returns a prvalue hook_handle; .detach() is called
-        // directly on it -- std::move() on a prvalue is a no-op and
-        // is omitted here (finding #19).
-        add_hook(hook_phase::before_handler,
-            std::function<hook_action(before_handler_ctx&)>(
-                [ws_ptr, impl_ptr](before_handler_ctx& ctx) -> hook_action {
-                    if (ctx.request == nullptr) return hook_action::pass();
-                    // Respect auth_skip_paths: skip auth for listed prefixes.
-                    // Empty skip-list is the production-typical case — skip
-                    // the std::string allocation entirely when there is
-                    // nothing to compare against (TASK-054 review #21;
-                    // should_skip_auth's own empty-list early-out from
-                    // TASK-058 still fires for the non-empty path).
-                    if (!ws_ptr->auth_skip_paths_normalized.empty()) {
-                        std::string path(ctx.request->get_path());
-                        if (impl_ptr->should_skip_auth(path)) {
-                            return hook_action::pass();
-                        }
-                    }
-                    // Call the user-supplied auth_handler. TASK-054: the
-                    // return type is std::optional<http_response>. nullopt
-                    // means "allow"; an engaged optional carries the
-                    // rejection response. Compared to the v1
-                    // shared_ptr<http_response> shape this saves the
-                    // per-authenticated-request control-block allocation
-                    // (one heap alloc removed per request that runs through
-                    // this hook), and small responses ride the http_response
-                    // SBO with zero further allocs.
-                    auto rejection = ws_ptr->auth_handler(*ctx.request);
-                    if (!rejection) {
-                        return hook_action::pass();
-                    }
-                    // Auth failed: short-circuit with the rejection response.
-                    return hook_action::respond_with(std::move(*rejection));
-                }))
-            .detach();
-    }
-
-    // ----------------------------------------------------------------
-    // method_not_allowed_handler -> before_handler (registered second).
-    //
-    // This is an alias. Calling method_not_allowed_handler(fn) registers
-    // a hook at hook_phase::before_handler. Equivalent to
-    // ws.add_hook(hook_phase::before_handler, ...).
-    //
-    // The hook checks whether the request method is in the resource's
-    // allowed set. If not, it calls method_not_allowed_handler (or
-    // synthesises a default 405 body), appends the Allow header, and
-    // returns hook_action::respond_with(...) to short-circuit dispatch.
-    // ----------------------------------------------------------------
-    if (method_not_allowed_handler != nullptr) {
-        webserver* ws_ptr = this;
-        add_hook(hook_phase::before_handler,
-            std::function<hook_action(before_handler_ctx&)>(
-                [ws_ptr](before_handler_ctx& ctx) -> hook_action {
-                    // Only fire when the resource is known (route hit).
-                    if (ctx.resource == nullptr) {
-                        return hook_action::pass();
-                    }
-                    if (ctx.resource->is_allowed(ctx.method)) {
-                        return hook_action::pass();
-                    }
-                    // Method not allowed: build the response.
-                    http_response resp =
-                        ws_ptr->method_not_allowed_handler(*ctx.request);
-                    // Append Allow header from the matched route descriptor.
-                    // TASK-048 review cleanup: use the shared free function
-                    // detail::format_allow_header (method_utils.hpp) instead of
-                    // the former local duplicate serialize_allow_methods_local.
-                    if (ctx.matched) {
-                        std::string allow_value =
-                            detail::format_allow_header(ctx.matched->methods);
-                        if (!allow_value.empty()) {
-                            resp.with_header(
-                                http::http_utils::http_header_allow,
-                                allow_value);
-                        }
-                    }
-                    return hook_action::respond_with(std::move(resp));
-                }))
-            .detach();
-    }
-
-    // ----------------------------------------------------------------
-    // not_found_handler -> route_resolved (observation-only per DR-012).
-    //
-    // This is an alias. Calling not_found_handler(fn) registers a hook
-    // at hook_phase::route_resolved. Equivalent to
-    // ws.add_hook(hook_phase::route_resolved, ...).
-    //
-    // Structural note: route_resolved_ctx does not carry a mutable
-    // response slot, so the 404 synthesis for user-provided handlers
-    // remains in webserver_impl::not_found_page (called from
-    // finalize_answer). The hook registers the alias in the bus so the
-    // hook count is observable and the architectural seat is reserved.
-    // ----------------------------------------------------------------
-    if (not_found_handler != nullptr) {
-        add_hook(hook_phase::route_resolved,
-            std::function<void(const route_resolved_ctx&)>(
-                [](const route_resolved_ctx&) {
-                    // Observation stub. The actual 404 synthesis lives
-                    // in webserver_impl::not_found_page, consulted from
-                    // finalize_answer at the existing v1 call site.
-                    // Route_resolved_ctx does not carry mr->response so
-                    // the spec's "stash into mr->response" is structurally
-                    // deferred (see TASK-048 spec §action item 3 note).
-                }))
-            .detach();
-    }
+    install_auth_alias_();
+    install_method_not_allowed_alias_();
+    install_not_found_alias_();
 
     // ----------------------------------------------------------------
     // internal_error_handler -> handler_exception alias slot (LAST position).

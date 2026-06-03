@@ -101,16 +101,40 @@ using detail::route_tier_result;
 // this private helper, which carries the validation and insertion logic.
 // Keeping the work in one place prevents drift between the two registration
 // kinds.
-void webserver::register_impl_(const std::string& resource,
-                               std::shared_ptr<http_resource> res,
-                               bool family) {
+// Input-validation guard for register_impl_. Extracted so register_impl_
+// stays inside the project-wide CCN gate.
+void webserver::validate_register_inputs_(const std::string& resource,
+        const std::shared_ptr<http_resource>& res, bool family) const {
     if (res == nullptr) {
         throw std::invalid_argument("The http_resource pointer cannot be null");
     }
-
     if (single_resource && ((resource != "" && resource != "/") || !family)) {
-        throw std::invalid_argument("The resource should be '' or '/' and be registered via register_prefix when using a single_resource server");
+        throw std::invalid_argument(
+            "The resource should be '' or '/' and be registered via "
+            "register_prefix when using a single_resource server");
     }
+}
+
+// Roll back the v1-side inserts performed by register_impl_ when
+// register_v2_route throws. Locks are reacquired briefly for the rollback;
+// the registration was visible to readers in the window between, which
+// is a harmless read-stale effect (same as the cache-invalidation window).
+void webserver::rollback_register_(const detail::http_endpoint& idx,
+                                   bool is_plain_path) {
+    std::unique_lock rollback_lock(impl_->registered_resources_mutex);
+    impl_->registered_resources.erase(idx);
+    if (is_plain_path) {
+        impl_->registered_resources_str.erase(idx.get_url_complete());
+    }
+    if (idx.is_regex_compiled()) {
+        impl_->registered_resources_regex.erase(idx);
+    }
+}
+
+void webserver::register_impl_(const std::string& resource,
+                               std::shared_ptr<http_resource> res,
+                               bool family) {
+    validate_register_inputs_(resource, res, family);
 
     detail::http_endpoint idx(resource, family, true, regex_checking);
 
@@ -143,36 +167,16 @@ void webserver::register_impl_(const std::string& resource,
         impl_->registered_resources_regex.insert({idx, res});
     }
     // Release the registration mutex before clearing the LRU cache.
-    // route_lru_cache.clear() takes the cache's internal mutex; the
-    // lock order documented in webserver_impl.hpp acquires the table
-    // mutex BEFORE the cache mutex and never both at once, so the
-    // registration mutex (which gates the registration-side maps,
-    // distinct from the v2 table mutex) is also released first as a
-    // matter of discipline.
     registered_resources_lock.unlock();
-    // A reader can transiently see the new entry without a warm cache,
-    // causing one extra tier walk on the first hit — harmless read-stale
-    // effect: the resource is already visible under the shared lock.
 
-    // TASK-056: register_v2_route may throw std::invalid_argument when a
-    // prefix-vs-exact terminus collision is detected on the canonical
-    // path. If it does, undo the v1 inserts above so the table stays
-    // consistent with the caller's mental model ("the call threw, so
-    // nothing was registered"). Locks are reacquired briefly for the
-    // rollback; the registration was visible to readers in the window
-    // between, which is the same harmless read-stale effect documented
-    // for the cache invalidation comment above.
+    // TASK-056: register_v2_route may throw on a prefix-vs-exact terminus
+    // collision; roll back the v1 inserts above so the table stays
+    // consistent with the caller's "the call threw, so nothing was
+    // registered" mental model.
     try {
         impl_->register_v2_route(idx, std::move(res), family);
     } catch (...) {
-        std::unique_lock rollback_lock(impl_->registered_resources_mutex);
-        impl_->registered_resources.erase(idx);
-        if (is_plain_path) {
-            impl_->registered_resources_str.erase(idx.get_url_complete());
-        }
-        if (idx.is_regex_compiled()) {
-            impl_->registered_resources_regex.erase(idx);
-        }
+        rollback_register_(idx, is_plain_path);
         throw;
     }
     impl_->invalidate_route_cache();

@@ -415,6 +415,20 @@ class webserver_impl {
     // webserver.hpp (webserver_test_access) gives test TUs access to impl*.
     [[nodiscard]] std::size_t phase_hook_count(
             ::httpserver::hook_phase p) const noexcept {
+        // Split the per-phase fanout in two so each helper stays under the
+        // project-wide CCN gate. Lifecycle-side phases (start through
+        // route_resolved) route through phase_hook_count_lifecycle_;
+        // handler-side phases (before_handler onwards) route through
+        // phase_hook_count_handler_.
+        if (static_cast<int>(p) <=
+                static_cast<int>(::httpserver::hook_phase::route_resolved)) {
+            return phase_hook_count_lifecycle_(p);
+        }
+        return phase_hook_count_handler_(p);
+    }
+ private:
+    [[nodiscard]] std::size_t phase_hook_count_lifecycle_(
+            ::httpserver::hook_phase p) const noexcept {
         switch (p) {
         case ::httpserver::hook_phase::connection_opened:
             return hooks_connection_opened_.size();
@@ -426,6 +440,13 @@ class webserver_impl {
             return hooks_body_chunk_.size();
         case ::httpserver::hook_phase::route_resolved:
             return hooks_route_resolved_.size();
+        default:
+            return 0;
+        }
+    }
+    [[nodiscard]] std::size_t phase_hook_count_handler_(
+            ::httpserver::hook_phase p) const noexcept {
+        switch (p) {
         case ::httpserver::hook_phase::before_handler:
             return hooks_before_handler_.size();
         case ::httpserver::hook_phase::handler_exception:
@@ -438,11 +459,11 @@ class webserver_impl {
             return hooks_request_completed_.size();
         case ::httpserver::hook_phase::connection_closed:
             return hooks_connection_closed_.size();
-        case ::httpserver::hook_phase::count_:
+        default:
             return 0;
         }
-        return 0;
     }
+ public:
 
     // Dispatch helpers, start helpers, MHD trampolines, and the route /
     // upload sub-types live in a sibling header to keep this class

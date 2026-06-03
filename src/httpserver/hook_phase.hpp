@@ -87,21 +87,26 @@ static_assert(static_cast<std::size_t>(hook_phase::count_) == 11u,
  *         `p` is `count_` or an out-of-range underlying value.
  */
 constexpr std::string_view to_string(hook_phase p) noexcept {
-    switch (p) {
-    case hook_phase::connection_opened:  return "connection_opened";
-    case hook_phase::accept_decision:    return "accept_decision";
-    case hook_phase::request_received:   return "request_received";
-    case hook_phase::body_chunk:         return "body_chunk";
-    case hook_phase::route_resolved:     return "route_resolved";
-    case hook_phase::before_handler:     return "before_handler";
-    case hook_phase::handler_exception:  return "handler_exception";
-    case hook_phase::after_handler:      return "after_handler";
-    case hook_phase::response_sent:      return "response_sent";
-    case hook_phase::request_completed:  return "request_completed";
-    case hook_phase::connection_closed:  return "connection_closed";
-    case hook_phase::count_:             return {};
-    }
-    return {};
+    // Names indexed by the hook_phase underlying value. Keep this array
+    // in lockstep with the enum declaration above. A constexpr lookup
+    // beats a 12-case switch on the CCN gate and codegens to the same
+    // jump table on a modern optimiser.
+    constexpr std::string_view kNames[] = {
+        "connection_opened",
+        "accept_decision",
+        "request_received",
+        "body_chunk",
+        "route_resolved",
+        "before_handler",
+        "handler_exception",
+        "after_handler",
+        "response_sent",
+        "request_completed",
+        "connection_closed",
+    };
+    const auto idx = static_cast<std::size_t>(p);
+    if (idx >= sizeof(kNames) / sizeof(kNames[0])) return {};
+    return kNames[idx];
 }
 
 }  // namespace httpserver

@@ -101,6 +101,82 @@ static void remove_per_route(std::weak_ptr<detail::resource_hook_table>& weak,
     }
 }
 
+namespace {
+
+// erase_slot_for_phase: route the (impl, phase, slot_id) tuple to the
+// correctly-typed per-phase vector and invoke `erase_and_reset` (a generic
+// lambda) on it. Split out of hook_handle::remove so the parent function
+// stays under the project-wide CCN gate; the per-phase typed dispatch is
+// intrinsically one-arm-per-phase so the CCN cost lives here instead.
+// The dispatch is split into two helpers (`_lifecycle` / `_handler`) so
+// each helper stays inside the CCN ceiling.
+
+template <class EraseFn>
+void erase_slot_for_lifecycle_phase_(detail::webserver_impl* impl,
+                                     hook_phase phase,
+                                     const EraseFn& erase_and_reset) {
+    switch (phase) {
+    case hook_phase::connection_opened:
+        erase_and_reset(impl->hooks_connection_opened_); break;
+    case hook_phase::accept_decision:
+        erase_and_reset(impl->hooks_accept_decision_); break;
+    case hook_phase::request_received:
+        erase_and_reset(impl->hooks_request_received_); break;
+    case hook_phase::body_chunk:
+        erase_and_reset(impl->hooks_body_chunk_); break;
+    case hook_phase::route_resolved:
+        erase_and_reset(impl->hooks_route_resolved_); break;
+    default:
+        break;
+    }
+}
+
+template <class EraseFn>
+void erase_slot_for_handler_phase_(detail::webserver_impl* impl,
+                                   hook_phase phase,
+                                   const EraseFn& erase_and_reset) {
+    switch (phase) {
+    case hook_phase::before_handler:
+        erase_and_reset(impl->hooks_before_handler_); break;
+    case hook_phase::handler_exception:
+        // Finding #6 (forward-looking): if a future task adds a runtime
+        // re-registration path for handler_exception_alias_, remove()
+        // will also need a path to clear that slot and re-evaluate
+        // any_hooks_. Currently any_hooks_ remains true while the alias
+        // is wired; removing only a user-vector entry does not clear it
+        // if the alias is still set. Add that handling alongside the
+        // runtime setter.
+        erase_and_reset(impl->hooks_handler_exception_); break;
+    case hook_phase::after_handler:
+        erase_and_reset(impl->hooks_after_handler_); break;
+    case hook_phase::response_sent:
+        erase_and_reset(impl->hooks_response_sent_); break;
+    case hook_phase::request_completed:
+        erase_and_reset(impl->hooks_request_completed_); break;
+    case hook_phase::connection_closed:
+        erase_and_reset(impl->hooks_connection_closed_); break;
+    default:
+        break;
+    }
+}
+
+template <class EraseFn>
+void erase_slot_for_phase(detail::webserver_impl* impl,
+                          hook_phase phase,
+                          const EraseFn& erase_and_reset) {
+    // The switch arms in the helpers below cannot collapse into a table
+    // lookup because each phase vector is a differently-typed
+    // phase_entry<Sig>.
+    if (static_cast<int>(phase) <=
+            static_cast<int>(hook_phase::route_resolved)) {
+        erase_slot_for_lifecycle_phase_(impl, phase, erase_and_reset);
+        return;
+    }
+    erase_slot_for_handler_phase_(impl, phase, erase_and_reset);
+}
+
+}  // namespace
+
 void hook_handle::remove() noexcept {
     if (!armed_) {
         return;
@@ -133,19 +209,10 @@ void hook_handle::remove() noexcept {
     // practice (single-digit hook counts). A not-found result is the
     // idempotent no-op case: the slot was already erased by an earlier
     // remove() or never inserted (defensive).
-    //
-    // erase_if_found returns true iff the slot was found and erased.
-    // We use the return value to skip reset_gate_if_empty on a no-op
-    // erase (the gate value is already consistent -- no erase happened).
-    // A false return from an armed handle would indicate a bug in
-    // register_hook_impl (slot never inserted); an assert catches this in
-    // debug builds. The !armed_ early-return above ensures that a second
-    // remove() on the same handle never reaches this code path.
     // erase_and_reset: linear scan for the slot, erase if found, and
-    // clear the any_hooks_ gate if the vector becomes empty. The two
-    // operations stay together so a new phase only adds a one-line
-    // switch arm. Phase vectors are tiny in practice (single-digit
-    // hook counts), so linear scan is the right shape here.
+    // clear the any_hooks_ gate if the vector becomes empty. Phase
+    // vectors are tiny in practice (single-digit hook counts), so
+    // linear scan is the right shape here.
     auto erase_and_reset = [id, impl, phase](auto& vec) {
         for (auto it = vec.begin(); it != vec.end(); ++it) {
             if (it->slot_id == id) {
@@ -159,46 +226,7 @@ void hook_handle::remove() noexcept {
         }
     };
 
-    // The switch arms below cannot collapse into a table lookup because
-    // each phase vector is a differently-typed phase_entry<Sig> — a
-    // type-erased unification would either need std::visit over a
-    // tuple-of-vectors or boxing each callable, both of which add
-    // indirection on the hot path. One arm per phase is the safest
-    // shape until the phase set stabilises post-TASK-051.
-    switch (phase) {
-    case hook_phase::connection_opened:
-        erase_and_reset(impl->hooks_connection_opened_); break;
-    case hook_phase::accept_decision:
-        erase_and_reset(impl->hooks_accept_decision_); break;
-    case hook_phase::request_received:
-        erase_and_reset(impl->hooks_request_received_); break;
-    case hook_phase::body_chunk:
-        erase_and_reset(impl->hooks_body_chunk_); break;
-    case hook_phase::route_resolved:
-        erase_and_reset(impl->hooks_route_resolved_); break;
-    case hook_phase::before_handler:
-        erase_and_reset(impl->hooks_before_handler_); break;
-    case hook_phase::handler_exception:
-        // Finding #6 (forward-looking): if a future task adds a runtime
-        // re-registration path for handler_exception_alias_, remove()
-        // will also need a path to clear that slot and re-evaluate
-        // any_hooks_. Currently any_hooks_ remains true while the alias
-        // is wired; removing only a user-vector entry does not clear it
-        // if the alias is still set. Add that handling alongside the
-        // runtime setter.
-        erase_and_reset(impl->hooks_handler_exception_); break;
-    case hook_phase::after_handler:
-        erase_and_reset(impl->hooks_after_handler_); break;
-    case hook_phase::response_sent:
-        erase_and_reset(impl->hooks_response_sent_); break;
-    case hook_phase::request_completed:
-        erase_and_reset(impl->hooks_request_completed_); break;
-    case hook_phase::connection_closed:
-        erase_and_reset(impl->hooks_connection_closed_); break;
-    case hook_phase::count_:
-        // Unreachable: an armed handle always carries a valid phase.
-        break;
-    }
+    erase_slot_for_phase(impl, phase, erase_and_reset);
 }
 
 hook_handle hook_handle::detach() && noexcept {

@@ -343,9 +343,11 @@ void webserver_impl::upsert_v2_table_entry(const detail::http_endpoint& idx,
 
 }  // namespace detail
 
-void webserver::on_methods_(method_set methods,
-                            const std::string& path,
-                            std::function<http_response(const http_request&)> handler) {
+// Input-validation guard for on_methods_. Extracted so on_methods_ stays
+// inside the project-wide CCN gate.
+void webserver::validate_on_methods_inputs_(method_set methods,
+        const std::string& path,
+        const std::function<http_response(const http_request&)>& handler) const {
     if (methods.empty()) {
         throw std::invalid_argument(
             "route(method_set, ...) requires at least one method bit set");
@@ -382,6 +384,28 @@ void webserver::on_methods_(method_set methods,
         throw std::invalid_argument(
             "Route path must not contain embedded null bytes");
     }
+}
+
+// Roll back the v1-side inserts performed by on_methods_ when
+// upsert_v2_table_entry throws. Only the fresh-entry case is meaningful
+// here -- existing entries are pre-rejected by prepare_or_create_lambda_shim
+// before any mutation, so no rollback is needed.
+void webserver::rollback_on_methods_fresh_entry_(
+        const detail::http_endpoint& idx) {
+    std::unique_lock rollback_lock(impl_->registered_resources_mutex);
+    impl_->registered_resources.erase(idx);
+    if (idx.get_url_pars().empty()) {
+        impl_->registered_resources_str.erase(idx.get_url_complete());
+    }
+    if (idx.is_regex_compiled()) {
+        impl_->registered_resources_regex.erase(idx);
+    }
+}
+
+void webserver::on_methods_(method_set methods,
+                            const std::string& path,
+                            std::function<http_response(const http_request&)> handler) {
+    validate_on_methods_inputs_(methods, path, handler);
 
     detail::http_endpoint idx(path, /*family=*/false,
                               /*registration=*/true, regex_checking);
@@ -392,37 +416,17 @@ void webserver::on_methods_(method_set methods,
         // Scoped block: registered_resources_mutex is released at the
         // closing brace, before upsert_v2_table_entry (which takes its
         // own route_table_mutex_) and before invalidate_route_cache
-        // (which takes the route_lru_cache internal mutex). This
-        // lock-ordering — registration mutex released before
-        // table/cache mutexes are acquired — prevents deadlock.
+        // (which takes the route_lru_cache internal mutex).
         std::unique_lock registered_resources_lock(impl_->registered_resources_mutex);
         shim = impl_->prepare_or_create_lambda_shim(idx, methods, is_new_entry);
         impl_->commit_handlers_to_shim(*shim, methods, std::move(handler));
         if (is_new_entry) impl_->insert_fresh_v1_entries(idx, shim);
-    }  // registered_resources_lock released here
+    }
 
-    // TASK-056: upsert_v2_table_entry may throw std::invalid_argument
-    // when a prefix-vs-exact terminus collision is detected. Roll back
-    // the v1 inserts above on throw so the table stays consistent with
-    // the caller's mental model. The fresh-entry rollback is the only
-    // case that needs work: for the existing-entry path, on_methods_'s
-    // prepare_or_create_lambda_shim atomicity pre-check would have
-    // rejected duplicates BEFORE any mutation, so we never get here.
     try {
         impl_->upsert_v2_table_entry(idx, methods, shim, is_new_entry);
     } catch (...) {
-        if (is_new_entry) {
-            std::unique_lock rollback_lock(
-                impl_->registered_resources_mutex);
-            impl_->registered_resources.erase(idx);
-            if (idx.get_url_pars().empty()) {
-                impl_->registered_resources_str.erase(
-                    idx.get_url_complete());
-            }
-            if (idx.is_regex_compiled()) {
-                impl_->registered_resources_regex.erase(idx);
-            }
-        }
+        if (is_new_entry) rollback_on_methods_fresh_entry_(idx);
         throw;
     }
     impl_->invalidate_route_cache();
