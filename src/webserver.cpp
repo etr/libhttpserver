@@ -200,8 +200,6 @@ webserver::webserver(const create_webserver& params):
     bind_address(params._bind_address),
     bind_address_storage(params._bind_address_storage),
     max_thread_stack_size(params._max_thread_stack_size),
-    max_args_count(params._max_args_count),
-    max_args_bytes(params._max_args_bytes),
     use_ssl(params._use_ssl),
     use_ipv6(params._use_ipv6),
     use_dual_stack(params._use_dual_stack),
