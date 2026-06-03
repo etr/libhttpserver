@@ -29,7 +29,7 @@
 
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
-#include "test/integ/curl_helpers.hpp"
+#include "./curl_helpers.hpp"
 
 using httpserver::body_chunk_ctx;
 using httpserver::create_webserver;
