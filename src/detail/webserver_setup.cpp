@@ -79,17 +79,14 @@
 
 // TASK-020-review: pin add_connection's unsigned-int/socklen_t ABI contract
 // at file scope so the assertion is evaluated once at TU start rather than
-// being associated with the specific function body.
+// being associated with the specific function body. socklen_t is a 32-bit
+// integer on every supported platform (unsigned on POSIX, signed `int` on
+// Windows winsock2). `unsigned int` is at least as wide as either, so the
+// static_cast<socklen_t>(addrlen) in add_connection is value-preserving for
+// any realistic sockaddr length (a few hundred bytes at most).
 static_assert(sizeof(unsigned int) >= sizeof(socklen_t),
               "unsigned int is narrower than socklen_t on this platform; "
               "webserver::add_connection's public signature must be widened.");
-// Also assert signedness: POSIX defines socklen_t as an unsigned type; the
-// static_cast<socklen_t>(addrlen) in add_connection is only well-defined
-// when the value fits in the unsigned target (CWE-681).
-static_assert(std::is_unsigned<socklen_t>::value,
-              "socklen_t is signed on this platform; "
-              "the static_cast<socklen_t>(addrlen) in add_connection may produce "
-              "sign-extension or truncation for large address lengths.");
 
 using std::string;
 using std::pair;
@@ -401,12 +398,12 @@ bool webserver::run_wait(int32_t millisec) {
     return MHD_run_wait(impl_->daemon, millisec) == MHD_YES;
 }
 
-bool webserver::get_fdset(struct fd_set* read_fd_set, struct fd_set* write_fd_set,
-                          struct fd_set* except_fd_set, int* max_fd) {
-    // TASK-020-review: signature now uses typed fd_set* (forward-declared in
-    // the public header) rather than void*, restoring compile-time type safety.
-    // <sys/select.h> is reachable here transitively via <microhttpd.h> so no
-    // cast is needed.
+bool webserver::get_fdset(fd_set* read_fd_set, fd_set* write_fd_set,
+                          fd_set* except_fd_set, int* max_fd) {
+    // TASK-020-review: signature uses typed fd_set* rather than void*,
+    // restoring compile-time type safety. The public header pulls in
+    // <sys/select.h> / <winsock2.h> directly because fd_set is a typedef
+    // and cannot be portably forward-declared.
     if (impl_->daemon == nullptr) return false;
     MHD_socket mhd_max_fd = 0;
     if (MHD_get_fdset(impl_->daemon,

@@ -46,11 +46,17 @@
 #include "httpserver/http_utils.hpp"
 #include "httpserver/create_webserver.hpp"
 
-// TASK-020: socket-layer types are forward-declared here so this public
-// header does not transitively drag <sys/select.h> / <sys/socket.h>
-// into consumer TUs. See the get_fdset and add_connection Doxygen
-// blocks below for the per-method ABI rationale.
-struct fd_set;
+// TASK-020: socket-layer types kept minimal in this public header.
+// `struct sockaddr` is a POSIX-tagged struct and can be forward-declared
+// per-use, but `fd_set` is a typedef of an unnamed struct in glibc, so
+// it must be a complete type when get_fdset's signature is parsed.
+// Pull in only the system header that defines fd_set; the rest of the
+// BSD-socket / select API does not leak into consumer TUs.
+#if defined(_WIN32) && !defined(__CYGWIN__)
+#include <winsock2.h>
+#else
+#include <sys/select.h>
+#endif
 
 // Forward declarations: backend (MHD) types are intentionally NOT pulled in.
 // The libmicrohttpd and pthread headers live behind the PIMPL
@@ -293,18 +299,19 @@ class webserver {
 
      /**
       * Get the file descriptor sets for select()-based event loop integration.
-      * `struct fd_set` is forward-declared at file scope so this header does
-      * not need to include `<sys/select.h>`. The typed parameters restore
-      * compile-time type safety: the compiler rejects non-fd_set* arguments
-      * that the previous void* signature silently accepted (CWE-704).
+      * `fd_set` is a typedef (anonymous-struct in glibc), so the public header
+      * includes the platform header that defines it rather than relying on a
+      * forward declaration. The typed parameters restore compile-time type
+      * safety: the compiler rejects non-fd_set* arguments that the previous
+      * void* signature silently accepted (CWE-704).
       * @param read_fd_set set of FDs to watch for reading
       * @param write_fd_set set of FDs to watch for writing
       * @param except_fd_set set of FDs to watch for exceptions
       * @param max_fd highest FD number set in any of the sets
       * @return true on success, false on error
      **/
-     bool get_fdset(struct fd_set* read_fd_set, struct fd_set* write_fd_set,
-                    struct fd_set* except_fd_set, int* max_fd);
+     bool get_fdset(fd_set* read_fd_set, fd_set* write_fd_set,
+                    fd_set* except_fd_set, int* max_fd);
 
      /**
       * Get the timeout until the next MHD action is needed.
@@ -316,10 +323,13 @@ class webserver {
      /**
       * Add an externally-accepted socket connection.
       * `addrlen` is typed as `unsigned int` rather than `socklen_t` so
-      * this header does not have to include the BSD-socket header. POSIX
-      * guarantees `socklen_t` is an unsigned integer of at least 32 bits;
-      * `unsigned int` is wider on every supported platform. The
-      * implementation passes the value directly to MHD_add_connection.
+      * this header does not have to include the BSD-socket header.
+      * `socklen_t` is a 32-bit integer on every supported platform
+      * (unsigned on POSIX, signed `int` on Windows winsock2); `unsigned
+      * int` is at least as wide as either, so the conversion in the
+      * implementation is value-preserving for any realistic `sockaddr`
+      * length. The implementation passes the value directly to
+      * MHD_add_connection.
       * @param client_socket the accepted client socket
       * @param addr the client address (forward-declared `struct sockaddr*`)
       * @param addrlen length of the address (in bytes)
@@ -401,6 +411,13 @@ class webserver {
      const struct sockaddr* bind_address;
      std::shared_ptr<struct sockaddr_storage> bind_address_storage;
      const int max_thread_stack_size;
+     // 0 sentinel -> compile-time defaults
+     // (arguments_accumulator::DEFAULT_MAX_ARGS_COUNT / _BYTES).
+     // webserver_impl::connection_notify copies these into the per-
+     // connection_state at MHD_CONNECTION_NOTIFY_STARTED; populate_args
+     // reads them from connection_state via the socket_context.
+     const std::size_t max_args_count;
+     const std::size_t max_args_bytes;
      const bool use_ssl;
      const bool use_ipv6;
      const bool use_dual_stack;
