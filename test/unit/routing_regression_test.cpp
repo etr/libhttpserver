@@ -182,23 +182,14 @@ LT_BEGIN_AUTO_TEST(routing_regression_suite,
 LT_END_AUTO_TEST(parameterized_multiple_segments_capture_in_order)
 
 LT_BEGIN_AUTO_TEST(routing_regression_suite,
-                   parameterized_with_custom_regex_lands_in_radix_tier)
+                   parameterized_with_custom_regex_enforced_in_radix_tier)
     // Mirrors basic_suite::regex_matching_arg_custom. v1 used the
-    // http_endpoint compiled-regex map to enforce the per-segment
-    // constraint ([0-9]+). The v2 radix tier treats the whole
-    // `{name|constraint}` literal as a wildcard with name
-    // "name|constraint" and does NOT enforce the per-segment regex —
-    // every same-shape path falls into the same radix bucket.
-    //
-    // This is a documented v2 divergence (see test/REGRESSION.md, row
-    // "custom-regex param"). The pin below locks the current v2
-    // behavior so any future change to constraint handling shows up
-    // as an explicit test edit, not silent drift.
-    //
-    // When the radix tier learns per-segment regex constraints (PRD
-    // §3.7 future work, currently unscheduled), this test flips back
-    // to the v1 semantics — assert `!miss.found` and the constraint
-    // is honored.
+    // http_endpoint compiled-regex map to enforce per-segment
+    // constraints; the v2 radix tier now does the same in-line via
+    // radix_node::wildcard_constraint_, restoring v1 parity. A
+    // matching segment resolves in the radix tier (and captures
+    // under the bare name); a non-matching segment misses the
+    // wildcard slot and falls through to 404.
     ht::webserver ws{ht::create_webserver(8080)
         .start_method(ht::http::http_utils::INTERNAL_SELECT)};
     ws.register_path("/items/{id|([0-9]+)}",
@@ -209,19 +200,10 @@ LT_BEGIN_AUTO_TEST(routing_regression_suite,
     LT_CHECK(hit.found);
     LT_CHECK(hit.tier == ht::detail::webserver_impl::tier_hit::radix);
 
-    // v2 current behavior: the radix tier matches regardless of the
-    // ([0-9]+) constraint. Documented divergence from v1.
-    //
-    // FIXME(TASK-036-prereq): when the radix tier learns per-segment
-    // regex constraints (PRD §3.7 future work, see REGRESSION.md
-    // section 3 "must land before TASK-036"), flip the two assertions
-    // below: `LT_CHECK(!non_numeric.found)` and remove the tier check.
     auto non_numeric = impl_of(ws).lookup_v2(ht::http_method::get,
                                              std::string("/items/abc"));
-    LT_CHECK(non_numeric.found);
-    LT_CHECK(non_numeric.tier ==
-             ht::detail::webserver_impl::tier_hit::radix);
-LT_END_AUTO_TEST(parameterized_with_custom_regex_lands_in_radix_tier)
+    LT_CHECK(!non_numeric.found);
+LT_END_AUTO_TEST(parameterized_with_custom_regex_enforced_in_radix_tier)
 
 // ---------------------------------------------------------------------
 // Prefix paths (taxonomy row: prefix).

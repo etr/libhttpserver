@@ -41,6 +41,24 @@
 
 #define MY_OPAQUE "11733b200778ce33060f31c9af70a870ba96ddd4"
 
+// v2-digest tracking note (consolidated):
+// Under v2, libhttpserver only emits the static 401 Digest challenge; the
+// nonce/opaque state machine is not driven, so check_digest_auth_check[_digest]()
+// is never reached and get_digested_user() always returns an empty view.
+// As a result the following tests are all observationally indistinguishable
+// from the canonical `digest_auth` case (both correct- and wrong-pass arms
+// see the same 401 + "FAIL"):
+//   - digest_auth_wrong_pass
+//   - digest_auth_with_ha1_md5 / *_wrong_pass
+//   - digest_auth_with_ha1_sha256 / *_wrong_pass
+//   - digest_user_cache_with_auth
+// They are retained as pins for the static-challenge contract and become
+// meaningful again only when full v2 Digest support (MHD nonce/opaque state
+// machine) lands. At that point the wrong-pass arms should assert a distinct
+// 403/401-with-stale, the HA1-MD5/SHA-256 arms should validate the chosen
+// algorithm, and digest_user_cache_with_auth should exercise the cache-hit
+// path. See PRD §digest-auth for the follow-up.
+
 using std::shared_ptr;
 using httpserver::webserver;
 using httpserver::create_webserver;
@@ -270,12 +288,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth)
     ws.stop();
 LT_END_AUTO_TEST(digest_auth)
 
-// TODO(v2-digest): digest_auth_wrong_pass is indistinguishable from digest_auth
-// under v2 because the handshake never completes regardless of credentials.
-// Wrong-pass vs. correct-pass both reach the same static 401 challenge path.
-// This test becomes meaningful again when full v2 digest support is added
-// (MHD nonce/opaque state machine).  Until then it exercises a different
-// digest_resource instance only.
+// See v2-digest tracking note at top of file.
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_wrong_pass)
     webserver ws{create_webserver(PORT)
         .digest_auth_random("myrandom")
@@ -320,10 +333,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_wrong_pass)
     ws.stop();
 LT_END_AUTO_TEST(digest_auth_wrong_pass)
 
-// TODO(v2-digest): digest_auth_with_ha1_md5 is indistinguishable from
-// digest_auth under v2 — check_digest_auth_digest() is never reached because
-// get_digested_user() always returns empty string (no nonce roundtrip).
-// This test becomes meaningful when full v2 digest support is added.
+// See v2-digest tracking note at top of file.
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5)
     webserver ws{create_webserver(PORT)
         .digest_auth_random("myrandom")
@@ -370,9 +380,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5)
     ws.stop();
 LT_END_AUTO_TEST(digest_auth_with_ha1_md5)
 
-// TODO(v2-digest): digest_auth_with_ha1_md5_wrong_pass is indistinguishable
-// from digest_auth_with_ha1_md5 under v2 — wrong-pass vs. correct-pass both
-// yield the same static 401 challenge. Becomes meaningful with full v2 digest.
+// See v2-digest tracking note at top of file.
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5_wrong_pass)
     webserver ws{create_webserver(PORT)
         .digest_auth_random("myrandom")
@@ -417,9 +425,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5_wrong_pass)
     ws.stop();
 LT_END_AUTO_TEST(digest_auth_with_ha1_md5_wrong_pass)
 
-// TODO(v2-digest): digest_auth_with_ha1_sha256 is indistinguishable from
-// digest_auth under v2 — SHA-256 vs. MD5 path is unreachable (no nonce
-// roundtrip). Becomes meaningful when full v2 digest support is added.
+// See v2-digest tracking note at top of file.
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256)
     webserver ws{create_webserver(PORT)
         .digest_auth_random("myrandom")
@@ -466,10 +472,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256)
     ws.stop();
 LT_END_AUTO_TEST(digest_auth_with_ha1_sha256)
 
-// TODO(v2-digest): digest_auth_with_ha1_sha256_wrong_pass is
-// indistinguishable from digest_auth_with_ha1_sha256 under v2 — wrong-pass
-// vs. correct-pass both yield the same static 401 challenge. Becomes
-// meaningful when full v2 digest support is added.
+// See v2-digest tracking note at top of file.
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256_wrong_pass)
     webserver ws{create_webserver(PORT)
         .digest_auth_random("myrandom")
@@ -570,15 +573,9 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_user_cache_no_auth)
     ws.stop();
 LT_END_AUTO_TEST(digest_user_cache_no_auth)
 
-// Test that digest_user_cache_resource handles a digest-auth attempt under v2.
-// NOTE: Under v2's static-challenge model (DR-013), the digest handshake never
-// completes, so get_digested_user() always returns an empty string.  The cache
-// hit path inside digest_user_cache_resource is therefore unreachable.  This
-// test asserts only that the server issues the expected static 401 challenge
-// (body == "FAIL"); it does NOT verify the cache-hit code path, which becomes
-// meaningful when full v2 Digest support (nonce/opaque state machine) is added.
-// TODO(v2-digest): rename to digest_user_cache_with_auth_v2_no_handshake
-// and update assertions when full Digest auth lands.
+// See v2-digest tracking note at top of file. Under the v2 static-challenge
+// model (DR-013) the digest_user_cache_resource cache-hit path is unreachable;
+// this test only pins the static 401 + "FAIL" challenge contract.
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_user_cache_with_auth)
     webserver ws{create_webserver(PORT)
         .digest_auth_random("myrandom")

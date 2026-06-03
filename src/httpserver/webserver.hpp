@@ -411,6 +411,13 @@ class webserver {
      const struct sockaddr* bind_address;
      std::shared_ptr<struct sockaddr_storage> bind_address_storage;
      const int max_thread_stack_size;
+     // 0 sentinel -> compile-time defaults
+     // (arguments_accumulator::DEFAULT_MAX_ARGS_COUNT / _BYTES).
+     // webserver_impl::connection_notify copies these into the per-
+     // connection_state at MHD_CONNECTION_NOTIFY_STARTED; populate_args
+     // reads them from connection_state via the socket_context.
+     const std::size_t max_args_count;
+     const std::size_t max_args_bytes;
      const bool use_ssl;
      const bool use_ipv6;
      const bool use_dual_stack;

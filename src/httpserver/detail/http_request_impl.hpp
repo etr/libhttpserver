@@ -118,8 +118,7 @@ class http_request_impl {
 #ifdef HAVE_DAUTH
           digested_user(alloc),
 #endif  // HAVE_DAUTH
-          unescaped_args(alloc),
-          path_pieces(alloc)
+          unescaped_args(alloc)
 #ifdef HAVE_GNUTLS
           , client_cert_dn(alloc),
           client_cert_issuer_dn(alloc),
@@ -183,24 +182,22 @@ class http_request_impl {
 #endif  // HAVE_DAUTH
     mutable std::pmr::map<std::pmr::string, std::pmr::vector<std::pmr::string>,
                           http::arg_comparator> unescaped_args;
-    mutable std::pmr::vector<std::pmr::string> path_pieces;
     mutable bool args_populated = false;
-    mutable bool path_pieces_cached = false;
 #ifdef HAVE_BAUTH
     // Guard for fetch_user_pass(): once the MHD round-trip has been made
     // (whether or not the request carries a Basic-Auth header), further
     // calls to get_user()/get_pass() skip the MHD call entirely.
     // Using a dedicated boolean (rather than checking username.empty())
-    // matches the args_populated / path_pieces_cached pattern and avoids
-    // a redundant MHD call on requests with no auth credentials where the
-    // credential strings remain empty after the first fetch.
+    // matches the args_populated pattern and avoids a redundant MHD call
+    // on requests with no auth credentials where the credential strings
+    // remain empty after the first fetch.
     // (code-simplifier finding #6 / major review item)
     mutable bool user_pass_fetched = false;
 #endif  // HAVE_BAUTH
     // Cache guard for get_requestor(). Using a dedicated boolean (rather
     // than checking requestor_ip.empty()) is consistent with the boolean-
-    // flag pattern used by args_populated and path_pieces_cached, and is
-    // robust if the connection layer ever returns an empty IP string.
+    // flag pattern used by args_populated, and is robust if the connection
+    // layer ever returns an empty IP string.
     // (code-simplifier finding #7 / minor review item)
     mutable bool requestor_ip_cached = false;
 
@@ -211,7 +208,7 @@ class http_request_impl {
     // and reused on subsequent calls.
     //
     // Allocator note: the public container types embed std::string_view
-    // (header_view_map / arg_view_map) or std::string (path_pieces_public_)
+    // (header_view_map / arg_view_map) or std::string (path_pieces_cached_)
     // and use the default allocator. They cannot be made PMR without
     // changing the public surface (TASK-017 plan, "Storage strategy").
     // The first call therefore allocates on the global heap; subsequent
@@ -231,24 +228,27 @@ class http_request_impl {
     mutable http::arg_view_map args_view_cached_;
     mutable bool args_view_cache_built_ = false;
 
-    // Public-typed mirror of `path_pieces` (the pmr::vector<pmr::string>
-    // already kept above). Two caches in lockstep: the pmr version stays
-    // arena-friendly for any future internal consumer (e.g. radix-tree
-    // route matching that must allocate on the per-connection arena);
-    // the public version is what get_path_pieces() returns by const&.
+    // PRD-REQ-REQ-001 / Item 19 / Item 24: cached "first value per key"
+    // view used by get_args_flat(). Aliases the pmr-backed unescaped_args
+    // storage via string_view, so it shares the request's lifetime.
+    // Avoids the O(n log n) reconstruction the by-value form paid on
+    // every call.
+    mutable std::map<std::string_view, std::string_view, http::arg_comparator>
+        args_flat_view_cached_;
+    mutable bool args_flat_view_cache_built_ = false;
+
+    // Tokenised path pieces. Single cache populated lazily on the first
+    // get_path_pieces() / get_path_piece(int) call. Stored as
+    // std::vector<std::string> so get_path_pieces() can return it by
+    // const& without an ABI break.
     //
-    // Deliberate dual-cache design (architecture-alignment-checker-iter1-1 /
-    // code-quality-reviewer-iter1-5 / performance-reviewer-iter1-13):
-    //   - The pmr::vector<pmr::string> cannot be returned as const
-    //     vector<string>& without an ABI change, so the public mirror
-    //     exists as a forward-compatible layer.
-    //   - No current internal consumer uses path_pieces post-PIMPL;
-    //     if none materialises before TASK-018 lands the two caches can
-    //     be collapsed to a single std::vector<std::string>.
-    //   - TODO(post-018): evaluate collapsing to a single cache if no
-    //     internal arena consumer has emerged.
-    mutable std::vector<std::string> path_pieces_public_;
-    mutable bool path_pieces_public_built_ = false;
+    // The post-PIMPL audit (TASK-018) found no internal arena consumer of
+    // a pmr-backed path-pieces vector, so the earlier dual-cache design
+    // (pmr arena copy + public mirror) was collapsed to this single
+    // heap-allocated cache. If a future radix/route-matching path needs
+    // arena-allocated pieces, reintroduce the pmr cache alongside.
+    mutable std::vector<std::string> path_pieces_cached_;
+    mutable bool path_pieces_cache_built_ = false;
 
     // TASK-057: when true, http_request::operator<< streams credential
     // material verbatim (v1 verbose form). Default false: the four
@@ -290,21 +290,19 @@ class http_request_impl {
     // the same reference in O(1).
     const http::header_view_map& ensure_headerlike_cache(MHD_ValueKind kind) const;
     void populate_args() const;
+    // Populates path_pieces_cached_ from the tokenised request path on
+    // first call. Subsequent calls are O(1) and zero-allocating.
     void ensure_path_pieces_cached(std::string_view path) const;
-
-    // TASK-017: populates the public-typed mirror of path_pieces and marks
-    // path_pieces_public_built_. Called from get_path_pieces() after
-    // ensure_path_pieces_cached() so all cache-maintenance logic for the
-    // public mirror lives inside the impl class (analogous to
-    // ensure_headerlike_cache / ensure_path_pieces_cached).
-    // (code-quality-reviewer-iter1-4 / code-simplifier-iter1-8)
-    void ensure_path_pieces_public_cached() const;
 
     // TASK-017: populates the arg view-map cache from unescaped_args.
     // Called from get_args() so the build loop lives inside the impl
     // class, keeping all cache-maintenance code in one place.
     // (code-simplifier-iter1-9)
     void ensure_args_view_cached() const;
+
+    // Populates args_flat_view_cached_ from unescaped_args, picking the
+    // first value for each key. Called from get_args_flat().
+    void ensure_args_flat_view_cached() const;
 
     void set_arg(const std::string& key, const std::string& value, std::size_t content_size_limit);
     void set_arg(const char* key, const char* value, std::size_t size, std::size_t content_size_limit);
@@ -347,9 +345,10 @@ class http_request_impl {
 //
 // Defaults are deliberately generous (64 unique keys / 64 KiB total bytes)
 // so existing callers that construct the accumulator without setting these
-// fields remain compatible. The webserver hot path sets these from
-// connection_state or a compile-time constant once the create_webserver
-// API exposes them (TODO(M5)).
+// fields remain compatible. Operators can override via
+// create_webserver::max_args_count() / max_args_bytes(); populate_args()
+// reads the per-connection override from connection_state when present
+// and falls back to these compile-time defaults otherwise.
 //
 // NOTE: POST argument limits are handled upstream by MHD_OPTION_CONNECTION_
 // MEMORY_LIMIT; the guards here apply only to GET arguments processed via

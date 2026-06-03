@@ -39,6 +39,8 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <regex>  // NOLINT [build/c++11] -- regex is not banned project-wide.
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -79,7 +81,15 @@ struct radix_node {
     // without constructing a temporary std::string per probe.
     std::map<std::string, std::unique_ptr<radix_node>, std::less<>> children_;
     std::unique_ptr<radix_node> wildcard_child_;
+    // wildcard_name_ is the bare parameter name (e.g. "id" for the
+    // pattern `{id|([0-9]+)}`), matching v1 semantics: callers reach the
+    // captured value via `req.get_arg("id")`, not via the full source
+    // token. wildcard_constraint_, when populated, carries the per-segment
+    // regex from the `|regex` suffix and is enforced during find(); a
+    // segment that fails the constraint is treated as a wildcard miss
+    // (the descent breaks, falling back to a prefix candidate or 404).
     std::string wildcard_name_;
+    std::optional<std::regex> wildcard_constraint_;
     std::optional<T> exact_terminus_;
     std::optional<T> prefix_terminus_;
 };
@@ -184,7 +194,19 @@ class radix_tree {
             if (it != node->children_.end()) {
                 node = it->second.get();
             } else if (node->wildcard_child_) {
-                node = node->wildcard_child_.get();
+                // Per-segment regex constraint enforcement: if the
+                // wildcard carries a `|regex` suffix, the actual
+                // segment must satisfy it; otherwise this branch is
+                // not taken and we fall back to a prefix candidate or
+                // 404, matching v1 semantics (the regex-map tier).
+                const radix_node<T>* candidate = node->wildcard_child_.get();
+                if (candidate->wildcard_constraint_.has_value()) {
+                    if (!std::regex_match(seg.begin(), seg.end(),
+                                          *candidate->wildcard_constraint_)) {
+                        break;
+                    }
+                }
+                node = candidate;
                 caps.emplace_back(node->wildcard_name_, std::string(seg));
             } else {
                 // No way forward: best we can do is the deepest prefix
@@ -296,19 +318,46 @@ class radix_tree {
         return seg.size() >= 2 && seg.front() == '{' && seg.back() == '}';
     }
 
+    // Split `{name|regex}` into (bare name, regex-pattern). When no `|`
+    // is present, returns (name, ""). The regex pattern (if any) is the
+    // substring between the first `|` and the closing `}`. Mirrors
+    // http_endpoint::append_parameter_url_part's split rule so the same
+    // user-facing `{name|regex}` syntax has identical semantics in both
+    // the radix tier and the regex-fallback tier.
+    static std::pair<std::string, std::string>
+    parse_wildcard(const std::string& seg) {
+        // Caller has already verified is_wildcard_segment(seg).
+        const std::string::size_type bar = seg.find_first_of('|');
+        if (bar == std::string::npos) {
+            return {seg.substr(1, seg.size() - 2), {}};
+        }
+        return {seg.substr(1, bar - 1),
+                seg.substr(bar + 1, seg.size() - bar - 2)};
+    }
+
     static radix_node<T>* descend_or_create(radix_node<T>* node,
                                             const std::string& seg) {
         if (is_wildcard_segment(seg)) {
-            // Strip the braces: "{id}" -> "id".
-            std::string name = seg.substr(1, seg.size() - 2);
+            auto [name, constraint_src] = parse_wildcard(seg);
             if (!node->wildcard_child_) {
                 node->wildcard_child_ = std::make_unique<radix_node<T>>();
                 node->wildcard_child_->wildcard_name_ = std::move(name);
+                if (!constraint_src.empty()) {
+                    try {
+                        node->wildcard_child_->wildcard_constraint_.emplace(
+                            constraint_src,
+                            std::regex::extended | std::regex::icase
+                                | std::regex::nosubs);
+                    } catch (const std::regex_error&) {
+                        throw std::invalid_argument(
+                            "Not a valid regex in URL: " + constraint_src);
+                    }
+                }
             }
-            // If a wildcard child already exists with a different name,
-            // we keep the first registered name. Re-registering with a
-            // different name on the same path is a user error and would
-            // be caught by the upstream conflict check before insert.
+            // If a wildcard child already exists, the first registered
+            // name and constraint win. Re-registering a different name
+            // or constraint on the same path is a user error and is
+            // caught by the upstream conflict check before insert.
             return node->wildcard_child_.get();
         }
         auto it = node->children_.find(seg);

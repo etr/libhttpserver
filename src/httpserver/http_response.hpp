@@ -402,12 +402,7 @@ class http_response final {
 
      // body_ is private; detail::webserver_impl dispatch helpers need
      // direct access to materialise wire responses and fire the
-     // response_sent hook (body_->size()). webserver is retained here
-     // for forward-compatibility -- it does not currently read body_
-     // directly but may need to in future public-layer helpers.
-     // TODO: remove friend class webserver once confirmed it is
-     // no longer needed at the public layer.
-     friend class webserver;
+     // response_sent hook (body_->size()).
      friend class detail::webserver_impl;
 };
 

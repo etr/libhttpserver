@@ -66,8 +66,14 @@ namespace detail {
 //     heap. (performance-reviewer-iter1-1.)
 //   - Overflow spills to the upstream resource (default = heap) silently
 //     -- it is a correctness fall-through, not a hard limit.
-//   - TODO(M5): expose ARENA_INITIAL_BYTES via create_webserver if/when
-//     profiling shows tuning value.
+//   - ARENA_INITIAL_BYTES stays compile-time intentionally: the buffer is
+//     an embedded std::array, so making it runtime-sized would require an
+//     extra heap allocation per connection. The compile-time default is
+//     sized to cover typical small-GET / small-POST shapes without
+//     overflow; profiling has not shown a deployed workload where the
+//     per-connection extra allocation pays for itself. If a future
+//     deployment needs tuning, replace initial_buffer_ with a
+//     unique_ptr<std::byte[]> + runtime size carried here.
 struct connection_state {
     static constexpr std::size_t ARENA_INITIAL_BYTES = 8192;
 
@@ -80,6 +86,15 @@ struct connection_state {
     std::pmr::monotonic_buffer_resource arena_{
         initial_buffer_.data(), initial_buffer_.size(),
         std::pmr::new_delete_resource()};
+
+    // Per-connection args DoS limits, copied from webserver::max_args_count
+    // / max_args_bytes by webserver_impl::connection_notify at
+    // MHD_CONNECTION_NOTIFY_STARTED. populate_args() reads these from the
+    // socket_context to set up the per-request arguments_accumulator. A
+    // value of 0 means "use the arguments_accumulator compile-time
+    // default", matching create_webserver's sentinel convention.
+    std::size_t max_args_count = 0;
+    std::size_t max_args_bytes = 0;
 
     connection_state() = default;
     connection_state(const connection_state&) = delete;

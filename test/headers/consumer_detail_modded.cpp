@@ -18,14 +18,12 @@
      USA
 */
 
-// Negative test (Check A.2b): a consumer including modded_request.hpp directly,
-// without HTTPSERVER_COMPILATION or _HTTPSERVER_HPP_INSIDE_, must hit the gate.
-// Complements consumer_detail.cpp (A.2) which covers http_endpoint.hpp; both
-// detail headers carry the same gate and both must be verified independently.
-//
-// TODO(TASK-014): when TASK-014 tightens the detail gate to HTTPSERVER_COMPILATION-
-// only (by removing the transitive include from webserver.hpp), add
-// '#define _HTTPSERVER_HPP_INSIDE_' here so A.2b validates that _HTTPSERVER_HPP_INSIDE_
-// alone is still rejected by the stricter HTTPSERVER_COMPILATION-only gate.
+// Negative test (Check A.2b): a consumer including modded_request.hpp
+// directly must hit the gate. Complements consumer_detail.cpp (A.2) which
+// covers http_endpoint.hpp; both detail headers carry the same
+// HTTPSERVER_COMPILATION-only gate and both must be verified independently.
+// _HTTPSERVER_HPP_INSIDE_ is defined precisely to validate that the
+// stricter post-TASK-014 gate rejects it.
+#define _HTTPSERVER_HPP_INSIDE_
 #include "httpserver/detail/modded_request.hpp"
 int main() { return 0; }

@@ -76,7 +76,15 @@ EXTRA_DIST = libhttpserver.pc.in $(DX_CONFIG) scripts/extract-release-notes.sh s
 # that -DHTTPSERVER_COMPILATION (set in src/ and test/ AM_CPPFLAGS) cannot
 # leak into the consumer-style compile. A true consumer never has that macro.
 CHECK_HEADERS_CXX = $(CXX) -std=c++20 -I$(top_builddir) -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver $(CPPFLAGS)
-CHECK_HEADERS_GATE_MSG = Only <httpserver.hpp> or <httpserverpp> can be included directly.
+# Public-header gate (consumer_direct, consumer_post_umbrella): triggered when
+# a public httpserver/* header is included without the umbrella having defined
+# _HTTPSERVER_HPP_INSIDE_.
+CHECK_HEADERS_PUBLIC_GATE_MSG = Only <httpserver.hpp> or <httpserverpp> can be included directly.
+# Detail-header gate (consumer_detail, consumer_detail_modded): post-TASK-014
+# the detail-header gate is HTTPSERVER_COMPILATION-only and emits a message of
+# the form "httpserver/detail/<file>.hpp is internal; only include it when
+# compiling libhttpserver (HTTPSERVER_COMPILATION must be defined)."
+CHECK_HEADERS_DETAIL_GATE_MSG = is internal; only include it when compiling libhttpserver
 
 check-headers:
 	@echo "=== check-headers A.1: direct public-header include must fail ==="
@@ -86,7 +94,7 @@ check-headers:
 	    rm -f check-headers-A1.log; \
 	    exit 1; \
 	fi
-	@if ! grep -q "$(CHECK_HEADERS_GATE_MSG)" check-headers-A1.log; then \
+	@if ! grep -q "$(CHECK_HEADERS_PUBLIC_GATE_MSG)" check-headers-A1.log; then \
 	    echo "FAIL: consumer_direct.cpp failed but not for the gate reason"; \
 	    cat check-headers-A1.log; \
 	    rm -f check-headers-A1.log; \
@@ -95,18 +103,18 @@ check-headers:
 	@rm -f check-headers-A1.log
 	@echo "  PASS: A.1 gate fired as expected"
 	@echo "=== check-headers A.2: direct detail-header include must fail ==="
-	@# NOTE: A.2 currently fires for the same reason as A.1 (neither macro defined).
-	@# After TASK-014 tightens the detail gate to HTTPSERVER_COMPILATION-only,
-	@# consumer_detail.cpp will add '#define _HTTPSERVER_HPP_INSIDE_' to exercise
-	@# the stricter path. Do not collapse A.2 into A.1 — the include path distinction
-	@# (detail/ vs public) is valuable and A.2 becomes a discriminating test post-TASK-014.
+	@# Post-TASK-014: the detail-header gate is HTTPSERVER_COMPILATION-only.
+	@# consumer_detail.cpp defines _HTTPSERVER_HPP_INSIDE_ explicitly so this
+	@# check validates the stricter scenario (the macro alone must not satisfy
+	@# the gate). A.2 is distinct from A.1 because of the include-path
+	@# (detail/ vs public) and the different gate message.
 	@if $(CHECK_HEADERS_CXX) -c $(top_srcdir)/test/headers/consumer_detail.cpp -o /dev/null 2>check-headers-A2.log; then \
 	    echo "FAIL: consumer_detail.cpp compiled but should have errored"; \
 	    cat check-headers-A2.log; \
 	    rm -f check-headers-A2.log; \
 	    exit 1; \
 	fi
-	@if ! grep -q "$(CHECK_HEADERS_GATE_MSG)" check-headers-A2.log; then \
+	@if ! grep -q "$(CHECK_HEADERS_DETAIL_GATE_MSG)" check-headers-A2.log; then \
 	    echo "FAIL: consumer_detail.cpp failed but not for the gate reason"; \
 	    cat check-headers-A2.log; \
 	    rm -f check-headers-A2.log; \
@@ -122,7 +130,7 @@ check-headers:
 	    rm -f check-headers-A2b.log; \
 	    exit 1; \
 	fi
-	@if ! grep -q "$(CHECK_HEADERS_GATE_MSG)" check-headers-A2b.log; then \
+	@if ! grep -q "$(CHECK_HEADERS_DETAIL_GATE_MSG)" check-headers-A2b.log; then \
 	    echo "FAIL: consumer_detail_modded.cpp failed but not for the gate reason"; \
 	    cat check-headers-A2b.log; \
 	    rm -f check-headers-A2b.log; \
@@ -146,7 +154,7 @@ check-headers:
 	    rm -f check-headers-A4.log; \
 	    exit 1; \
 	fi
-	@if ! grep -q "$(CHECK_HEADERS_GATE_MSG)" check-headers-A4.log; then \
+	@if ! grep -q "$(CHECK_HEADERS_PUBLIC_GATE_MSG)" check-headers-A4.log; then \
 	    echo "FAIL: consumer_post_umbrella.cpp failed but not for the gate reason"; \
 	    cat check-headers-A4.log; \
 	    rm -f check-headers-A4.log; \

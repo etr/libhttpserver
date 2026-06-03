@@ -113,11 +113,13 @@ namespace {
 
 using SBO = httpserver::http_response_sbo_test_access;
 
-// TODO(TASK-010): migrate place_* helpers to factory calls once factories
-// are stable. These helpers bypass the production factory path so they can
-// validate SBO internals before the factories land; they will need to be
-// partly rewritten or retired once TASK-010's http_response::string() et al.
-// are the canonical construction path.
+// SBO placement helpers. These deliberately bypass http_response's
+// production factory path (http_response::string() et al., TASK-010) so
+// individual tests can force a specific inline vs. heap placement and
+// validate the SBO state machine on both legs. counter_body in particular
+// is a test-only dtor probe with no factory analogue. The factory path is
+// validated by integration tests; this TU is the canonical place to
+// exercise the SBO internals directly.
 
 // Place a string_body into r's inline storage and wire the response
 // fields up. `r` must be empty (default-constructed).

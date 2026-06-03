@@ -242,20 +242,19 @@ class http_request {
 
      /**
       * Method used to get all args passed with the request. If any key has multiple
-      * values, one value is chosen and returned.
-      * @return a by-value map of string_view key→value pairs. The views alias the
-      *         request's arena storage and must not outlive the handler invocation.
+      * values, one value is chosen and returned (the first).
+      * @return a const reference to a cached "first value per key" view map.
+      *         The reference (and the string_view keys/values it holds) remain
+      *         valid until the http_request is destroyed.
       * @note (Item 22) The returned views carry the same CWE-416 dangling risk as
       *       get_arg_flat() and the other affected getters listed in the class-level
-      *       string_view lifetime contract block above.
-      * @note (Item 24) This getter returns by value rather than const& (unlike
-      *       get_args()). The by-value return is intentional for now;
-      *       see TODO below. Callers should capture the result once and reuse it.
-      * TODO: consider a cached flat_args_view_cached_ (similar to args_view_cached_)
-      *       to avoid O(n log n) reconstruction on every call (Item 19, Item 24).
-      *       PRD-REQ-REQ-001 tracks making the container-level variant return const&.
+      *       string_view lifetime contract block above. Copy to std::string if a
+      *       longer lifetime is required.
+      * @note (Item 19 / Item 24 / PRD-REQ-REQ-001) Previously returned by value;
+      *       now returns const& backed by a lazily-populated cache, so repeat
+      *       calls are O(1) and zero-allocating.
      **/
-     [[nodiscard]] const std::map<std::string_view, std::string_view, http::arg_comparator> get_args_flat() const;
+     [[nodiscard]] const std::map<std::string_view, std::string_view, http::arg_comparator>& get_args_flat() const;
 
      /**
       * Method to get or create a file info struct in the map if the provided filename is already in the map

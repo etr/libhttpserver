@@ -44,7 +44,7 @@ here AND a test in `routing_regression_test.cpp`.
 | Exact root `/` | `http_endpoint_suite::http_endpoint_root_only` | `test/unit/http_endpoint_test.cpp` | unchanged |
 | Single-segment param `/{arg}` | `basic_suite::regex_matching_arg`, `regex_matching_arg_with_url_pars`, `http_endpoint_*` unit tests | `test/integ/basic.cpp`, `test/unit/http_endpoint_test.cpp` | API-ported |
 | Multi-segment param `/{a}/{b}` | `http_endpoint_suite::http_endpoint_multiple_params` | `test/unit/http_endpoint_test.cpp` | unchanged |
-| Custom-regex param `/{arg|([0-9]+)}` | `basic_suite::regex_matching_arg_custom`, `http_endpoint_registration_arg_custom_regex` | `test/integ/basic.cpp`, `test/unit/http_endpoint_test.cpp` | API-ported (constraint enforced via v1 map); v2 radix tier does NOT enforce per-segment constraint — see "Documented divergences" below |
+| Custom-regex param `/{arg|([0-9]+)}` | `basic_suite::regex_matching_arg_custom`, `http_endpoint_registration_arg_custom_regex` | `test/integ/basic.cpp`, `test/unit/http_endpoint_test.cpp` | API-ported; v2 radix tier enforces the per-segment regex in-line via `radix_node::wildcard_constraint_`, matching v1 semantics |
 | Prefix (family) | `basic_suite::family_endpoints`, `non_family_url_with_regex_like_pieces`, `single_resource_mode` | `test/integ/basic.cpp` | API-ported (`register_resource(..., true)` → `register_prefix`) |
 | Regex (anchored, no `{}`) | `basic_suite::regex_matching`, `regex_url_exact_match`, `url_with_regex_like_pieces` | `test/integ/basic.cpp` | API-ported |
 | Regex-checking disabled | `basic_suite::*` with `no_regex_checking()` | `test/integ/basic.cpp` | unchanged |
@@ -94,31 +94,28 @@ a new `unregister_prefix(path)` for the prefix half. The old name is
 preserved as a `[[deprecated]]` forwarder for source compatibility.
 The v1 test was renamed in place; behavior unchanged.
 
-### 3. Custom-regex parameter constraints NOT enforced by the radix tier
+### 3. Custom-regex parameter constraints — RESOLVED (v1 parity restored)
 
 In v1, `/items/{id|([0-9]+)}` is enforced by the
 `registered_resources_regex` map: the per-segment `[0-9]+` constraint
 participates in `std::regex_match`, so `/items/abc` does not match the
 route.
 
-In v2, the radix-tree tier treats `{id|([0-9]+)}` as a single wildcard
-segment with name `id|([0-9]+)` and does NOT consult the constraint
-during the wildcard descent. So `/items/abc` and `/items/42` both
-resolve to the same radix entry today.
+Between the TASK-053 cutover and the current commit, the v2 radix tier
+briefly diverged: `{id|([0-9]+)}` was stored as a single wildcard
+segment with the full source token as its name, with no constraint
+enforcement. `/items/abc` and `/items/42` both resolved to the same
+radix entry.
 
-**Current behaviour**: after the TASK-053 cutover, end-to-end dispatch
-goes through `lookup_v2`, so `/items/abc` now resolves to the radix
-entry (200) where v1 returned 404. Three tests in `basic.cpp`
-(`regex_matching_arg_custom` and friends) were updated to pin this
-post-cutover behaviour, and the unit-level pin
-`parameterized_with_custom_regex_lands_in_radix_tier` ensures silent
-drift is impossible.
-
-**Follow-up**: per-segment regex constraint enforcement inside the
-radix tier is the right shape for restoring v1 parity here, and is
-explicitly tracked in PRD §3.7 retrieval semantics. When that work
-lands, restore the affected `basic.cpp` tests to assert 404 + body
-"Not Found" and remove the regression-pin block in each.
+**Resolution**: the radix tier now parses `{name|regex}` at registration
+time, binds captures under the bare `name`, and stores the compiled
+regex on the wildcard node (`radix_node::wildcard_constraint_`, using
+the same `extended | icase | nosubs` flags as `http_endpoint`). During
+`radix_tree::find()` the constraint is matched against the request
+segment; a miss breaks the descent so the lookup falls back to a prefix
+candidate or 404. `regex_matching_arg_custom`, `regex_url_exact_match`,
+and `parameterized_with_custom_regex_enforced_in_radix_tier` now pin
+the v1 behaviour directly.
 
 ### 4. Overlapping-routes precedence: v1 iteration-order accident → v2 deterministic structural precedence
 

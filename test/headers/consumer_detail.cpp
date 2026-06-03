@@ -18,13 +18,11 @@
      USA
 */
 
-// Negative test (Check A.2): a consumer including a detail header directly,
-// without HTTPSERVER_COMPILATION or _HTTPSERVER_HPP_INSIDE_, must hit the gate.
-// The dual-mode gate fires because neither macro is defined in this TU.
-//
-// TODO(TASK-014): when TASK-014 tightens the detail gate to HTTPSERVER_COMPILATION-
-// only (by removing the transitive include from webserver.hpp), add
-// '#define _HTTPSERVER_HPP_INSIDE_' here so A.2 validates that _HTTPSERVER_HPP_INSIDE_
-// alone is still rejected by the stricter HTTPSERVER_COMPILATION-only gate.
+// Negative test (Check A.2): a consumer including a detail header directly
+// must hit the gate. Post-TASK-014 the gate is HTTPSERVER_COMPILATION-only,
+// so even defining _HTTPSERVER_HPP_INSIDE_ (the public-header inside-macro)
+// must NOT satisfy it -- the macro is set here precisely to validate that
+// the stricter gate rejects it.
+#define _HTTPSERVER_HPP_INSIDE_
 #include "httpserver/detail/http_endpoint.hpp"
 int main() { return 0; }

@@ -110,11 +110,16 @@ struct method_set {
     }
 
     // TASK-027: convenience predicate for the route-table writer paths
-    // (on_methods_, route(method_set,...)). True iff no method bits are
-    // set. Constexpr noexcept so it works in the same constant-context
+    // (on_methods_, route(method_set,...)). True iff no valid-window
+    // method bits are set. Masking against valid_method_mask() ensures
+    // that a set containing only out-of-window bits (e.g. constructed
+    // via `method_set{}.set(http_method::count_)` -- a misuse caught
+    // here so on_methods_ rejects the call rather than silently
+    // registering zero handlers) is also reported as empty.
+    // Constexpr noexcept so it works in the same constant-context
     // gates as the rest of the method_set surface.
     constexpr bool empty() const noexcept {
-        return bits == 0u;
+        return (bits & detail::valid_method_mask()) == 0u;
     }
 
     friend constexpr bool operator==(method_set, method_set) noexcept = default;

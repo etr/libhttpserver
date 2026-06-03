@@ -185,19 +185,17 @@ void http_request::set_method(const std::string& method) {
 }
 
 const std::vector<std::string>& http_request::get_path_pieces() const {
-    // TASK-017: lazily populate both caches and return the public-typed
-    // mirror by const&. All cache-maintenance logic lives inside the impl
-    // class (code-quality-reviewer-iter1-4 / code-simplifier-iter1-8).
+    // TASK-017: lazily populate the cache and return it by const&. All
+    // cache-maintenance logic lives inside the impl class.
+    // (code-quality-reviewer-iter1-4 / code-simplifier-iter1-8)
     impl_->ensure_path_pieces_cached(path);
-    impl_->ensure_path_pieces_public_cached();
-    return impl_->path_pieces_public_;
+    return impl_->path_pieces_cached_;
 }
 
 const std::string http_request::get_path_piece(int index) const {
     impl_->ensure_path_pieces_cached(path);
-    if (static_cast<int>(impl_->path_pieces.size()) > index) {
-        const auto& p = impl_->path_pieces[index];
-        return std::string(p.data(), p.size());
+    if (static_cast<int>(impl_->path_pieces_cached_.size()) > index) {
+        return impl_->path_pieces_cached_[index];
     }
     return EMPTY;
 }
@@ -268,13 +266,11 @@ const http::arg_view_map& http_request::get_args() const {
     return impl_->args_view_cached_;
 }
 
-const std::map<std::string_view, std::string_view, http::arg_comparator> http_request::get_args_flat() const {
+const std::map<std::string_view, std::string_view, http::arg_comparator>&
+http_request::get_args_flat() const {
     impl_->populate_args();
-    std::map<std::string_view, std::string_view, http::arg_comparator> ret;
-    for (const auto& [key, val] : impl_->unescaped_args) {
-        ret[key] = val[0];
-    }
-    return ret;
+    impl_->ensure_args_flat_view_cached();
+    return impl_->args_flat_view_cached_;
 }
 
 http::file_info& http_request::get_or_create_file_info(const std::string& key, const std::string& upload_file_name) {
