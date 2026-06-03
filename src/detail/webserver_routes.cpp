@@ -44,6 +44,7 @@
 #include <stdlib.h>
 #include <strings.h>
 #include <algorithm>
+#include <cassert>
 #include <cstring>
 #include <iosfwd>
 #include <iostream>
@@ -274,10 +275,10 @@ void webserver_impl::insert_fresh_v2_entry(const detail::http_endpoint& idx,
     auto tier = classify_route_tier(idx);
     switch (tier.kind) {
     case route_tier_kind::radix:
-        // Unreachable: upsert_v2_table_entry routes url_pars-non-empty paths
+        // Precondition: upsert_v2_table_entry routes url_pars-non-empty paths
         // through upsert_v2_radix_route before calling insert_fresh_v2_entry.
+        assert(!"unreachable: radix paths go through upsert_v2_radix_route");
         __builtin_unreachable();
-        break;
     case route_tier_kind::exact:
         // TASK-056: refuse to plant an exact entry when a prefix entry
         // for the same canonical path already lives in the radix tier.

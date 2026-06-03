@@ -215,13 +215,16 @@ int main() {
         OUTER, INNER_CACHE);
 
     // ----- (b) radix tier, 8 segments -----
-    // Vary the captured-param values across iterations so the cache
-    // does NOT serve the lookup. The PATHS table holds 16 distinct
-    // 8-segment URLs; the modulo index rotates through them. The
-    // cache is sized so that 16 entries blow it out repeatedly,
-    // forcing the radix walk on every lookup. (The path string view
-    // dominates the visible work even if the LRU happens to keep
-    // one or two warm; the ceiling absorbs that.)
+    // Vary the captured-param values across iterations so we don't
+    // measure pure cache-hits. The PATHS table holds 16 distinct
+    // 8-segment URLs; the modulo index rotates through them.
+    // NOTE: route_lru_cache holds 256 entries by default, so all 16
+    // paths fit warm after the first rotation — the bench therefore
+    // measures a mix of cache-warm latency (most iterations) and one
+    // radix walk per fresh URL per round. The 5 µs ceiling is
+    // conservative enough to absorb the mix. If detail::route_cache's
+    // default capacity is ever shrunk below 16, this bench would
+    // shift to measuring pure radix-tier latency.
     static const std::vector<std::string> kPaths = {
         "/a/u01/b/v01/c/w01/d/x01", "/a/u02/b/v02/c/w02/d/x02",
         "/a/u03/b/v03/c/w03/d/x03", "/a/u04/b/v04/c/w04/d/x04",

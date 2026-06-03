@@ -83,6 +83,12 @@ static_assert(std::is_same_v<
 
 #define PORT 8295
 #define PORT_STRING "8295"
+// Paired numeric/string forms so the curl URL strings cannot silently
+// drift from the constructor port (TASK-054 review #14).
+#define PORT_1 (PORT + 1)
+#define PORT_1_STRING "8296"
+#define PORT_2 (PORT + 2)
+#define PORT_2_STRING "8297"
 
 namespace {
 
@@ -159,14 +165,14 @@ LT_BEGIN_AUTO_TEST(auth_handler_legacy_shim_suite,
         [](const http_request&) -> std::shared_ptr<http_response> {
             return nullptr;
         };
-    webserver ws{create_webserver(PORT + 1)
+    webserver ws{create_webserver(PORT_1)
         .auth_handler(legacy)};
     simple_resource sr;
     ws.register_path("/protected",
                      std::shared_ptr<http_resource>(&sr, [](http_resource*){}));
     ws.start(false);
 
-    fetch_result fr = fetch("localhost:8296/protected");
+    fetch_result fr = fetch("localhost:" PORT_1_STRING "/protected");
     LT_CHECK_EQ(fr.response_code, 200);
     LT_CHECK_EQ(fr.body, std::string("SUCCESS"));
 
@@ -187,14 +193,14 @@ LT_BEGIN_AUTO_TEST(auth_handler_legacy_shim_suite,
             resp->with_header("X-Blocked-By", "auth-shim");
             return resp;
         };
-    webserver ws{create_webserver(PORT + 2)
+    webserver ws{create_webserver(PORT_2)
         .auth_handler(legacy)};
     simple_resource sr;
     ws.register_path("/protected",
                      std::shared_ptr<http_resource>(&sr, [](http_resource*){}));
     ws.start(false);
 
-    fetch_result fr = fetch("localhost:8297/protected");
+    fetch_result fr = fetch("localhost:" PORT_2_STRING "/protected");
     LT_CHECK_EQ(fr.response_code, 401);
     LT_CHECK_EQ(fr.body, std::string("blocked"));
     LT_CHECK_EQ(fr.header_x_blocked_by, std::string("auth-shim"));

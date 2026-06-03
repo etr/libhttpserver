@@ -21,15 +21,15 @@ can be split out into individual task files when work starts.
 
 ## Summary
 
-| Task ID (proposed) | Name | Severity | Milestone | Estimate | GA-blocker? |
-|---|---|---|---|---|---|
-| TASK-053 | Wire `lookup_v2()` into dispatch hot path | Major | M5 | L | **Yes** — TASK-027 work is dead code today |
-| TASK-054 | Migrate `auth_handler_ptr` to `optional<http_response>` | Major | M4/M5 | M | **Yes** — last `shared_ptr<http_response>` on public API |
-| TASK-055 | DR-009 revision: default error body must not surface `e.what()` | Major | M6 | M | **Yes** — CWE-209 information disclosure |
-| TASK-056 | Hash-DoS hardening + prefix-route disambiguation in radix tree | Major | M5 | M | **Yes** — security hardening |
-| TASK-057 | Redact credentials in `http_request::operator<<` | Minor (sec) | M3 | S | **Yes** — A09:2021 logging failure |
-| TASK-058 | Hot-path allocation pass: canonicalize/normalize/serialize_allow_methods | Minor | post-v2.0 | L | No — perf polish |
-| TASK-059 | Supply-chain: sha256-pin PMD analyzer download in CI | Minor (sec) | M6 | S | Yes — quick win |
+| Task ID (proposed) | Name | Severity | Milestone | Estimate | GA-blocker? | Status |
+|---|---|---|---|---|---|---|
+| TASK-053 | Wire `lookup_v2()` into dispatch hot path | Major | M5 | L | **Yes** — TASK-027 work is dead code today | Done |
+| TASK-054 | Migrate `auth_handler_ptr` to `optional<http_response>` | Major | M4/M5 | M | **Yes** — last `shared_ptr<http_response>` on public API | Done |
+| TASK-055 | DR-009 revision: default error body must not surface `e.what()` | Major | M6 | M | **Yes** — CWE-209 information disclosure | Done |
+| TASK-056 | Hash-DoS hardening + prefix-route disambiguation in radix tree | Major | M5 | M | **Yes** — security hardening | Done |
+| TASK-057 | Redact credentials in `http_request::operator<<` | Minor (sec) | M3 | S | **Yes** — A09:2021 logging failure | Done |
+| TASK-058 | Hot-path allocation pass: canonicalize/normalize/serialize_allow_methods | Minor | post-v2.0 | L | No — perf polish | Done |
+| TASK-059 | Supply-chain: sha256-pin PMD analyzer download in CI | Minor (sec) | M6 | S | Yes — quick win | Done |
 
 GA-blockers (six of seven) should land before v2.0 cuts a release tag.
 TASK-058 is a post-v2.0 polish but the prep work (string_view return type
@@ -154,14 +154,19 @@ TODO comment marking this migration already lives at
 - Blocks: None
 
 **Acceptance Criteria:**
-- `grep -rE 'shared_ptr<.*http_response' src/httpserver/` returns no
-  results in public headers.
+- `grep -rE 'shared_ptr<.*http_response' src/httpserver/ | grep -v compat`
+  returns no results in public headers. (The deprecated v1 shim in
+  `httpserver::compat` is intentionally retained for one transitional
+  build per Action Item 1.)
 - `examples/centralized_authentication.cpp` and the auth integration
   test compile against the new signature.
 - The v1 shim adapter compiles with `-Werror=deprecated-declarations`
-  off, and emits a deprecation warning when on.
-- One heap allocation removed per authenticated request (verifiable via
-  `bench_auth.cpp` or by inspection).
+  off, and emits a deprecation warning when on. The compat alias and
+  setter overload are scheduled for removal in v2.1.
+- One heap allocation removed per authenticated request — verified by
+  inspection: the `std::optional<http_response>` return path eliminates
+  the `std::shared_ptr<http_response>` control-block allocation that the
+  v1 shape required. See `src/detail/webserver_aliases.cpp:221`.
 
 **Related Findings:** task-036 #38, task-030 #18
 **Related Decisions:** DR-009, PRD-RSP-REQ-007

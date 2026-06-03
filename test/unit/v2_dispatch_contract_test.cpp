@@ -302,6 +302,24 @@ LT_BEGIN_AUTO_TEST(v2_dispatch_contract_suite, method_mismatch_still_resolves_ro
     LT_CHECK_EQ(probe.last_is_prefix.load(), false);
 LT_END_AUTO_TEST(method_mismatch_still_resolves_route)
 
+// Invariant 5 (miss-path safety net): an unregistered path returns 404.
+// If the dispatch path ever broke the miss-path (e.g. by always returning
+// a default route), invariants 1-4 would silently still pass because
+// they only test registered paths. This is the other side of the coin.
+LT_BEGIN_AUTO_TEST(v2_dispatch_contract_suite, unregistered_path_returns_404)
+    webserver ws{create_webserver(PORT)};
+
+    auto resource = std::make_shared<hello_resource>();
+    ws.register_path("/registered", resource);
+    ws.start(false);
+    wait_for_server_ready(PORT);
+
+    response_capture r = do_get("/not_registered_at_all");
+    ws.stop();
+
+    LT_CHECK_EQ(r.status, 404L);
+LT_END_AUTO_TEST(unregistered_path_returns_404)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

@@ -152,8 +152,7 @@ LT_BEGIN_AUTO_TEST(auth_handler_optional_signature_suite,
     webserver ws{create_webserver(PORT_2)
         .auth_handler([](const http_request&)
                           -> std::optional<http_response> {
-            return std::optional<http_response>(
-                http_response::string("blocked").with_status(401));
+            return http_response::string("blocked").with_status(401);
         })};
     simple_resource sr;
     ws.register_path("/protected", std::shared_ptr<http_resource>(&sr, [](http_resource*){}));
@@ -203,8 +202,7 @@ LT_BEGIN_AUTO_TEST(auth_handler_optional_signature_suite,
     webserver ws{create_webserver(PORT_4)
         .auth_handler([large_body](const http_request&)
                           -> std::optional<http_response> {
-            return std::optional<http_response>(
-                http_response::string(large_body).with_status(403));
+            return http_response::string(large_body).with_status(403);
         })};
     simple_resource sr;
     ws.register_path("/protected", std::shared_ptr<http_resource>(&sr, [](http_resource*){}));

@@ -87,7 +87,7 @@ namespace {
 //
 // Naming: no trailing underscore -- this is a file-scope free function in
 // an anonymous namespace, not a private member function. Matches the
-// naming convention of install_log_access_alias_ (which itself follows
+// naming convention of install_log_access_alias (which itself follows
 // the same pattern). (TASK-049 review findings #20/#22.)
 //
 // Also sets any_hooks_[handler_exception] so the gate is the single source
@@ -136,7 +136,7 @@ void append_sanitized(std::string& out, std::string_view sv) {
 // for the same reason as install_internal_error_alias_: keeping the host
 // function under the project CCN gate. See webserver_impl::log_access_alias_
 // for the lifetime contract.
-void install_log_access_alias_(
+void install_log_access_alias(
         detail::webserver_impl* impl,
         log_access_ptr user_logger) {
     if (user_logger == nullptr) return;
@@ -208,9 +208,16 @@ void webserver::install_default_alias_hooks_() {
                 [ws_ptr, impl_ptr](before_handler_ctx& ctx) -> hook_action {
                     if (ctx.request == nullptr) return hook_action::pass();
                     // Respect auth_skip_paths: skip auth for listed prefixes.
-                    std::string path(ctx.request->get_path());
-                    if (impl_ptr->should_skip_auth(path)) {
-                        return hook_action::pass();
+                    // Empty skip-list is the production-typical case — skip
+                    // the std::string allocation entirely when there is
+                    // nothing to compare against (TASK-054 review #21;
+                    // should_skip_auth's own empty-list early-out from
+                    // TASK-058 still fires for the non-empty path).
+                    if (!ws_ptr->auth_skip_paths_normalized.empty()) {
+                        std::string path(ctx.request->get_path());
+                        if (impl_ptr->should_skip_auth(path)) {
+                            return hook_action::pass();
+                        }
                     }
                     // Call the user-supplied auth_handler. TASK-054: the
                     // return type is std::optional<http_response>. nullopt
@@ -221,14 +228,12 @@ void webserver::install_default_alias_hooks_() {
                     // (one heap alloc removed per request that runs through
                     // this hook), and small responses ride the http_response
                     // SBO with zero further allocs.
-                    std::optional<http_response> auth_rejection_response =
-                        ws_ptr->auth_handler(*ctx.request);
-                    if (!auth_rejection_response.has_value()) {
+                    auto rejection = ws_ptr->auth_handler(*ctx.request);
+                    if (!rejection) {
                         return hook_action::pass();
                     }
                     // Auth failed: short-circuit with the rejection response.
-                    return hook_action::respond_with(
-                        std::move(*auth_rejection_response));
+                    return hook_action::respond_with(std::move(*rejection));
                 }))
             .detach();
     }
@@ -356,7 +361,7 @@ void webserver::install_default_alias_hooks_() {
     //
     // Format: '<path> METHOD: <method>' -- mirrors v1 access_log to keep
     // basic.cpp log_access_callback test passing without modification.
-    install_log_access_alias_(impl_.get(), log_access);
+    install_log_access_alias(impl_.get(), log_access);
 }
 
 }  // namespace httpserver

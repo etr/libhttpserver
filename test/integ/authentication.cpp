@@ -631,8 +631,7 @@ class simple_resource : public http_resource {
 // allows the request; an engaged optional short-circuits with the value).
 std::optional<http_response> centralized_auth_handler(const http_request& req) {
     if (req.get_user() != "admin" || req.get_pass() != "secret") {
-        return std::optional<http_response>(
-            http_response::unauthorized("Basic", "testrealm", "Unauthorized"));
+        return http_response::unauthorized("Basic", "testrealm", "Unauthorized");
     }
     return std::nullopt;  // Allow request
 }

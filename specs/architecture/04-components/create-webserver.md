@@ -17,8 +17,8 @@ shape remains available for one transitional build via the
 `[[deprecated]]` setter overload (`auth_handler(compat::auth_handler_v1_ptr)`),
 both of which wrap the legacy callable via `compat::adapt_legacy_auth`
 into the canonical `auth_handler_ptr` shape and emit a deprecation
-diagnostic at the call site. The compat alias and overload will be
-removed after the next release. Rationale: completes the
+diagnostic at the call site. The compat alias and overload are scheduled
+for removal in v2.1. Rationale: completes the
 PRD-RSP-REQ-007 value-typed response cutover (DR-009) onto the auth
 path, removing the per-authenticated-request control-block allocation.
 

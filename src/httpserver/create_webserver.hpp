@@ -150,7 +150,7 @@ inline auth_handler_ptr adapt_legacy_auth(
             -> std::optional<http_response> {
         std::shared_ptr<http_response> ptr = legacy(req);
         if (ptr == nullptr) return std::nullopt;
-        return std::optional<http_response>(std::move(*ptr));
+        return std::move(*ptr);
     };
 }
 

@@ -95,9 +95,7 @@ namespace detail {
 // route_resolved and before_handler firing sites landed.
 
 void webserver_impl::invalidate_route_cache() {
-    // Clear the v2 LRU cache. (The v1 dispatch cache — route_cache_list
-    // / route_cache_map / route_cache_mutex_ — was removed in TASK-053
-    // step 3 along with the v1 resolver.)
+    // Called by registration callers after any table mutation.
     route_lru_cache.clear();
 }
 
@@ -232,26 +230,20 @@ webserver_impl::lookup_v2(http_method method, const std::string& path) {
         }
     }  // table_lock released.
 
-    // Step 3: install into cache (cache mutex only). Copy result.entry and
-    // result.captured_params into the cache_value — the caller (the v2
-    // resolver) consumes `result` after this returns, so a move-out of
-    // `result.entry` here would leave the caller's `std::get_if` reading a
-    // moved-from variant (the shared_ptr arm is null after a move, causing
-    // a false-negative 404). The copy is one shared_ptr ref-count bump and
-    // one std::vector copy on the miss path — cache hits are unaffected.
+    // Step 3: install into cache. Copy (not move) — the caller consumes
+    // `result` after this returns, and a move would leave the shared_ptr
+    // variant arm null (false-negative 404).
     if (result.found) {
-        cache_value v;
-        v.entry = result.entry;
-        v.captured_params = result.captured_params;
-        route_lru_cache.insert(key, std::move(v));
+        route_lru_cache.insert(
+            key, cache_value{result.entry, result.captured_params});
     }
 
     return result;
 }
 
-}  // namespace detail
-
-namespace detail {
+// ----------------------------------------------------------------------
+// v2 lookup-backed resolver (TASK-053).
+// ----------------------------------------------------------------------
 
 // TASK-053: v2 lookup-backed resolver. Routes finalize_answer through
 // lookup_v2 (the 3-tier v2 table fronted by route_lru_cache) — the v1

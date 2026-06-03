@@ -9,8 +9,8 @@
 4. `http_response` is value-typed with exclusive ownership. Returning it transfers it.
 
 **Internal locks:**
-- `route_table_mutex` (`std::shared_mutex`) — registration vs lookup.
-- `route_cache_mutex` (`std::mutex`) — LRU cache promotion.
+- `route_table_mutex_` (`std::shared_mutex` on `webserver_impl`) — registration vs lookup.
+- `route_lru_cache`'s internal `std::mutex` (owned by `detail::route_cache`; not a named top-level field on `webserver_impl`) — LRU promotion.
 - `bans_mutex` (`std::shared_mutex`) — block list.
 - `mutexwait` / `mutexcond` (`pthread_mutex_t` / `pthread_cond_t`) — start/stop handshake (kept as POSIX primitives because MHD's start path expects them).
 

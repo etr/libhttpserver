@@ -16,24 +16,21 @@ cd build/test && ./routing_regression
 
 ## Why two surfaces
 
-Today, dispatch in `webserver_impl::finalize_answer` still walks the v1
-registration maps (`registered_resources_str`, `registered_resources`,
-`registered_resources_regex`). The v2 3-tier table (TASK-027) is
-**shadow-populated** by every `register_path` / `register_prefix` /
-`on_methods_` / `unregister_*` call but does not yet drive requests —
-that cutover is TASK-036.
+Dispatch in `webserver_impl::finalize_answer` is driven by the v2 3-tier
+table (TASK-027) — `resolve_resource_for_request` calls `lookup_v2()`
+exclusively after the **TASK-053** cutover (and supersedes the original
+TASK-036 plan). The v1 maps (`registered_resources_str`,
+`registered_resources`, `registered_resources_regex`) survive only as
+registration-time bookkeeping; they no longer participate in dispatch.
 
 So this gate protects two distinct surfaces:
 
-1. **End-to-end dispatch via v1 maps.** The full v1 routing corpus
-   continues to round-trip through curl in `test/integ/basic.cpp` plus
-   the new TASK-024/025/026 unit suites. These pass today and must
-   continue to pass.
-2. **v2 3-tier table semantics, ahead of TASK-036's dispatch cutover.**
-   `routing_regression_test.cpp` is the only thing pinning v2-lookup
-   correctness before dispatch flips. A failure here is a release
-   blocker even though no end-user request currently routes through
-   the v2 table.
+1. **End-to-end dispatch (now via the v2 3-tier table).** The full
+   routing corpus continues to round-trip through curl in
+   `test/integ/basic.cpp` plus the TASK-024/025/026 unit suites.
+2. **v2 3-tier table semantics.** `routing_regression_test.cpp` and
+   `v2_dispatch_contract_test.cpp` together pin v2-lookup correctness.
+   A failure in either is a release blocker.
 
 ## Pattern taxonomy
 
@@ -109,18 +106,19 @@ segment with name `id|([0-9]+)` and does NOT consult the constraint
 during the wildcard descent. So `/items/abc` and `/items/42` both
 resolve to the same radix entry today.
 
-**Why this is acceptable for the gate**: end-to-end dispatch is still
-served by v1 maps (TASK-036 has not landed), so user-visible 404
-behavior is unchanged. The v2 divergence is only visible to TASK-028's
-parity probes against `lookup_v2`. The pinned test
-(`parameterized_with_custom_regex_lands_in_radix_tier`) asserts the
-current v2 behavior so silent drift is impossible.
+**Current behaviour**: after the TASK-053 cutover, end-to-end dispatch
+goes through `lookup_v2`, so `/items/abc` now resolves to the radix
+entry (200) where v1 returned 404. Three tests in `basic.cpp`
+(`regex_matching_arg_custom` and friends) were updated to pin this
+post-cutover behaviour, and the unit-level pin
+`parameterized_with_custom_regex_lands_in_radix_tier` ensures silent
+drift is impossible.
 
-**Follow-up**: adding per-segment regex constraints to the radix tier
-is a discrete, scoped piece of work (PRD §3.7 retrieval semantics). It
-must land **before** TASK-036 cuts dispatch over to `lookup_v2`, or
-the cutover will introduce a user-visible regression. Tracked as
-follow-up scope on TASK-036.
+**Follow-up**: per-segment regex constraint enforcement inside the
+radix tier is the right shape for restoring v1 parity here, and is
+explicitly tracked in PRD §3.7 retrieval semantics. When that work
+lands, restore the affected `basic.cpp` tests to assert 404 + body
+"Not Found" and remove the regression-pin block in each.
 
 ### 4. Overlapping-routes precedence: v1 iteration-order accident → v2 deterministic structural precedence
 

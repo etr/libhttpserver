@@ -48,7 +48,11 @@
 #include <httpserver.hpp>
 
 // Returns std::nullopt to allow the request, or an engaged optional
-// carrying an http_response to reject it (TASK-054).
+// carrying an http_response to reject it (TASK-054). NOTE: a production
+// deployment should read AUTH_USER and AUTH_PASS once at startup and
+// stash them in immutable storage; calling std::getenv on every request
+// is not thread-safe with respect to concurrent setenv/putenv from
+// other threads in the same process.
 std::optional<httpserver::http_response> auth_handler(
         const httpserver::http_request& req) {
     const char* expected_user = std::getenv("AUTH_USER");
@@ -56,14 +60,12 @@ std::optional<httpserver::http_response> auth_handler(
     if (!expected_user || !expected_pass) {
         std::cerr << "centralized_authentication: AUTH_USER and AUTH_PASS "
                      "environment variables must be set.\n";
-        return std::optional<httpserver::http_response>(
-            httpserver::http_response::string("Server configuration error")
-                .with_status(500));
+        return httpserver::http_response::string("Server configuration error")
+            .with_status(500);
     }
     if (req.get_user() != expected_user || req.get_pass() != expected_pass) {
-        return std::optional<httpserver::http_response>(
-            httpserver::http_response::unauthorized(
-                "Basic", "MyRealm", "Unauthorized"));
+        return httpserver::http_response::unauthorized(
+            "Basic", "MyRealm", "Unauthorized");
     }
     return std::nullopt;
 }

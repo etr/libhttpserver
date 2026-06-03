@@ -178,9 +178,10 @@ and see the v2 replacement.
   (earlier v2 work-in-progress shipped
   `std::function<std::shared_ptr<http_response>(const http_request&)>`).
   Return `std::nullopt` to allow the request; return an `http_response`
-  to reject. The v1 `shared_ptr` shape still compiles for one
-  transitional build via `httpserver::compat::auth_handler_v1_ptr` and a
-  `[[deprecated]]` setter overload; both emit a deprecation warning.
+  to reject. The v1 `shared_ptr` shape still compiles via
+  `httpserver::compat::auth_handler_v1_ptr` and a `[[deprecated]]`
+  setter overload (both emit a deprecation warning); the compat alias
+  and overload are scheduled for removal in v2.1.
   Removes one heap allocation per authenticated request.
 - **`http_request` getters return `const&` / `string_view`.** v1's
   `get_header(name)` (and `get_arg`, `get_cookie`, `get_footer`) returned
