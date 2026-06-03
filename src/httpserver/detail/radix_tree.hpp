@@ -257,7 +257,6 @@ class radix_tree {
     }
 
  public:
-
     // TASK-056: probe for a terminus of the specified kind at the EXACT
     // node reached by tokenizing `path` (pattern-equality, not request-
     // path matching). Unlike find(), this does NOT fall back to a

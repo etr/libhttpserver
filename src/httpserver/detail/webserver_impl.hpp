@@ -426,6 +426,7 @@ class webserver_impl {
         }
         return phase_hook_count_handler_(p);
     }
+
  private:
     [[nodiscard]] std::size_t phase_hook_count_lifecycle_(
             ::httpserver::hook_phase p) const noexcept {
@@ -463,8 +464,8 @@ class webserver_impl {
             return 0;
         }
     }
- public:
 
+ public:
     // Dispatch helpers, start helpers, MHD trampolines, and the route /
     // upload sub-types live in a sibling header to keep this class
     // definition under the project per-file LOC ceiling. The inner gate
