@@ -19,14 +19,20 @@
    # valgrind lane stays green until the per-route firing path is
    # restructured to lock the resource via the daemon-owned slot
    # rather than mr->resource_weak_.
+   #
+   # Use wildcard patterns rather than mangled names: the libstdc++
+   # __shared_ptr<T, _Lock_policy> mangling varies by inline-namespace
+   # version (libstdc++-13 vs libstdc++-14), so the literal frame
+   # symbols are not stable across the matrix lanes.
    Memcheck:Addr8
-   fun:_ZNKSt12__shared_ptrIN10httpserver6detail19resource_hook_tableELN9__gnu_cxx12_Lock_policyE2EE3getEv
-   fun:_ZNK10httpserver13http_resource15hook_table_raw_Ev
-   fun:_ZN10httpserver6detailL15per_route_tableEPNS0_14modded_requestERSt10shared_ptrINS_13http_resourceEE
+   fun:*shared_ptr*get*
+   fun:*http_resource*hook_table_raw*
+   fun:*per_route_table*
 }
 {
    per_route_table_resource_lifetime_window_atomic_load
    Memcheck:Addr1
-   fun:_ZNKSt6atomicIbE4loadESt12memory_order
-   fun:_ZNK10httpserver6detail19resource_hook_table10any_hooksENS_10hook_phaseE
+   fun:*atomic*load*
+   fun:*resource_hook_table*any_hooks*
+   fun:*fire_request_completed_gated*
 }
