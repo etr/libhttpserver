@@ -26,6 +26,16 @@
 // through create_test_request::expose_credentials_in_logs() for unit
 // scope) restores the v1 verbose form for development.
 
+// HAVE_BAUTH (config.h via HAVE_CONFIG_H) gates the username / password
+// surfaces that operator<< streams. On HAVE_BAUTH-off builds (Windows
+// MSYS2 lane, flag-invariance-off lane) get_user() / get_pass() return
+// empty string_views by contract, so the user:"admin" / pass:"hunter2"
+// expectations below do not hold; the BAUTH-off build path is covered
+// by webserver_dauth_unavailable / webserver_features tests instead.
+#if defined(HAVE_CONFIG_H)
+#include <config.h>
+#endif
+
 #include <sstream>
 #include <string>
 
@@ -44,6 +54,7 @@ LT_BEGIN_SUITE(http_request_operator_stream_suite)
     }
 LT_END_SUITE(http_request_operator_stream_suite)
 
+#ifdef HAVE_BAUTH
 // TASK-057 — Acceptance: default-built http_request must redact
 // credentials when streamed via operator<<.
 LT_BEGIN_AUTO_TEST(http_request_operator_stream_suite, operator_stream_redacts_credentials)
@@ -125,6 +136,7 @@ LT_BEGIN_AUTO_TEST(http_request_operator_stream_suite, operator_stream_exposes_c
     // flag is set (lets a developer inspect verbatim wire payloads).
     LT_CHECK(out.find("<redacted>") == std::string::npos);
 LT_END_AUTO_TEST(operator_stream_exposes_credentials_when_opted_in)
+#endif  // HAVE_BAUTH
 
 // TASK-057 — Edge case: the no-credentials request still emits the
 // `pass:"<redacted>"` token (because the field is unconditional), but
