@@ -25,7 +25,7 @@ TASK-093).
 | ID | Name | Audit grade | Estimate | Status |
 |---|---|---|---|---|
 | TASK-060 | Scope or remove file-scoped `-Warray-bounds` suppressions | HIGH | S | Done |
-| TASK-061 | Mechanical cleanup sweep — unfinished prose, orphan comments, stale doc refs | HIGH | S | Backlog |
+| TASK-061 | Mechanical cleanup sweep — unfinished prose, orphan comments, stale doc refs | HIGH | S | Done |
 | TASK-062 | RFC-7616-compliant Digest auth response factory | HIGH | L | Backlog |
 | TASK-063 | Honor or remove `http_response::pipe` `size_hint` parameter | HIGH | S | Backlog |
 | TASK-064 | Structured cookie type | HIGH | M | Backlog |
