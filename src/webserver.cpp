@@ -499,11 +499,4 @@ hook_handle webserver::add_hook(hook_phase phase,
         impl_->hooks_connection_closed_, std::move(fn));
 }
 
-
-// dangling resource pointer after the maps drop their refs.
-// they are no longer reachable from the public API.
-
-
-
-
 }  // namespace httpserver
