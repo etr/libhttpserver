@@ -45,6 +45,7 @@ EXTRA_DIST = libhttpserver.pc.in $(DX_CONFIG) scripts/extract-release-notes.sh s
 	scripts/lib/resolve-prefix.sh \
 	scripts/check-complexity.sh scripts/check-duplication.sh \
 	scripts/check-file-size.sh \
+	scripts/check-warning-suppressions.sh \
 	scripts/verify-installed-examples.sh \
 	test/headers/consumer_direct.cpp test/headers/consumer_detail.cpp test/headers/consumer_detail_modded.cpp \
 	test/headers/consumer_umbrella.cpp \
@@ -463,7 +464,17 @@ lint-file-size:
 	@echo "=== lint-file-size: enforce per-file line-count ceiling ==="
 	@$(top_srcdir)/scripts/check-file-size.sh
 
-.PHONY: check-headers check-install-layout check-hygiene check-local check-examples check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck check-soversion check-parallel-install lint-complexity lint-duplication lint-file-size
+# TASK-060: file-scoped warning-suppression gate. Fails if any of the
+# watched library TUs (currently src/http_utils.cpp and
+# src/detail/ip_representation.cpp) regains a top-level
+# `#pragma GCC diagnostic ignored "-Warray-bounds"` that is not
+# bracketed by a push/pop pair. Not wired into `make check` — invoked
+# directly by CI's `lint` lane alongside the other lint-* gates.
+lint-warning-suppressions:
+	@echo "=== lint-warning-suppressions: forbid file-scoped GCC warning suppressions ==="
+	@$(top_srcdir)/scripts/check-warning-suppressions.sh
+
+.PHONY: check-headers check-install-layout check-hygiene check-local check-examples check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck check-soversion check-parallel-install lint-complexity lint-duplication lint-file-size lint-warning-suppressions
 
 # TASK-039: top-level convenience rule that descends into test/ to
 # build and run the bench binaries (see test/Makefile.am and

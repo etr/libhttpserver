@@ -50,14 +50,28 @@
 #include "httpserver/http_utils.hpp"
 #include "httpserver/string_utilities.hpp"
 
-// Local bit ops mirror the ones in http_utils.cpp; both TUs need them
-// and a shared header would be overkill for two one-line macros.
-#pragma GCC diagnostic ignored "-Warray-bounds"
-#define CHECK_BIT(var, pos) ((var) & (1 << (pos)))
-#define CLEAR_BIT(var, pos) ((var) &= ~(1 << (pos)))
-
 namespace httpserver {
 namespace http {
+
+namespace {
+
+// TASK-060: the pre-existing CHECK_BIT/CLEAR_BIT function-like macros
+// here drove a file-scoped `#pragma GCC diagnostic ignored
+// "-Warray-bounds"`. Replacing them with `constexpr` helpers that take
+// the bit index as `unsigned int` and force the shift through `1u`
+// silences the warning at the source (GCC's VRP no longer loses the
+// `[0, 15]` bound across a macro expansion site) and lets us drop the
+// suppression. `mask` is a `uint16_t`, so the bitwise-and-assign goes
+// through an explicit `static_cast<uint16_t>` to keep the destination
+// type visible.
+constexpr bool check_bit(uint16_t var, unsigned int pos) {
+    return (var & (1u << pos)) != 0;
+}
+constexpr void clear_bit(uint16_t& var, unsigned int pos) {
+    var = static_cast<uint16_t>(var & ~(1u << pos));
+}
+
+}  // namespace
 
 std::string get_ip_str(const struct sockaddr *sa) {
     if (!sa) throw std::invalid_argument("socket pointer is null");
@@ -124,7 +138,7 @@ void ip_representation::parse_ipv4(const std::string& ip) {
     }
     for (unsigned int i = 0; i < parts.size(); i++) {
         if (parts[i] == "*") {
-            CLEAR_BIT(mask, 12+i);
+            clear_bit(mask, static_cast<unsigned int>(12 + i));
             continue;
         }
         pieces[12+i] = strtol(parts[i].c_str(), nullptr, 10);
@@ -188,7 +202,7 @@ void ip_representation::parse_nested_ipv4(const std::vector<std::string>& parts,
     }
     for (unsigned int ii = 0; ii < subparts.size(); ii++) {
         if (subparts[ii] == "*") {
-            CLEAR_BIT(mask, y+ii);
+            clear_bit(mask, static_cast<unsigned int>(y + ii));
             continue;
         }
         pieces[y+ii] = strtol(subparts[ii].c_str(), nullptr, 10);
@@ -202,8 +216,8 @@ void ip_representation::apply_ipv6_part(std::vector<std::string>& parts, unsigne
                                         int& y, unsigned int omitted) {
     auto& part = parts[i];
     if (part == "*") {
-        CLEAR_BIT(mask, y);
-        CLEAR_BIT(mask, y+1);
+        clear_bit(mask, static_cast<unsigned int>(y));
+        clear_bit(mask, static_cast<unsigned int>(y + 1));
         y += 2;
         return;
     }
@@ -267,7 +281,8 @@ namespace {
 void accumulate_octet_score(const ip_representation& a,
                             const ip_representation& b, int i,
                             int64_t& a_score, int64_t& b_score) {
-    if (!(CHECK_BIT(a.mask, i) && CHECK_BIT(b.mask, i))) return;
+    if (!(check_bit(a.mask, static_cast<unsigned int>(i))
+          && check_bit(b.mask, static_cast<unsigned int>(i)))) return;
     // Cast the (16 - i) factor to int64_t before the multiply so the product
     // is computed in the destination type. Without the cast the multiplication
     // happens in int and only the result is widened, which CodeQL flags as a
