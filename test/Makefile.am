@@ -70,8 +70,9 @@ header_hygiene_iovec_SOURCES = unit/header_hygiene_iovec_test.cpp
 #   passed so <httpserver.hpp> resolves.
 # - LDADD is overridden to empty: this is a pure-compile assertion, the
 #   `int main(){}` body has no library dependencies.
-# Currently in XFAIL_TESTS (see below); flips to PASS when M5 lands and
-# the umbrella is free of backend-header leakage.
+# Now an unconditional PASS: TASK-020 landed and the <httpserver.hpp>
+# umbrella is free of backend-header leakage. See lines ~532-535 below
+# for the historical XFAIL_TESTS note.
 header_hygiene_SOURCES = unit/header_hygiene_test.cpp
 header_hygiene_CPPFLAGS = -I$(top_srcdir)/src $(CPPFLAGS)
 header_hygiene_LDADD =

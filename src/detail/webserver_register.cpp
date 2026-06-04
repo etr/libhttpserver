@@ -244,6 +244,12 @@ void webserver::register_resource(const std::string& resource,
     register_path(resource, std::move(res));
 }
 
+// TASK-024: erase a single registration of the requested kind (family).
+// Each kind keeps a distinct http_endpoint key (the family flag is part
+// of the endpoint's identity), so we must build the key with the right
+// flag or the erase silently misses. Caches are invalidated under the
+// registered_resources lock to prevent any thread from reading a
+// dangling resource pointer after the maps drop their refs.
 void webserver::unregister_impl_(const string& resource, bool family) {
     detail::http_endpoint he(resource, family, true, regex_checking);
 
@@ -346,5 +352,6 @@ void webserver::unregister_resource(const string& resource) {
 // collapsed to a single name pair operating on the deny list. The internal
 // allowances set and the allow-list branch in policy_callback remain in
 // place so default_policy(REJECT) keeps working at the daemon level, but
+// they are no longer reachable from the public API.
 
 }  // namespace httpserver

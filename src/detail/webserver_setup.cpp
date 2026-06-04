@@ -438,11 +438,6 @@ bool webserver::add_connection(int client_socket, const struct sockaddr* addr, u
                               static_cast<socklen_t>(addrlen)) == MHD_YES;
 }
 
-// TASK-024: erase a single registration of the requested kind (family).
-// Each kind keeps a distinct http_endpoint key (the family flag is part
-// of the endpoint's identity), so we must build the key with the right
-// flag or the erase silently misses. Caches are invalidated under the
-// registered_resources lock to prevent any thread from reading a
 void webserver::block_ip(std::string_view ip) {
     std::unique_lock bans_lock(impl_->bans_mutex);
     ip_representation t_ip{std::string{ip}};

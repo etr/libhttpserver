@@ -270,7 +270,6 @@ while IFS= read -r target; do
     case "$target" in
         http://*|https://*) continue ;;         # absolute URLs — not checked
         \#*)                continue ;;         # in-page anchors — not checked
-        RELEASE_NOTES.md)   continue ;;         # created by TASK-042, not yet present
     esac
     # Strip fragment identifiers (#section) before existence check to avoid
     # false failures when a link like [foo](examples/foo.cpp#line) is added.
