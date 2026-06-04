@@ -8,15 +8,14 @@
 # ignored "-Warray-bounds"` directives that sat at file scope and
 # silenced the warning for entire translation units. TASK-060 either
 # removes them or scopes them to a `push`/`pop` block; this gate makes
-# the regression visible by failing if any of the watched files grows a
-# new file-scoped suppression.
+# the regression visible by failing if any TU in src/ grows a new
+# file-scoped suppression.
 #
-# Watched files: kept narrow on purpose. Future tasks that fix
-# additional suppression sites should add their files to WATCHED_FILES
-# below; broadening the scan to all of src/ is a separate decision
-# (currently other TUs in src/ legitimately carry no such pragmas, so
-# the gate would still pass — but adding files here is the conscious,
-# auditable choice).
+# Watched files: all .cpp files under src/, discovered at runtime via
+# `find`. This is safe because at the time TASK-060 landed no TU in
+# src/ carried an unscoped -Warray-bounds pragma; the broad scan ensures
+# that future work which introduces new TUs is also guarded without
+# needing to remember to update a static list.
 #
 # Detection logic:
 #   1. Any `#pragma GCC diagnostic ignored "-Warray-bounds"` at the
@@ -29,6 +28,14 @@
 #   3. Any candidate that fails the push/pop bracketing check is
 #      reported and the script exits 1.
 #
+# Known limitation: the push/pop check uses "nearest push before" /
+# "nearest pop after" heuristics. An interleaved pattern such as
+# push@5, pop@8, pragma@10, pop@15 would be incorrectly allowed because
+# push_before=5 (non-zero) and pop_after=15 (non-zero). This shape is
+# not present in the codebase and is extremely unlikely in practice; if
+# the project ever adopts nested or interleaved push/pop patterns,
+# upgrade the detection to track bracket depth with a counter.
+#
 # Exit codes:
 #   0  no violations
 #   1  one or more watched files carries a file-scoped suppression
@@ -37,11 +44,13 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
-# Files watched by this gate. Narrow on purpose; see header comment.
-WATCHED_FILES=(
-    "src/http_utils.cpp"
-    "src/detail/ip_representation.cpp"
-)
+# Discover all .cpp files under src/ at runtime so new TUs are
+# automatically included without requiring a manual list update.
+# Use a while-read loop for bash 3.x / macOS compatibility (no mapfile).
+WATCHED_FILES=()
+while IFS= read -r f; do
+    WATCHED_FILES+=("$f")
+done < <(find src -name '*.cpp' | sort)
 
 echo "check-warning-suppressions: scanning ${#WATCHED_FILES[@]} file(s)"
 
@@ -56,19 +65,16 @@ for file in "${WATCHED_FILES[@]}"; do
     # Each line that begins with the warning-suppression pragma is a
     # candidate. We then verify it is bracketed by push/pop.
     while IFS=: read -r lineno _; do
-        # Search backward for the nearest `#pragma GCC diagnostic push`
-        # before this line, and forward for the nearest `pop` after.
-        push_before=$(awk -v target="$lineno" '
+        # Single-pass awk: find the nearest push before and pop after
+        # the candidate line in one read of the file.
+        read -r push_before pop_after < <(awk -v target="$lineno" '
             /^#pragma[[:space:]]+GCC[[:space:]]+diagnostic[[:space:]]+push/ {
-                if (NR < target) last = NR
+                if (NR < target) last_push = NR
             }
-            END { print (last ? last : 0) }
-        ' "$file")
-        pop_after=$(awk -v target="$lineno" '
             /^#pragma[[:space:]]+GCC[[:space:]]+diagnostic[[:space:]]+pop/ {
-                if (NR > target && first == 0) first = NR
+                if (NR > target && first_pop == 0) first_pop = NR
             }
-            END { print (first ? first : 0) }
+            END { print (last_push ? last_push : 0), (first_pop ? first_pop : 0) }
         ' "$file")
 
         if [ "$push_before" = "0" ] || [ "$pop_after" = "0" ]; then
