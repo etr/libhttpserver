@@ -10,6 +10,7 @@ Clear the mechanical leftovers flagged in the audit's "Proposed disposition (nex
 **Action Items:**
 - [x] Finish the truncated comment at `src/detail/webserver_register.cpp:344-349`. The TASK-029 block comment ends mid-sentence (`"…keeps working at the daemon level, but"` then closing brace). Either complete the sentence with the original intent (reconstruct from git history or surrounding code) or rewrite the comment to stand on its own.
 - [x] Remove the two orphan comment fragments at `src/webserver.cpp:503-504` (leftover from removed logic).
+- [x] Move the orphaned/truncated TASK-024 comment head from `src/detail/webserver_setup.cpp:441-445` (currently sits above the unrelated `block_ip`) to its correct home as a prologue above `webserver::unregister_impl_` in `src/detail/webserver_register.cpp:247`, restoring the full original sentence ending `"…dangling resource pointer after the maps drop their refs."` reconstructed from commit `ec82d90`. (Same split-artifact class as the items above; surfaced during TASK-061 planning, in scope per planning decision.)
 - [x] Update the stale `XFAIL_TESTS` comment block at `test/Makefile.am:67-74` to reflect that `header_hygiene` was removed when TASK-020 landed (cross-referenced at lines 532-535 in the same file).
 - [x] Drop the stale `RELEASE_NOTES.md) continue ;;  # created by TASK-042, not yet present` line at `scripts/check-readme.sh:273` — TASK-042 has shipped.
 - [ ] Remove the decade-old `//TODO: personalized messages` at `test/littletest.hpp:21` only if we have a fork policy that lets us; otherwise leave (it's vendored).
@@ -21,6 +22,8 @@ Clear the mechanical leftovers flagged in the audit's "Proposed disposition (nex
 **Acceptance Criteria:**
 - `git diff master..HEAD -- src/detail/webserver_register.cpp` shows a complete, well-formed comment.
 - `src/webserver.cpp:503-504` no longer contains orphan comment fragments.
+- `src/detail/webserver_setup.cpp:441-445` no longer carries the TASK-024 comment head above `block_ip`.
+- `src/detail/webserver_register.cpp` shows the full TASK-024 prologue (ending `"…dangling resource pointer after the maps drop their refs."`) immediately above `webserver::unregister_impl_`.
 - `test/Makefile.am:67-74` no longer claims `header_hygiene` is in `XFAIL_TESTS`.
 - `scripts/check-readme.sh:273` no longer carries the "created by TASK-042, not yet present" line.
 - `make check` still green.
