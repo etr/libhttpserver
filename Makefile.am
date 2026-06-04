@@ -45,6 +45,7 @@ EXTRA_DIST = libhttpserver.pc.in $(DX_CONFIG) scripts/extract-release-notes.sh s
 	scripts/lib/resolve-prefix.sh \
 	scripts/check-complexity.sh scripts/check-duplication.sh \
 	scripts/check-file-size.sh \
+	scripts/check-warning-suppressions.sh \
 	scripts/verify-installed-examples.sh \
 	test/headers/consumer_direct.cpp test/headers/consumer_detail.cpp test/headers/consumer_detail_modded.cpp \
 	test/headers/consumer_umbrella.cpp \
@@ -357,7 +358,7 @@ check-hygiene:
 
 # check-local runs the following static (no-install) checks first:
 #   check-headers, check-examples, check-readme, check-release-notes,
-#   check-doxygen, check-hooks-doc-spotcheck
+#   check-doxygen, check-hooks-doc-spotcheck, lint-warning-suppressions
 # Then runs check-install-layout and check-hygiene against a single shared
 # staged install to avoid paying two full `make install` costs on every
 # `make check`. Both install-backed sub-checks can still be invoked standalone
@@ -367,7 +368,7 @@ check-hygiene:
 # staged the install; sub-check skips the install step to avoid double cost.
 # This knob is set only by check-local; do not set it when invoking sub-checks
 # standalone.
-check-local: check-headers check-examples check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck
+check-local: check-headers check-examples check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck lint-warning-suppressions
 	@echo "=== Shared staged install for check-install-layout and check-hygiene ==="
 	@rm -rf "$(abs_top_builddir)/.shared-check-stage"
 	@$(MAKE) $(AM_MAKEFLAGS) install DESTDIR="$(abs_top_builddir)/.shared-check-stage" >check-shared-install.log 2>&1 || { \
@@ -463,7 +464,17 @@ lint-file-size:
 	@echo "=== lint-file-size: enforce per-file line-count ceiling ==="
 	@$(top_srcdir)/scripts/check-file-size.sh
 
-.PHONY: check-headers check-install-layout check-hygiene check-local check-examples check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck check-soversion check-parallel-install lint-complexity lint-duplication lint-file-size
+# TASK-060: file-scoped warning-suppression gate. Fails if any .cpp
+# file under src/ carries a top-level `#pragma GCC diagnostic ignored
+# "-Warray-bounds"` that is not bracketed by a push/pop pair. Wired
+# into `make check` via check-local (requires only bash/awk/grep, so
+# runs in every CI lane and local developer builds without needing
+# external tools). Also invoked directly by CI's `lint` lane.
+lint-warning-suppressions:
+	@echo "=== lint-warning-suppressions: forbid file-scoped GCC warning suppressions ==="
+	@$(top_srcdir)/scripts/check-warning-suppressions.sh
+
+.PHONY: check-headers check-install-layout check-hygiene check-local check-examples check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck check-soversion check-parallel-install lint-complexity lint-duplication lint-file-size lint-warning-suppressions
 
 # TASK-039: top-level convenience rule that descends into test/ to
 # build and run the bench binaries (see test/Makefile.am and

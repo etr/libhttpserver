@@ -728,6 +728,14 @@ jobs:
       run: ./scripts/check-file-size.sh
       if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
 
+    - name: Run warning-suppression gate
+      # TASK-060: forbid file-scoped `#pragma GCC diagnostic ignored
+      # "-Warray-bounds"` (and any future broadened list) on the watched
+      # library TUs. A regression here would silently turn the warning
+      # off TU-wide.
+      run: ./scripts/check-warning-suppressions.sh
+      if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
+
     - name: Run libhttpserver configure
       # TASK-038: fixed CXXLAGS -> CXXFLAGS typo so C++ TUs are instrumented by the sanitizer matrix.
       run: |

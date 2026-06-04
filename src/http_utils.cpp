@@ -59,11 +59,6 @@
 #include "httpserver/constants.hpp"
 #include "httpserver/string_utilities.hpp"
 
-#pragma GCC diagnostic ignored "-Warray-bounds"
-#define CHECK_BIT(var, pos) ((var) & (1 << (pos)))
-#define SET_BIT(var, pos) ((var) |= 1 << (pos))
-#define CLEAR_BIT(var, pos) ((var) &= ~(1 << (pos)))
-
 #if defined (__CYGWIN__)
 
 #if !defined (NI_MAXHOST)
