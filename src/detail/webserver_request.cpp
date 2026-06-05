@@ -329,6 +329,91 @@ struct MHD_Response* webserver_impl::get_raw_response_with_fallback(detail::modd
 // to keep this TU under the FILE_LOC_MAX gate after adding the
 // after_handler / response_sent firing sites.
 
+// TASK-062: kind-dispatched queueing.
+//
+// For `body_kind::digest_challenge`, delegate to
+// MHD_queue_auth_required_response3 so libmicrohttpd writes the
+// authoritative RFC-7616 WWW-Authenticate header with its
+// HMAC-keyed nonce, our opaque, and the requested
+// algorithm/qop/charset/userhash bits. For every other body kind,
+// queue the response through the standard MHD_queue_response path.
+// Returning `int` matches the legacy MHD_queue_response signature on
+// older MHD versions (the MHD_Result alias upcast happens at the
+// call site).
+//
+// The digest mapping (algorithm enum -> MHD bitfield, opaque
+// substitution, domain optional-NULL handling) is factored into the
+// `map_to_mhd_digest_args_` anonymous-namespace helper so the
+// member-function dispatcher stays under the CCN ceiling. That helper
+// only handles fields visible through `const params&`, which is safe
+// to expose because get_params() is public.
+#ifdef HAVE_DAUTH
+namespace {
+struct mhd_digest_args {
+    MHD_DigestAuthMultiAlgo3 algo;
+    MHD_DigestAuthMultiQOP qop;
+    const char* opaque_cstr;
+    const char* domain_cstr;
+};
+
+mhd_digest_args map_to_mhd_digest_args_(
+        const detail::digest_challenge_body::params& p,
+        const std::string& server_opaque) {
+    MHD_DigestAuthMultiAlgo3 algo;
+    switch (p.algorithm) {
+        case http::http_utils::digest_algorithm::SHA256:
+            algo = MHD_DIGEST_AUTH_MULT_ALGO3_SHA256;
+            break;
+        case http::http_utils::digest_algorithm::SHA512_256:
+            algo = MHD_DIGEST_AUTH_MULT_ALGO3_SHA512_256;
+            break;
+        case http::http_utils::digest_algorithm::MD5:
+        default:
+            algo = MHD_DIGEST_AUTH_MULT_ALGO3_MD5;
+            break;
+    }
+    // qop="auth" is the only v2.0-supported variant; auth-int is parked
+    // (TASK-062 plan §7). qop_auth == false -> RFC-2069 no-qop.
+    MHD_DigestAuthMultiQOP qop = p.qop_auth
+        ? MHD_DIGEST_AUTH_MULT_QOP_AUTH
+        : MHD_DIGEST_AUTH_MULT_QOP_NONE;
+    // Empty user opaque -> substitute per-webserver opaque (plan §2.4).
+    const char* opaque_cstr =
+        p.opaque.empty() ? server_opaque.c_str() : p.opaque.c_str();
+    const char* domain_cstr =
+        p.domain.empty() ? nullptr : p.domain.c_str();
+    return {algo, qop, opaque_cstr, domain_cstr};
+}
+}  // namespace
+#endif  // HAVE_DAUTH
+
+int webserver_impl::queue_response_dispatching_kind(
+        MHD_Connection* connection,
+        detail::modded_request* mr,
+        MHD_Response* raw_response) {
+#ifdef HAVE_DAUTH
+    if (mr->response->kind() == body_kind::digest_challenge) {
+        auto* dch = static_cast<detail::digest_challenge_body*>(
+            mr->response->body_);
+        const auto& p = dch->get_params();
+        auto args = map_to_mhd_digest_args_(p, digest_opaque_);
+        return static_cast<int>(MHD_queue_auth_required_response3(
+            connection,
+            p.realm.c_str(),
+            args.opaque_cstr,
+            args.domain_cstr,
+            raw_response,
+            p.signal_stale ? MHD_YES : MHD_NO,
+            args.qop,
+            args.algo,
+            p.userhash_support ? MHD_YES : MHD_NO,
+            p.prefer_utf8 ? MHD_YES : MHD_NO));
+    }
+#endif  // HAVE_DAUTH
+    return static_cast<int>(MHD_queue_response(
+        connection, mr->response->get_status(), raw_response));
+}
+
 MHD_Result webserver_impl::materialize_and_queue_response(MHD_Connection* connection,
                                                           detail::modded_request* mr) {
     struct MHD_Response* raw_response = get_raw_response_with_fallback(mr);
@@ -354,7 +439,7 @@ MHD_Result webserver_impl::materialize_and_queue_response(MHD_Connection* connec
         }
     }
     decorate_mhd_response(raw_response, *mr->response);
-    int to_ret = MHD_queue_response(connection, mr->response->get_status(), raw_response);
+    int to_ret = queue_response_dispatching_kind(connection, mr, raw_response);
     // TASK-050: fire response_sent AFTER MHD_queue_response (so the
     // status/bytes ctx fields reflect what was actually queued) and
     // BEFORE MHD_destroy_response (so ctx.response is backed by live

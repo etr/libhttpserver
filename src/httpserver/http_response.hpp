@@ -56,6 +56,44 @@ class webserver;
 namespace detail { class webserver_impl; }
 
 /**
+ * RFC-7616 Digest auth challenge parameters (TASK-062).
+ *
+ * Passed by value to `http_response::unauthorized(digest_challenge)`,
+ * which produces a `body_kind::digest_challenge` response. The dispatch
+ * path branches on that body kind and routes through
+ * libmicrohttpd's `MHD_queue_auth_required_response3` so the
+ * authoritative `WWW-Authenticate: Digest ...` challenge with
+ * nonce/opaque/algorithm/qop is written into the wire response.
+ *
+ * Field defaults mirror the RFC 7616 §3.3 "minimal challenge"
+ * recommendations:
+ *   * `algorithm = MD5` — the only RFC 7616 baseline algorithm;
+ *     `SHA256` and `SHA512_256` are RFC-compliant alternatives.
+ *   * `qop_auth = true` — RFC 7616 mandates `qop` on every challenge
+ *     except in strict RFC-2069 backward-compat mode.
+ *   * `prefer_utf8 = true` — `charset=UTF-8` advisory per §3.3.
+ *
+ * `opaque` left empty -> the dispatch path substitutes a per-server
+ * random hex string seeded once at startup.
+ *
+ * Empty `domain` -> RFC 7616 default (challenge applies to the entire
+ * origin).
+ */
+struct digest_challenge {
+    std::string realm;
+    std::string opaque       = {};        // empty -> server-substituted
+    std::string domain       = {};        // optional space-separated URIs
+    http::http_utils::digest_algorithm algorithm
+                             = http::http_utils::digest_algorithm::MD5;
+    bool qop_auth            = true;      // qop="auth"
+    bool qop_auth_int        = false;     // qop="auth-int" not in v2 scope
+    bool signal_stale        = false;     // set on a stale-nonce re-challenge
+    bool userhash_support    = false;     // RFC 7616 §3.4.4
+    bool prefer_utf8         = true;      // charset=UTF-8
+    std::string body         = {};        // "access denied" body
+};
+
+/**
  * Class representing an abstraction for an Http Response. It is used from classes using these apis to send information through http protocol.
 **/
 // PRD-HDR-REQ-004 exemption (DR-003a): http_response is the v2 sealed
@@ -181,23 +219,59 @@ class http_response final {
      /// header of the form `<scheme> realm="<realm>"`. Replaces v1's
      /// basic_auth_fail_response and digest_auth_fail_response.
      ///
-     /// @warning **Digest scheme produces a non-RFC-compliant stub.**
-     /// When `scheme == "Digest"` this factory emits only a static
-     /// `WWW-Authenticate: Digest realm="<realm>"` challenge — it does
-     /// NOT set `nonce`, `opaque`, `algorithm`, or `qop`, which RFC 7616
-     /// §3.3 requires in every 401 Digest challenge.  The response
-     /// provides *no replay protection* and will be rejected outright by
-     /// strict RFC 7616 parsers.  This is because the Digest handshake
-     /// requires per-connection nonce state managed by libmicrohttpd
-     /// internally (the v1 `MHD_queue_auth_required_response3` path),
-     /// which is incompatible with libhttpserver's value-typed response
-     /// model (DR-013).  Callers needing fully RFC-compliant Digest auth
-     /// must call the MHD APIs directly.  Use `"Basic"` if a compliant
-     /// challenge is required.
+     /// Use this overload for `"Basic"` and for RFC-2069-compatible
+     /// static `Digest realm="..."` challenges.  For full RFC 7616 §3.3
+     /// Digest challenges with `nonce`, `opaque`, `algorithm`, and `qop`
+     /// parameters — required by strict RFC-7616 parsers — use the
+     /// `unauthorized(digest_challenge)` overload below.  The dispatch
+     /// path detects a `body_kind::digest_challenge` body and routes
+     /// through libmicrohttpd's `MHD_queue_auth_required_response3`,
+     /// driving the per-connection nonce state machine.  See RFC 7616
+     /// §3.3 (challenge format), §3.4 (Authorization validation), and
+     /// §5.10 (security considerations).
+     ///
+     /// @see digest_challenge
      [[nodiscard]] static http_response unauthorized(
          std::string_view scheme,
          std::string_view realm,
          std::string body = {});
+
+#ifdef HAVE_DAUTH
+     /// Construct an RFC 7616 §3.3 Digest 401 Unauthorized response
+     /// (TASK-062).
+     ///
+     /// The returned response carries a `body_kind::digest_challenge`
+     /// body that the webserver dispatch path recognises: instead of
+     /// `MHD_queue_response`, the dispatch site invokes
+     /// `MHD_queue_auth_required_response3` (libmicrohttpd >= 0x00097701)
+     /// with the parameters carried on the body.  libmicrohttpd then
+     /// writes the authoritative `WWW-Authenticate: Digest ...`
+     /// challenge with `nonce`, `opaque`, `algorithm`, `qop`, and
+     /// (optionally) `charset=UTF-8` / `userhash=true`.
+     ///
+     /// The nonce is generated and replay-tracked by libmicrohttpd
+     /// itself, HMAC-keyed by `create_webserver().digest_auth_random`
+     /// and replay-windowed by `create_webserver().nonce_nc_size`.
+     /// libhttpserver does not implement its own nonce store, in line
+     /// with the "MHD's MD5/SHA-256 helpers remain the underlying
+     /// primitive" architectural constraint.
+     ///
+     /// The `opaque` field is optional — when left empty, the dispatch
+     /// path substitutes a per-webserver-instance random hex string
+     /// generated once at startup.
+     ///
+     /// Header-injection guards: `realm`, `opaque`, `domain`, and `body`
+     /// are rejected with `std::invalid_argument` if they contain CR,
+     /// LF, or NUL (CWE-113).
+     ///
+     /// Only declared when libmicrohttpd Digest support is compiled in
+     /// (`HAVE_DAUTH`); the build-time gate matches the gate on
+     /// `http_request::check_digest_auth(...)`.
+     ///
+     /// @see http_response::unauthorized(std::string_view,std::string_view,std::string)
+     [[nodiscard]] static http_response unauthorized(
+         digest_challenge challenge);
+#endif  // HAVE_DAUTH
 
      // -----------------------------------------------------------------
      // Read accessors (TASK-011, PRD-RSP-REQ-002 / PRD-RSP-REQ-003).

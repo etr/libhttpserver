@@ -94,19 +94,35 @@ class user_pass_resource : public http_resource {
 #endif  // HAVE_BAUTH
 
 #ifdef HAVE_DAUTH
+// TASK-062: digest_resource now drives the full RFC-7616 nonce/opaque
+// handshake by emitting digest_challenge_body challenges. The first
+// request from a curl --digest client arrives with no Authorization
+// header (get_digested_user() empty), so we emit the initial RFC-7616
+// challenge with nonce/opaque/algorithm/qop populated by the dispatch
+// path; on the second request, curl recomputes the response using the
+// challenge, and check_digest_auth() validates and returns OK.
 class digest_resource : public http_resource {
  public:
      http_response render_get(const http_request& req) {
          using httpserver::http::http_utils;
+         using httpserver::digest_challenge;
          if (req.get_digested_user() == "") {
-             return http_response::unauthorized("Digest", "examplerealm", "FAIL");
-         } else {
-             auto result = req.check_digest_auth("examplerealm", "mypass", 300, 0, http_utils::digest_algorithm::MD5);
-             if (result == http_utils::digest_auth_result::NONCE_STALE) {
-                 return http_response::unauthorized("Digest", "examplerealm", "FAIL");
-             } else if (result != http_utils::digest_auth_result::OK) {
-                 return http_response::unauthorized("Digest", "examplerealm", "FAIL");
-             }
+             return http_response::unauthorized(
+                 digest_challenge{.realm = "examplerealm",
+                                  .body  = "FAIL"});
+         }
+         auto result = req.check_digest_auth("examplerealm", "mypass", 300,
+                                             0, http_utils::digest_algorithm::MD5);
+         if (result == http_utils::digest_auth_result::NONCE_STALE) {
+             return http_response::unauthorized(
+                 digest_challenge{.realm        = "examplerealm",
+                                  .signal_stale = true,
+                                  .body         = "FAIL"});
+         }
+         if (result != http_utils::digest_auth_result::OK) {
+             return http_response::unauthorized(
+                 digest_challenge{.realm = "examplerealm",
+                                  .body  = "FAIL"});
          }
          return http_response::string("SUCCESS");
      }
@@ -278,11 +294,12 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth)
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-    // v2 contract: the server issues a static 401 Digest challenge; the
-    // handshake cannot complete (no nonce/opaque state machine), so the
-    // body remains FAIL and the status must be 401.
-    LT_CHECK_EQ(http_code, 401);
-    LT_CHECK_EQ(s, "FAIL");
+    // TASK-062 contract: the server now emits a full RFC-7616 §3.3
+    // challenge with nonce/opaque/algorithm/qop via
+    // MHD_queue_auth_required_response3, so curl --digest can complete
+    // the handshake. Final response on round 2 is 200 SUCCESS.
+    LT_CHECK_EQ(http_code, 200);
+    LT_CHECK_EQ(s, "SUCCESS");
     curl_easy_cleanup(curl);
 
     ws.stop();

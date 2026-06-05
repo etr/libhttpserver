@@ -483,4 +483,56 @@ http_response http_response::unauthorized(std::string_view scheme,
     return r;
 }
 
+#ifdef HAVE_DAUTH
+// TASK-062: RFC 7616 §3.3-compliant Digest challenge factory.
+//
+// Validates the user-supplied fields for header-injection control
+// characters (CR/LF/NUL) and packs the parameters into a
+// detail::digest_challenge_body. No `WWW-Authenticate` header is added
+// at the response-value layer; the dispatch path (TASK-062 branch in
+// materialize_and_queue_response) calls
+// MHD_queue_auth_required_response3 to attach the authoritative
+// challenge with nonce/opaque/algorithm/qop/charset/userhash bits.
+//
+// Empty opaque is preserved: the dispatch path substitutes
+// webserver_impl::digest_opaque_ at queue time, so the factory remains
+// side-effect-free (no webserver reference required).
+http_response http_response::unauthorized(digest_challenge challenge) {
+    // Same forbidden-character set as validate_http_field above.
+    auto reject_ctrl_chars = [](std::string_view field,
+                                std::string_view value) {
+        if (value.find_first_of(kForbiddenFieldChars) !=
+                std::string_view::npos) {
+            throw std::invalid_argument(
+                std::string("http_response::unauthorized(digest_challenge): ") +
+                std::string(field) +
+                " contains forbidden control character (CR, LF, or NUL)");
+        }
+    };
+    reject_ctrl_chars("realm",  challenge.realm);
+    reject_ctrl_chars("opaque", challenge.opaque);
+    reject_ctrl_chars("domain", challenge.domain);
+    reject_ctrl_chars("body",   challenge.body);
+
+    detail::digest_challenge_body::params p{
+        /*realm=*/        std::move(challenge.realm),
+        /*opaque=*/       std::move(challenge.opaque),
+        /*domain=*/       std::move(challenge.domain),
+        /*body_text=*/    std::move(challenge.body),
+        /*algorithm=*/    challenge.algorithm,
+        /*qop_auth=*/     challenge.qop_auth,
+        /*qop_auth_int=*/ challenge.qop_auth_int,
+        /*signal_stale=*/ challenge.signal_stale,
+        /*userhash_support=*/ challenge.userhash_support,
+        /*prefer_utf8=*/  challenge.prefer_utf8,
+    };
+
+    http_response r;
+    r.status_code_ = http::http_utils::http_unauthorized;        // 401
+    r.emplace_body<detail::digest_challenge_body>(
+        body_kind::digest_challenge, std::move(p));
+    return r;
+}
+#endif  // HAVE_DAUTH
+
 }  // namespace httpserver

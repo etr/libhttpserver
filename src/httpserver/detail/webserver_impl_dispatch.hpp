@@ -339,6 +339,21 @@ std::string serialize_allow_methods(method_set allowed) const;
 MHD_Result materialize_and_queue_response(MHD_Connection* connection,
                                           modded_request* mr);
 
+// TASK-062: kind-dispatched MHD queue entry-point.  For
+// body_kind::digest_challenge, branches into the auth-required
+// queueing API (MHD_queue_auth_required_response3) so libmicrohttpd
+// writes the authoritative RFC-7616 WWW-Authenticate header with our
+// opaque, libmicrohttpd's HMAC-keyed nonce, and the user-supplied
+// algorithm/qop bits.  Every other body kind goes through the
+// standard MHD_queue_response path.
+//
+// Returns the raw MHD status (int rather than MHD_Result so the
+// MHD_Result alias upcast happens at the call site, matching the
+// existing materialize_and_queue_response shape).
+int queue_response_dispatching_kind(MHD_Connection* connection,
+                                    modded_request* mr,
+                                    MHD_Response* raw_response);
+
 // Helpers carved out of webserver::on_methods_ to stay under the
 // cyclomatic-complexity bar. The orchestrator on_methods_ retains
 // input validation and the public ordering; everything that
