@@ -263,14 +263,15 @@ void webserver_impl::decorate_mhd_response(MHD_Response* response,
     for (const auto& [k, v] : resp.get_footers()) {
         MHD_add_response_footer(response, k.c_str(), v.c_str());
     }
-    for (const auto& [k, v] : resp.get_cookies()) {
-        // Use reserve+append to avoid two heap allocations per cookie
-        // that `k + "=" + v` would cause (performance-reviewer finding #19).
-        std::string cookie_hdr;
-        cookie_hdr.reserve(k.size() + 1 + v.size());
-        cookie_hdr = k;
-        cookie_hdr += '=';
-        cookie_hdr += v;
+    // TASK-064: render from the structured cookie list, not from the
+    // legacy `cookies_` map. Each entry is rendered via
+    // cookie::to_set_cookie_header() so attributes (Domain, Path,
+    // Expires, Max-Age, Secure, HttpOnly, SameSite) propagate to the
+    // wire per RFC 6265 §4.1. The legacy `cookies_` mirror is no
+    // longer a render source -- it survives only to back the
+    // deprecated `get_cookie`/`get_cookies` accessors.
+    for (const auto& c : resp.get_cookies_parsed()) {
+        const std::string cookie_hdr = c.to_set_cookie_header();
         MHD_add_response_header(response, "Set-Cookie", cookie_hdr.c_str());
     }
 }

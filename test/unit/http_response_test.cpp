@@ -27,6 +27,16 @@
 #include "./littletest.hpp"
 #include "./httpserver.hpp"
 
+// TASK-064: this TU intentionally exercises the deprecated string-blob
+// cookie surface (`with_cookie(string, string)`, `get_cookie(...)`,
+// `get_cookies()`). Suppress the [[deprecated]] diagnostic for the
+// whole file -- the legacy path still works through a thin
+// forwarder, and the tests must keep passing during the v2.0
+// transitional release. The structured-overload behaviour is pinned
+// by cookie_render_test, cookie_header_sentinel_test, and the
+// http_response_cookie_wire_test added in TASK-064.
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
 using std::string;
 using httpserver::http_response;
 

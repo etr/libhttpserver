@@ -339,6 +339,47 @@ void http_request_impl::ensure_path_pieces_cached(std::string_view path) const {
     path_pieces_cache_built_ = true;
 }
 
+void http_request_impl::ensure_cookies_parsed_cached() const {
+    if (cookies_parsed_cache_built_) {
+        return;
+    }
+    // Test-request path: walk the local owning storage and synthesize
+    // a structured cookie per entry. Attributes are left default --
+    // request-side cookies carry name+value only per RFC 6265 §5.4.
+    if (connection_ == nullptr) {
+        cookies_parsed_cached_.reserve(cookies_local.size());
+        for (const auto& [k, v] : cookies_local) {
+            // Bypass cookie::with_*'s strict validators: the test
+            // builder writes arbitrary user-controlled bytes (the
+            // common case is fine, but the validators reject ';' / '='
+            // / whitespace in names which the v1 test API permitted).
+            // We populate via the static `parse_cookie_header` so the
+            // outer parser path is the single source of truth -- but
+            // for the test-request fallback we just assemble entries
+            // directly via a small helper to avoid round-tripping
+            // through a wire-formatted string.
+            auto parsed = cookie::parse_cookie_header(k + std::string("=") + v);
+            if (!parsed.empty()) {
+                cookies_parsed_cached_.push_back(std::move(parsed.front()));
+            }
+        }
+        cookies_parsed_cache_built_ = true;
+        return;
+    }
+
+    // Live-request path: read the raw `Cookie:` header from MHD and
+    // hand it to cookie::parse_cookie_header. Going through the
+    // dedicated parser (rather than walking MHD_COOKIE_KIND) means
+    // browsers' quoted-value, byte-transparent, and skip-malformed
+    // semantics all live in one tested code path.
+    const char* raw = MHD_lookup_connection_value(
+        connection_, MHD_HEADER_KIND, "Cookie");
+    if (raw != nullptr) {
+        cookies_parsed_cached_ = cookie::parse_cookie_header(raw);
+    }
+    cookies_parsed_cache_built_ = true;
+}
+
 namespace {
 
 // Type alias to avoid repeating the verbose map type in every helper

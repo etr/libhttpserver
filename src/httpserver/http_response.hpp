@@ -35,7 +35,9 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 #include "httpserver/body_kind.hpp"
+#include "httpserver/cookie.hpp"
 #include "httpserver/http_arg_value.hpp"
 #include "httpserver/http_utils.hpp"
 #include "httpserver/iovec_entry.hpp"
@@ -310,6 +312,11 @@ class http_response final {
 
      /// Returns the value of cookie `key`, or an empty view if absent.
      /// Does NOT insert on miss. View lifetime: see lifetime contract.
+     ///
+     /// TASK-064: deprecated in v2.0. Use `get_cookies_parsed()` to walk
+     /// the structured cookie vector instead. Will be removed in v2.1.
+     [[deprecated("TASK-064: use get_cookies_parsed() (returns const "
+                  "std::vector<httpserver::cookie>&). Removed in v2.1.")]]
      [[nodiscard]] std::string_view get_cookie(std::string_view key) const;
 
      /**
@@ -329,11 +336,36 @@ class http_response final {
      }
 
      /**
-      * Method used to get all response cookies.
-      * @return a map<string,string> containing all cookies.
+      * Method used to get all response cookies (legacy string-blob view).
+      *
+      * TASK-064: deprecated. The map is a `name -> value` mirror that the
+      * dispatch path NO LONGER uses for wire rendering. Use
+      * `get_cookies_parsed()` for the authoritative structured view.
+      * Will be removed in v2.1.
+      *
+      * @return a map<string,string> containing all cookies' name/value
+      *         mirrors. Attribute data (Path, Secure, etc.) is NOT
+      *         reflected here -- use `get_cookies_parsed()` for that.
      **/
+     [[deprecated("TASK-064: use get_cookies_parsed() (returns const "
+                  "std::vector<httpserver::cookie>&). Removed in v2.1.")]]
      [[nodiscard]] const http::header_map& get_cookies() const noexcept {
          return cookies_;
+     }
+
+     /**
+      * Structured cookie accessor (TASK-064). Returns the in-order list
+      * of cookies attached via `with_cookie(...)`. Each entry carries
+      * name/value plus optional attributes (Domain, Path, Expires,
+      * Max-Age, Secure, HttpOnly, SameSite).
+      *
+      * The returned reference is stable across other mutations and
+      * remains valid until *this is destroyed or moved-from. No
+      * allocation occurs on access -- the vector is populated by
+      * `with_cookie(...)`, not lazily.
+     **/
+     [[nodiscard]] const std::vector<cookie>& get_cookies_parsed() const noexcept {
+         return structured_cookies_;
      }
 
      /**
@@ -400,7 +432,26 @@ class http_response final {
      http_response& with_footer(std::string key, std::string value) &;
      http_response&& with_footer(std::string key, std::string value) &&;
 
+     // TASK-064: structured cookie overload. Appends a typed cookie to
+     // the response. Validated at the cookie's own setter sites; the
+     // renderer (dispatch path) emits one `Set-Cookie` header per entry,
+     // RFC 6265 §4.1 compliant. Accepts the cookie by VALUE so callers
+     // can either copy or move.
+     http_response& with_cookie(cookie c) &;
+     http_response&& with_cookie(cookie c) &&;
+
+     // Legacy string-blob overload (TASK-012). Kept as a thin shim that
+     // forwards through the structured path, so wire output matches:
+     // `Set-Cookie: name=value`. Deprecated in TASK-064; will be
+     // removed in v2.1.
+     [[deprecated("TASK-064: use with_cookie(cookie{}.with_name(...)"
+                  ".with_value(...)) for RFC-6265 attribute safety. "
+                  "Removed in v2.1.")]]
      http_response& with_cookie(std::string key, std::string value) &;
+
+     [[deprecated("TASK-064: use with_cookie(cookie{}.with_name(...)"
+                  ".with_value(...)) for RFC-6265 attribute safety. "
+                  "Removed in v2.1.")]]
      http_response&& with_cookie(std::string key, std::string value) &&;
 
      http_response& with_status(int code) &;
@@ -413,7 +464,15 @@ class http_response final {
 
      http::header_map headers_;
      http::header_map footers_;
+     // Legacy name->value mirror, retained so the deprecated
+     // get_cookies() / get_cookie() accessors keep returning the v1
+     // shape. The dispatch path renders from `structured_cookies_`
+     // (TASK-064), so this mirror is observation-only.
      http::header_map cookies_;
+     // TASK-064: authoritative structured cookie list. One entry per
+     // `with_cookie(...)` call. The dispatch path renders one
+     // `Set-Cookie` header per entry via cookie::to_set_cookie_header().
+     std::vector<cookie> structured_cookies_;
 
      // SBO state for the polymorphic body. body_ is either nullptr (no
      // body), a pointer into body_storage_ (inline), or a heap pointer
@@ -440,7 +499,13 @@ class http_response final {
      // statement; the mutation + validation is in exactly one place.
      void do_set_header(std::string key, std::string value);
      void do_set_footer(std::string key, std::string value);
+     // Legacy entry point: forwards through the structured path so
+     // wire rendering goes through a single code path.
      void do_set_cookie(std::string key, std::string value);
+     // TASK-064: structured entry point. Appends `c` to
+     // `structured_cookies_` and mirrors name/value into `cookies_`
+     // so the deprecated string-blob accessors keep working.
+     void do_set_cookie_struct(cookie c);
      void do_set_status(int code);
 
      // Placement-new a concrete detail::body subclass into the SBO

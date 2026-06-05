@@ -139,6 +139,7 @@ http_response::http_response(http_response&& other) noexcept
       headers_(std::move(other.headers_)),
       footers_(std::move(other.footers_)),
       cookies_(std::move(other.cookies_)),
+      structured_cookies_(std::move(other.structured_cookies_)),
       kind_(other.kind_) {
     adopt_body_from(other);
 }
@@ -162,6 +163,7 @@ http_response& http_response::operator=(http_response&& other) noexcept {
     headers_ = std::move(other.headers_);
     footers_ = std::move(other.footers_);
     cookies_ = std::move(other.cookies_);
+    structured_cookies_ = std::move(other.structured_cookies_);
     kind_ = other.kind_;
     adopt_body_from(other);
     return *this;
@@ -213,8 +215,33 @@ void http_response::do_set_footer(std::string key, std::string value) {
 }
 
 void http_response::do_set_cookie(std::string key, std::string value) {
+    // Legacy v1 string-blob entry point. Validates with the v1
+    // CR/LF/NUL guard (same as before TASK-064), mirrors into the
+    // legacy `cookies_` map for the deprecated `get_cookie`/
+    // `get_cookies` accessors, AND appends a structured cookie so the
+    // dispatch path has a single render source. Pre-TASK-064 callers
+    // that put a `;` in the value silently injected attributes;
+    // post-TASK-064 the structured renderer is the only render source
+    // and it bans `;` in cookie values -- so we keep the v1
+    // validate_http_field for the legacy shim's input check and
+    // simply rely on the structured renderer to enforce the stricter
+    // RFC 6265 rules on emit. (Action: a legacy caller passing `;` in
+    // the value will see the validation throw at to_set_cookie_header
+    // time -- that is the v2 promise the task asks for.)
     validate_http_field("with_cookie", key, value);
-    cookies_.insert_or_assign(std::move(key), std::move(value));
+    cookies_.insert_or_assign(key, value);
+    cookie c;
+    c.with_name(std::move(key)).with_value(std::move(value));
+    structured_cookies_.push_back(std::move(c));
+}
+
+void http_response::do_set_cookie_struct(cookie c) {
+    // Structured entry point. The cookie value was validated at its
+    // own setter sites; mirror name/value into the legacy `cookies_`
+    // map so the deprecated `get_cookie`/`get_cookies` accessors keep
+    // returning sane data.
+    cookies_.insert_or_assign(c.name(), c.value());
+    structured_cookies_.push_back(std::move(c));
 }
 
 void http_response::do_set_status(int code) {
@@ -258,6 +285,17 @@ http_response& http_response::with_cookie(std::string key,
 http_response&& http_response::with_cookie(std::string key,
                                            std::string value) && {
     do_set_cookie(std::move(key), std::move(value));
+    return std::move(*this);
+}
+
+// TASK-064: structured with_cookie(cookie) overloads.
+http_response& http_response::with_cookie(cookie c) & {
+    do_set_cookie_struct(std::move(c));
+    return *this;
+}
+
+http_response&& http_response::with_cookie(cookie c) && {
+    do_set_cookie_struct(std::move(c));
     return std::move(*this);
 }
 

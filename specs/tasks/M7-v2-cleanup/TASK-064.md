@@ -29,4 +29,4 @@ Replace the string-blob cookie surface on `http_response` with a structured `htt
 **Related Requirements:** PRD-RSP-REQ-004 (fluent return), PRD §2 API minimalism
 **Related Decisions:** None new (RFC 6265)
 
-**Status:** Backlog
+**Status:** Completed

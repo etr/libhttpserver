@@ -59,6 +59,11 @@
 #include "httpserver/detail/body.hpp"
 #include "./littletest.hpp"
 
+// TASK-064: this TU intentionally exercises the deprecated string-blob
+// cookie surface as part of the move/sanitizer coverage. Suppress the
+// [[deprecated]] diagnostic for the whole file.
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
 using httpserver::body_kind;
 using httpserver::http_response;
 using httpserver::detail::body;

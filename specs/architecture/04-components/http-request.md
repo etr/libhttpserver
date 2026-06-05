@@ -9,6 +9,7 @@
   - `get_path()`, `get_method()`, `get_version()`, `get_content()`, `get_querystring()` returning `string_view`
   - `get_headers()`, `get_footers()`, `get_cookies()`, `get_args()`, `get_path_pieces()`, `get_files()` returning `const ContainerType&`
   - `get_header(key)`, `get_cookie(key)`, `get_footer(key)`, `get_arg(key)`, `get_arg_flat(key)` returning `string_view` (empty on miss; never insert)
+  - `get_cookies_parsed()` (TASK-064) returning `const std::vector<httpserver::cookie>&`: structured RFC 6265 §5.4 parse of the request's `Cookie:` header. Each entry carries `name` and `value` (request cookies have no attributes per the spec). Backed by a per-request lazy cache that follows the TASK-016/TASK-017 arena pattern: the first call parses and populates the vector; subsequent calls are O(1) and reuse the same buffer (`reference_stable_across_calls`, `second_call_does_not_reallocate` pinned by `http_request_cookies_parsed_test`).
   - `get_user()`, `get_pass()`, `get_digested_user()` returning `string_view` (empty when basic/digest auth disabled at build)
   - `has_tls_session()`, `has_client_certificate()`, `get_client_cert_dn()`, `get_client_cert_issuer_dn()`, `get_client_cert_cn()`, `get_client_cert_fingerprint_sha256()`, `is_client_cert_verified()`, `get_client_cert_not_before()`, `get_client_cert_not_after()` (all returning sentinels when GnuTLS disabled)
   - `check_digest_auth(...)` family
