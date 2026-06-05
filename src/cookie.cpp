@@ -53,14 +53,16 @@ bool is_invalid_name_byte(unsigned char c) noexcept {
         || c == '=';
 }
 
-void validate_name(std::string_view v) {
+void validate_name(std::string_view v,
+                   std::string_view ctx = "cookie::with_name") {
     // RFC 6265 §4.1.1 + RFC 7230 §3.2.6 token rule (relaxed: we reject
     // only the bytes that would cause syntactic ambiguity in a
     // `Set-Cookie` header).
     for (unsigned char c : v) {
         if (is_invalid_name_byte(c)) {
             throw std::invalid_argument(
-                "cookie::with_name: name contains forbidden character "
+                std::string(ctx) +
+                ": name contains forbidden character "
                 "(CR, LF, NUL, whitespace, ';', '=', or other control)");
         }
     }
@@ -303,21 +305,19 @@ std::string cookie::to_set_cookie_header() const {
 
     // Render-time injection guard (defense-in-depth, CWE-113).
     // Cookies created via parse_cookie_header() bypass the normal
-    // name validators (see the comment in that function). If a caller
-    // naively reflects a parsed request cookie into a Set-Cookie
-    // response header, any forbidden byte in the name (e.g. a space
-    // from a lax client, or a control character) would be emitted
-    // verbatim. We catch this here so the injection window is closed
-    // even when the application skips re-construction through
-    // with_name().
-    for (unsigned char c : name_) {
-        if (is_invalid_name_byte(c)) {
+    // name/value validators (see the comment in that function). If a
+    // caller naively reflects a parsed request cookie into a Set-Cookie
+    // response header, any forbidden byte in name_ or value_ would be
+    // emitted verbatim. We catch both here so the injection window is
+    // closed even when the application skips re-construction.
+    validate_name(name_, "cookie::to_set_cookie_header");
+    for (unsigned char c : value_) {
+        if (c == '\r' || c == '\n' || c == '\0' || c == ';') {
             throw std::invalid_argument(
-                "cookie::to_set_cookie_header: name contains a byte that "
-                "is forbidden in a Set-Cookie header (control, whitespace, "
-                "';', or '='); do not reflect cookies returned by "
-                "parse_cookie_header() without re-constructing them via "
-                "with_name()");
+                "cookie::to_set_cookie_header: value contains a byte that "
+                "is forbidden in a Set-Cookie header (CR, LF, NUL, or ';'); "
+                "do not reflect cookies returned by parse_cookie_header() "
+                "without re-constructing them via with_value()");
         }
     }
 
