@@ -47,6 +47,7 @@
 #include <utility>
 #include <vector>
 
+#include "httpserver/cookie.hpp"
 #include "httpserver/http_arg_value.hpp"
 #include "httpserver/http_utils.hpp"
 #include "httpserver/file_info.hpp"
@@ -227,6 +228,25 @@ class http_request {
       *       (security-reviewer-iter1-18 / CWE-672)
      **/
      [[nodiscard]] const http::header_view_map& get_cookies() const;
+
+     /**
+      * TASK-064: structured cookie accessor. Returns the in-order list
+      * of cookies parsed from the request's `Cookie:` header per RFC
+      * 6265 §5.4. Each entry carries `name` and `value`; request
+      * cookies do not carry attributes per the spec, so domain/path/
+      * etc. are left default-constructed.
+      *
+      * Lifetime: the returned reference and the strings it holds remain
+      * valid until the http_request is destroyed (typically when the
+      * handler returns). Backed by a per-request lazy cache (TASK-016 /
+      * TASK-017 arena pattern): the first call parses the Cookie header
+      * and builds the vector; subsequent calls are O(1) and reuse the
+      * same buffer.
+      *
+      * Byte-transparent: no percent-decoding is performed. Callers that
+      * need decoded values must decode themselves.
+     **/
+     [[nodiscard]] const std::vector<cookie>& get_cookies_parsed() const;
 
      /**
       * Method used to get all args passed with the request.

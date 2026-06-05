@@ -52,6 +52,7 @@
 #include <string_view>
 #include <vector>
 
+#include "httpserver/cookie.hpp"
 #include "httpserver/create_webserver.hpp"
 #include "httpserver/file_info.hpp"
 #include "httpserver/http_arg_value.hpp"
@@ -250,6 +251,18 @@ class http_request_impl {
     mutable std::vector<std::string> path_pieces_cached_;
     mutable bool path_pieces_cache_built_ = false;
 
+    // TASK-064: per-request cache for the structured cookie vector
+    // returned by http_request::get_cookies_parsed(). First call parses
+    // the request's `Cookie:` header (or walks `cookies_local` for
+    // test-requests with no MHD connection) and populates this vector;
+    // subsequent calls are O(1) and reuse the same buffer.
+    //
+    // The vector uses the default allocator -- it is part of the public
+    // surface (`const std::vector<cookie>&`) and cannot be PMR without
+    // an ABI break, matching the `path_pieces_cached_` rationale.
+    mutable std::vector<cookie> cookies_parsed_cached_;
+    mutable bool cookies_parsed_cache_built_ = false;
+
     // TASK-057: when true, http_request::operator<< streams credential
     // material verbatim (v1 verbose form). Default false: the four
     // credential surfaces (pass, Authorization / Proxy-Authorization
@@ -293,6 +306,11 @@ class http_request_impl {
     // Populates path_pieces_cached_ from the tokenised request path on
     // first call. Subsequent calls are O(1) and zero-allocating.
     void ensure_path_pieces_cached(std::string_view path) const;
+
+    // TASK-064: populates cookies_parsed_cached_ from the request's
+    // `Cookie:` header (live path) or from cookies_local
+    // (test-request path) on first call. O(1) thereafter.
+    void ensure_cookies_parsed_cached() const;
 
     // TASK-017: populates the arg view-map cache from unescaped_args.
     // Called from get_args() so the build loop lives inside the impl

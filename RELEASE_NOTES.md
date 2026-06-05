@@ -231,6 +231,24 @@ and see the v2 replacement.
   is no honoring path planned — `Content-Length` synthesis would lie
   when the pipe yields a different byte count, and libmicrohttpd's
   `MHD_create_response_from_pipe` takes no size.
+- **Structured cookie type (TASK-064).** The string-blob cookie API
+  on `http_response` is now `[[deprecated]]` in favour of a typed
+  `httpserver::cookie` value (new public header `<httpserver/cookie.hpp>`).
+  Construct with fluent setters — `cookie{}.with_name(...).with_value(...)
+  .with_domain(...).with_path(...).with_expires(epoch_seconds).with_max_age(s)
+  .with_secure(true).with_http_only(true).with_same_site(same_site_mode::strict)`
+  — then hand to `http_response::with_cookie(cookie)`. The dispatch path
+  emits one RFC 6265 §4.1 well-formed `Set-Cookie` header per entry with
+  a fixed attribute order (`name=value; Expires; Max-Age; Domain; Path;
+  Secure; HttpOnly; SameSite`); `SameSite=None` auto-coerces `Secure` on
+  the wire. The matching request-side accessor is `http_request::
+  get_cookies_parsed()`, returning `const std::vector<httpserver::cookie>&`
+  backed by a per-request lazy cache. Legacy `with_cookie(std::string,
+  std::string)`, `get_cookie(...)`, and `get_cookies()` still compile but
+  emit `[[deprecated]]`; they will be removed in v2.1. The new APIs reject
+  CR/LF/NUL plus `;` in values (attribute-injection guard, CWE-113); the
+  pre-TASK-064 wire footgun of `with_cookie("name", "v; Path=/admin")`
+  silently emitting attributes is gone.
 
 ## Threading
 

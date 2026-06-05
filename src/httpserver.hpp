@@ -29,6 +29,7 @@
 
 #include "httpserver/body_kind.hpp"
 #include "httpserver/constants.hpp"
+#include "httpserver/cookie.hpp"
 #include "httpserver/feature_unavailable.hpp"
 #include "httpserver/hook_action.hpp"
 #include "httpserver/hook_context.hpp"

@@ -184,6 +184,47 @@ The response hierarchy has eight subclasses (`string_response`, `file_response`,
 
 ---
 
+### 3.5.1 Structured Cookie Type (API-CKY)
+
+**Problem / outcome**
+The v1 `with_cookie(string, string)` / `get_cookie(string)` API stored cookies as opaque string blobs, making RFC 6265 attribute fields (Secure, HttpOnly, SameSite, Path, Domain, Expires, Max-Age) inaccessible to callers and allowing header-injection via unguarded semicolons in values. After TASK-064 the library exposes `httpserver::cookie`, a structured value type, alongside `http_response::with_cookie(cookie)` for responses and `http_request::get_cookies_parsed()` for requests. The string-blob path is retained as a `[[deprecated]]` shim for one transitional v2.0 release.
+
+**In scope**
+- `httpserver::cookie` value type with fluent `with_name`, `with_value`, `with_domain`, `with_path`, `with_expires`, `with_max_age`, `with_secure`, `with_http_only`, `with_same_site` setters.
+- `enum class same_site_mode { unset, strict, lax, none }`.
+- `cookie::to_set_cookie_header()` renders a fully RFC 6265 §4.1 conformant `Set-Cookie` value.
+- `cookie::parse_cookie_header(string_view)` parses a `Cookie:` request header into a `std::vector<cookie>`, byte-transparent and lenient.
+- `http_response::with_cookie(cookie)` structured overload; legacy `with_cookie(string, string)` marked `[[deprecated]]`.
+- `http_request::get_cookies_parsed()` returns `const std::vector<cookie>&`, parsed once and cached.
+- Injection guard: CR, LF, NUL, and `;` are rejected in name, value, domain, and path at setter time (CWE-113).
+- SameSite=None auto-coerces `Secure` at render time (browser requirement per draft-west-cookie-incrementalism).
+- Transitional policy: legacy `get_cookie(string)`, `get_cookies()`, and `with_cookie(string, string)` are `[[deprecated]]` and compile with a diagnostic in v2.0.
+
+**Out of scope**
+- Removing the deprecated string-blob path before v2.1.
+- Domain-format hostname validation beyond semicolon rejection.
+
+**EARS Requirements**
+- `PRD-CKY-REQ-001` When a user constructs a `httpserver::cookie` then the system shall provide fluent `with_*` setters that return `cookie&` on lvalue and `cookie&&` on rvalue, mirroring the `http_response` fluent style.
+- `PRD-CKY-REQ-002` When a user calls `with_name`, `with_value`, `with_domain`, or `with_path` with a value containing CR, LF, NUL, or `;` then the system shall throw `std::invalid_argument`.
+- `PRD-CKY-REQ-003` When a user calls `with_name` with a value containing `=` or ASCII whitespace then the system shall throw `std::invalid_argument`.
+- `PRD-CKY-REQ-004` When a user calls `cookie::to_set_cookie_header()` then the system shall produce a string conforming to RFC 6265 §4.1 with attributes in the canonical order: Expires, Max-Age, Domain, Path, Secure, HttpOnly, SameSite.
+- `PRD-CKY-REQ-005` When a user calls `cookie::to_set_cookie_header()` with `same_site_mode::none` set and `with_secure(false)` then the system shall include `Secure` in the output (browser requirement).
+- `PRD-CKY-REQ-006` When a user calls `cookie::parse_cookie_header(s)` then the system shall return a `std::vector<cookie>` parsed from the `Cookie:` wire format, stripping outer DQUOTE pairs from values and tolerating arbitrary ASCII whitespace around tokens.
+- `PRD-CKY-REQ-007` When a user calls `http_response::with_cookie(cookie)` then the system shall append the structured cookie to the response's cookie list; `get_cookies_parsed()` shall reflect it without copying the cookie object.
+- `PRD-CKY-REQ-008` When a user calls `http_request::get_cookies_parsed()` then the system shall return a `const std::vector<cookie>&` backed by a parse-once cached representation; subsequent calls shall not allocate.
+- `PRD-CKY-REQ-009` When v2.0 ships then `http_response::with_cookie(string, string)`, `http_response::get_cookie(string_view)`, and `http_response::get_cookies()` shall be `[[deprecated]]` and shall not be removed until v2.1.
+- `PRD-CKY-REQ-010` When a user calls the legacy `with_cookie(string, string)` shim with a name or value that violates RFC 6265 cookie-name or cookie-value rules then the system shall throw `std::invalid_argument` before mutating any internal state.
+
+**Acceptance criteria**
+- `http_response::string("body").with_cookie(cookie{}.with_name("sid").with_secure(true).with_same_site(same_site_mode::strict))` compiles and produces a single well-formed `Set-Cookie` value.
+- `http_request::get_cookies_parsed()` returns `const std::vector<cookie>&`; pointer identity is stable across unrelated mutations.
+- RFC 6265 round-trip examples pass (`cookie_render` test suite, cycles 2–6).
+- `cookie{}.with_path("/; Secure")` throws `std::invalid_argument`.
+- Deprecated string-blob path compiles with `-Wdeprecated-declarations` diagnostic.
+
+---
+
 ### 3.6 Request Type Ergonomics (API-REQ)
 
 **Problem / outcome**

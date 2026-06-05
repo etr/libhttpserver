@@ -139,6 +139,7 @@ http_response::http_response(http_response&& other) noexcept
       headers_(std::move(other.headers_)),
       footers_(std::move(other.footers_)),
       cookies_(std::move(other.cookies_)),
+      structured_cookies_(std::move(other.structured_cookies_)),
       kind_(other.kind_) {
     adopt_body_from(other);
 }
@@ -162,6 +163,7 @@ http_response& http_response::operator=(http_response&& other) noexcept {
     headers_ = std::move(other.headers_);
     footers_ = std::move(other.footers_);
     cookies_ = std::move(other.cookies_);
+    structured_cookies_ = std::move(other.structured_cookies_);
     kind_ = other.kind_;
     adopt_body_from(other);
     return *this;
@@ -213,8 +215,40 @@ void http_response::do_set_footer(std::string key, std::string value) {
 }
 
 void http_response::do_set_cookie(std::string key, std::string value) {
-    validate_http_field("with_cookie", key, value);
+    // Legacy v1 string-blob entry point. Build and validate the
+    // structured cookie FIRST — with_name / with_value throw
+    // std::invalid_argument for forbidden characters (CR, LF, NUL,
+    // ';', '=' in names). Only after the structured object is
+    // successfully constructed do we mirror name/value into the legacy
+    // `cookies_` map so the two stores never diverge on failure.
+    //
+    // Note: validate_http_field is intentionally NOT called here. The
+    // structured cookie::with_name / with_value setters enforce the
+    // stricter RFC 6265 rules (rejecting ';' in both name and value,
+    // among others) and give callers the correct error message.
+    // Calling validate_http_field first would give an incorrect
+    // earlier error citing 'forbidden control character' rather than
+    // the real reason.
+    cookie new_cookie;
+    new_cookie.with_name(key).with_value(value);  // throws before any map mutation
     cookies_.insert_or_assign(std::move(key), std::move(value));
+    structured_cookies_.push_back(std::move(new_cookie));
+}
+
+void http_response::do_set_cookie_struct(cookie c) {
+    // Structured entry point. Mirror name/value into the legacy
+    // `cookies_` map so the deprecated `get_cookie`/`get_cookies`
+    // accessors keep returning sane data.
+    //
+    // NOTE: cookies created by cookie::parse_cookie_header() bypass
+    // all name/value validators and store raw wire bytes directly.
+    // Callers MUST NOT pass parsed request cookies to this path
+    // without first re-constructing them through with_name()/
+    // with_value().  The render-time guard in
+    // cookie::to_set_cookie_header() will throw if a forbidden byte
+    // reaches the wire, providing a last line of defense.
+    cookies_.insert_or_assign(c.name(), c.value());
+    structured_cookies_.push_back(std::move(c));
 }
 
 void http_response::do_set_status(int code) {
@@ -258,6 +292,17 @@ http_response& http_response::with_cookie(std::string key,
 http_response&& http_response::with_cookie(std::string key,
                                            std::string value) && {
     do_set_cookie(std::move(key), std::move(value));
+    return std::move(*this);
+}
+
+// TASK-064: structured with_cookie(cookie) overloads.
+http_response& http_response::with_cookie(cookie c) & {
+    do_set_cookie_struct(std::move(c));
+    return *this;
+}
+
+http_response&& http_response::with_cookie(cookie c) && {
+    do_set_cookie_struct(std::move(c));
     return std::move(*this);
 }
 

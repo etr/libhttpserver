@@ -225,6 +225,14 @@ const http::header_view_map& http_request::get_cookies() const {
     return impl_->ensure_headerlike_cache(MHD_COOKIE_KIND);
 }
 
+// TASK-064: structured-cookie accessor. Forwards to the impl's
+// lazily-built cache (parses the request's `Cookie:` header once, then
+// returns the same buffer on every subsequent call).
+const std::vector<cookie>& http_request::get_cookies_parsed() const {
+    impl_->ensure_cookies_parsed_cached();
+    return impl_->cookies_parsed_cached_;
+}
+
 http_arg_value http_request::get_arg(std::string_view key) const {
     impl_->populate_args();
 
