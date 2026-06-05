@@ -153,6 +153,23 @@ LT_BEGIN_AUTO_TEST(cookie_render_suite, with_path_rejects_crlf)
     LT_CHECK_EQ(threw, true);
 LT_END_AUTO_TEST(with_path_rejects_crlf)
 
+LT_BEGIN_AUTO_TEST(cookie_render_suite, with_path_rejects_semicolon)
+    // CWE-113: a semicolon in Path would inject synthetic attributes
+    // into the Set-Cookie header.
+    bool threw = false;
+    try { cookie{}.with_path("/; Secure"); }
+    catch (const std::invalid_argument&) { threw = true; }
+    LT_CHECK_EQ(threw, true);
+LT_END_AUTO_TEST(with_path_rejects_semicolon)
+
+LT_BEGIN_AUTO_TEST(cookie_render_suite, with_domain_rejects_semicolon)
+    // CWE-113: a semicolon in Domain would inject synthetic attributes.
+    bool threw = false;
+    try { cookie{}.with_domain("example.com; Secure"); }
+    catch (const std::invalid_argument&) { threw = true; }
+    LT_CHECK_EQ(threw, true);
+LT_END_AUTO_TEST(with_domain_rejects_semicolon)
+
 // ---------------- Cycle 4: to_set_cookie_header() rendering ----------------
 
 LT_BEGIN_AUTO_TEST(cookie_render_suite, render_minimal_name_value)

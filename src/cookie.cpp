@@ -86,6 +86,16 @@ void validate_attr_param(std::string_view setter, std::string_view v) {
             ": attribute value contains forbidden control character "
             "(CR, LF, or NUL)");
     }
+    // CWE-113: a semicolon in a Domain or Path attribute value would
+    // be emitted verbatim by the renderer, injecting synthetic
+    // attributes into the Set-Cookie header (e.g. with_path("/; Secure")
+    // produces 'name=val; Path=/; Secure' even though the caller only
+    // meant to set a path).
+    if (v.find(';') != std::string_view::npos) {
+        throw std::invalid_argument(
+            std::string(setter) +
+            ": attribute value contains forbidden character (';')");
+    }
 }
 
 // IMF-fixdate formatter (RFC 7231 §7.1.1.1):

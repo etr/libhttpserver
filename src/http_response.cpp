@@ -215,24 +215,24 @@ void http_response::do_set_footer(std::string key, std::string value) {
 }
 
 void http_response::do_set_cookie(std::string key, std::string value) {
-    // Legacy v1 string-blob entry point. Validates with the v1
-    // CR/LF/NUL guard (same as before TASK-064), mirrors into the
-    // legacy `cookies_` map for the deprecated `get_cookie`/
-    // `get_cookies` accessors, AND appends a structured cookie so the
-    // dispatch path has a single render source. Pre-TASK-064 callers
-    // that put a `;` in the value silently injected attributes;
-    // post-TASK-064 the structured renderer is the only render source
-    // and it bans `;` in cookie values -- so we keep the v1
-    // validate_http_field for the legacy shim's input check and
-    // simply rely on the structured renderer to enforce the stricter
-    // RFC 6265 rules on emit. (Action: a legacy caller passing `;` in
-    // the value will see the validation throw at to_set_cookie_header
-    // time -- that is the v2 promise the task asks for.)
-    validate_http_field("with_cookie", key, value);
-    cookies_.insert_or_assign(key, value);
-    cookie c;
-    c.with_name(std::move(key)).with_value(std::move(value));
-    structured_cookies_.push_back(std::move(c));
+    // Legacy v1 string-blob entry point. Build and validate the
+    // structured cookie FIRST — with_name / with_value throw
+    // std::invalid_argument for forbidden characters (CR, LF, NUL,
+    // ';', '=' in names). Only after the structured object is
+    // successfully constructed do we mirror name/value into the legacy
+    // `cookies_` map so the two stores never diverge on failure.
+    //
+    // Note: validate_http_field is intentionally NOT called here. The
+    // structured cookie::with_name / with_value setters enforce the
+    // stricter RFC 6265 rules (rejecting ';' in both name and value,
+    // among others) and give callers the correct error message.
+    // Calling validate_http_field first would give an incorrect
+    // earlier error citing 'forbidden control character' rather than
+    // the real reason.
+    cookie new_cookie;
+    new_cookie.with_name(key).with_value(value);  // throws before any map mutation
+    cookies_.insert_or_assign(std::move(key), std::move(value));
+    structured_cookies_.push_back(std::move(new_cookie));
 }
 
 void http_response::do_set_cookie_struct(cookie c) {

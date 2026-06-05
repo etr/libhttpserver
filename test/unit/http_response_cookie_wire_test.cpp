@@ -220,6 +220,27 @@ LT_BEGIN_AUTO_TEST(http_response_cookie_wire_suite,
                 std::string("sid=abc; Secure; SameSite=Strict"));
 LT_END_AUTO_TEST(wire_renderer_emits_full_attribute_set)
 
+// ---------------- Cycle 9: partial-mutation guard (TASK-064 fix) ----
+
+LT_BEGIN_AUTO_TEST(http_response_cookie_wire_suite,
+                   legacy_with_cookie_bad_key_leaves_maps_clean)
+    // Regression: if with_name throws (key contains ';'), the legacy
+    // cookies_ map must NOT be mutated. Before the fix, insert_or_assign
+    // ran before with_name, so the map got a dirty entry on failure.
+    http_response r = http_response::string("body");
+    bool threw = false;
+    try {
+        r.with_cookie("bad;key", "value");
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK_EQ(threw, true);
+    // The bad key must NOT appear in the legacy map.
+    LT_CHECK_EQ(r.get_cookie("bad;key"), std::string_view(""));
+    // The structured vector must also be empty.
+    LT_CHECK_EQ(r.get_cookies_parsed().empty(), true);
+LT_END_AUTO_TEST(legacy_with_cookie_bad_key_leaves_maps_clean)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()
