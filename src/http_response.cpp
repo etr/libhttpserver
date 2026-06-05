@@ -236,10 +236,17 @@ void http_response::do_set_cookie(std::string key, std::string value) {
 }
 
 void http_response::do_set_cookie_struct(cookie c) {
-    // Structured entry point. The cookie value was validated at its
-    // own setter sites; mirror name/value into the legacy `cookies_`
-    // map so the deprecated `get_cookie`/`get_cookies` accessors keep
-    // returning sane data.
+    // Structured entry point. Mirror name/value into the legacy
+    // `cookies_` map so the deprecated `get_cookie`/`get_cookies`
+    // accessors keep returning sane data.
+    //
+    // NOTE: cookies created by cookie::parse_cookie_header() bypass
+    // all name/value validators and store raw wire bytes directly.
+    // Callers MUST NOT pass parsed request cookies to this path
+    // without first re-constructing them through with_name()/
+    // with_value().  The render-time guard in
+    // cookie::to_set_cookie_header() will throw if a forbidden byte
+    // reaches the wire, providing a last line of defense.
     cookies_.insert_or_assign(c.name(), c.value());
     structured_cookies_.push_back(std::move(c));
 }

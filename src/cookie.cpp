@@ -96,6 +96,18 @@ void validate_attr_param(std::string_view setter, std::string_view v) {
             std::string(setter) +
             ": attribute value contains forbidden character (';')");
     }
+    // Defense-in-depth: HTTP/1.0 legacy parsers and some CDN edge
+    // nodes split Set-Cookie headers on commas.  A Domain or Path
+    // value containing a comma (e.g. Domain=evil.com,other.com) can
+    // appear as two separate directives to such parsers, creating a
+    // header-injection opportunity.  RFC 6265 §4.1 av-octet permits
+    // commas, but we reject them here to be safe.
+    if (v.find(',') != std::string_view::npos) {
+        throw std::invalid_argument(
+            std::string(setter) +
+            ": attribute value contains forbidden character (','); "
+            "commas can split Set-Cookie headers in legacy HTTP/1.0 parsers");
+    }
 }
 
 // IMF-fixdate formatter (RFC 7231 §7.1.1.1):
@@ -287,6 +299,26 @@ std::string cookie::to_set_cookie_header() const {
         throw std::invalid_argument(
             "cookie::to_set_cookie_header: name is empty -- a cookie "
             "with no name is not a valid Set-Cookie");
+    }
+
+    // Render-time injection guard (defense-in-depth, CWE-113).
+    // Cookies created via parse_cookie_header() bypass the normal
+    // name validators (see the comment in that function). If a caller
+    // naively reflects a parsed request cookie into a Set-Cookie
+    // response header, any forbidden byte in the name (e.g. a space
+    // from a lax client, or a control character) would be emitted
+    // verbatim. We catch this here so the injection window is closed
+    // even when the application skips re-construction through
+    // with_name().
+    for (unsigned char c : name_) {
+        if (is_invalid_name_byte(c)) {
+            throw std::invalid_argument(
+                "cookie::to_set_cookie_header: name contains a byte that "
+                "is forbidden in a Set-Cookie header (control, whitespace, "
+                "';', or '='); do not reflect cookies returned by "
+                "parse_cookie_header() without re-constructing them via "
+                "with_name()");
+        }
     }
 
     // Reserve enough for a typical cookie. The exact growth is

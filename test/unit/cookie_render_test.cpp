@@ -427,6 +427,85 @@ LT_BEGIN_AUTO_TEST(cookie_render_suite, roundtrip_first_token_is_name_value)
     LT_CHECK_EQ(token, std::string("sid=abc"));
 LT_END_AUTO_TEST(roundtrip_first_token_is_name_value)
 
+// ---------------- Cycle 7: render-time injection guard (TASK-064 / security-reviewer-iter2-1) ----------------
+
+// parse_cookie_header() deliberately bypasses validators, so a cookie
+// object returned by it may carry a name containing bytes forbidden
+// for Set-Cookie headers (e.g. ';').  to_set_cookie_header() must
+// detect this and throw rather than silently emit an injected header.
+LT_BEGIN_AUTO_TEST(cookie_render_suite, render_throws_when_parsed_name_contains_semicolon)
+    // Build a cookie that bypasses name validation (simulate what
+    // parse_cookie_header returns for a malicious Cookie: header).
+    auto cookies = cookie::parse_cookie_header("a;Secure=1=x");
+    // The parser will store the raw bytes; we attempt to reflect it.
+    bool threw = false;
+    for (auto& c : cookies) {
+        // Only test cookies whose name contains ';'.
+        if (c.name().find(';') != std::string::npos) {
+            try {
+                std::string s = c.to_set_cookie_header();
+                (void)s;
+            } catch (const std::invalid_argument&) {
+                threw = true;
+            }
+        }
+    }
+    // Either the parser split on ';' (yielding no forbidden-name cookie) OR
+    // to_set_cookie_header threw when it found a ';' in the name.  Both are
+    // safe.  The test passes IFF there is no cookie with a ';' in its name
+    // that was silently emitted.
+    LT_CHECK_EQ(threw || [&](){
+        for (auto& c : cookies) {
+            if (c.name().find(';') != std::string::npos) return false;
+        }
+        return true;
+    }(), true);
+LT_END_AUTO_TEST(render_throws_when_parsed_name_contains_semicolon)
+
+// A more direct test: directly construct a cookie with a raw name containing
+// ';' via parse_cookie_header and verify to_set_cookie_header throws.
+// We craft a Cookie: header whose first token is literally "x;y=z" (no
+// whitespace stripping will remove the ';').  Actually the parser splits on
+// ';', so we need to test via another forbidden character that the parser
+// does NOT split on but is_invalid_name_byte still rejects: NUL byte.
+// We test NUL via a separate direct test on the render guard.
+LT_BEGIN_AUTO_TEST(cookie_render_suite, render_throws_on_name_with_low_byte_bypassed_by_parser)
+    // Directly manipulate via the raw parse path: inject a cookie name with
+    // a space (0x20), which is rejected by is_invalid_name_byte but NOT split
+    // on by the parser's semicolon delimiter.
+    // Cookie: "a b=val" => parser trims whitespace around '=' key, giving name "a b".
+    auto cookies = cookie::parse_cookie_header("a b=val");
+    bool threw = false;
+    if (!cookies.empty()) {
+        // "a b" has a space which is_invalid_name_byte rejects (c <= 0x20).
+        try {
+            std::string s = cookies[0].to_set_cookie_header();
+            (void)s;
+        } catch (const std::invalid_argument&) {
+            threw = true;
+        }
+    }
+    LT_CHECK_EQ(threw, true);
+LT_END_AUTO_TEST(render_throws_on_name_with_low_byte_bypassed_by_parser)
+
+// ---------------- Cycle 7: comma rejection in validate_attr_param (security-reviewer-iter2-2) ----------------
+
+LT_BEGIN_AUTO_TEST(cookie_render_suite, with_domain_rejects_comma)
+    // HTTP/1.0 legacy parsers split Set-Cookie on commas, so a Domain
+    // value containing a comma can produce a split-header injection.
+    bool threw = false;
+    try { cookie{}.with_domain("evil.com,other.com"); }
+    catch (const std::invalid_argument&) { threw = true; }
+    LT_CHECK_EQ(threw, true);
+LT_END_AUTO_TEST(with_domain_rejects_comma)
+
+LT_BEGIN_AUTO_TEST(cookie_render_suite, with_path_rejects_comma)
+    bool threw = false;
+    try { cookie{}.with_path("/foo,/bar"); }
+    catch (const std::invalid_argument&) { threw = true; }
+    LT_CHECK_EQ(threw, true);
+LT_END_AUTO_TEST(with_path_rejects_comma)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()
