@@ -111,6 +111,31 @@ class challenge_resource : public http_resource {
                              .body  = "access denied"});
     }
 };
+
+// Resource that emits a SHA-256 Digest challenge (RFC 7616 §3.3 algorithm
+// coverage — wire-observable, unlike the unit-test friend-hook assertions).
+class sha256_challenge_resource : public http_resource {
+ public:
+    http_response render_get(const http_request& /*req*/) override {
+        return http_response::unauthorized(
+            digest_challenge{.realm      = "sha256realm@host.com",
+                             .algorithm  = http_utils::digest_algorithm::SHA256,
+                             .body       = "denied"});
+    }
+};
+
+// Resource that emits a challenge with an explicit opaque and domain so we
+// can verify those fields appear in the wire challenge (RFC 7616 §3.3).
+class opaque_domain_challenge_resource : public http_resource {
+ public:
+    http_response render_get(const http_request& /*req*/) override {
+        return http_response::unauthorized(
+            digest_challenge{.realm   = "odrealm@host.com",
+                             .opaque  = "deadbeef",
+                             .domain  = "/protected",
+                             .body    = "denied"});
+    }
+};
 #endif  // HAVE_DAUTH
 
 }  // namespace
@@ -175,6 +200,104 @@ LT_BEGIN_AUTO_TEST(digest_challenge_format_suite,
     curl_easy_cleanup(curl);
     ws.stop();
 LT_END_AUTO_TEST(rfc7616_challenge_carries_required_fields)
+
+// RFC 7616 §3.3 algorithm coverage: when digest_challenge.algorithm is set
+// to SHA256 the WWW-Authenticate header on the wire must contain
+// "SHA-256" (the canonical token per RFC 7616 §3.3, distinct from MD5).
+// This is a wire-format assertion -- the only reliable place to verify it,
+// since the dispatch path (MHD_queue_auth_required_response3) owns the
+// algorithm token serialisation.
+LT_BEGIN_AUTO_TEST(digest_challenge_format_suite,
+                   rfc7616_challenge_sha256_algorithm_in_header)
+    webserver ws{create_webserver(PORT)
+        .digest_auth_random("myrandom")
+        .nonce_nc_size(300)};
+
+    auto resource = std::make_shared<sha256_challenge_resource>();
+    ws.register_path("sha256", resource);
+    ws.start(false);
+
+#if defined(_WINDOWS)
+    curl_global_init(CURL_GLOBAL_WIN32);
+#else
+    curl_global_init(CURL_GLOBAL_ALL);
+#endif
+
+    std::string body;
+    std::string headers;
+    CURL* curl = curl_easy_init();
+    CURLcode res;
+    long http_code = 0;  // NOLINT(runtime/int)
+    curl_easy_setopt(curl, CURLOPT_URL,
+                     "localhost:" PORT_STRING "/sha256");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &body);
+    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, headerfunc);
+    curl_easy_setopt(curl, CURLOPT_HEADERDATA, &headers);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 150L);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 150L);
+    curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
+    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    LT_CHECK_EQ(http_code, 401);
+    LT_CHECK_EQ(body, std::string("denied"));
+    // RFC 7616 §3.3: the algorithm token for SHA-256 is "SHA-256".
+    LT_CHECK_EQ(ci_contains(headers, "SHA-256"), true);
+
+    curl_easy_cleanup(curl);
+    ws.stop();
+LT_END_AUTO_TEST(rfc7616_challenge_sha256_algorithm_in_header)
+
+// Wire-format round-trip for the opaque and domain fields.  The unit tests
+// formerly asserted these through the internal get_params() friend hook;
+// wire-format assertions here are the appropriate place per the
+// test-quality-reviewer recommendation.
+LT_BEGIN_AUTO_TEST(digest_challenge_format_suite,
+                   rfc7616_challenge_opaque_and_domain_in_header)
+    webserver ws{create_webserver(PORT)
+        .digest_auth_random("myrandom")
+        .nonce_nc_size(300)};
+
+    auto resource = std::make_shared<opaque_domain_challenge_resource>();
+    ws.register_path("od", resource);
+    ws.start(false);
+
+#if defined(_WINDOWS)
+    curl_global_init(CURL_GLOBAL_WIN32);
+#else
+    curl_global_init(CURL_GLOBAL_ALL);
+#endif
+
+    std::string body;
+    std::string headers;
+    CURL* curl = curl_easy_init();
+    CURLcode res;
+    long http_code = 0;  // NOLINT(runtime/int)
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/od");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &body);
+    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, headerfunc);
+    curl_easy_setopt(curl, CURLOPT_HEADERDATA, &headers);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 150L);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 150L);
+    curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
+    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    LT_CHECK_EQ(http_code, 401);
+    // The opaque value we set must appear verbatim in the challenge header.
+    LT_CHECK_EQ(ci_contains(headers, "deadbeef"), true);
+    // The domain URI must appear in the challenge header.
+    LT_CHECK_EQ(ci_contains(headers, "/protected"), true);
+
+    curl_easy_cleanup(curl);
+    ws.stop();
+LT_END_AUTO_TEST(rfc7616_challenge_opaque_and_domain_in_header)
 
 #else  // !HAVE_DAUTH
 

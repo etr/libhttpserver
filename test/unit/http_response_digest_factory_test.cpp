@@ -22,14 +22,21 @@
 //
 // Pins the public-observable contract of the new `digest_challenge`
 // overload of `http_response::unauthorized`:
-//   * status 401, kind == body_kind::digest_challenge;
-//   * algorithm/qop fields round-trip through the factory and are
-//     observable via the test-access friend hook;
+//   * status 401, kind == body_kind::digest_challenge (regardless of
+//     algorithm/opaque/domain/body-text values);
 //   * CR/LF/NUL in realm/opaque/domain throw std::invalid_argument
 //     (header-injection guard, mirrors the Basic-side validation);
 //   * the new digest_challenge_body subclass fits the 64-byte SBO
 //     budget (pinned by the static_assert in detail/body.hpp, mirrored
 //     in-test to catch a future ABI drift early).
+//
+// The unit tests do NOT reach into detail::digest_challenge_body via the
+// friend hook to inspect get_params() fields (algorithm, opaque, domain).
+// Those fields are verified at the wire level in:
+//   test/integ/digest_challenge_format_test.cpp
+// which asserts on the actual WWW-Authenticate header emitted by MHD.
+// Keeping internal-struct assertions out of unit tests avoids coupling to
+// the current storage shape (TASK-062 test-quality-reviewer iter1-3).
 //
 // The end-to-end byte-format assertions for the WWW-Authenticate
 // challenge produced on the wire live in the new integ test
@@ -56,8 +63,8 @@ namespace httpserver {
 
 // Mirrors the friend struct in http_response_factories_test.cpp; both
 // TUs are build-tree-only test sources and never linked together, so
-// there is no ODR conflict. We only need the kind() peek for the SBO
-// flag here.
+// there is no ODR conflict. We only need the body_inline() flag here
+// to assert the SBO budget (body placed inline vs. heap pointer).
 struct http_response_sbo_test_access {
     static bool body_inline(http_response& r) noexcept {
         return r.body_inline_;
@@ -126,69 +133,71 @@ LT_BEGIN_AUTO_TEST(http_response_digest_factory_suite,
 LT_END_AUTO_TEST(digest_challenge_does_not_set_www_authenticate_header)
 
 // ---------------------------------------------------------------------
-// Algorithm round-trip: MD5 (default), SHA256.
+// Algorithm and field round-trips: body_kind discrimination only.
+//
+// The previous tests in this section reached into the private
+// detail::digest_challenge_body params struct via the SBO friend hook and
+// a concrete-subclass cast (body->get_params().algorithm, .opaque, .domain).
+// That couples the unit tests to the internal storage shape.  Per the
+// test-quality-reviewer finding (TASK-062 iter1-3), the authoritative
+// place to verify algorithm, opaque, and domain values is the wire-format
+// integration test (digest_challenge_format_test.cpp), which asserts on
+// the actual WWW-Authenticate header emitted by MHD.
+//
+// Here we pin only what is observable without internal access:
+//   * the factory produces body_kind::digest_challenge regardless of
+//     which algorithm/fields are set (already covered by
+//     digest_challenge_status_and_kind above, repeated here for
+//     algorithm=SHA256 and for opaque+domain to protect the factory
+//     code paths without re-coupling to internals).
 // ---------------------------------------------------------------------
 LT_BEGIN_AUTO_TEST(http_response_digest_factory_suite,
-                   digest_challenge_default_algo_is_md5)
-    digest_challenge ch;
-    ch.realm = "r";
-    auto r = http_response::unauthorized(std::move(ch));
-    auto* body = static_cast<httpserver::detail::digest_challenge_body*>(
-        SBO::body_ptr(r));
-    LT_ASSERT_NEQ(body,
-        static_cast<httpserver::detail::digest_challenge_body*>(nullptr));
-    LT_CHECK_EQ(static_cast<int>(body->get_params().algorithm),
-                static_cast<int>(http_utils::digest_algorithm::MD5));
-LT_END_AUTO_TEST(digest_challenge_default_algo_is_md5)
-
-LT_BEGIN_AUTO_TEST(http_response_digest_factory_suite,
-                   digest_challenge_sha256_algorithm)
+                   digest_challenge_sha256_produces_digest_challenge_kind)
+    // Observable contract: kind() == digest_challenge regardless of
+    // which algorithm is selected.  Wire-format coverage (SHA-256 token
+    // in WWW-Authenticate) lives in digest_challenge_format_test.cpp:
+    //   rfc7616_challenge_sha256_algorithm_in_header.
     digest_challenge ch;
     ch.realm = "r";
     ch.algorithm = http_utils::digest_algorithm::SHA256;
     auto r = http_response::unauthorized(std::move(ch));
-    auto* body = static_cast<httpserver::detail::digest_challenge_body*>(
-        SBO::body_ptr(r));
-    LT_ASSERT_NEQ(body,
-        static_cast<httpserver::detail::digest_challenge_body*>(nullptr));
-    LT_CHECK_EQ(static_cast<int>(body->get_params().algorithm),
-                static_cast<int>(http_utils::digest_algorithm::SHA256));
-LT_END_AUTO_TEST(digest_challenge_sha256_algorithm)
+    LT_CHECK_EQ(static_cast<int>(r.kind()),
+                static_cast<int>(body_kind::digest_challenge));
+    LT_CHECK_EQ(r.get_status(), 401);
+LT_END_AUTO_TEST(digest_challenge_sha256_produces_digest_challenge_kind)
 
-// ---------------------------------------------------------------------
-// Opaque/domain round-trip.
-// ---------------------------------------------------------------------
 LT_BEGIN_AUTO_TEST(http_response_digest_factory_suite,
-                   digest_challenge_opaque_and_domain_roundtrip)
+                   digest_challenge_opaque_and_domain_produce_digest_challenge_kind)
+    // Observable contract: kind() == digest_challenge when opaque and
+    // domain are set.  Wire-format coverage lives in
+    // digest_challenge_format_test.cpp:
+    //   rfc7616_challenge_opaque_and_domain_in_header.
     digest_challenge ch;
     ch.realm = "r";
     ch.opaque = "abc123";
     ch.domain = "/protected /other";
     auto r = http_response::unauthorized(std::move(ch));
-    auto* body = static_cast<httpserver::detail::digest_challenge_body*>(
-        SBO::body_ptr(r));
-    LT_ASSERT_NEQ(body,
-        static_cast<httpserver::detail::digest_challenge_body*>(nullptr));
-    LT_CHECK_EQ(body->get_params().opaque, std::string("abc123"));
-    LT_CHECK_EQ(body->get_params().domain,
-                std::string("/protected /other"));
-LT_END_AUTO_TEST(digest_challenge_opaque_and_domain_roundtrip)
+    LT_CHECK_EQ(static_cast<int>(r.kind()),
+                static_cast<int>(body_kind::digest_challenge));
+    LT_CHECK_EQ(r.get_status(), 401);
+LT_END_AUTO_TEST(digest_challenge_opaque_and_domain_produce_digest_challenge_kind)
 
 // ---------------------------------------------------------------------
-// Body text round-trip.
+// Body text: verify the factory accepts a non-empty body string and
+// still produces a digest_challenge kind response.  The byte count is
+// not pinned here (internals); a non-empty body round-trip at the wire
+// level is already exercised by rfc7616_challenge_carries_required_fields.
 // ---------------------------------------------------------------------
 LT_BEGIN_AUTO_TEST(http_response_digest_factory_suite,
-                   digest_challenge_body_text_roundtrip)
+                   digest_challenge_with_body_text_is_digest_challenge_kind)
     digest_challenge ch;
     ch.realm = "r";
     ch.body = "access denied";
     auto r = http_response::unauthorized(std::move(ch));
-    auto* body = static_cast<httpserver::detail::digest_challenge_body*>(
-        SBO::body_ptr(r));
-    LT_ASSERT_NEQ(body,
-        static_cast<httpserver::detail::digest_challenge_body*>(nullptr));
-    LT_CHECK_EQ(body->size(), std::size_t{13});
-LT_END_AUTO_TEST(digest_challenge_body_text_roundtrip)
+    LT_CHECK_EQ(static_cast<int>(r.kind()),
+                static_cast<int>(body_kind::digest_challenge));
+    LT_CHECK_EQ(r.get_status(), 401);
+LT_END_AUTO_TEST(digest_challenge_with_body_text_is_digest_challenge_kind)
 
 // ---------------------------------------------------------------------
 // Header injection guards: CR/LF/NUL in realm/opaque/domain throw.
