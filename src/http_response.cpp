@@ -405,8 +405,7 @@ http_response http_response::iovec(std::span<const iovec_entry> entries) {
     return r;
 }
 
-http_response http_response::pipe(int fd, std::size_t size_hint) {
-    (void)size_hint;  // reserved for future use
+http_response http_response::pipe(int fd) {
     http_response r;
     r.status_code_ = http::http_utils::http_ok;
     r.emplace_body<detail::pipe_body>(body_kind::pipe, fd);

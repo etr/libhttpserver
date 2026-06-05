@@ -222,6 +222,15 @@ and see the v2 replacement.
   verbose form for local development, call `.expose_credentials_in_logs(true)`
   on the `create_webserver` builder — this flag is intended for development
   only and must not be set in production deployments.
+- **`http_response::pipe` no longer accepts a `size_hint`.** Earlier v2
+  work-in-progress builds exposed `pipe(int fd, std::size_t size_hint = 0)`
+  with `size_hint` reserved for future use; the parameter was never
+  consulted on the dispatch path. v2.0 ships the minimal `pipe(int fd)`
+  signature (TASK-063, PRD §3.5 / `PRD-RSP-REQ-001`). Source callers
+  passing a second argument must drop it; no behavioural change. There
+  is no honoring path planned — `Content-Length` synthesis would lie
+  when the pipe yields a different byte count, and libmicrohttpd's
+  `MHD_create_response_from_pipe` takes no size.
 
 ## Threading
 
