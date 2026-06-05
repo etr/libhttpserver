@@ -250,20 +250,20 @@ LT_BEGIN_AUTO_TEST(http_response_factories_suite, pipe_factory_kind)
     ::close(fds[1]);
 LT_END_AUTO_TEST(pipe_factory_kind)
 
+// Pin: pipe() must accept exactly one argument (the fd). Any future
+// reintroduction of a size_hint / chunk_size / Content-Length parameter
+// is a deliberate API change and must update this assertion. See
+// TASK-063 — rationale: an accepted-but-ignored parameter teaches
+// callers a lie; honoring it would require synthesising Content-Length
+// without ground truth from the pipe fd.
 LT_BEGIN_AUTO_TEST(http_response_factories_suite,
-                   pipe_factory_size_hint_is_accepted_but_ignored)
-    // size_hint is reserved for future use; callers may pass it without
-    // observable effect today.
-    int fds[2];
-    int rc = ::pipe(fds);
-    LT_ASSERT_EQ(rc, 0);
-    {
-        auto r = http_response::pipe(fds[0], /*size_hint=*/4096);
-        LT_CHECK_EQ(static_cast<int>(r.kind()),
-                    static_cast<int>(body_kind::pipe));
-    }
-    ::close(fds[1]);
-LT_END_AUTO_TEST(pipe_factory_size_hint_is_accepted_but_ignored)
+                   pipe_factory_signature_is_single_arg)
+    using pipe_fn_t = http_response (*)(int);
+    static_assert(std::is_same_v<decltype(&http_response::pipe), pipe_fn_t>,
+                  "http_response::pipe must take exactly one parameter "
+                  "(int fd); see TASK-063");
+    LT_CHECK_EQ(true, true);  // littletest needs at least one runtime check
+LT_END_AUTO_TEST(pipe_factory_signature_is_single_arg)
 #endif  // !_WIN32
 
 // -----------------------------------------------------------------------

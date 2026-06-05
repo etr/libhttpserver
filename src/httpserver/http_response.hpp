@@ -192,11 +192,7 @@ class http_response final {
      // when the materialized MHD_Response is destroyed; if the response
      // is never materialized, the http_response's destructor closes
      // it. Callers MUST NOT close `fd` after handing it off.
-     // `size_hint` is reserved for forward compatibility — currently
-     // ignored, may be used to advise libmicrohttpd of payload size in
-     // a future revision.
-     [[nodiscard]] static http_response pipe(int fd,
-                                             std::size_t size_hint = 0);
+     [[nodiscard]] static http_response pipe(int fd);
 
      // Construct an empty (no-payload) response. Defaults to 204
      // No Content, matching v1 empty_response. The optional `mhd_flags`
