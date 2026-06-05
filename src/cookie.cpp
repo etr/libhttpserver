@@ -163,37 +163,6 @@ std::string_view same_site_attribute_text(same_site_mode m) noexcept {
     return {};
 }
 
-// Split a cookie-pair token into trimmed name + (DQUOTE-stripped)
-// value. Returns {has_value, name_view, value_view}.
-//   - has_value=false: token had no `=` or had no name; caller skips.
-//   - otherwise: name and value are byte-views into `tok`.
-struct cookie_token_split {
-    bool ok;
-    std::string_view name;
-    std::string_view value;
-};
-
-cookie_token_split split_cookie_token(std::string_view tok) noexcept {
-    const std::size_t eq = tok.find('=');
-    if (eq == std::string_view::npos || eq == 0) {
-        return {false, {}, {}};
-    }
-    std::string_view name_sv = trim_ws(tok.substr(0, eq));
-    std::string_view value_sv = tok.substr(eq + 1);
-
-    // Strip a single outer DQUOTE pair from the value (RFC 6265
-    // §5.2 step 2 / common browser practice).
-    if (value_sv.size() >= 2
-            && value_sv.front() == '"'
-            && value_sv.back() == '"') {
-        value_sv = value_sv.substr(1, value_sv.size() - 2);
-    }
-    if (name_sv.empty()) {
-        return {false, {}, {}};
-    }
-    return {true, name_sv, value_sv};
-}
-
 }  // namespace
 
 // ----------------------------------------------------------------------
@@ -338,22 +307,22 @@ std::string cookie::to_set_cookie_header() const {
 
 void cookie::append_time_attributes(std::string& out) const {
     if (expires_.has_value()) {
-        out.append("; Expires=", 10);
+        out.append("; Expires=");
         out.append(format_imf_fixdate(*expires_));
     }
     if (max_age_.has_value()) {
-        out.append("; Max-Age=", 10);
+        out.append("; Max-Age=");
         out.append(std::to_string(*max_age_));
     }
 }
 
 void cookie::append_target_attributes(std::string& out) const {
     if (!domain_.empty()) {
-        out.append("; Domain=", 9);
+        out.append("; Domain=");
         out.append(domain_);
     }
     if (!path_.empty()) {
-        out.append("; Path=", 7);
+        out.append("; Path=");
         out.append(path_);
     }
 }
@@ -363,10 +332,10 @@ void cookie::append_flag_attributes(std::string& out) const {
     const bool effective_secure =
         secure_ || (same_site_ == same_site_mode::none);
     if (effective_secure) {
-        out.append("; Secure", 8);
+        out.append("; Secure");
     }
     if (http_only_) {
-        out.append("; HttpOnly", 10);
+        out.append("; HttpOnly");
     }
 }
 
