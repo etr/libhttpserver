@@ -8,12 +8,12 @@
 Make `http_response::unauthorized(...)` produce an RFC-7616-compliant `WWW-Authenticate: Digest …` challenge with `nonce`, `opaque`, `algorithm`, and `qop` parameters, and drive the matching nonce/opaque server-side state machine so strict clients negotiate a real Digest session. The current implementation (`src/httpserver/http_response.hpp:184-196`) is documented as a non-RFC-compliant stub that strict parsers reject.
 
 **Action Items:**
-- [ ] Audit current `http_response::unauthorized(...)` overloads and document the gap against RFC 7616 §3 (challenge format) and §3.4 (`Authorization` validation) in a short header comment.
-- [ ] Add a nonce/opaque generator to `webserver_impl` (CSPRNG-backed, with replay/expiry tracking). Reuse the existing `dauth` plumbing where possible.
-- [ ] Extend `http_response::unauthorized(...)` to accept (or auto-derive) `nonce`, `opaque`, `algorithm` (default `MD5`, support `SHA-256` and `SHA-256-sess`), `qop` (default `auth`).
-- [ ] Wire the dispatch path to validate incoming `Authorization: Digest …` against the issued nonce/opaque pair and route to `dauth` handlers.
-- [ ] Convert the six v2 digest placeholder integ tests (`test/integ/authentication.cpp:42-60, 245-613`) to drive the nonce/opaque state machine end-to-end. Coordinated with TASK-079 (test work).
-- [ ] Update Doxygen on `unauthorized(...)` to remove the "non-RFC-compliant stub" disclaimer and add RFC references.
+- [x] Audit current `http_response::unauthorized(...)` overloads and document the gap against RFC 7616 §3 (challenge format) and §3.4 (`Authorization` validation) in a short header comment.
+- [x] Add a nonce/opaque generator to `webserver_impl` (CSPRNG-backed, with replay/expiry tracking). Reuse the existing `dauth` plumbing where possible. — *delegated to libmicrohttpd via `MHD_queue_auth_required_response3` (nonce HMAC keyed by `MHD_OPTION_DIGEST_AUTH_RANDOM`, replay window by `MHD_OPTION_NONCE_NC_SIZE`); opaque generated once at `webserver_impl` construction from `std::random_device`.*
+- [x] Extend `http_response::unauthorized(...)` to accept (or auto-derive) `nonce`, `opaque`, `algorithm` (default `MD5`, support `SHA-256` and `SHA-256-sess`), `qop` (default `auth`). — *new `unauthorized(digest_challenge)` overload supports MD5 (default), SHA-256, SHA-512-256, qop="auth". SHA-256-sess deferred (out of v2 scope, see plan §7).*
+- [x] Wire the dispatch path to validate incoming `Authorization: Digest …` against the issued nonce/opaque pair and route to `dauth` handlers. — *dispatch branches on `body_kind::digest_challenge` in `webserver_impl::queue_response_dispatching_kind`; existing `req.check_digest_auth(...)` validates the returning header.*
+- [x] Convert the six v2 digest placeholder integ tests (`test/integ/authentication.cpp:42-60, 245-613`) to drive the nonce/opaque state machine end-to-end. Coordinated with TASK-079 (test work). — *`digest_resource` updated to emit the new `digest_challenge` body; all six tests now exercise the real handshake path end-to-end (the wrong-password tests remain 401/FAIL but now go through `MHD_digest_auth_check3` validation rather than failing because no nonce was issued).*
+- [x] Update Doxygen on `unauthorized(...)` to remove the "non-RFC-compliant stub" disclaimer and add RFC references.
 
 **Dependencies:**
 - Blocked by: None
@@ -30,4 +30,4 @@ Make `http_response::unauthorized(...)` produce an RFC-7616-compliant `WWW-Authe
 **Related Requirements:** PRD-RSP-REQ-005 (`unauthorized` factory completeness)
 **Related Decisions:** None new (RFC 7616)
 
-**Status:** Backlog
+**Status:** Done

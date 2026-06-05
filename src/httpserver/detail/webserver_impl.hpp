@@ -143,6 +143,18 @@ class webserver_impl {
     // ws_start_stop integ test (start on worker thread, stop on main).
     std::atomic<bool> running{false};
 
+#ifdef HAVE_DAUTH
+    // TASK-062: per-webserver-instance `opaque` value handed to
+    // MHD_queue_auth_required_response3 when the user's
+    // digest_challenge factory leaves the field empty. Generated once
+    // at construction from std::random_device (16 bytes hex-encoded ->
+    // 32 chars). Single-writer-at-construction, lock-free read on the
+    // dispatch hot path: same posture as handler_exception_alias_ /
+    // log_access_alias_ below. RFC 7616 §5.10: opaque is an identifier,
+    // not a secret nor a replay token; reuse is allowed.
+    std::string digest_opaque_;
+#endif  // HAVE_DAUTH
+
     // --- Registration-side resource maps (post-TASK-053) ----------------
     //
     // As of TASK-053 these maps are NO LONGER on the dispatch hot path.

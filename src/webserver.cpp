@@ -52,6 +52,7 @@
 #include <iostream>
 #include <memory>
 #include <mutex>
+#include <random>           // std::random_device for TASK-062 opaque
 #include <regex>
 #include <set>
 #include <shared_mutex>
@@ -152,6 +153,31 @@ namespace detail {
 
 // ----- webserver_impl construction / destruction -------------------------
 
+// TASK-062: seed `digest_opaque_` with 16 random bytes from
+// std::random_device, hex-encoded -> 32-char string. RFC 7616 §5.10:
+// opaque is an identifier, not a secret -- std::random_device gives the
+// "unpredictable enough that clients cannot guess server state"
+// property the RFC requires; the strong nonce HMAC keying is owned by
+// libmicrohttpd (MHD_OPTION_DIGEST_AUTH_RANDOM seed on the create_webserver).
+#ifdef HAVE_DAUTH
+static std::string generate_random_hex_opaque_() {
+    std::random_device rd;
+    static constexpr char kHex[] = "0123456789abcdef";
+    std::string out;
+    out.reserve(32);
+    for (int i = 0; i < 8; ++i) {
+        unsigned int v = rd();
+        // Pack 4 bytes -> 8 hex chars per std::random_device sample.
+        for (int b = 0; b < 4; ++b) {
+            unsigned int byte = (v >> (b * 8)) & 0xFFu;
+            out.push_back(kHex[(byte >> 4) & 0xFu]);
+            out.push_back(kHex[byte & 0xFu]);
+        }
+    }
+    return out;
+}
+#endif  // HAVE_DAUTH
+
 webserver_impl::webserver_impl(webserver* parent, MHD_socket bind_socket_val)
     : parent(parent), bind_socket(bind_socket_val) {
     // Guard against null parent: the dispatch helpers (not_found_page,
@@ -165,6 +191,9 @@ webserver_impl::webserver_impl(webserver* parent, MHD_socket bind_socket_val)
     }
     pthread_mutex_init(&mutexwait, nullptr);
     pthread_cond_init(&mutexcond, nullptr);
+#ifdef HAVE_DAUTH
+    digest_opaque_ = generate_random_hex_opaque_();
+#endif  // HAVE_DAUTH
 }
 
 webserver_impl::~webserver_impl() {

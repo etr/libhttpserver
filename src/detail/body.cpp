@@ -253,6 +253,29 @@ MHD_Response* deferred_body::materialize() {
         MHD_SIZE_UNKNOWN, 1024, &deferred_body::trampoline, this, nullptr);
 }
 
+// ---------------------------------------------------------------------------
+// digest_challenge_body — TASK-062 / RFC 7616.
+//
+// Returns a body-only MHD_Response carrying the "access denied" payload.
+// The WWW-Authenticate header itself is NOT attached here -- the dispatch
+// path branches on body_kind::digest_challenge and routes through
+// MHD_queue_auth_required_response3, which writes the authoritative
+// challenge with libmicrohttpd's MHD_OPTION_DIGEST_AUTH_RANDOM-keyed nonce
+// machinery (this satisfies the "MHD MD5/SHA-256 helpers remain the
+// underlying primitive" acceptance criterion).
+// ---------------------------------------------------------------------------
+MHD_Response* digest_challenge_body::materialize() {
+    if (!params_) {
+        // Defence in depth: a moved-from body should never reach the
+        // dispatch path, but if a regression causes it, hand MHD an
+        // empty body rather than a null pointer.
+        return MHD_create_response_from_buffer_static(0, nullptr);
+    }
+    return MHD_create_response_from_buffer_static(
+        params_->body_text.size(),
+        static_cast<const void*>(params_->body_text.data()));
+}
+
 }  // namespace detail
 
 }  // namespace httpserver

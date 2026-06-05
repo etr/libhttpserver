@@ -42,6 +42,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <memory>           // unique_ptr for digest_challenge_body params
 #include <new>              // placement-new used by move_into() overrides
 #include <string>
 #include <type_traits>
@@ -49,6 +50,7 @@
 #include <vector>
 
 #include "httpserver/body_kind.hpp"
+#include "httpserver/http_utils.hpp"   // digest_algorithm enum
 #include "httpserver/iovec_entry.hpp"
 
 namespace httpserver {
@@ -359,6 +361,75 @@ class deferred_body final : public body {
 };
 
 // ---------------------------------------------------------------------------
+// digest_challenge_body — RFC-7616 Digest auth challenge marker (TASK-062).
+//
+// Stores the parameters needed to drive
+// MHD_queue_auth_required_response3 at dispatch time. materialize()
+// returns the "access denied" body-only MHD_Response; the WWW-Authenticate
+// header itself is NOT attached at the body layer -- the dispatch path
+// branches on body_kind::digest_challenge and calls
+// MHD_queue_auth_required_response3 instead of MHD_queue_response, so
+// libmicrohttpd writes the authoritative challenge (with nonce, opaque,
+// algorithm, qop, charset, userhash bits) directly into the connection.
+//
+// Parameters live on the heap inside a single unique_ptr to keep the
+// body's inline footprint under the 64-byte SBO budget (DR-005). The
+// trade-off — one extra small allocation at factory time — is accepted
+// because the alternative (promoting digest_challenge_body to a
+// heap-fallback body via the existing oversized path) would also
+// allocate, and the inline-with-unique_ptr shape keeps the SBO budget
+// assertion clean.
+// ---------------------------------------------------------------------------
+class digest_challenge_body final : public body {
+ public:
+    struct params {
+        std::string realm;
+        std::string opaque;       // empty -> server-substituted at dispatch
+        std::string domain;
+        std::string body_text;    // "access denied" body string
+        ::httpserver::http::http_utils::digest_algorithm algorithm;
+        bool qop_auth;
+        bool qop_auth_int;
+        bool signal_stale;
+        bool userhash_support;
+        bool prefer_utf8;
+    };
+
+    explicit digest_challenge_body(params p) noexcept
+        : params_(std::make_unique<params>(std::move(p))) {}
+
+    digest_challenge_body(digest_challenge_body&&) noexcept = default;
+
+    body_kind kind() const noexcept override {
+        return body_kind::digest_challenge;
+    }
+    std::size_t size() const noexcept override {
+        return params_ ? params_->body_text.size() : 0;
+    }
+    MHD_Response* materialize() override;
+
+    void move_into(void* dst) noexcept override {
+        ::new (dst) digest_challenge_body(std::move(*this));
+    }
+
+    // Read-only accessor for params. Used by the dispatch path
+    // (webserver_impl::materialize_and_queue_response branches on
+    // kind() == digest_challenge then reaches in here for the realm,
+    // opaque, algorithm, qop, etc.) and by unit tests via the SBO
+    // friend hook.
+    [[nodiscard]] const params& get_params() const noexcept {
+        // Postcondition: params_ is always populated after construction;
+        // a moved-from body becomes destructible but no caller reaches
+        // get_params on a moved-from body (the http_response that owned
+        // it has had its body slot reset).
+        return *params_;
+    }
+
+ private:
+    std::unique_ptr<params> params_;
+};
+
+// ---------------------------------------------------------------------------
 // SBO budget asserts. Per DR-005 every concrete body must fit in the
 // 64-byte buffer http_response carries. If any of these fires on a new
 // platform, TASK-010's factory must heap-allocate that subclass instead
@@ -388,6 +459,10 @@ static_assert(sizeof(deferred_body) <= 64,
               "deferred_body must fit in http_response SBO (DR-005)");
 static_assert(alignof(deferred_body) <= 16,
               "deferred_body alignment must be <= 16 (DR-005)");
+static_assert(sizeof(digest_challenge_body) <= 64,
+              "digest_challenge_body must fit in http_response SBO (DR-005)");
+static_assert(alignof(digest_challenge_body) <= 16,
+              "digest_challenge_body alignment must be <= 16 (DR-005)");
 
 // Per-subclass nothrow-move contract. http_response::move_into(...) is
 // noexcept (TASK-009 AC), and that depends on every concrete body's move
@@ -407,6 +482,8 @@ static_assert(std::is_nothrow_move_constructible_v<pipe_body>,
               "pipe_body move ctor must be noexcept (TASK-009 / DR-005)");
 static_assert(std::is_nothrow_move_constructible_v<deferred_body>,
               "deferred_body move ctor must be noexcept (TASK-009 / DR-005)");
+static_assert(std::is_nothrow_move_constructible_v<digest_challenge_body>,
+              "digest_challenge_body move ctor must be noexcept (DR-005)");
 
 }  // namespace detail
 

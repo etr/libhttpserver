@@ -50,6 +50,14 @@ enum class body_kind : std::uint8_t {
     iovec,
     pipe,
     deferred,
+    // TASK-062: RFC-7616 Digest auth challenge body. The body is a body-only
+    // MHD_Response (the "access denied" payload); the WWW-Authenticate header
+    // with nonce/opaque/qop/algorithm parameters is attached by the dispatch
+    // path via MHD_queue_auth_required_response3 rather than by the body's
+    // own materialize() output. Carrying the kind lets the dispatch hot path
+    // branch onto the auth-required queueing API without naming any backend
+    // type from http_response.hpp.
+    digest_challenge,
 };
 
 }  // namespace httpserver

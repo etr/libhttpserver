@@ -41,23 +41,28 @@
 
 #define MY_OPAQUE "11733b200778ce33060f31c9af70a870ba96ddd4"
 
-// v2-digest tracking note (consolidated):
-// Under v2, libhttpserver only emits the static 401 Digest challenge; the
-// nonce/opaque state machine is not driven, so check_digest_auth_check[_digest]()
-// is never reached and get_digested_user() always returns an empty view.
-// As a result the following tests are all observationally indistinguishable
-// from the canonical `digest_auth` case (both correct- and wrong-pass arms
-// see the same 401 + "FAIL"):
+// v2-digest tracking note (updated after TASK-062):
+// After TASK-062, digest_resource and the HA1 resources (digest_ha1_md5_resource,
+// digest_ha1_sha256_resource) all emit full RFC-7616 challenges via
+// http_response::unauthorized(digest_challenge{...}). The nonce/opaque
+// state machine is driven by MHD_queue_auth_required_response3, and the
+// following tests now complete the full digest handshake and assert 200 SUCCESS:
+//   - digest_auth, digest_auth_with_ha1_md5, digest_auth_with_ha1_sha256
+//
+// The following tests still assert the 401 FAIL contract (wrong credentials or
+// no auth provided -- the handshake completes but auth fails):
 //   - digest_auth_wrong_pass
-//   - digest_auth_with_ha1_md5 / *_wrong_pass
-//   - digest_auth_with_ha1_sha256 / *_wrong_pass
-//   - digest_user_cache_with_auth
-// They are retained as pins for the static-challenge contract and become
-// meaningful again only when full v2 Digest support (MHD nonce/opaque state
-// machine) lands. At that point the wrong-pass arms should assert a distinct
-// 403/401-with-stale, the HA1-MD5/SHA-256 arms should validate the chosen
-// algorithm, and digest_user_cache_with_auth should exercise the cache-hit
-// path. See PRD §digest-auth for the follow-up.
+//   - digest_auth_with_ha1_md5_wrong_pass, *_sha256_wrong_pass
+//
+// Remaining gap (signal_stale re-challenge path):
+//   The NONCE_STALE branch inside digest_resource/digest_ha1_*_resource
+//   (signal_stale = true) cannot be reliably triggered in CI because MHD's
+//   nonce expiry requires a real time delay and concurrent replay requests.
+//   This gap is documented in TASK-062 test-quality-reviewer iter1-2; it will
+//   be covered when full nonce-expiry testing infrastructure lands.
+//
+// Also pending: digest_user_cache_with_auth exercises the cache-hit path only
+// once the digest handshake completes (see resource definition below).
 
 using std::shared_ptr;
 using httpserver::webserver;
@@ -94,19 +99,35 @@ class user_pass_resource : public http_resource {
 #endif  // HAVE_BAUTH
 
 #ifdef HAVE_DAUTH
+// TASK-062: digest_resource now drives the full RFC-7616 nonce/opaque
+// handshake by emitting digest_challenge_body challenges. The first
+// request from a curl --digest client arrives with no Authorization
+// header (get_digested_user() empty), so we emit the initial RFC-7616
+// challenge with nonce/opaque/algorithm/qop populated by the dispatch
+// path; on the second request, curl recomputes the response using the
+// challenge, and check_digest_auth() validates and returns OK.
 class digest_resource : public http_resource {
  public:
      http_response render_get(const http_request& req) {
          using httpserver::http::http_utils;
+         using httpserver::digest_challenge;
          if (req.get_digested_user() == "") {
-             return http_response::unauthorized("Digest", "examplerealm", "FAIL");
-         } else {
-             auto result = req.check_digest_auth("examplerealm", "mypass", 300, 0, http_utils::digest_algorithm::MD5);
-             if (result == http_utils::digest_auth_result::NONCE_STALE) {
-                 return http_response::unauthorized("Digest", "examplerealm", "FAIL");
-             } else if (result != http_utils::digest_auth_result::OK) {
-                 return http_response::unauthorized("Digest", "examplerealm", "FAIL");
-             }
+             return http_response::unauthorized(
+                 digest_challenge{.realm = "examplerealm",
+                                  .body  = "FAIL"});
+         }
+         auto result = req.check_digest_auth("examplerealm", "mypass", 300,
+                                             0, http_utils::digest_algorithm::MD5);
+         if (result == http_utils::digest_auth_result::NONCE_STALE) {
+             return http_response::unauthorized(
+                 digest_challenge{.realm        = "examplerealm",
+                                  .signal_stale = true,
+                                  .body         = "FAIL"});
+         }
+         if (result != http_utils::digest_auth_result::OK) {
+             return http_response::unauthorized(
+                 digest_challenge{.realm = "examplerealm",
+                                  .body  = "FAIL"});
          }
          return http_response::string("SUCCESS");
      }
@@ -197,51 +218,77 @@ static const unsigned char PRECOMPUTED_HA1_SHA256[32] = {
     0x20, 0x7e, 0x02, 0xd7, 0xc4, 0xbd, 0x8a, 0x05
 };
 
+// TASK-062: migrated to digest_challenge so the nonce/opaque handshake can
+// complete and check_digest_auth_digest() is exercised. Previously used the
+// legacy string overload which emitted a static challenge with no nonce,
+// making the handshake impossible and the algorithm parameter meaningless.
 class digest_ha1_md5_resource : public http_resource {
  public:
      http_response render_get(const http_request& req) {
          using httpserver::http::http_utils;
+         using httpserver::digest_challenge;
          if (req.get_digested_user() == "") {
-             return http_response::unauthorized("Digest", "examplerealm", "FAIL");
+             return http_response::unauthorized(
+                 digest_challenge{.realm     = "examplerealm",
+                                  .algorithm = http_utils::digest_algorithm::MD5,
+                                  .body      = "FAIL"});
          }
          auto result = req.check_digest_auth_digest("examplerealm", PRECOMPUTED_HA1_MD5,
                  http_utils::md5_digest_size, 300, 0,
                  http_utils::digest_algorithm::MD5);
          if (result == http_utils::digest_auth_result::NONCE_STALE) {
-             return http_response::unauthorized("Digest", "examplerealm", "FAIL");
+             return http_response::unauthorized(
+                 digest_challenge{.realm        = "examplerealm",
+                                  .algorithm    = http_utils::digest_algorithm::MD5,
+                                  .signal_stale = true,
+                                  .body         = "FAIL"});
          } else if (result != http_utils::digest_auth_result::OK) {
-             return http_response::unauthorized("Digest", "examplerealm", "FAIL");
+             return http_response::unauthorized(
+                 digest_challenge{.realm     = "examplerealm",
+                                  .algorithm = http_utils::digest_algorithm::MD5,
+                                  .body      = "FAIL"});
          }
          return http_response::string("SUCCESS");
      }
 };
 
+// TASK-062: migrated to digest_challenge with algorithm=SHA256 so the
+// nonce/opaque handshake can complete and check_digest_auth_digest() is
+// exercised with the SHA-256 algorithm. Previously used the legacy string
+// overload which made the algorithm parameter meaningless.
 class digest_ha1_sha256_resource : public http_resource {
  public:
      http_response render_get(const http_request& req) {
          using httpserver::http::http_utils;
+         using httpserver::digest_challenge;
          if (req.get_digested_user() == "") {
-             return http_response::unauthorized("Digest", "examplerealm", "FAIL");
+             return http_response::unauthorized(
+                 digest_challenge{.realm     = "examplerealm",
+                                  .algorithm = http_utils::digest_algorithm::SHA256,
+                                  .body      = "FAIL"});
          }
          auto result = req.check_digest_auth_digest("examplerealm", PRECOMPUTED_HA1_SHA256,
                  http_utils::sha256_digest_size, 300, 0,
                  http_utils::digest_algorithm::SHA256);
          if (result == http_utils::digest_auth_result::NONCE_STALE) {
-             return http_response::unauthorized("Digest", "examplerealm", "FAIL");
+             return http_response::unauthorized(
+                 digest_challenge{.realm        = "examplerealm",
+                                  .algorithm    = http_utils::digest_algorithm::SHA256,
+                                  .signal_stale = true,
+                                  .body         = "FAIL"});
          } else if (result != http_utils::digest_auth_result::OK) {
-             return http_response::unauthorized("Digest", "examplerealm", "FAIL");
+             return http_response::unauthorized(
+                 digest_challenge{.realm     = "examplerealm",
+                                  .algorithm = http_utils::digest_algorithm::SHA256,
+                                  .body      = "FAIL"});
          }
          return http_response::string("SUCCESS");
      }
 };
 
-// TASK-013 §2 / §10: full digest-auth round-trip is a v1-only behaviour.
-// The v1 `digest_auth_fail_response::enqueue_response` path called
-// MHD_queue_auth_required_response3 to drive libmicrohttpd's nonce/opaque
-// state machine; v2's `unauthorized("Digest", ...)` only emits a static
-// WWW-Authenticate challenge (see http_response.hpp:175-180 doxygen).
-// These tests now assert the v2 contract: the resource emits FAIL on the
-// initial request because curl's nonce roundtrip cannot complete.
+// TASK-062: digest_resource uses http_response::unauthorized(digest_challenge{...})
+// which routes through MHD_queue_auth_required_response3 so curl --digest can
+// complete the full RFC-7616 nonce/opaque handshake and receive 200 SUCCESS.
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth)
     webserver ws{create_webserver(PORT)
         .digest_auth_random("myrandom")
@@ -278,17 +325,29 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth)
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-    // v2 contract: the server issues a static 401 Digest challenge; the
-    // handshake cannot complete (no nonce/opaque state machine), so the
-    // body remains FAIL and the status must be 401.
-    LT_CHECK_EQ(http_code, 401);
-    LT_CHECK_EQ(s, "FAIL");
+    // TASK-062 contract: the server now emits a full RFC-7616 §3.3
+    // challenge with nonce/opaque/algorithm/qop via
+    // MHD_queue_auth_required_response3, so curl --digest can complete
+    // the handshake. Final response on round 2 is 200 SUCCESS.
+    LT_CHECK_EQ(http_code, 200);
+    LT_CHECK_EQ(s, "SUCCESS");
     curl_easy_cleanup(curl);
 
     ws.stop();
 LT_END_AUTO_TEST(digest_auth)
 
-// See v2-digest tracking note at top of file.
+// Wrong-password case: curl completes the nonce handshake but check_digest_auth()
+// returns NOT_AUTHORIZED, so the resource emits a new 401 challenge (body "FAIL").
+//
+// TODO(TASK-062 test-quality-reviewer iter1-2): The signal_stale=true re-challenge
+// branch in digest_resource::render_get (NONCE_STALE path) is not covered here.
+// Triggering NONCE_STALE requires sending a replayed/expired nonce. MHD's nonce
+// expiry (nonce_nc_size window) cannot be reliably exhausted in a single-threaded
+// CI test without real-time delays or replay injection. Once nonce-expiry
+// infrastructure is available, add a test that:
+//   (a) sends the correct credentials with a replayed/expired nonce,
+//   (b) asserts status 401 with WWW-Authenticate containing stale=true,
+//   (c) asserts body is "FAIL".
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_wrong_pass)
     webserver ws{create_webserver(PORT)
         .digest_auth_random("myrandom")
@@ -333,7 +392,10 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_wrong_pass)
     ws.stop();
 LT_END_AUTO_TEST(digest_auth_wrong_pass)
 
-// See v2-digest tracking note at top of file.
+// TASK-062: digest_ha1_md5_resource now emits a full RFC-7616 digest_challenge
+// with algorithm=MD5 so the nonce/opaque handshake can complete. curl --digest
+// authenticates using the precomputed HA1 and the server verifies via
+// check_digest_auth_digest(). On success the resource returns 200 SUCCESS.
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5)
     webserver ws{create_webserver(PORT)
         .digest_auth_random("myrandom")
@@ -370,17 +432,17 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5)
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-    // v2 contract: static 401 Digest challenge, no handshake completes.
-    LT_CHECK_EQ(http_code, 401);
-    // TASK-013 §2 / §10: v2 digest auth only emits a static challenge — see
-    // digest_auth test above. Handshake cannot complete; body remains FAIL.
-    LT_CHECK_EQ(s, "FAIL");
+    // TASK-062 contract: digest_challenge emits a full RFC-7616 challenge with
+    // algorithm=MD5; curl --digest completes the handshake. Final response: 200.
+    LT_CHECK_EQ(http_code, 200);
+    LT_CHECK_EQ(s, "SUCCESS");
     curl_easy_cleanup(curl);
 
     ws.stop();
 LT_END_AUTO_TEST(digest_auth_with_ha1_md5)
 
-// See v2-digest tracking note at top of file.
+// TASK-062: digest_ha1_md5_resource now uses digest_challenge; curl completes
+// the handshake but check_digest_auth_digest() rejects the wrong HA1. 401 FAIL.
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5_wrong_pass)
     webserver ws{create_webserver(PORT)
         .digest_auth_random("myrandom")
@@ -417,7 +479,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5_wrong_pass)
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-    // v2 contract: static 401 Digest challenge, no handshake completes.
+    // TASK-062 contract: handshake completes, but wrong HA1 fails check_digest_auth_digest.
     LT_CHECK_EQ(http_code, 401);
     LT_CHECK_EQ(s, "FAIL");
     curl_easy_cleanup(curl);
@@ -425,7 +487,10 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5_wrong_pass)
     ws.stop();
 LT_END_AUTO_TEST(digest_auth_with_ha1_md5_wrong_pass)
 
-// See v2-digest tracking note at top of file.
+// TASK-062: digest_ha1_sha256_resource now emits a full RFC-7616 digest_challenge
+// with algorithm=SHA256 so the nonce/opaque handshake can complete. curl --digest
+// authenticates using the precomputed HA1 and the server verifies via
+// check_digest_auth_digest() with SHA-256. On success the resource returns 200 SUCCESS.
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256)
     webserver ws{create_webserver(PORT)
         .digest_auth_random("myrandom")
@@ -462,17 +527,17 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256)
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-    // v2 contract: static 401 Digest challenge, no handshake completes.
-    LT_CHECK_EQ(http_code, 401);
-    // TASK-013 §2 / §10: v2 digest auth only emits a static challenge — see
-    // digest_auth test above. Handshake cannot complete; body remains FAIL.
-    LT_CHECK_EQ(s, "FAIL");
+    // TASK-062 contract: digest_challenge emits a full RFC-7616 challenge with
+    // algorithm=SHA256; curl --digest completes the handshake. Final response: 200.
+    LT_CHECK_EQ(http_code, 200);
+    LT_CHECK_EQ(s, "SUCCESS");
     curl_easy_cleanup(curl);
 
     ws.stop();
 LT_END_AUTO_TEST(digest_auth_with_ha1_sha256)
 
-// See v2-digest tracking note at top of file.
+// TASK-062: digest_ha1_sha256_resource now uses digest_challenge; curl completes
+// the handshake but check_digest_auth_digest() rejects the wrong HA1. 401 FAIL.
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256_wrong_pass)
     webserver ws{create_webserver(PORT)
         .digest_auth_random("myrandom")
@@ -509,7 +574,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256_wrong_pass)
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-    // v2 contract: static 401 Digest challenge, no handshake completes.
+    // TASK-062 contract: handshake completes, but wrong HA1 fails check_digest_auth_digest.
     LT_CHECK_EQ(http_code, 401);
     LT_CHECK_EQ(s, "FAIL");
     curl_easy_cleanup(curl);
