@@ -95,6 +95,13 @@ LT_END_AUTO_TEST(reference_stable_across_calls)
 
 LT_BEGIN_AUTO_TEST(http_request_cookies_parsed_suite,
                    second_call_does_not_reallocate)
+    // This test exercises the cookies_parsed_cache_ guard via the
+    // create_test_request() builder path (cookies_parsed_cache_built_
+    // is set during build). The live MHD path — where
+    // cookies_parsed_cache_built_ is set on the first MHD_get_connection_values
+    // call — is only exercised by integration tests (test/integ/).
+    // See test-quality-reviewer-iter3-4: the live-MHD branch is accepted
+    // as integration-test-only coverage.
     http_request req = create_test_request()
         .path("/").method("GET")
         .cookie("sid", "abc")
