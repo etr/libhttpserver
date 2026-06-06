@@ -342,14 +342,10 @@ void webserver::install_default_alias_hooks_() {
     // calling it a second time would observably invoke the user code
     // twice for one logical exception). See webserver_dispatch.cpp.
     //
-    // Re-registration semantics (finding #35 / spec-alignment): the
-    // task spec says "re-registration replaces the existing alias hook".
-    // At v2.0 there is no runtime re-registration path -- the slot is
-    // written exactly once at construction (write-once-at-construction
-    // contract). If a future task adds a runtime setter, it must
-    // overwrite handler_exception_alias_ under hook_table_mutex_
-    // exclusive and update any_hooks_ accordingly; "replace" semantics
-    // are then enforced by the plain std::function overwrite.
+    // The alias slot is written exactly once here and is immutable
+    // thereafter (DR-012 / §4.10). Runtime extension of the
+    // handler_exception phase is via add_hook(); the alias slot is not
+    // user-mutable post-construction.
     install_internal_error_alias(impl_.get(), internal_error_handler);
 
     // ----------------------------------------------------------------

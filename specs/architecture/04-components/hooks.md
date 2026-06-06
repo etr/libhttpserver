@@ -97,6 +97,8 @@ hook_handle http_resource::add_hook(hook_phase, std::function<...>);
 | `log_error(fn)` | *not* a hook alias — it is an MHD-level callback for backend errors, distinct from the request lifecycle |
 | `file_cleanup_callback(fn)` | *not* a hook alias — file-upload cleanup is a separate post-upload concern, not a lifecycle phase |
 
+**Alias mutability.** All v1 alias setters are **construction-time-only**. Their backing storage is wired during `create_webserver` → `webserver` construction and not mutated afterward. Two aliases (`log_access`, `internal_error_handler`) occupy dedicated single-slot members on `webserver_impl` (`log_access_alias_`, `handler_exception_alias_`); the other three (`auth_handler`, `method_not_allowed_handler`, `not_found_handler`) are seated into the regular per-phase hook vectors via `add_hook(...).detach()` at construction. In neither case is the slot mutable after `webserver::start()`. Users who need runtime registration or replacement of an extension point should use the hook bus directly: `webserver::add_hook(phase, callable)` returns a `hook_handle` that supports `remove()`. This is a deliberate v2.0 design choice (DR-012 / TASK-066): the hook bus IS the runtime extension surface; aliases are documented construction-time sugar. The semantics are pinned by `log_access_alias_is_immutable_after_construction` and `handler_exception_alias_is_immutable_after_construction` in `test/unit/hooks_log_access_alias_slot_test.cpp`.
+
 **Related requirements:** PRD-HOOK-REQ-001..009.
 **Related decisions:** DR-012, §5.6.
 
