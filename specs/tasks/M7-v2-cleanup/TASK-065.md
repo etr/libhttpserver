@@ -8,10 +8,10 @@
 `peer_address.cpp:49-50` skips RFC 5952 zero-compression (collapsing consecutive zero groups to `::`) so the textual IPv6 form we expose is non-canonical. Spec comment notes "TASK-046 can refine when telemetry firms up" — telemetry has firmed up; finish the canonicalization now.
 
 **Action Items:**
-- [ ] Implement RFC 5952 §4 canonical form: lowercase, suppress leading zeros within groups, collapse the longest run of `2+` consecutive zero groups to `::` (ties broken by first occurrence), do not collapse a single zero group.
-- [ ] Reuse libc's `inet_ntop` where it already produces RFC 5952 output (glibc ≥ 2.28, musl, macOS recent) and only post-process when the platform falls short; or always post-process for determinism across platforms (preferred — document choice in commit message).
-- [ ] Add a unit test pinning the RFC 5952 §4.2.2 examples (`2001:db8::1`, `::1`, `::`, embedded IPv4 mappings).
-- [ ] Remove the "TASK-046 can refine when telemetry firms up" comment.
+- [x] Implement RFC 5952 §4 canonical form: lowercase, suppress leading zeros within groups, collapse the longest run of `2+` consecutive zero groups to `::` (ties broken by first occurrence), do not collapse a single zero group.
+- [x] Reuse libc's `inet_ntop` where it already produces RFC 5952 output (glibc ≥ 2.28, musl, macOS recent) and only post-process when the platform falls short; or always post-process for determinism across platforms (preferred — document choice in commit message).
+- [x] Add a unit test pinning the RFC 5952 §4.2.2 examples (`2001:db8::1`, `::1`, `::`, embedded IPv4 mappings).
+- [x] Remove the "TASK-046 can refine when telemetry firms up" comment.
 
 **Dependencies:**
 - Blocked by: None
@@ -27,4 +27,4 @@
 **Related Requirements:** PRD §2 observability NFR
 **Related Decisions:** None new (RFC 5952)
 
-**Status:** Backlog
+**Status:** Done

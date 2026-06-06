@@ -29,7 +29,7 @@ TASK-093).
 | TASK-062 | RFC-7616-compliant Digest auth response factory | HIGH | L | Done |
 | TASK-063 | Honor or remove `http_response::pipe` `size_hint` parameter | HIGH | S | Done |
 | TASK-064 | Structured cookie type | HIGH | M | Backlog |
-| TASK-065 | RFC 5952 IPv6 zero-compression in `peer_address` | HIGH | S | Backlog |
+| TASK-065 | RFC 5952 IPv6 zero-compression in `peer_address` | HIGH | S | Done |
 | TASK-066 | Runtime setter for hook alias slots | MED | M | Backlog |
 | TASK-067 | Remove v1 `registered_resources*` maps and `namespace compat` shim | MED | L | Backlog |
 | TASK-068 | `connection_state` hardening — CWE-226 / CWE-14 | MED | S | Backlog |
