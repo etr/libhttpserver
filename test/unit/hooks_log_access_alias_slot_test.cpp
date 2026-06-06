@@ -39,6 +39,7 @@
 #include <algorithm>
 #include <functional>
 #include <string>
+#include <string_view>
 
 #include "./httpserver.hpp"
 #include "httpserver/create_test_request.hpp"
@@ -164,45 +165,97 @@ LT_BEGIN_AUTO_TEST(hooks_log_access_alias_slot_suite,
     LT_CHECK(captured.find("GET") != std::string::npos);
 LT_END_AUTO_TEST(alias_sanitizes_control_chars_in_method)
 
-// Re-registration: calling log_access a second time on the builder
-// replaces the previous callable. At v2.0 the only write point is
-// webserver construction (write-once-at-construction contract); runtime
-// re-registration via a setter is deferred to a future task.
-// This test pins the replace semantics at construction time.
+// TASK-066: alias slots are construction-time-only. The previous test on
+// this site (`log_access_second_registration_replaces_first`) simulated
+// re-registration by constructing two webservers and asserting they did
+// not pollute each other -- but that was not a runtime "replace"
+// semantics pin, because no runtime replacement path exists or is
+// planned (DR-012, §4.10). The two tests below replace that simulated
+// scenario with the real contract: alias slots are written exactly once
+// at webserver construction and are immutable thereafter; the public
+// runtime extension surface for both phases is add_hook(), which lives
+// in the per-phase user vector and never touches the alias slot.
 LT_BEGIN_AUTO_TEST(hooks_log_access_alias_slot_suite,
-                   log_access_second_registration_replaces_first)
-    int first_calls = 0;
-    int second_calls = 0;
-    // Simulate re-registration by creating two builders and checking that
-    // only the callable set on the webserver used for construction is stored.
-    webserver ws1{create_webserver(8244)
-        .log_access([&first_calls](const std::string&) { ++first_calls; })};
-    webserver ws2{create_webserver(8245)
-        .log_access([&second_calls](const std::string&) { ++second_calls; })};
+                   log_access_alias_is_immutable_after_construction)
+    int direct_calls = 0;
+    int user_hook_calls = 0;
+    webserver ws{create_webserver(8244)
+        .log_access([&direct_calls](const std::string&) { ++direct_calls; })};
+    auto* impl = impl_of(ws);
 
-    // Each webserver holds its own callable; neither pollutes the other.
-    auto* impl1 = impl_of(ws1);
-    auto* impl2 = impl_of(ws2);
-    LT_CHECK(static_cast<bool>(impl1->log_access_alias_));
-    LT_CHECK(static_cast<bool>(impl2->log_access_alias_));
+    // (a) Construction wires the slot exactly once.
+    LT_CHECK(static_cast<bool>(impl->log_access_alias_));
+    LT_CHECK_EQ(impl->hooks_response_sent_.size(),
+                static_cast<std::size_t>(0));
 
-    // Invoke each alias independently.
-    http_request req1 =
+    // (b) Adding a user response_sent hook grows the vector but leaves
+    // the alias slot untouched -- the public way to add observation at
+    // response_sent post-construction is add_hook(), which routes into
+    // the user vector and never reseats the alias slot.
+    auto h = ws.add_hook(hook_phase::response_sent,
+        std::function<void(const response_sent_ctx&)>(
+            [&user_hook_calls](const response_sent_ctx&) {
+                ++user_hook_calls;
+            }));
+    LT_CHECK(static_cast<bool>(impl->log_access_alias_));
+    LT_CHECK_EQ(impl->hooks_response_sent_.size(),
+                static_cast<std::size_t>(1));
+
+    // (c) Removing the user hook leaves the alias slot untouched -- the
+    // slot is not under user control via the hook bus.
+    h.remove();
+    LT_CHECK(static_cast<bool>(impl->log_access_alias_));
+    LT_CHECK_EQ(impl->hooks_response_sent_.size(),
+                static_cast<std::size_t>(0));
+
+    // (d) Direct invocation still reaches the construction-time callable.
+    http_request req =
         create_test_request().path("/a").method("GET").build();
-    http_request req2 =
-        create_test_request().path("/b").method("GET").build();
-    response_sent_ctx ctx1{};
-    ctx1.request = &req1;
-    response_sent_ctx ctx2{};
-    ctx2.request = &req2;
+    response_sent_ctx ctx{};
+    ctx.request = &req;
+    impl->log_access_alias_(ctx);
+    LT_CHECK_EQ(direct_calls, 1);
+    LT_CHECK_EQ(user_hook_calls, 0);
+LT_END_AUTO_TEST(log_access_alias_is_immutable_after_construction)
 
-    impl1->log_access_alias_(ctx1);
-    impl2->log_access_alias_(ctx2);
+LT_BEGIN_AUTO_TEST(hooks_log_access_alias_slot_suite,
+                   handler_exception_alias_is_immutable_after_construction)
+    // Mirror of the log_access pin above for handler_exception_alias_.
+    // Construction wires the slot; user add_hook() at handler_exception
+    // grows hooks_handler_exception_ but does not displace or clear the
+    // alias slot. Removing the user hook leaves the alias slot intact.
+    webserver ws{create_webserver(8244)
+        .internal_error_handler(
+            [](const httpserver::http_request&, std::string_view)
+                -> httpserver::http_response {
+                return httpserver::http_response::string("oops");
+            })};
+    auto* impl = impl_of(ws);
 
-    // Only the callable stored on each respective webserver was invoked.
-    LT_CHECK_EQ(first_calls, 1);
-    LT_CHECK_EQ(second_calls, 1);
-LT_END_AUTO_TEST(log_access_second_registration_replaces_first)
+    // (a) Construction wires the alias slot exactly once.
+    LT_CHECK(static_cast<bool>(impl->handler_exception_alias_));
+    LT_CHECK_EQ(impl->hooks_handler_exception_.size(),
+                static_cast<std::size_t>(0));
+
+    // (b) User add_hook(handler_exception, ...) grows the vector; alias
+    // slot remains set independently.
+    auto h = ws.add_hook(hook_phase::handler_exception,
+        std::function<httpserver::hook_action(
+                const httpserver::handler_exception_ctx&)>(
+            [](const httpserver::handler_exception_ctx&) {
+                return httpserver::hook_action::pass();
+            }));
+    LT_CHECK(static_cast<bool>(impl->handler_exception_alias_));
+    LT_CHECK_EQ(impl->hooks_handler_exception_.size(),
+                static_cast<std::size_t>(1));
+
+    // (c) Removing the user hook does not clear the alias slot -- the
+    // slot is not under user control via the hook bus.
+    h.remove();
+    LT_CHECK(static_cast<bool>(impl->handler_exception_alias_));
+    LT_CHECK_EQ(impl->hooks_handler_exception_.size(),
+                static_cast<std::size_t>(0));
+LT_END_AUTO_TEST(handler_exception_alias_is_immutable_after_construction)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

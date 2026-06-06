@@ -82,6 +82,15 @@ class http_resource;
  * `weak_ptr<resource_hook_table>` instead of a raw pointer; their
  * `remove()` is safe even after the resource is destroyed (the
  * weak_ptr expires and the call becomes a no-op).
+ *
+ * @note **Alias slots are construction-time-only.** The v1-derived
+ * setters on `create_webserver` (`log_access`,
+ * `internal_error_handler`, `not_found_handler`,
+ * `method_not_allowed_handler`, `auth_handler`) wire their slot
+ * exactly once during webserver construction and are immutable
+ * thereafter. To add or remove an observation/intervention point at
+ * runtime, use `webserver::add_hook(phase, ...)` and the returned
+ * `hook_handle`. See DR-012 / §4.10.
  */
 class hook_handle {
  public:

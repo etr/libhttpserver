@@ -139,13 +139,11 @@ void erase_slot_for_handler_phase_(detail::webserver_impl* impl,
     case hook_phase::before_handler:
         erase_and_reset(impl->hooks_before_handler_); break;
     case hook_phase::handler_exception:
-        // Finding #6 (forward-looking): if a future task adds a runtime
-        // re-registration path for handler_exception_alias_, remove()
-        // will also need a path to clear that slot and re-evaluate
-        // any_hooks_. Currently any_hooks_ remains true while the alias
-        // is wired; removing only a user-vector entry does not clear it
-        // if the alias is still set. Add that handling alongside the
-        // runtime setter.
+        // The alias slot (handler_exception_alias_) is immutable after
+        // construction (DR-012 / §4.10), so remove() only touches the
+        // user vector here; any_hooks_ remains true while the alias is
+        // wired, which is correct -- the alias is the "still has a
+        // hook" signal.
         erase_and_reset(impl->hooks_handler_exception_); break;
     case hook_phase::after_handler:
         erase_and_reset(impl->hooks_after_handler_); break;
@@ -493,15 +491,9 @@ detail::webserver_impl::fire_handler_exception(
         log_dispatch_error(
             "fire_handler_exception: snapshot copy failed");
     }
-    // Tail: invoke the alias slot, if any. Read without synchronisation;
-    // the slot is single-writer-at-construction (see webserver_impl.hpp).
-    //
-    // Finding #33 (security-reviewer): if a future task adds a runtime
-    // setter for handler_exception_alias_, this read MUST be upgraded to
-    // take hook_table_mutex_ shared and the writer MUST take it exclusive.
-    // The synchronisation contract lives in webserver_impl.hpp at the
-    // handler_exception_alias_ field declaration -- keep both sites in
-    // sync when adding any runtime re-registration path.
+    // Tail: invoke the alias slot, if any. Read without synchronisation:
+    // the slot is single-writer-at-construction, immutable after
+    // webserver::start() (DR-012 / §4.10).
     //
     // Throw containment: a throwing alias is logged with the legacy
     // "internal_error_handler threw" prefix so the DR-009 §5.2 point 4
@@ -545,8 +537,9 @@ detail::webserver_impl::fire_after_handler(
 void detail::webserver_impl::fire_response_sent(
     const ::httpserver::response_sent_ctx& ctx) noexcept {
     fire_hooks_for_phase(this, hooks_response_sent_, ctx, "response_sent");
-    // Tail: invoke the alias slot, if any. Read without synchronisation;
-    // the slot is single-writer-at-construction (see webserver_impl.hpp).
+    // Tail: invoke the alias slot, if any. Read without synchronisation:
+    // the slot is single-writer-at-construction, immutable after
+    // webserver::start() (DR-012 / §4.10).
     if (log_access_alias_) {
         try {
             log_access_alias_(ctx);

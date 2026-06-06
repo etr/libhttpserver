@@ -347,12 +347,8 @@ class webserver_impl {
     // at webserver construction, before start() is called -- the daemon is
     // not yet running, so no synchronisation is required for the write.
     // Read on the dispatch hot path from fire_handler_exception with no
-    // lock (single-writer-before-readers contract, same as
-    // parent->internal_error_handler). If a future task adds a runtime
-    // setter the writer MUST take hook_table_mutex_ exclusively and the
-    // reader MUST take it shared -- same pattern as the per-phase vectors.
-    // (Finding #14: full rationale lives here; fire_handler_exception in
-    // hook_handle.cpp has a cross-reference comment per finding #33.)
+    // lock. Slot is immutable after construction (DR-012 / §4.10); the
+    // reader path requires no synchronisation.
     std::function<::httpserver::hook_action(
             const ::httpserver::handler_exception_ctx&)>
         handler_exception_alias_;
@@ -370,11 +366,8 @@ class webserver_impl {
     // The slot fires AFTER user-added response_sent hooks so user hooks
     // observe the response before the legacy access logger formats it.
     //
-    // A future runtime setter that allows re-registration MUST take
-    // hook_table_mutex_ exclusively for the write, and the reader in
-    // fire_response_sent MUST take it shared. At v2.0 there is no runtime
-    // setter -- the slot is written exactly once at webserver construction
-    // before start() is called.
+    // Slot is immutable after construction (DR-012 / §4.10); the reader
+    // path requires no synchronisation.
     std::function<void(const ::httpserver::response_sent_ctx&)>
         log_access_alias_;
     std::vector<phase_entry<void(const ::httpserver::request_completed_ctx&)>>
