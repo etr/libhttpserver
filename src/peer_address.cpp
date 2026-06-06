@@ -103,38 +103,41 @@ zero_run find_longest_zero_run(const ipv6_groups& g) {
     return best;
 }
 
-// Append "%x" for a single group to `out`.
-void append_group_hex(std::string& out, std::uint16_t group) {
-    char scratch[5];  // up to 4 hex chars + NUL per group
-    std::snprintf(scratch, sizeof(scratch), "%x",
-                  static_cast<unsigned>(group));
-    out += scratch;
-}
-
 // Emit the canonical text form, given the assembled groups and the
 // collapse window. Edge cases ("::1", "1::", "::") fall out naturally
 // because the "::" marker brings both colons with it.
+//
+// We write into a fixed stack buffer (max 39 chars for a fully-expanded
+// all-non-zero address) and construct the returned std::string from
+// (buf, len). This lets short compressed addresses like "::1" (3 chars)
+// or "2001:db8::1" (11 chars) stay within SBO on all common
+// implementations without any reserve() call that would defeat it.
 std::string emit_canonical(const ipv6_groups& g, const zero_run& collapse) {
-    std::string out;
-    out.reserve(40);  // bounded by INET6_ADDRSTRLEN
+    char buf[40];  // "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff" = 39 + NUL
+    std::size_t pos = 0;
     for (int i = 0; i < 8;) {
         if (i == collapse.start) {
-            out += "::";
+            buf[pos++] = ':';
+            buf[pos++] = ':';
             i += collapse.len;
             continue;
         }
-        append_group_hex(out, g[i]);
+        char scratch[5];
+        std::snprintf(scratch, sizeof(scratch), "%x",
+                      static_cast<unsigned>(g[i]));
+        for (char* p = scratch; *p; ++p) buf[pos++] = *p;
         ++i;
         // Emit a ':' separator if more groups remain AND the next slot
         // is not the collapse window (which brings its own leading ':').
-        if (i < 8 && i != collapse.start) out += ':';
+        if (i < 8 && i != collapse.start) buf[pos++] = ':';
     }
-    return out;
+    return std::string(buf, pos);
 }
 
 // RFC 5952 §4 canonicalizer for the 16-byte big-endian IPv6 address in
-// `bytes`. The output is bounded by INET6_ADDRSTRLEN (45 + NUL = 46), so
-// std::string's SBO covers it on every reasonable libc++/libstdc++ build.
+// `bytes`. The output is bounded by INET6_ADDRSTRLEN (45 + NUL = 46).
+// emit_canonical() uses a stack buffer to avoid defeating SBO for the
+// typical compressed short addresses ("::1", "2001:db8::1", etc.).
 //
 // We deliberately implement the canonical form in pure C++ over the
 // 16-byte buffer rather than delegating to `inet_ntop`:
