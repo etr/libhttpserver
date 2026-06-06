@@ -151,8 +151,11 @@ class header_set_test_resource : public http_resource {
 class cookie_set_test_resource : public http_resource {
  public:
      http_response render_get(const http_request&) override {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
          return http_response::string("OK")
                     .with_cookie("MyCookie", "CookieValue");
+#pragma GCC diagnostic pop
      }
 };
 
@@ -361,10 +364,13 @@ class print_response_resource : public http_resource {
      explicit print_response_resource(stringstream* ss) : ss(ss) {}
 
      http_response render_get(const http_request&) override {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
          auto hresp = http_response::string("OK")
                           .with_header("MyResponseHeader", "MyResponseHeaderValue")
                           .with_footer("MyResponseFooter", "MyResponseFooterValue")
                           .with_cookie("MyResponseCookie", "MyResponseCookieValue");
+#pragma GCC diagnostic pop
 
          (*ss) << hresp;
 
@@ -485,11 +491,20 @@ LT_BEGIN_AUTO_TEST(basic_suite, duplicate_endpoints)
     // for the rationale.
     LT_CHECK_THROW(ws->register_prefix("OK", ok2));
 
-    // Case folding: http_endpoint::operator< is unconditionally
-    // case-insensitive (std::toupper in src/detail/http_endpoint.cpp),
-    // so "ok" collides with the already-registered "OK" regardless of
-    // the CASE_INSENSITIVE build flag.
+    // TASK-067: pre-TASK-067 the v1 `registered_resources` ordered map
+    // was the duplicate-detection oracle, and its key comparator
+    // (`http_endpoint::operator<`) was unconditionally case-insensitive
+    // via `std::toupper` regardless of the CASE_INSENSITIVE build flag
+    // (a v1 quirk that didn't match dispatch-time lookup semantics).
+    // With the v1 maps gone the v2 3-tier route table is the only
+    // oracle, and it is consistently case-sensitive without
+    // -DCASE_INSENSITIVE — so "ok" is a genuinely distinct route key
+    // from "OK" and registers successfully.
+#ifdef CASE_INSENSITIVE
     LT_CHECK_THROW(ws->register_path("ok", ok2));
+#else
+    ws->register_path("ok", ok2);
+#endif
 LT_END_AUTO_TEST(duplicate_endpoints)
 
 LT_BEGIN_AUTO_TEST(basic_suite, family_endpoints)

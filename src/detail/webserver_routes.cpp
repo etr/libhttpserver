@@ -134,20 +134,70 @@ void for_each_requested_method(method_set methods, Fn&& fn) {
 
 namespace detail {
 
+// Returns the route_entry that maps to @p idx in the v2 route table, or
+// nullptr if no such entry exists. Probes the three tiers in the same
+// order as lookup_v2 (exact -> radix -> regex) but matches on the
+// canonical path key (idx.get_url_complete()) rather than a request URL,
+// because the on_*/route conflict-detection oracle wants "is there
+// already an entry registered AT this path", not "does this request URL
+// match a registered route".
+//
+// Caller must hold route_table_mutex_ (any lock kind). The returned
+// pointer is valid only while that lock is held. The pointer is `const`
+// because the caller only reads handler/methods to extract the
+// lambda_resource shim; the shim itself is mutated through its own
+// shared_ptr<>, not through this route_entry.
+const detail::route_entry* webserver_impl::find_v2_entry_by_path_(
+        const detail::http_endpoint& idx) const noexcept {
+    const std::string& key = idx.get_url_complete();
+    if (!idx.get_url_pars().empty()) {
+        // Parameterized routes live in the radix tier exclusively.
+        // Probe the exact terminus at @p key (is_prefix=false); ignore
+        // any prefix terminus -- on_*/route never reach this code with
+        // a prefix endpoint (family=false at construction).
+        detail::radix_match<detail::route_entry> rm;
+        if (param_and_prefix_routes_.find(key, rm)
+                && rm.entry != nullptr && !rm.is_prefix_match) {
+            return rm.entry;
+        }
+        return nullptr;
+    }
+    // Non-parameterized: probe exact tier first, then regex tier by
+    // url_complete string equality.
+    auto it = exact_routes_.find(key);
+    if (it != exact_routes_.end()) return &it->second;
+    if (idx.is_regex_compiled()) {
+        for (const auto& rr : regex_routes_) {
+            if (rr.url_complete == key) return &rr.entry;
+        }
+    }
+    return nullptr;
+}
+
+// Caller must hold route_table_mutex_ (unique_lock). The shim returned
+// here is the SAME object that subsequent helpers (commit_handlers_to_shim,
+// upsert_v2_table_entry_locked_) mutate; holding the lock across the
+// whole prepare->commit->upsert sequence prevents a concurrent registration
+// from racing in between.
 std::shared_ptr<detail::lambda_resource>
 webserver_impl::prepare_or_create_lambda_shim(const detail::http_endpoint& idx,
                                               method_set methods,
                                               bool& fresh_out) {
-    auto it = registered_resources.find(idx);
-    if (it == registered_resources.end()) {
+    const detail::route_entry* existing = find_v2_entry_by_path_(idx);
+    if (existing == nullptr) {
         fresh_out = true;
         return std::make_shared<detail::lambda_resource>();
     }
-    // Existing entry. Must be a lambda_resource shim, otherwise a
-    // class-based register_path/register_prefix has already taken
-    // this path -- lambda and class registrations cannot coexist
-    // on the same path.
-    auto shim = std::dynamic_pointer_cast<detail::lambda_resource>(it->second);
+    // Existing entry. The v2 storage uses a variant whose handler arm is
+    // always shared_ptr<http_resource> in the current code (the
+    // lambda_handler arm is unused; see resolve_resource_for_request).
+    // Pull the shared_ptr and dynamic_pointer_cast to lambda_resource:
+    // if the cast misses, a class-based register_path/register_prefix
+    // owns this path and we must throw.
+    const auto* sp = std::get_if<std::shared_ptr<http_resource>>(&existing->handler);
+    auto shim = (sp != nullptr)
+        ? std::dynamic_pointer_cast<detail::lambda_resource>(*sp)
+        : nullptr;
     if (!shim) {
         throw std::invalid_argument(
             "A non-lambda http_resource is already registered at "
@@ -190,17 +240,6 @@ void webserver_impl::commit_handlers_to_shim(detail::lambda_resource& shim,
         } else {
             shim.set_slot(buf[i], std::move(handler));  // move into last slot
         }
-    }
-}
-
-void webserver_impl::insert_fresh_v1_entries(const detail::http_endpoint& idx,
-        std::shared_ptr<http_resource> shim) {
-    registered_resources.insert({idx, shim});
-    if (idx.get_url_pars().empty()) {
-        registered_resources_str.insert({idx.get_url_complete(), shim});
-    }
-    if (idx.is_regex_compiled()) {
-        registered_resources_regex.insert({idx, shim});
     }
 }
 
@@ -324,13 +363,19 @@ void webserver_impl::update_existing_v2_entry(const std::string& key,
     }
 }
 
-void webserver_impl::upsert_v2_table_entry(const detail::http_endpoint& idx,
+void webserver_impl::upsert_v2_table_entry_locked_(
+        const detail::http_endpoint& idx,
         method_set methods, std::shared_ptr<http_resource> shim, bool fresh) {
+    // TASK-067: caller must already hold route_table_mutex_ (unique_lock).
+    // The single-lock window covers the conflict probe (carried out by
+    // prepare_or_create_lambda_shim via find_v2_entry_by_path_) all the
+    // way through the table mutation here, so no concurrent registration
+    // can race in between.
+    //
     // TASK-027: mirror into the v2 3-tier table. We store the
     // lambda_resource shim via the shared_ptr arm so dispatch is
     // identical to class-resource registration. The methods bitmask
     // accumulates across calls when fresh==false.
-    std::unique_lock table_lock(route_table_mutex_);
     const std::string& key = idx.get_url_complete();
     if (!idx.get_url_pars().empty()) {
         upsert_v2_radix_route(key, methods, std::move(shim));
@@ -386,22 +431,6 @@ void webserver::validate_on_methods_inputs_(method_set methods,
     }
 }
 
-// Roll back the v1-side inserts performed by on_methods_ when
-// upsert_v2_table_entry throws. Only the fresh-entry case is meaningful
-// here -- existing entries are pre-rejected by prepare_or_create_lambda_shim
-// before any mutation, so no rollback is needed.
-void webserver::rollback_on_methods_fresh_entry_(
-        const detail::http_endpoint& idx) {
-    std::unique_lock rollback_lock(impl_->registered_resources_mutex);
-    impl_->registered_resources.erase(idx);
-    if (idx.get_url_pars().empty()) {
-        impl_->registered_resources_str.erase(idx.get_url_complete());
-    }
-    if (idx.is_regex_compiled()) {
-        impl_->registered_resources_regex.erase(idx);
-    }
-}
-
 void webserver::on_methods_(method_set methods,
                             const std::string& path,
                             std::function<http_response(const http_request&)> handler) {
@@ -413,21 +442,21 @@ void webserver::on_methods_(method_set methods,
     bool is_new_entry = false;
     std::shared_ptr<detail::lambda_resource> shim;
     {
-        // Scoped block: registered_resources_mutex is released at the
-        // closing brace, before upsert_v2_table_entry (which takes its
-        // own route_table_mutex_) and before invalidate_route_cache
-        // (which takes the route_lru_cache internal mutex).
-        std::unique_lock registered_resources_lock(impl_->registered_resources_mutex);
+        // TASK-067: single-locked window across the v2 conflict probe,
+        // the per-method atomicity pre-check, the slot writes, and the
+        // table mutation. Prior to TASK-067 a separate registered_resources
+        // mutex covered the prepare/commit/insert phase and was released
+        // before the v2 upsert; the gap was harmless only because the
+        // post-throw rollback unwound the v1 inserts.  With the v1 maps
+        // gone, the route_table_mutex_ is the only consistency boundary
+        // and must cover both the probe and the mutation. An upsert throw
+        // (e.g. reject_terminus_collision) now leaves the local shim
+        // unreferenced and discarded -- no rollback required since the
+        // table itself was never touched.
+        std::unique_lock table_lock(impl_->route_table_mutex_);
         shim = impl_->prepare_or_create_lambda_shim(idx, methods, is_new_entry);
         impl_->commit_handlers_to_shim(*shim, methods, std::move(handler));
-        if (is_new_entry) impl_->insert_fresh_v1_entries(idx, shim);
-    }
-
-    try {
-        impl_->upsert_v2_table_entry(idx, methods, shim, is_new_entry);
-    } catch (...) {
-        if (is_new_entry) rollback_on_methods_fresh_entry_(idx);
-        throw;
+        impl_->upsert_v2_table_entry_locked_(idx, methods, shim, is_new_entry);
     }
     impl_->invalidate_route_cache();
 }
@@ -516,7 +545,7 @@ void webserver::register_ws_resource(const std::string& resource,
         throw std::invalid_argument("The websocket_handler pointer cannot be null");
     }
     std::string url_key = http_utils::standardize_url(resource);
-    std::unique_lock lock(impl_->registered_resources_mutex);
+    std::unique_lock lock(impl_->registered_ws_handlers_mutex_);
     auto result = impl_->registered_ws_handlers.emplace(std::move(url_key),
                                                         std::move(handler));
     if (!result.second) {
@@ -536,7 +565,7 @@ void webserver::register_ws_resource(const std::string& resource,
 
 void webserver::unregister_ws_resource(const std::string& resource) {
 #ifdef HAVE_WEBSOCKET
-    std::unique_lock lock(impl_->registered_resources_mutex);
+    std::unique_lock lock(impl_->registered_ws_handlers_mutex_);
     impl_->registered_ws_handlers.erase(http_utils::standardize_url(resource));
 #else
     (void)resource;

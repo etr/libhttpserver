@@ -155,42 +155,6 @@ class webserver_impl {
     std::string digest_opaque_;
 #endif  // HAVE_DAUTH
 
-    // --- Registration-side resource maps (post-TASK-053) ----------------
-    //
-    // As of TASK-053 these maps are NO LONGER on the dispatch hot path.
-    // The HTTP dispatch path now goes through lookup_v2() and the v2
-    // 3-tier route table below. The maps below survive as
-    // registration-time bookkeeping that two non-dispatch callers still
-    // depend on:
-    //
-    //   * `prepare_or_create_lambda_shim` (webserver_routes.cpp) reads
-    //     `registered_resources` to detect "trying to register a lambda
-    //     handler where a class resource already exists at the same
-    //     path, or vice versa." That conflict-detection oracle has not
-    //     been redesigned onto the v2 tiers in this task.
-    //   * The WebSocket dispatch path (`webserver_websocket.cpp`) uses
-    //     `registered_resources_mutex` for its own (non-HTTP) handler
-    //     lookup. That mutex must stay alive while WS support exists.
-    //
-    // Removing the maps and the mutex is a separate, larger task that
-    // restructures both callers — see TASK-053 §11 (the v1-maps catch).
-    //
-    // TASK-023: storage type is shared_ptr<http_resource>. Both public
-    // register_resource overloads (unique_ptr / shared_ptr) funnel into
-    // the shared_ptr branch, so storage is always shared_ptr regardless
-    // of which overload the caller used. This also closes a latent
-    // dispatch race: a thread holding a shared_ptr copy for the
-    // duration of an in-flight call cannot be invalidated by a
-    // concurrent unregister_resource — the resource lives until the
-    // call returns and its shared_ptr drops.
-    std::shared_mutex registered_resources_mutex;
-    std::map<detail::http_endpoint,
-             std::shared_ptr<::httpserver::http_resource>> registered_resources;
-    std::map<std::string,
-             std::shared_ptr<::httpserver::http_resource>> registered_resources_str;
-    std::map<detail::http_endpoint,
-             std::shared_ptr<::httpserver::http_resource>> registered_resources_regex;
-
     // LRU cache size (architecture spec): 256 entries.
     static constexpr size_t ROUTE_CACHE_MAX_SIZE = 256;
 
@@ -260,12 +224,13 @@ class webserver_impl {
     // documented above. Returns lookup_result; populates `tier` even on
     // miss (tier_hit::none) so callers can branch deterministically.
     //
-    // NOTE (TASK-053): lookup_v2 is the live dispatch path. As of
-    // TASK-053 step 3, resolve_resource_for_request() calls lookup_v2()
-    // exclusively; all v1 helper functions were deleted. The v1
-    // registered_resources* maps survive only as registration-side
-    // bookkeeping (lambda/class conflict detection and WebSocket dispatch
-    // — see the 'Registration-side resource maps' section below).
+    // NOTE (TASK-053 / TASK-067): lookup_v2 is the only dispatch path.
+    // As of TASK-053 step 3, resolve_resource_for_request() calls
+    // lookup_v2() exclusively, and TASK-067 deleted the v1 registration
+    // bookkeeping maps -- the v2 3-tier table is now the single routing
+    // surface. Lambda/class conflict detection probes the same v2 tiers
+    // (find_v2_entry_by_path_); WebSocket dispatch uses a dedicated
+    // registered_ws_handlers_mutex_.
     lookup_result lookup_v2(http_method method, const std::string& path);
 
     // TASK-045 -- Lifecycle hook bus (skeleton, no firing yet).
@@ -382,17 +347,19 @@ class webserver_impl {
     std::set<http::ip_representation> allowances;
 
 #ifdef HAVE_WEBSOCKET
-    // TASK-035: shared_ptr storage mirrors the registered_resources map
-    // type and lets the dispatch path (finalize_answer) take a shared_ptr
-    // copy under the shared lock that keeps the handler alive across an
-    // MHD upgrade callback, even if unregister_ws_resource races to drop
-    // the registration mid-upgrade. The webserver always holds one
-    // reference until the slot is erased.
+    // TASK-035: shared_ptr storage. The dispatch path
+    // (complete_websocket_upgrade) takes a shared_ptr copy under the
+    // shared lock that keeps the handler alive across an MHD upgrade
+    // callback, even if unregister_ws_resource races to drop the
+    // registration mid-upgrade. The webserver always holds one reference
+    // until the slot is erased.
     //
-    // Lock: protected by registered_resources_mutex (same mutex as the HTTP
-    // route tables registered_resources / registered_resources_str /
-    // registered_resources_regex). Sharing one mutex avoids potential
-    // lock-ordering bugs between HTTP and WebSocket registration paths.
+    // Lock: registered_ws_handlers_mutex_ guards this map exclusively.
+    // TASK-067 split this off from the shared HTTP route-table mutex
+    // (deleted alongside the v1 HTTP registration bookkeeping). No call
+    // site ever held both mutexes simultaneously, so the split is
+    // invariant-preserving.
+    std::shared_mutex registered_ws_handlers_mutex_;
     std::map<std::string, std::shared_ptr<::httpserver::websocket_handler>>
         registered_ws_handlers;
 

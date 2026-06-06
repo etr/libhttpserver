@@ -34,4 +34,4 @@ Cut them in a single, well-tested PR so the v2 dispatch path is the only one.
 **Related Requirements:** PRD §2 API minimalism, PRD §1 release strategy
 **Related Decisions:** DR-007, DR-011
 
-**Status:** Backlog
+**Status:** Done
