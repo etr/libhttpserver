@@ -15,13 +15,15 @@
 - [ ] Remove the TODO comment.
 
 **Dependencies:**
-- Blocked by: TASK-001 (C++20 floor, Done), TASK-051 (per-route hooks, Done)
+- Blocked by: TASK-001 (C++20 floor, Done), TASK-051 (per-route hooks, Done), libc++ P0718R2 (Apple Clang/libc++ still lacks `std::atomic<std::shared_ptr<T>>` — recheck each LLVM release; see project memory)
 - Blocks: None
+- Spun off: TASK-094 (Done) — delivers the TSan stress harness for the per-resource CAS path ahead of the migration
 
 **Acceptance Criteria:**
 - `grep -nE 'atomic_load|atomic_store' src/http_resource.cpp` returns no matches.
 - `grep -nE 'Wdeprecated-declarations' src/http_resource.cpp` returns no matches.
 - Stress test `threadsafety_stress` extended with hook table swap remains TSan-clean.
+  *(Satisfied out-of-band by TASK-094 — Done. TASK-094 added Sub-test D that stress-tests the legacy CAS path under TSan. When TASK-070 eventually lands, Sub-test D is the required regression net for the migrated atomic path.)*
 - Typecheck passes.
 - Tests pass.
 

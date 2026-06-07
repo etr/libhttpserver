@@ -1,7 +1,7 @@
 # M7 — v2.0 Branch Cleanup
 
 **Status:** Draft 1
-**Last updated:** 2026-06-04
+**Last updated:** 2026-06-07
 **Owner:** Sebastiano Merlino
 **Inputs:** [../v2-branch-gap-audit.md](../v2-branch-gap-audit.md)
 
@@ -58,6 +58,7 @@ TASK-093).
 | TASK-091 | Tighten CI script soft-degradations | MED | M | Backlog |
 | TASK-092 | Wire `route_table_concurrency` TSan + `stop()`-from-handler into per-PR CI | MED | S | Backlog |
 | TASK-093 | Tighten example caveats (auth, pipe, access-log) | LOW | S | Backlog |
+| TASK-094 | Extend `threadsafety_stress` with per-resource `add_hook` CAS race | MED | S | Done |
 
 ## Dependency notes
 
