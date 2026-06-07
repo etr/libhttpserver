@@ -156,6 +156,10 @@ LT_BEGIN_AUTO_TEST(connection_state_body_residue_suite,
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_FORBID_REUSE, 0L);
     curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1L);
+    // Force HTTP/1.1 to guarantee keep-alive semantics (HTTP/2 has
+    // stream multiplexing rather than connection reuse in the HTTP/1.1
+    // sense, so the connection_opened hook count would differ).
+    curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
 
     // GET 1: carry the sentinel string as the basic-auth username. The
     // handler calls get_user() which copies it into the arena-backed
@@ -178,15 +182,22 @@ LT_BEGIN_AUTO_TEST(connection_state_body_residue_suite,
     curl_easy_cleanup(curl);
     ws.stop();
 
+    // Gate: keep-alive must have engaged. Both requests must share the
+    // same connection_state arena for the headline assertion to be
+    // meaningful. Use ASSERT (hard abort) so that if keep-alive did not
+    // engage, we abort here rather than evaluating the headline assertion
+    // under the wrong precondition and producing a vacuously-passing
+    // misleading result (a new connection gives a zeroed arena regardless
+    // of whether reset_arena scrubs credentials).
+    LT_ASSERT_EQ(g_connection_opened_count.load(), 1);
     // Sanity: first handler observed the sentinel in its own request's
-    // body (proves the buffer is the one we are testing).
+    // body (proves the buffer is the one we are testing and get_user()
+    // populated the arena-backed username field as expected).
     LT_CHECK(g_first_handler_saw_sentinel.load());
     // Headline assertion: by the time the second request reaches the
-    // handler, the buffer has been cleared.
+    // handler on the same connection, the buffer has been cleared by
+    // reset_arena() and the credential sentinel is not observable.
     LT_CHECK(!g_second_handler_saw_sentinel.load());
-    // Belt-and-braces: keep-alive engaged, so we are testing the same
-    // connection_state across both requests.
-    LT_CHECK_EQ(g_connection_opened_count.load(), 1);
 #endif
 LT_END_AUTO_TEST(sentinel_in_first_body_not_observable_in_second)
 
