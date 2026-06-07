@@ -31,8 +31,10 @@
 
 // HTTPSERVER_COMPILATION is supplied by test/Makefile.am AM_CPPFLAGS.
 #include "httpserver/http_request.hpp"
+#include "httpserver/detail/http_request_impl.hpp"
 
 #include <map>
+#include <memory_resource>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -131,5 +133,23 @@ static_assert(std::is_same_v<
                                  std::map<std::string,
                                           httpserver::http::file_info>>&>,
               "get_files must return const std::map<...>&");
+
+// TASK-069: pin the http_request_impl construction surface. After v2
+// cutover, the only public constructors are the no-arg default
+// (test-request path, delegates to the three-arg form) and the
+// allocator-aware three-arg form. The transitional two-arg overload
+// (MHD_Connection*, unescaper_ptr) is gone. If it ever returns, the
+// negative is_constructible assertion below breaks the build.
+static_assert(std::is_constructible_v<httpserver::detail::http_request_impl>,
+              "default http_request_impl() must remain (test-request path)");
+static_assert(std::is_constructible_v<
+                  httpserver::detail::http_request_impl,
+                  MHD_Connection*, httpserver::unescaper_ptr,
+                  std::pmr::polymorphic_allocator<>>,
+              "canonical three-arg http_request_impl(MHD_Connection*, unescaper_ptr, alloc) must exist");
+static_assert(!std::is_constructible_v<
+                  httpserver::detail::http_request_impl,
+                  MHD_Connection*, httpserver::unescaper_ptr>,
+              "TASK-069: transitional two-arg http_request_impl ctor must be removed");
 
 int main() { return 0; }
