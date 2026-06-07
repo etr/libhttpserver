@@ -122,11 +122,15 @@ void webserver_impl::request_completed(void *cls, struct MHD_Connection *connect
     *con_cls = nullptr;
 
     // (2) Now that no live object inside the arena's storage remains,
-    //     rewind the bump pointer AND zero the initial buffer so that
+    //     rewind the bump pointer AND secure-zero the initial buffer so
     //     credentials from the completed request do not linger in the
-    //     reused memory (security-reviewer-iter1-3). reset_arena() does
-    //     both atomically. The next request on this keep-alive connection
-    //     reuses the same memory (verified by http_request_arena unit test).
+    //     reused memory (security-reviewer-iter1-3, CWE-226 / CWE-14).
+    //     reset_arena() does release + non-elidable zero atomically; see
+    //     connection_state::reset_arena() docs and
+    //     httpserver/detail/secure_zero.hpp for the platform-specific
+    //     dispatch (TASK-068). The next request on this keep-alive
+    //     connection reuses the same memory (verified by
+    //     http_request_arena and connection_state_sentinel unit tests).
     //
     // Unconditional release is correct regardless of the `toe`
     // (MHD_RequestTerminationCode) value: step (1) above always destroys

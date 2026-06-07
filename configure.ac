@@ -114,6 +114,24 @@ AC_CHECK_HEADER([signal.h],[],[AC_MSG_ERROR("signal.h not found")])
 
 AC_CHECK_HEADER([gnutls/gnutls.h],[have_gnutls="yes"],[AC_MSG_WARN("gnutls/gnutls.h not found. TLS will be disabled"); have_gnutls="no"])
 
+# TASK-068: portable secure-zero primitive selection. Probe for
+# explicit_bzero (glibc / musl / FreeBSD / OpenBSD / *BSD). The header
+# httpserver/detail/secure_zero.hpp dispatches at compile time based on
+# whether this is available. Windows takes the RtlSecureZeroMemory
+# branch; macOS and other platforms without explicit_bzero take the
+# portable volatile + asm-clobber fallback (which has the same security
+# guarantee without the __STDC_WANT_LIB_EXT1__ include-order coupling
+# that memset_s would impose on a transitively-included header).
+#
+# The HAVE_EXPLICIT_BZERO macro is pushed into AM_CXXFLAGS / AM_CFLAGS
+# (matching the established libhttpserver pattern for HAVE_GNUTLS /
+# HAVE_BAUTH / etc.) so it reaches the header without requiring an
+# explicit `#include "config.h"` from secure_zero.hpp.
+AC_CHECK_DECLS([explicit_bzero], [], [], [[#include <string.h>]])
+AS_IF([test "x$ac_cv_have_decl_explicit_bzero" = "xyes"],
+    [AM_CXXFLAGS="$AM_CXXFLAGS -DHAVE_EXPLICIT_BZERO"
+     AM_CFLAGS="$AM_CFLAGS -DHAVE_EXPLICIT_BZERO"])
+
 # Checks for libmicrohttpd
 if test x"$host" = x"$build"; then
     AC_CHECK_HEADER([microhttpd.h],

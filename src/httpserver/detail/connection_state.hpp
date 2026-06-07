@@ -29,10 +29,11 @@
 #define SRC_HTTPSERVER_DETAIL_CONNECTION_STATE_HPP_
 
 #include <cstddef>
-#include <cstring>
 
 #include <array>
 #include <memory_resource>
+
+#include "httpserver/detail/secure_zero.hpp"
 
 namespace httpserver {
 namespace detail {
@@ -112,26 +113,43 @@ struct connection_state {
     // Explicit zeroing after release() closes that residual-credential
     // window. (security-reviewer-iter1-3, CWE-226.)
     //
-    // Scope limitation: zeroing covers only initial_buffer_ (ARENA_INITIAL_BYTES).
-    // If a request's arena usage overflows the initial buffer, the monotonic_
-    // buffer_resource silently allocates additional blocks from the upstream
-    // resource (heap). Those overflow blocks are freed by arena_.release()
-    // but NOT zeroed here. Credentials that spill past ARENA_INITIAL_BYTES
-    // are therefore not cleared by this call. In practice the buffer is sized
-    // to hold typical requests without overflow (see sizing comment above);
-    // if sizing assumptions change, this limitation should be revisited.
-    // (code-quality-reviewer-iter1-5)
+    // CWE-14 mitigation (TASK-068): the clear uses
+    // httpserver::detail::secure_zero (defined in
+    // httpserver/detail/secure_zero.hpp), which dispatches to
+    // explicit_bzero / memset_s / RtlSecureZeroMemory where available
+    // and falls back to a volatile-pointer loop plus an inline-asm
+    // memory clobber. The previous std::memset path was vulnerable to
+    // dead-store elimination at -O2 / LTO under the right conditions
+    // (the buffer's bytes are not observably read on the no-keep-alive
+    // tear-down path, only on the next request's allocation). The new
+    // helper is non-elidable by construction and is pinned by the
+    // unit test secure_zero_dce_test.cpp.
     //
-    // Using std::memset here (rather than explicit_bzero / SecureZeroMemory)
-    // is acceptable because the buffer is accessed again immediately by the
-    // next request's arena allocation, preventing the compiler from
-    // optimising the clear away as a dead store. (security-reviewer-iter1-4,
-    // CWE-14 risk acknowledged; std::atomic_signal_fence or volatile
-    // initial_buffer_ would provide a language-level guarantee if needed
-    // by future deployments.)
+    // Trade-off: secure_zero walks the 8 KiB buffer byte-by-byte rather
+    // than letting the compiler emit a vectorised store. The cost is a
+    // few thousand cycles per keep-alive request -- well below the
+    // arena-allocation cost the next request will pay anyway -- in
+    // exchange for the CWE-14 guarantee. Profiling has not surfaced
+    // this as a bench-relevant hot path.
+    //
+    // Scope limitation (accepted residue): zeroing covers only
+    // initial_buffer_ (ARENA_INITIAL_BYTES = 8 KiB). If a request's
+    // arena usage overflows the initial buffer, the monotonic_
+    // buffer_resource silently allocates additional blocks from the
+    // upstream resource (heap). Those overflow blocks are freed by
+    // arena_.release() but NOT zeroed here -- the trailing bytes can
+    // still be observed by a future unrelated allocation in the same
+    // process. The buffer is sized to hold typical requests without
+    // overflow (see the sizing comment above); credentials are several
+    // hundred bytes at most, so they are reliably inside the 8 KiB
+    // window in practice. A follow-up task is required to close the
+    // overflow gap (hand-rolled arena or a zero-on-deallocate upstream
+    // adapter); the current task explicitly accepts this residue.
+    // (security-reviewer-iter1-3, code-quality-reviewer-iter1-5,
+    // TASK-068.)
     void reset_arena() noexcept {
         arena_.release();
-        std::memset(initial_buffer_.data(), 0, ARENA_INITIAL_BYTES);
+        secure_zero(initial_buffer_.data(), ARENA_INITIAL_BYTES);
     }
 };
 
