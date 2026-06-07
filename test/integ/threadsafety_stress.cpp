@@ -990,6 +990,15 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
             contended_window_iters.fetch_add(
                 1, std::memory_order_relaxed);
         }
+        // Post-race witness: safe non-atomic .get() read because all
+        // workers and burst threads have been joined above (both
+        // workers.join() and burst.join() loops complete, and
+        // handles.clear() has drained the handle bag). The join()
+        // calls establish a happens-before edge over every atomic store
+        // in ensure_table(), making the non-atomic hook_table_.get()
+        // inside hook_table_raw_() observationally correct here.
+        // (See the CONTRACT comment on hook_table_raw_() in
+        // src/httpserver/http_resource.hpp for the full rationale.)
         if (r.hook_table_raw_() != nullptr) {
             total_post_race_nonnull.fetch_add(
                 1, std::memory_order_relaxed);

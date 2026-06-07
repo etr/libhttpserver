@@ -394,6 +394,19 @@ class http_resource {
      // hooks for any phase"). Public-but-HTTPSERVER_COMPILATION-gated
      // for the same reason webserver::make_hook_handle_ is: the symbol
      // is reachable only from within the library translation units.
+     //
+     // CONTRACT — synchronisation requirement:
+     //   This is a **non-atomic** read of the shared_ptr's stored pointer
+     //   via std::shared_ptr::get().  It is safe only when the caller
+     //   holds a happens-before edge over any concurrent writer of
+     //   hook_table_: e.g., after all mutating threads have been joined
+     //   or after an acquire fence/lock that sequenced-after the last
+     //   atomic_store in ensure_table().  Do NOT call this from a thread
+     //   that races with ensure_table() without external synchronisation.
+     //   (ensure_table() itself uses the deprecated free-function
+     //   std::atomic_*_explicit overloads; once TASK-070 migrates the
+     //   field to std::atomic<std::shared_ptr<T>>, an acquire load should
+     //   replace the .get() call here too.)
      detail::resource_hook_table* hook_table_raw_() const noexcept {
          return hook_table_.get();
      }
