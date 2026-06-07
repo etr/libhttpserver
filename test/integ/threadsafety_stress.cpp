@@ -18,16 +18,23 @@
      USA
 */
 
-// TASK-032 + TASK-052: DR-008 thread-safety contract stress test.
+// TASK-032 + TASK-052 + TASK-094: DR-008 thread-safety contract stress test.
 //
 // Sub-test A — concurrent_register_block_from_handlers_no_data_race
 //   Drives the PUBLIC mutating surface (register_path, unregister_path,
-//   block_ip, unblock_ip) AND, as of TASK-052, the lifecycle-hook
-//   registration surface (webserver::add_hook + hook_handle::remove)
-//   from inside MHD handler threads against a running webserver. 16
-//   curl clients × N seconds at default port 0 (kernel-assigned).
-//   The hook ops exercise the documented `route_table_mutex_ → resource
-//   hook_table → server-wide hook_table` lock order under TSan.
+//   block_ip, unblock_ip) AND, as of TASK-052, the **server-wide**
+//   lifecycle-hook registration surface (webserver::add_hook +
+//   hook_handle::remove) AND, as of TASK-094, the **per-resource**
+//   hook bus via http_resource::add_hook on both a fresh stack-local
+//   resource (contended-null branch in ensure_table()) and a shared
+//   resource whose hook_table_ is already installed (load-acquire
+//   short-circuit branch). 16 curl clients × N seconds at default port
+//   0 (kernel-assigned).
+//   The hook ops here exercise the server-wide tier AND, with TASK-094,
+//   the resource (middle) tier of the documented
+//   `route_table_mutex_ → resource hook_table → server-wide hook_table`
+//   lock order under TSan. Standalone per-resource CAS-race coverage
+//   lives in Sub-test D (TASK-094).
 //   The TSan-clean rerun is the headline acceptance:
 //   `make clean && CXXFLAGS=-fsanitize=thread … && make check` re-runs
 //   this binary under TSan via the CI matrix entry `build-type: tsan`
@@ -70,6 +77,7 @@
 #include <cstdlib>
 #include <functional>
 #include <iostream>
+#include <latch>
 #include <memory>
 #include <mutex>
 #include <random>
@@ -112,6 +120,8 @@ struct OpCounters {
     std::atomic<int> unblock_ok{0};
     std::atomic<int> hook_add_ok{0};     // TASK-052
     std::atomic<int> hook_remove_ok{0};  // TASK-052
+    std::atomic<int> cas_resource_hook_ok{0};  // TASK-094 op 6: contended-null branch
+    std::atomic<int> cas_existing_hook_ok{0};  // TASK-094 op 7: load-acquire short-circuit branch
     std::atomic<int> handler_calls{0};
 };
 
@@ -126,6 +136,19 @@ struct HookBag {
 };
 
 class noop_resource : public ht::http_resource {
+ public:
+    ht::http_response render_get(
+        const ht::http_request&) override {
+        return ht::http_response::string("ok");
+    }
+};
+
+// TASK-094: dedicated subclass for Sub-test D so a single stack frame
+// can re-arm the lazy `hook_table_` CAS for every fresh iteration. The
+// subclass adds no new state; render_get is unreachable in Sub-test D
+// (no MHD daemon is started against it — the CAS race is exercised
+// purely from worker threads calling `add_hook` directly).
+class cas_witness_resource : public ht::http_resource {
  public:
     ht::http_response render_get(
         const ht::http_request&) override {
@@ -206,7 +229,8 @@ ht::hook_handle install_random_hook(ht::webserver* ws, unsigned phase_idx) {
 // register_path's contract — not a data race).
 ht::http_response driver_body(const ht::http_request& req,
                               ht::webserver* ws, OpCounters* counters,
-                              HookBag* hooks) {
+                              HookBag* hooks,
+                              ht::http_resource* shared_cas_resource) {
     counters->handler_calls.fetch_add(1, std::memory_order_relaxed);
 
     int op = 0;
@@ -227,14 +251,19 @@ ht::http_response driver_body(const ht::http_request& req,
     const std::string ip =
         "198.51.100." + std::to_string(i & (kIpRange - 1));
 
-    // Six ops total: 0..3 are the TASK-032 route-table / ban-list
-    // mutators; 4..5 are TASK-052's hook bus churn. `op % 6` keeps
-    // the distribution roughly uniform.
+    // Eight ops total: 0..3 are the TASK-032 route-table / ban-list
+    // mutators; 4..5 are TASK-052's webserver-side hook bus churn;
+    // 6..7 are TASK-094's per-resource hook bus churn (op 6 hits the
+    // contended-null branch of ensure_table() on a fresh stack-local
+    // cas_witness_resource; op 7 hits the load-acquire short-circuit
+    // branch on the shared_cas_resource whose hook_table_ is already
+    // installed after the first op-7 call lands). `op % 8` keeps the
+    // distribution roughly uniform.
     // NOTE: register_prefix / unregister_prefix are intentionally not
     // exercised here because they share the same lock path as
     // register_path / unregister_path (register_impl_ with family=true
     // vs false); the existing cases already cover the mutex contention.
-    switch (op % 6) {
+    switch (op % 8) {
         case 0:
             try {
                 ws->register_path(dyn_path,
@@ -308,6 +337,48 @@ ht::http_response driver_body(const ht::http_request& req,
             }
             break;
         }
+        case 6: {
+            // TASK-094: per-resource CAS race — fresh stack-local
+            // resource whose hook_table_ slot is null. While this
+            // handler is in flight, register_path / unregister_path
+            // (cases 0/1) on other threads are holding
+            // route_table_mutex_ shared, so this case exercises the
+            // full three-tier order
+            //   route_table_mutex_ (shared, this thread is a reader
+            //   inside dispatch) -> resource hook_table_ (this
+            //   thread's CAS in ensure_table()) -> server-wide
+            //   hook_table (other threads' webserver::add_hook in
+            //   cases 4/5).
+            // The hook_handle is dropped at end of scope so the
+            // resource's destructor at end of scope runs against a
+            // weak_ptr that expires cleanly.
+            cas_witness_resource transient;
+            ht::hook_handle h = transient.add_hook(
+                ht::hook_phase::request_completed,
+                std::function<void(const ht::request_completed_ctx&)>(
+                    [](const ht::request_completed_ctx&) {}));
+            (void)h;
+            counters->cas_resource_hook_ok.fetch_add(
+                1, std::memory_order_relaxed);
+            break;
+        }
+        case 7: {
+            // TASK-094: shared resource whose hook_table_ is
+            // installed after the first op-7 call. Subsequent calls
+            // take the load-acquire short-circuit branch in
+            // ensure_table() (`if (existing) return existing;`),
+            // complementing case 6's contended-null branch. The
+            // handle is dropped immediately; remove() runs against
+            // the still-alive resource at end of scope.
+            ht::hook_handle h = shared_cas_resource->add_hook(
+                ht::hook_phase::request_completed,
+                std::function<void(const ht::request_completed_ctx&)>(
+                    [](const ht::request_completed_ctx&) {}));
+            h.remove();
+            counters->cas_existing_hook_ok.fetch_add(
+                1, std::memory_order_relaxed);
+            break;
+        }
     }
 
     return ht::http_response::string("ok");
@@ -342,6 +413,12 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
                    concurrent_register_block_from_handlers_no_data_race)
     OpCounters counters;
     HookBag hooks;  // TASK-052: bag retained for the duration of the test
+    // TASK-094: shared per-resource CAS target for op 7. The first
+    // op-7 call installs the hook_table_ via the contended-null path;
+    // every subsequent op-7 call across all client threads takes the
+    // load-acquire short-circuit branch in ensure_table(), driving
+    // concurrent registration + dispatch on the middle tier.
+    cas_witness_resource shared_cas_resource;
 
     // Port 0 lets the kernel pick a free port; read it back via
     // get_bound_port() to avoid hard-coded-port collisions when this
@@ -353,8 +430,10 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
             .max_threads(8)};
 
     ws.on_get("/driver",
-              [&ws, &counters, &hooks](const ht::http_request& req) {
-                  return driver_body(req, &ws, &counters, &hooks);
+              [&ws, &counters, &hooks, &shared_cas_resource](
+                  const ht::http_request& req) {
+                  return driver_body(req, &ws, &counters, &hooks,
+                                     &shared_cas_resource);
               });
 
     ws.start(false);
@@ -386,8 +465,10 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
             std::mt19937 rng(static_cast<uint32_t>(c) * 0x9e3779b9u);
 
             while (!stop.load(std::memory_order_relaxed)) {
-                // Six ops: 0..3 route-table/ban; 4..5 hook bus (TASK-052).
-                const int op = static_cast<int>(rng() % 6u);
+                // Eight ops: 0..3 route-table/ban; 4..5 webserver-side
+                // hook bus (TASK-052); 6..7 per-resource hook bus
+                // (TASK-094 — contended-null + load-acquire branches).
+                const int op = static_cast<int>(rng() % 8u);
                 const int i = static_cast<int>(rng() & (kIpRange - 1));
                 const std::string url =
                     base + "?op=" + std::to_string(op) +
@@ -415,10 +496,11 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
     for (auto& t : clients) t.join();
 
     // Acceptance criterion: 60 s of concurrent register/lookup/block.
-    // We don't pin exact counts — the gate is "all six mutating ops
+    // We don't pin exact counts — the gate is "all eight mutating ops
     // executed at least once without deadlock or crash, and (under the
     // documented TSan rebuild) no data race fired". TASK-052 adds the
-    // hook add/remove pair to the same gate.
+    // webserver-side hook add/remove pair; TASK-094 adds the per-
+    // resource CAS-driven pair to the same gate.
     LT_CHECK_GT(counters.handler_calls.load(), 0);
     LT_CHECK_GT(counters.register_ok.load(), 0);    // TASK-032
     LT_CHECK_GT(counters.unregister_ok.load(), 0);  // TASK-032
@@ -426,6 +508,8 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
     LT_CHECK_GT(counters.unblock_ok.load(), 0);      // TASK-032
     LT_CHECK_GT(counters.hook_add_ok.load(), 0);     // TASK-052
     LT_CHECK_GT(counters.hook_remove_ok.load(), 0);  // TASK-052
+    LT_CHECK_GT(counters.cas_resource_hook_ok.load(), 0);  // TASK-094
+    LT_CHECK_GT(counters.cas_existing_hook_ok.load(), 0);  // TASK-094
 
     // Drain the hook bag explicitly before the webserver stops so the
     // hook_handle destructors run while the impl is still alive. (The
@@ -769,6 +853,165 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
 
     ws.stop();
 LT_END_AUTO_TEST(adversarial_segments_registration_no_latency_spike)
+
+// ---------------------------------------------------------------------
+// Sub-test D — per_resource_add_hook_first_call_cas_no_data_race
+// (TASK-094).
+//
+// Targets the lazy CAS path in `http_resource::ensure_table()`
+// (`src/http_resource.cpp:93-110`) that the M5 hook bus added.
+// Constructs `kRepeats` fresh `cas_witness_resource` subclasses; for
+// each, releases `kThreads` (>= 8) racing add_hook callers on a
+// std::latch. The contended-null window in `ensure_table()` is
+// observably entered (witnessed via the HTTPSERVER_COMPILATION-gated
+// `hook_table_raw_()` accessor declared in `http_resource.hpp` — pre-
+// race null reads on the main thread pin the structural property that
+// every iteration starts with `hook_table_` == nullptr). After the
+// race, the worker threads exercise mixed add/remove churn on the
+// now-installed `resource_hook_table` to drive concurrent registration
+// + dispatch on the middle tier.
+//
+// This phase **completes** the
+// `route_table_mutex_ -> resource hook_table -> server-wide hook_table`
+// lock-order claim that Sub-test A makes only for the bookend tiers
+// (server-wide via webserver::add_hook, and route_table_mutex_ via
+// register_path / unregister_path).
+//
+// Wall-clock: shape-bounded (~1-5 s under TSan slowdown); no
+// HTTPSERVER_STRESS_SECONDS integration. Total CAS races per run =
+// kRepeats * kThreads = 64 * 8 = 512.
+// ---------------------------------------------------------------------
+
+LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
+                   per_resource_add_hook_first_call_cas_no_data_race)
+    constexpr int kRepeats = 64;
+    constexpr int kThreads = 8;
+
+    // Cumulative witnesses across all iterations. The accumulator is
+    // the falsifiable gate for the cycle: it must reach kRepeats (each
+    // iteration must drive at least one successful add_hook installing
+    // the table). On the cycle-1 RED step the worker threads do not
+    // call add_hook, so total_post_race_nonnull stays at 0 and the
+    // LT_CHECK_GT fails as designed.
+    std::atomic<int> total_post_race_nonnull{0};
+    // Cumulative count of iterations that observed >= 2 workers
+    // entering add_hook simultaneously after the latch released —
+    // structural proof that the contended-null window was reached
+    // (per design consideration 4 in the plan).
+    std::atomic<int> contended_window_iters{0};
+
+    for (int iter = 0; iter < kRepeats; ++iter) {
+        cas_witness_resource r;
+
+        // Pre-race witness: the resource starts with hook_table_ ==
+        // nullptr. hook_table_raw_() is HTTPSERVER_COMPILATION-gated;
+        // the test TU defines that macro via test/Makefile.am
+        // AM_CPPFLAGS, so the accessor is reachable here.
+        LT_CHECK(r.hook_table_raw_() == nullptr);
+
+        // +1 for the main thread; the latch is released only after
+        // every worker AND the main thread have arrived. This biases
+        // all workers to enter add_hook on (approximately) the same
+        // instruction cycle, maximising the chance the racing CAS
+        // hits the contended-null window.
+        std::latch start(kThreads + 1);
+
+        // entered_after_latch: per-iteration counter incremented by
+        // every worker the instant it returns from arrive_and_wait().
+        // Inspected immediately after main joins all workers to count
+        // iterations that fielded >= 2 concurrent add_hook entries.
+        std::atomic<int> entered_after_latch{0};
+
+        // Per-iteration handle bag: every worker pushes its returned
+        // hook_handle here under handles_mtx so the registrations
+        // outlive the iteration body just long enough for the post-
+        // race witness read. The bag is destroyed at the end of the
+        // iteration BEFORE `r` exits scope so each handle's dtor
+        // runs against a still-live resource (mirrors the lifetime
+        // pattern in hooks_per_route_resource_destroyed_first).
+        std::mutex handles_mtx;
+        std::vector<ht::hook_handle> handles;
+        handles.reserve(static_cast<std::size_t>(kThreads));
+
+        std::vector<std::thread> workers;
+        workers.reserve(kThreads);
+        for (int t = 0; t < kThreads; ++t) {
+            workers.emplace_back([&] {
+                start.arrive_and_wait();
+                entered_after_latch.fetch_add(
+                    1, std::memory_order_relaxed);
+                // Race the lazy CAS in ensure_table(): every worker
+                // calls the same add_hook overload on the freshly-
+                // null `r.hook_table_` slot. Exactly one thread's
+                // make_shared+compare_exchange wins; the rest take
+                // either the load-acquire short-circuit (winner has
+                // already published) or the genuine CAS-loser
+                // branch (`expected` updated by the failed exchange).
+                ht::hook_handle h = r.add_hook(
+                    ht::hook_phase::request_completed,
+                    std::function<void(const ht::request_completed_ctx&)>(
+                        [](const ht::request_completed_ctx&) {}));
+                std::lock_guard<std::mutex> lk(handles_mtx);
+                handles.push_back(std::move(h));
+            });
+        }
+        start.arrive_and_wait();
+        for (auto& th : workers) th.join();
+
+        // Post-race mixed add/remove burst (action item 1.c). Each
+        // burst hits the now-installed resource_hook_table from
+        // multiple threads, exercising concurrent registration +
+        // dispatch contention on the middle tier of the lock order.
+        constexpr int kBurstThreads = 4;
+        constexpr int kBurstOpsPerThread = 8;
+        std::vector<std::thread> burst;
+        burst.reserve(kBurstThreads);
+        for (int b = 0; b < kBurstThreads; ++b) {
+            burst.emplace_back([&] {
+                for (int op = 0; op < kBurstOpsPerThread; ++op) {
+                    ht::hook_handle h = r.add_hook(
+                        ht::hook_phase::request_completed,
+                        std::function<void(
+                            const ht::request_completed_ctx&)>(
+                            [](const ht::request_completed_ctx&) {}));
+                    h.remove();
+                }
+            });
+        }
+        for (auto& th : burst) th.join();
+
+        // Drain the post-race handle bag before `r` exits scope so
+        // every hook_handle's dtor runs against a still-live
+        // resource. This is the same lifetime ordering enforced by
+        // hooks_per_route_resource_destroyed_first.
+        handles.clear();
+
+        if (entered_after_latch.load(std::memory_order_relaxed) >= 2) {
+            contended_window_iters.fetch_add(
+                1, std::memory_order_relaxed);
+        }
+        if (r.hook_table_raw_() != nullptr) {
+            total_post_race_nonnull.fetch_add(
+                1, std::memory_order_relaxed);
+        }
+    }
+
+    std::cout << "[INFO] per_resource CAS: iters=" << kRepeats
+              << " threads_per_iter=" << kThreads
+              << " total_post_race_nonnull="
+              << total_post_race_nonnull.load()
+              << " contended_window_iters="
+              << contended_window_iters.load() << "\n";
+
+    // Falsifiable gate: every iteration must install a table (some
+    // thread must have driven ensure_table() to completion). On the
+    // cycle-1 RED step this is 0 — proves the witness mechanism is
+    // wired and observably distinguishes install vs no-install.
+    LT_CHECK_GT(total_post_race_nonnull.load(), 0);
+    // Structural CAS-contention gate (cycle 2): at least one iteration
+    // must have observed >= 2 workers entering add_hook concurrently.
+    LT_CHECK_GT(contended_window_iters.load(), 0);
+LT_END_AUTO_TEST(per_resource_add_hook_first_call_cas_no_data_race)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
