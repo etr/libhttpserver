@@ -301,11 +301,11 @@ std::optional<MHD_Result> complete_websocket_upgrade(MHD_Connection* connection,
 // hit (also populates URL parameter captures on @p mr->dhr via
 // set_arg, and sets mr->matched_path_template + matched_is_prefix when
 // any hook in the route_resolved / before_handler phases is registered);
-// false otherwise. The parent->single_resource fast path is preserved
-// inside the resolver as a documented short-circuit (it reads the
-// registered_resources map directly because the configuration shape —
-// one registered endpoint serves every URL — is orthogonal to the
-// route-table tier choice).
+// false otherwise.
+//
+// TASK-067: single_resource mode no longer has a dedicated short-circuit.
+// Its register_prefix("/") registration lives in the radix tier and is
+// resolved by the same lookup_v2 walk used for every other request.
 //
 // The v1 resolver (`registered_resources_str` exact + linear
 // `registered_resources_regex` scan + LRU front-end) and its helpers
@@ -313,12 +313,6 @@ std::optional<MHD_Result> complete_websocket_upgrade(MHD_Connection* connection,
 // dispatch-side route resolver.
 bool resolve_resource_for_request(modded_request* mr,
         std::shared_ptr<::httpserver::http_resource>& hrm);
-
-// single_resource fast path extracted from resolve_resource_for_request
-// to keep the parent function under the project-wide CCN gate.
-bool resolve_single_resource_(modded_request* mr,
-        std::shared_ptr<::httpserver::http_resource>& hrm,
-        bool need_path_template);
 
 // Invoke the resource handler bound to @p mr, populating
 // mr->response. On is_allowed=false, queues a 405 with an Allow
@@ -356,13 +350,15 @@ int queue_response_dispatching_kind(MHD_Connection* connection,
 
 // Helpers carved out of webserver::on_methods_ to stay under the
 // cyclomatic-complexity bar. The orchestrator on_methods_ retains
-// input validation and the public ordering; everything that
-// mutates the v1 maps or the v2 3-tier table lives here.
+// input validation and the public ordering; everything that mutates
+// the v2 3-tier route table lives here.
 //
-// Caller must hold registered_resources_mutex (unique_lock) for
-// prepare_or_create_lambda_shim, commit_handlers_to_shim, and
-// insert_fresh_v1_entries. upsert_v2_table_entry takes
-// route_table_mutex_ internally.
+// TASK-067: caller must hold route_table_mutex_ (unique_lock) for
+// the whole prepare_or_create_lambda_shim -> commit_handlers_to_shim
+// -> upsert_v2_table_entry_locked_ sequence so the v2 conflict probe
+// and the table mutation are atomic against concurrent registrations.
+const detail::route_entry* find_v2_entry_by_path_(
+        const detail::http_endpoint& idx) const noexcept;
 std::shared_ptr<detail::lambda_resource>
     prepare_or_create_lambda_shim(const detail::http_endpoint& idx,
                                   method_set methods,
@@ -371,12 +367,10 @@ void commit_handlers_to_shim(detail::lambda_resource& shim,
                              method_set methods,
                              std::function<::httpserver::http_response(
                                  const ::httpserver::http_request&)> handler);
-void insert_fresh_v1_entries(const detail::http_endpoint& idx,
-                             std::shared_ptr<::httpserver::http_resource> shim);
-void upsert_v2_table_entry(const detail::http_endpoint& idx,
-                           method_set methods,
-                           std::shared_ptr<::httpserver::http_resource> shim,
-                           bool fresh);
+void upsert_v2_table_entry_locked_(const detail::http_endpoint& idx,
+                                   method_set methods,
+                                   std::shared_ptr<::httpserver::http_resource> shim,
+                                   bool fresh);
 void upsert_v2_radix_route(const std::string& key,
                            method_set methods,
                            std::shared_ptr<::httpserver::http_resource> shim);
@@ -385,6 +379,12 @@ void upsert_v2_radix_route(const std::string& key,
 // existing entry. Must be called BEFORE any mutation of the route
 // table so atomicity holds. Caller holds route_table_mutex_.
 void reject_terminus_collision(const std::string& key, bool want_is_prefix);
+// TASK-067: throw std::invalid_argument if a same-kind v2 entry already
+// exists at the canonical key. Replaces the v1 `registered_resources`
+// insert-fails-on-dup oracle removed in TASK-067. Caller must hold
+// route_table_mutex_ (unique_lock); the probe runs before any mutation
+// so the atomicity contract holds.
+void reject_duplicate_v2_entry_(const detail::http_endpoint& idx, bool family);
 void insert_fresh_v2_entry(const detail::http_endpoint& idx,
                            method_set methods,
                            std::shared_ptr<::httpserver::http_resource> shim);

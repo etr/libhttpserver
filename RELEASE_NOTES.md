@@ -65,6 +65,32 @@ v1.x is end-of-life on the day v2.0 ships.
   must include them directly.
 - **The implicit conversion** `webserver ws = cw;` (where `cw` is a
   `create_webserver`). The constructor is now `explicit`.
+- **v1 compat auth-handler shim.** `httpserver::compat::auth_handler_v1_ptr`,
+  `httpserver::compat::adapt_legacy_auth`, and the
+  `[[deprecated]] create_webserver::auth_handler(compat::auth_handler_v1_ptr)`
+  overload are removed (TASK-067). The transitional shim that let v1
+  callers spell their auth handler as
+  `std::function<std::shared_ptr<http_response>(const http_request&)>`
+  was scheduled for removal "in the next release"; this is that removal.
+  Migrate to the canonical `auth_handler_ptr` returning
+  `std::optional<http_response>` (`std::nullopt` to allow, engaged value
+  to reject). The `namespace httpserver::compat` is dissolved with no
+  surviving members. **Source incompatibility:** TUs that called
+  `auth_handler(<legacy shape>)` fail to compile against v2.1 headers;
+  the legacy callable is no longer implicitly convertible to
+  `auth_handler_ptr`. There is no runtime ABI surface to break — the
+  overload was a header-only inline forwarder.
+- **v1 `registered_resources*` registration maps (internal).** No
+  public-API change. Dispatch already routed through the v2 3-tier
+  route table (`lookup_v2()`) after TASK-053; the residual
+  registration-time maps (`registered_resources`,
+  `registered_resources_str`, `registered_resources_regex`) and their
+  shared mutex are now deleted (TASK-067). Lambda/class path-conflict
+  detection consults the v2 route table directly via
+  `find_v2_entry_by_path_`; duplicate-registration detection moved
+  inside `register_v2_route`; the WebSocket handler registry gains a
+  dedicated `registered_ws_handlers_mutex_`. Callers observe no
+  behavioural change.
 
 ## What's new
 
@@ -178,11 +204,7 @@ and see the v2 replacement.
   (earlier v2 work-in-progress shipped
   `std::function<std::shared_ptr<http_response>(const http_request&)>`).
   Return `std::nullopt` to allow the request; return an `http_response`
-  to reject. The v1 `shared_ptr` shape still compiles via
-  `httpserver::compat::auth_handler_v1_ptr` and a `[[deprecated]]`
-  setter overload (both emit a deprecation warning); the compat alias
-  and overload are scheduled for removal in v2.1.
-  Removes one heap allocation per authenticated request.
+  to reject. Removes one heap allocation per authenticated request.
 - **`http_request` getters return `const&` / `string_view`.** v1's
   `get_header(name)` (and `get_arg`, `get_cookie`, `get_footer`) returned
   by value and inserted an empty entry into the request map on miss; v2's

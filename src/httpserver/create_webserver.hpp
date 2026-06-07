@@ -105,57 +105,6 @@ typedef std::function<bool(const std::string&, const std::string&, const http::f
  */
 typedef std::function<std::optional<http_response>(const http_request&)> auth_handler_ptr;
 
-namespace compat {
-
-/**
- * One-transitional-build alias preserving the v1 auth callable shape
- * (`std::function<std::shared_ptr<http_response>(const http_request&)>`).
- *
- * A v1 caller can migrate without an in-place call-site change by
- * spelling the type as `httpserver::compat::auth_handler_v1_ptr`; the
- * deprecated @ref create_webserver::auth_handler(compat::auth_handler_v1_ptr)
- * overload wraps the callable via @ref compat::adapt_legacy_auth into the
- * new @ref auth_handler_ptr shape. Both this alias and the overload emit
- * a deprecation diagnostic; they will be removed in the next release.
- *
- * @deprecated Migrate to @ref auth_handler_ptr returning
- *             `std::optional<http_response>`.
- */
-using auth_handler_v1_ptr
-[[deprecated(
-"use auth_handler_ptr returning std::optional<http_response>; "
-"see RELEASE_NOTES.md 'auth handler migration' (TASK-054)")]]
-= std::function<std::shared_ptr<http_response>(const http_request&)>;
-
-/**
- * Adapts a v1 auth callable (`std::shared_ptr<http_response>` return)
- * into the v2 @ref auth_handler_ptr shape.
- *
- * The returned wrapper invokes @p legacy; a null `shared_ptr` maps to
- * `std::nullopt` (allow); a non-null `shared_ptr` is dereferenced and
- * its pointed-to @ref http_response is MOVED into the engaged optional
- * (so response state — status, body, headers — is forwarded verbatim).
- *
- * @deprecated Provided for one transitional build. Migrate the callable's
- *             return type to `std::optional<http_response>` and pass it
- *             directly to @ref create_webserver::auth_handler.
- */
-[[deprecated(
-    "v1 shared_ptr<http_response> auth signature is deprecated; "
-    "migrate to std::optional<http_response> (TASK-054)")]]
-inline auth_handler_ptr adapt_legacy_auth(
-        std::function<std::shared_ptr<http_response>(
-            const http_request&)> legacy) {
-    return [legacy = std::move(legacy)](const http_request& req)
-            -> std::optional<http_response> {
-        std::shared_ptr<http_response> ptr = legacy(req);
-        if (ptr == nullptr) return std::nullopt;
-        return std::move(*ptr);
-    };
-}
-
-}  // namespace compat
-
 /**
  * Fluent builder for @ref webserver instances (PRD-NAM-REQ-004,
  * PRD-CFG-REQ-001..003 / TASK-033).
@@ -534,42 +483,6 @@ class create_webserver {
       */
      create_webserver& auth_handler(auth_handler_ptr v) { _auth_handler = std::move(v); return *this; }
 
-     /**
-      * Deprecated v1 overload: accepts a callable returning
-      * `std::shared_ptr<http_response>`, wraps it via
-      * @ref compat::adapt_legacy_auth, and stores it in the canonical
-      * @ref auth_handler_ptr shape. Provided for one transitional build
-      * so existing v1 call sites get a deprecation warning rather than
-      * a hard build break.
-      *
-      * @deprecated Migrate callables to return
-      *             `std::optional<http_response>` and use the canonical
-      *             @ref auth_handler(auth_handler_ptr) overload.
-      */
-     [[deprecated(
-         "v1 shared_ptr<http_response> auth signature is deprecated; "
-         "return std::optional<http_response> instead (TASK-054)")]]
-     create_webserver& auth_handler(compat::auth_handler_v1_ptr v) {
-         // This overload is itself deprecated and forwards to the
-         // equally-deprecated compat::adapt_legacy_auth. Suppress the
-         // duplicate -Wdeprecated-declarations at the forwarding call site
-         // so -Werror builds compile; the user-facing deprecation is the
-         // attribute on this overload, fired at the call site.
-#if defined(__clang__)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-#elif defined(__GNUC__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-#endif
-         _auth_handler = compat::adapt_legacy_auth(std::move(v));
-#if defined(__clang__)
-#pragma clang diagnostic pop
-#elif defined(__GNUC__)
-#pragma GCC diagnostic pop
-#endif
-         return *this;
-     }
      create_webserver& auth_skip_paths(std::vector<std::string> v) { _auth_skip_paths = std::move(v); return *this; }
      create_webserver& sni_callback(sni_callback_t v) { _sni_callback = std::move(v); return *this; }
 

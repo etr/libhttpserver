@@ -498,8 +498,6 @@ class webserver {
      void validate_register_inputs_(const std::string& path,
                          const std::shared_ptr<http_resource>& res,
                          bool family) const;
-     void rollback_register_(const detail::http_endpoint& idx,
-                             bool is_plain_path);
 
      // Shared unregistration helper. Erases a single registration of the
      // requested kind.
@@ -527,7 +525,6 @@ class webserver {
      void validate_on_methods_inputs_(method_set methods,
                       const std::string& path,
                       const std::function<http_response(const http_request&)>& handler) const;
-     void rollback_on_methods_fresh_entry_(const detail::http_endpoint& idx);
 
      // PIMPL: backend-coupled state (MHD daemon, pthread mutexes, route
      // table, ban set, route cache, websocket registry, GnuTLS SNI cache,

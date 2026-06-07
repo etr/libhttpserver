@@ -201,7 +201,7 @@ std::optional<MHD_Result>
 webserver_impl::complete_websocket_upgrade(MHD_Connection* connection,
                                            detail::modded_request* mr,
                                            const char* ws_key) {
-    std::shared_lock lock(registered_resources_mutex);
+    std::shared_lock lock(registered_ws_handlers_mutex_);
     auto ws_it = registered_ws_handlers.find(mr->standardized_url);
     if (ws_it == registered_ws_handlers.end()) {
         return std::nullopt;

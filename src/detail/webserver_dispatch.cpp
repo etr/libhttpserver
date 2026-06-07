@@ -259,34 +259,14 @@ webserver_impl::lookup_v2(http_method method, const std::string& path) {
 //       (the on_*/route entry points wrap user lambdas in lambda_resource
 //       before storing; the variant's lambda_handler arm is dead code).
 //
-// The parent->single_resource fast path is intentionally preserved
-// here: it reads the single registered endpoint directly from
-// registered_resources rather than falling through to lookup_v2 (which
-// would also work because single_resource installs a radix prefix at
-// "/"). Reading registered_resources avoids the captured-params /
-// route_entry plumbing for a configuration that has no parameters.
-// single_resource fast path: the one registered endpoint serves every
-// URL. Read it directly from registered_resources.
-// registered_resources_mutex protects a registration-time data store;
-// under dispatch we still need a shared lock to make the read-then-copy
-// atomic with respect to a concurrent unregister_path. (single_resource
-// webservers do not support runtime register/unregister in practice,
-// but the lock is cheap when uncontended and the safety guarantee is
-// worth it.) Returns false when no resource is registered yet.
-bool webserver_impl::resolve_single_resource_(detail::modded_request* mr,
-        std::shared_ptr<http_resource>& hrm,
-        bool need_path_template) {
-    std::shared_lock registered_resources_lock(registered_resources_mutex);
-    if (registered_resources.empty()) return false;
-    const auto& only = *registered_resources.begin();
-    hrm = only.second;
-    if (need_path_template) {
-        mr->matched_path_template = only.first.get_url_complete();
-        mr->matched_is_prefix = only.first.is_family_url();
-    }
-    return true;
-}
-
+// TASK-067: single_resource mode used to short-circuit to a direct read
+// of the v1 registered_resources map. With the v1 maps deleted, single
+// resource servers register their handler via register_prefix("")
+// or register_prefix("/") -- both surface as a radix-tier prefix
+// terminus at "/", which lookup_v2 finds on the radix-tier walk. There
+// is no separate fast path because the v2 walk for a single registered
+// prefix is one shared_lock + one empty-map probe + one trivial radix
+// descent: cheap enough that the extra branch was net-negative.
 bool webserver_impl::resolve_resource_for_request(detail::modded_request* mr,
         std::shared_ptr<http_resource>& hrm) {
     // matched_path_template + matched_is_prefix feed the route_resolved
@@ -295,10 +275,6 @@ bool webserver_impl::resolve_resource_for_request(detail::modded_request* mr,
     const bool need_path_template =
         has_hooks_for(hook_phase::route_resolved) ||
         has_hooks_for(hook_phase::before_handler);
-
-    if (parent->single_resource) {
-        return resolve_single_resource_(mr, hrm, need_path_template);
-    }
 
     // v2 lookup pipeline: cache -> exact -> radix -> regex.
     lookup_result result = lookup_v2(mr->method_enum, mr->standardized_url);

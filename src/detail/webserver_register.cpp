@@ -115,22 +115,6 @@ void webserver::validate_register_inputs_(const std::string& resource,
     }
 }
 
-// Roll back the v1-side inserts performed by register_impl_ when
-// register_v2_route throws. Locks are reacquired briefly for the rollback;
-// the registration was visible to readers in the window between, which
-// is a harmless read-stale effect (same as the cache-invalidation window).
-void webserver::rollback_register_(const detail::http_endpoint& idx,
-                                   bool is_plain_path) {
-    std::unique_lock rollback_lock(impl_->registered_resources_mutex);
-    impl_->registered_resources.erase(idx);
-    if (is_plain_path) {
-        impl_->registered_resources_str.erase(idx.get_url_complete());
-    }
-    if (idx.is_regex_compiled()) {
-        impl_->registered_resources_regex.erase(idx);
-    }
-}
-
 void webserver::register_impl_(const std::string& resource,
                                std::shared_ptr<http_resource> res,
                                bool family) {
@@ -138,51 +122,64 @@ void webserver::register_impl_(const std::string& resource,
 
     detail::http_endpoint idx(resource, family, true, regex_checking);
 
-    std::unique_lock registered_resources_lock(impl_->registered_resources_mutex);
-    auto result = impl_->registered_resources.insert({idx, res});
-
-    if (!result.second) {
-        // TASK-023: v1 returned false on duplicate. The new void API
-        // throws so the caller cannot silently lose ownership. For the
-        // unique_ptr overload the resource was moved into a shared_ptr by
-        // the inline template shim in webserver.hpp before this function
-        // was entered; it will be destroyed when the shared_ptr parameter
-        // 'res' is unwound by this exception, cleanly releasing ownership.
-        throw std::invalid_argument(
-            "A resource is already registered at this path");
-    }
-
-    // is_plain_path: true when the route has no wildcards of either kind
-    // (not a family/prefix route AND no parameterized URL segments). Only
-    // plain-path routes go into the fast string-keyed lookup map.
-    bool is_plain_path = !family && idx.get_url_pars().empty();
-    if (is_plain_path) {
-        impl_->registered_resources_str.insert(
-            {idx.get_url_complete(), result.first->second});
-    }
-    if (idx.is_regex_compiled()) {
-        // res is also passed to register_v2_route below; copy the shared_ptr
-        // here (one extra ref-count increment) rather than moving it, since
-        // shared_ptr copies are cheaper than the regex scan they help avoid.
-        impl_->registered_resources_regex.insert({idx, res});
-    }
-    // Release the registration mutex before clearing the LRU cache.
-    registered_resources_lock.unlock();
-
-    // TASK-056: register_v2_route may throw on a prefix-vs-exact terminus
-    // collision; roll back the v1 inserts above so the table stays
-    // consistent with the caller's "the call threw, so nothing was
-    // registered" mental model.
-    try {
-        impl_->register_v2_route(idx, std::move(res), family);
-    } catch (...) {
-        rollback_register_(idx, is_plain_path);
-        throw;
-    }
+    // TASK-067: v1 maps are gone. Duplicate detection now happens entirely
+    // inside register_v2_route, which takes its own unique_lock on
+    // route_table_mutex_ and runs reject_terminus_collision (plus a
+    // tier-classification probe for the exact tier) BEFORE any mutation.
+    // A duplicate at any tier surfaces as std::invalid_argument with the
+    // table still in its prior state -- no rollback required because no
+    // intermediate v1 write happened.
+    //
+    // TASK-023 ownership contract preserved: when register_v2_route throws,
+    // the shared_ptr parameter `res` (and any unique_ptr-derived shared_ptr
+    // funnelled through the webserver.hpp inline template shim) is destroyed
+    // by exception unwinding, cleanly releasing the resource.
+    impl_->register_v2_route(idx, std::move(res), family);
     impl_->invalidate_route_cache();
 }
 
 namespace detail {
+
+// TASK-067: helper used by register_v2_route. Probes the v2 tiers for a
+// pre-existing registration at @p idx and throws std::invalid_argument
+// before any mutation if one exists. Pre-TASK-067 the v1 `registered_resources`
+// ordered map was the duplicate-detection oracle (its `.insert(...)`
+// surfaced the dup); with the v1 maps gone, the oracle moves here.
+//
+// Caller must hold route_table_mutex_ (unique_lock). The reject_terminus_
+// collision guard (prefix-vs-exact polarity) is run separately in
+// register_v2_route.
+void webserver_impl::reject_duplicate_v2_entry_(
+        const detail::http_endpoint& idx, bool family) {
+    const std::string& key = idx.get_url_complete();
+    auto duplicate_throw = [&key]() {
+        throw std::invalid_argument(
+            "A resource is already registered at this path: '" + key + "'");
+    };
+    if (family) {
+        if (param_and_prefix_routes_.has_terminus_at(key, /*is_prefix=*/true)) {
+            duplicate_throw();
+        }
+        return;
+    }
+    auto pre_tier = classify_route_tier(idx);
+    switch (pre_tier.kind) {
+    case route_tier_kind::exact:
+        if (exact_routes_.find(key) != exact_routes_.end()) duplicate_throw();
+        break;
+    case route_tier_kind::radix:
+        if (param_and_prefix_routes_.has_terminus_at(
+                key, /*is_prefix=*/false)) {
+            duplicate_throw();
+        }
+        break;
+    case route_tier_kind::pattern:
+        for (const auto& rr : regex_routes_) {
+            if (rr.url_complete == key) duplicate_throw();
+        }
+        break;
+    }
+}
 
 void webserver_impl::register_v2_route(const detail::http_endpoint& idx,
         std::shared_ptr<http_resource> res, bool family) {
@@ -196,10 +193,14 @@ void webserver_impl::register_v2_route(const detail::http_endpoint& idx,
     std::unique_lock table_lock(route_table_mutex_);
     // TASK-056: guard against prefix-vs-exact terminus collisions on
     // the canonical key. Run BEFORE any mutation so the throw leaves
-    // the route table in its prior state. (See
-    // reject_terminus_collision for the full rationale.)
+    // the route table in its prior state.
     reject_terminus_collision(idx.get_url_complete(),
                               /*want_is_prefix=*/family);
+    // TASK-067: same-kind duplicate detection (replaces the v1 maps'
+    // insert-fails-on-dup oracle). Throws BEFORE any mutation so the
+    // atomicity contract pinned by basic_suite::duplicate_endpoints
+    // holds: a failed registration leaves the table exactly as before.
+    reject_duplicate_v2_entry_(idx, family);
     detail::route_entry entry;
     entry.methods = method_set{}.set_all();
     entry.handler = std::move(res);
@@ -245,35 +246,19 @@ void webserver::register_resource(const std::string& resource,
 }
 
 // TASK-024: erase a single registration of the requested kind (family).
-// Each kind keeps a distinct http_endpoint key (the family flag is part
-// of the endpoint's identity), so we must build the key with the right
-// flag or the erase silently misses. Caches are invalidated under the
-// registered_resources lock to prevent any thread from reading a
-// dangling resource pointer after the maps drop their refs.
+// Each kind keeps a distinct v2-table entry (parameterized routes live in
+// the radix tier, regex routes in the regex_routes_ vector, exact routes
+// in the exact_routes_ hash map; prefix routes are radix-tier with
+// is_prefix=true), so we route by the same classification used at
+// registration. The route_table_mutex_ write lock keeps the erasure
+// atomic against concurrent dispatch.
 void webserver::unregister_impl_(const string& resource, bool family) {
     detail::http_endpoint he(resource, family, true, regex_checking);
 
-    {
-        std::unique_lock registered_resources_lock(impl_->registered_resources_mutex);
-        impl_->registered_resources.erase(he);
-        // Prefix routes are never stored in the regex chain (only paths with
-        // regex metacharacters go there, and register_prefix does not set
-        // is_regex_compiled). The erase below is therefore a safe no-op for
-        // the family=true path but is harmless to call unconditionally.
-        impl_->registered_resources_regex.erase(he);
-        // The string-keyed fast-path map only ever holds exact (non-family)
-        // entries (see register_impl_). A prefix unregister has nothing to
-        // do here.
-        if (!family) {
-            impl_->registered_resources_str.erase(he.get_url_complete());
-        }
-    }
-
-    // TASK-027: mirror the erasure into the v2 3-tier table.
-    // Lock ordering: registered_resources_mutex (released above) ->
-    // route_table_mutex_ -> route_lru_cache's internal mutex
-    // (inside invalidate_route_cache). Table lock released before the
-    // LRU cache is cleared, matching register_impl_ / on_methods_.
+    // TASK-067: mirror the erasure into the v2 3-tier table.
+    // Lock ordering: route_table_mutex_ -> route_lru_cache's internal
+    // mutex (inside invalidate_route_cache). Table lock released before
+    // the LRU cache is cleared, matching register_impl_ / on_methods_.
     {
         std::unique_lock table_lock(impl_->route_table_mutex_);
         const std::string& key = he.get_url_complete();
@@ -305,27 +290,15 @@ void webserver::unregister_prefix(const string& path) {
 }
 
 void webserver::unregister_resource(const string& resource) {
-    // Build both endpoint keys before acquiring any lock.
+    // Build the canonical endpoint key once. With the v1 maps gone
+    // (TASK-067), the family flag no longer affects which v2 storage
+    // location holds the entry; the url_complete key is the only sweep key.
     detail::http_endpoint he_exact(resource, /*family=*/false, true, regex_checking);
-    detail::http_endpoint he_prefix(resource, /*family=*/true,  true, regex_checking);
 
-    {
-        // Hold a single write-lock across both v1 erasures AND the cache
-        // key removal below so no request thread can observe a
-        // partially-unregistered state (CWE-367 TOCTOU fix: the exact entry
-        // and the prefix entry are removed atomically).
-        std::unique_lock registered_resources_lock(impl_->registered_resources_mutex);
-        impl_->registered_resources.erase(he_exact);
-        impl_->registered_resources.erase(he_prefix);
-        impl_->registered_resources_regex.erase(he_exact);
-        impl_->registered_resources_regex.erase(he_prefix);
-        // The string-keyed fast-path map only holds exact (non-family) entries.
-        impl_->registered_resources_str.erase(he_exact.get_url_complete());
-    }
-
-    // TASK-027: mirror into the v2 3-tier table. Erase under both
-    // classifications so a prior register_path AND register_prefix on
-    // the same path are both cleared atomically.
+    // TASK-067: erase into the v2 3-tier table. Hold a single write-lock
+    // across all four tier sweeps so no request thread can observe a
+    // partially-unregistered state (CWE-367 TOCTOU: a prior register_path
+    // AND register_prefix on the same path are both cleared atomically).
     {
         std::unique_lock table_lock(impl_->route_table_mutex_);
         const std::string& key = he_exact.get_url_complete();

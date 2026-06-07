@@ -19,9 +19,10 @@ cd build/test && ./routing_regression
 Dispatch in `webserver_impl::finalize_answer` is driven by the v2 3-tier
 table (TASK-027) — `resolve_resource_for_request` calls `lookup_v2()`
 exclusively after the **TASK-053** cutover (and supersedes the original
-TASK-036 plan). The v1 maps (`registered_resources_str`,
-`registered_resources`, `registered_resources_regex`) survive only as
-registration-time bookkeeping; they no longer participate in dispatch.
+TASK-036 plan). **TASK-067** deleted the v1 registration-side maps and
+mutex; the v2 table is now the only routing surface end-to-end —
+lambda/class conflict detection probes the v2 tiers directly via
+`find_v2_entry_by_path_`.
 
 So this gate protects two distinct surfaces:
 
@@ -96,8 +97,8 @@ The v1 test was renamed in place; behavior unchanged.
 
 ### 3. Custom-regex parameter constraints — RESOLVED (v1 parity restored)
 
-In v1, `/items/{id|([0-9]+)}` is enforced by the
-`registered_resources_regex` map: the per-segment `[0-9]+` constraint
+In v1, `/items/{id|([0-9]+)}` was enforced by the `registered_resources_regex`
+map (deleted in TASK-067): the per-segment `[0-9]+` constraint
 participates in `std::regex_match`, so `/items/abc` does not match the
 route.
 
