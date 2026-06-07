@@ -417,6 +417,17 @@ class http_request {
      // See the MHD_Connection forward-declaration comment at global scope
      // above for the namespace-injection rationale.
      http_request(MHD_Connection* underlying_connection, unescaper_ptr unescaper);
+
+ public:
+     // TASK-068: internal-only test accessor. Returns the underlying
+     // MHD_Connection* the request was built against (the same pointer
+     // passed to the internal constructor above). Used exclusively by
+     // test/integ/connection_state_body_residue_test.cpp to peek the
+     // per-connection arena and pin the CWE-226 mitigation contract.
+     // NOT part of the public ABI; only visible when the library itself
+     // is being compiled (gated by HTTPSERVER_COMPILATION).
+     MHD_Connection* underlying_connection_for_testing() const noexcept;
+ private:
 #endif  // HTTPSERVER_COMPILATION
 
      /**

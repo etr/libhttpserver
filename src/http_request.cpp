@@ -123,6 +123,14 @@ std::pmr::memory_resource* pick_resource(struct MHD_Connection* connection) {
 
 }  // namespace
 
+// TASK-068: internal-only accessor for the per-connection arena residue
+// integration test. See http_request.hpp for the contract. Returns the
+// MHD_Connection* the impl was constructed against (nullptr on the
+// test-request / create_test_request path).
+MHD_Connection* http_request::underlying_connection_for_testing() const noexcept {
+    return impl_ ? impl_->connection_ : nullptr;
+}
+
 http_request::http_request(struct MHD_Connection* underlying_connection, unescaper_ptr unescaper)
     : impl_(nullptr, detail::http_request_impl_deleter{nullptr}) {
     auto* res = pick_resource(underlying_connection);
