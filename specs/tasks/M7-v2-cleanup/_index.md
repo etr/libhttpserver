@@ -33,7 +33,7 @@ TASK-093).
 | TASK-066 | Runtime setter for hook alias slots | MED | M | Backlog |
 | TASK-067 | Remove v1 `registered_resources*` maps and `namespace compat` shim | MED | L | Done |
 | TASK-068 | `connection_state` hardening — CWE-226 / CWE-14 | MED | S | Done |
-| TASK-069 | Remove transitional two-arg `http_request_impl` constructor | MED | S | Backlog |
+| TASK-069 | Remove transitional two-arg `http_request_impl` constructor | MED | S | Done |
 | TASK-070 | Migrate `hook_table_` to `std::atomic<std::shared_ptr<T>>` | MED | M | Backlog |
 | TASK-071 | Wire `install_not_found_alias_` stub and remove dead `lambda_handler` arm | MED | S | Backlog |
 | TASK-072 | Arena-allocated unescape on the warm path | MED | M | Backlog |

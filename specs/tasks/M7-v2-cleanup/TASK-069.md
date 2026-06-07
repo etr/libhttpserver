@@ -8,9 +8,9 @@
 The two-arg `http_request_impl` constructor at `http_request_impl.hpp:95-99` is preserved "for source compatibility" with no removal date. Remove it now that the v2 cutover is complete, so the only constructor is the canonical one. Internal headers do not need a deprecation cycle.
 
 **Action Items:**
-- [ ] Grep `src/` and `test/` for callers of the two-arg form. Migrate each to the canonical form.
-- [ ] Delete the two-arg overload and its comment block.
-- [ ] Verify `make check` is green across all build-flag matrix lanes (HAVE_BAUTH, HAVE_DAUTH, HAVE_GNUTLS, HAVE_WEBSOCKET).
+- [x] Grep `src/` and `test/` for callers of the two-arg form. Migrate each to the canonical form.
+- [x] Delete the two-arg overload and its comment block.
+- [x] Verify `make check` is green across all build-flag matrix lanes (HAVE_BAUTH, HAVE_DAUTH, HAVE_GNUTLS, HAVE_WEBSOCKET).
 
 **Dependencies:**
 - Blocked by: TASK-015 (request impl PIMPL split, Done)
@@ -25,4 +25,4 @@ The two-arg `http_request_impl` constructor at `http_request_impl.hpp:95-99` is 
 **Related Requirements:** PRD §2 API minimalism
 **Related Decisions:** None new
 
-**Status:** Backlog
+**Status:** Done

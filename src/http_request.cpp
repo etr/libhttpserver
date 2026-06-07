@@ -137,7 +137,9 @@ http_request::http_request(struct MHD_Connection* underlying_connection, unescap
     if (res == std::pmr::get_default_resource()) {
         // Heap-fallback: matches v1 lifetime exactly; deleter frees via
         // operator delete.
-        impl_.reset(new detail::http_request_impl(underlying_connection, unescaper));
+        impl_.reset(new detail::http_request_impl(
+            underlying_connection, unescaper,
+            std::pmr::polymorphic_allocator<>(std::pmr::get_default_resource())));
         impl_.get_deleter().fn = &detail::delete_impl_heap;
     } else {
         // Arena-backed: allocate and construct via polymorphic_allocator

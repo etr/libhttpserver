@@ -91,14 +91,6 @@ class http_request_impl {
                             std::pmr::polymorphic_allocator<>{
                                 std::pmr::get_default_resource()}) {}
 
-    // Two-arg ctor (TASK-015 surface) is preserved for source compatibility
-    // with any caller that hasn't been ported to the allocator-taking ctor
-    // yet -- it forwards to the three-arg form with the default resource.
-    http_request_impl(MHD_Connection* connection, unescaper_ptr unescaper)
-        : http_request_impl(connection, unescaper,
-                            std::pmr::polymorphic_allocator<>{
-                                std::pmr::get_default_resource()}) {}
-
     // TASK-016: allocator-aware constructor. The PMR-aware containers in
     // this impl propagate `alloc` through their value_types via the
     // standard scoped-allocator semantics built into
