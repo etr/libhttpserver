@@ -154,13 +154,95 @@ void prepend_x_dash_unescaper(std::string& val) {
 // default unescaper does real work (decodes to '/').
 constexpr const char* kLongValueWithPct2F = "a%2Fbcdefghijklmnopqrstuvwxyz_padding_to_force_heap_allocation";  // NOLINT(whitespace/line_length)
 
+// ---------------------------------------------------------------------------
+// Helpers shared across the correctness tests (3-6).
+//
+// decode_via_arena: constructs a fresh arena-backed impl+accumulator,
+// calls build_request_args once for (key, raw_value) with no unescaper,
+// retrieves the stored value, deletes the impl, and returns the decoded
+// std::string.  Each correctness test is a single LT_CHECK_EQ call.
+// (code-simplifier-iter1-3)
+// ---------------------------------------------------------------------------
+using httpserver::detail::http_request_impl;
+using httpserver::detail::arguments_accumulator;
+using impl_alloc_t = std::pmr::polymorphic_allocator<http_request_impl>;
+
+std::string decode_via_arena(const char* raw_value) {
+    alignas(std::max_align_t) std::array<std::byte, 8192> buf{};
+    std::pmr::monotonic_buffer_resource arena(buf.data(), buf.size(),
+                                              std::pmr::new_delete_resource());
+    impl_alloc_t alloc(&arena);
+    auto* p = alloc.new_object<http_request_impl>(nullptr, nullptr, alloc);
+
+    arguments_accumulator aa;
+    aa.unescaper = nullptr;
+    aa.arguments = &p->unescaped_args;
+
+    http_request_impl::build_request_args(
+        &aa, MHD_GET_ARGUMENT_KIND, "k", raw_value);
+
+    std::string result;
+    auto it = p->unescaped_args.find(std::string_view("k"));
+    if (it != p->unescaped_args.end() && !it->second.empty()) {
+        result.assign(it->second[0].data(), it->second[0].size());
+    }
+
+    alloc.delete_object(p);
+    return result;
+}
+
+// ---------------------------------------------------------------------------
+// Helper for the two headline alloc-pin tests (1) and (2).
+//
+// run_alloc_pin: constructs a fresh arena-backed impl+accumulator,
+// runs `warmup_rounds` cold calls to prime caches and grow any
+// thread_local buffers, then opens a count_new_window and runs one
+// measured call, returning the observed global-allocation count.
+// (code-simplifier-iter1-6)
+// ---------------------------------------------------------------------------
+std::size_t run_alloc_pin(httpserver::unescaper_ptr fn,
+                          int warmup_rounds) {
+    alignas(std::max_align_t) std::array<std::byte, 8192> buf{};
+    std::pmr::monotonic_buffer_resource arena(buf.data(), buf.size(),
+                                              std::pmr::new_delete_resource());
+    impl_alloc_t alloc(&arena);
+    auto* p = alloc.new_object<http_request_impl>(nullptr, nullptr, alloc);
+
+    arguments_accumulator aa;
+    aa.unescaper = fn;
+    aa.arguments = &p->unescaped_args;
+
+    for (int i = 0; i < warmup_rounds; ++i) {
+        // Use a unique key per warmup call so each inserts into a fresh
+        // map slot; this avoids accumulating a large vector under one key.
+        const std::string warmup_key = "warmup" + std::to_string(i);
+        http_request_impl::build_request_args(
+            &aa, MHD_GET_ARGUMENT_KIND, warmup_key.c_str(),
+            kLongValueWithPct2F);
+    }
+
+    std::size_t alloc_count = 0;
+    {
+        count_new_window window;
+        http_request_impl::build_request_args(
+            &aa, MHD_GET_ARGUMENT_KIND, "key", kLongValueWithPct2F);
+        alloc_count = window.count();
+    }
+
+    alloc.delete_object(p);
+    return alloc_count;
+}
+
 }  // namespace
 
+// The suite has no shared fixture state: each test constructs its own
+// arena+impl via the helpers above.  set_up/tear_down are present
+// (required by the littletest template) but empty; the comments
+// signal this is intentional, not an oversight.
+// (code-simplifier-iter1-4)
 LT_BEGIN_SUITE(http_request_unescape_arena_suite)
-    void set_up() {
-    }
-    void tear_down() {
-    }
+    void set_up() {}    // per-test setup is in the helpers above
+    void tear_down() {} // per-test teardown is in the helpers above
 LT_END_SUITE(http_request_unescape_arena_suite)
 
 // (1) Headline pin -- default unescaper. With a value strictly longer
@@ -170,177 +252,51 @@ LT_END_SUITE(http_request_unescape_arena_suite)
 // in the per-connection arena and no global-heap allocation occurs in
 // the build_request_args call itself.
 //
-// The test wraps the build_request_args call window in a
-// `count_new_window` RAII guard that toggles a global operator-new
-// counter; the assertion is that during the warm window the counter
-// does not advance.
+// One cold warmup call primes the impl-internal caches. The warm call
+// must consume only arena memory.
 LT_BEGIN_AUTO_TEST(http_request_unescape_arena_suite,
                    warm_path_zero_global_allocs_default_unescape)
-    alignas(std::max_align_t) std::array<std::byte, 8192> buf{};
-    std::pmr::monotonic_buffer_resource arena(buf.data(), buf.size(),
-                                              std::pmr::new_delete_resource());
-
-    using httpserver::detail::http_request_impl;
-    using httpserver::detail::arguments_accumulator;
-    using impl_alloc_t = std::pmr::polymorphic_allocator<http_request_impl>;
-
-    impl_alloc_t alloc(&arena);
-    auto* p = alloc.new_object<http_request_impl>(nullptr, nullptr, alloc);
-
-    arguments_accumulator aa;
-    aa.unescaper = nullptr;
-    aa.arguments = &p->unescaped_args;
-
-    // Cold call: may populate any one-shot internal caches.
-    http_request_impl::build_request_args(
-        &aa, MHD_GET_ARGUMENT_KIND, "warmup", kLongValueWithPct2F);
-
-    // Now measure a second call. The arena has already been grown by
-    // the cold call; the warm call must consume only arena memory and
-    // never touch the global heap.
-    {
-        count_new_window window;
-        http_request_impl::build_request_args(
-            &aa, MHD_GET_ARGUMENT_KIND, "key", kLongValueWithPct2F);
-        LT_CHECK_EQ(window.count(), std::size_t{0});
-    }
-
-    alloc.delete_object(p);
+    // 1 warmup: primes impl-internal caches; no thread_local to grow on
+    // the default-unescaper path.
+    LT_CHECK_EQ(run_alloc_pin(nullptr, 1), std::size_t{0});
 LT_END_AUTO_TEST(warm_path_zero_global_allocs_default_unescape)
 
 // (2) Headline pin -- user-registered unescaper. Same invariant must
 // hold when the user-callback path is exercised. A per-thread scratch
-// std::string amortises its capacity across requests on the same
-// thread; the first cold call grows it once, the warm call after that
-// must consume no further global heap.
+// std::string (thread_value in unescape_in_arena) amortises its capacity
+// across requests on the same thread.
+//
+// Two cold warmup calls are required: the first grows the thread_local
+// buffer to the peak value length; the second confirms steady-state. The
+// warm call after that must consume no further global heap.
 LT_BEGIN_AUTO_TEST(http_request_unescape_arena_suite,
                    warm_path_zero_global_allocs_user_unescape)
-    alignas(std::max_align_t) std::array<std::byte, 8192> buf{};
-    std::pmr::monotonic_buffer_resource arena(buf.data(), buf.size(),
-                                              std::pmr::new_delete_resource());
-
-    using httpserver::detail::http_request_impl;
-    using httpserver::detail::arguments_accumulator;
-    using impl_alloc_t = std::pmr::polymorphic_allocator<http_request_impl>;
-
-    impl_alloc_t alloc(&arena);
-    auto* p = alloc.new_object<http_request_impl>(nullptr, nullptr, alloc);
-
-    arguments_accumulator aa;
-    aa.unescaper = &passthrough_unescaper;
-    aa.arguments = &p->unescaped_args;
-
-    // Two cold calls: warm any one-shot impl-internal caches AND grow
-    // the per-thread user-scratch std::string capacity, so the warm
-    // window below measures only steady-state behaviour.
-    http_request_impl::build_request_args(
-        &aa, MHD_GET_ARGUMENT_KIND, "warmup1", kLongValueWithPct2F);
-    http_request_impl::build_request_args(
-        &aa, MHD_GET_ARGUMENT_KIND, "warmup2", kLongValueWithPct2F);
-
-    {
-        count_new_window window;
-        http_request_impl::build_request_args(
-            &aa, MHD_GET_ARGUMENT_KIND, "key", kLongValueWithPct2F);
-        LT_CHECK_EQ(window.count(), std::size_t{0});
-    }
-
-    alloc.delete_object(p);
+    // 2 warmups: first grows thread_value capacity; second confirms it.
+    LT_CHECK_EQ(run_alloc_pin(&passthrough_unescaper, 2), std::size_t{0});
 LT_END_AUTO_TEST(warm_path_zero_global_allocs_user_unescape)
 
 // (3) Correctness: "%2F" decodes to '/' on the default-unescaper path.
 LT_BEGIN_AUTO_TEST(http_request_unescape_arena_suite,
                    unescape_pct2f_decodes_to_slash)
-    using httpserver::detail::http_request_impl;
-    using httpserver::detail::arguments_accumulator;
-    using impl_alloc_t = std::pmr::polymorphic_allocator<http_request_impl>;
-
-    alignas(std::max_align_t) std::array<std::byte, 8192> buf{};
-    std::pmr::monotonic_buffer_resource arena(buf.data(), buf.size(),
-                                              std::pmr::new_delete_resource());
-    impl_alloc_t alloc(&arena);
-    auto* p = alloc.new_object<http_request_impl>(nullptr, nullptr, alloc);
-
-    arguments_accumulator aa;
-    aa.unescaper = nullptr;
-    aa.arguments = &p->unescaped_args;
-
-    http_request_impl::build_request_args(
-        &aa, MHD_GET_ARGUMENT_KIND, "k", "a%2Fb");
-
-    auto it = p->unescaped_args.find(std::string_view("k"));
-    LT_CHECK(it != p->unescaped_args.end());
-    LT_CHECK_EQ(it->second.size(), std::size_t{1});
-    LT_CHECK_EQ(std::string(it->second[0].data(), it->second[0].size()),
-                std::string("a/b"));
-
-    alloc.delete_object(p);
+    LT_CHECK_EQ(decode_via_arena("a%2Fb"), std::string("a/b"));
 LT_END_AUTO_TEST(unescape_pct2f_decodes_to_slash)
 
 // (4) Invalid hex passthrough: "%%" stays as "%%" (consistent with
 // http_unescape's fall-through behavior on non-hex digits after '%').
 LT_BEGIN_AUTO_TEST(http_request_unescape_arena_suite,
                    unescape_double_percent_passthrough)
-    using httpserver::detail::http_request_impl;
-    using httpserver::detail::arguments_accumulator;
-    using impl_alloc_t = std::pmr::polymorphic_allocator<http_request_impl>;
-
-    alignas(std::max_align_t) std::array<std::byte, 8192> buf{};
-    std::pmr::monotonic_buffer_resource arena(buf.data(), buf.size(),
-                                              std::pmr::new_delete_resource());
-    impl_alloc_t alloc(&arena);
-    auto* p = alloc.new_object<http_request_impl>(nullptr, nullptr, alloc);
-
-    arguments_accumulator aa;
-    aa.unescaper = nullptr;
-    aa.arguments = &p->unescaped_args;
-
-    http_request_impl::build_request_args(
-        &aa, MHD_GET_ARGUMENT_KIND, "k", "a%%b");
-
-    auto it = p->unescaped_args.find(std::string_view("k"));
-    LT_CHECK(it != p->unescaped_args.end());
-    LT_CHECK_EQ(std::string(it->second[0].data(), it->second[0].size()),
-                std::string("a%%b"));
-
-    alloc.delete_object(p);
+    LT_CHECK_EQ(decode_via_arena("a%%b"), std::string("a%%b"));
 LT_END_AUTO_TEST(unescape_double_percent_passthrough)
 
 // (5) Trailing percent: "abc%" stays as "abc%".
 LT_BEGIN_AUTO_TEST(http_request_unescape_arena_suite,
                    unescape_trailing_percent_passthrough)
-    using httpserver::detail::http_request_impl;
-    using httpserver::detail::arguments_accumulator;
-    using impl_alloc_t = std::pmr::polymorphic_allocator<http_request_impl>;
-
-    alignas(std::max_align_t) std::array<std::byte, 8192> buf{};
-    std::pmr::monotonic_buffer_resource arena(buf.data(), buf.size(),
-                                              std::pmr::new_delete_resource());
-    impl_alloc_t alloc(&arena);
-    auto* p = alloc.new_object<http_request_impl>(nullptr, nullptr, alloc);
-
-    arguments_accumulator aa;
-    aa.unescaper = nullptr;
-    aa.arguments = &p->unescaped_args;
-
-    http_request_impl::build_request_args(
-        &aa, MHD_GET_ARGUMENT_KIND, "k", "abc%");
-
-    auto it = p->unescaped_args.find(std::string_view("k"));
-    LT_CHECK(it != p->unescaped_args.end());
-    LT_CHECK_EQ(std::string(it->second[0].data(), it->second[0].size()),
-                std::string("abc%"));
-
-    alloc.delete_object(p);
+    LT_CHECK_EQ(decode_via_arena("abc%"), std::string("abc%"));
 LT_END_AUTO_TEST(unescape_trailing_percent_passthrough)
 
 // (6) Empty value: produces an empty arg without crashing.
 LT_BEGIN_AUTO_TEST(http_request_unescape_arena_suite,
                    unescape_empty_value)
-    using httpserver::detail::http_request_impl;
-    using httpserver::detail::arguments_accumulator;
-    using impl_alloc_t = std::pmr::polymorphic_allocator<http_request_impl>;
-
     alignas(std::max_align_t) std::array<std::byte, 8192> buf{};
     std::pmr::monotonic_buffer_resource arena(buf.data(), buf.size(),
                                               std::pmr::new_delete_resource());
@@ -368,10 +324,6 @@ LT_END_AUTO_TEST(unescape_empty_value)
 // TASK-018 lifetime contract on the arena-routed path.
 LT_BEGIN_AUTO_TEST(http_request_unescape_arena_suite,
                    unescape_view_outlives_subsequent_inserts)
-    using httpserver::detail::http_request_impl;
-    using httpserver::detail::arguments_accumulator;
-    using impl_alloc_t = std::pmr::polymorphic_allocator<http_request_impl>;
-
     alignas(std::max_align_t) std::array<std::byte, 8192> buf{};
     std::pmr::monotonic_buffer_resource arena(buf.data(), buf.size(),
                                               std::pmr::new_delete_resource());
@@ -410,10 +362,6 @@ LT_END_AUTO_TEST(unescape_view_outlives_subsequent_inserts)
 // arena-backed sink may legitimately grow past the input size.
 LT_BEGIN_AUTO_TEST(http_request_unescape_arena_suite,
                    unescape_user_callback_can_grow_value)
-    using httpserver::detail::http_request_impl;
-    using httpserver::detail::arguments_accumulator;
-    using impl_alloc_t = std::pmr::polymorphic_allocator<http_request_impl>;
-
     alignas(std::max_align_t) std::array<std::byte, 8192> buf{};
     std::pmr::monotonic_buffer_resource arena(buf.data(), buf.size(),
                                               std::pmr::new_delete_resource());
