@@ -340,10 +340,30 @@ size_t webserver_impl::unescaper_func(void * cls, struct MHD_Connection *c, char
     std::ignore = cls;
     std::ignore = c;
 
-    // THIS IS USED TO AVOID AN UNESCAPING OF URL BEFORE THE ANSWER.
-    // IT IS DUE TO A BOGUS ON libmicrohttpd (V0.99) THAT PRODUCING A
-    // STRING CONTAINING '\0' AFTER AN UNESCAPING, IS UNABLE TO PARSE
-    // ARGS WITH get_connection_values FUNC OR lookup FUNC.
+    // No-op unescaper: returns the input length and does not mutate `s`,
+    // so MHD ships raw percent-encoded bytes to our get_connection_values
+    // callbacks. Decoding is performed by libhttpserver itself:
+    //   - URL path: base_unescaper() in webserver_request.cpp
+    //   - GET args: unescape_in_arena() in http_request_impl.cpp (TASK-072)
+    // This is required so we can honour a user-registered unescaper hook
+    // (create_webserver::unescaper(...)) and route GET-arg decoding through
+    // the per-connection arena. Per microhttpd.h, registering a custom
+    // MHD_OPTION_UNESCAPE_CALLBACK suppresses MHD's internal "%HH" decode,
+    // so this no-op is what guarantees MHD does not pre-decode behind our
+    // back (which would otherwise cause double-decoding of `?key=%2F`).
+    //
+    // Historical note (TASK-073, verified against upstream libmicrohttpd
+    // ChangeLog): this callback originally also worked around a v0.99-era
+    // MHD bug where the internal unescape could produce strings containing
+    // embedded NULs (e.g. from `%00`), which then broke
+    // MHD_get_connection_values / MHD_lookup_connection_value lookups
+    // downstream. Upstream resolved that by adding explicit
+    // binary-zero-aware key/value storage and the size-carrying
+    // MHD_KeyValueIteratorN callback in libmicrohttpd 0.9.64 (released
+    // 2019-06-09; see ChangeLog entries dated 2019-03-20, 2019-05-01,
+    // 2019-05-03). configure.ac requires libmicrohttpd >= 1.0.0
+    // (released 2024-02), so the original v0.99 bug is no longer
+    // reachable; the no-op stays for the architectural reasons above.
     if (s == nullptr) return 0;
     return std::char_traits<char>::length(s);
 }
