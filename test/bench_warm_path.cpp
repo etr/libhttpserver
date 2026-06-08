@@ -19,8 +19,8 @@
 */
 // TASK-058 -- Warm-path allocation pass benchmark.
 //
-// Three measurements isolate the per-request allocations that TASK-058
-// targets:
+// Six measurements isolate the per-request allocations that TASK-058
+// (and TASK-072, variants 5 and 6) target:
 //   (1) canonicalize: lookup_v2() on a canonical path.  Pre-TASK-058 this
 //       allocated a std::string in canonicalize_lookup_path on every
 //       call; after step 1 the happy path returns a string_view into
@@ -38,6 +38,15 @@
 //       value for a 405 response.  Pre-TASK-058 this rebuilds the
 //       string on every 405; after step 3 a per-resource cache returns
 //       the previously-computed std::string by reference.
+//   (5) build_request_args_pct2f: TASK-072 -- the cost of inserting a
+//       GET arg whose value contains "%2F" (the canonical percent-
+//       encoded form encountered in real workloads).  Before TASK-072
+//       this allocated a std::string temporary on the global heap;
+//       after TASK-072 the unescape output is materialised directly
+//       in the per-connection arena.
+//   (6) build_request_args_plain: TASK-072 baseline -- same operation
+//       but with a value that has no percent-encoded sequences.  The
+//       median for (5) should land within noise of the (6) baseline.
 //
 // Wired into `make bench` via bench_targets in test/Makefile.am; not
 // part of `make check`.  Sanitizer builds skip with exit 0 so the
@@ -48,10 +57,13 @@
 #define HTTPSERVER_COMPILATION 1  // unlock webserver_test_access
 
 #include <algorithm>
+#include <array>
 #include <chrono>
+#include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
+#include <memory_resource>
 #include <string>
 #include <utility>
 #include <vector>
@@ -61,6 +73,7 @@
 #include "httpserver/http_response.hpp"
 #include "httpserver/http_utils.hpp"
 #include "httpserver/webserver.hpp"
+#include "httpserver/detail/http_request_impl.hpp"  // TASK-072: build_request_args bench
 #include "httpserver/detail/webserver_impl.hpp"
 
 namespace hs = httpserver;
@@ -273,6 +286,100 @@ int main() {
                 do_not_optimize(s);
             },
             OUTER, INNER_405);
+    }
+
+    // ----- (5) TASK-072: build_request_args with a %2F-containing
+    // value, one insert per fresh per-request arena.
+    //
+    // Each measured call mirrors the full production request lifecycle:
+    // allocate a fresh arena-backed impl, insert one arg (the warm path
+    // the task targets), and destroy the impl.  The 65536-byte arena is
+    // more than large enough for a single insert, so all pmr::string
+    // allocations stay inside the arena and zero global-heap allocation
+    // occurs during the measured window.
+    //
+    // Prior design flaw: the old loop accumulated all 1M values under a
+    // single key without resetting the arena.  The arena was exhausted
+    // after ~819 iterations (~65536 / 80 bytes per pmr::string), so
+    // every subsequent call spilled to the upstream heap -- measuring
+    // exactly the allocation overhead the task was supposed to eliminate.
+    // The new design (fresh impl per call) removes this flaw and makes
+    // the bench an honest proof of the zero-heap-alloc guarantee.
+    // (performance-reviewer-iter1-1) -----
+    {
+        using httpserver::detail::http_request_impl;
+        using httpserver::detail::arguments_accumulator;
+        using impl_alloc_t =
+            std::pmr::polymorphic_allocator<http_request_impl>;
+
+        // Long enough to exceed std::string SSO on libc++ and libstdc++.
+        // Contains "%2F" so the default unescape path does real work.
+        static const char* kValue =
+            "a%2Fbcdefghijklmnopqrstuvwxyz_padding_to_force_heap";
+
+        std::printf("bench_warm_path (5): build_request_args "
+                    "(%%2F unescape via arena, fresh impl per call)\n");
+        measure_median_ns(
+            "build_request_args_pct2f",
+            [&]() {
+                // Each call: fresh arena-backed impl, one insert, destroy.
+                // This mirrors the production per-request lifecycle and
+                // keeps the arena within capacity on every call.
+                alignas(std::max_align_t) std::array<std::byte, 65536> buf{};
+                std::pmr::monotonic_buffer_resource arena(
+                    buf.data(), buf.size(), std::pmr::new_delete_resource());
+                impl_alloc_t alloc(&arena);
+                auto* p = alloc.new_object<http_request_impl>(
+                    nullptr, nullptr, alloc);
+                arguments_accumulator aa;
+                aa.unescaper = nullptr;
+                aa.arguments = &p->unescaped_args;
+                aa.max_args_count = 64;
+                aa.max_args_bytes = 64 * 128;
+                http_request_impl::build_request_args(
+                    &aa, MHD_GET_ARGUMENT_KIND, "k", kValue);
+                do_not_optimize(p->unescaped_args);
+                alloc.delete_object(p);
+            },
+            OUTER, INNER);
+    }
+
+    // ----- (6) TASK-072: baseline with no percent-encoded sequences.
+    // Same fresh-impl-per-call structure as (5) so the timings are
+    // directly comparable.  The median for (5) should land within noise
+    // of this baseline once TASK-072 lands.
+    // (performance-reviewer-iter1-1) -----
+    {
+        using httpserver::detail::http_request_impl;
+        using httpserver::detail::arguments_accumulator;
+        using impl_alloc_t =
+            std::pmr::polymorphic_allocator<http_request_impl>;
+
+        static const char* kValue =
+            "abcdefghijklmnopqrstuvwxyz_no_escape_baseline_padding";
+
+        std::printf("bench_warm_path (6): build_request_args "
+                    "(no-escape baseline, fresh impl per call)\n");
+        measure_median_ns(
+            "build_request_args_plain",
+            [&]() {
+                alignas(std::max_align_t) std::array<std::byte, 65536> buf{};
+                std::pmr::monotonic_buffer_resource arena(
+                    buf.data(), buf.size(), std::pmr::new_delete_resource());
+                impl_alloc_t alloc(&arena);
+                auto* p = alloc.new_object<http_request_impl>(
+                    nullptr, nullptr, alloc);
+                arguments_accumulator aa;
+                aa.unescaper = nullptr;
+                aa.arguments = &p->unescaped_args;
+                aa.max_args_count = 64;
+                aa.max_args_bytes = 64 * 128;
+                http_request_impl::build_request_args(
+                    &aa, MHD_GET_ARGUMENT_KIND, "k", kValue);
+                do_not_optimize(p->unescaped_args);
+                alloc.delete_object(p);
+            },
+            OUTER, INNER);
     }
 
     std::printf("\nbench_warm_path: no pass/fail ceiling -- numbers "

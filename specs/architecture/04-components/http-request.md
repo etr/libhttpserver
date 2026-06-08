@@ -19,6 +19,7 @@
 
 **Key design notes:**
 - The arena allocator is plumbed through `webserver_impl` → connection state → `http_request` constructor. The user does not see it; it is an internal optimization.
+  - GET-argument population (`http_request_impl::build_request_args`) writes the unescaped value directly into the per-connection arena (TASK-072). The standard `%HH` / `+`→space transformation runs in-place on the arena-backed `pmr::string`; when a user-registered unescaper is set, a per-thread reusable `std::string` scratch buffer adapts the ABI-locked `void(std::string&)` callback signature without a per-request global-heap allocation. Pinned by `test/unit/http_request_unescape_arena_test.cpp` (zero global `operator new` calls during the warm cycle) and exercised by `bench_warm_path` variants (5) and (6).
 - Containers returned by `get_*()` reference impl-owned storage; the request must outlive any view derived from it. Documented as a lifetime contract.
 - `gnutls_session_t` (raw GnuTLS handle) is not exposed publicly. Users wanting custom TLS introspection use the high-level `get_client_cert_*` accessors. The handle remains accessible via friend access from internal code.
 
