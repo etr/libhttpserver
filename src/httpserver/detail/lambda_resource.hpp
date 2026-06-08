@@ -48,6 +48,7 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <utility>
 
 #include "httpserver/http_method.hpp"
@@ -62,12 +63,26 @@ class http_request;
 namespace httpserver {
 namespace detail {
 
+// The per-method slot signature for lambda_resource. Returns
+// http_response by value (DR-004) and takes the request by const
+// reference. std::function is the chosen storage so users can pass any
+// callable (lambda, function pointer, std::bind result, member-function
+// adaptor) without leaking the concrete callable type into the slot
+// array.
+//
+// TASK-071 history: this typedef formerly lived in route_entry.hpp as
+// the lambda arm of `std::variant<lambda_handler, shared_ptr<...>>`. The
+// variant arm was dead code (no writer stored a lambda directly — every
+// on_*/route path funnels through lambda_resource), so it was removed.
+// The typedef relocates here, where its remaining uses are.
+using lambda_handler = std::function<::httpserver::http_response(const ::httpserver::http_request&)>;  // NOLINT(whitespace/line_length)
+
 // Tiny adapter that wraps a single lambda_handler as an http_resource
 // virtual override. We keep one slot per method enum and dispatch in
 // each render_* override. Each slot holds a
 //   std::function<http_response(const http_request&)>
-// (see route_entry.hpp::lambda_handler). Slots are installed via
-// set_slot() and invoked by the render_* overrides below.
+// (the `lambda_handler` typedef defined above). Slots are installed
+// via set_slot() and invoked by the render_* overrides below.
 class lambda_resource final : public ::httpserver::http_resource {
  public:
     lambda_resource() {

@@ -255,9 +255,10 @@ webserver_impl::lookup_v2(http_method method, const std::string& path) {
 // The dispatch path now does:
 //   lookup_v2() walks route_lru_cache -> exact_routes_ ->
 //       param_and_prefix_routes_ -> regex_routes_, returning a
-//       route_entry whose handler arm is always shared_ptr<http_resource>
+//       route_entry whose handler is a shared_ptr<http_resource>
 //       (the on_*/route entry points wrap user lambdas in lambda_resource
-//       before storing; the variant's lambda_handler arm is dead code).
+//       before storing — see prepare_or_create_lambda_shim in
+//       webserver_routes.cpp).
 //
 // TASK-067: single_resource mode used to short-circuit to a direct read
 // of the v1 registered_resources map. With the v1 maps deleted, single
@@ -267,6 +268,13 @@ webserver_impl::lookup_v2(http_method method, const std::string& path) {
 // is no separate fast path because the v2 walk for a single registered
 // prefix is one shared_lock + one empty-map probe + one trivial radix
 // descent: cheap enough that the extra branch was net-negative.
+//
+// TASK-071: route_entry::handler was previously a
+// `std::variant<lambda_handler, shared_ptr<http_resource>>`. The
+// lambda_handler arm was dead code (every writer wrapped lambdas in
+// lambda_resource) and has been removed. The dispatch path reads the
+// shared_ptr directly with a defensive null check that degrades to a
+// 404 miss.
 bool webserver_impl::resolve_resource_for_request(detail::modded_request* mr,
         std::shared_ptr<http_resource>& hrm) {
     // matched_path_template + matched_is_prefix feed the route_resolved
@@ -280,20 +288,15 @@ bool webserver_impl::resolve_resource_for_request(detail::modded_request* mr,
     lookup_result result = lookup_v2(mr->method_enum, mr->standardized_url);
     if (!result.found) return false;
 
-    // Extract the shared_ptr<http_resource> arm of the route_entry's
-    // variant. The on_* / route entry points wrap user lambdas in a
-    // lambda_resource shim and store the shim as shared_ptr<http_resource>,
-    // so this arm is the only one populated in practice; treat the
-    // lambda_handler arm as unreachable (defensive nullptr check below).
-    auto* hp = std::get_if<std::shared_ptr<http_resource>>(&result.entry.handler);
-    if (hp == nullptr || *hp == nullptr) {
-        // Unreachable today: lookup_v2 only returns entries whose
-        // handler is a shared_ptr<http_resource>. If a future task
-        // stores a lambda_handler directly we will need to grow this
-        // path; until then, treat as a not-found miss.
+    // Read the resource pointer directly. Every writer of route_entry
+    // populates a non-null shared_ptr (a class-derived http_resource
+    // for register_path / register_prefix, or a lambda_resource shim
+    // for on_* / route); a null pointer here would indicate a future
+    // bug, so degrade to a not-found miss defensively.
+    if (result.entry.handler == nullptr) {
         return false;
     }
-    hrm = *hp;
+    hrm = result.entry.handler;
 
     // Replay captured URL parameters into the request. This is the v2
     // equivalent of the v1-era apply_extracted_params (removed in

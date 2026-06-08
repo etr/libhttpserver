@@ -283,28 +283,47 @@ void webserver::install_method_not_allowed_alias_() {
 }
 
 // ----------------------------------------------------------------
-// not_found_handler -> route_resolved (observation-only per DR-012).
+// not_found_handler -> route_resolved (observation-only per DR-012 §4.10).
 //
 // This is an alias. Calling not_found_handler(fn) registers a hook
 // at hook_phase::route_resolved. Equivalent to
 // ws.add_hook(hook_phase::route_resolved, ...).
 //
-// Structural note: route_resolved_ctx does not carry a mutable
-// response slot, so the 404 synthesis for user-provided handlers
-// remains in webserver_impl::not_found_page (called from
-// finalize_answer). The hook registers the alias in the bus so the
-// hook count is observable and the architectural seat is reserved.
+// Structural pin: per DR-012 §4.10, route_resolved is observation-only
+// — it cannot mutate the in-flight response or its delivery, and
+// route_resolved_ctx exposes no mutable response slot. The user-
+// provided not_found_handler is therefore consulted at the v1 call
+// site webserver_impl::not_found_page (invoked from finalize_answer
+// and the materialize-fallback path; see src/detail/webserver_error_pages.cpp
+// and src/detail/webserver_request.cpp). The alias seat here is the
+// architectural anchor: it reserves a stable hook[0] index at this
+// phase (per PRD-HOOK-REQ-009), it keeps the hook count observable
+// via the public hook API (verified by hooks_alias_count_test), and
+// it gives future observation-only integrations (logging, metrics)
+// a known phase boundary to subscribe alongside. The on-wire 404
+// body shape is pinned by hooks_not_found_alias_test (default and
+// custom branches) and by basic.cpp:custom_not_found_handler.
+//
+// TASK-071: previously labelled "structurally deferred (TASK-048)".
+// TASK-048 shipped; the deferral was a misread of the design — the
+// phase being observation-only is not a deferral, it IS the design
+// (see DR-012 §4.10). The body remains a documented no-op observation
+// marker; the forward-debt comment has been removed.
 void webserver::install_not_found_alias_() {
     if (not_found_handler == nullptr) return;
     add_hook(hook_phase::route_resolved,
         std::function<void(const route_resolved_ctx&)>(
-            [](const route_resolved_ctx&) {
-                // Observation stub. The actual 404 synthesis lives
-                // in webserver_impl::not_found_page, consulted from
-                // finalize_answer at the existing v1 call site.
-                // Route_resolved_ctx does not carry mr->response so
-                // the spec's "stash into mr->response" is structurally
-                // deferred (see TASK-048 spec §action item 3 note).
+            [](const route_resolved_ctx& ctx) {
+                // Pure observation marker. The on-wire 404 body is
+                // synthesised by webserver_impl::not_found_page; this
+                // hook intentionally does NOT re-invoke the user
+                // handler (doing so would double-count the user
+                // handler's call rate and violate v1 observed-call-
+                // count semantics). DR-012 §4.10 forbids mutating the
+                // response from this phase. The discard of `ctx` makes
+                // explicit that no response-shaping decision is taken
+                // here.
+                (void) ctx;
             }))
         .detach();
 }

@@ -35,7 +35,7 @@ TASK-093).
 | TASK-068 | `connection_state` hardening — CWE-226 / CWE-14 | MED | S | Done |
 | TASK-069 | Remove transitional two-arg `http_request_impl` constructor | MED | S | Done |
 | TASK-070 | Migrate `hook_table_` to `std::atomic<std::shared_ptr<T>>` | MED | M | Backlog |
-| TASK-071 | Wire `install_not_found_alias_` stub and remove dead `lambda_handler` arm | MED | S | Backlog |
+| TASK-071 | Wire `install_not_found_alias_` stub and remove dead `lambda_handler` arm | MED | S | Done |
 | TASK-072 | Arena-allocated unescape on the warm path | MED | M | Backlog |
 | TASK-073 | Revisit libmicrohttpd v0.99 unescape workaround | LOW | S | Backlog |
 | TASK-074 | Gate DEBUG raw-body printing behind explicit opt-in | LOW (sec) | S | Backlog |
