@@ -37,7 +37,7 @@ TASK-093).
 | TASK-070 | Migrate `hook_table_` to `std::atomic<std::shared_ptr<T>>` | MED | M | Backlog |
 | TASK-071 | Wire `install_not_found_alias_` stub and remove dead `lambda_handler` arm | MED | S | Done |
 | TASK-072 | Arena-allocated unescape on the warm path | MED | M | Done |
-| TASK-073 | Revisit libmicrohttpd v0.99 unescape workaround | LOW | S | Backlog |
+| TASK-073 | Revisit libmicrohttpd v0.99 unescape workaround | LOW | S | Done |
 | TASK-074 | Gate DEBUG raw-body printing behind explicit opt-in | LOW (sec) | S | Backlog |
 | TASK-075 | Propagate `wait_for_server_ready` to sibling hooks integ tests | HIGH | M | Backlog |
 | TASK-076 | Replace tautological-pass blocks in TLS test lanes | HIGH | M | Backlog |
