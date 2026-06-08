@@ -188,16 +188,12 @@ webserver_impl::prepare_or_create_lambda_shim(const detail::http_endpoint& idx,
         fresh_out = true;
         return std::make_shared<detail::lambda_resource>();
     }
-    // Existing entry. The v2 storage uses a variant whose handler arm is
-    // always shared_ptr<http_resource> in the current code (the
-    // lambda_handler arm is unused; see resolve_resource_for_request).
-    // Pull the shared_ptr and dynamic_pointer_cast to lambda_resource:
-    // if the cast misses, a class-based register_path/register_prefix
-    // owns this path and we must throw.
-    const auto* sp = std::get_if<std::shared_ptr<http_resource>>(&existing->handler);
-    auto shim = (sp != nullptr)
-        ? std::dynamic_pointer_cast<detail::lambda_resource>(*sp)
-        : nullptr;
+    // Existing entry. route_entry::handler is a shared_ptr<http_resource>
+    // (TASK-071 collapsed the prior variant). Dynamic-cast to
+    // lambda_resource: if the cast misses, a class-based
+    // register_path/register_prefix owns this path and we must throw.
+    auto shim = std::dynamic_pointer_cast<detail::lambda_resource>(
+        existing->handler);
     if (!shim) {
         throw std::invalid_argument(
             "A non-lambda http_resource is already registered at "
@@ -355,8 +351,7 @@ void webserver_impl::update_existing_v2_entry(const std::string& key,
         return;
     }
     for (auto& rr : regex_routes_) {
-        auto* sp = std::get_if<std::shared_ptr<http_resource>>(&rr.entry.handler);
-        if (sp && *sp == shim) {
+        if (rr.entry.handler == shim) {
             merge_into(rr.entry);
             return;
         }

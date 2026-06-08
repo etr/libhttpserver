@@ -172,8 +172,12 @@ static_assert(std::is_same_v<
                   void>,
               "on_head must exist and return void");
 
-// (2) The route_entry detail type pins the §4.7 shape: method_set + a
-//     two-arm variant + a bool is_prefix flag.
+// (2) The route_entry detail type pins the §4.7 shape: method_set +
+//     a single-arm shared_ptr<http_resource> handler + a bool is_prefix
+//     flag. TASK-071 collapsed the variant: the lambda_handler arm was
+//     dead code (every writer wrapped user lambdas in a lambda_resource
+//     shim and stored the shim as shared_ptr<http_resource>; no path
+//     stored a lambda directly).
 static_assert(std::is_same_v<
                   decltype(httpserver::detail::route_entry::methods),
                   method_set>,
@@ -181,10 +185,10 @@ static_assert(std::is_same_v<
 
 static_assert(std::is_same_v<
                   decltype(httpserver::detail::route_entry::handler),
-                  std::variant<httpserver::detail::lambda_handler,
-                               std::shared_ptr<http_resource>>>,
-              "route_entry::handler must be variant<lambda_handler, "
-              "shared_ptr<http_resource>>");
+                  std::shared_ptr<http_resource>>,
+              "route_entry::handler must be shared_ptr<http_resource> "
+              "(TASK-071: lambda_handler variant arm removed; "
+              "on_*/route shim through lambda_resource).");
 
 static_assert(std::is_same_v<
                   decltype(httpserver::detail::route_entry::is_prefix),

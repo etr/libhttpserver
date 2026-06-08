@@ -39,11 +39,13 @@ namespace ht = httpserver;
 namespace htd = httpserver::detail;
 
 // Sentinel makers to avoid crafting a real http_resource just to populate
-// the variant; we leave the lambda_handler default-constructed (empty
-// std::function) and ride on the sentinel id field in the test below.
-// The variant arm itself is irrelevant — the radix_tree / route_cache
-// tests only care about the entry payload identity through pointer
-// equality and the methods/is_prefix fields.
+// the handler field; we leave it null (a default-constructed shared_ptr)
+// and ride on the sentinel id field in the test below. The handler field
+// is irrelevant — the radix_tree / route_cache tests only care about the
+// entry payload identity through pointer equality and the methods/is_prefix
+// fields. (TASK-071: route_entry::handler was originally a
+// std::variant<lambda_handler, shared_ptr<http_resource>>; the variant arm
+// was collapsed to a bare shared_ptr<http_resource>.)
 struct test_entry {
     int sentinel = 0;
     ht::method_set methods{};
@@ -57,7 +59,7 @@ static htd::route_entry make_entry(
     htd::route_entry e;
     e.methods = ms;
     e.is_prefix = is_prefix;
-    // Leave variant alternative #0 (lambda_handler) default-constructed.
+    // Leave handler default-constructed (null shared_ptr).
     return e;
 }
 

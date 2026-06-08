@@ -40,44 +40,38 @@
 #ifndef SRC_HTTPSERVER_DETAIL_ROUTE_ENTRY_HPP_
 #define SRC_HTTPSERVER_DETAIL_ROUTE_ENTRY_HPP_
 
-#include <functional>
 #include <memory>
-#include <variant>
 
 #include "httpserver/http_method.hpp"
 
 namespace httpserver {
-class http_request;
-class http_response;
 class http_resource;
 }  // namespace httpserver
 
 namespace httpserver {
 namespace detail {
 
-// The lambda arm of the route_entry payload variant. Returns
-// http_response by value (DR-004) and takes the request by const
-// reference. std::function is the chosen storage so users can pass any
-// callable (lambda, function pointer, std::bind result, member-function
-// adaptor) without leaking the concrete callable type into the route
-// table.
-//
-// PRD-RSP-REQ-007 dispatch note: when the lookup_v2 path invokes this
-// variant arm, the returned http_response prvalue is moved directly into
-// modded_request::response via emplace(), matching the pointer-to-member
-// dispatch path used by the v1 finalize_answer (see DR-004 §5.3).
-using lambda_handler = std::function<::httpserver::http_response(const ::httpserver::http_request&)>;  // NOLINT(whitespace/line_length)
-
 // route_entry: §4.7-shape value type stored per route in the route
 // table. The `methods` mask holds every HTTP method this entry serves;
-// the variant payload holds either a lambda (for on_* registrations)
-// or a shared_ptr<http_resource> (for register_path / register_prefix
-// registrations). `is_prefix` distinguishes prefix matching from exact
-// matching at lookup time.
+// the `handler` payload is a shared_ptr to the http_resource serving
+// the route — either a class-derived resource (for register_path /
+// register_prefix registrations) or a lambda_resource shim
+// (for on_* / route registrations, which wrap the user lambda in a
+// lambda_resource owning one slot per HTTP method). `is_prefix`
+// distinguishes prefix matching from exact matching at lookup time.
+//
+// TASK-071 history: this field was originally a
+// `std::variant<lambda_handler, shared_ptr<http_resource>>`. The
+// lambda_handler arm was never populated — every writer wrapped user
+// lambdas in lambda_resource (see webserver_routes.cpp's
+// prepare_or_create_lambda_shim and the lambda_resource header doc-
+// comment for why the shim composes cleanly with register_path's
+// resource storage). The variant arm has been removed; the
+// lambda_handler typedef now lives in detail/lambda_resource.hpp
+// where its remaining uses are (the per-method slot signature).
 struct route_entry {
     method_set methods{};
-    std::variant<lambda_handler,
-                 std::shared_ptr<::httpserver::http_resource>> handler;
+    std::shared_ptr<::httpserver::http_resource> handler;
     bool is_prefix = false;
 };
 

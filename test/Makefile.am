@@ -252,8 +252,8 @@ webserver_register_path_prefix_SOURCES = unit/webserver_register_path_prefix_tes
 # webserver_on_methods: TASK-025. Compile-time signature contract for
 # the seven on_* lambda registration overloads (on_get / on_post / on_put
 # / on_delete / on_patch / on_options / on_head) plus static_asserts on
-# the §4.7 detail::route_entry shape (method_set + variant<lambda_handler,
-# shared_ptr<http_resource>> + bool is_prefix). Runtime tests over real
+# the §4.7 detail::route_entry shape (method_set + shared_ptr<http_resource>
+# + bool is_prefix; TASK-071 collapsed the original variant arm). Runtime tests over real
 # curl round-trips: PRD §3.4 hello-world; per-method 405 + Allow header;
 # composition (on_get + on_post on the same path serve both); all seven
 # methods dispatch correctly; duplicate (method, path) registration

@@ -565,10 +565,10 @@ LT_BEGIN_AUTO_TEST(routing_regression_suite,
     // literal "foo" (exact child), so the tree descends there first and
     // never tries the wildcard root branch required by the second
     // pattern. Structural precedence → first-registered wins here.
-    auto* hp = std::get_if<std::shared_ptr<ht::http_resource>>(
-        &r.entry.handler);
-    LT_CHECK(hp != nullptr);
-    LT_CHECK(*hp == first);
+    // TASK-071: route_entry::handler is now a bare shared_ptr<http_resource>
+    // (the variant arm was collapsed); read it directly.
+    LT_CHECK(r.entry.handler != nullptr);
+    LT_CHECK(r.entry.handler == first);
 LT_END_AUTO_TEST(overlapping_two_regex_routes_deterministic_first_wins)
 
 LT_BEGIN_AUTO_TEST(routing_regression_suite,
@@ -588,10 +588,8 @@ LT_BEGIN_AUTO_TEST(routing_regression_suite,
                                    std::string("/foo/bar/"));
     LT_CHECK(r.found);
     LT_CHECK(r.tier == ht::detail::webserver_impl::tier_hit::exact);
-    auto* hp = std::get_if<std::shared_ptr<ht::http_resource>>(
-        &r.entry.handler);
-    LT_CHECK(hp != nullptr);
-    LT_CHECK(*hp == exact);
+    LT_CHECK(r.entry.handler != nullptr);
+    LT_CHECK(r.entry.handler == exact);
 LT_END_AUTO_TEST(later_exact_registration_shadows_earlier_regex)
 
 // ---------------------------------------------------------------------
@@ -615,10 +613,8 @@ LT_BEGIN_AUTO_TEST(routing_regression_suite,
     auto deep = impl_of(ws).lookup_v2(
         ht::http_method::get, std::string("/anything/at/all"));
     LT_CHECK(deep.found);
-    auto* hp = std::get_if<std::shared_ptr<ht::http_resource>>(
-        &deep.entry.handler);
-    LT_CHECK(hp != nullptr);
-    LT_CHECK(*hp == only);
+    LT_CHECK(deep.entry.handler != nullptr);
+    LT_CHECK(deep.entry.handler == only);
 LT_END_AUTO_TEST(single_resource_mode_serves_any_subpath)
 
 // ---------------------------------------------------------------------
