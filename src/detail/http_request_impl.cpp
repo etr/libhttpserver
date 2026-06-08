@@ -39,6 +39,7 @@
 
 #include "httpserver/detail/connection_state.hpp"
 #include "httpserver/detail/http_request_impl.hpp"
+#include "httpserver/detail/unescape_helpers.hpp"
 #include "httpserver/http_utils.hpp"
 
 namespace httpserver {
@@ -157,84 +158,53 @@ const http::header_view_map& http_request_impl::ensure_headerlike_cache(MHD_Valu
 
 namespace {
 
-// TASK-072: hex_digit_value matches src/http_utils.cpp's static helper.
-// Duplicated here (rather than promoted to a header) because both
-// copies are tiny and trivially constexpr-foldable; centralising it
-// would require either a header-only inline helper or an exposed
-// non-public symbol, neither of which justifies the surface area.
-constexpr int hex_digit_value(char c) noexcept {
-    if (c >= '0' && c <= '9') return c - '0';
-    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
-    return -1;
-}
-
-// TASK-072: raw-buffer unescape, mirrors http_unescape(std::string*)
-// byte-identically. Operates in-place on [data, data+size); returns
-// the new size after the transformation. The output is guaranteed to
-// be <= input length (the standard %HH / '+'->' ' replacement only
-// ever shrinks).
-inline std::size_t http_unescape_raw(char* data, std::size_t size) noexcept {
-    if (size == 0 || data[0] == '\0') return 0;
-    std::size_t rpos = 0;
-    std::size_t wpos = 0;
-    while (rpos < size && data[rpos] != '\0') {
-        switch (data[rpos]) {
-            case '+':
-                data[wpos++] = ' ';
-                ++rpos;
-                break;
-            case '%':
-                if (size > rpos + 2) {
-                    int hi = hex_digit_value(data[rpos + 1]);
-                    int lo = hex_digit_value(data[rpos + 2]);
-                    if (hi >= 0 && lo >= 0) {
-                        data[wpos++] =
-                            static_cast<char>((hi << 4) | lo);
-                        rpos += 3;
-                        break;
-                    }
-                }
-            // intentional fall through!
-            default:
-                data[wpos++] = data[rpos++];
-        }
-    }
-    return wpos;
-}
-
 // TASK-072: arena-routed unescape. The caller passes an arena-backed
 // pmr::string already holding the raw bytes; we run the unescape
 // transformation directly on the pmr::string's storage so no
 // global-heap allocation occurs on the warm path.
 //
-// When a user unescaper is registered, the public callback signature
-// is `void(std::string&)` (ABI-locked), so we route through a
-// thread_local std::string whose capacity amortises across all
-// requests on the same worker thread. The first request on a thread
-// grows it once; subsequent requests reuse the capacity (zero
-// per-request global-heap allocations on the warm path). The result
-// bytes are then assigned back into the arena-backed sink.
-inline void unescape_in_arena(std::pmr::string& sink,
+// Default path: calls httpserver::detail::unescape_buf_raw (shared
+// helper from unescape_helpers.hpp -- same algorithm as the
+// http_unescape wrapper in http_utils.cpp, one truth-source).
+//
+// User-callback path: the public callback signature is
+// `void(std::string&)` (ABI-locked), so we route through a
+// thread_local std::string (thread_value) whose capacity amortises
+// across all requests on the same worker thread.
+//
+// Amortisation contract: zero global-heap allocations on the warm
+// path per thread, *after* thread_value has grown to the peak value
+// length seen on that thread. The first call on a new thread, or the
+// first call that sees a value longer than any previous one, triggers
+// exactly one global-heap allocation to grow thread_value's buffer;
+// all subsequent calls at or below that length are allocation-free.
+// (performance-reviewer-iter1-2)
+//
+// Arena-waste note: when the user callback grows the value
+// (thread_value.size() > original value.size()), value's original
+// arena allocation is abandoned in the monotonic arena until
+// reset_arena(). This is an accepted trade-off of the ABI-locked
+// void(std::string&) signature; the arena is reset per request so
+// the waste is bounded by the request's total value bytes.
+// (performance-reviewer-iter1-3)
+inline void unescape_in_arena(std::pmr::string& value,
                               unescaper_ptr user_fn) {
-    if (sink.empty()) return;
+    if (value.empty()) return;
     if (user_fn == nullptr) {
         // Default %HH / '+' decode: run in-place on the arena
         // buffer, then truncate to the new size.
-        const std::size_t new_size = http_unescape_raw(
-            sink.data(), sink.size());
-        sink.resize(new_size);
+        const std::size_t new_size = httpserver::detail::unescape_buf_raw(
+            value.data(), value.size());
+        value.resize(new_size);
         return;
     }
     // User-callback path: route through a per-thread reusable
     // std::string scratch buffer so the warm-path cost is zero
-    // global-heap allocations. The thread_local lives for the
-    // worker thread's lifetime; capacity grows once per peak input
-    // size on the thread.
-    thread_local std::string user_scratch;
-    user_scratch.assign(sink.data(), sink.size());
-    user_fn(user_scratch);
-    sink.assign(user_scratch.data(), user_scratch.size());
+    // global-heap allocations after the first call on this thread.
+    thread_local std::string thread_value;
+    thread_value.assign(value.data(), value.size());
+    user_fn(thread_value);
+    value.assign(thread_value.data(), thread_value.size());
 }
 
 }  // namespace
@@ -274,26 +244,10 @@ MHD_Result http_request_impl::build_request_args(void* cls, MHD_ValueKind kind,
     }
     aa->accumulated_bytes += this_pair_bytes;
 
-    // TASK-072: route the unescape output into the per-connection
-    // arena. The destination pmr::string lives in the arena domain, so
-    // its bytes consume only arena memory (no global-heap allocation).
-    //
-    // Two paths:
-    //   - null user-unescaper: do the standard %HH / '+'->' '
-    //     transformation in-place on the arena-backed pmr::string via
-    //     http_unescape_raw (raw-buffer overload of the standard
-    //     unescape, defined in the anonymous namespace below).
-    //   - user-registered unescaper: the public callback signature
-    //     `void(std::string&)` is ABI-locked, so we pass it a
-    //     thread_local std::string scratch buffer; its capacity
-    //     amortises across requests on the same worker thread, leaving
-    //     the warm-path per-request cost at zero global-heap
-    //     allocations. The result is then copied into the arena-backed
-    //     pmr::string sink.
-    //
-    // The returned pmr::string's data is owned by the arena and lives
-    // until connection_state::reset_arena() runs (request completion),
-    // matching the TASK-018 string_view lifetime contract.
+    // Arena-routed unescape: see unescape_in_arena() above for path details.
+    // The returned pmr::string's data is owned by the arena and lives until
+    // connection_state::reset_arena() runs (request completion), matching
+    // the TASK-018 string_view lifetime contract.
     auto pmr_alloc = args.get_allocator();
     auto it = existing_it;
     if (it == args.end()) {
@@ -305,12 +259,10 @@ MHD_Result http_request_impl::build_request_args(void* cls, MHD_ValueKind kind,
     }
 
     // Allocate the destination pmr::string in the arena domain and
-    // copy the raw input bytes into it. The outer vector's allocator-
-    // propagating construct wires the inner pmr::string's allocator,
-    // so we pass (ptr, size) here. The unescape transformation then
+    // copy the raw input bytes into it. The unescape transformation
     // runs in-place on the arena-backed buffer.
-    auto& sink = it->second.emplace_back(val_sv.data(), val_sv.size());
-    unescape_in_arena(sink, aa->unescaper);
+    auto& arg_value_ref = it->second.emplace_back(val_sv.data(), val_sv.size());
+    unescape_in_arena(arg_value_ref, aa->unescaper);
     return MHD_YES;
 }
 

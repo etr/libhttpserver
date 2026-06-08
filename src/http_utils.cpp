@@ -57,6 +57,7 @@
 #include <vector>
 
 #include "httpserver/constants.hpp"
+#include "httpserver/detail/unescape_helpers.hpp"
 #include "httpserver/string_utilities.hpp"
 
 #if defined (__CYGWIN__)
@@ -302,49 +303,18 @@ std::string http_utils::sanitize_upload_filename(const std::string& filename) {
 // src/detail/ip_representation.cpp to keep this TU under the project
 // per-file LOC ceiling. See FILE_LOC_MAX in scripts/check-file-size.sh.
 
-static inline int hex_digit_value(char c) {
-    if (c >= '0' && c <= '9') return c - '0';
-    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
-    return -1;
-}
-
+// TASK-072 (code-simplifier-iter1-1/2): hex_digit_value and the core
+// unescape loop have been promoted to the shared internal header
+// src/httpserver/detail/unescape_helpers.hpp so that this TU and
+// src/detail/http_request_impl.cpp share one truth-source.
+// http_unescape is now a thin wrapper around unescape_buf_raw.
 size_t http_unescape(std::string* val) {
     if (val->empty()) return 0;
-
-    unsigned int rpos = 0;
-    unsigned int wpos = 0;
-
-    unsigned int size = val->size();
-
-    while (rpos < size && (*val)[rpos] != '\0') {
-        switch ((*val)[rpos]) {
-            case '+':
-                (*val)[wpos] = ' ';
-                wpos++;
-                rpos++;
-                break;
-            case '%':
-                if (size > rpos + 2) {
-                    int hi = hex_digit_value((*val)[rpos + 1]);
-                    int lo = hex_digit_value((*val)[rpos + 2]);
-                    if (hi >= 0 && lo >= 0) {
-                        (*val)[wpos] = static_cast<unsigned char>((hi << 4) | lo);
-                        wpos++;
-                        rpos += 3;
-                        break;
-                    }
-                }
-            // intentional fall through!
-            default:
-                (*val)[wpos] = (*val)[rpos];
-                wpos++;
-                rpos++;
-        }
-    }
-    (*val)[wpos] = '\0';  // add 0-terminator
-    val->resize(wpos);
-    return wpos;  // = strlen(val)
+    const std::size_t new_size =
+        httpserver::detail::unescape_buf_raw(val->data(), val->size());
+    (*val)[new_size] = '\0';  // add 0-terminator (std::string owns the byte)
+    val->resize(new_size);
+    return new_size;  // = strlen(val)
 }
 
 const std::string load_file(const std::string& filename) {
