@@ -296,6 +296,13 @@ bool webserver::start(bool blocking) {
             "Cannot specify maximum number of threads when using a thread per connection");
     }
 
+    // TASK-074: fire the one-shot raw-body-dump opt-in SECURITY
+    // WARNING before MHD_start_daemon so the operator sees the
+    // notice on every fresh process invocation that actually starts
+    // accepting traffic. Defined in webserver_body_pipeline.cpp
+    // alongside the consumer of the opt-in flag.
+    detail::maybe_warn_debug_dump_request_body(this);
+
     vector<struct MHD_OptionItem> iov;
     impl_->build_mhd_option_array(iov);
     const int start_conf = impl_->compose_start_flags();

@@ -100,6 +100,34 @@ class lambda_resource;
 // httpserver/detail/connection_state.hpp for documentation and
 // rationale.
 
+/**
+ * @brief Whether the runtime opt-in for raw-body debug dumping is in
+ *        effect for this process (TASK-074).
+ *
+ * Reads the env var LIBHTTPSERVER_DEBUG_DUMP_REQUEST_BODY once on
+ * first call via a function-local static; subsequent setenv() calls
+ * are intentionally ignored. Returns true iff the variable is set to
+ * any non-empty, non-`"0"` value. Default behaviour is silent on both
+ * RELEASE and DEBUG builds.
+ */
+bool debug_dump_request_body_opted_in();
+
+/**
+ * @brief Emit a one-shot SECURITY WARNING when raw-body dumping is
+ *        opted in (TASK-074).
+ *
+ * Called from webserver::start() before MHD_start_daemon. If the env
+ * var opt-in is active, writes a single line naming the env var, the
+ * SECURITY WARNING marker, and the credential / PII risk to stderr,
+ * and (when wired) forwards the same line to the owning webserver's
+ * log_error callback. Process-wide idempotent: multiple webservers in
+ * the same process produce exactly one stderr emission.
+ *
+ * @param parent  Owning webserver pointer (used to find log_error).
+ *                May be nullptr; the stderr emission still fires.
+ */
+void maybe_warn_debug_dump_request_body(const webserver* parent);
+
 // webserver_impl: backing object holding all backend-coupled state of
 // `webserver` (MHD daemon, mutexes, ban/allowance sets, route table,
 // route cache, websocket registry, optional GnuTLS SNI cache) plus the
