@@ -17,18 +17,17 @@
 #include <curl/curl.h>
 
 #include <atomic>
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
-#include <thread>
 #include <vector>
 
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
+#include "./server_ready.hpp"
 #include "./curl_helpers.hpp"
 
 using httpserver::body_chunk_ctx;
@@ -85,7 +84,7 @@ LT_BEGIN_AUTO_TEST(hooks_body_chunk_observes_progress_suite,
     auto resource = std::make_shared<sink_resource>();
     ws.register_path("/sink", resource);
     ws.start(false);
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    httpserver_test::wait_for_server_ready(PORT);
 
     std::string body(1572864, 'A');   // 1.5 MB deterministic body
 

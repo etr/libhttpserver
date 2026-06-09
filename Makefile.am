@@ -46,6 +46,7 @@ EXTRA_DIST = libhttpserver.pc.in $(DX_CONFIG) scripts/extract-release-notes.sh s
 	scripts/check-complexity.sh scripts/check-duplication.sh \
 	scripts/check-file-size.sh \
 	scripts/check-warning-suppressions.sh \
+	scripts/check-server-ready-helper.sh \
 	scripts/verify-installed-examples.sh \
 	test/headers/consumer_direct.cpp test/headers/consumer_detail.cpp test/headers/consumer_detail_modded.cpp \
 	test/headers/consumer_umbrella.cpp \
@@ -368,7 +369,7 @@ check-hygiene:
 # staged the install; sub-check skips the install step to avoid double cost.
 # This knob is set only by check-local; do not set it when invoking sub-checks
 # standalone.
-check-local: check-headers check-examples check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck lint-warning-suppressions
+check-local: check-headers check-examples check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck lint-warning-suppressions lint-server-ready-helper
 	@echo "=== Shared staged install for check-install-layout and check-hygiene ==="
 	@rm -rf "$(abs_top_builddir)/.shared-check-stage"
 	@$(MAKE) $(AM_MAKEFLAGS) install DESTDIR="$(abs_top_builddir)/.shared-check-stage" >check-shared-install.log 2>&1 || { \
@@ -474,7 +475,17 @@ lint-warning-suppressions:
 	@echo "=== lint-warning-suppressions: forbid file-scoped GCC warning suppressions ==="
 	@$(top_srcdir)/scripts/check-warning-suppressions.sh
 
-.PHONY: check-headers check-install-layout check-hygiene check-local check-examples check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck check-soversion check-parallel-install lint-complexity lint-duplication lint-file-size lint-warning-suppressions
+# TASK-075: server-ready helper gate. Fails if any
+# test/integ/hooks_*.cpp file regresses to a bare
+# `std::this_thread::sleep_for(...ms)` used as a server-ready wait
+# instead of the shared `httpserver_test::wait_for_server_ready`
+# helper from test/integ/server_ready.hpp. Wired into `make check`
+# via check-local; pure bash/awk/grep, runs in every CI lane.
+lint-server-ready-helper:
+	@echo "=== lint-server-ready-helper: forbid bare server-ready sleeps in hooks_* integ tests ==="
+	@$(top_srcdir)/scripts/check-server-ready-helper.sh
+
+.PHONY: check-headers check-install-layout check-hygiene check-local check-examples check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck check-soversion check-parallel-install lint-complexity lint-duplication lint-file-size lint-warning-suppressions lint-server-ready-helper
 
 # TASK-039: top-level convenience rule that descends into test/ to
 # build and run the bench binaries (see test/Makefile.am and

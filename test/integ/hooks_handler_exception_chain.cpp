@@ -18,17 +18,16 @@
 #include <curl/curl.h>
 
 #include <atomic>
-#include <chrono>
 #include <cstddef>
 #include <functional>
 #include <memory>
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <thread>
 
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
+#include "./server_ready.hpp"
 
 using httpserver::create_webserver;
 using httpserver::handler_exception_ctx;
@@ -45,29 +44,6 @@ namespace {
 size_t writefunc(void* ptr, size_t size, size_t nmemb, std::string* s) {
     s->append(reinterpret_cast<char*>(ptr), size * nmemb);
     return size * nmemb;
-}
-
-// Poll the port with HEAD requests until the server responds (any status)
-// or the deadline elapses. Replaces a fixed 50ms sleep that races with
-// MHD_start_daemon on heavily-loaded CI runners (TASK-049 finding #3).
-void wait_for_server_ready(int port,
-                           std::chrono::milliseconds deadline
-                               = std::chrono::milliseconds(3000)) {
-    using clock = std::chrono::steady_clock;
-    auto end = clock::now() + deadline;
-    std::string url = "http://127.0.0.1:" + std::to_string(port) + "/";
-    while (clock::now() < end) {
-        CURL* c = curl_easy_init();
-        if (!c) break;
-        curl_easy_setopt(c, CURLOPT_URL, url.c_str());
-        curl_easy_setopt(c, CURLOPT_NOBODY, 1L);
-        curl_easy_setopt(c, CURLOPT_CONNECTTIMEOUT_MS, 50L);
-        curl_easy_setopt(c, CURLOPT_TIMEOUT_MS, 50L);
-        CURLcode rc = curl_easy_perform(c);
-        curl_easy_cleanup(c);
-        if (rc == CURLE_OK) return;
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
-    }
 }
 
 class throwing_resource : public httpserver::http_resource {
@@ -117,7 +93,7 @@ LT_BEGIN_AUTO_TEST(hooks_handler_exception_chain_suite,
     auto resource = std::make_shared<throwing_resource>();
     ws.register_path("/boom", resource);
     ws.start(false);
-    wait_for_server_ready(PORT);
+    httpserver_test::wait_for_server_ready(PORT);
 
     CURL* curl = curl_easy_init();
     LT_ASSERT_NEQ(curl, static_cast<CURL*>(nullptr));

@@ -16,16 +16,15 @@
 
 #include <curl/curl.h>
 
-#include <chrono>
 #include <functional>
 #include <memory>
 #include <string>
-#include <thread>
 #include <utility>
 #include <vector>
 
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
+#include "./server_ready.hpp"
 
 using httpserver::before_handler_ctx;
 using httpserver::create_webserver;
@@ -129,7 +128,7 @@ LT_BEGIN_AUTO_TEST(hooks_per_route_early_413_per_endpoint_suite,
     ws.register_path("/upload-small", small_r);
     ws.register_path("/upload-large", large_r);
     ws.start(false);
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    httpserver_test::wait_for_server_ready(PORT);
 
     // 2 KB POST to /upload-small -> 413 (over the 1 KB cap).
     long s1 = post_bytes(PORT, "/upload-small", 2048);  // NOLINT(runtime/int)

@@ -31,18 +31,17 @@
 #include <curl/curl.h>
 
 #include <atomic>
-#include <chrono>
 #include <cstddef>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
-#include <thread>
 #include <utility>
 #include <vector>
 
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
+#include "./server_ready.hpp"
 
 using httpserver::create_webserver;
 using httpserver::hook_phase;
@@ -123,7 +122,7 @@ LT_BEGIN_AUTO_TEST(hooks_connection_lifecycle_suite, all_three_phases_fire)
     auto resource = std::make_shared<hello_resource>();
     ws.register_path("/hello", resource);
     ws.start(false);
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    httpserver_test::wait_for_server_ready(PORT);
 
     CURL* curl = curl_easy_init();
     LT_ASSERT_NEQ(curl, static_cast<CURL*>(nullptr));

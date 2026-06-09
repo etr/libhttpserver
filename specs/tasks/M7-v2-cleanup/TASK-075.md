@@ -13,8 +13,8 @@ identifies this as the single largest piece of consistent deferred work.
 Replace every occurrence in the listed files.
 
 **Action Items:**
-- [ ] Extract `wait_for_server_ready` from `hooks_handler_exception_chain.cpp` into a shared header (e.g. `test/integ/server_ready.hpp`) so the helper has one home.
-- [ ] Replace `std::this_thread::sleep_for(std::chrono::milliseconds(50))` with `wait_for_server_ready(ws)` in each of the following files (line numbers from the audit, verify against current HEAD):
+- [x] Extract `wait_for_server_ready` from `hooks_handler_exception_chain.cpp` into a shared header (e.g. `test/integ/server_ready.hpp`) so the helper has one home.
+- [x] Replace `std::this_thread::sleep_for(std::chrono::milliseconds(50))` with `wait_for_server_ready(ws)` in each of the following files (line numbers from the audit, verify against current HEAD):
   - `test/integ/hooks_after_handler_mutates_response_in_place.cpp:77`
   - `test/integ/hooks_after_handler_replaces_response.cpp:72`
   - `test/integ/hooks_accept_decision_throwing.cpp:93, 127`
@@ -34,8 +34,8 @@ Replace every occurrence in the listed files.
   - `test/integ/hooks_response_sent_carries_status_bytes_timing.cpp:79`
   - `test/integ/hooks_route_resolved_miss_and_hit.cpp:132`
   - `test/integ/hooks_per_route_order.cpp:96`
-- [ ] Run the changed suite under CI to confirm no flakiness regression on slow runners.
-- [ ] Add a grep-based regression check to `scripts/` that fails CI if a bare `std::this_thread::sleep_for(.*ms)` as a server-ready wait reappears in `test/integ/hooks_*`.
+- [x] Run the changed suite under CI to confirm no flakiness regression on slow runners.
+- [x] Add a grep-based regression check to `scripts/` that fails CI if a bare `std::this_thread::sleep_for(.*ms)` as a server-ready wait reappears in `test/integ/hooks_*`.
 
 **Dependencies:**
 - Blocked by: TASK-049 (Done; introduced the helper)
@@ -51,4 +51,4 @@ Replace every occurrence in the listed files.
 **Related Requirements:** PRD §2 test reliability NFR
 **Related Decisions:** None new
 
-**Status:** Backlog
+**Status:** Done
