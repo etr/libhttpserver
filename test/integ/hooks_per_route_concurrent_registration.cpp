@@ -39,6 +39,7 @@
 
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
+#include "./server_ready.hpp"
 
 using httpserver::create_webserver;
 using httpserver::hook_action;
@@ -117,7 +118,7 @@ LT_BEGIN_AUTO_TEST(hooks_per_route_concurrent_registration_suite,
     ws.register_path("/q", q);
     ws.register_path("/r", r);
     ws.start(false);
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    httpserver_test::wait_for_server_ready(PORT);
 
     constexpr int kThreads = 8;
     constexpr auto kRunDuration = std::chrono::milliseconds(800);

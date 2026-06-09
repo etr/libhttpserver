@@ -621,7 +621,7 @@ connection_state_body_residue_LDADD = $(LDADD) -lmicrohttpd
 debug_dump_request_body_unset_SOURCES = integ/debug_dump_request_body_unset_test.cpp
 debug_dump_request_body_set_SOURCES = integ/debug_dump_request_body_set_test.cpp
 
-noinst_HEADERS = littletest.hpp integ/test_utils.hpp integ/curl_helpers.hpp
+noinst_HEADERS = littletest.hpp integ/test_utils.hpp integ/curl_helpers.hpp integ/server_ready.hpp
 AM_CXXFLAGS += -Wall -fPIC -Wno-overloaded-virtual
 
 if COND_GCOV

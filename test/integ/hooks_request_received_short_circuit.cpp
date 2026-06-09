@@ -20,15 +20,14 @@
 #include <curl/curl.h>
 
 #include <atomic>
-#include <chrono>
 #include <cstddef>
 #include <functional>
 #include <memory>
 #include <string>
-#include <thread>
 
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
+#include "./server_ready.hpp"
 #include "./curl_helpers.hpp"
 
 using httpserver::body_chunk_ctx;
@@ -102,7 +101,7 @@ LT_BEGIN_AUTO_TEST(hooks_request_received_short_circuit_suite,
     auto resource = std::make_shared<upload_resource>(&c);
     ws.register_path("/upload", resource);
     ws.start(false);
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    httpserver_test::wait_for_server_ready(PORT);
 
     // 2 MB body — over the 1 MB cap, must be 413.
     std::string body(2 * 1024 * 1024, 'X');
@@ -160,7 +159,7 @@ LT_BEGIN_AUTO_TEST(hooks_request_received_short_circuit_suite,
     auto resource = std::make_shared<upload_resource>(&c);
     ws.register_path("/upload", resource);
     ws.start(false);
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    httpserver_test::wait_for_server_ready(PORT);
 
     std::string body(100, 'a');
 

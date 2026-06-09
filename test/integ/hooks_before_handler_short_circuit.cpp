@@ -17,16 +17,15 @@
 #include <curl/curl.h>
 
 #include <atomic>
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
-#include <thread>
 
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
+#include "./server_ready.hpp"
 
 using httpserver::before_handler_ctx;
 using httpserver::create_webserver;
@@ -79,7 +78,7 @@ LT_BEGIN_AUTO_TEST(hooks_before_handler_short_circuit_suite,
     auto resource = std::make_shared<secure_resource>(&handler_calls);
     ws.register_path("/secure", resource);
     ws.start(false);
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    httpserver_test::wait_for_server_ready(PORT);
 
     CURL* curl = curl_easy_init();
     LT_ASSERT_NEQ(curl, static_cast<CURL*>(nullptr));
@@ -125,7 +124,7 @@ LT_BEGIN_AUTO_TEST(hooks_before_handler_short_circuit_suite,
     auto resource = std::make_shared<secure_resource>(&handler_calls);
     ws.register_path("/secure", resource);
     ws.start(false);
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    httpserver_test::wait_for_server_ready(PORT);
 
     CURL* curl = curl_easy_init();
     LT_ASSERT_NEQ(curl, static_cast<CURL*>(nullptr));

@@ -17,15 +17,14 @@
 #include <curl/curl.h>
 
 #include <atomic>
-#include <chrono>
 #include <cstddef>
 #include <functional>
 #include <memory>
 #include <string>
-#include <thread>
 
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
+#include "./server_ready.hpp"
 
 using httpserver::create_webserver;
 using httpserver::hook_phase;
@@ -129,7 +128,7 @@ LT_BEGIN_AUTO_TEST(hooks_route_resolved_suite, two_hooks_observe_hit_and_miss)
     auto resource = std::make_shared<hello_resource>();
     ws.register_path("/hit", resource);
     ws.start(false);
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    httpserver_test::wait_for_server_ready(PORT);
 
     long code_hit = 0;  // NOLINT(runtime/int)
     long code_miss = 0;  // NOLINT(runtime/int)

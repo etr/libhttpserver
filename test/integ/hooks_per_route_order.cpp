@@ -14,16 +14,15 @@
 
 #include <curl/curl.h>
 
-#include <chrono>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
-#include <thread>
 #include <vector>
 
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
+#include "./server_ready.hpp"
 
 using httpserver::create_webserver;
 using httpserver::hook_phase;
@@ -93,7 +92,7 @@ LT_BEGIN_AUTO_TEST(hooks_per_route_order_suite, order_per_route_after_global)
     ws.register_path("/r", r);
     ws.register_path("/s", s);
     ws.start(false);
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    httpserver_test::wait_for_server_ready(PORT);
 
     // Request 1: GET /r -> A then B.
     {

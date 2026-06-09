@@ -19,17 +19,16 @@
 #include <curl/curl.h>
 
 #include <atomic>
-#include <chrono>
 #include <cstddef>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
-#include <thread>
 #include <vector>
 
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
+#include "./server_ready.hpp"
 
 using httpserver::create_webserver;
 using httpserver::hook_phase;
@@ -87,7 +86,9 @@ LT_BEGIN_AUTO_TEST(hooks_accept_decision_banned_suite, banned_ip_observed)
     auto resource = std::make_shared<hello_resource>();
     ws.register_path("/hello", resource);
     ws.start(false);
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    // TCP-level probe — works even though ws.block_ip("127.0.0.1") rejects HTTP probes
+    // (the kernel completes the handshake before MHD's policy_callback runs).
+    httpserver_test::wait_for_server_ready(PORT);
 
     // Issue a curl request from 127.0.0.1. The connection MUST be
     // rejected by policy_callback before answer_to_connection ever

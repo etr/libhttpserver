@@ -28,14 +28,13 @@
 #include <curl/curl.h>
 
 #include <atomic>
-#include <chrono>
 #include <functional>
 #include <memory>
 #include <string>
-#include <thread>
 
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
+#include "./server_ready.hpp"
 
 using httpserver::create_webserver;
 using httpserver::hook_phase;
@@ -72,35 +71,6 @@ CURLcode get_url(int port, const std::string& path,
     return rc;
 }
 
-// Poll the server until a TCP connection succeeds (or 2 s elapses).
-// Replaces the fixed sleep_for(50 ms) pattern: on a loaded CI host the server
-// may not be ready in 50 ms, causing CURLE_COULDNT_CONNECT and a spurious
-// test failure.
-//
-// Uses CURLOPT_CONNECT_ONLY so the poll sends no HTTP traffic — critical for
-// tests that count not-found-handler invocations: a probe /path would trigger
-// the handler before the real test request.
-void wait_for_server(int port) {
-    using clock = std::chrono::steady_clock;
-    auto deadline = clock::now() + std::chrono::seconds(2);
-    while (clock::now() < deadline) {
-        CURL* curl = curl_easy_init();
-        if (curl == nullptr) break;
-        std::string url =
-            "http://127.0.0.1:" + std::to_string(port) + "/";
-        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 100L);
-        curl_easy_setopt(curl, CURLOPT_CONNECT_ONLY, 1L);
-        CURLcode rc = curl_easy_perform(curl);
-        curl_easy_cleanup(curl);
-        // CURLE_OK means TCP connected; anything else except
-        // CURLE_COULDNT_CONNECT is a different error (TLS, etc.) — still
-        // counts as the TCP stack being up.
-        if (rc != CURLE_COULDNT_CONNECT) return;
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-}
-
 }  // namespace
 
 LT_BEGIN_SUITE(hooks_not_found_alias_suite)
@@ -116,7 +86,7 @@ LT_BEGIN_AUTO_TEST(hooks_not_found_alias_suite,
                    not_found_alias_default_body_when_no_user_handler)
     webserver ws{create_webserver(PORT_DEFAULT)};
     ws.start(false);
-    wait_for_server(PORT_DEFAULT);
+    httpserver_test::wait_for_server_ready(PORT_DEFAULT);
 
     long code = 0;  // NOLINT(runtime/int)
     std::string body;
@@ -145,7 +115,7 @@ LT_BEGIN_AUTO_TEST(hooks_not_found_alias_suite,
 
     webserver ws{create_webserver(PORT_CUSTOM).not_found_handler(user_not_found)};
     ws.start(false);
-    wait_for_server(PORT_CUSTOM);
+    httpserver_test::wait_for_server_ready(PORT_CUSTOM);
 
     long code = 0;  // NOLINT(runtime/int)
     std::string body;
@@ -188,7 +158,7 @@ LT_BEGIN_AUTO_TEST(hooks_not_found_alias_suite,
             }));
 
     ws.start(false);
-    wait_for_server(PORT_ORDER);
+    httpserver_test::wait_for_server_ready(PORT_ORDER);
 
     long code = 0;  // NOLINT(runtime/int)
     std::string body;
