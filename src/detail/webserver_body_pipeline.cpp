@@ -36,16 +36,18 @@
 
 #include <strings.h>
 
+#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
-#ifdef DEBUG
 #include <iostream>
-#endif  // DEBUG
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 
 #include "httpserver/create_webserver.hpp"
@@ -64,6 +66,35 @@ using httpserver::http::http_utils;
 namespace detail {
 
 namespace {
+
+// TASK-074: gate the raw-body dump in requests_answer_second_step
+// behind an explicit, runtime, opt-in environment variable. The check
+// is cached in a function-local static so getenv() is called at most
+// once per process; subsequent setenv() calls are intentionally
+// ignored (debug-knob semantics, matches the cheap race-free choice
+// described in DR-009 / TASK-074 plan). C++11 guarantees thread-safe
+// init of function-local statics, so the first call from MHD's
+// request-handling threads is safe even under concurrent first-touch.
+//
+// Default behaviour is silent on RELEASE and DEBUG builds alike; the
+// env var is the ONLY gate. A debug build accidentally shipped to
+// production therefore still does not leak credentials/PII unless the
+// operator explicitly opted in. Accepts any non-empty, non-"0" value.
+bool debug_dump_request_body_enabled() {
+    static const bool enabled = [] {
+        const char* v = std::getenv("LIBHTTPSERVER_DEBUG_DUMP_REQUEST_BODY");
+        return v != nullptr && v[0] != '\0' && std::string_view(v) != "0";
+    }();
+    return enabled;
+}
+
+// TASK-074: process-wide print-once flag for the SECURITY WARNING
+// emitted at the first webserver::start() that observes the env var.
+// std::atomic<bool> + compare_exchange_strong matches the lock-free
+// atomic style used elsewhere (e.g. g_arena_fallback_count). The
+// idempotence is process-wide -- multiple webservers in the same
+// process trigger exactly one stderr warning.
+std::atomic<bool> g_debug_dump_warning_emitted{false};
 
 // Wrap the body_chunk firing site so requests_answer_second_step stays a
 // flat sequence of small steps. Returns true iff a hook short-circuited
@@ -114,6 +145,55 @@ void run_post_processor_if_attached(modded_request* mr,
 }
 
 }  // namespace
+
+// TASK-074: free function in namespace detail, declared in
+// webserver_impl.hpp. Reports whether the runtime opt-in env var is
+// effective in this process. Used by webserver::start()'s
+// security-warning emitter to decide whether to fire the one-shot
+// stderr notice.
+bool debug_dump_request_body_opted_in() {
+    return debug_dump_request_body_enabled();
+}
+
+// TASK-074: free function in namespace detail, declared in
+// webserver_impl.hpp. Called from webserver::start() before
+// MHD_start_daemon. Emits a one-shot SECURITY WARNING to stderr when
+// the env-var opt-in is observed, and forwards the same line to the
+// owning webserver's log_error callback when one is wired. The flag
+// is process-wide so multiple webservers do not flood stderr.
+//
+// Stderr is used (not std::cerr) to match the pre-existing
+// fprintf-to-stderr pattern in src/http_request.cpp / src/webserver.cpp
+// and to remain visible even when the user has not wired log_error.
+//
+// Both the stderr path and the log_error forwarding swallow any
+// exception so a misconfigured logger cannot abort the daemon
+// start sequence.
+void maybe_warn_debug_dump_request_body(const webserver* parent) {
+    if (!debug_dump_request_body_opted_in()) return;
+    bool expected = false;
+    if (!g_debug_dump_warning_emitted.compare_exchange_strong(
+            expected, true)) {
+        return;  // already warned this process
+    }
+    constexpr const char* msg =
+        "[libhttpserver] SECURITY WARNING: "
+        "LIBHTTPSERVER_DEBUG_DUMP_REQUEST_BODY is set. "
+        "Raw request bodies will be written to stdout, including "
+        "credentials, session cookies, and PII. Unset the variable "
+        "for production deployments. See docs/debug-env-vars.md.";
+    std::fprintf(stderr, "%s\n", msg);
+    std::fflush(stderr);
+    if (parent != nullptr) {
+        if (auto sink = parent->get_error_logger()) {
+            try {
+                sink(msg);
+            } catch (...) {
+                // swallow: misconfigured logger must not abort start()
+            }
+        }
+    }
+}
 
 MHD_Result webserver_impl::requests_answer_first_step(MHD_Connection* connection, struct detail::modded_request* mr) {
     // The http_request constructor calls pick_resource(connection) internally
@@ -196,16 +276,19 @@ MHD_Result webserver_impl::requests_answer_second_step(MHD_Connection* connectio
         }
     }
 
-#ifdef DEBUG
-    // WARNING (TASK-057): this emits the raw request body to stdout.
-    // If a client posts credentials in a form body
-    // (`application/x-www-form-urlencoded` with a `password=` field) or
-    // raw Basic-auth bytes, those values will appear verbatim in the
-    // debug stream. Must remain guarded by `#ifdef DEBUG` and must not
-    // be widened to release builds; the operator<< redaction policy
-    // does NOT cover this code path.
-    std::cout << "Writing content: " << std::string(upload_data, *upload_data_size) << std::endl;
-#endif  // DEBUG
+    // TASK-074 (was TASK-057): raw request-body dump, opt-in via the
+    // env var LIBHTTPSERVER_DEBUG_DUMP_REQUEST_BODY. Default behaviour
+    // is silent on RELEASE *and* DEBUG builds -- the env var is the
+    // only gate, so a debug build accidentally shipped to production
+    // still does not leak credentials/PII unless the operator opted
+    // in. See docs/debug-env-vars.md for the security warning and
+    // the one-shot startup notice that fires when the env var is set.
+    // The operator<< redaction policy (TASK-057) does NOT cover this
+    // code path: raw bytes are written verbatim.
+    if (debug_dump_request_body_enabled()) {
+        std::cout << "Writing content: "
+                  << std::string(upload_data, *upload_data_size) << std::endl;
+    }
     // The post iterator is only created from the libmicrohttpd for content of type
     // multipart/form-data and application/x-www-form-urlencoded
     // all other content (which is indicated by mr-pp == nullptr)
