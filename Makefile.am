@@ -47,6 +47,8 @@ EXTRA_DIST = libhttpserver.pc.in $(DX_CONFIG) scripts/extract-release-notes.sh s
 	scripts/check-file-size.sh \
 	scripts/check-warning-suppressions.sh \
 	scripts/check-server-ready-helper.sh \
+	scripts/check-no-tautological-asserts.sh \
+	scripts/test_check_littletest_skip_exit_code.sh \
 	scripts/verify-installed-examples.sh \
 	test/headers/consumer_direct.cpp test/headers/consumer_detail.cpp test/headers/consumer_detail_modded.cpp \
 	test/headers/consumer_umbrella.cpp \
@@ -369,7 +371,7 @@ check-hygiene:
 # staged the install; sub-check skips the install step to avoid double cost.
 # This knob is set only by check-local; do not set it when invoking sub-checks
 # standalone.
-check-local: check-headers check-examples check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck lint-warning-suppressions lint-server-ready-helper
+check-local: check-headers check-examples check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck lint-warning-suppressions lint-server-ready-helper lint-no-tautological-asserts lint-littletest-skip-exit-code
 	@echo "=== Shared staged install for check-install-layout and check-hygiene ==="
 	@rm -rf "$(abs_top_builddir)/.shared-check-stage"
 	@$(MAKE) $(AM_MAKEFLAGS) install DESTDIR="$(abs_top_builddir)/.shared-check-stage" >check-shared-install.log 2>&1 || { \
@@ -485,7 +487,30 @@ lint-server-ready-helper:
 	@echo "=== lint-server-ready-helper: forbid bare server-ready sleeps in hooks_* integ tests ==="
 	@$(top_srcdir)/scripts/check-server-ready-helper.sh
 
-.PHONY: check-headers check-install-layout check-hygiene check-local check-examples check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck check-soversion check-parallel-install lint-complexity lint-duplication lint-file-size lint-warning-suppressions lint-server-ready-helper
+# TASK-076: forbid `LT_CHECK_EQ(1, 1)` in test/integ/ws_start_stop.cpp.
+# Pre-TASK-076 ~33 catches in the TLS test suite used the tautological
+# assertion as a fake "skip" — a build that silently lost TLS support
+# would still report PASS. The replacement uses LT_SKIP_IF (added to
+# test/littletest.hpp by TASK-076) which reports SKIP. This gate
+# prevents regressing back to the broken pattern in ws_start_stop.cpp.
+# Wired into `make check` via check-local; pure bash/grep, runs in
+# every CI lane.
+lint-no-tautological-asserts:
+	@echo "=== lint-no-tautological-asserts: forbid tautological pseudo-skip in ws_start_stop.cpp ==="
+	@$(top_srcdir)/scripts/check-no-tautological-asserts.sh
+
+# TASK-076: pin the LT_SKIP exit-code semantics in test/littletest.hpp.
+# Asserts (a) an all-skip binary exits 77 (Automake SKIP), (b) a mixed
+# pass+skip binary exits 0 and emits both `[SKIP]` and `-> N skipped`
+# stdout markers. The textual markers are what CI greps for in the
+# tls-no-cli lane to assert per-test SKIPs fired. Wired into `make
+# check` via check-local; needs only a C++ compiler on $PATH so it
+# runs in every lane.
+lint-littletest-skip-exit-code:
+	@echo "=== lint-littletest-skip-exit-code: pin LT_SKIP exit-code semantics ==="
+	@$(top_srcdir)/scripts/test_check_littletest_skip_exit_code.sh
+
+.PHONY: check-headers check-install-layout check-hygiene check-local check-examples check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck check-soversion check-parallel-install lint-complexity lint-duplication lint-file-size lint-warning-suppressions lint-server-ready-helper lint-no-tautological-asserts lint-littletest-skip-exit-code
 
 # TASK-039: top-level convenience rule that descends into test/ to
 # build and run the bench binaries (see test/Makefile.am and

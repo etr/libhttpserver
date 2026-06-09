@@ -304,6 +304,24 @@ jobs:
             coverage: nocoverage
             linking: dynamic
             shell: bash
+          # TASK-076: TLS-no-CLI lane. Installs libgnutls28-dev (so the
+          # library compiles WITH HAVE_GNUTLS) but deliberately omits
+          # `gnutls-bin`, so the gnutls-cli binary is NOT on $PATH. The
+          # five `psk_connection_*` tests in test/integ/ws_start_stop.cpp
+          # must report `[SKIP]` (via LT_SKIP_IF(!has_gnutls_cli(), ...))
+          # rather than tautological PASS. Post-test verification step
+          # below greps the test log for the [SKIP] markers.
+          - test-group: extra
+            os: ubuntu-latest
+            os-type: ubuntu
+            build-type: tls-no-cli
+            compiler-family: gcc
+            c-compiler: gcc-14
+            cc-compiler: g++-14
+            debug: nodebug
+            coverage: nocoverage
+            linking: dynamic
+            shell: bash
           - test-group: basic
             os: windows-latest
             os-type: windows
@@ -565,7 +583,23 @@ jobs:
       # TASK-037: skip gnutls install on the flag-invariance-off lane so
       # HAVE_GNUTLS auto-detects to off (the configure script just
       # AC_CHECK_HEADER's gnutls/gnutls.h, no header == HAVE_GNUTLS=0).
-      if: ${{ matrix.os-type == 'ubuntu' && matrix.build-type != 'flag-invariance-off' }}
+      # TASK-076: also skip on the tls-no-cli lane — it does its own
+      # install of libgnutls28-dev WITHOUT gnutls-bin in the next step
+      # so the per-test LT_SKIP_IF(!has_gnutls_cli(), ...) gate fires.
+      if: ${{ matrix.os-type == 'ubuntu' && matrix.build-type != 'flag-invariance-off' && matrix.build-type != 'tls-no-cli' }}
+
+    - name: Setup gnutls dependency WITHOUT gnutls-cli (TASK-076 tls-no-cli lane)
+      run: |
+        sudo apt-get install libgnutls28-dev ;
+        # Deliberate: NO gnutls-bin here. The lane asserts that
+        # has_gnutls_cli() returns false at runtime, which makes the
+        # five `psk_connection_*` tests in ws_start_stop.cpp emit
+        # `[SKIP]` rather than tautological PASS.
+        if which gnutls-cli >/dev/null 2>&1; then
+          echo "ERROR: gnutls-cli is on PATH but the tls-no-cli lane requires it absent" >&2
+          exit 1
+        fi
+      if: ${{ matrix.build-type == 'tls-no-cli' }}
 
     - name: Fetch libmicrohttpd from cache
       id: cache-libmicrohttpd
@@ -922,6 +956,56 @@ jobs:
         cd build
         make check-hygiene
       if: ${{ matrix.build-type == 'header-hygiene' }}
+
+    - name: Verify [SKIP] markers fire on tls-no-cli lane (TASK-076)
+      # The five `psk_connection_*` tests in ws_start_stop.cpp gate on
+      # has_gnutls_cli(); since this lane installs libgnutls28-dev WITHOUT
+      # gnutls-bin, the gate must fire. The runner's stdout must contain
+      # at least 5 [SKIP] markers AND zero [CHECK FAILURE] / [ASSERT
+      # FAILURE] markers attributable to a psk_connection_* test. The
+      # ws_start_stop binary log is at build/test/ws_start_stop.log
+      # (Automake's per-test capture).
+      run: |
+        set -euo pipefail
+        cd build
+        LOG=test/ws_start_stop.log
+        if [ ! -f "$LOG" ]; then
+            echo "ERROR: $LOG missing — ws_start_stop did not run" >&2
+            exit 1
+        fi
+        SKIP_COUNT=$(grep -c '^\[SKIP\].*gnutls-cli' "$LOG" || true)
+        echo "Found $SKIP_COUNT [SKIP] markers attributable to gnutls-cli"
+        if [ "$SKIP_COUNT" -lt 5 ]; then
+            echo "ERROR: expected >=5 [SKIP] markers in $LOG; got $SKIP_COUNT" >&2
+            cat "$LOG"
+            exit 1
+        fi
+        if grep -E '\[(CHECK|ASSERT) FAILURE\].*psk_connection' "$LOG"; then
+            echo "ERROR: a psk_connection_* test reported FAILURE in tls-no-cli lane" >&2
+            exit 1
+        fi
+      if: ${{ matrix.build-type == 'tls-no-cli' }}
+
+    - name: Verify TLS blocks exercised when gnutls-cli is present (TASK-076)
+      # Canary invariant on a representative healthy gnutls-bin-installed
+      # lane: the psk_connection_* tests must NOT report [SKIP]. If they
+      # do, gnutls-cli detection regressed. Runs on the classic
+      # ubuntu/gcc/nodebug/dynamic baseline only.
+      run: |
+        set -euo pipefail
+        cd build
+        LOG=test/ws_start_stop.log
+        if [ ! -f "$LOG" ]; then
+            echo "ERROR: $LOG missing — ws_start_stop did not run" >&2
+            exit 1
+        fi
+        if grep -E '^\[SKIP\].*psk_connection' "$LOG"; then
+            echo "ERROR: psk_connection_* skipped on a lane that has gnutls-bin" >&2
+            cat "$LOG"
+            exit 1
+        fi
+        echo "PASS — no psk_connection_* SKIPs on the with-gnutls baseline lane"
+      if: ${{ matrix.os-type == 'ubuntu' && matrix.test-group == 'basic' && matrix.compiler-family == 'gcc' && matrix.debug == 'nodebug' && matrix.linking == 'dynamic' && matrix.build-type == 'classic' }}
 
     - name: Print tests results
       shell: bash
