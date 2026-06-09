@@ -27,4 +27,4 @@
 **Related Requirements:** PRD §2 security NFR (defense-in-depth)
 **Related Decisions:** None new
 
-**Status:** In Progress
+**Status:** Done
