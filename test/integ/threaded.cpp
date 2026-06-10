@@ -58,11 +58,17 @@ class ok_resource : public http_resource {
 
 LT_BEGIN_SUITE(threaded_suite)
 
+// reason: libmicrohttpd on the Windows CI lanes is built with
+// --enable-poll=no; MHD's INTERNAL_SELECT thread-pool path deadlocks the
+// MSYS curl shim on the single round-trip this suite exercises. See
+// test/PORTABILITY.md §threaded.cpp.
 #ifndef _WINDOWS
     std::unique_ptr<webserver> ws;
 #endif
 
     void set_up() {
+// reason: see test/PORTABILITY.md §threaded.cpp — MHD INTERNAL_SELECT +
+// thread-pool combo not viable on the MinGW64 / MSYS build.
 #ifndef _WINDOWS
         ws = std::make_unique<webserver>(create_webserver(PORT).start_method(httpserver::http::http_utils::INTERNAL_SELECT).max_threads(5));
         ws->start(false);
@@ -70,6 +76,8 @@ LT_BEGIN_SUITE(threaded_suite)
     }
 
     void tear_down() {
+// reason: see test/PORTABILITY.md §threaded.cpp — paired with the
+// set_up() skip; nothing to tear down on Windows.
 #ifndef _WINDOWS
         ws->stop();
 #endif
@@ -77,6 +85,8 @@ LT_BEGIN_SUITE(threaded_suite)
 LT_END_SUITE(threaded_suite)
 
 LT_BEGIN_AUTO_TEST(threaded_suite, base)
+// reason: see test/PORTABILITY.md §threaded.cpp — entire test body
+// requires the daemon that set_up() does not start on Windows.
 #ifndef _WINDOWS
     auto resource = std::make_shared<ok_resource>();
     ws->register_path("base", resource);

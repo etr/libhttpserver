@@ -134,6 +134,10 @@ LT_END_SUITE(connection_state_body_residue_suite)
 
 LT_BEGIN_AUTO_TEST(connection_state_body_residue_suite,
                    sentinel_in_first_body_not_observable_in_second)
+// Connection-lifecycle hook firing on MSYS curl + MHD has not been verified,
+// and the test depends on the connection_opened hook running through MHD's
+// Windows accept path. Coverage on Linux / Darwin remains unaffected.
+// reason: see test/PORTABILITY.md §connection_state_body_residue_test.cpp.
 #ifndef _WINDOWS
     httpserver::webserver ws{httpserver::create_webserver(PORT)};
 
