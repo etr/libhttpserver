@@ -344,6 +344,23 @@ v2 is a clean rename, not an ABI overlay over v1. v1.x is end-of-life
 on the day v2.0 ships — there is no v1 maintenance branch (PRD §1,
 DR-011 ([specs/architecture/11-decisions/DR-011.md](specs/architecture/11-decisions/DR-011.md))).
 
+## Test infrastructure
+
+- **`LT_SKIP` / `LT_SKIP_IF` macros (TASK-076).** The internal
+  `test/littletest.hpp` framework now distinguishes SKIP from PASS.
+  Test bodies that depend on a runtime resource (for example
+  `gnutls-cli` for the PSK connection tests in
+  `test/integ/ws_start_stop.cpp`) now call
+  `LT_SKIP_IF(cond, reason)` instead of recording a tautological
+  `LT_CHECK_EQ(1, 1)`. A binary whose only outcomes are skips exits
+  77 (Automake's SKIP code from `test-driver`); a binary with mixed
+  skips and successes exits 0 and the runner summary reports
+  `-> N skipped`. The TLS lanes in `ws_start_stop.cpp` now skip — not
+  silently pass — when GnuTLS or `gnutls-cli` is absent, so a build
+  that silently lost TLS support is no longer hidden behind a green
+  CI signal. Two new CI lanes (`tls-no-cli`, plus a baseline canary)
+  assert the SKIP wiring fires (or does not) as configured.
+
 ## See also
 
 - [README.md](README.md) — full v2.0 introduction and worked examples.

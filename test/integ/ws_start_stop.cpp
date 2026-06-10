@@ -754,27 +754,31 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ipv6_webserver)
     try {
         ws.start(false);
     } catch (const std::exception& e) {
-        // IPv6 may not be available, skip the test
-        LT_CHECK_EQ(1, 1);
-        return;
+        // TASK-076: IPv6 may be unavailable in the host network stack;
+        // distinguish that from "TLS support actually broke" by emitting
+        // a SKIP rather than a tautological pass.
+        LT_SKIP_IF(true, std::string("IPv6 webserver start failed: ") + e.what());
     }
     if (ws.is_running()) {
         curl_global_init(CURL_GLOBAL_ALL);
         std::string s;
         CURL *curl = curl_easy_init();
         CURLcode res;
-        curl_easy_setopt(curl, CURLOPT_URL, "http://[::1]:" STR(PORT + 20) "/base");
+        // TASK-076 fix: STR(PORT + 20) stringifies to "8080 + 20" (not
+        // "8100"), so we build the URL at runtime with std::to_string.
+        std::string ipv6_url = "http://[::1]:" + std::to_string(PORT + 20) + "/base";
+        curl_easy_setopt(curl, CURLOPT_URL, ipv6_url.c_str());
         curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
         res = curl_easy_perform(curl);
-        if (res == 0) {
-            LT_CHECK_EQ(s, "OK");
-        }
+        // Once the server is confirmed running, a curl failure is a
+        // genuine test failure — not an environmental skip.
+        LT_ASSERT_EQ(res, 0);
+        LT_CHECK_EQ(s, "OK");
         curl_easy_cleanup(curl);
         ws.stop();
     }
-    LT_CHECK_EQ(1, 1);  // Test passes even if IPv6 not available
 LT_END_AUTO_TEST(ipv6_webserver)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, dual_stack_webserver)
@@ -784,27 +788,31 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, dual_stack_webserver)
     try {
         ws.start(false);
     } catch (const std::exception& e) {
-        // Dual stack may not be available, skip the test
-        LT_CHECK_EQ(1, 1);
-        return;
+        // TASK-076: dual-stack may be disabled on the host kernel; SKIP
+        // rather than tautological-pass so a broken-build regression is
+        // observable.
+        LT_SKIP_IF(true, std::string("dual-stack webserver start failed: ") + e.what());
     }
     if (ws.is_running()) {
         curl_global_init(CURL_GLOBAL_ALL);
         std::string s;
         CURL *curl = curl_easy_init();
         CURLcode res;
-        curl_easy_setopt(curl, CURLOPT_URL, "localhost:" STR(PORT + 21) "/base");
+        // TASK-076 fix: STR(PORT + 21) stringifies to "8080 + 21" (not
+        // "8101"), so we build the URL at runtime with std::to_string.
+        std::string ds_url = "localhost:" + std::to_string(PORT + 21) + "/base";
+        curl_easy_setopt(curl, CURLOPT_URL, ds_url.c_str());
         curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
         res = curl_easy_perform(curl);
-        if (res == 0) {
-            LT_CHECK_EQ(s, "OK");
-        }
+        // Once the server is confirmed running, a curl failure is a
+        // genuine test failure — not an environmental skip.
+        LT_ASSERT_EQ(res, 0);
+        LT_CHECK_EQ(s, "OK");
         curl_easy_cleanup(curl);
         ws.stop();
     }
-    LT_CHECK_EQ(1, 1);  // Test passes even if dual stack not available
 LT_END_AUTO_TEST(dual_stack_webserver)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, bind_address_ipv4)
@@ -834,34 +842,42 @@ LT_END_AUTO_TEST(bind_address_ipv4)
 // Test bind_address with IPv6 address string (covers IPv6 branch in create_webserver.cpp)
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, bind_address_ipv6_string)
     int port = PORT + 31;
-    // This tests the IPv6 branch in bind_address
-    // Note: This may fail if IPv6 is not available on the system
+    // TASK-076 fix: webserver is non-movable so we use a shared_ptr to
+    // separate construction / start (environmental SKIP) from the curl
+    // block (unconditional assertion). Previously a single catch(...)
+    // swallowed assert_unattended and turned a curl failure into a SKIP.
+    std::shared_ptr<httpserver::webserver> ws_ptr;
     try {
-        httpserver::webserver ws{httpserver::create_webserver(port).bind_address("::1")};
-        auto ok = std::make_shared<ok_resource>();
-        ws.register_path("base", ok);
-        ws.start(false);
-        if (ws.is_running()) {
-            curl_global_init(CURL_GLOBAL_ALL);
-            std::string s;
-            CURL *curl = curl_easy_init();
-            CURLcode res;
-            std::string url = "http://[::1]:" + std::to_string(port) + "/base";
-            curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-            curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-            curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-            curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-            res = curl_easy_perform(curl);
-            if (res == 0) {
-                LT_CHECK_EQ(s, "OK");
-            }
-            curl_easy_cleanup(curl);
-            ws.stop();
-        }
+        ws_ptr = std::make_shared<httpserver::webserver>(
+            httpserver::create_webserver(port).bind_address("::1"));
     } catch (...) {
-        // IPv6 may not be available, that's OK for coverage purposes
+        LT_SKIP_IF(true, "IPv6 bind: construction failed on this host");
     }
-    LT_CHECK_EQ(1, 1);  // Test passes even if IPv6 not available
+    auto ok = std::make_shared<ok_resource>();
+    ws_ptr->register_path("base", ok);
+    try {
+        ws_ptr->start(false);
+    } catch (...) {
+        LT_SKIP_IF(true, "IPv6 bind: start failed on this host");
+    }
+    if (ws_ptr->is_running()) {
+        curl_global_init(CURL_GLOBAL_ALL);
+        std::string s;
+        CURL *curl = curl_easy_init();
+        CURLcode res;
+        std::string url = "http://[::1]:" + std::to_string(port) + "/base";
+        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+        curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+        res = curl_easy_perform(curl);
+        // Once the server is confirmed running, a curl failure is a
+        // genuine test failure — not an environmental skip.
+        LT_ASSERT_EQ(res, 0);
+        LT_CHECK_EQ(s, "OK");
+        curl_easy_cleanup(curl);
+        ws_ptr->stop();
+    }
 LT_END_AUTO_TEST(bind_address_ipv6_string)
 
 #ifdef HAVE_GNUTLS
@@ -909,9 +925,10 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, https_webserver)
     try {
         ws.start(false);
     } catch (const std::exception& e) {
-        // SSL setup may fail in some environments, skip the test
-        LT_CHECK_EQ(1, 1);
-        return;
+        // TASK-076: TLS setup may fail in environments without the
+        // certs or library; SKIP rather than tautological-pass so a
+        // build that silently lost TLS support reports SKIP, not PASS.
+        LT_SKIP_IF(true, std::string("TLS start failed: ") + e.what());
     }
     {
         curl_global_init(CURL_GLOBAL_ALL);
@@ -944,9 +961,10 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, tls_session_getters)
     try {
         ws.start(false);
     } catch (const std::exception& e) {
-        // SSL setup may fail in some environments, skip the test
-        LT_CHECK_EQ(1, 1);
-        return;
+        // TASK-076: TLS setup may fail in environments without the
+        // certs or library; SKIP rather than tautological-pass so a
+        // build that silently lost TLS support reports SKIP, not PASS.
+        LT_SKIP_IF(true, std::string("TLS start failed: ") + e.what());
     }
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -1011,9 +1029,10 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_no_certificate)
     try {
         ws.start(false);
     } catch (const std::exception& e) {
-        // SSL setup may fail in some environments, skip the test
-        LT_CHECK_EQ(1, 1);
-        return;
+        // TASK-076: TLS setup may fail in environments without the
+        // certs or library; SKIP rather than tautological-pass so a
+        // build that silently lost TLS support reports SKIP, not PASS.
+        LT_SKIP_IF(true, std::string("TLS start failed: ") + e.what());
     }
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -1046,9 +1065,10 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_with_certificate)
     try {
         ws.start(false);
     } catch (const std::exception& e) {
-        // SSL setup may fail in some environments, skip the test
-        LT_CHECK_EQ(1, 1);
-        return;
+        // TASK-076: TLS setup may fail in environments without the
+        // certs or library; SKIP rather than tautological-pass so a
+        // build that silently lost TLS support reports SKIP, not PASS.
+        LT_SKIP_IF(true, std::string("TLS start failed: ") + e.what());
     }
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -1086,9 +1106,10 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_dn_extraction)
     try {
         ws.start(false);
     } catch (const std::exception& e) {
-        // SSL setup may fail in some environments, skip the test
-        LT_CHECK_EQ(1, 1);
-        return;
+        // TASK-076: TLS setup may fail in environments without the
+        // certs or library; SKIP rather than tautological-pass so a
+        // build that silently lost TLS support reports SKIP, not PASS.
+        LT_SKIP_IF(true, std::string("TLS start failed: ") + e.what());
     }
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -1124,9 +1145,10 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_fingerprint)
     try {
         ws.start(false);
     } catch (const std::exception& e) {
-        // SSL setup may fail in some environments, skip the test
-        LT_CHECK_EQ(1, 1);
-        return;
+        // TASK-076: TLS setup may fail in environments without the
+        // certs or library; SKIP rather than tautological-pass so a
+        // build that silently lost TLS support reports SKIP, not PASS.
+        LT_SKIP_IF(true, std::string("TLS start failed: ") + e.what());
     }
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -1167,8 +1189,9 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_no_cn)
     try {
         ws.start(false);
     } catch (const std::exception& e) {
-        LT_CHECK_EQ(1, 1);
-        return;
+        // TASK-076: TLS setup may fail in environments without certs;
+        // SKIP rather than tautological-pass.
+        LT_SKIP_IF(true, std::string("TLS start failed: ") + e.what());
     }
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -1208,8 +1231,9 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_untrusted)
     try {
         ws.start(false);
     } catch (const std::exception& e) {
-        LT_CHECK_EQ(1, 1);
-        return;
+        // TASK-076: TLS setup may fail in environments without certs;
+        // SKIP rather than tautological-pass.
+        LT_SKIP_IF(true, std::string("TLS start failed: ") + e.what());
     }
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -1257,13 +1281,12 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_accessors_known_values)
     try {
         ws.start(false);
     } catch (const std::exception& e) {
-        // SSL setup may fail in some environments (missing cert files, system
-        // TLS library not available). The LT_CHECK_EQ(1,1) is the project
-        // convention for an explicit skip: it records a passing assertion so
-        // the test counts as run but the accessor assertions below are not
-        // exercised. (test-quality-reviewer item 28)
-        LT_CHECK_EQ(1, 1);
-        return;
+        // TASK-076: SSL setup may fail in environments without the
+        // cert files or the system TLS library. The previous project
+        // convention recorded a passing tautological assertion; under
+        // TASK-076 we now emit a proper SKIP so a build that silently
+        // lost TLS support is reportable.
+        LT_SKIP_IF(true, std::string("TLS start failed: ") + e.what());
     }
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1362,9 +1385,10 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, sni_callback_setup)
     try {
         ws.start(false);
     } catch (const std::exception& e) {
-        // SSL setup may fail in some environments, skip the test
-        LT_CHECK_EQ(1, 1);
-        return;
+        // TASK-076: TLS setup may fail in environments without the
+        // certs or library; SKIP rather than tautological-pass so a
+        // build that silently lost TLS support reports SKIP, not PASS.
+        LT_SKIP_IF(true, std::string("TLS start failed: ") + e.what());
     }
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1466,6 +1490,60 @@ bool has_gnutls_cli() {
     return system("which gnutls-cli > /dev/null 2>&1") == 0;
 }
 
+// TASK-076: detect libmicrohttpd/gnutls builds where PSK isn't
+// compiled in. The catch is wrapped around `webserver::start` /
+// configuration, and the exception message MHD raises when PSK is
+// unsupported contains both "PSK" and a "not supported"/"unsupported"
+// token. Substring-matching is intentionally permissive — if MHD ever
+// changes the exact wording, we just fall through to `throw;` and the
+// test reports a real failure rather than masking it as a skip.
+bool is_psk_unsupported_error(const std::exception& e) {
+    std::string msg = e.what();
+    if (msg.find("PSK") == std::string::npos &&
+        msg.find("psk") == std::string::npos) {
+        return false;
+    }
+    return msg.find("not supported") != std::string::npos ||
+           msg.find("unsupported") != std::string::npos ||
+           msg.find("not available") != std::string::npos ||
+           msg.find("disabled") != std::string::npos;
+}
+
+// TASK-076: pin is_psk_unsupported_error triage logic so a future
+// change in MHD's error strings or in the helper predicate is caught
+// before it silently masks/surfaces PSK failures.
+//
+// Helper: wrap a literal string as a std::exception so we can pass it
+// to is_psk_unsupported_error without starting a webserver.
+namespace {
+struct fake_exception : public std::exception {
+    explicit fake_exception(const char* msg) : msg_(msg) {}
+    const char* what() const noexcept override { return msg_; }
+    const char* msg_;
+};
+}  // namespace
+
+// (a) "PSK not supported" → true
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, is_psk_unsupported_error_psk_not_supported)
+    LT_CHECK_EQ(is_psk_unsupported_error(fake_exception("PSK not supported")), true);
+LT_END_AUTO_TEST(is_psk_unsupported_error_psk_not_supported)
+
+// (b) "psk disabled" → true (lowercase variant)
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, is_psk_unsupported_error_psk_disabled)
+    LT_CHECK_EQ(is_psk_unsupported_error(fake_exception("psk disabled")), true);
+LT_END_AUTO_TEST(is_psk_unsupported_error_psk_disabled)
+
+// (c) "TLS handshake failed" → false (no PSK keyword at all)
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, is_psk_unsupported_error_tls_handshake_failed)
+    LT_CHECK_EQ(is_psk_unsupported_error(fake_exception("TLS handshake failed")), false);
+LT_END_AUTO_TEST(is_psk_unsupported_error_tls_handshake_failed)
+
+// (d) "PSK credential error" → false (PSK present but no 'unsupported' token;
+//     must NOT be treated as a skip — real PSK config failures should surface)
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, is_psk_unsupported_error_psk_credential_error)
+    LT_CHECK_EQ(is_psk_unsupported_error(fake_exception("PSK credential error")), false);
+LT_END_AUTO_TEST(is_psk_unsupported_error_psk_credential_error)
+
 // Test PSK credential handler setup
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_handler_setup)
     int port = PORT + 28;
@@ -1481,16 +1559,23 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_handler_setup)
     try {
         ws.start(false);
     } catch (const std::exception& e) {
-        // PSK setup may fail if libmicrohttpd/gnutls doesn't support it
-        LT_CHECK_EQ(1, 1);
-        return;
+        // TASK-076: distinguish "this libmicrohttpd build doesn't
+        // support PSK" (SKIP) from "implementation broken" (FAIL).
+        // The substring match is permissive — if MHD changes wording
+        // we fall through to `throw;` and the test reports a real
+        // failure rather than masking it.
+        LT_SKIP_IF(is_psk_unsupported_error(e),
+                   std::string("libmicrohttpd built without PSK: ") + e.what());
+        throw;
     }
 
     // Just verify the server can be configured with PSK options
     if (ws.is_running()) {
         ws.stop();
     }
-    LT_CHECK_EQ(1, 1);  // Test passes if we get here without crashing
+    // TASK-076: replaced tautological-pass with a real postcondition
+    // assertion. After `ws.stop()` the server must report not-running.
+    LT_CHECK_EQ(ws.is_running(), false);
 LT_END_AUTO_TEST(psk_handler_setup)
 
 // Test PSK with empty handler (error path)
@@ -1508,14 +1593,18 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_handler_empty)
     try {
         ws.start(false);
     } catch (const std::exception& e) {
-        LT_CHECK_EQ(1, 1);
-        return;
+        // TASK-076: see psk_handler_setup — typed SKIP on
+        // PSK-unsupported builds; re-throw to fail loudly otherwise.
+        LT_SKIP_IF(is_psk_unsupported_error(e),
+                   std::string("libmicrohttpd built without PSK: ") + e.what());
+        throw;
     }
 
     if (ws.is_running()) {
         ws.stop();
     }
-    LT_CHECK_EQ(1, 1);
+    // TASK-076: strengthened tail-position liveness assertion.
+    LT_CHECK_EQ(ws.is_running(), false);
 LT_END_AUTO_TEST(psk_handler_empty)
 
 // Test PSK without handler (nullptr check)
@@ -1533,24 +1622,28 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_no_handler)
     try {
         ws.start(false);
     } catch (const std::exception& e) {
-        LT_CHECK_EQ(1, 1);
-        return;
+        // TASK-076: see psk_handler_setup — typed SKIP on
+        // PSK-unsupported builds; re-throw to fail loudly otherwise.
+        LT_SKIP_IF(is_psk_unsupported_error(e),
+                   std::string("libmicrohttpd built without PSK: ") + e.what());
+        throw;
     }
 
     if (ws.is_running()) {
         ws.stop();
     }
-    LT_CHECK_EQ(1, 1);
+    // TASK-076: strengthened tail-position liveness assertion.
+    LT_CHECK_EQ(ws.is_running(), false);
 LT_END_AUTO_TEST(psk_no_handler)
 
 // Test PSK connection attempt using gnutls-cli
 // This triggers the psk_cred_handler_func callback to execute, providing coverage
 // The callback now uses the static registry to get the webserver pointer
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_connection_success)
-    if (!has_gnutls_cli()) {
-        LT_CHECK_EQ(1, 1);  // Skip if gnutls-cli not available
-        return;
-    }
+    // TASK-076: SKIP (not PASS) when the gnutls-cli binary is not in
+    // $PATH. Previously this gate emitted a tautological pass which
+    // hid lanes that had broken TLS support.
+    LT_SKIP_IF(!has_gnutls_cli(), "gnutls-cli binary not in PATH");
 
     int port = PORT + 41;
     try {
@@ -1579,25 +1672,35 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_connection_success)
             "--insecure localhost -p %d 2>&1 || true",
             port);
 
-        // Execute the command to trigger the PSK handler callback
-        system(cmd);
+        // Execute the command to trigger the PSK handler callback.
+        // TASK-076: previously this discarded `system`'s return and
+        // recorded a tautological pass. We now capture the exit code
+        // and assert it is not 127 (command-not-found). Any other
+        // exit code (including non-zero from the actual TLS handshake)
+        // is acceptable because the assertion target is "the PSK
+        // callback was reached at all" — which the `has_gnutls_cli()`
+        // gate above already ensures the cli was on PATH at probe
+        // time; a 127 here would mean the env changed between probe
+        // and exec.
+        int cmd_exit = system(cmd);
         ws.stop();
-
-        // Test passes - we exercised the PSK callback code path
-        LT_CHECK_EQ(1, 1);
-    } catch (...) {
-        // PSK server may not be supported, skip test
-        LT_CHECK_EQ(1, 1);
+        LT_CHECK_NEQ(cmd_exit, 127);
+    } catch (const std::exception& e) {
+        // TASK-076: see psk_handler_setup — typed SKIP on
+        // PSK-unsupported builds; re-throw to fail loudly otherwise.
+        LT_SKIP_IF(is_psk_unsupported_error(e),
+                   std::string("libmicrohttpd built without PSK: ") + e.what());
+        throw;
     }
 LT_END_AUTO_TEST(psk_connection_success)
 
 // Test PSK connection with unknown user (empty PSK response)
 // This covers lines 438-440 in psk_cred_handler_func
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_connection_unknown_user)
-    if (!has_gnutls_cli()) {
-        LT_CHECK_EQ(1, 1);  // Skip if gnutls-cli not available
-        return;
-    }
+    // TASK-076: SKIP (not PASS) when the gnutls-cli binary is not in
+    // $PATH. Previously this gate emitted a tautological pass which
+    // hid lanes that had broken TLS support.
+    LT_SKIP_IF(!has_gnutls_cli(), "gnutls-cli binary not in PATH");
 
     int port = PORT + 42;
     try {
@@ -1628,19 +1731,22 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_connection_unknown_user)
         ws.stop();
 
         LT_CHECK_NEQ(result, 0);  // Connection should fail
-    } catch (...) {
-        // PSK server may not be supported, skip test
-        LT_CHECK_EQ(1, 1);
+    } catch (const std::exception& e) {
+        // TASK-076: see psk_handler_setup — typed SKIP on
+        // PSK-unsupported builds; re-throw to fail loudly otherwise.
+        LT_SKIP_IF(is_psk_unsupported_error(e),
+                   std::string("libmicrohttpd built without PSK: ") + e.what());
+        throw;
     }
 LT_END_AUTO_TEST(psk_connection_unknown_user)
 
 // Test PSK connection with handler returning empty string
 // This covers lines 438-440 in psk_cred_handler_func
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_connection_empty_handler)
-    if (!has_gnutls_cli()) {
-        LT_CHECK_EQ(1, 1);  // Skip if gnutls-cli not available
-        return;
-    }
+    // TASK-076: SKIP (not PASS) when the gnutls-cli binary is not in
+    // $PATH. Previously this gate emitted a tautological pass which
+    // hid lanes that had broken TLS support.
+    LT_SKIP_IF(!has_gnutls_cli(), "gnutls-cli binary not in PATH");
 
     int port = PORT + 43;
     try {
@@ -1671,19 +1777,22 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_connection_empty_handler)
         ws.stop();
 
         LT_CHECK_NEQ(result, 0);  // Connection should fail
-    } catch (...) {
-        // PSK server may not be supported, skip test
-        LT_CHECK_EQ(1, 1);
+    } catch (const std::exception& e) {
+        // TASK-076: see psk_handler_setup — typed SKIP on
+        // PSK-unsupported builds; re-throw to fail loudly otherwise.
+        LT_SKIP_IF(is_psk_unsupported_error(e),
+                   std::string("libmicrohttpd built without PSK: ") + e.what());
+        throw;
     }
 LT_END_AUTO_TEST(psk_connection_empty_handler)
 
 // Test PSK connection with invalid hex key
 // This covers lines 451-456 in psk_cred_handler_func
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_connection_invalid_hex)
-    if (!has_gnutls_cli()) {
-        LT_CHECK_EQ(1, 1);  // Skip if gnutls-cli not available
-        return;
-    }
+    // TASK-076: SKIP (not PASS) when the gnutls-cli binary is not in
+    // $PATH. Previously this gate emitted a tautological pass which
+    // hid lanes that had broken TLS support.
+    LT_SKIP_IF(!has_gnutls_cli(), "gnutls-cli binary not in PATH");
 
     int port = PORT + 44;
     try {
@@ -1714,19 +1823,22 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_connection_invalid_hex)
         ws.stop();
 
         LT_CHECK_NEQ(result, 0);  // Connection should fail
-    } catch (...) {
-        // PSK server may not be supported, skip test
-        LT_CHECK_EQ(1, 1);
+    } catch (const std::exception& e) {
+        // TASK-076: see psk_handler_setup — typed SKIP on
+        // PSK-unsupported builds; re-throw to fail loudly otherwise.
+        LT_SKIP_IF(is_psk_unsupported_error(e),
+                   std::string("libmicrohttpd built without PSK: ") + e.what());
+        throw;
     }
 LT_END_AUTO_TEST(psk_connection_invalid_hex)
 
 // Test PSK connection with no handler set (nullptr check)
 // This covers lines 432-435 in psk_cred_handler_func
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_connection_no_handler)
-    if (!has_gnutls_cli()) {
-        LT_CHECK_EQ(1, 1);  // Skip if gnutls-cli not available
-        return;
-    }
+    // TASK-076: SKIP (not PASS) when the gnutls-cli binary is not in
+    // $PATH. Previously this gate emitted a tautological pass which
+    // hid lanes that had broken TLS support.
+    LT_SKIP_IF(!has_gnutls_cli(), "gnutls-cli binary not in PATH");
 
     int port = PORT + 45;
     try {
@@ -1757,9 +1869,12 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_connection_no_handler)
         ws.stop();
 
         LT_CHECK_NEQ(result, 0);  // Connection should fail
-    } catch (...) {
-        // PSK server may not be supported, skip test
-        LT_CHECK_EQ(1, 1);
+    } catch (const std::exception& e) {
+        // TASK-076: see psk_handler_setup — typed SKIP on
+        // PSK-unsupported builds; re-throw to fail loudly otherwise.
+        LT_SKIP_IF(is_psk_unsupported_error(e),
+                   std::string("libmicrohttpd built without PSK: ") + e.what());
+        throw;
     }
 LT_END_AUTO_TEST(psk_connection_no_handler)
 

@@ -40,7 +40,7 @@ TASK-093).
 | TASK-073 | Revisit libmicrohttpd v0.99 unescape workaround | LOW | S | Done |
 | TASK-074 | Gate DEBUG raw-body printing behind explicit opt-in | LOW (sec) | S | Done |
 | TASK-075 | Propagate `wait_for_server_ready` to sibling hooks integ tests | HIGH | M | Done |
-| TASK-076 | Replace tautological-pass blocks in TLS test lanes | HIGH | M | Backlog |
+| TASK-076 | Replace tautological-pass blocks in TLS test lanes | HIGH | M | Done |
 | TASK-077 | Restore Windows / Darwin coverage in skipped test suites | HIGH | L | Backlog |
 | TASK-078 | Resolve commented-out CONNECT-method test bodies | HIGH | S | Backlog |
 | TASK-079 | Drive nonce/opaque state machine in v2 digest-auth integ tests | MED | M | Backlog |
