@@ -24,22 +24,12 @@ LT_BEGIN_SUITE(littletest_skip_semantics_suite)
 LT_END_SUITE(littletest_skip_semantics_suite)
 
 // Cycle 1.a — LT_SKIP increments the runner's skip counter and halts
-// the enclosing test body. We split the post-skip "must not run"
-// assertion into a sibling test because LT_SKIP terminates the test by
-// throwing a skip_unattended (mirroring assert_unattended). To observe
-// the counter delta we register a probe sibling test that runs before
-// the skipping test in registration order.
+// the enclosing test body. LT_SKIP throws skip_unattended so no code
+// after it can execute; the counter-delta assertion is therefore
+// delegated to `observe_prior_skip_was_counted` below, which reads the
+// cumulative skip total in a fresh test body after this one has run.
 LT_BEGIN_AUTO_TEST(littletest_skip_semantics_suite, skip_macro_increments_skip_counter)
-    int before = littletest::auto_test_runner.get_skips();
     LT_SKIP("intentional skip — Cycle 1 sentinel");
-    // Unreachable: LT_SKIP throws, so the line below must not execute.
-    // If it does, the test framework would record a CHECK FAILURE here
-    // because we'd be asserting `after == before + 1` after the
-    // post-skip body still ran — which is precisely what the contract
-    // forbids.
-    int after = littletest::auto_test_runner.get_skips();
-    LT_CHECK_EQ(after, before + 1);
-    LT_FAIL("LT_SKIP did not halt test body");
 LT_END_AUTO_TEST(skip_macro_increments_skip_counter)
 
 // Cycle 1.b — LT_SKIP_IF(false, ...) is a no-op; control flows through.

@@ -764,21 +764,21 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ipv6_webserver)
         std::string s;
         CURL *curl = curl_easy_init();
         CURLcode res;
-        curl_easy_setopt(curl, CURLOPT_URL, "http://[::1]:" STR(PORT + 20) "/base");
+        // TASK-076 fix: STR(PORT + 20) stringifies to "8080 + 20" (not
+        // "8100"), so we build the URL at runtime with std::to_string.
+        std::string ipv6_url = "http://[::1]:" + std::to_string(PORT + 20) + "/base";
+        curl_easy_setopt(curl, CURLOPT_URL, ipv6_url.c_str());
         curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
         res = curl_easy_perform(curl);
-        if (res == 0) {
-            LT_CHECK_EQ(s, "OK");
-        }
+        // Once the server is confirmed running, a curl failure is a
+        // genuine test failure — not an environmental skip.
+        LT_ASSERT_EQ(res, 0);
+        LT_CHECK_EQ(s, "OK");
         curl_easy_cleanup(curl);
         ws.stop();
     }
-    // TASK-076: deleted the duplicate tail-position tautological
-    // assertion. The catch above now emits SKIP; the success path's
-    // body-content `LT_CHECK_EQ` inside the curl block carries the
-    // real signal.
 LT_END_AUTO_TEST(ipv6_webserver)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, dual_stack_webserver)
@@ -798,19 +798,21 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, dual_stack_webserver)
         std::string s;
         CURL *curl = curl_easy_init();
         CURLcode res;
-        curl_easy_setopt(curl, CURLOPT_URL, "localhost:" STR(PORT + 21) "/base");
+        // TASK-076 fix: STR(PORT + 21) stringifies to "8080 + 21" (not
+        // "8101"), so we build the URL at runtime with std::to_string.
+        std::string ds_url = "localhost:" + std::to_string(PORT + 21) + "/base";
+        curl_easy_setopt(curl, CURLOPT_URL, ds_url.c_str());
         curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
         res = curl_easy_perform(curl);
-        if (res == 0) {
-            LT_CHECK_EQ(s, "OK");
-        }
+        // Once the server is confirmed running, a curl failure is a
+        // genuine test failure — not an environmental skip.
+        LT_ASSERT_EQ(res, 0);
+        LT_CHECK_EQ(s, "OK");
         curl_easy_cleanup(curl);
         ws.stop();
     }
-    // TASK-076: deleted the duplicate tail-position tautological
-    // assertion (see ipv6_webserver above).
 LT_END_AUTO_TEST(dual_stack_webserver)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, bind_address_ipv4)
@@ -840,39 +842,42 @@ LT_END_AUTO_TEST(bind_address_ipv4)
 // Test bind_address with IPv6 address string (covers IPv6 branch in create_webserver.cpp)
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, bind_address_ipv6_string)
     int port = PORT + 31;
-    // This tests the IPv6 branch in bind_address
-    // Note: This may fail if IPv6 is not available on the system
+    // TASK-076 fix: webserver is non-movable so we use a shared_ptr to
+    // separate construction / start (environmental SKIP) from the curl
+    // block (unconditional assertion). Previously a single catch(...)
+    // swallowed assert_unattended and turned a curl failure into a SKIP.
+    std::shared_ptr<httpserver::webserver> ws_ptr;
     try {
-        httpserver::webserver ws{httpserver::create_webserver(port).bind_address("::1")};
-        auto ok = std::make_shared<ok_resource>();
-        ws.register_path("base", ok);
-        ws.start(false);
-        if (ws.is_running()) {
-            curl_global_init(CURL_GLOBAL_ALL);
-            std::string s;
-            CURL *curl = curl_easy_init();
-            CURLcode res;
-            std::string url = "http://[::1]:" + std::to_string(port) + "/base";
-            curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-            curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-            curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-            curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-            res = curl_easy_perform(curl);
-            if (res == 0) {
-                LT_CHECK_EQ(s, "OK");
-            }
-            curl_easy_cleanup(curl);
-            ws.stop();
-        }
+        ws_ptr = std::make_shared<httpserver::webserver>(
+            httpserver::create_webserver(port).bind_address("::1"));
     } catch (...) {
-        // TASK-076: IPv6 may not be available on the host; emit SKIP
-        // rather than tautological-pass.
-        LT_SKIP_IF(true, "IPv6 bind unavailable on this host");
+        LT_SKIP_IF(true, "IPv6 bind: construction failed on this host");
     }
-    // TASK-076: deleted the tail-position tautological assertion. The
-    // catch above now distinguishes "IPv6 absent" (SKIP) from
-    // "implementation broken" (the catch wouldn't fire; the
-    // inside-`is_running()` LT_CHECK_EQ on /base carries the signal).
+    auto ok = std::make_shared<ok_resource>();
+    ws_ptr->register_path("base", ok);
+    try {
+        ws_ptr->start(false);
+    } catch (...) {
+        LT_SKIP_IF(true, "IPv6 bind: start failed on this host");
+    }
+    if (ws_ptr->is_running()) {
+        curl_global_init(CURL_GLOBAL_ALL);
+        std::string s;
+        CURL *curl = curl_easy_init();
+        CURLcode res;
+        std::string url = "http://[::1]:" + std::to_string(port) + "/base";
+        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+        curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+        res = curl_easy_perform(curl);
+        // Once the server is confirmed running, a curl failure is a
+        // genuine test failure — not an environmental skip.
+        LT_ASSERT_EQ(res, 0);
+        LT_CHECK_EQ(s, "OK");
+        curl_easy_cleanup(curl);
+        ws_ptr->stop();
+    }
 LT_END_AUTO_TEST(bind_address_ipv6_string)
 
 #ifdef HAVE_GNUTLS
@@ -1503,6 +1508,41 @@ bool is_psk_unsupported_error(const std::exception& e) {
            msg.find("not available") != std::string::npos ||
            msg.find("disabled") != std::string::npos;
 }
+
+// TASK-076: pin is_psk_unsupported_error triage logic so a future
+// change in MHD's error strings or in the helper predicate is caught
+// before it silently masks/surfaces PSK failures.
+//
+// Helper: wrap a literal string as a std::exception so we can pass it
+// to is_psk_unsupported_error without starting a webserver.
+namespace {
+struct fake_exception : public std::exception {
+    explicit fake_exception(const char* msg) : msg_(msg) {}
+    const char* what() const noexcept override { return msg_; }
+    const char* msg_;
+};
+}  // namespace
+
+// (a) "PSK not supported" → true
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, is_psk_unsupported_error_psk_not_supported)
+    LT_CHECK_EQ(is_psk_unsupported_error(fake_exception("PSK not supported")), true);
+LT_END_AUTO_TEST(is_psk_unsupported_error_psk_not_supported)
+
+// (b) "psk disabled" → true (lowercase variant)
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, is_psk_unsupported_error_psk_disabled)
+    LT_CHECK_EQ(is_psk_unsupported_error(fake_exception("psk disabled")), true);
+LT_END_AUTO_TEST(is_psk_unsupported_error_psk_disabled)
+
+// (c) "TLS handshake failed" → false (no PSK keyword at all)
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, is_psk_unsupported_error_tls_handshake_failed)
+    LT_CHECK_EQ(is_psk_unsupported_error(fake_exception("TLS handshake failed")), false);
+LT_END_AUTO_TEST(is_psk_unsupported_error_tls_handshake_failed)
+
+// (d) "PSK credential error" → false (PSK present but no 'unsupported' token;
+//     must NOT be treated as a skip — real PSK config failures should surface)
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, is_psk_unsupported_error_psk_credential_error)
+    LT_CHECK_EQ(is_psk_unsupported_error(fake_exception("PSK credential error")), false);
+LT_END_AUTO_TEST(is_psk_unsupported_error_psk_credential_error)
 
 // Test PSK credential handler setup
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_handler_setup)
