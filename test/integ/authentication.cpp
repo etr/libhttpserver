@@ -194,10 +194,13 @@ LT_BEGIN_AUTO_TEST(authentication_suite, base_auth_fail)
 LT_END_AUTO_TEST(base_auth_fail)
 #endif  // HAVE_BAUTH
 
-//  do not run the digest auth tests on windows as curl
-//  appears to have problems with it.
-//  Will fix this separately
-//  Also skip if libmicrohttpd was built without digest auth support
+// MinGW64's curl --digest parser does not accept the challenge produced by
+// MHD's MHD_queue_auth_required_response3 on Windows, so the authenticated
+// round-trip never completes. Predates TASK-062 (RFC-7616) and is a
+// test-infrastructure issue, not a digest-algorithm issue. The HAVE_DAUTH
+// guard separately skips the block when libmicrohttpd is built without
+// digest-auth support.
+// reason: see test/PORTABILITY.md §authentication.cpp digest-auth block.
 #if !defined(_WINDOWS) && defined(HAVE_DAUTH)
 
 // Pre-computed MD5 hash of "myuser:examplerealm:mypass"

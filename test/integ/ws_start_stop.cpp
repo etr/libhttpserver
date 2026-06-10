@@ -110,6 +110,14 @@ LT_BEGIN_SUITE(ws_start_stop_suite)
     }
 LT_END_SUITE(ws_start_stop_suite)
 
+// Wide skip of TLS / IPv6 / SNI / PSK / custom-socket / bind-address tests:
+// MinGW64 curl + gnutls + MHD round-trips are flaky, IPv6 is gated on
+// IPV6_TESTS_ENABLED (not set on the Windows lanes), and POSIX socket
+// primitives the custom-socket test relies on are not cleanly exposed by
+// MSYS. The simplest non-TLS GET round-trip is restored on Windows via the
+// `windows_smoke` test (added in TASK-077, in a `#ifdef _WINDOWS` block
+// below this skip).
+// reason: see test/PORTABILITY.md §ws_start_stop.cpp wide skip.
 #ifndef _WINDOWS
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, start_stop)
@@ -334,6 +342,12 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, enable_options)
     ws.stop();
 LT_END_AUTO_TEST(enable_options)
 
+// On macOS the user-bound listening socket interacts poorly with MHD's
+// kqueue-based accept loop unless SO_REUSEPORT is set alongside
+// SO_REUSEADDR; the bind-address tests below also depend on the same
+// socket-setup path. Confirming the fix requires a macos-latest CI run
+// with the modified setsockopt sequence.
+// reason: see test/PORTABILITY.md §ws_start_stop.cpp custom_socket.
 #ifndef DARWIN
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_socket)
     int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -1410,6 +1424,37 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, sni_callback_setup)
 LT_END_AUTO_TEST(sni_callback_setup)
 #endif  // HAVE_GNUTLS
 
+#endif  // _WINDOWS
+
+#ifdef _WINDOWS
+// TASK-077: Windows-only smoke variant. Asserts the daemon starts, accepts
+// one HTTP/1.1 GET, and serves the registered resource. Mirrors the
+// non-TLS subset of `start_stop` test #1 (the default-config curl GET) so
+// that the MinGW64 / MSYS lanes exercise at least one full round-trip
+// through libhttpserver, restoring the most valuable piece of CI coverage
+// without inheriting the TLS / IPv6 / SNI / PSK / custom-socket flake
+// tracked in test/PORTABILITY.md §ws_start_stop.cpp.
+LT_BEGIN_AUTO_TEST(ws_start_stop_suite, windows_smoke)
+    httpserver::webserver ws{httpserver::create_webserver(PORT)};
+    auto ok = std::make_shared<ok_resource>();
+    ws.register_path("base", ok);
+    ws.start(false);
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    LT_ASSERT_EQ(res, 0);
+    LT_CHECK_EQ(s, "OK");
+    curl_easy_cleanup(curl);
+
+    ws.stop();
+LT_END_AUTO_TEST(windows_smoke)
 #endif  // _WINDOWS
 
 // Test pedantic mode configuration

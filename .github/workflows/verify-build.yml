@@ -770,6 +770,16 @@ jobs:
       run: ./scripts/check-warning-suppressions.sh
       if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
 
+    - name: Run skip-rationale gate
+      # TASK-077: forbid `#ifndef _WINDOWS`, `#ifndef DARWIN`, or
+      # `#if !defined(_WINDOWS)` blocks in `test/integ/` that lack a
+      # `// reason:` comment pointing at `test/PORTABILITY.md` (or a
+      # follow-up task). Without this gate, whole-suite skips silently
+      # drift on the Windows / Darwin CI lanes and the library's
+      # portability claim quietly decays.
+      run: ./scripts/check-skip-rationales.sh
+      if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
+
     - name: Run libhttpserver configure
       # TASK-038: fixed CXXLAGS -> CXXFLAGS typo so C++ TUs are instrumented by the sanitizer matrix.
       run: |
@@ -1013,6 +1023,26 @@ jobs:
         cd build ;
         cat test/test-suite.log ;
       if: ${{ failure() && matrix.build-type != 'iwyu' && matrix.compiler-family != 'arm-cross' && matrix.build-type != 'header-hygiene' }}
+
+    - name: Verify Windows smoke test ran (TASK-077)
+      # TASK-077: assert the new `ws_start_stop_suite::windows_smoke` test
+      # is actually being compiled and executed on the MinGW64 / MSYS lanes
+      # so that the basic daemon-start-accept-one-GET path is observed end
+      # to end on Windows. Without this, a future build-flag tweak that
+      # inadvertently turns off the `#ifdef _WINDOWS` branch would silently
+      # erase the Windows round-trip coverage.
+      shell: bash
+      run: |
+        cd build
+        if [ ! -f test/ws_start_stop.log ]; then
+          echo "ERROR: test/ws_start_stop.log is missing — windows_smoke could not be verified" >&2
+          exit 1
+        fi
+        if ! grep -E "windows_smoke" test/ws_start_stop.log; then
+          echo "ERROR: windows_smoke test did not appear in test/ws_start_stop.log" >&2
+          exit 1
+        fi
+      if: ${{ matrix.os-type == 'windows' }}
 
     - name: Run Valgrind checks
       run: |

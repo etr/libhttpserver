@@ -14,11 +14,11 @@ Three whole-suite or near-whole-suite skips remove the library's portability cla
 Either land Windows/Darwin variants or document and gate the exclusion behind a CI flag that asserts intent rather than letting silent skips drift.
 
 **Action Items:**
-- [ ] For `threaded.cpp`: write a Windows-shaped variant of the suite (matching the I/O completion port semantics MHD uses on Windows) under `#ifdef _WINDOWS`, or document why no Windows variant is feasible and capture the gap in `test/PORTABILITY.md`.
-- [ ] For `ws_start_stop.cpp` Windows skip: same — variant suite under `#ifdef _WINDOWS`, or PORTABILITY.md note. Comment must explain *why* MHD's Windows path can't drive this scenario.
-- [ ] For the postponed digest-auth Windows tests in `ws_start_stop.cpp:176-180` and `authentication.cpp:176-180`: either port them or document the upstream MHD-on-Windows limitation. If coordinated with TASK-062 (Digest RFC-7616), bring up there.
-- [ ] For `ws_start_stop.cpp:337` `custom_socket` Darwin skip: add a comment naming the macOS-specific limitation, or port. Comment must reference the specific Darwin syscall behaviour that fails.
-- [ ] Add a `scripts/check-skip-rationales.sh` lint that fails CI if a `#ifndef _WINDOWS` or `#ifndef DARWIN` block in `test/integ/` lacks a `// reason:` comment.
+- [x] For `threaded.cpp`: write a Windows-shaped variant of the suite (matching the I/O completion port semantics MHD uses on Windows) under `#ifdef _WINDOWS`, or document why no Windows variant is feasible and capture the gap in `test/PORTABILITY.md`.
+- [x] For `ws_start_stop.cpp` Windows skip: same — variant suite under `#ifdef _WINDOWS`, or PORTABILITY.md note. Comment must explain *why* MHD's Windows path can't drive this scenario.
+- [x] For the postponed digest-auth Windows tests in `ws_start_stop.cpp:176-180` and `authentication.cpp:176-180`: either port them or document the upstream MHD-on-Windows limitation. If coordinated with TASK-062 (Digest RFC-7616), bring up there.
+- [x] For `ws_start_stop.cpp:337` `custom_socket` Darwin skip: add a comment naming the macOS-specific limitation, or port. Comment must reference the specific Darwin syscall behaviour that fails.
+- [x] Add a `scripts/check-skip-rationales.sh` lint that fails CI if a `#ifndef _WINDOWS` or `#ifndef DARWIN` block in `test/integ/` lacks a `// reason:` comment.
 
 **Dependencies:**
 - Blocked by: None
@@ -34,4 +34,4 @@ Either land Windows/Darwin variants or document and gate the exclusion behind a 
 **Related Requirements:** PRD §2 portability NFR
 **Related Decisions:** None new
 
-**Status:** Backlog
+**Status:** Done
