@@ -548,6 +548,65 @@ inline bool parse_one_param(std::string_view& s,
     return true;
 }
 
+// Dispatch the chosen H() over `input`.
+inline std::string H_hex(digest_hash hash, std::string_view input) {
+    if (hash == digest_hash::md5) {
+        unsigned char out[16];
+        detail::md5(input, out);
+        return detail::to_hex_lower(out, 16);
+    }
+    unsigned char out[32];
+    detail::sha256(input, out);
+    return detail::to_hex_lower(out, 32);
+}
+
+// Concatenate the RFC 7616 §3.4.1 response chain:
+//   response = H( HA1 ":" nonce ":" nc ":" cnonce ":" qop ":" HA2 )
+inline std::string assemble_response(digest_hash hash,
+                                     std::string_view ha1_hex,
+                                     std::string_view nonce,
+                                     std::string_view nc,
+                                     std::string_view cnonce,
+                                     std::string_view qop,
+                                     std::string_view ha2_hex) {
+    std::string buf;
+    buf.reserve(ha1_hex.size() + nonce.size() + nc.size() +
+                cnonce.size() + qop.size() + ha2_hex.size() + 5);
+    buf.append(ha1_hex);
+    buf.push_back(':');
+    buf.append(nonce);
+    buf.push_back(':');
+    buf.append(nc);
+    buf.push_back(':');
+    buf.append(cnonce);
+    buf.push_back(':');
+    buf.append(qop);
+    buf.push_back(':');
+    buf.append(ha2_hex);
+    return H_hex(hash, buf);
+}
+
+// Shared A2 construction + response assembly used by both
+// compute_response_cleartext (which derives ha1_hex from cleartext) and
+// compute_response_ha1 (which hex-encodes a precomputed raw HA1).
+inline std::string compute_response_from_ha1_hex(
+        digest_hash hash,
+        std::string_view ha1_hex,
+        const parsed_challenge& ch,
+        std::string_view method,
+        std::string_view request_uri,
+        std::string_view cnonce,
+        std::string_view nc) {
+    // A2 = Method ":" request-uri
+    std::string a2;
+    a2.reserve(method.size() + request_uri.size() + 1);
+    a2.append(method);
+    a2.push_back(':');
+    a2.append(request_uri);
+    std::string ha2 = H_hex(hash, a2);
+    return assemble_response(hash, ha1_hex, ch.nonce, nc, cnonce, ch.qop, ha2);
+}
+
 }  // namespace digest_client_internal
 
 // Parse the value of a `WWW-Authenticate:` Digest challenge header (the
@@ -630,48 +689,6 @@ inline std::optional<parsed_challenge> extract_digest_challenge(std::string_view
     return std::nullopt;
 }
 
-namespace digest_client_internal {
-
-// Dispatch the chosen H() over `input`.
-inline std::string H_hex(digest_hash hash, std::string_view input) {
-    if (hash == digest_hash::md5) {
-        unsigned char out[16];
-        detail::md5(input, out);
-        return detail::to_hex_lower(out, 16);
-    }
-    unsigned char out[32];
-    detail::sha256(input, out);
-    return detail::to_hex_lower(out, 32);
-}
-
-// Concatenate the RFC 7616 §3.4.1 response chain:
-//   response = H( HA1 ":" nonce ":" nc ":" cnonce ":" qop ":" HA2 )
-inline std::string assemble_response(digest_hash hash,
-                                     std::string_view ha1_hex,
-                                     std::string_view nonce,
-                                     std::string_view nc,
-                                     std::string_view cnonce,
-                                     std::string_view qop,
-                                     std::string_view ha2_hex) {
-    std::string buf;
-    buf.reserve(ha1_hex.size() + nonce.size() + nc.size() +
-                cnonce.size() + qop.size() + ha2_hex.size() + 5);
-    buf.append(ha1_hex);
-    buf.push_back(':');
-    buf.append(nonce);
-    buf.push_back(':');
-    buf.append(nc);
-    buf.push_back(':');
-    buf.append(cnonce);
-    buf.push_back(':');
-    buf.append(qop);
-    buf.push_back(':');
-    buf.append(ha2_hex);
-    return H_hex(hash, buf);
-}
-
-}  // namespace digest_client_internal
-
 // Compute the RFC 7616 §3.4 `response=` token using a cleartext password.
 inline std::string compute_response_cleartext(
         const parsed_challenge& ch,
@@ -690,18 +707,9 @@ inline std::string compute_response_cleartext(
     a1.append(ch.realm);
     a1.push_back(':');
     a1.append(password);
-    std::string ha1 = digest_client_internal::H_hex(hash, a1);
-
-    // A2 = Method ":" request-uri
-    std::string a2;
-    a2.reserve(method.size() + request_uri.size() + 1);
-    a2.append(method);
-    a2.push_back(':');
-    a2.append(request_uri);
-    std::string ha2 = digest_client_internal::H_hex(hash, a2);
-
-    return digest_client_internal::assemble_response(
-        hash, ha1, ch.nonce, nc, cnonce, ch.qop, ha2);
+    std::string ha1_hex = digest_client_internal::H_hex(hash, a1);
+    return digest_client_internal::compute_response_from_ha1_hex(
+        hash, ha1_hex, ch, method, request_uri, cnonce, nc);
 }
 
 // Compute the RFC 7616 §3.4 `response=` token from a precomputed HA1.
@@ -715,16 +723,8 @@ inline std::string compute_response_ha1(
         std::string_view cnonce,
         std::string_view nc) {
     std::string ha1_hex = detail::to_hex_lower(ha1, ha1_size);
-
-    std::string a2;
-    a2.reserve(method.size() + request_uri.size() + 1);
-    a2.append(method);
-    a2.push_back(':');
-    a2.append(request_uri);
-    std::string ha2 = digest_client_internal::H_hex(hash, a2);
-
-    return digest_client_internal::assemble_response(
-        hash, ha1_hex, ch.nonce, nc, cnonce, ch.qop, ha2);
+    return digest_client_internal::compute_response_from_ha1_hex(
+        hash, ha1_hex, ch, method, request_uri, cnonce, nc);
 }
 
 // Serialize a full `Authorization: Digest …` header value (the part after
@@ -758,21 +758,18 @@ inline std::string build_authorization_header(
     return out;
 }
 
-// Generate a 16-hex-char client nonce from a fresh random device. Test-only;
-// not cryptographically graded but ample for handshake replay uniqueness in
-// a single test run.
+// Generate a 32-hex-char client nonce (16 random bytes) from a fresh random
+// device. Test-only; not cryptographically graded but ample for handshake
+// replay uniqueness in a single test run.
 inline std::string make_cnonce() {
     std::random_device rd;
     std::mt19937_64 rng(rd());
     std::uint64_t hi = rng();
     std::uint64_t lo = rng();
-    static const char digits[] = "0123456789abcdef";
-    std::string out(16, '0');
-    for (int i = 0; i < 8; ++i) {
-        out[7 - i]  = digits[(hi >> (i * 8)) & 0xF];
-        out[15 - i] = digits[(lo >> (i * 8)) & 0xF];
-    }
-    return out;
+    unsigned char buf[16];
+    std::memcpy(buf,     &hi, 8);
+    std::memcpy(buf + 8, &lo, 8);
+    return detail::to_hex_lower(buf, 16);
 }
 
 }  // namespace httpserver_test

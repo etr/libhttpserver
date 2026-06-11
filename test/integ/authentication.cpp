@@ -105,6 +105,60 @@ size_t headerfunc(void *ptr, size_t size, size_t nmemb, std::string *s) {
     return size*nmemb;
 }
 
+#ifdef HAVE_DAUTH
+// Round-1 helper: issue a plain GET to `url` and return a pair of
+// {http_status_code, raw_header_block}. Each caller asserts the expected 401
+// via the LT_CHECK_EQ macro in its own test context so the assertion names
+// are accurate. Used by every two-round digest-auth test.
+static std::pair<long, std::string>  // NOLINT(runtime/int)
+collect_challenge(const char* url) {
+    std::string body, headers;
+    long http_code = 0;  // NOLINT(runtime/int)
+    CURL *curl = curl_easy_init();
+    curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &body);
+    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, headerfunc);
+    curl_easy_setopt(curl, CURLOPT_HEADERDATA, &headers);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 150L);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 150L);
+    curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
+    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
+    curl_easy_perform(curl);
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    curl_easy_cleanup(curl);
+    return {http_code, headers};
+}
+
+// Round-2 helper: issue a GET to `url` with an explicit `Authorization:`
+// header string (the full "Authorization: Digest …" line), capture the
+// response body in `*body_out`, and return the HTTP status code.
+static long perform_with_auth_header(  // NOLINT(runtime/int)
+        const char* url,
+        const char* auth_hdr,
+        std::string* body_out) {
+    long http_code = 0;  // NOLINT(runtime/int)
+    CURL *curl = curl_easy_init();
+    struct curl_slist *hdrs = nullptr;
+    hdrs = curl_slist_append(hdrs, auth_hdr);
+    curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, hdrs);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, body_out);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 150L);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 150L);
+    curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
+    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
+    curl_easy_perform(curl);
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    curl_easy_cleanup(curl);
+    curl_slist_free_all(hdrs);
+    return http_code;
+}
+#endif  // HAVE_DAUTH
+
 #ifdef HAVE_BAUTH
 class user_pass_resource : public http_resource {
  public:
@@ -240,72 +294,48 @@ static const unsigned char PRECOMPUTED_HA1_SHA256[32] = {
     0x20, 0x7e, 0x02, 0xd7, 0xc4, 0xbd, 0x8a, 0x05
 };
 
-// TASK-062: migrated to digest_challenge so the nonce/opaque handshake can
-// complete and check_digest_auth_digest() is exercised. Previously used the
-// legacy string overload which emitted a static challenge with no nonce,
-// making the handshake impossible and the algorithm parameter meaningless.
-class digest_ha1_md5_resource : public http_resource {
+// TASK-062 / TASK-079 refactor: a single parameterised resource replaces the
+// former digest_ha1_md5_resource and digest_ha1_sha256_resource pair. The two
+// classes were structurally identical and differed only in the algorithm enum,
+// the precomputed HA1 constant, and the HA1 byte size. Collapsing them into
+// one class means any change to the NONCE_STALE or NOT_AUTHORIZED branch
+// only needs to be applied once.
+class digest_ha1_resource : public http_resource {
  public:
-     http_response render_get(const http_request& req) {
-         using httpserver::http::http_utils;
-         using httpserver::digest_challenge;
-         if (req.get_digested_user() == "") {
-             return http_response::unauthorized(
-                 digest_challenge{.realm     = "examplerealm",
-                                  .algorithm = http_utils::digest_algorithm::MD5,
-                                  .body      = "FAIL"});
-         }
-         auto result = req.check_digest_auth_digest("examplerealm", PRECOMPUTED_HA1_MD5,
-                 http_utils::md5_digest_size, 300, 0,
-                 http_utils::digest_algorithm::MD5);
-         if (result == http_utils::digest_auth_result::NONCE_STALE) {
-             return http_response::unauthorized(
-                 digest_challenge{.realm        = "examplerealm",
-                                  .algorithm    = http_utils::digest_algorithm::MD5,
-                                  .signal_stale = true,
-                                  .body         = "FAIL"});
-         } else if (result != http_utils::digest_auth_result::OK) {
-             return http_response::unauthorized(
-                 digest_challenge{.realm     = "examplerealm",
-                                  .algorithm = http_utils::digest_algorithm::MD5,
-                                  .body      = "FAIL"});
-         }
-         return http_response::string("SUCCESS");
-     }
-};
+    using http_utils = httpserver::http::http_utils;
+    digest_ha1_resource(http_utils::digest_algorithm algo,
+                        const unsigned char* ha1,
+                        std::size_t ha1_size)
+        : algo_(algo), ha1_(ha1), ha1_size_(ha1_size) {}
 
-// TASK-062: migrated to digest_challenge with algorithm=SHA256 so the
-// nonce/opaque handshake can complete and check_digest_auth_digest() is
-// exercised with the SHA-256 algorithm. Previously used the legacy string
-// overload which made the algorithm parameter meaningless.
-class digest_ha1_sha256_resource : public http_resource {
- public:
      http_response render_get(const http_request& req) {
-         using httpserver::http::http_utils;
          using httpserver::digest_challenge;
          if (req.get_digested_user() == "") {
              return http_response::unauthorized(
                  digest_challenge{.realm     = "examplerealm",
-                                  .algorithm = http_utils::digest_algorithm::SHA256,
+                                  .algorithm = algo_,
                                   .body      = "FAIL"});
          }
-         auto result = req.check_digest_auth_digest("examplerealm", PRECOMPUTED_HA1_SHA256,
-                 http_utils::sha256_digest_size, 300, 0,
-                 http_utils::digest_algorithm::SHA256);
+         auto result = req.check_digest_auth_digest("examplerealm", ha1_,
+                 ha1_size_, 300, 0, algo_);
          if (result == http_utils::digest_auth_result::NONCE_STALE) {
              return http_response::unauthorized(
                  digest_challenge{.realm        = "examplerealm",
-                                  .algorithm    = http_utils::digest_algorithm::SHA256,
+                                  .algorithm    = algo_,
                                   .signal_stale = true,
                                   .body         = "FAIL"});
          } else if (result != http_utils::digest_auth_result::OK) {
              return http_response::unauthorized(
                  digest_challenge{.realm     = "examplerealm",
-                                  .algorithm = http_utils::digest_algorithm::SHA256,
+                                  .algorithm = algo_,
                                   .body      = "FAIL"});
          }
          return http_response::string("SUCCESS");
      }
+ private:
+    http_utils::digest_algorithm algo_;
+    const unsigned char* ha1_;
+    std::size_t ha1_size_;
 };
 
 // TASK-079: two-round hand-rolled RFC 7616 §3.4 flow. Round 1 fetches the
@@ -328,24 +358,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth)
 #endif
 
     // Round 1: plain GET, capture the WWW-Authenticate challenge.
-    std::string body1;
-    std::string headers1;
-    long http_code1 = 0;  // NOLINT(runtime/int)
-    CURL *curl1 = curl_easy_init();
-    curl_easy_setopt(curl1, CURLOPT_URL, "localhost:" PORT_STRING "/base");
-    curl_easy_setopt(curl1, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl1, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl1, CURLOPT_WRITEDATA, &body1);
-    curl_easy_setopt(curl1, CURLOPT_HEADERFUNCTION, headerfunc);
-    curl_easy_setopt(curl1, CURLOPT_HEADERDATA, &headers1);
-    curl_easy_setopt(curl1, CURLOPT_TIMEOUT, 150L);
-    curl_easy_setopt(curl1, CURLOPT_CONNECTTIMEOUT, 150L);
-    curl_easy_setopt(curl1, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
-    curl_easy_setopt(curl1, CURLOPT_NOSIGNAL, 1);
-    LT_ASSERT_EQ(curl_easy_perform(curl1), 0);
-    curl_easy_getinfo(curl1, CURLINFO_RESPONSE_CODE, &http_code1);
+    auto [http_code1, headers1] = collect_challenge("localhost:" PORT_STRING "/base");
     LT_CHECK_EQ(http_code1, 401);
-    curl_easy_cleanup(curl1);
 
     auto challenge = httpserver_test::extract_digest_challenge(headers1);
     LT_ASSERT_EQ(challenge.has_value(), true);
@@ -357,30 +371,15 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth)
     std::string response = httpserver_test::compute_response_cleartext(
         *challenge, httpserver_test::digest_hash::md5,
         "GET", "/base", "myuser", "mypass", cnonce, "00000001");
-    std::string auth_header_value = httpserver_test::build_authorization_header(
-        *challenge, "myuser", "/base", cnonce, "00000001", response);
-    std::string auth_header = "Authorization: " + auth_header_value;
+    std::string auth_header = "Authorization: " +
+        httpserver_test::build_authorization_header(
+            *challenge, "myuser", "/base", cnonce, "00000001", response);
 
     std::string body2;
-    long http_code2 = 0;  // NOLINT(runtime/int)
-    CURL *curl2 = curl_easy_init();
-    struct curl_slist *hdrs = nullptr;
-    hdrs = curl_slist_append(hdrs, auth_header.c_str());
-    curl_easy_setopt(curl2, CURLOPT_URL, "localhost:" PORT_STRING "/base");
-    curl_easy_setopt(curl2, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl2, CURLOPT_HTTPHEADER, hdrs);
-    curl_easy_setopt(curl2, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl2, CURLOPT_WRITEDATA, &body2);
-    curl_easy_setopt(curl2, CURLOPT_TIMEOUT, 150L);
-    curl_easy_setopt(curl2, CURLOPT_CONNECTTIMEOUT, 150L);
-    curl_easy_setopt(curl2, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
-    curl_easy_setopt(curl2, CURLOPT_NOSIGNAL, 1);
-    LT_ASSERT_EQ(curl_easy_perform(curl2), 0);
-    curl_easy_getinfo(curl2, CURLINFO_RESPONSE_CODE, &http_code2);
+    long http_code2 = perform_with_auth_header(  // NOLINT(runtime/int)
+        "localhost:" PORT_STRING "/base", auth_header.c_str(), &body2);
     LT_CHECK_EQ(http_code2, 200);
     LT_CHECK_EQ(body2, std::string("SUCCESS"));
-    curl_easy_cleanup(curl2);
-    curl_slist_free_all(hdrs);
 
     ws.stop();
 LT_END_AUTO_TEST(digest_auth)
@@ -406,23 +405,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_wrong_pass)
 #endif
 
     // Round 1.
-    std::string body1, headers1;
-    long http_code1 = 0;  // NOLINT(runtime/int)
-    CURL *curl1 = curl_easy_init();
-    curl_easy_setopt(curl1, CURLOPT_URL, "localhost:" PORT_STRING "/base");
-    curl_easy_setopt(curl1, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl1, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl1, CURLOPT_WRITEDATA, &body1);
-    curl_easy_setopt(curl1, CURLOPT_HEADERFUNCTION, headerfunc);
-    curl_easy_setopt(curl1, CURLOPT_HEADERDATA, &headers1);
-    curl_easy_setopt(curl1, CURLOPT_TIMEOUT, 150L);
-    curl_easy_setopt(curl1, CURLOPT_CONNECTTIMEOUT, 150L);
-    curl_easy_setopt(curl1, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
-    curl_easy_setopt(curl1, CURLOPT_NOSIGNAL, 1);
-    LT_ASSERT_EQ(curl_easy_perform(curl1), 0);
-    curl_easy_getinfo(curl1, CURLINFO_RESPONSE_CODE, &http_code1);
+    auto [http_code1, headers1] = collect_challenge("localhost:" PORT_STRING "/base");
     LT_CHECK_EQ(http_code1, 401);
-    curl_easy_cleanup(curl1);
 
     auto challenge = httpserver_test::extract_digest_challenge(headers1);
     LT_ASSERT_EQ(challenge.has_value(), true);
@@ -437,28 +421,13 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_wrong_pass)
             *challenge, "myuser", "/base", cnonce, "00000001", response);
 
     std::string body2;
-    long http_code2 = 0;  // NOLINT(runtime/int)
-    CURL *curl2 = curl_easy_init();
-    struct curl_slist *hdrs = nullptr;
-    hdrs = curl_slist_append(hdrs, auth_header.c_str());
-    curl_easy_setopt(curl2, CURLOPT_URL, "localhost:" PORT_STRING "/base");
-    curl_easy_setopt(curl2, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl2, CURLOPT_HTTPHEADER, hdrs);
-    curl_easy_setopt(curl2, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl2, CURLOPT_WRITEDATA, &body2);
-    curl_easy_setopt(curl2, CURLOPT_TIMEOUT, 150L);
-    curl_easy_setopt(curl2, CURLOPT_CONNECTTIMEOUT, 150L);
-    curl_easy_setopt(curl2, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
-    curl_easy_setopt(curl2, CURLOPT_NOSIGNAL, 1);
-    LT_ASSERT_EQ(curl_easy_perform(curl2), 0);
-    curl_easy_getinfo(curl2, CURLINFO_RESPONSE_CODE, &http_code2);
     // The 401 here is the round-2 server-side rejection: check_digest_auth()
     // returned NOT_AUTHORIZED because the response token didn't match what
     // the server computed from the configured password "mypass".
+    long http_code2 = perform_with_auth_header(  // NOLINT(runtime/int)
+        "localhost:" PORT_STRING "/base", auth_header.c_str(), &body2);
     LT_CHECK_EQ(http_code2, 401);
     LT_CHECK_EQ(body2, std::string("FAIL"));
-    curl_easy_cleanup(curl2);
-    curl_slist_free_all(hdrs);
 
     ws.stop();
 LT_END_AUTO_TEST(digest_auth_wrong_pass)
@@ -473,7 +442,9 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5)
         .digest_auth_random("myrandom")
         .nonce_nc_size(300)};
 
-    auto digest_ha1 = std::make_shared<digest_ha1_md5_resource>();
+    auto digest_ha1 = std::make_shared<digest_ha1_resource>(
+        digest_ha1_resource::http_utils::digest_algorithm::MD5,
+        PRECOMPUTED_HA1_MD5, httpserver::http::http_utils::md5_digest_size);
     ws.register_path("base", digest_ha1);
     ws.start(false);
 
@@ -484,23 +455,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5)
 #endif
 
     // Round 1.
-    std::string body1, headers1;
-    long http_code1 = 0;  // NOLINT(runtime/int)
-    CURL *curl1 = curl_easy_init();
-    curl_easy_setopt(curl1, CURLOPT_URL, "localhost:" PORT_STRING "/base");
-    curl_easy_setopt(curl1, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl1, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl1, CURLOPT_WRITEDATA, &body1);
-    curl_easy_setopt(curl1, CURLOPT_HEADERFUNCTION, headerfunc);
-    curl_easy_setopt(curl1, CURLOPT_HEADERDATA, &headers1);
-    curl_easy_setopt(curl1, CURLOPT_TIMEOUT, 150L);
-    curl_easy_setopt(curl1, CURLOPT_CONNECTTIMEOUT, 150L);
-    curl_easy_setopt(curl1, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
-    curl_easy_setopt(curl1, CURLOPT_NOSIGNAL, 1);
-    LT_ASSERT_EQ(curl_easy_perform(curl1), 0);
-    curl_easy_getinfo(curl1, CURLINFO_RESPONSE_CODE, &http_code1);
+    auto [http_code1, headers1] = collect_challenge("localhost:" PORT_STRING "/base");
     LT_CHECK_EQ(http_code1, 401);
-    curl_easy_cleanup(curl1);
 
     auto challenge = httpserver_test::extract_digest_challenge(headers1);
     LT_ASSERT_EQ(challenge.has_value(), true);
@@ -517,25 +473,10 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5)
             *challenge, "myuser", "/base", cnonce, "00000001", response);
 
     std::string body2;
-    long http_code2 = 0;  // NOLINT(runtime/int)
-    CURL *curl2 = curl_easy_init();
-    struct curl_slist *hdrs = nullptr;
-    hdrs = curl_slist_append(hdrs, auth_header.c_str());
-    curl_easy_setopt(curl2, CURLOPT_URL, "localhost:" PORT_STRING "/base");
-    curl_easy_setopt(curl2, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl2, CURLOPT_HTTPHEADER, hdrs);
-    curl_easy_setopt(curl2, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl2, CURLOPT_WRITEDATA, &body2);
-    curl_easy_setopt(curl2, CURLOPT_TIMEOUT, 150L);
-    curl_easy_setopt(curl2, CURLOPT_CONNECTTIMEOUT, 150L);
-    curl_easy_setopt(curl2, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
-    curl_easy_setopt(curl2, CURLOPT_NOSIGNAL, 1);
-    LT_ASSERT_EQ(curl_easy_perform(curl2), 0);
-    curl_easy_getinfo(curl2, CURLINFO_RESPONSE_CODE, &http_code2);
+    long http_code2 = perform_with_auth_header(  // NOLINT(runtime/int)
+        "localhost:" PORT_STRING "/base", auth_header.c_str(), &body2);
     LT_CHECK_EQ(http_code2, 200);
     LT_CHECK_EQ(body2, std::string("SUCCESS"));
-    curl_easy_cleanup(curl2);
-    curl_slist_free_all(hdrs);
 
     ws.stop();
 LT_END_AUTO_TEST(digest_auth_with_ha1_md5)
@@ -550,7 +491,9 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5_wrong_pass)
         .digest_auth_random("myrandom")
         .nonce_nc_size(300)};
 
-    auto digest_ha1 = std::make_shared<digest_ha1_md5_resource>();
+    auto digest_ha1 = std::make_shared<digest_ha1_resource>(
+        digest_ha1_resource::http_utils::digest_algorithm::MD5,
+        PRECOMPUTED_HA1_MD5, httpserver::http::http_utils::md5_digest_size);
     ws.register_path("base", digest_ha1);
     ws.start(false);
 
@@ -560,23 +503,9 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5_wrong_pass)
     curl_global_init(CURL_GLOBAL_ALL);
 #endif
 
-    std::string body1, headers1;
-    long http_code1 = 0;  // NOLINT(runtime/int)
-    CURL *curl1 = curl_easy_init();
-    curl_easy_setopt(curl1, CURLOPT_URL, "localhost:" PORT_STRING "/base");
-    curl_easy_setopt(curl1, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl1, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl1, CURLOPT_WRITEDATA, &body1);
-    curl_easy_setopt(curl1, CURLOPT_HEADERFUNCTION, headerfunc);
-    curl_easy_setopt(curl1, CURLOPT_HEADERDATA, &headers1);
-    curl_easy_setopt(curl1, CURLOPT_TIMEOUT, 150L);
-    curl_easy_setopt(curl1, CURLOPT_CONNECTTIMEOUT, 150L);
-    curl_easy_setopt(curl1, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
-    curl_easy_setopt(curl1, CURLOPT_NOSIGNAL, 1);
-    LT_ASSERT_EQ(curl_easy_perform(curl1), 0);
-    curl_easy_getinfo(curl1, CURLINFO_RESPONSE_CODE, &http_code1);
+    // Round 1.
+    auto [http_code1, headers1] = collect_challenge("localhost:" PORT_STRING "/base");
     LT_CHECK_EQ(http_code1, 401);
-    curl_easy_cleanup(curl1);
 
     auto challenge = httpserver_test::extract_digest_challenge(headers1);
     LT_ASSERT_EQ(challenge.has_value(), true);
@@ -594,25 +523,10 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5_wrong_pass)
             *challenge, "myuser", "/base", cnonce, "00000001", response);
 
     std::string body2;
-    long http_code2 = 0;  // NOLINT(runtime/int)
-    CURL *curl2 = curl_easy_init();
-    struct curl_slist *hdrs = nullptr;
-    hdrs = curl_slist_append(hdrs, auth_header.c_str());
-    curl_easy_setopt(curl2, CURLOPT_URL, "localhost:" PORT_STRING "/base");
-    curl_easy_setopt(curl2, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl2, CURLOPT_HTTPHEADER, hdrs);
-    curl_easy_setopt(curl2, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl2, CURLOPT_WRITEDATA, &body2);
-    curl_easy_setopt(curl2, CURLOPT_TIMEOUT, 150L);
-    curl_easy_setopt(curl2, CURLOPT_CONNECTTIMEOUT, 150L);
-    curl_easy_setopt(curl2, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
-    curl_easy_setopt(curl2, CURLOPT_NOSIGNAL, 1);
-    LT_ASSERT_EQ(curl_easy_perform(curl2), 0);
-    curl_easy_getinfo(curl2, CURLINFO_RESPONSE_CODE, &http_code2);
+    long http_code2 = perform_with_auth_header(  // NOLINT(runtime/int)
+        "localhost:" PORT_STRING "/base", auth_header.c_str(), &body2);
     LT_CHECK_EQ(http_code2, 401);
     LT_CHECK_EQ(body2, std::string("FAIL"));
-    curl_easy_cleanup(curl2);
-    curl_slist_free_all(hdrs);
 
     ws.stop();
 LT_END_AUTO_TEST(digest_auth_with_ha1_md5_wrong_pass)
@@ -626,7 +540,9 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256)
         .digest_auth_random("myrandom")
         .nonce_nc_size(300)};
 
-    auto digest_ha1 = std::make_shared<digest_ha1_sha256_resource>();
+    auto digest_ha1 = std::make_shared<digest_ha1_resource>(
+        digest_ha1_resource::http_utils::digest_algorithm::SHA256,
+        PRECOMPUTED_HA1_SHA256, httpserver::http::http_utils::sha256_digest_size);
     ws.register_path("base", digest_ha1);
     ws.start(false);
 
@@ -636,23 +552,9 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256)
     curl_global_init(CURL_GLOBAL_ALL);
 #endif
 
-    std::string body1, headers1;
-    long http_code1 = 0;  // NOLINT(runtime/int)
-    CURL *curl1 = curl_easy_init();
-    curl_easy_setopt(curl1, CURLOPT_URL, "localhost:" PORT_STRING "/base");
-    curl_easy_setopt(curl1, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl1, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl1, CURLOPT_WRITEDATA, &body1);
-    curl_easy_setopt(curl1, CURLOPT_HEADERFUNCTION, headerfunc);
-    curl_easy_setopt(curl1, CURLOPT_HEADERDATA, &headers1);
-    curl_easy_setopt(curl1, CURLOPT_TIMEOUT, 150L);
-    curl_easy_setopt(curl1, CURLOPT_CONNECTTIMEOUT, 150L);
-    curl_easy_setopt(curl1, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
-    curl_easy_setopt(curl1, CURLOPT_NOSIGNAL, 1);
-    LT_ASSERT_EQ(curl_easy_perform(curl1), 0);
-    curl_easy_getinfo(curl1, CURLINFO_RESPONSE_CODE, &http_code1);
+    // Round 1.
+    auto [http_code1, headers1] = collect_challenge("localhost:" PORT_STRING "/base");
     LT_CHECK_EQ(http_code1, 401);
-    curl_easy_cleanup(curl1);
 
     auto challenge = httpserver_test::extract_digest_challenge(headers1);
     LT_ASSERT_EQ(challenge.has_value(), true);
@@ -667,25 +569,10 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256)
             *challenge, "myuser", "/base", cnonce, "00000001", response);
 
     std::string body2;
-    long http_code2 = 0;  // NOLINT(runtime/int)
-    CURL *curl2 = curl_easy_init();
-    struct curl_slist *hdrs = nullptr;
-    hdrs = curl_slist_append(hdrs, auth_header.c_str());
-    curl_easy_setopt(curl2, CURLOPT_URL, "localhost:" PORT_STRING "/base");
-    curl_easy_setopt(curl2, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl2, CURLOPT_HTTPHEADER, hdrs);
-    curl_easy_setopt(curl2, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl2, CURLOPT_WRITEDATA, &body2);
-    curl_easy_setopt(curl2, CURLOPT_TIMEOUT, 150L);
-    curl_easy_setopt(curl2, CURLOPT_CONNECTTIMEOUT, 150L);
-    curl_easy_setopt(curl2, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
-    curl_easy_setopt(curl2, CURLOPT_NOSIGNAL, 1);
-    LT_ASSERT_EQ(curl_easy_perform(curl2), 0);
-    curl_easy_getinfo(curl2, CURLINFO_RESPONSE_CODE, &http_code2);
+    long http_code2 = perform_with_auth_header(  // NOLINT(runtime/int)
+        "localhost:" PORT_STRING "/base", auth_header.c_str(), &body2);
     LT_CHECK_EQ(http_code2, 200);
     LT_CHECK_EQ(body2, std::string("SUCCESS"));
-    curl_easy_cleanup(curl2);
-    curl_slist_free_all(hdrs);
 
     ws.stop();
 LT_END_AUTO_TEST(digest_auth_with_ha1_sha256)
@@ -697,7 +584,9 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256_wrong_pass)
         .digest_auth_random("myrandom")
         .nonce_nc_size(300)};
 
-    auto digest_ha1 = std::make_shared<digest_ha1_sha256_resource>();
+    auto digest_ha1 = std::make_shared<digest_ha1_resource>(
+        digest_ha1_resource::http_utils::digest_algorithm::SHA256,
+        PRECOMPUTED_HA1_SHA256, httpserver::http::http_utils::sha256_digest_size);
     ws.register_path("base", digest_ha1);
     ws.start(false);
 
@@ -707,23 +596,9 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256_wrong_pass)
     curl_global_init(CURL_GLOBAL_ALL);
 #endif
 
-    std::string body1, headers1;
-    long http_code1 = 0;  // NOLINT(runtime/int)
-    CURL *curl1 = curl_easy_init();
-    curl_easy_setopt(curl1, CURLOPT_URL, "localhost:" PORT_STRING "/base");
-    curl_easy_setopt(curl1, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl1, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl1, CURLOPT_WRITEDATA, &body1);
-    curl_easy_setopt(curl1, CURLOPT_HEADERFUNCTION, headerfunc);
-    curl_easy_setopt(curl1, CURLOPT_HEADERDATA, &headers1);
-    curl_easy_setopt(curl1, CURLOPT_TIMEOUT, 150L);
-    curl_easy_setopt(curl1, CURLOPT_CONNECTTIMEOUT, 150L);
-    curl_easy_setopt(curl1, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
-    curl_easy_setopt(curl1, CURLOPT_NOSIGNAL, 1);
-    LT_ASSERT_EQ(curl_easy_perform(curl1), 0);
-    curl_easy_getinfo(curl1, CURLINFO_RESPONSE_CODE, &http_code1);
+    // Round 1.
+    auto [http_code1, headers1] = collect_challenge("localhost:" PORT_STRING "/base");
     LT_CHECK_EQ(http_code1, 401);
-    curl_easy_cleanup(curl1);
 
     auto challenge = httpserver_test::extract_digest_challenge(headers1);
     LT_ASSERT_EQ(challenge.has_value(), true);
@@ -740,25 +615,10 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256_wrong_pass)
             *challenge, "myuser", "/base", cnonce, "00000001", response);
 
     std::string body2;
-    long http_code2 = 0;  // NOLINT(runtime/int)
-    CURL *curl2 = curl_easy_init();
-    struct curl_slist *hdrs = nullptr;
-    hdrs = curl_slist_append(hdrs, auth_header.c_str());
-    curl_easy_setopt(curl2, CURLOPT_URL, "localhost:" PORT_STRING "/base");
-    curl_easy_setopt(curl2, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl2, CURLOPT_HTTPHEADER, hdrs);
-    curl_easy_setopt(curl2, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl2, CURLOPT_WRITEDATA, &body2);
-    curl_easy_setopt(curl2, CURLOPT_TIMEOUT, 150L);
-    curl_easy_setopt(curl2, CURLOPT_CONNECTTIMEOUT, 150L);
-    curl_easy_setopt(curl2, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
-    curl_easy_setopt(curl2, CURLOPT_NOSIGNAL, 1);
-    LT_ASSERT_EQ(curl_easy_perform(curl2), 0);
-    curl_easy_getinfo(curl2, CURLINFO_RESPONSE_CODE, &http_code2);
+    long http_code2 = perform_with_auth_header(  // NOLINT(runtime/int)
+        "localhost:" PORT_STRING "/base", auth_header.c_str(), &body2);
     LT_CHECK_EQ(http_code2, 401);
     LT_CHECK_EQ(body2, std::string("FAIL"));
-    curl_easy_cleanup(curl2);
-    curl_slist_free_all(hdrs);
 
     ws.stop();
 LT_END_AUTO_TEST(digest_auth_with_ha1_sha256_wrong_pass)
@@ -854,23 +714,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_user_cache_with_auth)
     curl_global_init(CURL_GLOBAL_ALL);
 
     // Round 1 -- collect the challenge.
-    std::string body1, headers1;
-    long http_code1 = 0;  // NOLINT(runtime/int)
-    CURL *curl1 = curl_easy_init();
-    curl_easy_setopt(curl1, CURLOPT_URL, "localhost:" PORT_STRING "/cache_test");
-    curl_easy_setopt(curl1, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl1, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl1, CURLOPT_WRITEDATA, &body1);
-    curl_easy_setopt(curl1, CURLOPT_HEADERFUNCTION, headerfunc);
-    curl_easy_setopt(curl1, CURLOPT_HEADERDATA, &headers1);
-    curl_easy_setopt(curl1, CURLOPT_TIMEOUT, 150L);
-    curl_easy_setopt(curl1, CURLOPT_CONNECTTIMEOUT, 150L);
-    curl_easy_setopt(curl1, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
-    curl_easy_setopt(curl1, CURLOPT_NOSIGNAL, 1);
-    LT_ASSERT_EQ(curl_easy_perform(curl1), 0);
-    curl_easy_getinfo(curl1, CURLINFO_RESPONSE_CODE, &http_code1);
+    auto [http_code1, headers1] = collect_challenge("localhost:" PORT_STRING "/cache_test");
     LT_CHECK_EQ(http_code1, 401);
-    curl_easy_cleanup(curl1);
 
     auto challenge = httpserver_test::extract_digest_challenge(headers1);
     LT_ASSERT_EQ(challenge.has_value(), true);
@@ -885,25 +730,10 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_user_cache_with_auth)
             *challenge, "testuser", "/cache_test", cnonce, "00000001", response);
 
     std::string body2;
-    long http_code2 = 0;  // NOLINT(runtime/int)
-    CURL *curl2 = curl_easy_init();
-    struct curl_slist *hdrs = nullptr;
-    hdrs = curl_slist_append(hdrs, auth_header.c_str());
-    curl_easy_setopt(curl2, CURLOPT_URL, "localhost:" PORT_STRING "/cache_test");
-    curl_easy_setopt(curl2, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl2, CURLOPT_HTTPHEADER, hdrs);
-    curl_easy_setopt(curl2, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl2, CURLOPT_WRITEDATA, &body2);
-    curl_easy_setopt(curl2, CURLOPT_TIMEOUT, 150L);
-    curl_easy_setopt(curl2, CURLOPT_CONNECTTIMEOUT, 150L);
-    curl_easy_setopt(curl2, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
-    curl_easy_setopt(curl2, CURLOPT_NOSIGNAL, 1);
-    LT_ASSERT_EQ(curl_easy_perform(curl2), 0);
-    curl_easy_getinfo(curl2, CURLINFO_RESPONSE_CODE, &http_code2);
+    long http_code2 = perform_with_auth_header(  // NOLINT(runtime/int)
+        "localhost:" PORT_STRING "/cache_test", auth_header.c_str(), &body2);
     LT_CHECK_EQ(http_code2, 200);
     LT_CHECK_EQ(body2, std::string("USER:testuser"));
-    curl_easy_cleanup(curl2);
-    curl_slist_free_all(hdrs);
 
     ws.stop();
 LT_END_AUTO_TEST(digest_user_cache_with_auth)

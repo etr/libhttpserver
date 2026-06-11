@@ -13,10 +13,10 @@ machine isn't driven. They are retained as static-challenge pins. Convert them
 into real two-round flows once TASK-062 lands the RFC-7616-compliant challenge.
 
 **Action Items:**
-- [ ] Build a small helper in the test harness that parses a `WWW-Authenticate: Digest …` response into a structured challenge (nonce, opaque, algorithm, qop), computes the client-side response per RFC 7616 §3.4, and issues the second request.
-- [ ] Convert each of the six tests to a two-round shape: first request → `401` with challenge → compute response → second request → expected status (`200` for valid creds, `401`/`403` for wrong creds).
-- [ ] Cover both `MD5` and `SHA-256` algorithms in matched pairs.
-- [ ] Replace the existing static-challenge assertions with end-to-end behaviour pins.
+- [x] Build a small helper in the test harness that parses a `WWW-Authenticate: Digest …` response into a structured challenge (nonce, opaque, algorithm, qop), computes the client-side response per RFC 7616 §3.4, and issues the second request.
+- [x] Convert each of the six tests to a two-round shape: first request → `401` with challenge → compute response → second request → expected status (`200` for valid creds, `401`/`403` for wrong creds).
+- [x] Cover both `MD5` and `SHA-256` algorithms in matched pairs.
+- [x] Replace the existing static-challenge assertions with end-to-end behaviour pins.
 
 **Dependencies:**
 - Blocked by: TASK-062 (RFC-7616 challenge factory)
@@ -32,4 +32,4 @@ into real two-round flows once TASK-062 lands the RFC-7616-compliant challenge.
 **Related Requirements:** PRD-RSP-REQ-005 (`unauthorized` factory completeness)
 **Related Decisions:** None new (RFC 7616)
 
-**Status:** In Progress
+**Status:** Done

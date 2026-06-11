@@ -43,7 +43,7 @@ TASK-093).
 | TASK-076 | Replace tautological-pass blocks in TLS test lanes | HIGH | M | Done |
 | TASK-077 | Restore Windows / Darwin coverage in skipped test suites | HIGH | L | Done |
 | TASK-078 | Resolve commented-out CONNECT-method test bodies | HIGH | S | Done |
-| TASK-079 | Drive nonce/opaque state machine in v2 digest-auth integ tests | MED | M | In Progress |
+| TASK-079 | Drive nonce/opaque state machine in v2 digest-auth integ tests | MED | M | Done |
 | TASK-080 | Tighten threadsafety_stress latency gate back from 100× to 10× | MED | M | Backlog |
 | TASK-081 | Fill empty-on-correct-build unit suites and re-enable pthread leak detector | MED | M | Backlog |
 | TASK-082 | Tighten static-size bounds in `http_resource_test` and `webserver_pimpl_test` | MED | S | Backlog |

@@ -219,6 +219,25 @@ LT_BEGIN_AUTO_TEST(digest_client_self_test_suite, ha1_path_matches_cleartext_pat
     LT_CHECK_EQ(cleartext_response, ha1_response);
 LT_END_AUTO_TEST(ha1_path_matches_cleartext_path)
 
+// make_cnonce must produce a 32-hex-char string (16 bytes of random data
+// encoded as full hex pairs, not nibble-only encoding) so that every bit of
+// each source byte contributes to the output. The output must consist solely
+// of lowercase hex characters [0-9a-f].
+LT_BEGIN_AUTO_TEST(digest_client_self_test_suite, make_cnonce_produces_valid_hex)
+    std::string cnonce = httpserver_test::make_cnonce();
+    // A properly-encoded 16-byte random token is exactly 32 hex characters.
+    LT_CHECK_EQ(cnonce.size(), std::size_t(32));
+    // Every character must be a lowercase hex digit.
+    bool all_hex = true;
+    for (char c : cnonce) {
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) {
+            all_hex = false;
+            break;
+        }
+    }
+    LT_CHECK_EQ(all_hex, true);
+LT_END_AUTO_TEST(make_cnonce_produces_valid_hex)
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()
