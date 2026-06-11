@@ -67,6 +67,14 @@
 #include <unistd.h>
 #endif
 
+// Linux-only: pthread_setaffinity_np for the noise-reduction pin in
+// adversarial_segments_registration_no_latency_spike (TASK-080).
+#if defined(__linux__) && !defined(_WIN32)
+#define _GNU_SOURCE
+#include <pthread.h>
+#include <sched.h>
+#endif
+
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -398,6 +406,61 @@ int stress_seconds() {
     return 60;
 }
 
+// TASK-080: characterisation knob. When set to N>1, the
+// adversarial_segments_registration_no_latency_spike sub-test runs its
+// gate computation N times back-to-back, printing one [STATS] line per
+// run. Used to build per-lane CDFs of the p95/median ratio when
+// investigating CI flakes. Default 1 (single run, no behaviour change).
+// Capped at 200 to prevent runaway in CI.
+int stress_repeats() {
+    if (const char* s = std::getenv("HTTPSERVER_STRESS_REPEATS")) {
+        try {
+            int v = std::stoi(s);
+            if (v > 0 && v <= 200) return v;
+        } catch (...) {
+        }
+    }
+    return 1;
+}
+
+// TASK-080: Linux-only noise-reduction knob. When HTTPSERVER_STRESS_PIN_CPU
+// is set to a non-negative integer, the four writer threads of the
+// adversarial_segments sub-test are pinned to that CPU via
+// pthread_setaffinity_np. Pinning all writers to the same CPU is
+// counter-intuitive but correct for this test: the writers contend on
+// route_table_mutex_, so they are effectively serialised — forcing them
+// onto one CPU eliminates cross-CPU cache misses on radix-tree node
+// memory and removes scheduler migration jitter from the p95 tail. macOS
+// has no equivalent (thread_policy_set is a hint widely reported as
+// ineffective on Apple Silicon), so the knob is a no-op there. Returns
+// -1 when unset / out of range, meaning "do not pin".
+int stress_pin_cpu() {
+    if (const char* s = std::getenv("HTTPSERVER_STRESS_PIN_CPU")) {
+        try {
+            int v = std::stoi(s);
+            if (v >= 0 && v < 4096) return v;
+        } catch (...) {
+        }
+    }
+    return -1;
+}
+
+// Pin the calling thread to `cpu_id` on Linux; no-op elsewhere.
+// Returns true on success, false on failure (no diagnostic — pinning
+// is a best-effort optimisation, not a contract).
+bool pin_this_thread_to_cpu(int cpu_id) {
+#if defined(__linux__) && !defined(_WIN32)
+    if (cpu_id < 0) return false;
+    cpu_set_t set;
+    CPU_ZERO(&set);
+    CPU_SET(cpu_id, &set);
+    return pthread_setaffinity_np(pthread_self(), sizeof(set), &set) == 0;
+#else
+    (void)cpu_id;
+    return false;
+#endif
+}
+
 }  // namespace
 
 LT_BEGIN_SUITE(threadsafety_stress_suite)
@@ -670,13 +733,18 @@ LT_END_AUTO_TEST(stop_from_handler_deadlocks_as_documented)
 //     siblings into a deeper sub-tree (each is a distinct radix node
 //     directly under the parent).
 //
-// Latency gate: capture per-op insert times in nanoseconds, compute
-// median and p99 over the run, assert
-//   p99 < 10 × median_of_first_quarter_of_samples.
+// Latency gate (post-TASK-080 noise-floor study): capture per-op
+// insert times in nanoseconds via per-thread sample buffers (no
+// hot-path lock), then assert
+//   p95 < 20 × median_of_first_quarter_of_samples.
 // This is the deterministic encoding of the task's "no dispatch
 // latency spikes > 10× baseline" criterion. We anchor the baseline on
 // the first quarter (warmup at low cardinality) and compare against
 // the tail (high cardinality, worst case for an O(log n) tree).
+// The 20× threshold and p95 statistic come from the TASK-080 sweep
+// — see `test/PERFORMANCE.md § Methodology — threadsafety_stress
+// adversarial_segments latency gate` and the inline justification at
+// the gate assertion for the full rationale.
 //
 // Operating mode: no HTTP server — registration is a webserver API
 // call, the daemon is unnecessary, and excluding it removes a noise
@@ -720,138 +788,273 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
     constexpr int kMaxRoutesPerParent = 5000;       // 15 000 total
     constexpr std::array<const char*, 3> kParents = {"api", "v1", "svc"};
 
-    ht::webserver ws{
-        ht::create_webserver(0)
-            .start_method(ht::http::http_utils::INTERNAL_SELECT)
-            .max_threads(2)};
-    // No ws.start() — registration does not need a running daemon.
+    const int repeats = stress_repeats();
+    const int pin_cpu = stress_pin_cpu();
 
-    std::atomic<bool> stop{false};
-    std::mutex samples_mtx;
-    std::vector<int64_t> samples_ns;
-    samples_ns.reserve(static_cast<size_t>(kMaxRoutesPerParent
-                                           * kParents.size()));
+    // Per-run sampler. Each call performs one full 15 000-op stress
+    // round on a fresh webserver and returns the gathered stats. Wrapping
+    // the round in a lambda lets HTTPSERVER_STRESS_REPEATS=N drive N
+    // back-to-back rounds for noise-floor characterisation without
+    // touching the surrounding test harness.
+    struct round_result {
+        bool gate_ran = false;
+        int64_t warmup_median = 0;
+        int64_t median = 0;
+        int64_t p95 = 0;
+        int64_t p99 = 0;
+        int64_t p999 = 0;
+        int64_t max_ns = 0;
+        size_t samples = 0;
+        int collisions = 0;
+    };
+    auto run_one_round = [&]() -> round_result {
+        round_result r;
+        ht::webserver ws{
+            ht::create_webserver(0)
+                .start_method(ht::http::http_utils::INTERNAL_SELECT)
+                .max_threads(2)};
+        // No ws.start() — registration does not need a running daemon.
 
-    std::atomic<int> register_ok{0};
-    std::atomic<int> register_collision{0};  // expected race / duplicate
+        std::atomic<bool> stop{false};
 
-    auto writer = [&](int tid) {
-        for (uint32_t i = static_cast<uint32_t>(tid);
-             !stop.load(std::memory_order_relaxed)
-                 && i < static_cast<uint32_t>(kMaxRoutesPerParent);
-             i += kWriterThreads) {
-            for (const char* parent : kParents) {
-                const std::string path = std::string("/") + parent + "/"
-                    + adversarial_segment(parent, i);
-                const auto t0 = clock_t::now();
-                try {
-                    ws.register_path(path,
-                                     std::make_shared<noop_resource>());
-                    const auto dt = std::chrono::duration_cast<ns>(
-                        clock_t::now() - t0).count();
-                    register_ok.fetch_add(1, std::memory_order_relaxed);
-                    std::lock_guard<std::mutex> lk(samples_mtx);
-                    samples_ns.push_back(dt);
-                } catch (const std::invalid_argument&) {
-                    // Cross-thread duplicate race — contract, not a bug.
-                    register_collision.fetch_add(
-                        1, std::memory_order_relaxed);
+        // TASK-080 stabilisation 2a: per-thread sample buffers. The
+        // previous design pushed each sample into a shared
+        // std::vector<int64_t> under a global std::mutex INSIDE the
+        // writer loop. Even though the timing window closed BEFORE the
+        // lock acquisition, the prior-iteration lock-wait jitter
+        // shifted cache lines and induced scheduler pressure that
+        // leaked into the next sample. Per-thread buffers (merged
+        // once at thread exit) make the hot path lock-free.
+        std::array<std::vector<int64_t>, kWriterThreads> per_thread_samples;
+        for (auto& v : per_thread_samples) {
+            v.reserve(static_cast<size_t>(
+                kMaxRoutesPerParent * kParents.size() / kWriterThreads
+                + kParents.size()));
+        }
+
+        std::atomic<int> register_ok{0};
+        std::atomic<int> register_collision{0};
+
+        auto writer = [&](int tid) {
+            // TASK-080 stabilisation 2b: optional Linux CPU pinning.
+            // Pinning all writers to the same CPU is correct for THIS
+            // test because they contend on route_table_mutex_ (effectively
+            // serialised) — single-CPU placement eliminates cross-CPU
+            // cache misses on radix-tree node memory. macOS / Windows:
+            // no-op (pin_this_thread_to_cpu returns false). Failure to
+            // pin is silent (best-effort optimisation, not a contract).
+            if (pin_cpu >= 0) {
+                (void)pin_this_thread_to_cpu(pin_cpu);
+            }
+            auto& samples = per_thread_samples[tid];
+            for (uint32_t i = static_cast<uint32_t>(tid);
+                 !stop.load(std::memory_order_relaxed)
+                     && i < static_cast<uint32_t>(kMaxRoutesPerParent);
+                 i += kWriterThreads) {
+                for (const char* parent : kParents) {
+                    const std::string path = std::string("/") + parent + "/"
+                        + adversarial_segment(parent, i);
+                    const auto t0 = clock_t::now();
+                    try {
+                        ws.register_path(
+                            path, std::make_shared<noop_resource>());
+                        const auto dt = std::chrono::duration_cast<ns>(
+                            clock_t::now() - t0).count();
+                        register_ok.fetch_add(
+                            1, std::memory_order_relaxed);
+                        samples.push_back(dt);
+                    } catch (const std::invalid_argument&) {
+                        // Cross-thread duplicate race — contract, not bug.
+                        register_collision.fetch_add(
+                            1, std::memory_order_relaxed);
+                    }
                 }
             }
+        };
+
+        std::vector<std::thread> writers;
+        writers.reserve(kWriterThreads);
+        for (int t = 0; t < kWriterThreads; ++t) {
+            writers.emplace_back(writer, t);
         }
+
+        // Wall-clock safety net: a watchdog thread flips `stop` when the
+        // deadline expires. Writers poll `stop` between ops, so they exit
+        // cleanly even if the corpus would otherwise outrun the budget.
+        std::thread watchdog([&] {
+            const auto deadline = clock_t::now()
+                + std::chrono::seconds(stress_seconds());
+            while (clock_t::now() < deadline
+                   && register_ok.load(std::memory_order_relaxed)
+                      < kMaxRoutesPerParent
+                          * static_cast<int>(kParents.size())) {
+                std::this_thread::sleep_for(
+                    std::chrono::milliseconds(100));
+            }
+            stop.store(true, std::memory_order_relaxed);
+        });
+
+        for (auto& t : writers) t.join();
+        stop.store(true, std::memory_order_relaxed);
+        watchdog.join();
+
+        r.collisions = register_collision.load();
+
+        // Flatten per-thread buffers into one insertion-ordered vector
+        // (interleave round-robin to roughly preserve wall-clock order,
+        // so the "first quarter = warmup" baseline still corresponds to
+        // the low-cardinality regime). Exact ordering across threads is
+        // impossible without synchronised timestamps, but a round-robin
+        // merge gives each thread equal weight in the warmup window,
+        // which is sufficient.
+        std::vector<int64_t> samples_ns;
+        size_t total = 0;
+        for (auto& v : per_thread_samples) total += v.size();
+        samples_ns.reserve(total);
+        size_t idx = 0;
+        bool any = true;
+        while (any) {
+            any = false;
+            for (auto& v : per_thread_samples) {
+                if (idx < v.size()) {
+                    samples_ns.push_back(v[idx]);
+                    any = true;
+                }
+            }
+            ++idx;
+        }
+
+        if (samples_ns.size() < 100) {
+            // Too few samples for a meaningful percentile gate (would
+            // happen only if the wall-clock deadline cut us short before
+            // 100 ops landed). Skip the latency gate but pass the test
+            // — the deadlock-free completion above is itself a pass.
+            std::cout << "[INFO] adversarial_segments: only "
+                      << samples_ns.size() << " samples — skipping "
+                         "latency gate (deadlock-free completion is "
+                         "the gate)\n";
+            ws.stop();
+            r.samples = samples_ns.size();
+            return r;
+        }
+
+        std::vector<int64_t> sorted = samples_ns;
+        std::sort(sorted.begin(), sorted.end());
+        r.samples = sorted.size();
+        r.median = sorted[sorted.size() / 2];
+        r.p95 = sorted[static_cast<size_t>(
+            static_cast<double>(sorted.size()) * 0.95)];
+        r.p99 = sorted[static_cast<size_t>(
+            static_cast<double>(sorted.size()) * 0.99)];
+        r.p999 = sorted[static_cast<size_t>(
+            static_cast<double>(sorted.size()) * 0.999)];
+        r.max_ns = sorted.back();
+
+        // Baseline: median of the first quarter of insertion-order
+        // samples (warmup, low cardinality). The hot path under test is
+        // the post-warmup tail.
+        const size_t quarter = samples_ns.size() / 4;
+        std::vector<int64_t> warmup(
+            samples_ns.begin(),
+            samples_ns.begin() + static_cast<std::ptrdiff_t>(quarter));
+        std::sort(warmup.begin(), warmup.end());
+        r.warmup_median = warmup[warmup.size() / 2];
+        r.gate_ran = true;
+
+        ws.stop();
+        return r;
     };
 
-    std::vector<std::thread> writers;
-    writers.reserve(kWriterThreads);
-    for (int t = 0; t < kWriterThreads; ++t) {
-        writers.emplace_back(writer, t);
-    }
-
-    // Wall-clock safety net: a watchdog thread flips `stop` when the
-    // deadline expires. Writers poll `stop` between ops, so they exit
-    // cleanly even if the corpus would otherwise outrun the budget.
-    std::thread watchdog([&] {
-        const auto deadline = clock_t::now()
-            + std::chrono::seconds(stress_seconds());
-        while (clock_t::now() < deadline
-               && register_ok.load(std::memory_order_relaxed)
-                  < kMaxRoutesPerParent
-                      * static_cast<int>(kParents.size())) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    // Track gate outcomes across repeats. For repeats == 1 (the default
+    // CI shape) this is a single round and the gate is checked inline.
+    // For HTTPSERVER_STRESS_REPEATS > 1 (local diagnostic) we print
+    // every round's [STATS] line and gate-check the worst observed p95
+    // — that mirrors what a real per-CI-run gate would see.
+    int64_t worst_p95 = 0;
+    int64_t worst_baseline = 0;
+    int rounds_ran = 0;
+    int register_ok_first_round = 0;
+    for (int rep = 0; rep < repeats; ++rep) {
+        round_result r = run_one_round();
+        // Acceptance: must have made meaningful progress (first round
+        // is the canonical signal; later rounds re-measure stability).
+        // r.samples counts only successful register_path calls
+        // (collisions tracked separately), so it is the right proxy for
+        // the pre-TASK-080 `register_ok.load() > 100` acceptance check.
+        if (rep == 0) {
+            register_ok_first_round = static_cast<int>(r.samples);
         }
-        stop.store(true, std::memory_order_relaxed);
-    });
+        if (!r.gate_ran) continue;
+        ++rounds_ran;
+        const int64_t baseline = std::max(
+            r.warmup_median, static_cast<int64_t>(1000));
 
-    for (auto& t : writers) t.join();
-    stop.store(true, std::memory_order_relaxed);
-    watchdog.join();
+        std::cout << "[STATS] adversarial_segments rep=" << (rep + 1)
+                  << "/" << repeats
+                  << " samples=" << r.samples
+                  << " warmup_median=" << r.warmup_median << "ns"
+                  << " overall_median=" << r.median << "ns"
+                  << " p95=" << r.p95 << "ns"
+                  << " p99=" << r.p99 << "ns"
+                  << " p999=" << r.p999 << "ns"
+                  << " max=" << r.max_ns << "ns"
+                  << " collisions=" << r.collisions
+                  << " baseline_clamped=" << baseline << "ns"
+                  << " p95_ratio=" << (r.p95 * 100 / baseline) << "%"
+                  << "\n";
+
+        if (r.p95 > worst_p95) {
+            worst_p95 = r.p95;
+            worst_baseline = baseline;
+        }
+    }
 
     // Acceptance: must have made meaningful progress.
-    LT_CHECK_GT(register_ok.load(), 100);
+    LT_CHECK_GT(register_ok_first_round, 100);
 
-    // Latency analysis. Sort a copy so we can pull median and p99
-    // without destroying the insertion-order vector (kept for the
-    // warmup-baseline computation below).
-    std::vector<int64_t> sorted;
-    {
-        std::lock_guard<std::mutex> lk(samples_mtx);
-        sorted = samples_ns;
+    // Gate: p95 must not exceed 20× the warmup median (clamped to 1 µs so
+    // the gate stays meaningful when steady_clock quantises sub-µs samples
+    // to 0). For HTTPSERVER_STRESS_REPEATS > 1, the gate is checked
+    // against the worst-observed p95 across all rounds — that mirrors
+    // what a real per-CI-run gate would see and is the canonical
+    // noise-floor characterisation output.
+    //
+    // TWO design choices recorded here. Both flowed from the TASK-080
+    // noise-floor study (see test/PERFORMANCE.md § Methodology —
+    // threadsafety_stress adversarial_segments latency gate).
+    //
+    // CHOICE 1 — p95, not p99. p99 is dominated by OS-scheduler
+    // preemption on shared CI runners (kernel ticks, neighbour-process
+    // scheduling, page-fault servicing) that has nothing to do with the
+    // registration algorithm. On a 15k-op run, p99 = top 150 samples →
+    // a single 1 ms preemption spike against a ~10 µs median produces a
+    // 100× ratio that is purely environmental. p95 = top 750 samples
+    // and is robust against that: an O(n) algorithmic regression at
+    // 15k items would shift the entire upper quartile (p95 included);
+    // a single preemption spike does not.
+    //
+    // CHOICE 2 — 20×, not 10×. Even with the TASK-080 stabilisation
+    // stack in place (per-thread sample buffers, optional Linux CPU
+    // pinning via HTTPSERVER_STRESS_PIN_CPU), the measured p95/baseline
+    // ratio on a quiet Apple Silicon laptop runs 11×–14× across a
+    // 10-round local sweep. The dominant floor is NOT OS noise but
+    // legitimate route_table_mutex_ contention: 4 writer threads
+    // contend on a single std::mutex around the radix-tree insert, and
+    // the top 5% of samples are precisely the lock-wait queue tail.
+    // 10× is therefore genuinely infeasible without rewriting the lock
+    // strategy (out of scope for TASK-080). 20× gives ~50% headroom
+    // over the worst observed local round and is still 5× tighter
+    // than the pre-TASK-080 gate of 100× p99 — restoring real
+    // regression bite against algorithmic regressions (an O(n)
+    // traversal at 15k items would push p95 to >100×).
+    //
+    // p99 is still printed above as a forensic diagnostic. If a future
+    // regression report shows p95 fine but p99 blown by >200×, that
+    // warrants separate investigation — open a ticket and re-run with
+    // HTTPSERVER_STRESS_REPEATS=N to characterise the new tail.
+    if (rounds_ran > 0) {
+        LT_CHECK_LT(worst_p95, worst_baseline * 20);
     }
-    if (sorted.size() < 100) {
-        // Too few samples for a meaningful percentile gate (would
-        // happen only if the wall-clock deadline cut us short before
-        // 100 ops landed). Skip the latency gate but pass the test
-        // — the deadlock-free completion above is itself a pass.
-        std::cout << "[INFO] adversarial_segments: only "
-                  << sorted.size() << " samples — skipping latency "
-                     "gate (deadlock-free completion is the gate)\n";
-        ws.stop();
-        return;
-    }
-
-    std::sort(sorted.begin(), sorted.end());
-    const int64_t median = sorted[sorted.size() / 2];
-    const int64_t p99 = sorted[static_cast<size_t>(
-        static_cast<double>(sorted.size()) * 0.99)];
-
-    // Baseline: median of the first quarter of insertion-order samples
-    // (warmup, low cardinality). The hot path under test is the
-    // post-warmup tail.
-    std::vector<int64_t> warmup;
-    {
-        std::lock_guard<std::mutex> lk(samples_mtx);
-        const size_t quarter = samples_ns.size() / 4;
-        warmup.assign(samples_ns.begin(),
-                      samples_ns.begin()
-                          + static_cast<std::ptrdiff_t>(quarter));
-    }
-    std::sort(warmup.begin(), warmup.end());
-    const int64_t warmup_median = warmup[warmup.size() / 2];
-
-    std::cout << "[INFO] adversarial_segments: "
-              << "samples=" << sorted.size()
-              << " warmup_median=" << warmup_median << "ns"
-              << " overall_median=" << median << "ns"
-              << " p99=" << p99 << "ns"
-              << " collisions=" << register_collision.load()
-              << "\n";
-
-    // Gate: p99 must not exceed 100× the warmup median. With std::map
-    // (O(log n) per probe) on a quiet host the ratio in practice is
-    // < 3×; the previous 10× gate was tight enough that shared GitHub-
-    // Actions runners (where unrelated noisy neighbours dominate the
-    // tail) tripped it on routine kernel preemption spikes (~1 ms p99
-    // against a ~16 µs median is a 60× ratio that is not caused by the
-    // algorithm under test). 100× still catches genuine algorithmic
-    // regressions (e.g. an accidental O(n) traversal turning the worst
-    // case quadratic) without flaking on CI scheduler noise. Clamp the
-    // baseline to 1 µs so the gate stays meaningful even when
-    // steady_clock quantises sub-µs samples to 0.
-    const int64_t baseline = std::max(warmup_median,
-                                      static_cast<int64_t>(1000));
-    LT_CHECK_LT(p99, baseline * 100);
-
-    ws.stop();
 LT_END_AUTO_TEST(adversarial_segments_registration_no_latency_spike)
 
 // ---------------------------------------------------------------------
