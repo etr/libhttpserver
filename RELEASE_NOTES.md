@@ -80,6 +80,22 @@ v1.x is end-of-life on the day v2.0 ships.
   the legacy callable is no longer implicitly convertible to
   `auth_handler_ptr`. There is no runtime ABI surface to break — the
   overload was a header-only inline forwarder.
+- **`create_webserver::validator(...)` dispatch semantics — confirmed
+  never wired (TASK-078).** The `validator` builder method and the
+  `validator_ptr` callback typedef on `create_webserver` are retained
+  as inert v1 surface — the callback has not been invoked from the
+  dispatch path since commit `9163a4f` (Jan 2013, "Eliminated unescaper
+  and validator delegates"). v2 ships the surface unchanged for source
+  compatibility, but a configured validator callback is dead code. The
+  v2 replacement is `webserver::add_hook(hook_phase::request_received,
+  ...)` returning `hook_action::respond_with(http_response)` to reject
+  a request, or `hook_phase::accept_decision` for a connection-scoped
+  veto (see `specs/architecture/04-components/hooks.md`). The legacy
+  `validator_builder` integ test in `test/integ/basic.cpp` exercised
+  no validation behaviour (it only asserted the server booted with a
+  validator set) and has been removed; the equivalent compile-time
+  builder pin survives at
+  `test/unit/create_webserver_test.cpp::builder_validator`.
 - **v1 `registered_resources*` registration maps (internal).** No
   public-API change. Dispatch already routed through the v2 3-tier
   route table (`lookup_v2()`) after TASK-053; the residual

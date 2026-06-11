@@ -164,6 +164,28 @@ it at the head of `lookup_v2`, including cache keying. This brings v2
 in line with v1 semantics; the test
 `exact_path_normalization_aliases` pins it.
 
+### 6. CONNECT-method client-roundtrip integ test (TASK-078)
+
+`test/integ/basic.cpp` previously contained two `/* ... */`-commented
+CONNECT bodies inside `basic_suite::complete` and `basic_suite::only_render`
+that issued `curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "CONNECT")`
+through the high-level libcurl easy API. They were commented out in
+2017 (commit bd39cb4) because libcurl treats CONNECT as a tunnel-establishing
+verb and waits for the socket to be upgraded; `curl_easy_perform` then
+hangs against a plain HTTP server. The bodies have been deleted; there is
+no way to drive a CONNECT round-trip through `curl_easy_perform` and the
+high-level easy API has no other shape that produces a useful integ
+assertion against an HTTP server that is not also a proxy.
+
+Server-side CONNECT dispatch IS exercised: the method-to-render-fn table
+in `src/detail/webserver_request.cpp` (the `methods[]` array around line
+608) maps the `CONNECT` wire token to `http_resource::render_connect`,
+and `test/unit/http_resource_test.cpp::render_connect_returns_by_value`
+pins the public signature. The deleted integ blocks added no coverage
+beyond that.
+
+No port required; not a v1-only feature, but a v1-era libcurl misuse.
+
 ## How to extend
 
 When adding a new routing pattern to the public API:
