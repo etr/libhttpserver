@@ -32,4 +32,4 @@ into real two-round flows once TASK-062 lands the RFC-7616-compliant challenge.
 **Related Requirements:** PRD-RSP-REQ-005 (`unauthorized` factory completeness)
 **Related Decisions:** None new (RFC 7616)
 
-**Status:** Backlog
+**Status:** In Progress
