@@ -833,16 +833,6 @@ LT_BEGIN_AUTO_TEST(basic_suite, complete)
     LT_ASSERT_EQ(res, 0);
     curl_easy_cleanup(curl);
     }
-/*
-    {
-    CURL* curl = curl_easy_init();
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
-    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "CONNECT");
-    CURLcode res = curl_easy_perform(curl);
-    LT_ASSERT_EQ(res, 0);
-    curl_easy_cleanup(curl);
-    }
-*/
 
     {
     CURL* curl = curl_easy_init();
@@ -896,19 +886,6 @@ LT_BEGIN_AUTO_TEST(basic_suite, only_render)
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "OK");
     curl_easy_cleanup(curl);
-
-/*
-    s = "";
-    curl = curl_easy_init();
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
-    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "CONNECT");
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    res = curl_easy_perform(curl);
-    LT_ASSERT_EQ(res, 0);
-    LT_CHECK_EQ(s, "OK");
-    curl_easy_cleanup(curl);
-*/
 
     s = "";
     curl = curl_easy_init();
@@ -2906,39 +2883,6 @@ LT_BEGIN_AUTO_TEST(basic_suite, single_resource_mode)
 
     ws2.stop();
 LT_END_AUTO_TEST(single_resource_mode)
-
-// Test validator builder method (validator is stored but not currently called in webserver)
-bool test_validator_func(const std::string& url) {
-    return url.find("valid") != std::string::npos;
-}
-
-LT_BEGIN_AUTO_TEST(basic_suite, validator_builder)
-    // Test that the validator builder method works (for coverage of create_webserver.hpp)
-    webserver ws2{create_webserver(PORT + 72)
-        .validator(test_validator_func)};
-    auto resource = std::make_shared<ok_resource>();
-    ws2.register_path("test", resource);
-    ws2.start(false);
-
-    // Just verify the server works with a validator set
-    {
-        curl_global_init(CURL_GLOBAL_ALL);
-        string s;
-        CURL *curl = curl_easy_init();
-        CURLcode res;
-        std::string url = "http://localhost:" + std::to_string(PORT + 72) + "/test";
-        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-        curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-        res = curl_easy_perform(curl);
-        LT_ASSERT_EQ(res, 0);
-        LT_CHECK_EQ(s, "OK");
-        curl_easy_cleanup(curl);
-    }
-
-    ws2.stop();
-LT_END_AUTO_TEST(validator_builder)
 
 // Test resource with no render methods overridden (exercises empty_render path)
 // Note: empty_render returns string_response with code -1, which triggers internal error
