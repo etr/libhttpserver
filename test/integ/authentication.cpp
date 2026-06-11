@@ -38,31 +38,42 @@
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
 #include "./test_utils.hpp"
+#include "./digest_client.hpp"
 
 #define MY_OPAQUE "11733b200778ce33060f31c9af70a870ba96ddd4"
 
-// v2-digest tracking note (updated after TASK-062):
-// After TASK-062, digest_resource and the HA1 resources (digest_ha1_md5_resource,
-// digest_ha1_sha256_resource) all emit full RFC-7616 challenges via
-// http_response::unauthorized(digest_challenge{...}). The nonce/opaque
-// state machine is driven by MHD_queue_auth_required_response3, and the
-// following tests now complete the full digest handshake and assert 200 SUCCESS:
-//   - digest_auth, digest_auth_with_ha1_md5, digest_auth_with_ha1_sha256
+// v2-digest tracking note (updated after TASK-079):
 //
-// The following tests still assert the 401 FAIL contract (wrong credentials or
-// no auth provided -- the handshake completes but auth fails):
-//   - digest_auth_wrong_pass
-//   - digest_auth_with_ha1_md5_wrong_pass, *_sha256_wrong_pass
+// After TASK-062 the resources emit full RFC-7616 challenges via
+// http_response::unauthorized(digest_challenge{...}). After TASK-079 the
+// tests drive the nonce/opaque/qop state machine themselves rather than
+// delegating to libcurl's CURLAUTH_DIGEST automation, and every test below
+// performs an explicit two-round flow:
+//   round 1: plain GET, expect 401 + RFC 7616 §3.3 challenge
+//   round 2: GET with hand-built `Authorization: Digest …` header
+//
+// This pins behaviours that libcurl previously masked:
+//   - For *_wrong_pass: the 401 fires on the second request (not just on
+//     the initial challenge), proving check_digest_auth* rejected the
+//     response token rather than the wire being short-circuited earlier.
+//   - For *_ha1_*: the test signs with a precomputed HA1 directly and
+//     never sends cleartext over the wire. The server returns 200 only if
+//     it validates against the configured HA1 (not by re-deriving
+//     MD5/SHA-256 from a password it never received). The wrong-HA1
+//     negative variants strengthen the proof: signing with an HA1 derived
+//     from a *different* password produces 401, even though the server is
+//     configured with the original HA1.
+//   - digest_user_cache_with_auth now reaches the cache-hit code path
+//     (digest_user_cache_resource was migrated to digest_challenge in
+//     TASK-079 so the handshake can complete).
 //
 // Remaining gap (signal_stale re-challenge path):
 //   The NONCE_STALE branch inside digest_resource/digest_ha1_*_resource
 //   (signal_stale = true) cannot be reliably triggered in CI because MHD's
-//   nonce expiry requires a real time delay and concurrent replay requests.
-//   This gap is documented in TASK-062 test-quality-reviewer iter1-2; it will
-//   be covered when full nonce-expiry testing infrastructure lands.
-//
-// Also pending: digest_user_cache_with_auth exercises the cache-hit path only
-// once the digest handshake completes (see resource definition below).
+//   nonce expiry requires a real time delay and concurrent replay
+//   requests. This gap is documented in TASK-062 test-quality-reviewer
+//   iter1-2; it will be covered when full nonce-expiry testing
+//   infrastructure lands.
 
 using std::shared_ptr;
 using httpserver::webserver;
@@ -82,6 +93,14 @@ using httpserver::http_request;
 #define PORT_STRING STR(PORT)
 
 size_t writefunc(void *ptr, size_t size, size_t nmemb, std::string *s) {
+    s->append(reinterpret_cast<char*>(ptr), size*nmemb);
+    return size*nmemb;
+}
+
+// TASK-079: CURLOPT_HEADERFUNCTION-shaped sink so the test can capture the
+// raw `WWW-Authenticate` line from the round-1 401 response and feed it to
+// httpserver_test::extract_digest_challenge().
+size_t headerfunc(void *ptr, size_t size, size_t nmemb, std::string *s) {
     s->append(reinterpret_cast<char*>(ptr), size*nmemb);
     return size*nmemb;
 }
@@ -289,9 +308,10 @@ class digest_ha1_sha256_resource : public http_resource {
      }
 };
 
-// TASK-062: digest_resource uses http_response::unauthorized(digest_challenge{...})
-// which routes through MHD_queue_auth_required_response3 so curl --digest can
-// complete the full RFC-7616 nonce/opaque handshake and receive 200 SUCCESS.
+// TASK-079: two-round hand-rolled RFC 7616 §3.4 flow. Round 1 fetches the
+// challenge, the test parses it and computes the response client-side,
+// round 2 ships an explicit `Authorization: Digest …` header. Asserts the
+// full handshake terminates in 200 SUCCESS.
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth)
     webserver ws{create_webserver(PORT)
         .digest_auth_random("myrandom")
@@ -307,50 +327,69 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth)
     curl_global_init(CURL_GLOBAL_ALL);
 #endif
 
-    std::string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
-    long http_code = 0;  // NOLINT(runtime/int)
-    curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_DIGEST);
-#if defined(_WINDOWS)
-    curl_easy_setopt(curl, CURLOPT_USERPWD, "examplerealm/myuser:mypass");
-#else
-    curl_easy_setopt(curl, CURLOPT_USERPWD, "myuser:mypass");
-#endif
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 150L);
-    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 150L);
-    curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
-    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
-    res = curl_easy_perform(curl);
-    LT_ASSERT_EQ(res, 0);
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-    // TASK-062 contract: the server now emits a full RFC-7616 §3.3
-    // challenge with nonce/opaque/algorithm/qop via
-    // MHD_queue_auth_required_response3, so curl --digest can complete
-    // the handshake. Final response on round 2 is 200 SUCCESS.
-    LT_CHECK_EQ(http_code, 200);
-    LT_CHECK_EQ(s, "SUCCESS");
-    curl_easy_cleanup(curl);
+    // Round 1: plain GET, capture the WWW-Authenticate challenge.
+    std::string body1;
+    std::string headers1;
+    long http_code1 = 0;  // NOLINT(runtime/int)
+    CURL *curl1 = curl_easy_init();
+    curl_easy_setopt(curl1, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl1, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl1, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl1, CURLOPT_WRITEDATA, &body1);
+    curl_easy_setopt(curl1, CURLOPT_HEADERFUNCTION, headerfunc);
+    curl_easy_setopt(curl1, CURLOPT_HEADERDATA, &headers1);
+    curl_easy_setopt(curl1, CURLOPT_TIMEOUT, 150L);
+    curl_easy_setopt(curl1, CURLOPT_CONNECTTIMEOUT, 150L);
+    curl_easy_setopt(curl1, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
+    curl_easy_setopt(curl1, CURLOPT_NOSIGNAL, 1);
+    LT_ASSERT_EQ(curl_easy_perform(curl1), 0);
+    curl_easy_getinfo(curl1, CURLINFO_RESPONSE_CODE, &http_code1);
+    LT_CHECK_EQ(http_code1, 401);
+    curl_easy_cleanup(curl1);
+
+    auto challenge = httpserver_test::extract_digest_challenge(headers1);
+    LT_ASSERT_EQ(challenge.has_value(), true);
+    LT_CHECK_EQ(challenge->qop, std::string("auth"));
+    // digest_resource emits algorithm=MD5 implicitly (default).
+
+    // Round 2: hand-built Authorization header carrying our response.
+    std::string cnonce = httpserver_test::make_cnonce();
+    std::string response = httpserver_test::compute_response_cleartext(
+        *challenge, httpserver_test::digest_hash::md5,
+        "GET", "/base", "myuser", "mypass", cnonce, "00000001");
+    std::string auth_header_value = httpserver_test::build_authorization_header(
+        *challenge, "myuser", "/base", cnonce, "00000001", response);
+    std::string auth_header = "Authorization: " + auth_header_value;
+
+    std::string body2;
+    long http_code2 = 0;  // NOLINT(runtime/int)
+    CURL *curl2 = curl_easy_init();
+    struct curl_slist *hdrs = nullptr;
+    hdrs = curl_slist_append(hdrs, auth_header.c_str());
+    curl_easy_setopt(curl2, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl2, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl2, CURLOPT_HTTPHEADER, hdrs);
+    curl_easy_setopt(curl2, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl2, CURLOPT_WRITEDATA, &body2);
+    curl_easy_setopt(curl2, CURLOPT_TIMEOUT, 150L);
+    curl_easy_setopt(curl2, CURLOPT_CONNECTTIMEOUT, 150L);
+    curl_easy_setopt(curl2, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
+    curl_easy_setopt(curl2, CURLOPT_NOSIGNAL, 1);
+    LT_ASSERT_EQ(curl_easy_perform(curl2), 0);
+    curl_easy_getinfo(curl2, CURLINFO_RESPONSE_CODE, &http_code2);
+    LT_CHECK_EQ(http_code2, 200);
+    LT_CHECK_EQ(body2, std::string("SUCCESS"));
+    curl_easy_cleanup(curl2);
+    curl_slist_free_all(hdrs);
 
     ws.stop();
 LT_END_AUTO_TEST(digest_auth)
 
-// Wrong-password case: curl completes the nonce handshake but check_digest_auth()
-// returns NOT_AUTHORIZED, so the resource emits a new 401 challenge (body "FAIL").
-//
-// TODO(TASK-062 test-quality-reviewer iter1-2): The signal_stale=true re-challenge
-// branch in digest_resource::render_get (NONCE_STALE path) is not covered here.
-// Triggering NONCE_STALE requires sending a replayed/expired nonce. MHD's nonce
-// expiry (nonce_nc_size window) cannot be reliably exhausted in a single-threaded
-// CI test without real-time delays or replay injection. Once nonce-expiry
-// infrastructure is available, add a test that:
-//   (a) sends the correct credentials with a replayed/expired nonce,
-//   (b) asserts status 401 with WWW-Authenticate containing stale=true,
-//   (c) asserts body is "FAIL".
+// TASK-079: wrong-password variant. The 401 fires on round 2 (after the
+// client has computed a response with the wrong cleartext) -- under the
+// pre-TASK-079 libcurl-driven shape the round-1 challenge alone could
+// satisfy the body=="FAIL" assertion, but here we explicitly assert the
+// rejection happens after the full handshake completes.
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_wrong_pass)
     webserver ws{create_webserver(PORT)
         .digest_auth_random("myrandom")
@@ -366,39 +405,69 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_wrong_pass)
     curl_global_init(CURL_GLOBAL_ALL);
 #endif
 
-    std::string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
-    long http_code = 0;  // NOLINT(runtime/int)
-    curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_DIGEST);
-#if defined(_WINDOWS)
-    curl_easy_setopt(curl, CURLOPT_USERPWD, "examplerealm/myuser:wrongpass");
-#else
-    curl_easy_setopt(curl, CURLOPT_USERPWD, "myuser:wrongpass");
-#endif
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 150L);
-    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 150L);
-    curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
-    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
-    res = curl_easy_perform(curl);
-    LT_ASSERT_EQ(res, 0);
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-    // v2 contract: static 401 Digest challenge, no handshake completes.
-    LT_CHECK_EQ(http_code, 401);
-    LT_CHECK_EQ(s, "FAIL");
-    curl_easy_cleanup(curl);
+    // Round 1.
+    std::string body1, headers1;
+    long http_code1 = 0;  // NOLINT(runtime/int)
+    CURL *curl1 = curl_easy_init();
+    curl_easy_setopt(curl1, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl1, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl1, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl1, CURLOPT_WRITEDATA, &body1);
+    curl_easy_setopt(curl1, CURLOPT_HEADERFUNCTION, headerfunc);
+    curl_easy_setopt(curl1, CURLOPT_HEADERDATA, &headers1);
+    curl_easy_setopt(curl1, CURLOPT_TIMEOUT, 150L);
+    curl_easy_setopt(curl1, CURLOPT_CONNECTTIMEOUT, 150L);
+    curl_easy_setopt(curl1, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
+    curl_easy_setopt(curl1, CURLOPT_NOSIGNAL, 1);
+    LT_ASSERT_EQ(curl_easy_perform(curl1), 0);
+    curl_easy_getinfo(curl1, CURLINFO_RESPONSE_CODE, &http_code1);
+    LT_CHECK_EQ(http_code1, 401);
+    curl_easy_cleanup(curl1);
+
+    auto challenge = httpserver_test::extract_digest_challenge(headers1);
+    LT_ASSERT_EQ(challenge.has_value(), true);
+
+    // Round 2 -- sign with wrong password.
+    std::string cnonce = httpserver_test::make_cnonce();
+    std::string response = httpserver_test::compute_response_cleartext(
+        *challenge, httpserver_test::digest_hash::md5,
+        "GET", "/base", "myuser", "wrongpass", cnonce, "00000001");
+    std::string auth_header = "Authorization: " +
+        httpserver_test::build_authorization_header(
+            *challenge, "myuser", "/base", cnonce, "00000001", response);
+
+    std::string body2;
+    long http_code2 = 0;  // NOLINT(runtime/int)
+    CURL *curl2 = curl_easy_init();
+    struct curl_slist *hdrs = nullptr;
+    hdrs = curl_slist_append(hdrs, auth_header.c_str());
+    curl_easy_setopt(curl2, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl2, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl2, CURLOPT_HTTPHEADER, hdrs);
+    curl_easy_setopt(curl2, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl2, CURLOPT_WRITEDATA, &body2);
+    curl_easy_setopt(curl2, CURLOPT_TIMEOUT, 150L);
+    curl_easy_setopt(curl2, CURLOPT_CONNECTTIMEOUT, 150L);
+    curl_easy_setopt(curl2, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
+    curl_easy_setopt(curl2, CURLOPT_NOSIGNAL, 1);
+    LT_ASSERT_EQ(curl_easy_perform(curl2), 0);
+    curl_easy_getinfo(curl2, CURLINFO_RESPONSE_CODE, &http_code2);
+    // The 401 here is the round-2 server-side rejection: check_digest_auth()
+    // returned NOT_AUTHORIZED because the response token didn't match what
+    // the server computed from the configured password "mypass".
+    LT_CHECK_EQ(http_code2, 401);
+    LT_CHECK_EQ(body2, std::string("FAIL"));
+    curl_easy_cleanup(curl2);
+    curl_slist_free_all(hdrs);
 
     ws.stop();
 LT_END_AUTO_TEST(digest_auth_wrong_pass)
 
-// TASK-062: digest_ha1_md5_resource now emits a full RFC-7616 digest_challenge
-// with algorithm=MD5 so the nonce/opaque handshake can complete. curl --digest
-// authenticates using the precomputed HA1 and the server verifies via
-// check_digest_auth_digest(). On success the resource returns 200 SUCCESS.
+// TASK-079: HA1-precomputed MD5 path. The test never sends cleartext over
+// the wire and never feeds CURLOPT_USERPWD: round 2 signs with the same
+// 16-byte HA1 the server is configured with. A successful 200 proves the
+// server is verifying against the configured HA1 (not by recomputing
+// MD5("myuser:examplerealm:mypass") from cleartext it never received).
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5)
     webserver ws{create_webserver(PORT)
         .digest_auth_random("myrandom")
@@ -414,38 +483,68 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5)
     curl_global_init(CURL_GLOBAL_ALL);
 #endif
 
-    std::string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
-    long http_code = 0;  // NOLINT(runtime/int)
-    curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_DIGEST);
-#if defined(_WINDOWS)
-    curl_easy_setopt(curl, CURLOPT_USERPWD, "examplerealm/myuser:mypass");
-#else
-    curl_easy_setopt(curl, CURLOPT_USERPWD, "myuser:mypass");
-#endif
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 150L);
-    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 150L);
-    curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
-    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
-    res = curl_easy_perform(curl);
-    LT_ASSERT_EQ(res, 0);
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-    // TASK-062 contract: digest_challenge emits a full RFC-7616 challenge with
-    // algorithm=MD5; curl --digest completes the handshake. Final response: 200.
-    LT_CHECK_EQ(http_code, 200);
-    LT_CHECK_EQ(s, "SUCCESS");
-    curl_easy_cleanup(curl);
+    // Round 1.
+    std::string body1, headers1;
+    long http_code1 = 0;  // NOLINT(runtime/int)
+    CURL *curl1 = curl_easy_init();
+    curl_easy_setopt(curl1, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl1, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl1, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl1, CURLOPT_WRITEDATA, &body1);
+    curl_easy_setopt(curl1, CURLOPT_HEADERFUNCTION, headerfunc);
+    curl_easy_setopt(curl1, CURLOPT_HEADERDATA, &headers1);
+    curl_easy_setopt(curl1, CURLOPT_TIMEOUT, 150L);
+    curl_easy_setopt(curl1, CURLOPT_CONNECTTIMEOUT, 150L);
+    curl_easy_setopt(curl1, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
+    curl_easy_setopt(curl1, CURLOPT_NOSIGNAL, 1);
+    LT_ASSERT_EQ(curl_easy_perform(curl1), 0);
+    curl_easy_getinfo(curl1, CURLINFO_RESPONSE_CODE, &http_code1);
+    LT_CHECK_EQ(http_code1, 401);
+    curl_easy_cleanup(curl1);
+
+    auto challenge = httpserver_test::extract_digest_challenge(headers1);
+    LT_ASSERT_EQ(challenge.has_value(), true);
+    // The resource emits algorithm=MD5; assert it reached the wire.
+    LT_CHECK_EQ(challenge->algorithm, std::string("MD5"));
+
+    // Round 2 -- sign with the precomputed HA1 directly.
+    std::string cnonce = httpserver_test::make_cnonce();
+    std::string response = httpserver_test::compute_response_ha1(
+        *challenge, httpserver_test::digest_hash::md5,
+        "GET", "/base", PRECOMPUTED_HA1_MD5, 16, cnonce, "00000001");
+    std::string auth_header = "Authorization: " +
+        httpserver_test::build_authorization_header(
+            *challenge, "myuser", "/base", cnonce, "00000001", response);
+
+    std::string body2;
+    long http_code2 = 0;  // NOLINT(runtime/int)
+    CURL *curl2 = curl_easy_init();
+    struct curl_slist *hdrs = nullptr;
+    hdrs = curl_slist_append(hdrs, auth_header.c_str());
+    curl_easy_setopt(curl2, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl2, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl2, CURLOPT_HTTPHEADER, hdrs);
+    curl_easy_setopt(curl2, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl2, CURLOPT_WRITEDATA, &body2);
+    curl_easy_setopt(curl2, CURLOPT_TIMEOUT, 150L);
+    curl_easy_setopt(curl2, CURLOPT_CONNECTTIMEOUT, 150L);
+    curl_easy_setopt(curl2, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
+    curl_easy_setopt(curl2, CURLOPT_NOSIGNAL, 1);
+    LT_ASSERT_EQ(curl_easy_perform(curl2), 0);
+    curl_easy_getinfo(curl2, CURLINFO_RESPONSE_CODE, &http_code2);
+    LT_CHECK_EQ(http_code2, 200);
+    LT_CHECK_EQ(body2, std::string("SUCCESS"));
+    curl_easy_cleanup(curl2);
+    curl_slist_free_all(hdrs);
 
     ws.stop();
 LT_END_AUTO_TEST(digest_auth_with_ha1_md5)
 
-// TASK-062: digest_ha1_md5_resource now uses digest_challenge; curl completes
-// the handshake but check_digest_auth_digest() rejects the wrong HA1. 401 FAIL.
+// TASK-079: HA1-precomputed MD5 negative variant. The test signs with an
+// HA1 derived from a *different* password the server doesn't know about,
+// so check_digest_auth_digest() rejects with 401. This proves the server-
+// side validation pathway is HA1-driven (it cannot have re-derived the
+// wrong HA1 from cleartext, because it never received cleartext).
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5_wrong_pass)
     webserver ws{create_webserver(PORT)
         .digest_auth_random("myrandom")
@@ -461,39 +560,67 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5_wrong_pass)
     curl_global_init(CURL_GLOBAL_ALL);
 #endif
 
-    std::string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
-    long http_code = 0;  // NOLINT(runtime/int)
-    curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_DIGEST);
-#if defined(_WINDOWS)
-    curl_easy_setopt(curl, CURLOPT_USERPWD, "examplerealm/myuser:wrongpass");
-#else
-    curl_easy_setopt(curl, CURLOPT_USERPWD, "myuser:wrongpass");
-#endif
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 150L);
-    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 150L);
-    curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
-    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
-    res = curl_easy_perform(curl);
-    LT_ASSERT_EQ(res, 0);
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-    // TASK-062 contract: handshake completes, but wrong HA1 fails check_digest_auth_digest.
-    LT_CHECK_EQ(http_code, 401);
-    LT_CHECK_EQ(s, "FAIL");
-    curl_easy_cleanup(curl);
+    std::string body1, headers1;
+    long http_code1 = 0;  // NOLINT(runtime/int)
+    CURL *curl1 = curl_easy_init();
+    curl_easy_setopt(curl1, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl1, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl1, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl1, CURLOPT_WRITEDATA, &body1);
+    curl_easy_setopt(curl1, CURLOPT_HEADERFUNCTION, headerfunc);
+    curl_easy_setopt(curl1, CURLOPT_HEADERDATA, &headers1);
+    curl_easy_setopt(curl1, CURLOPT_TIMEOUT, 150L);
+    curl_easy_setopt(curl1, CURLOPT_CONNECTTIMEOUT, 150L);
+    curl_easy_setopt(curl1, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
+    curl_easy_setopt(curl1, CURLOPT_NOSIGNAL, 1);
+    LT_ASSERT_EQ(curl_easy_perform(curl1), 0);
+    curl_easy_getinfo(curl1, CURLINFO_RESPONSE_CODE, &http_code1);
+    LT_CHECK_EQ(http_code1, 401);
+    curl_easy_cleanup(curl1);
+
+    auto challenge = httpserver_test::extract_digest_challenge(headers1);
+    LT_ASSERT_EQ(challenge.has_value(), true);
+
+    // Derive HA1 from a password the server doesn't know about.
+    unsigned char wrong_ha1[16];
+    httpserver_test::detail::md5("myuser:examplerealm:totallywrong", wrong_ha1);
+
+    std::string cnonce = httpserver_test::make_cnonce();
+    std::string response = httpserver_test::compute_response_ha1(
+        *challenge, httpserver_test::digest_hash::md5,
+        "GET", "/base", wrong_ha1, 16, cnonce, "00000001");
+    std::string auth_header = "Authorization: " +
+        httpserver_test::build_authorization_header(
+            *challenge, "myuser", "/base", cnonce, "00000001", response);
+
+    std::string body2;
+    long http_code2 = 0;  // NOLINT(runtime/int)
+    CURL *curl2 = curl_easy_init();
+    struct curl_slist *hdrs = nullptr;
+    hdrs = curl_slist_append(hdrs, auth_header.c_str());
+    curl_easy_setopt(curl2, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl2, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl2, CURLOPT_HTTPHEADER, hdrs);
+    curl_easy_setopt(curl2, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl2, CURLOPT_WRITEDATA, &body2);
+    curl_easy_setopt(curl2, CURLOPT_TIMEOUT, 150L);
+    curl_easy_setopt(curl2, CURLOPT_CONNECTTIMEOUT, 150L);
+    curl_easy_setopt(curl2, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
+    curl_easy_setopt(curl2, CURLOPT_NOSIGNAL, 1);
+    LT_ASSERT_EQ(curl_easy_perform(curl2), 0);
+    curl_easy_getinfo(curl2, CURLINFO_RESPONSE_CODE, &http_code2);
+    LT_CHECK_EQ(http_code2, 401);
+    LT_CHECK_EQ(body2, std::string("FAIL"));
+    curl_easy_cleanup(curl2);
+    curl_slist_free_all(hdrs);
 
     ws.stop();
 LT_END_AUTO_TEST(digest_auth_with_ha1_md5_wrong_pass)
 
-// TASK-062: digest_ha1_sha256_resource now emits a full RFC-7616 digest_challenge
-// with algorithm=SHA256 so the nonce/opaque handshake can complete. curl --digest
-// authenticates using the precomputed HA1 and the server verifies via
-// check_digest_auth_digest() with SHA-256. On success the resource returns 200 SUCCESS.
+// TASK-079: HA1-precomputed SHA-256 path. Same shape as the MD5 sibling
+// (test signs with the configured 32-byte HA1 directly, never sends
+// cleartext). Additionally asserts the algorithm token on the wire is
+// "SHA-256" -- the canonical RFC 7616 §3.3 token, distinct from "MD5".
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256)
     webserver ws{create_webserver(PORT)
         .digest_auth_random("myrandom")
@@ -509,38 +636,62 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256)
     curl_global_init(CURL_GLOBAL_ALL);
 #endif
 
-    std::string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
-    long http_code = 0;  // NOLINT(runtime/int)
-    curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_DIGEST);
-#if defined(_WINDOWS)
-    curl_easy_setopt(curl, CURLOPT_USERPWD, "examplerealm/myuser:mypass");
-#else
-    curl_easy_setopt(curl, CURLOPT_USERPWD, "myuser:mypass");
-#endif
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 150L);
-    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 150L);
-    curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
-    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
-    res = curl_easy_perform(curl);
-    LT_ASSERT_EQ(res, 0);
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-    // TASK-062 contract: digest_challenge emits a full RFC-7616 challenge with
-    // algorithm=SHA256; curl --digest completes the handshake. Final response: 200.
-    LT_CHECK_EQ(http_code, 200);
-    LT_CHECK_EQ(s, "SUCCESS");
-    curl_easy_cleanup(curl);
+    std::string body1, headers1;
+    long http_code1 = 0;  // NOLINT(runtime/int)
+    CURL *curl1 = curl_easy_init();
+    curl_easy_setopt(curl1, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl1, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl1, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl1, CURLOPT_WRITEDATA, &body1);
+    curl_easy_setopt(curl1, CURLOPT_HEADERFUNCTION, headerfunc);
+    curl_easy_setopt(curl1, CURLOPT_HEADERDATA, &headers1);
+    curl_easy_setopt(curl1, CURLOPT_TIMEOUT, 150L);
+    curl_easy_setopt(curl1, CURLOPT_CONNECTTIMEOUT, 150L);
+    curl_easy_setopt(curl1, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
+    curl_easy_setopt(curl1, CURLOPT_NOSIGNAL, 1);
+    LT_ASSERT_EQ(curl_easy_perform(curl1), 0);
+    curl_easy_getinfo(curl1, CURLINFO_RESPONSE_CODE, &http_code1);
+    LT_CHECK_EQ(http_code1, 401);
+    curl_easy_cleanup(curl1);
+
+    auto challenge = httpserver_test::extract_digest_challenge(headers1);
+    LT_ASSERT_EQ(challenge.has_value(), true);
+    LT_CHECK_EQ(challenge->algorithm, std::string("SHA-256"));
+
+    std::string cnonce = httpserver_test::make_cnonce();
+    std::string response = httpserver_test::compute_response_ha1(
+        *challenge, httpserver_test::digest_hash::sha256,
+        "GET", "/base", PRECOMPUTED_HA1_SHA256, 32, cnonce, "00000001");
+    std::string auth_header = "Authorization: " +
+        httpserver_test::build_authorization_header(
+            *challenge, "myuser", "/base", cnonce, "00000001", response);
+
+    std::string body2;
+    long http_code2 = 0;  // NOLINT(runtime/int)
+    CURL *curl2 = curl_easy_init();
+    struct curl_slist *hdrs = nullptr;
+    hdrs = curl_slist_append(hdrs, auth_header.c_str());
+    curl_easy_setopt(curl2, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl2, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl2, CURLOPT_HTTPHEADER, hdrs);
+    curl_easy_setopt(curl2, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl2, CURLOPT_WRITEDATA, &body2);
+    curl_easy_setopt(curl2, CURLOPT_TIMEOUT, 150L);
+    curl_easy_setopt(curl2, CURLOPT_CONNECTTIMEOUT, 150L);
+    curl_easy_setopt(curl2, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
+    curl_easy_setopt(curl2, CURLOPT_NOSIGNAL, 1);
+    LT_ASSERT_EQ(curl_easy_perform(curl2), 0);
+    curl_easy_getinfo(curl2, CURLINFO_RESPONSE_CODE, &http_code2);
+    LT_CHECK_EQ(http_code2, 200);
+    LT_CHECK_EQ(body2, std::string("SUCCESS"));
+    curl_easy_cleanup(curl2);
+    curl_slist_free_all(hdrs);
 
     ws.stop();
 LT_END_AUTO_TEST(digest_auth_with_ha1_sha256)
 
-// TASK-062: digest_ha1_sha256_resource now uses digest_challenge; curl completes
-// the handshake but check_digest_auth_digest() rejects the wrong HA1. 401 FAIL.
+// TASK-079: HA1-precomputed SHA-256 negative variant. Signs with a
+// wrong-password-derived SHA-256 HA1; server rejects with 401.
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256_wrong_pass)
     webserver ws{create_webserver(PORT)
         .digest_auth_random("myrandom")
@@ -556,58 +707,103 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256_wrong_pass)
     curl_global_init(CURL_GLOBAL_ALL);
 #endif
 
-    std::string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
-    long http_code = 0;  // NOLINT(runtime/int)
-    curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_DIGEST);
-#if defined(_WINDOWS)
-    curl_easy_setopt(curl, CURLOPT_USERPWD, "examplerealm/myuser:wrongpass");
-#else
-    curl_easy_setopt(curl, CURLOPT_USERPWD, "myuser:wrongpass");
-#endif
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 150L);
-    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 150L);
-    curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
-    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
-    res = curl_easy_perform(curl);
-    LT_ASSERT_EQ(res, 0);
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-    // TASK-062 contract: handshake completes, but wrong HA1 fails check_digest_auth_digest.
-    LT_CHECK_EQ(http_code, 401);
-    LT_CHECK_EQ(s, "FAIL");
-    curl_easy_cleanup(curl);
+    std::string body1, headers1;
+    long http_code1 = 0;  // NOLINT(runtime/int)
+    CURL *curl1 = curl_easy_init();
+    curl_easy_setopt(curl1, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl1, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl1, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl1, CURLOPT_WRITEDATA, &body1);
+    curl_easy_setopt(curl1, CURLOPT_HEADERFUNCTION, headerfunc);
+    curl_easy_setopt(curl1, CURLOPT_HEADERDATA, &headers1);
+    curl_easy_setopt(curl1, CURLOPT_TIMEOUT, 150L);
+    curl_easy_setopt(curl1, CURLOPT_CONNECTTIMEOUT, 150L);
+    curl_easy_setopt(curl1, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
+    curl_easy_setopt(curl1, CURLOPT_NOSIGNAL, 1);
+    LT_ASSERT_EQ(curl_easy_perform(curl1), 0);
+    curl_easy_getinfo(curl1, CURLINFO_RESPONSE_CODE, &http_code1);
+    LT_CHECK_EQ(http_code1, 401);
+    curl_easy_cleanup(curl1);
+
+    auto challenge = httpserver_test::extract_digest_challenge(headers1);
+    LT_ASSERT_EQ(challenge.has_value(), true);
+
+    unsigned char wrong_ha1[32];
+    httpserver_test::detail::sha256("myuser:examplerealm:totallywrong", wrong_ha1);
+
+    std::string cnonce = httpserver_test::make_cnonce();
+    std::string response = httpserver_test::compute_response_ha1(
+        *challenge, httpserver_test::digest_hash::sha256,
+        "GET", "/base", wrong_ha1, 32, cnonce, "00000001");
+    std::string auth_header = "Authorization: " +
+        httpserver_test::build_authorization_header(
+            *challenge, "myuser", "/base", cnonce, "00000001", response);
+
+    std::string body2;
+    long http_code2 = 0;  // NOLINT(runtime/int)
+    CURL *curl2 = curl_easy_init();
+    struct curl_slist *hdrs = nullptr;
+    hdrs = curl_slist_append(hdrs, auth_header.c_str());
+    curl_easy_setopt(curl2, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl2, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl2, CURLOPT_HTTPHEADER, hdrs);
+    curl_easy_setopt(curl2, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl2, CURLOPT_WRITEDATA, &body2);
+    curl_easy_setopt(curl2, CURLOPT_TIMEOUT, 150L);
+    curl_easy_setopt(curl2, CURLOPT_CONNECTTIMEOUT, 150L);
+    curl_easy_setopt(curl2, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
+    curl_easy_setopt(curl2, CURLOPT_NOSIGNAL, 1);
+    LT_ASSERT_EQ(curl_easy_perform(curl2), 0);
+    curl_easy_getinfo(curl2, CURLINFO_RESPONSE_CODE, &http_code2);
+    LT_CHECK_EQ(http_code2, 401);
+    LT_CHECK_EQ(body2, std::string("FAIL"));
+    curl_easy_cleanup(curl2);
+    curl_slist_free_all(hdrs);
 
     ws.stop();
 LT_END_AUTO_TEST(digest_auth_with_ha1_sha256_wrong_pass)
 
-// Resource that tests get_digested_user() caching
-// Covers http_request.cpp lines 293-295 (cache hit) and 300 (nullptr branch)
+// Resource that tests get_digested_user() caching.
+// Covers http_request.cpp lines 293-295 (cache hit) and 300 (nullptr branch).
+//
+// TASK-079: migrated from the legacy `unauthorized("Digest", "testrealm",
+// "FAIL")` static-string overload to the RFC 7616 `digest_challenge{...}`
+// factory so the nonce/opaque handshake can complete. Once the client has
+// authenticated, the resource validates via check_digest_auth() and then
+// exercises both get_digested_user() entries (population + cache-hit).
 class digest_user_cache_resource : public http_resource {
  public:
     http_response render_get(const http_request& req) {
         using httpserver::http::http_utils;
-        // First call - will populate cache (line 300 nullptr or non-null branch)
+        using httpserver::digest_challenge;
+
+        // First call: populates the cache from MHD (or returns empty if no
+        // Authorization header has been sent yet).
         std::string user1 = std::string(req.get_digested_user());
 
         if (user1.empty()) {
-            // No digest auth provided - send a 401 challenge so curl can retry
-            return http_response::unauthorized("Digest", "testrealm", "FAIL");
+            // No digest auth provided -- emit the initial RFC 7616 §3.3
+            // challenge so a client can compute a response.
+            return http_response::unauthorized(
+                digest_challenge{.realm = "testrealm",
+                                 .body  = "FAIL"});
         }
 
-        // Second call - should hit cache (lines 293-295)
-        std::string user2 = std::string(req.get_digested_user());
+        // Validate the round-2 credentials. NOT_AUTHORIZED here means the
+        // response token didn't verify against the configured password.
+        auto result = req.check_digest_auth("testrealm", "testpass", 300,
+                                            0, http_utils::digest_algorithm::MD5);
+        if (result != http_utils::digest_auth_result::OK) {
+            return http_response::unauthorized(
+                digest_challenge{.realm = "testrealm",
+                                 .body  = "FAIL"});
+        }
 
-        // Verify caching works correctly (both calls return same value)
+        // Second call: must hit the cache (lines 293-295 in http_request.cpp).
+        std::string user2 = std::string(req.get_digested_user());
         if (user1 != user2) {
             return http_response::string("CACHE_MISMATCH").with_status(500);
         }
-
-        // Return the digested user (tests cache hit with valid user)
         return http_response::string("USER:" + user1);
     }
 };
@@ -641,9 +837,11 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_user_cache_no_auth)
     ws.stop();
 LT_END_AUTO_TEST(digest_user_cache_no_auth)
 
-// See v2-digest tracking note at top of file. Under the v2 static-challenge
-// model (DR-013) the digest_user_cache_resource cache-hit path is unreachable;
-// this test only pins the static 401 + "FAIL" challenge contract.
+// TASK-079: the resource emits a full RFC 7616 challenge, so the test can
+// drive the handshake to completion. Round 2 carries a hand-built
+// Authorization header; on the round-2 server-side validation pass,
+// digest_user_cache_resource exercises BOTH legs of get_digested_user()
+// caching (the populate + the cache-hit), returning "USER:testuser".
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_user_cache_with_auth)
     webserver ws{create_webserver(PORT)
         .digest_auth_random("myrandom")
@@ -654,28 +852,58 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_user_cache_with_auth)
     ws.start(false);
 
     curl_global_init(CURL_GLOBAL_ALL);
-    std::string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_DIGEST);
-    curl_easy_setopt(curl, CURLOPT_USERPWD, "testuser:testpass");
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/cache_test");
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 150L);
-    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 150L);
-    curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
-    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
-    res = curl_easy_perform(curl);
-    LT_ASSERT_EQ(res, 0);
-    // TASK-013 §2 / §10: v2's unauthorized("Digest", ...) only emits a
-    // static challenge — there's no MHD nonce/opaque state machine, so the
-    // digest handshake cannot complete. The resource never sees a digested
-    // user, so the response stays "FAIL". The cache-hit path is unreachable
-    // until/unless v2 grows full digest auth support.
-    LT_CHECK_EQ(s, "FAIL");
-    curl_easy_cleanup(curl);
+
+    // Round 1 -- collect the challenge.
+    std::string body1, headers1;
+    long http_code1 = 0;  // NOLINT(runtime/int)
+    CURL *curl1 = curl_easy_init();
+    curl_easy_setopt(curl1, CURLOPT_URL, "localhost:" PORT_STRING "/cache_test");
+    curl_easy_setopt(curl1, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl1, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl1, CURLOPT_WRITEDATA, &body1);
+    curl_easy_setopt(curl1, CURLOPT_HEADERFUNCTION, headerfunc);
+    curl_easy_setopt(curl1, CURLOPT_HEADERDATA, &headers1);
+    curl_easy_setopt(curl1, CURLOPT_TIMEOUT, 150L);
+    curl_easy_setopt(curl1, CURLOPT_CONNECTTIMEOUT, 150L);
+    curl_easy_setopt(curl1, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
+    curl_easy_setopt(curl1, CURLOPT_NOSIGNAL, 1);
+    LT_ASSERT_EQ(curl_easy_perform(curl1), 0);
+    curl_easy_getinfo(curl1, CURLINFO_RESPONSE_CODE, &http_code1);
+    LT_CHECK_EQ(http_code1, 401);
+    curl_easy_cleanup(curl1);
+
+    auto challenge = httpserver_test::extract_digest_challenge(headers1);
+    LT_ASSERT_EQ(challenge.has_value(), true);
+
+    // Round 2 -- sign with correct cleartext (testuser / testpass).
+    std::string cnonce = httpserver_test::make_cnonce();
+    std::string response = httpserver_test::compute_response_cleartext(
+        *challenge, httpserver_test::digest_hash::md5,
+        "GET", "/cache_test", "testuser", "testpass", cnonce, "00000001");
+    std::string auth_header = "Authorization: " +
+        httpserver_test::build_authorization_header(
+            *challenge, "testuser", "/cache_test", cnonce, "00000001", response);
+
+    std::string body2;
+    long http_code2 = 0;  // NOLINT(runtime/int)
+    CURL *curl2 = curl_easy_init();
+    struct curl_slist *hdrs = nullptr;
+    hdrs = curl_slist_append(hdrs, auth_header.c_str());
+    curl_easy_setopt(curl2, CURLOPT_URL, "localhost:" PORT_STRING "/cache_test");
+    curl_easy_setopt(curl2, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl2, CURLOPT_HTTPHEADER, hdrs);
+    curl_easy_setopt(curl2, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl2, CURLOPT_WRITEDATA, &body2);
+    curl_easy_setopt(curl2, CURLOPT_TIMEOUT, 150L);
+    curl_easy_setopt(curl2, CURLOPT_CONNECTTIMEOUT, 150L);
+    curl_easy_setopt(curl2, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
+    curl_easy_setopt(curl2, CURLOPT_NOSIGNAL, 1);
+    LT_ASSERT_EQ(curl_easy_perform(curl2), 0);
+    curl_easy_getinfo(curl2, CURLINFO_RESPONSE_CODE, &http_code2);
+    LT_CHECK_EQ(http_code2, 200);
+    LT_CHECK_EQ(body2, std::string("USER:testuser"));
+    curl_easy_cleanup(curl2);
+    curl_slist_free_all(hdrs);
 
     ws.stop();
 LT_END_AUTO_TEST(digest_user_cache_with_auth)
