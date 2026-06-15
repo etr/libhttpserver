@@ -47,9 +47,6 @@
 // Guard-macro mapping (verified on glibc, musl, macOS/BSD, MSYS2/MINGW64):
 //
 //   <microhttpd.h>     -> MHD_VERSION       (defined unconditionally inside)
-//   <pthread.h>        -> _PTHREAD_H        (glibc/musl, AND macOS/Apple SDK)
-//                         _PTHREAD_H_       (some BSDs)
-//                         _WINPTHREADS_H    (MSYS2/MINGW64 winpthreads)
 //   <gnutls/gnutls.h>  -> GNUTLS_GNUTLS_H   (the library's own include guard)
 //   <sys/socket.h>     -> _SYS_SOCKET_H     (glibc/musl)
 //                         _SYS_SOCKET_H_    (macOS/BSD)
@@ -60,20 +57,22 @@
 // red states during M2-M5 -- the leaks must be removed in production
 // code, not here.
 //
-// TASK-020 caveat (libc++ AND libstdc++ in thread mode): both
-// mainstream STLs pull <pthread.h> in transitively from any STL
-// container header (<vector>, <string>, <map>, etc.) when threading
-// is enabled, so _PTHREAD_H / _PTHREAD_H_ being defined is an STL
-// implementation detail, not a libhttpserver leak:
-//   - libc++ (Apple's default STL on macOS) routes through
-//     <__thread/support/pthread.h>.
-//   - libstdc++ in thread-enabled mode (which is the default whenever
-//     -D_REENTRANT is set, as configure.ac does) routes through
-//     <bits/gthr-default.h>, which #include <pthread.h> directly.
-// We therefore skip the pthread guards on both STLs (detected via
-// _LIBCPP_VERSION and _GLIBCXX_HAS_GTHREADS respectively). The guards
-// remain meaningful on STLs that don't use pthread for std::thread
-// (e.g. MSVC's Microsoft STL, which uses Win32 threading).
+// TASK-081 pthread-detector removal: a previous revision included guards
+// for <pthread.h> (_PTHREAD_H / _PTHREAD_H_ / _WINPTHREADS_H), conditional
+// on the consumer's STL not transitively dragging it in. Investigation
+// confirmed that the libhttpserver public surface uses STL container
+// headers (std::string, std::vector, std::map, etc. in http_request.hpp,
+// http_resource.hpp, ip_representation.hpp, ...), and that BOTH mainstream
+// STLs (libc++ via <__thread/support/pthread.h>, libstdc++ in
+// thread-enabled mode via <bits/gthr-default.h>) unconditionally drag
+// <pthread.h> in from those container headers when threading is enabled
+// (the default whenever -D_REENTRANT is set, as configure.ac does).
+// Since libhttpserver cannot rewrite its public surface to avoid STL
+// containers without breaking source compatibility, the pthread guard
+// is impossible to satisfy on any libhttpserver-supported STL/CI lane.
+// The detector was therefore deleted rather than left as dead code
+// guarded on STL detection macros. See RELEASE_NOTES.md (Test
+// infrastructure) for the rationale.
 //
 // Cross-reference: the same forbidden-header list is enforced via the
 // preprocessor-grep target `make check-hygiene` in the top-level
@@ -101,36 +100,14 @@ int main() {
     ++leaks;
 #endif
 
-// TASK-020: both libc++ and libstdc++ (in thread-enabled mode, which
-// is the default whenever -D_REENTRANT is set) unconditionally drag
-// <pthread.h> in from any STL container header. _PTHREAD_H /
-// _PTHREAD_H_ being defined under either STL is an implementation
-// detail, not a libhttpserver leak. Skip these guards on both;
-// keep them strict on STLs that don't route std::thread through
-// pthread (e.g. MSVC's Microsoft STL).
-//
-// Detection macros: _LIBCPP_VERSION is defined by libc++ (LLVM/Apple
-// libcxx) as a numeric version; _GLIBCXX_HAS_GTHREADS is defined by
-// libstdc++ when threading is enabled (the default when -D_REENTRANT
-// is set, as configure.ac does). These are the correct stable guards
-// for this detection — re-verify on each major libstdc++/libc++ upgrade.
-// See also: Makefile.am HEADER_HYGIENE_FORBIDDEN rationale comment.
-#if !defined(_LIBCPP_VERSION) && !defined(_GLIBCXX_HAS_GTHREADS)
-#ifdef _PTHREAD_H
-    std::fprintf(stderr, "LEAK: <pthread.h> reached the consumer TU (glibc/musl guard _PTHREAD_H)\n");
-    ++leaks;
-#endif
-
-#ifdef _PTHREAD_H_
-    std::fprintf(stderr, "LEAK: <pthread.h> reached the consumer TU (macOS/BSD guard _PTHREAD_H_)\n");
-    ++leaks;
-#endif
-
-#ifdef _WINPTHREADS_H
-    std::fprintf(stderr, "LEAK: <pthread.h> reached the consumer TU (MSYS2/MINGW64 guard _WINPTHREADS_H)\n");
-    ++leaks;
-#endif
-#endif  // !_LIBCPP_VERSION && !_GLIBCXX_HAS_GTHREADS
+// TASK-081: the <pthread.h> detector was removed. The libhttpserver
+// public surface uses STL container headers, and BOTH mainstream STLs
+// (libc++ AND libstdc++ in thread-enabled mode) unconditionally drag
+// <pthread.h> in from those headers. The detector could not be
+// satisfied on any supported CI lane without rewriting the public
+// surface to drop STL containers, which would break source
+// compatibility. See the comment block above and RELEASE_NOTES.md
+// (Test infrastructure) for the rationale.
 
 #ifdef GNUTLS_GNUTLS_H
     std::fprintf(stderr, "LEAK: <gnutls/gnutls.h> reached the consumer TU (guard GNUTLS_GNUTLS_H)\n");

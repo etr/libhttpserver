@@ -128,6 +128,81 @@ Each section names a specific skip site (`<file>:<line>`) and records:
 
 ---
 
+## Skipped in test/unit/
+
+The skip sites in `test/unit/` predate the `check-skip-rationales.sh` lint
+(which scopes itself to `test/integ/` only). They are tracked here for
+parity, but the lint does NOT enforce a `// reason:` comment on these
+blocks.
+
+### `body_test.cpp` — pipe_body POSIX-pipe tests (lines 263, 277)
+
+- **Symptom**: the two pipe_body tests (`pipe_body_kind_and_materialize`,
+  `pipe_body_destructor_closes_fd_when_not_materialized`) call POSIX
+  `::pipe()` directly. MSYS2/MinGW64 does not ship POSIX `::pipe()`;
+  the Windows equivalent is `_pipe()` from `<io.h>` or
+  `CreatePipe()` from `<windows.h>`, with different fd semantics.
+- **Root cause**: the `pipe_body` class itself is portable (it owns and
+  closes an fd; `MHD_create_response_from_pipe` is wired the same way
+  on every MHD build), but the tests need to *create* a pipe to feed
+  the constructor, and pipe creation is platform-specific.
+- **Restoration plan**: a future follow-up could swap `::pipe()` for
+  `_pipe(fds, 4096, _O_BINARY)` from `<io.h>` under an `#ifdef _WIN32`
+  branch (mingw-w64 ships `<io.h>` with `_pipe`/`_close`). The Linux
+  and macOS CI lanes currently exercise the pipe_body code path; the
+  Windows MSYS lanes do not. The class's fd lifecycle and
+  destructor-closes-fd contract are still verified on Linux/macOS, and
+  the production `MHD_create_response_from_pipe` call is the same on
+  every platform, so the Windows gap is a defence-in-depth coverage
+  loss rather than a contract gap.
+
+### `body_test.cpp` — file_body destructor test (line 198)
+
+- **Symptom**: `file_body_destructor_closes_fd_when_not_materialized`
+  uses POSIX `::open()` / `::close()` and inspects `errno == EBADF`.
+- **Root cause**: the file_body class itself is portable (the
+  constructor uses `::open` via libmicrohttpd's headers on every
+  platform), but the anchor-fd technique (open / close / re-open to
+  obtain a known fd slot) is POSIX-shaped.
+- **Restoration plan**: a future follow-up could use `_open` / `_close`
+  from `<io.h>` on Windows for an equivalent anchor-fd test. The
+  destructor-closes-fd contract for file_body is still verified on
+  Linux/macOS lanes; the Windows gap is the same defence-in-depth
+  loss as for pipe_body above.
+
+### `http_response_factories_test.cpp` — pipe() factory tests (lines 235–267)
+
+- **Symptom**: `pipe_factory_kind` and
+  `pipe_factory_signature_is_single_arg` call POSIX `::pipe()` to feed
+  `http_response::pipe(int)`.
+- **Root cause**: same as body_test pipe_body — pipe creation is
+  platform-specific. The factory's signature pin (`static_assert` that
+  `http_response::pipe` takes exactly one `int` argument) is wrapped
+  inside the `#ifndef _WIN32` block but is itself portable; a future
+  Windows port could split the static_assert out so it runs on every
+  lane while the runtime test stays gated.
+- **Restoration plan**: same follow-up as body_test pipe_body. Until
+  then, the Linux/macOS CI lanes cover the factory and the Windows
+  lanes do not.
+
+### `iovec_entry_test.cpp` — POSIX struct iovec bridge (line 86)
+
+- **Symptom**: `reinterpret_cast_to_struct_iovec_preserves_data`
+  reinterpret-casts an `iovec_entry` array to `const struct iovec*`
+  (POSIX `<sys/uio.h>`). MSYS2/MinGW64 does not ship `<sys/uio.h>`.
+- **Root cause**: POSIX `struct iovec` has no Windows equivalent; the
+  Windows MHD build uses MHD's own `MHD_IoVec` shape, which the
+  `reinterpret_cast_to_MHD_IoVec_preserves_data` test (unconditional,
+  lines 105–118) already exercises on every platform.
+- **Restoration plan**: **not currently planned**. The
+  `MHD_IoVec` cast test already covers the actual production cast
+  path that `iovec_response::get_raw_response()` performs at dispatch
+  time. The POSIX `struct iovec` cast is a defence-in-depth assertion
+  only — its purpose is to catch a future libc-shaped consumer that
+  re-uses the same layout. The Windows gap here is structural (no
+  POSIX type to cast to), not a coverage loss for any production
+  call site.
+
 ## Adding a new entry
 
 1. Add a `// reason: <one-liner>` comment within the 5 lines immediately

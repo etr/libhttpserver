@@ -377,6 +377,23 @@ DR-011 ([specs/architecture/11-decisions/DR-011.md](specs/architecture/11-decisi
   CI signal. Two new CI lanes (`tls-no-cli`, plus a baseline canary)
   assert the SKIP wiring fires (or does not) as configured.
 
+- **`<pthread.h>` runtime-sentinel guard removed (TASK-081).** The
+  pthread leak detector in `test/unit/header_hygiene_test.cpp` (and
+  its companion regex slot in `Makefile.am`'s `HEADER_HYGIENE_FORBIDDEN`)
+  was unable to fire on any CI lane libhttpserver actually runs on. The
+  libhttpserver public surface uses STL container headers
+  (`std::string`, `std::vector`, `std::map`, ...) and both mainstream
+  C++ standard libraries — libc++ via
+  `<__thread/support/pthread.h>` and libstdc++ in thread-enabled mode
+  via `<bits/gthr-default.h>` — unconditionally drag `<pthread.h>` in
+  from those headers. Because the public surface cannot be rewritten
+  to drop STL containers without a source-incompatible break, the
+  pthread guard is structurally unsatisfiable on every supported
+  configuration. The detector was deleted rather than kept as
+  dead code gated on STL-implementation-detection macros. The
+  remaining hygiene sentinels (`<microhttpd.h>`, `<gnutls/gnutls.h>`,
+  `<sys/socket.h>`, `<sys/uio.h>`) continue to run on every CI lane.
+
 ## See also
 
 - [README.md](README.md) — full v2.0 introduction and worked examples.

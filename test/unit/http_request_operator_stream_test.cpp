@@ -137,6 +137,80 @@ LT_BEGIN_AUTO_TEST(http_request_operator_stream_suite, operator_stream_exposes_c
     // flag is set (lets a developer inspect verbatim wire payloads).
     LT_CHECK(out.find("<redacted>") == std::string::npos);
 LT_END_AUTO_TEST(operator_stream_exposes_credentials_when_opted_in)
+#else
+// TASK-081 cycle 4 — HAVE_BAUTH-off complement of the redaction tests
+// above. On this build the user/pass surfaces are absent (get_user() /
+// get_pass() return empty views per src/http_request_auth.cpp), but the
+// Authorization-class header redaction and cookie redaction are
+// independent of HAVE_BAUTH (dump_header_map_redacted /
+// dump_cookie_map_redacted at src/http_request.cpp:431, :444 — neither
+// has a HAVE_BAUTH gate). The on-build expectation that
+// .user("admin") / .pass("hunter2") render verbatim does NOT hold here:
+// the builder calls become no-ops at the field level, and the streamed
+// line is `user:"" pass:"<redacted>"`. The Authorization and Cookie
+// redaction continues to fire.
+LT_BEGIN_AUTO_TEST(http_request_operator_stream_suite,
+                   operator_stream_credential_surfaces_absent_on_bauth_off)
+    auto req = create_test_request()
+        .user("admin")
+        .pass("hunter2")
+        .build();
+
+    std::ostringstream oss;
+    oss << req;
+    const std::string out = oss.str();
+
+    // user/pass field values must not leak — the surfaces are absent on
+    // a HAVE_BAUTH-off build by construction.
+    LT_CHECK(out.find("admin") == std::string::npos);
+    LT_CHECK(out.find("hunter2") == std::string::npos);
+
+    // The pass redaction token still appears (the field is emitted
+    // unconditionally; the value is the redacted token).
+    LT_CHECK(out.find("pass:\"<redacted>\"") != std::string::npos);
+LT_END_AUTO_TEST(operator_stream_credential_surfaces_absent_on_bauth_off)
+
+LT_BEGIN_AUTO_TEST(http_request_operator_stream_suite,
+                   operator_stream_redacts_authorization_header_on_bauth_off)
+    auto req = create_test_request()
+        .header("Authorization", "Basic YWRtaW46aHVudGVyMg==")
+        .header("Proxy-Authorization", "Digest username=\"admin\", response=\"deadbeef\"")
+        .footer("Authorization", "Bearer footertoken")
+        .build();
+
+    std::ostringstream oss;
+    oss << req;
+    const std::string out = oss.str();
+
+    // Authorization-class header redaction is independent of HAVE_BAUTH
+    // (dump_header_map_redacted has no HAVE_BAUTH gate). The credential
+    // payload must NOT leak; the redaction token must appear in its place.
+    LT_CHECK(out.find("Authorization:\"<redacted>\"") != std::string::npos);
+    LT_CHECK(out.find("Proxy-Authorization:\"<redacted>\"") != std::string::npos);
+    LT_CHECK(out.find("YWRtaW46aHVudGVyMg==") == std::string::npos);
+    LT_CHECK(out.find("deadbeef") == std::string::npos);
+    LT_CHECK(out.find("footertoken") == std::string::npos);
+LT_END_AUTO_TEST(operator_stream_redacts_authorization_header_on_bauth_off)
+
+LT_BEGIN_AUTO_TEST(http_request_operator_stream_suite,
+                   operator_stream_redacts_cookies_on_bauth_off)
+    auto req = create_test_request()
+        .cookie("session", "session-token-cafef00d")
+        .cookie("csrf", "csrf-token-abad1dea")
+        .build();
+
+    std::ostringstream oss;
+    oss << req;
+    const std::string out = oss.str();
+
+    // Cookie redaction is independent of HAVE_BAUTH
+    // (dump_cookie_map_redacted has no HAVE_BAUTH gate). Every cookie
+    // value must be redacted; cookie keys remain visible.
+    LT_CHECK(out.find("session:\"<redacted>\"") != std::string::npos);
+    LT_CHECK(out.find("csrf:\"<redacted>\"") != std::string::npos);
+    LT_CHECK(out.find("session-token-cafef00d") == std::string::npos);
+    LT_CHECK(out.find("csrf-token-abad1dea") == std::string::npos);
+LT_END_AUTO_TEST(operator_stream_redacts_cookies_on_bauth_off)
 #endif  // HAVE_BAUTH
 
 // TASK-057 — Edge case: the no-credentials request still emits the

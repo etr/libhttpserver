@@ -229,8 +229,9 @@ LT_END_AUTO_TEST(iovec_factory_single_entry)
 
 // -----------------------------------------------------------------------
 // pipe() — owns the fd, destructor closes it when not materialized.
-// Gated on !_WIN32 because Windows uses _pipe()/CreatePipe() rather
-// than POSIX ::pipe(). See body_test.cpp for the same gate rationale.
+// reason: Windows uses _pipe()/CreatePipe() rather than POSIX ::pipe();
+// MSYS2/mingw does not ship POSIX ::pipe(). See body_test.cpp for the
+// same gate rationale. Gap tracked in test/PORTABILITY.md.
 // -----------------------------------------------------------------------
 #ifndef _WIN32
 LT_BEGIN_AUTO_TEST(http_response_factories_suite, pipe_factory_kind)
