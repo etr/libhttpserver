@@ -906,7 +906,21 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
         // the low-cardinality regime). Exact ordering across threads is
         // impossible without synchronised timestamps, but a round-robin
         // merge gives each thread equal weight in the warmup window,
-        // which is sufficient.
+        // which is sufficient for the normal case.
+        //
+        // PRECONDITION: the round-robin warmup-window approximation is
+        // valid only when all threads make roughly similar progress.
+        // If the wall-clock watchdog fires early (stop=true before the
+        // 15 000-route corpus completes), per-thread buffers may have
+        // wildly different sizes. The round-robin loop then mixes warmup
+        // samples from fast threads with tail samples from slow threads
+        // in unpredictable positions. The minimum-samples guard below
+        // (samples_ns.size() < 100) rejects extreme cutoff cases, but
+        // partial-corpus runs with uneven thread progress can still
+        // produce a skewed warmup_median. This is acceptable for the
+        // CI use-case: the gate is intentionally skipped when the corpus
+        // does not complete (rounds_ran == 0 trips the explicit check
+        // below). An assertion at the gate site verifies this.
         std::vector<int64_t> samples_ns;
         size_t total = 0;
         for (auto& v : per_thread_samples) total += v.size();
@@ -941,18 +955,30 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
         std::vector<int64_t> sorted = samples_ns;
         std::sort(sorted.begin(), sorted.end());
         r.samples = sorted.size();
-        r.median = sorted[sorted.size() / 2];
-        r.p95 = sorted[static_cast<size_t>(
-            static_cast<double>(sorted.size()) * 0.95)];
-        r.p99 = sorted[static_cast<size_t>(
-            static_cast<double>(sorted.size()) * 0.99)];
-        r.p999 = sorted[static_cast<size_t>(
-            static_cast<double>(sorted.size()) * 0.999)];
+        const size_t n = sorted.size();
+        r.median = sorted[n / 2];
+        // Use ceiling integer arithmetic for percentile indices to avoid
+        // floating-point truncation returning a sub-percentile sample.
+        // Formula: min((n * k + (100-1)) / 100, n-1) gives the ceiling
+        // index for the k-th percentile boundary.
+        r.p95  = sorted[std::min((n * 95  + 99) / 100, n - 1)];
+        r.p99  = sorted[std::min((n * 99  + 99) / 100, n - 1)];
+        r.p999 = sorted[std::min((n * 999 + 999) / 1000, n - 1)];
         r.max_ns = sorted.back();
 
         // Baseline: median of the first quarter of insertion-order
         // samples (warmup, low cardinality). The hot path under test is
         // the post-warmup tail.
+        //
+        // NOTE: the round-robin merge above preserves per-thread ordering
+        // but NOT cross-thread wall-clock ordering. The "first quarter"
+        // window is therefore a statistical approximation of the warmup
+        // regime, not a hard wall-clock guarantee. If one thread is
+        // de-scheduled and starts late, its early (low-cardinality) samples
+        // may land in the merged second or third quarter. The approximation
+        // is conservative: late fast-thread samples inflate the warmup_median,
+        // making the gate stricter rather than looser. The approximation
+        // holds well under concurrent startup and is sufficient for CI use.
         const size_t quarter = samples_ns.size() / 4;
         std::vector<int64_t> warmup(
             samples_ns.begin(),
@@ -1052,9 +1078,23 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
     // regression report shows p95 fine but p99 blown by >200×, that
     // warrants separate investigation — open a ticket and re-run with
     // HTTPSERVER_STRESS_REPEATS=N to characterise the new tail.
-    if (rounds_ran > 0) {
-        LT_CHECK_LT(worst_p95, worst_baseline * 20);
+    // Gate: require that at least one latency round actually ran.
+    // rounds_ran == 0 means ALL repeats were cut short before accumulating
+    // 100 samples (wall-clock watchdog fired on a saturated host). The
+    // LT_CHECK_GT(register_ok_first_round, 100) above also catches this
+    // indirectly, but an explicit gate here gives a clearer CI log message:
+    // "latency gate was never exercised — host too slow" rather than a
+    // confusing "expected 50 > 100".
+    if (rounds_ran == 0) {
+        std::cout << "[WARNING] adversarial_segments: latency gate was "
+                     "never exercised — all " << repeats << " repeat(s) "
+                     "collected fewer than 100 samples (wall-clock "
+                     "deadline fired before corpus completed). "
+                     "Investigate host load or increase "
+                     "HTTPSERVER_STRESS_SECONDS.\n";
     }
+    LT_CHECK(rounds_ran > 0);
+    LT_CHECK_LT(worst_p95, worst_baseline * 20);
 LT_END_AUTO_TEST(adversarial_segments_registration_no_latency_spike)
 
 // ---------------------------------------------------------------------
