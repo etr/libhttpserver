@@ -195,6 +195,9 @@ LT_BEGIN_AUTO_TEST(body_suite, file_body_returns_null_for_non_regular_file)
     LT_CHECK_EQ(b.materialize(), static_cast<MHD_Response*>(nullptr));
 LT_END_AUTO_TEST(file_body_returns_null_for_non_regular_file)
 
+// reason: POSIX ::open/::close + errno EBADF inspection has no portable
+// Windows equivalent. The file_body class is itself portable; only the
+// anchor-fd test technique is POSIX-shaped. Gap tracked in test/PORTABILITY.md.
 #ifndef _WIN32
 // Parallel of pipe_body_destructor_closes_fd_when_not_materialized: the
 // ownership contract states 'if materialize() is never called, ~file_body()
@@ -253,11 +256,12 @@ LT_END_AUTO_TEST(iovec_body_empty_entries_materializes)
 // -----------------------------------------------------------------------
 // pipe_body
 //
-// Gated on !_WIN32: MSYS2/mingw does not expose POSIX ::pipe() — Windows
-// pipes use _pipe() / CreatePipe(). The pipe_body class itself is portable
-// (it just owns and closes a fd) but the tests below need to *create* a
-// pipe to exercise it, which is platform-specific. The Linux/macOS CI
-// matrix exercises this code path.
+// reason: MSYS2/mingw does not expose POSIX ::pipe() — Windows pipes use
+// _pipe() / CreatePipe() with different fd semantics. The pipe_body class
+// itself is portable (it just owns and closes a fd) but the tests below
+// need to *create* a pipe to exercise it, which is platform-specific. The
+// Linux/macOS CI matrix exercises this code path; the Windows gap is
+// tracked in test/PORTABILITY.md.
 // -----------------------------------------------------------------------
 #ifndef _WIN32
 LT_BEGIN_AUTO_TEST(body_suite, pipe_body_kind_and_materialize)

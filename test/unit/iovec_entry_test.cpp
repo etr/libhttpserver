@@ -25,6 +25,9 @@
 // is asserted separately by `header_hygiene_iovec_test.cpp`.
 
 #include <microhttpd.h>
+// reason: <sys/uio.h> is POSIX-only; MSYS2/mingw does not ship it. The
+// bridge test that uses POSIX struct iovec is gated below (line ~86).
+// Gap tracked in test/PORTABILITY.md.
 #ifndef _WIN32
 #include <sys/uio.h>        // POSIX struct iovec — bridge test only on POSIX
 #endif
@@ -80,8 +83,10 @@ LT_END_AUTO_TEST(brace_init_assigns_members)
 // libmicrohttpd, and what TASK-010 will rely on when it lands the
 // std::span<const iovec_entry> factory.
 //
-// Gated on !_WIN32: MSYS2/mingw does not ship <sys/uio.h>. The MHD_IoVec
-// bridge test below covers the actual production cast on every platform.
+// reason: MSYS2/mingw does not ship <sys/uio.h>; POSIX struct iovec has
+// no Windows equivalent. The MHD_IoVec bridge test below covers the
+// actual production cast on every platform; this POSIX-iovec cast is
+// defence-in-depth only. Gap tracked in test/PORTABILITY.md.
 #ifndef _WIN32
 LT_BEGIN_AUTO_TEST(iovec_entry_suite, reinterpret_cast_to_struct_iovec_preserves_data)
     const char* a = "abc";

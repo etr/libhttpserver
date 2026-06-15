@@ -287,6 +287,64 @@ LT_END_AUTO_TEST(derived_unique_ptr_accepted_by_shim)
 
 #endif  // HAVE_WEBSOCKET
 
+// ---- HAVE_WEBSOCKET-off runtime tests (TASK-081 cycle 3) --------------
+//
+// Before TASK-081, on a HAVE_WEBSOCKET-off build the only thing this TU
+// exercised at run-time was an empty suite (the compile-time signature
+// asserts above fire either way, but littletest cannot count them as
+// "tests executed"). The two tests below ensure that on the
+// flag-invariance-off and Windows MSYS lanes the suite contributes
+// non-trivial coverage:
+//
+//   1. features().websocket reports false on this build — pins the
+//      flag-state to the same TU as the smartptr surface contracts, so
+//      a missed AM_CXXFLAGS regression would fail here even if all the
+//      throw-site contracts in webserver_ws_unavailable still passed.
+//   2. register_ws_resource(unique_ptr) with a null arg throws
+//      feature_unavailable (NOT std::invalid_argument): the same
+//      contract pinned by webserver_ws_unavailable_test.cpp, exercised
+//      from a different call site. Catching it in both TUs guards
+//      against a regression in the smartptr-overload throw routing that
+//      slipped past the unavailable TU's null-handler check.
+
+#ifndef HAVE_WEBSOCKET
+LT_BEGIN_SUITE(webserver_register_ws_smartptr_off_suite)
+    void set_up() {}
+    void tear_down() {}
+LT_END_SUITE(webserver_register_ws_smartptr_off_suite)
+
+LT_BEGIN_AUTO_TEST(webserver_register_ws_smartptr_off_suite,
+                   features_reports_websocket_off)
+    const auto f = webserver::features();
+    LT_CHECK_EQ(f.websocket, false);
+LT_END_AUTO_TEST(features_reports_websocket_off)
+
+// Throw-type contrast against webserver_ws_available_test.cpp: on a
+// HAVE_WEBSOCKET-off build the smartptr null-arg path must trip
+// feature_unavailable, NOT std::invalid_argument. A regression that
+// flipped the throw routing would still pass webserver_ws_unavailable's
+// generic catch (the unavailable test only checks that
+// feature_unavailable's what() names "websocket" + "HAVE_WEBSOCKET";
+// it does NOT verify that a different exception type doesn't ALSO
+// fire). Catching the std::invalid_argument variant explicitly here
+// adds the missing pin.
+LT_BEGIN_AUTO_TEST(webserver_register_ws_smartptr_off_suite,
+                   null_unique_ptr_throws_feature_unavailable_on_ws_off)
+    webserver ws{create_webserver(PORT + 9)};
+    bool caught_feature_unavailable = false;
+    bool caught_invalid_argument = false;
+    try {
+        ws.register_ws_resource("/ws", std::unique_ptr<websocket_handler>{});
+    } catch (const httpserver::feature_unavailable&) {
+        caught_feature_unavailable = true;
+    } catch (const std::invalid_argument&) {
+        caught_invalid_argument = true;
+    }
+    LT_CHECK(caught_feature_unavailable);
+    LT_CHECK(!caught_invalid_argument);
+LT_END_AUTO_TEST(null_unique_ptr_throws_feature_unavailable_on_ws_off)
+#endif  // !HAVE_WEBSOCKET
+
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

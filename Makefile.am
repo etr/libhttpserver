@@ -255,29 +255,20 @@ check-install-layout:
 # Cross-reference: keep HEADER_HYGIENE_FORBIDDEN in sync with the
 # #ifdef ladder in test/unit/header_hygiene_test.cpp.
 #
-# TASK-020 caveat (libc++ AND libstdc++ in thread mode): <pthread.h>
-# is intentionally absent from the forbidden list below. Both
-# mainstream STLs unconditionally pull <pthread.h> in from any STL
-# container header (<vector>, <string>, <map>, etc.) when threading
-# is enabled:
-#   - libc++ (Apple's default STL on macOS) routes through
-#     <__thread/support/pthread.h>.
-#   - libstdc++ in thread-enabled mode (which is the default whenever
-#     -D_REENTRANT is set, as configure.ac does) routes through
-#     <bits/gthr-default.h>, which #include <pthread.h> directly.
-# The resulting `# N "...pthread.h"` line markers therefore appear in
-# the preprocessed output even though libhttpserver itself does not
-# include <pthread.h>. The runtime sentinel
-# test/unit/header_hygiene_test.cpp keeps the pthread guards but skips
-# them on both libc++ (_LIBCPP_VERSION) and libstdc++ in thread mode
-# (_GLIBCXX_HAS_GTHREADS), so the guards still fire on STLs that don't
-# route std::thread through pthread (e.g. MSVC's Microsoft STL).
-# pthread.h is intentionally absent from HEADER_HYGIENE_FORBIDDEN below
-# for the same reason: the grep-based check would produce false positives
-# on libc++ and libstdc++ in thread mode. The runtime sentinel in
-# test/unit/header_hygiene_test.cpp enforces the pthread invariant via
-# the #ifndef _LIBCPP_VERSION && !_GLIBCXX_HAS_GTHREADS guard ladder so
-# it still fires on STLs that do not route std::thread through pthread.
+# TASK-081 pthread-detector removal: <pthread.h> is intentionally absent
+# from the forbidden list below, AND the corresponding runtime-sentinel
+# guards in test/unit/header_hygiene_test.cpp have been removed
+# entirely. Both mainstream STLs (libc++ and libstdc++ in thread mode,
+# which is the default whenever -D_REENTRANT is set, as configure.ac
+# does) unconditionally pull <pthread.h> in from any STL container
+# header. The libhttpserver public surface uses STL containers
+# (std::string, std::vector, std::map in http_request.hpp, http_resource.hpp,
+# ip_representation.hpp, ...), so the pthread leak is structural to the
+# C++ standard library on every CI lane libhttpserver supports. The
+# detector could not be satisfied on any supported configuration without
+# rewriting the public surface to drop STL containers, which would
+# break source compatibility. See RELEASE_NOTES.md (Test infrastructure)
+# for the deletion rationale.
 # ---------------------------------------------------------------------------
 
 # NOTE: each entry matches a basename; the grep in check-hygiene anchors with a

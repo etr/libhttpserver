@@ -37,4 +37,4 @@ Make sure every suite actually exercises code on the build configuration where t
 **Related Requirements:** PRD-FLG-REQ-003 (`features()` coverage)
 **Related Decisions:** None new
 
-**Status:** Backlog
+**Status:** Done
