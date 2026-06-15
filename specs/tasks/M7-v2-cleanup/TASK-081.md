@@ -16,12 +16,12 @@ Several unit suites have near-zero effective coverage on the CI lanes that matte
 Make sure every suite actually exercises code on the build configuration where the feature is *available* (the inverse of what each gate currently does).
 
 **Action Items:**
-- [ ] `webserver_ws_unavailable_test.cpp`: invert the guard so the suite exercises the `HAVE_WEBSOCKET`-off path (or rename + add a paired `webserver_ws_available_test.cpp` for the on-path). Goal: each build flag has a unit suite that runs.
-- [ ] `webserver_dauth_unavailable_test.cpp`: same pattern.
-- [ ] `header_hygiene_test.cpp`: investigate why the pthread leak detector was disabled on both stdlibs. Either fix the detector so it works (preferred — this is the entire purpose of the test) or delete the test with a documented `RELEASE_NOTES.md` entry. Coordinated with TASK-007.
-- [ ] `http_request_operator_stream_test.cpp`: split the credential-redaction tests into two — the `HAVE_BAUTH`-on variant pins redaction-when-set; the `HAVE_BAUTH`-off variant pins that the auth-related fields are absent from the stream.
-- [ ] `body_test.cpp` / `http_response_factories_test.cpp` / `iovec_entry_test.cpp`: write a Windows-shaped variant of the pipe/iovec tests using Windows native equivalents (CreateFileMapping for the fd source, etc.) or document the gap in `test/PORTABILITY.md`.
-- [ ] `webserver_register_ws_smartptr_test.cpp`: same pattern as `webserver_ws_unavailable_test`.
+- [x] `webserver_ws_unavailable_test.cpp`: invert the guard so the suite exercises the `HAVE_WEBSOCKET`-off path (or rename + add a paired `webserver_ws_available_test.cpp` for the on-path). Goal: each build flag has a unit suite that runs.
+- [x] `webserver_dauth_unavailable_test.cpp`: same pattern.
+- [x] `header_hygiene_test.cpp`: investigate why the pthread leak detector was disabled on both stdlibs. Either fix the detector so it works (preferred — this is the entire purpose of the test) or delete the test with a documented `RELEASE_NOTES.md` entry. Coordinated with TASK-007.
+- [x] `http_request_operator_stream_test.cpp`: split the credential-redaction tests into two — the `HAVE_BAUTH`-on variant pins redaction-when-set; the `HAVE_BAUTH`-off variant pins that the auth-related fields are absent from the stream.
+- [x] `body_test.cpp` / `http_response_factories_test.cpp` / `iovec_entry_test.cpp`: write a Windows-shaped variant of the pipe/iovec tests using Windows native equivalents (CreateFileMapping for the fd source, etc.) or document the gap in `test/PORTABILITY.md`.
+- [x] `webserver_register_ws_smartptr_test.cpp`: same pattern as `webserver_ws_unavailable_test`.
 
 **Dependencies:**
 - Blocked by: None
