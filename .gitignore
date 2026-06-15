@@ -15,6 +15,7 @@
 .idea
 libhttpserver.iml
 build/*
+build-debug/
 aclocal.m4
 autom4te.cache/
 config.guess

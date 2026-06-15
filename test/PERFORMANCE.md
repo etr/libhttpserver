@@ -149,6 +149,115 @@ padding` ≈ map_size minus ~8 bytes. The corrected algebra above
 captures the actual contract ("the map went away") without
 papering over the new field's cost.
 
+## Methodology — `threadsafety_stress` adversarial_segments latency gate
+
+### What this gate measures
+
+`test/integ/threadsafety_stress.cpp` sub-test C
+(`adversarial_segments_registration_no_latency_spike`) hammers the
+`webserver::register_path` mutating API with an adversarial corpus of
+15 000 sibling path segments distributed across 3 parent prefixes,
+driven by 4 contending writer threads. The corpus shape (24-byte common
+prefix, 8-byte discriminating tail) is the worst case for
+`std::map<std::string>::find` per-probe cost in the radix tree's
+per-segment child container, so per-op insert cost will surface any
+algorithmic regression (e.g. a future refactor that drops back to O(n)
+sibling scan).
+
+The gate encodes the PRD §3.6 / TASK-056 "no dispatch latency spikes
+> 10× baseline" criterion as a deterministic ratio assertion against
+the warmup-window median.
+
+### Gate
+
+| Parameter | Value | Rationale |
+|---|---|---|
+| Statistic | p95 of overall samples vs median of first quarter | p99 too sensitive to OS preemption on shared CI |
+| Threshold ratio | < 20× warmup median | TASK-080 noise-floor study (see below) |
+| Baseline floor clamp | warmup_median = max(actual, 1 µs) | Prevents degenerate gate when timer quantises |
+
+### Stabilisation techniques in effect
+
+| Technique | Status | Notes |
+|---|---|---|
+| Per-thread sample buffers (no hot-path lock) | adopted | Eliminates `samples_mtx` from the timing window; the previous global `std::mutex`-guarded `push_back` leaked prior-iteration lock-wait jitter into the next sample's cache lines |
+| Linux CPU pinning of writer threads | optional, off by default | `HTTPSERVER_STRESS_PIN_CPU=N` pins all 4 writers to CPU N via `pthread_setaffinity_np`. Counter-intuitively single-CPU pinning is correct here — writers serialise on `route_table_mutex_` regardless, so single-CPU placement eliminates cross-CPU cache misses on radix-tree node memory. macOS / Windows: no-op |
+| Statistic switch p99 → p95 | adopted | See "Why p95, not p99" below |
+| Top-N% trimming | rejected | "Trim before gate" is unprincipled and looks like hiding regressions. Switching the statistic (p99 → p95) is principled — the gate now uses a more robust order statistic, not censored data |
+| `__rdtsc` high-precision timer | rejected | `std::chrono::steady_clock` (≈20 ns resolution on Linux, ≈40 ns on macOS) is fine for 10-100+ µs samples; TSC drift across cores is not worth the portability cost |
+
+### Why p95, not p99
+
+p99 on a 15 000-sample run = top 150 samples. A single 1 ms OS-scheduler
+preemption spike (kernel tick, neighbour-process scheduling, page-fault
+servicing) against a ~10 µs median produces a 100× ratio that is purely
+environmental — not a property of the algorithm under test. p95 = top
+750 samples and is robust against that: an O(n) algorithmic regression
+at 15k items would shift the entire upper quartile (p95 included); a
+single preemption spike does not.
+
+p99 is still printed in the `[STATS]` diagnostic line for forensic use.
+
+### Why 20×, not 10×
+
+The TASK-080 stabilisation stack reduces but does NOT eliminate the
+noise floor. The dominant residual contributor is **legitimate
+contention on `route_table_mutex_`**, not OS noise: 4 writer threads
+serialise on a single std::mutex around the radix-tree insert, and the
+top 5% of samples are precisely the lock-wait queue tail.
+
+| Sweep | Worst observed p95/warmup_median ratio | Notes |
+|---|---|---|
+| TASK-080 measurement, Apple Silicon (M-series), `-O3 -DNDEBUG`, `HTTPSERVER_STRESS_REPEATS=10`, no pinning | 13.4× | Quiet laptop, no other tenants |
+| Pre-TASK-080 baseline (with `samples_mtx` in hot path) | similar p95, larger p99 spread | Per-thread buffers tighten p99 more than p95 |
+
+10× is therefore genuinely infeasible without rewriting the
+registration locking strategy (out of scope for TASK-080). 20× gives
+~50% headroom over the worst observed local round and is still **5×
+tighter than the pre-TASK-080 gate of 100× p99** — restoring real
+regression bite against algorithmic regressions (an accidental O(n)
+traversal at 15k items would push p95 to >100× the baseline).
+
+### How to re-measure
+
+Run the test with `HTTPSERVER_STRESS_REPEATS=N` to drive N back-to-back
+sampling rounds within a single test invocation. Each round prints a
+`[STATS]` line; the gate is checked against the worst-observed p95
+across rounds.
+
+```sh
+# Single-shot diagnostic on the current host
+cd build
+HTTPSERVER_STRESS_SECONDS=15 HTTPSERVER_STRESS_REPEATS=20 \
+  ./test/threadsafety_stress 2>&1 | grep STATS
+
+# Linux: with CPU pinning
+HTTPSERVER_STRESS_SECONDS=15 HTTPSERVER_STRESS_REPEATS=20 \
+  HTTPSERVER_STRESS_PIN_CPU=0 ./test/threadsafety_stress 2>&1 | grep STATS
+
+# Aggregate the [STATS] lines to compute per-lane p95/baseline CDFs.
+# The relevant fields are warmup_median, p95, p99, and p95_ratio
+# (printed in percent of warmup median, so 1300% = 13×).
+```
+
+### Acceptance criterion verification — 50-run stability
+
+The TASK-080 acceptance criterion "test has not flaked in the last 50
+CI runs across the matrix" cannot be enforced at PR-time (a PR has 1
+run per lane, not 50). The proxy used at merge:
+
+1. Local 10-round sweep on the maintainer's reference host (Apple
+   Silicon, `-O3 -DNDEBUG`, no pinning) — worst observed p95 ratio
+   13.4× against the 20× gate (gate margin: ~50%).
+2. Post-merge monitoring window: any flake of this test on
+   `feature/v2.0` CI within the first week of merge is grounds for
+   re-opening TASK-080 and re-running the noise-floor sweep on the
+   flaking lane.
+
+If a CI flake surfaces post-merge, capture the `[STATS]` line from the
+failing job logs, then re-run locally on the same lane shape with
+`HTTPSERVER_STRESS_REPEATS=50` to characterise the new noise floor.
+
 ## How to re-run on this branch
 
 ```sh
