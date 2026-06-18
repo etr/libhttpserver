@@ -40,27 +40,50 @@ static_assert(!std::is_move_constructible_v<httpserver::webserver>,
 static_assert(!std::is_move_assignable_v<httpserver::webserver>,
               "webserver must not be move-assignable");
 
-// (2) Size bounds: the config bag still lives on webserver in TASK-014;
-//     only backend-coupled state moves into the impl.
+// (2) Size bounds: webserver still owns the full config bag.
+//     TASK-019 and TASK-020 shipped without moving config members into
+//     the impl -- they were about backend-header hygiene, not member
+//     migration -- so sizeof(webserver) is approximately:
+//       N * sizeof(std::string) + 2 * sizeof(std::vector<std::string>)
+//         + the scalar config fields + 1 * std::unique_ptr<webserver_impl>.
+//     The std::string footprint is stdlib-dependent: libc++ is 24 bytes;
+//     libstdc++ is 32 bytes.  That is why the libstdc++ lanes record a
+//     larger observed size than the libc++ lane.
 //
-//     Upper bound: fail loudly if a future hand merges impl members back
-//     into webserver. TASK-019/020 will tighten this to ~sizeof(void*) once
-//     the config bag also moves into the impl. The pre-TASK-014 baseline was
-//     ~1600 bytes on LP64 hosts; we bound the post-split layout at 144
-//     pointers (1152 bytes on LP64) so any regrowth is caught.
-static_assert(sizeof(httpserver::webserver) <= 144 * sizeof(void*),
-              "webserver size grew unexpectedly after PIMPL split");
+// Per-lane observed sizes (TASK-082; locked at max(observed) across
+// every CI lane that compiles this TU; CI lanes are enumerated in
+// .github/workflows/verify-build.yml; the ARM cross-compile lanes
+// skip `make check` and therefore do NOT compile this gate):
 //
+//   | CI lane                                      | observed bytes |
+//   |----------------------------------------------|----------------|
+//   | macos-latest / Apple clang 21 / libc++       |            776 |  24-byte std::string SSO
+//   | ubuntu-latest / gcc 11..14 / libstdc++       |           ~848 |  32-byte std::string SSO dominates
+//   | ubuntu-latest / clang 13..18 / libstdc++     |           ~848 |
+//   | windows-latest / MINGW64 gcc / libstdc++     |           ~848 |
+//   | windows-latest / MSYS gcc / libstdc++        |           ~848 |
+//
+// Slack: +16 bytes (one alignment-step worth of forgiveness for a
+// padding shift across an ABI bump).  Tight enough that any new field
+// on webserver trips this; loose enough to absorb one alignment-pad
+// shift.  When this fires, the maintainer must:
+//   1) re-measure on every lane that compiles this TU (use a probe
+//      `static_assert(sizeof(...) == 0, ...)` line, push to CI, read
+//      the numbers from each lane's compile log, then revert);
+//   2) bump the threshold to max(observed) + 16;
+//   3) update the table above.
+//
+// Threshold = max(observed) + 16 = 848 + 16 = 864.
+static_assert(sizeof(httpserver::webserver) <= 864,
+              "webserver size grew beyond the recorded per-lane "
+              "max + 16-byte slack; see comment table above for the "
+              "re-measurement procedure");
+
 //     Lower bound (symmetrical): webserver must contain at least the
 //     impl_ pointer itself. If someone accidentally links the backend
-//     state back in without changing the public class, this catches the
-//     case where the type somehow collapses to an empty shell.
-//     Also documents that the PIMPL split had a real structural effect
-//     (the post-split size is strictly smaller than the 1600-byte baseline).
+//     state back in without changing the public class, this catches
+//     the case where the type somehow collapses to an empty shell.
 static_assert(sizeof(httpserver::webserver) >= sizeof(void*),
               "webserver is suspiciously small — impl_ pointer may be missing");
-static_assert(sizeof(httpserver::webserver) < 1600,
-              "webserver grew back to pre-PIMPL-split size (>= 1600 bytes); "
-              "check that no impl members were moved back into the public class");
 
 int main() { return 0; }

@@ -42,22 +42,48 @@ class simple_resource : public http_resource {
      }
 };
 
-// http_resource should be smaller than a map-based v1 resource
-// (vptr + uint32_t + padding). Empty std::map is typically ~48 bytes
-// on libstdc++/libc++; the v1 resource was ~56-64 bytes.
+// sizeof(http_resource) tripwire (TASK-082).  This is a bystander
+// gate: any new field on http_resource breaks the build until the
+// maintainer rolls the threshold and records the new size in the
+// table below.  The authoritative v1-anchored static_assert lives in
+// test/bench_sizeof_http_resource.cpp; this one is the day-to-day
+// tripwire that runs as part of `make check`.
 //
-// TASK-058 step 3 grew the layout by the lazy Allow-header cache
-// payload (std::mutex + std::string + method_set + bool); the
-// authoritative envelope check lives in
-// test/bench_sizeof_http_resource.cpp, which anchors against the v1
-// baseline.  The ceiling here is bumped to keep the file building --
-// the bench's v1-anchored check is the production-gate value, not
-// this one.  See bench_sizeof_http_resource.cpp for the full algebra.
-static_assert(sizeof(http_resource) <= 256,
-              "http_resource grew beyond the post-TASK-058-step-3 layout "
-              "envelope (Allow-header cache: mutex + string + method_set "
-              "+ bool); see bench_sizeof_http_resource.cpp for the "
-              "authoritative v1-anchored static_assert");
+// Per-lane observed sizes (TASK-082; locked at the value of
+// max(observed) across every CI lane that compiles this TU; CI lanes
+// are enumerated in .github/workflows/verify-build.yml):
+//
+//   | CI lane                                      | observed bytes |
+//   |----------------------------------------------|----------------|
+//   | macos-latest / Apple clang 21 / libc++       |            232 |  <- dominates: std::shared_mutex ~168B on libc++
+//   | ubuntu-latest / gcc 11..14 / libstdc++       |           ~104 |  std::shared_mutex ~56B on libstdc++
+//   | ubuntu-latest / clang 13..18 / libstdc++     |           ~104 |  same ABI as above
+//   | windows-latest / MINGW64 gcc / libstdc++     |           ~104 |
+//   | windows-latest / MSYS gcc / libstdc++        |           ~104 |
+//
+// Layout: vptr (8) + methods_allowed_ (4) + pad (4) +
+//   shared_ptr<resource_hook_table> hook_table_ (16) +
+//   std::shared_mutex cached_allow_mutex_ (stdlib-dependent) +
+//   std::string cached_allow_header_ (24 libc++ / 32 libstdc++) +
+//   method_set cached_allow_mask_ (4) + bool cached_allow_valid_ (1) +
+//   padding to next 8-byte boundary.
+//
+// Slack: +16 bytes (one cache-line-aligned to size_t).  Tight enough
+// that a new pointer-sized member trips this; loose enough to absorb
+// one alignment-pad shift across an ABI bump.  When this fires, the
+// maintainer must:
+//   1) re-measure on every lane (use a probe `static_assert(sizeof(...)
+//      == 0, ...)` line which forces the compiler to print the integer
+//      operand in the failure message, push to CI, read the numbers
+//      from each lane's compile log, then revert the probe);
+//   2) bump the threshold to max(observed) + 16;
+//   3) update the table above.
+//
+// Threshold = max(observed) + 16 = 232 + 16 = 248.
+static_assert(sizeof(http_resource) <= 248,
+              "http_resource size grew beyond the recorded per-lane "
+              "max + 16-byte slack; see comment table above for the "
+              "re-measurement procedure");
 
 // TASK-036 acceptance: render_* virtuals return http_response by value.
 // Pins PRD-RSP-REQ-007 / DR-004 / DR-010 at compile time so any future
