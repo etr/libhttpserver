@@ -51,8 +51,15 @@
 // Wired into `make bench` via bench_targets in test/Makefile.am; not
 // part of `make check`.  Sanitizer builds skip with exit 0 so the
 // bench stays green on sanitizer hosts (same convention as
-// bench_route_lookup).  No pass/fail ceilings: the bench reports
-// numbers; reviewers compare before/after manually.
+// bench_route_lookup).
+//
+// CI gate (TASK-083): every measurement is checked against a committed
+// per-platform baseline in bench_baseline.hpp.  The bench fails (rc=1)
+// when any median regresses more than 5% over its baseline -- i.e. the
+// warm path must stay within 5% of the committed numbers (the
+// ">= 5% improvement vs baseline" acceptance from TASK-058, expressed
+// here as fail-on-regression).  Refresh the baselines via TASK-084 when
+// the runner hardware changes.
 
 #define HTTPSERVER_COMPILATION 1  // unlock webserver_test_access
 
@@ -75,19 +82,10 @@
 #include "httpserver/webserver.hpp"
 #include "httpserver/detail/http_request_impl.hpp"  // TASK-072: build_request_args bench
 #include "httpserver/detail/webserver_impl.hpp"
+#include "bench_baseline.hpp"  // NOLINT(build/include_subdir)
+#include "bench_harness.hpp"   // NOLINT(build/include_subdir) -- do_not_optimize
 
 namespace hs = httpserver;
-
-// Defeat dead-store elimination on the lookup_result.
-template <typename T>
-[[gnu::always_inline]] inline void do_not_optimize(T const& value) {
-#if defined(__GNUC__) || defined(__clang__)
-    asm volatile("" : : "r,m"(&value) : "memory");
-#else
-    volatile const void* sink = static_cast<const void*>(&value);
-    (void)sink;
-#endif
-}
 
 static constexpr bool kSanitizerBuild =
 #if defined(__SANITIZE_ADDRESS__) \
@@ -205,6 +203,16 @@ int main() {
     constexpr std::size_t INNER = 1'000'000;
     constexpr std::size_t INNER_405 = 100'000;
 
+    // Medians for the six measurements, lifted out of their per-scope
+    // blocks so the gate at the end of main() can compare each against
+    // its committed baseline.
+    double med_canonicalize = 0.0;
+    double med_skip_auth_nonempty = 0.0;
+    double med_skip_auth_empty = 0.0;
+    double med_serialize_allow_405 = 0.0;
+    double med_build_args_pct2f = 0.0;
+    double med_build_args_plain = 0.0;
+
     // ----- (1) canonicalize: lookup_v2 on a canonical path. -----
     {
         auto ws = make_bench_webserver({"/public", "/health"});
@@ -218,7 +226,7 @@ int main() {
         }
         std::printf("bench_warm_path (1): canonicalize "
                     "(/api/v1/users/me cache-hit)\n");
-        measure_median_ns(
+        med_canonicalize = measure_median_ns(
             "canonicalize",
             [&]() {
                 auto r = impl->lookup_v2(hs::http_method::get, kPath);
@@ -234,7 +242,7 @@ int main() {
         static const std::string kPath("/api/v1/users/me");
         std::printf("bench_warm_path (2): should_skip_auth "
                     "(non-empty skip list)\n");
-        measure_median_ns(
+        med_skip_auth_nonempty = measure_median_ns(
             "should_skip_auth_nonempty",
             [&]() {
                 bool r = impl->should_skip_auth(kPath);
@@ -255,7 +263,7 @@ int main() {
         static const std::string kPath("/api/v1/users/me");
         std::printf("bench_warm_path (3): should_skip_auth "
                     "(empty skip list)\n");
-        measure_median_ns(
+        med_skip_auth_empty = measure_median_ns(
             "should_skip_auth_empty",
             [&]() {
                 bool r = impl->should_skip_auth(kPath);
@@ -278,7 +286,7 @@ int main() {
         r.set_allowing(hs::http_method::post, true);
         std::printf("bench_warm_path (4): serialize_allow_405 "
                     "(GET, HEAD, POST mask)\n");
-        measure_median_ns(
+        med_serialize_allow_405 = measure_median_ns(
             "serialize_allow_405",
             [&]() {
                 std::string s = impl->serialize_allow_methods(
@@ -319,7 +327,7 @@ int main() {
 
         std::printf("bench_warm_path (5): build_request_args "
                     "(%%2F unescape via arena, fresh impl per call)\n");
-        measure_median_ns(
+        med_build_args_pct2f = measure_median_ns(
             "build_request_args_pct2f",
             [&]() {
                 // Each call: fresh arena-backed impl, one insert, destroy.
@@ -360,7 +368,7 @@ int main() {
 
         std::printf("bench_warm_path (6): build_request_args "
                     "(no-escape baseline, fresh impl per call)\n");
-        measure_median_ns(
+        med_build_args_plain = measure_median_ns(
             "build_request_args_plain",
             [&]() {
                 alignas(std::max_align_t) std::array<std::byte, 65536> buf{};
@@ -382,8 +390,45 @@ int main() {
             OUTER, INNER);
     }
 
-    std::printf("\nbench_warm_path: no pass/fail ceiling -- numbers "
-                "reported above are the baseline; rerun after each "
-                "TASK-058 step and compare medians manually.\n");
-    return 0;
+    // ----- Summary + gates (TASK-083) -----
+    // Each median is compared against its committed per-platform baseline
+    // (bench_baseline.hpp). A median more than kAllowedRegressionRatio
+    // (5%) over baseline fails the bench.
+    namespace bb = httpserver::bench_baseline;
+    std::printf("\nbench_warm_path summary (baselines from "
+                "bench_baseline.hpp, +%.0f%% allowed):\n",
+                100.0 * (bb::kAllowedRegressionRatio - 1.0));
+
+    int rc = 0;
+    const auto check = [&](const char* label, double measured,
+                           double baseline) {
+        const double allowed = baseline * bb::kAllowedRegressionRatio;
+        const double pct = 100.0 * (measured / baseline - 1.0);
+        std::printf("  %-26s median=%8.3f ns  baseline=%8.3f ns  %+6.1f%%\n",
+                    label, measured, baseline, pct);
+        if (measured > allowed) {
+            std::printf("FAIL: %s median %.3f ns exceeds baseline*%.2f = "
+                        "%.3f ns (regression %+.1f%%)\n",
+                        label, measured, bb::kAllowedRegressionRatio,
+                        allowed, pct);
+            rc = 1;
+        }
+    };
+    check("canonicalize", med_canonicalize, bb::WARM_CANONICALIZE_NS);
+    check("should_skip_auth_nonempty", med_skip_auth_nonempty,
+          bb::WARM_SHOULD_SKIP_AUTH_NONEMPTY_NS);
+    check("should_skip_auth_empty", med_skip_auth_empty,
+          bb::WARM_SHOULD_SKIP_AUTH_EMPTY_NS);
+    check("serialize_allow_405", med_serialize_allow_405,
+          bb::WARM_SERIALIZE_ALLOW_405_NS);
+    check("build_request_args_pct2f", med_build_args_pct2f,
+          bb::WARM_BUILD_REQUEST_ARGS_PCT2F_NS);
+    check("build_request_args_plain", med_build_args_plain,
+          bb::WARM_BUILD_REQUEST_ARGS_PLAIN_NS);
+
+    if (rc == 0) {
+        std::printf("PASS: all warm-path medians within %.0f%% of baseline\n",
+                    100.0 * (bb::kAllowedRegressionRatio - 1.0));
+    }
+    return rc;
 }

@@ -675,6 +675,7 @@ EXTRA_DIST = libhttpserver.supp \
              tsan.supp \
              PERFORMANCE.md \
              bench_harness.hpp \
+             bench_baseline.hpp \
              v1_baseline/README.md \
              v1_baseline/v1_constants.hpp \
              v1_baseline/measure_v1_sizes.cpp \
@@ -734,28 +735,31 @@ bench_get_headers_LDADD = $(LDADD) -lmicrohttpd
 # unused" claim. Defines HTTPSERVER_COMPILATION so the bench can
 # reach webserver_test_access; this is the same friend pattern used
 # by test/unit/hook_api_shape_test.cpp.
-bench_hook_overhead_SOURCES = bench_hook_overhead.cpp
+bench_hook_overhead_SOURCES = bench_hook_overhead.cpp bench_harness.hpp
 bench_hook_overhead_LDADD = $(LDADD) -lmicrohttpd
 
 # bench_route_lookup (TASK-053): v2 dispatch performance acceptance.
 # Drives webserver_impl::lookup_v2() directly (no MHD daemon, no
 # sockets) and asserts two ceilings on the dispatch hot path:
-#   (a) cache-hit median <= 200 ns/lookup,
-#   (b) radix-tier median <= 5 us/lookup for an 8-segment
-#       parameterized path.
+#   (a) cache_warm_ns median <= 200 ns/lookup,
+#   (b) radix_pure_ns median <= 5 us/lookup for an 8-segment
+#       parameterized path (cache cold -- TASK-083 separates this from
+#       the cache-warm measurement).
 # Defines HTTPSERVER_COMPILATION so the bench can reach
 # webserver_test_access, the same friend pattern used by
 # bench_hook_overhead.cpp and the unit tests.
-bench_route_lookup_SOURCES = bench_route_lookup.cpp
+bench_route_lookup_SOURCES = bench_route_lookup.cpp bench_harness.hpp
 bench_route_lookup_LDADD = $(LDADD) -lmicrohttpd
 
 # bench_warm_path (TASK-058): per-request allocation pass.  Times
 # canonicalize_lookup_path, should_skip_auth (non-empty + empty list),
 # and serialize_allow_methods to verify the TASK-058 refactors land
-# without regressing the warm GET path.  Defines HTTPSERVER_COMPILATION
-# so the bench can reach webserver_test_access, the same friend
-# pattern used by bench_route_lookup.
-bench_warm_path_SOURCES = bench_warm_path.cpp
+# without regressing the warm GET path.  TASK-083 gates each median
+# against per-platform baselines in bench_baseline.hpp (fail on >5%
+# regression).  Defines HTTPSERVER_COMPILATION so the bench can reach
+# webserver_test_access, the same friend pattern used by
+# bench_route_lookup.
+bench_warm_path_SOURCES = bench_warm_path.cpp bench_harness.hpp bench_baseline.hpp
 bench_warm_path_LDADD = $(LDADD) -lmicrohttpd
 
 bench: $(bench_targets)

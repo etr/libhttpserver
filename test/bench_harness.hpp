@@ -17,8 +17,14 @@
      Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
      USA
 */
-// Shared microbench helpers used by bench_get_headers.cpp and
-// (as an EXTRA_DIST documentation TU) measure_v1_get_headers.cpp.
+// Shared microbench helpers. Included by every bench TU:
+// bench_get_headers.cpp, bench_hook_overhead.cpp, bench_route_lookup.cpp,
+// bench_warm_path.cpp, and (as an EXTRA_DIST documentation TU)
+// measure_v1_get_headers.cpp.
+//
+// Until TASK-083 the hook/route/warm benches each carried a private
+// duplicate of do_not_optimize, so the hardened MSVC sink could not reach
+// them. They now all include this single canonical definition.
 //
 // Two utilities are provided:
 //
@@ -41,6 +47,18 @@
 #include <chrono>
 #include <vector>
 
+#if defined(_MSC_VER)
+#include <intrin.h>  // _ReadWriteBarrier
+#endif
+
+#if defined(_MSC_VER)
+// Single, ODR-safe sink for the MSVC do_not_optimize fallback (below). An
+// `inline` variable gives exactly one definition across every TU that
+// includes this header (C++17). do_not_optimize writes through it on each
+// call, so the compiler must materialise the value being protected.
+inline volatile const void* volatile do_not_optimize_sink = nullptr;
+#endif
+
 // ---------------------------------------------------------------------------
 // do_not_optimize
 // ---------------------------------------------------------------------------
@@ -54,21 +72,39 @@
 // asm input constraint copies it by value into the constraint, which is
 // undefined for non-trivially-copyable types. Passing the address is safe
 // for any type.
-//
-// MSVC fallback: volatile-pointer write acts as an optimisation barrier.
-// This may be elided by aggressive optimisers; see bench documentation for
-// the known limitation.
 template <typename T>
 [[gnu::always_inline]] inline void do_not_optimize(T const& value) {
 #if defined(__GNUC__) || defined(__clang__)
     asm volatile("" : : "r,m"(&value) : "memory");
+#elif defined(_MSC_VER)
+    // Why the PREVIOUS MSVC sink was elidable: it was
+    //     volatile const void* sink = static_cast<const void*>(&value);
+    //     (void)sink;
+    // i.e. a single volatile *read* of an address into a function-local
+    // that nothing downstream observes. Under /O2 MSVC treats `sink` as a
+    // dead local: the volatile qualifier sits on a pointer-to-const-void
+    // whose value is never read after initialisation, so the whole store is
+    // removed and `value` is no longer forced live across the call.
+    //
+    // The robust form composes two guarantees:
+    //   1. _ReadWriteBarrier() — a documented MSVC compiler intrinsic that
+    //      acts as a compile-time memory clobber: the optimiser may not
+    //      reorder loads/stores across it. (Mirrors the `: "memory"` clobber
+    //      in the gcc/clang asm-volatile form above.)
+    //   2. A *write* through `do_not_optimize_sink`, a file-scope
+    //      `volatile const void* volatile` pointer. A write to volatile-
+    //      qualified storage is an observable side effect the compiler must
+    //      emit; bracketing it with barriers pins &value live on both sides.
+    _ReadWriteBarrier();
+    do_not_optimize_sink = static_cast<const void*>(&value);
+    _ReadWriteBarrier();
 #else
-    // MSVC fallback: take address via volatile sink.
-    // Limitation: aggressive MSVC optimisers may still elide this on
-    // newer standards (/O2 /std:c++20). For a more robust MSVC sink,
-    // consider _ReadWriteBarrier() or __iso_volatile_store64.
-    volatile const void* sink = static_cast<const void*>(&value);
-    (void)sink;
+    // Unknown compiler: best-effort volatile-write fallback (still better
+    // than a discarded local because the store target is volatile-qualified
+    // at file scope and therefore observable).
+    static volatile const void* volatile fallback_sink = nullptr;
+    fallback_sink = static_cast<const void*>(&value);
+    (void)fallback_sink;
 #endif
 }
 

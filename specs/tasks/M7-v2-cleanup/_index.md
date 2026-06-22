@@ -47,7 +47,7 @@ TASK-093).
 | TASK-080 | Tighten threadsafety_stress latency gate back from 100× to 10× | MED | M | Done |
 | TASK-081 | Fill empty-on-correct-build unit suites and re-enable pthread leak detector | MED | M | Done |
 | TASK-082 | Tighten static-size bounds in `http_resource_test` and `webserver_pimpl_test` | MED | S | Done |
-| TASK-083 | Wire real CI gates into benchmarks | MED | M | Backlog |
+| TASK-083 | Wire real CI gates into benchmarks | MED | M | Done |
 | TASK-084 | Re-measure libstdc++/Linux v1 baseline for `get_headers` ns/call | MED | S | Backlog |
 | TASK-085 | Residual test-smell sweep | MED | S | Backlog |
 | TASK-086 | Execute file-size split roadmap (FILE_LOC_MAX 750 → 500) | HIGH | L | Backlog |
