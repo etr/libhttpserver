@@ -30,4 +30,4 @@ Tighten each to the current observed size + a small slack (e.g., +16 bytes) so g
 **Related Requirements:** PRD-REQ-REQ-003 (bitmask method state — `sizeof(http_resource)` shrink)
 **Related Decisions:** §2.2 const-correctness, §4.2
 
-**Status:** In Progress
+**Status:** Done
