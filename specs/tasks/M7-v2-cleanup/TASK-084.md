@@ -12,10 +12,10 @@ per-stdlib; only the ns/call constant is mono-platform. Capture the missing
 measurement so the TASK-039 ≥10× speedup gate has a real Linux baseline.
 
 **Action Items:**
-- [ ] On a representative Linux x86-64 host with libstdc++ (Ubuntu 22.04, the verify-build.yml default), run `bench_get_headers` against a clean v1 checkout (or via the existing v1-baseline harness). Capture median, p99, n.
-- [ ] Update `v1_constants.hpp:65-70` and `94-98` with the new libstdc++ value, separating it from the libc++ value.
-- [ ] Update `test/PERFORMANCE.md:34` with the per-stdlib table.
-- [ ] Re-run TASK-039's `≥10× speedup` assertion against the new baseline on the Linux lane and confirm it still passes.
+- [x] On a representative Linux x86-64 host with libstdc++ (Ubuntu 22.04, the verify-build.yml default), run `bench_get_headers` against a clean v1 checkout (or via the existing v1-baseline harness). Capture median, p99, n.
+- [x] Update `v1_constants.hpp:65-70` and `94-98` with the new libstdc++ value, separating it from the libc++ value.
+- [x] Update `test/PERFORMANCE.md:34` with the per-stdlib table.
+- [x] Re-run TASK-039's `≥10× speedup` assertion against the new baseline on the Linux lane and confirm it still passes.
 
 **Dependencies:**
 - Blocked by: TASK-039 (Done)
@@ -31,4 +31,4 @@ measurement so the TASK-039 ≥10× speedup gate has a real Linux baseline.
 **Related Requirements:** PRD §3.6 performance acceptance, PRD-REQ-REQ-001
 **Related Decisions:** None new
 
-**Status:** Backlog
+**Status:** Done
