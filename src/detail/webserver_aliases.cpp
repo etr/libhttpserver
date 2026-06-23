@@ -56,6 +56,7 @@
 #include "httpserver/detail/webserver_impl.hpp"
 
 #include <cassert>
+#include <exception>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -227,7 +228,32 @@ void webserver::install_auth_alias_() {
                 // (one heap alloc removed per request that runs through
                 // this hook), and small responses ride the http_response
                 // SBO with zero further allocs.
-                auto rejection = ws_ptr->auth_handler(*ctx.request);
+                // Fail-closed (TASK-085): the auth seat is a security
+                // boundary, so a throwing auth callable must NOT fall
+                // through to the resource. The generic short-circuit
+                // firing path (fire_short_circuit_hooks_for_phase) treats
+                // a throwing hook as pass(), which would be a security
+                // fail-open here (CWE-703). Wrap the callable in a local
+                // try/catch that short-circuits with a 500 instead,
+                // matching the documented §5.2 / DR-009 contract that an
+                // exception thrown by a hook is routed through the same
+                // path as a throwing resource handler (which yields 500).
+                std::optional<http_response> rejection;
+                try {
+                    rejection = ws_ptr->auth_handler(*ctx.request);
+                } catch (const std::exception& e) {
+                    impl_ptr->log_dispatch_error(
+                        std::string("auth_handler threw: ").append(e.what())
+                            .append("; failing closed with 500"));
+                    return hook_action::respond_with(
+                        http_response::empty().with_status(500));
+                } catch (...) {
+                    impl_ptr->log_dispatch_error(
+                        "auth_handler threw unknown exception; "
+                        "failing closed with 500");
+                    return hook_action::respond_with(
+                        http_response::empty().with_status(500));
+                }
                 if (!rejection) {
                     return hook_action::pass();
                 }

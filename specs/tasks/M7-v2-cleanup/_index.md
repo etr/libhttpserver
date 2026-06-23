@@ -49,7 +49,7 @@ TASK-093).
 | TASK-082 | Tighten static-size bounds in `http_resource_test` and `webserver_pimpl_test` | MED | S | Done |
 | TASK-083 | Wire real CI gates into benchmarks | MED | M | Done |
 | TASK-084 | Re-measure libstdc++/Linux v1 baseline for `get_headers` ns/call | MED | S | Done |
-| TASK-085 | Residual test-smell sweep | MED | S | Backlog |
+| TASK-085 | Residual test-smell sweep | MED | S | Done |
 | TASK-086 | Execute file-size split roadmap (FILE_LOC_MAX 750 → 500) | HIGH | L | Backlog |
 | TASK-087 | Restore msan CI lane | HIGH | M | Backlog |
 | TASK-088 | Re-enable helgrind / drd / sgcheck in valgrind CI lane | HIGH | M | Backlog |
