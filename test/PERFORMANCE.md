@@ -31,14 +31,21 @@ versions change materially.
 |---|---|---|---|
 | `sizeof(http_resource)` | 32 bytes | 56 bytes | `v1_baseline/measure_v1_sizes.cpp` |
 | `sizeof(std::map<std::string,bool>)` | 24 bytes | 48 bytes | `v1_baseline/measure_v1_sizes.cpp` |
-| `get_headers()` median ns/call (16 headers) | ~768 ns (committed: 760 ns, conservative) | (not re-measured; gate uses libc++ constant) | `v1_baseline/measure_v1_get_headers.cpp` |
+| `get_headers()` median ns/call (16 headers) | ~768 ns (committed: 760 ns, conservative) | ~667 ns (committed: 640 ns, conservative) | `v1_baseline/measure_v1_get_headers.cpp` |
 
-The committed `V1_GET_HEADERS_NS_PER_CALL = 760.0` and the sizeof constants are selected at compile time by `v1_baseline/v1_constants.hpp` based on the detected C++ stdlib, so the acceptance gates are correct on both macOS and Linux.
+`V1_GET_HEADERS_NS_PER_CALL` is now selected per-stdlib (TASK-084),
+exactly like the sizeof constants: `v1_baseline/v1_constants.hpp` picks
+`760.0` on libc++ and `640.0` on libstdc++ based on the detected C++
+standard library, so the `≥10×` acceptance gate compares v2 against a
+real per-stdlib baseline on both macOS and Linux. Before TASK-084 the
+libc++ literal (760 ns) was reused unchanged on libstdc++/Linux.
 
-The committed `V1_GET_HEADERS_NS_PER_CALL = 760.0` is the rounded lower end
-of the observed 756–784 ns range so the ratio assertion remains conservative
-under host jitter. The sizeof constants are selected per-stdlib in
-`v1_baseline/v1_constants.hpp`; see the table above for both platform values.
+Each committed value is the rounded **lower** end of its platform's
+observed range (libc++: 756–784 ns rounded to 760; libstdc++: ~667 ns
+rounded down to 640) so the ratio assertion stays conservative under host
+jitter — a lower v1 baseline makes the gate strictly harder, never
+spuriously easier. The sizeof constants are likewise selected per-stdlib;
+see the table above for both platform values.
 
 ## v2.0 measured values (re-run `make bench` to refresh)
 
@@ -47,9 +54,15 @@ under host jitter. The sizeof constants are selected per-stdlib in
 | `sizeof(http_resource)` | 16 bytes | 50% of v1 |
 | `get_headers()` median ns/call (16 headers) | ~3.3 ns | ~230× faster than v1 |
 
-Concretely: on the maintainer reference host, `make bench` printed
-`bench_get_headers v1=760.000ns v2=3.293ns ratio=230.76x` on
+Concretely: on the maintainer reference host (libc++), `make bench`
+printed `bench_get_headers v1=760.000ns v2=3.293ns ratio=230.76x` on
 `feature/v2.0` HEAD = `c71b0e8`.
+
+On a libstdc++ build (g++-14, Ubuntu 24.04) used to verify the TASK-084
+per-stdlib baseline, `make bench` printed
+`bench_get_headers v1=640.000ns v2=2.777ns ratio=230.43x` — the `≥10×`
+gate passes against the re-measured libstdc++ baseline with the same
+~230× headroom as libc++.
 
 ## Methodology — `bench_get_headers`
 

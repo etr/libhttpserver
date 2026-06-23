@@ -44,6 +44,31 @@ using httpserver::create_test_request;
 using httpserver::http_request;
 using httpserver::v1_baseline::V1_GET_HEADERS_NS_PER_CALL;
 
+// TASK-084: pin the per-stdlib provenance of the v1 baseline at compile
+// time. Before TASK-084, V1_GET_HEADERS_NS_PER_CALL was a single
+// mono-platform literal (760.0, the libc++/Apple-Silicon measurement)
+// reused unchanged on libstdc++/Linux. These static_asserts encode that
+// the constant is now selected per-stdlib and carries the platform's own
+// re-measured value, so a future edit cannot silently revert the
+// libstdc++ arm to the reused libc++ number. The arm for the inactive
+// stdlib is not compiled, so each lane only checks its own value.
+#if defined(__GLIBCXX__)
+static_assert(
+    V1_GET_HEADERS_NS_PER_CALL != 760.0,
+    "libstdc++ v1 get_headers baseline must be the re-measured libstdc++ "
+    "value (TASK-084), not the reused libc++ 760ns literal");
+static_assert(
+    V1_GET_HEADERS_NS_PER_CALL >= 500.0
+        && V1_GET_HEADERS_NS_PER_CALL <= 760.0,
+    "libstdc++ v1 get_headers baseline must lie within the re-measured "
+    "band (TASK-084); a value outside it signals an un-re-measured constant");
+#elif defined(_LIBCPP_VERSION)
+static_assert(
+    V1_GET_HEADERS_NS_PER_CALL == 760.0,
+    "libc++ v1 get_headers baseline must remain the original TASK-039 "
+    "measurement (760.0 ns), the conservative lower end of 756..784 ns");
+#endif
+
 // Compile-time detection of any sanitizer instrumentation that
 // would distort the per-call cost beyond recognition.
 // Wrapped in a constexpr function to avoid the awkward trailing-semicolon

@@ -17,12 +17,17 @@ drift.
 Re-run the measurement TUs and update `v1_constants.hpp` if any of
 the following change on the build host:
 
-- libstdc++ major version (affects `sizeof(std::map<...>)`)
-- libc++ major version (same)
+- libstdc++ major version (affects `sizeof(std::map<...>)` and the
+  libstdc++ `get_headers()` ns/call constant)
+- libc++ major version (affects the libc++ counterparts of both)
 - libmicrohttpd major version (affects `get_headers()` ns/call only)
 - Compiler vendor (affects `std::map` layout via stdlib choice)
 
-A re-measurement is a one-commit change: update the three constants
+Both the sizeof constants and `V1_GET_HEADERS_NS_PER_CALL` are selected
+per-stdlib (TASK-084), so each has a libc++ branch and a libstdc++ branch
+— re-measure and update only the branch for the stdlib you are on.
+
+A re-measurement is a one-commit change: update the relevant constants
 in `v1_constants.hpp`, update the "Baseline values" table in
 `PERFORMANCE.md`, and rerun `make bench` to verify the bench
 assertions still pass.
@@ -73,9 +78,27 @@ This TU stubs `MHD_get_connection_values` itself; it does not need
 the v1 library link or a running daemon. It does need
 `microhttpd.h` for the type declarations.
 
+`V1_GET_HEADERS_NS_PER_CALL` is selected **per-stdlib** (TASK-084), so
+re-measure it on the stdlib whose constant you are updating; the two
+values live behind `#if defined(__GLIBCXX__)` / `#elif
+defined(_LIBCPP_VERSION)` branches in `v1_constants.hpp`.
+
+On macOS / Apple clang / libc++ (Homebrew `microhttpd.h`):
+
 ```sh
 c++ -std=c++20 -O3 \
     -I/opt/homebrew/include \
+    test/v1_baseline/measure_v1_get_headers.cpp \
+    -o /tmp/measure_v1_get_headers
+/tmp/measure_v1_get_headers
+```
+
+On Linux / GCC / libstdc++ (Ubuntu `apt-get install libmicrohttpd-dev`;
+the verify-build.yml performance lane uses `g++-14`):
+
+```sh
+g++-14 -std=c++20 -O3 -DNDEBUG \
+    -I/usr/include \
     test/v1_baseline/measure_v1_get_headers.cpp \
     -o /tmp/measure_v1_get_headers
 /tmp/measure_v1_get_headers
@@ -88,9 +111,18 @@ v1_get_headers_ns_per_call=767.665
   (min=756.367 max=783.927)
 ```
 
+Sample output (g++-14, libstdc++ `__GLIBCXX__=20240908`, native
+aarch64):
+
+```
+v1_get_headers_ns_per_call=667.319
+```
+
 Take the rounded **lower** end of the observed range as
-`V1_GET_HEADERS_NS_PER_CALL` (we commit a conservative number so
-the ≥10× ratio assertion has comfortable margin under host jitter).
+`V1_GET_HEADERS_NS_PER_CALL` for that stdlib's branch (we commit a
+conservative number so the ≥10× ratio assertion has comfortable margin
+under host jitter; a lower v1 baseline can only make the gate stricter,
+never spuriously easier).
 
 ### Step 4 — update the constants
 
