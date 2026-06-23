@@ -239,6 +239,23 @@ int main() {
     // its capacity, so the steady-state hit rate is effectively zero and
     // each lookup pays the full radix walk.
     //
+    // Note (performance-reviewer-iter1-1): during the first ≤256 iterations
+    // of each outer round, the LRU progressively re-warms from the
+    // invalidated state. These iterations see a mix of cold-miss and
+    // warming costs rather than pure radix latency. However, with
+    // INNER_RADIX=100K this warm-up window is only ~0.25% of inner
+    // iterations per round (256 / 100K), so its effect on the median
+    // ns/call across OUTER rounds is negligible and conservative (slightly
+    // inflates the measured cost, making the gate stricter, not looser).
+    // The comment "each lookup pays the full radix walk" holds for >99.75%
+    // of measured iterations; the first-256-per-round warm-up does not
+    // compromise the gate intent.
+    //
+    // If kNumPaths is ever changed, keep it above ROUTE_CACHE_MAX_SIZE
+    // (currently 256) so the LRU-eviction guarantee holds. If
+    // ROUTE_CACHE_MAX_SIZE itself changes, this constant must be updated
+    // manually -- see test-quality-reviewer-iter1-3.
+    //
     // invalidate_route_cache() runs once per OUTER round (not per inner
     // iteration), so its cost (clearing a ≤256-entry map) is amortised
     // across INNER_RADIX (100K) lookups and does not taint the median.
