@@ -28,11 +28,16 @@
 // path at all -- there is no compile-time expression on the v2.0
 // branch that reproduces the v1 numbers.
 //
-// Baseline environment (full details in test/PERFORMANCE.md):
+// Baseline environment (full details in test/PERFORMANCE.md). Both the
+// sizeof constants AND the get_headers ns/call constant are selected
+// per-stdlib at compile time (TASK-084 split the ns/call constant, which
+// had previously reused the libc++ value on libstdc++). The host triple
+// below describes the libc++ reference host; the libstdc++ ns/call
+// provenance is documented against its own branch lower in this file.
 //   * master SHA      : d8b055e ("Migrate to libmicrohttpd 1.0.0 API")
-//   * host triple     : aarch64-apple-darwin25.3.0 (Apple silicon)
+//   * host triple     : aarch64-apple-darwin25.3.0 (Apple silicon, libc++)
 //   * compiler        : Apple clang 21.0.0
-//   * C++ stdlib      : libc++ (LLVM)
+//   * C++ stdlib      : libc++ (LLVM)  [libstdc++: see ns/call branch]
 //   * build profile   : -std=c++20 -O3 (release; no sanitizers)
 //   * libmicrohttpd   : 1.0.5 (only relevant to ns/call measurement)
 //
@@ -91,11 +96,49 @@ inline constexpr std::size_t V1_STD_MAP_STRING_BOOL_SIZEOF = 24;
 // bench_get_headers.cpp), std::chrono::steady_clock, asm-volatile
 // sink to defeat dead-store elimination.
 //
+// This constant is selected per-stdlib (TASK-084). It was previously a
+// single mono-platform literal (the libc++ value) reused unchanged on
+// libstdc++/Linux; TASK-084 re-measured the libstdc++ value so the
+// TASK-039 >=10x speedup gate has a real per-stdlib baseline. The
+// dominant per-call cost is the std::map node layout + 16 string copies,
+// which differs between the two standard libraries' map implementations.
+//
+// We commit the conservatively rounded LOWER end of each platform's
+// observed range so the >=10x ratio assertion keeps margin under host
+// jitter (a lower v1 baseline makes the gate strictly harder, never
+// spuriously easier).
+#if defined(__GLIBCXX__)
+// libstdc++ (Linux / GCC): re-measured under TASK-084.
+//
+// Provenance: gcc-14 (g++-14 14.2.0, Ubuntu 24.04, the verify-build.yml
+// performance lane's toolchain), -std=c++20 -O3 -DNDEBUG, libstdc++
+// __GLIBCXX__=20240908. Measured via the Step-3 recipe in
+// test/v1_baseline/README.md.
+//
+// Two measurement vantage points were taken (a native x86-64
+// verify-build.yml runner is not reachable from the macOS maintainer
+// host, so the value is filled from the most authoritative available
+// libstdc++ measurement per the README re-measurement procedure):
+//   * native aarch64 libstdc++ (Apple-silicon Linux container, no
+//     emulation) : ~667 .. 742 ns/call across reps.
+//   * emulated x86-64 libstdc++ (Docker on Apple silicon) : ~4477 ..
+//     5029 ns/call -- inflated ~6x by binary translation, recorded only
+//     to confirm libstdc++'s map is comparable-or-slower than libc++,
+//     NOT used to set the literal.
+// We commit the rounded lower end of the un-emulated native range
+// (~667 ns rounded down to 640 ns) as the conservative libstdc++
+// baseline.
+inline constexpr double V1_GET_HEADERS_NS_PER_CALL = 640.0;
+#elif defined(_LIBCPP_VERSION)
+// libc++ (macOS / Apple clang) -- the original TASK-039 measurement.
+//
 // Measured median on the baseline host: 767.665 ns/call (range
 // 756 .. 784 across the 11 reps). We commit the rounded lower end of
-// the observed range (756 ns rounded to 760 ns) as a conservative number;
-// the >=10x assertion has comfortable margin regardless of host jitter.
+// the observed range (756 ns rounded to 760 ns) as a conservative number.
 inline constexpr double V1_GET_HEADERS_NS_PER_CALL = 760.0;
+#else
+#error "Unknown C++ stdlib: re-measure v1 get_headers ns/call (see test/v1_baseline/README.md) and add a branch in v1_constants.hpp"
+#endif
 
 }  // namespace httpserver::v1_baseline
 
