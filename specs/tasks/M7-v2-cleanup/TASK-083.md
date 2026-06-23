@@ -14,11 +14,11 @@ Three benches have soft or absent acceptance gates:
 Land the gates that were asked for in TASK-052 and TASK-053, separate the bench_route_lookup measurement, and harden the MSVC sink.
 
 **Action Items:**
-- [ ] `bench_hook_overhead`: implement the relative `2× HOOK_BASELINE_NS` gate per TASK-052 acceptance. Compute `HOOK_BASELINE_NS` in the no-hooks variant of the same bench run (not a hardcoded constant) so the gate auto-tracks runner speed. Keep the absolute 50 ns ceiling as a sanity bound.
-- [ ] `bench_warm_path`: add `>= 5% improvement vs baseline` pass/fail per TASK-058 acceptance. Use a versioned `BASELINE_NS` per-platform constant header, refreshed deliberately (see TASK-084).
-- [ ] `bench_route_lookup`: split into two measurements — `cache_warm_ns` (cache hit) and `radix_pure_ns` (cache cold, radix only). Each carries its own gate (≤ 200 ns and ≤ 5 µs from TASK-053).
-- [ ] `bench_harness.hpp`: replace the MSVC sink with `_ReadWriteBarrier()` + a `volatile` pointer write, mirroring the gcc/clang `asm volatile("" :: "g"(x) : "memory")` pattern. Document why the previous sink was elidable.
-- [ ] Wire the new gates into `bench_targets` in `test/Makefile.am`. Bench runs stay opt-in from `make check`.
+- [x] `bench_hook_overhead`: implement the relative `2× HOOK_BASELINE_NS` gate per TASK-052 acceptance. Compute `HOOK_BASELINE_NS` in the no-hooks variant of the same bench run (not a hardcoded constant) so the gate auto-tracks runner speed. Keep the absolute 50 ns ceiling as a sanity bound.
+- [x] `bench_warm_path`: add `>= 5% improvement vs baseline` pass/fail per TASK-058 acceptance. Use a versioned `BASELINE_NS` per-platform constant header, refreshed deliberately (see TASK-084).
+- [x] `bench_route_lookup`: split into two measurements — `cache_warm_ns` (cache hit) and `radix_pure_ns` (cache cold, radix only). Each carries its own gate (≤ 200 ns and ≤ 5 µs from TASK-053).
+- [x] `bench_harness.hpp`: replace the MSVC sink with `_ReadWriteBarrier()` + a `volatile` pointer write, mirroring the gcc/clang `asm volatile("" :: "g"(x) : "memory")` pattern. Document why the previous sink was elidable.
+- [x] Wire the new gates into `bench_targets` in `test/Makefile.am`. Bench runs stay opt-in from `make check`.
 
 **Dependencies:**
 - Blocked by: TASK-052 (Done), TASK-053 (Done), TASK-058 (Done)
