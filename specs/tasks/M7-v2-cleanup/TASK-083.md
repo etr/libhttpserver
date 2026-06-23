@@ -35,4 +35,4 @@ Land the gates that were asked for in TASK-052 and TASK-053, separate the bench_
 **Related Requirements:** PRD §3.6 performance acceptance, PRD-HOOK-REQ-008 (zero-cost when unused)
 **Related Decisions:** §4.5 routing, DR-012
 
-**Status:** Backlog
+**Status:** Done
