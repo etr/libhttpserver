@@ -165,16 +165,21 @@ LT_BEGIN_AUTO_TEST(auth_handler_optional_signature_suite,
     ws.stop();
 LT_END_AUTO_TEST(engaged_optional_rejects_request)
 
-// 3. Auth handler throwing a std::runtime_error: pin the observable
-//    contract for error paths through the hook-invocation machinery.
-//    The current dispatch path swallows the exception and lets the
-//    request progress (equivalent to nullopt). The hook framework's
-//    handler-exception slot is the named extension point for converting
-//    an exception into a custom response; the alias hook itself stays
-//    non-fatal so a buggy auth callable cannot DoS the whole server.
-//    A future change that short-circuits with 500 must update this pin.
+// 3. Auth handler throwing a std::exception: the auth alias is
+//    FAIL-CLOSED (TASK-085). A throwing auth callable must NOT let the
+//    request through to the resource — that would be a security
+//    fail-open on the authentication boundary (CWE-703). Instead the
+//    alias hook catches the exception, logs it, and short-circuits with
+//    a 500, matching the documented §5.2 / DR-009 contract that an
+//    exception thrown by a hook is "routed through the same path as a
+//    throwing resource handler" (which terminates in a 500). The
+//    contrast with the generic short-circuit phases (which still treat
+//    a throwing hook as pass()) is deliberate: the auth seat is the one
+//    place where fail-open is most dangerous, so the alias wraps its own
+//    callable invocation in a fail-closed guard. See the auth_handler
+//    row in specs/architecture/04-components/hooks.md.
 LT_BEGIN_AUTO_TEST(auth_handler_optional_signature_suite,
-                   throwing_handler_is_swallowed_and_request_passes)
+                   throwing_auth_handler_fails_closed_with_500)
     webserver ws{create_webserver(PORT_3)
         .auth_handler([](const http_request&)
                           -> std::optional<http_response> {
@@ -185,11 +190,12 @@ LT_BEGIN_AUTO_TEST(auth_handler_optional_signature_suite,
     ws.start(false);
 
     fetch_result fr = fetch("localhost:" PORT_3_STRING "/protected");
-    LT_CHECK_EQ(fr.response_code, 200);
-    LT_CHECK_EQ(fr.body, std::string("SUCCESS"));
+    // Fail-closed: the request must NOT reach the resource.
+    LT_CHECK_EQ(fr.response_code, 500);
+    LT_CHECK(fr.body != std::string("SUCCESS"));
 
     ws.stop();
-LT_END_AUTO_TEST(throwing_handler_is_swallowed_and_request_passes)
+LT_END_AUTO_TEST(throwing_auth_handler_fails_closed_with_500)
 
 // 4. Engaged optional carrying a 64 KB body arrives uncorrupted on the
 //    wire. Regression target for the MOVE from the optional into

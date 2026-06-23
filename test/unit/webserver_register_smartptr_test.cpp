@@ -55,13 +55,16 @@ using httpserver::http_resource;
 using httpserver::http_response;
 using httpserver::webserver;
 
-// PORT and the PORT+N offsets below are fixed numeric values shared by all
-// tests in this TU. The tests run sequentially (single-process), so the
-// offsets (PORT+0 through PORT+5) do not conflict with each other.
-// If a future parallel test runner binds the same ports concurrently, switch
-// to create_webserver(0) and retrieve the OS-assigned port via
-// ws.get_bound_port() after ws.start().
-#define PORT 8080
+// TASK-085: this TU is parallel-runner safe.
+//   - The one test that starts a server and does a curl round-trip
+//     (unique_ptr_overload_compiles_and_serves) binds an OS-assigned
+//     ephemeral port via create_webserver(0) and reads it back with
+//     ws.get_bound_port() — no fixed port, no cross-test collision.
+//   - Every other test constructs create_webserver(0) but never calls
+//     start(), so no port is ever bound; the ephemeral 0 is harmless.
+//   - The destructor-counting tests use a per-test local std::atomic<int>
+//     passed to counted_resource by pointer, not a shared static, so two
+//     tests running concurrently cannot contaminate each other's count.
 
 namespace {
 
@@ -77,21 +80,24 @@ class ok_resource : public http_resource {
      }
 };
 
-// Resource whose destructor increments a static counter, so tests can
-// observe ownership-driven destruction.
+// Resource whose destructor increments a caller-supplied counter, so
+// tests can observe ownership-driven destruction. The counter is a
+// per-test local std::atomic<int> passed by pointer (TASK-085) rather
+// than a shared static, so concurrent tests cannot contaminate each
+// other's count under a parallel runner.
 class counted_resource : public http_resource {
  public:
-     static std::atomic<int> dtor_count;
-
-     counted_resource() = default;
-     ~counted_resource() override { ++dtor_count; }
+     explicit counted_resource(std::atomic<int>* counter)
+         : counter_(counter) {}
+     ~counted_resource() override { ++(*counter_); }
 
      http_response render_get(const http_request&) override {
          return http_response::string("OK");
      }
-};
 
-std::atomic<int> counted_resource::dtor_count{0};
+ private:
+     std::atomic<int>* counter_;
+};
 
 }  // namespace
 
@@ -145,15 +151,9 @@ static_assert(!has_raw_register_resource<webserver>::value,
 // ---- Runtime ownership tests ------------------------------------------
 
 LT_BEGIN_SUITE(webserver_register_smartptr_suite)
-    void set_up() {
-        // Reset the static dtor_count before every test so tests do not
-        // accumulate each other's destructor calls. This relies on the
-        // current runner executing tests sequentially; if a parallel
-        // runner is ever introduced, replace dtor_count with a per-test
-        // local atomic passed by reference.
-        counted_resource::dtor_count = 0;
-    }
-
+    // No shared mutable state to reset: the destructor-counting tests
+    // each own a local std::atomic<int> (TASK-085).
+    void set_up() {}
     void tear_down() {}
 LT_END_SUITE(webserver_register_smartptr_suite)
 
@@ -168,15 +168,19 @@ LT_END_SUITE(webserver_register_smartptr_suite)
 // explicit "compiles AND serves" requirement.
 LT_BEGIN_AUTO_TEST(webserver_register_smartptr_suite,
                    unique_ptr_overload_compiles_and_serves)
-    webserver ws{create_webserver(PORT)};
+    webserver ws{create_webserver(0)};
     auto r = std::make_unique<ok_resource>();
     ws.register_resource("/foo", std::move(r));
     ws.start(false);
+    // OS-assigned ephemeral port: no fixed port to collide under a
+    // parallel runner (TASK-085).
+    const std::string url =
+        "localhost:" + std::to_string(ws.get_bound_port()) + "/foo";
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
     CURL* curl = curl_easy_init();
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:8080/foo");
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -192,35 +196,38 @@ LT_END_AUTO_TEST(unique_ptr_overload_compiles_and_serves)
 // when the webserver is destroyed."
 LT_BEGIN_AUTO_TEST(webserver_register_smartptr_suite,
                    unique_ptr_dtor_runs_on_webserver_destruction)
-    LT_CHECK_EQ(counted_resource::dtor_count.load(), 0);
+    std::atomic<int> dtor_count{0};
+    LT_CHECK_EQ(dtor_count.load(), 0);
     {
-        webserver ws{create_webserver(PORT + 1)};
-        ws.register_resource("/x", std::make_unique<counted_resource>());
+        webserver ws{create_webserver(0)};
+        ws.register_resource(
+            "/x", std::make_unique<counted_resource>(&dtor_count));
         // No start/stop needed — registration alone must transfer
         // ownership; webserver destruction must run the dtor.
     }
-    LT_CHECK_EQ(counted_resource::dtor_count.load(), 1);
+    LT_CHECK_EQ(dtor_count.load(), 1);
 LT_END_AUTO_TEST(unique_ptr_dtor_runs_on_webserver_destruction)
 
 // shared_ptr semantics: caller's shared_ptr keeps the resource alive
 // past webserver destruction. The dtor runs only once both refs drop.
 LT_BEGIN_AUTO_TEST(webserver_register_smartptr_suite,
                    shared_ptr_caller_keeps_resource_alive)
-    LT_CHECK_EQ(counted_resource::dtor_count.load(), 0);
-    auto sp = std::make_shared<counted_resource>();
+    std::atomic<int> dtor_count{0};
+    LT_CHECK_EQ(dtor_count.load(), 0);
+    auto sp = std::make_shared<counted_resource>(&dtor_count);
     {
-        webserver ws{create_webserver(PORT + 2)};
+        webserver ws{create_webserver(0)};
         ws.register_resource("/x", sp);
     }
     // Webserver destroyed; caller still holds a ref.
-    LT_CHECK_EQ(counted_resource::dtor_count.load(), 0);
+    LT_CHECK_EQ(dtor_count.load(), 0);
     sp.reset();
-    LT_CHECK_EQ(counted_resource::dtor_count.load(), 1);
+    LT_CHECK_EQ(dtor_count.load(), 1);
 LT_END_AUTO_TEST(shared_ptr_caller_keeps_resource_alive)
 
 LT_BEGIN_AUTO_TEST(webserver_register_smartptr_suite,
                    null_unique_ptr_throws)
-    webserver ws{create_webserver(PORT + 3)};
+    webserver ws{create_webserver(0)};
     bool caught_invalid_argument = false;
     try {
         ws.register_resource("/x", std::unique_ptr<http_resource>{});
@@ -234,7 +241,7 @@ LT_END_AUTO_TEST(null_unique_ptr_throws)
 
 LT_BEGIN_AUTO_TEST(webserver_register_smartptr_suite,
                    null_shared_ptr_throws)
-    webserver ws{create_webserver(PORT + 4)};
+    webserver ws{create_webserver(0)};
     bool caught_invalid_argument = false;
     try {
         ws.register_resource("/x", std::shared_ptr<http_resource>{});
@@ -249,7 +256,7 @@ LT_END_AUTO_TEST(null_shared_ptr_throws)
 // throw-on-null behavior.
 LT_BEGIN_AUTO_TEST(webserver_register_smartptr_suite,
                    duplicate_registration_throws)
-    webserver ws{create_webserver(PORT + 5)};
+    webserver ws{create_webserver(0)};
     ws.register_resource("/dup", std::make_shared<ok_resource>());
     bool caught_invalid_argument = false;
     try {
