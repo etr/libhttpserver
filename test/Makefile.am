@@ -26,7 +26,7 @@ LDADD += -lcurl
 
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/
 METASOURCES = AUTO
-check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver new_response_types daemon_info uri_log
+check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication deferred http_resource http_response create_webserver new_response_types daemon_info uri_log post_iterator_null_key
 
 MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
 
@@ -51,6 +51,14 @@ uri_log_SOURCES = unit/uri_log_test.cpp
 # it needs an explicit -lmicrohttpd in its link line on top of the default
 # LDADD (modern ld enforces --no-copy-dt-needed-entries).
 uri_log_LDADD = $(LDADD) -lmicrohttpd
+# post_iterator_null_key: issue #375 regression. Drives the static
+# webserver::post_iterator callback with a null key (the continuation-chunk
+# case MHD hits when a field is split across callbacks) and asserts it no
+# longer throws std::logic_error / terminates. Constructs an http_request
+# and modded_request directly, so it needs -lmicrohttpd the same way
+# uri_log does.
+post_iterator_null_key_SOURCES = unit/post_iterator_null_key_test.cpp
+post_iterator_null_key_LDADD = $(LDADD) -lmicrohttpd
 
 noinst_HEADERS = littletest.hpp
 AM_CXXFLAGS += -Wall -fPIC -Wno-overloaded-virtual
