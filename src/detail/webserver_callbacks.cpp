@@ -374,6 +374,18 @@ namespace detail {
 
 MHD_Result webserver_impl::handle_post_form_arg(detail::modded_request* mr,
         const char* key, const char* data, size_t size, uint64_t off) {
+    // MHD may invoke the post iterator with a null key on a continuation
+    // chunk (off > 0): the field name was supplied on the first call and
+    // is not repeated. With no field name there is nothing to store the
+    // value under, so silently accept the chunk (MHD_YES tells MHD to
+    // continue; MHD_NO would abort the whole request). Guarding here also
+    // stops the raw pointer from reaching std::string, which throws
+    // std::logic_error on null and aborts the process via std::terminate
+    // because the throw escapes a C callback. See issue #375 (same class
+    // of bug as the null-uri fix in uri_log, issue #371).
+    if (key == nullptr) {
+        return MHD_YES;
+    }
     // No file: set the arg key/value and return. A non-zero @p off
     // means MHD is feeding us a continuation chunk of a previously-
     // started value, so append rather than replace.
