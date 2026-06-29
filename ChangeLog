@@ -16,6 +16,9 @@ Version 2.0.0
 		down per refactor commit until reaching the long-term target
 		of 10. Duplication gate runs at PMD's default
 		minimum-tokens=100 from day one (currently zero hits).
+	Fixed std::terminate when MHD invokes the post-processor iterator with
+		a null key on a continuation chunk (a field split across multiple
+		callbacks). Resolves issue #375.
 
 Version 0.20.0
 
