@@ -33,4 +33,4 @@ block at lines 26-46 and is the single residual TEMP-BUMP from commit
 **Related Requirements:** PRD §2 code quality NFR
 **Related Decisions:** None new
 
-**Status:** Backlog
+**Status:** Done
