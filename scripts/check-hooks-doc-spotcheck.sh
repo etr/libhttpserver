@@ -136,20 +136,34 @@ fi
 # ---- H5: alias-setter Doxygen mentions add_hook + hook_phase + alias -------
 
 CW_HPP="$SRC/create_webserver.hpp"
+# TASK-086: the handler/callback alias setters (not_found_handler,
+# method_not_allowed_handler, internal_error_handler, auth_handler) were
+# split out of create_webserver.hpp into the create_webserver_setters.hpp
+# class-body fragment to keep both headers under the per-file LOC ceiling.
+# log_access remains in create_webserver.hpp. Locate each setter in
+# whichever of the two files declares it.
+CW_SETTERS="$SRC/create_webserver_setters.hpp"
 [ -f "$CW_HPP" ] || fail "H5: $CW_HPP does not exist"
+[ -f "$CW_SETTERS" ] || fail "H5: $CW_SETTERS does not exist"
 for setter in log_access not_found_handler method_not_allowed_handler \
               internal_error_handler auth_handler; do
-    sym_line="$(grep -nE "^[[:space:]]*create_webserver& ${setter}\(" "$CW_HPP" \
-                | head -1 | cut -d: -f1)"
+    cw_file="$CW_HPP"
+    sym_line="$(grep -nE "^[[:space:]]*create_webserver& ${setter}\(" "$cw_file" \
+                | head -1 | cut -d: -f1)" || true
     if [ -z "$sym_line" ]; then
-        fail "H5: cannot find setter '$setter' in create_webserver.hpp"
+        cw_file="$CW_SETTERS"
+        sym_line="$(grep -nE "^[[:space:]]*create_webserver& ${setter}\(" "$cw_file" \
+                    | head -1 | cut -d: -f1)" || true
     fi
-    start_line="$(awk -v end="$sym_line" 'NR<end && /\/\*\*/ { last=NR } END { print last+0 }' "$CW_HPP")"
+    if [ -z "$sym_line" ]; then
+        fail "H5: cannot find setter '$setter' in create_webserver.hpp or create_webserver_setters.hpp"
+    fi
+    start_line="$(awk -v end="$sym_line" 'NR<end && /\/\*\*/ { last=NR } END { print last+0 }' "$cw_file")"
     if [ "$start_line" -eq 0 ]; then
         fail "H5: no /** block precedes setter '$setter'"
     fi
-    end_line="$(awk -v s="$start_line" -v e="$sym_line" 'NR>=s && NR<=e && /\*\// { print NR; exit }' "$CW_HPP")"
-    block="$(awk -v s="$start_line" -v e="$end_line" 'NR>=s && NR<=e' "$CW_HPP")"
+    end_line="$(awk -v s="$start_line" -v e="$sym_line" 'NR>=s && NR<=e && /\*\// { print NR; exit }' "$cw_file")"
+    block="$(awk -v s="$start_line" -v e="$end_line" 'NR>=s && NR<=e' "$cw_file")"
     if ! echo "$block" | grep -qiE '\balias\b|\baliases\b'; then
         fail "H5: setter '$setter' Doxygen block does not call out 'alias'"
     fi
