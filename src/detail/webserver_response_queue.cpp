@@ -21,78 +21,18 @@
 #include "httpserver/webserver.hpp"
 #include "httpserver/detail/webserver_impl.hpp"
 
-#if defined(_WIN32) && !defined(__CYGWIN__)
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#define _WINDOWS
-#else
-#if defined(__CYGWIN__)
-#include <sys/select.h>
-#endif
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-#endif
-
-#include <errno.h>
 #include <microhttpd.h>
-#ifdef HAVE_WEBSOCKET
-#include <microhttpd_ws.h>
-#endif  // HAVE_WEBSOCKET
-#include <signal.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <strings.h>
-#include <algorithm>
-#include <chrono>
-#include <cstring>
-#include <iosfwd>
-#include <iostream>
-#include <memory>
-#include <mutex>
 #include <optional>
-#include <regex>
-#include <set>
-#include <shared_mutex>
 #include <stdexcept>
 #include <string>
-#include <string_view>
 #include <utility>
-#include <vector>
 
-#include "httpserver/constants.hpp"
-#include "httpserver/create_webserver.hpp"
-#include "httpserver/feature_unavailable.hpp"
-#include "httpserver/websocket_handler.hpp"
-#include "httpserver/detail/http_endpoint.hpp"
-#include "httpserver/detail/lambda_resource.hpp"
+#include "httpserver/detail/body.hpp"
 #include "httpserver/detail/modded_request.hpp"
-#include "httpserver/detail/path_normalize.hpp"
-#include "httpserver/detail/resource_hook_table.hpp"
-#include "httpserver/http_request.hpp"
-#include "httpserver/http_resource.hpp"
 #include "httpserver/http_response.hpp"
 #include "httpserver/http_utils.hpp"
-#include "httpserver/string_utilities.hpp"
-#include "httpserver/detail/body.hpp"
-
-#ifdef HAVE_GNUTLS
-#include <gnutls/gnutls.h>
-#include <gnutls/x509.h>
-#endif  // HAVE_GNUTLS
-
-using std::string;
-using std::pair;
-using std::vector;
-using std::map;
-using std::set;
 
 namespace httpserver {
-
-using httpserver::http::http_utils;
-using httpserver::http::ip_representation;
-using httpserver::http::base_unescaper;
-
 
 namespace detail {
 
@@ -328,21 +268,6 @@ MHD_Result webserver_impl::materialize_and_queue_response(MHD_Connection* connec
     MHD_destroy_response(raw_response);
     return (MHD_Result) to_ret;
 }
-
-// TASK-048: gated fire of the route_resolved phase. Built as a small
-// helper so finalize_answer stays under the per-function CCN ceiling
-// (CCN_MAX in scripts/check-complexity.sh) after the addition of the
-// hook firing site. Observation-only per DR-012 §4.10.
-//
-// LIFETIME NOTE: desc.path_template is a string_view into
-// mr->matched_path_template (a per-request std::string on modded_request).
-// The view is only valid for the duration of fire_route_resolved — hooks
-// must not capture it past their return. See route_descriptor::path_template
-// Doxygen in hook_context.hpp for the full contract.
-//
-// hrm may be null for lambda-route hits; the 'found && hrm' gate covers
-// both the miss path (found==false) and the lambda-route hit (found==true
-// but no http_resource*), both of which produce desc==nullopt.
 
 }  // namespace detail
 
