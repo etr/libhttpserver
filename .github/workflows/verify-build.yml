@@ -196,14 +196,46 @@ jobs:
             debug: nodebug
             coverage: nocoverage
             shell: bash
+          # TASK-088: split valgrind into three parallel matrix entries — one
+          # per tool (memcheck / helgrind / drd). GitHub Actions runs them
+          # concurrently, capping wall-clock cost at the slowest single tool
+          # instead of the sum of all three serially.
+          #
+          # The full check_PROGRAMS suite runs under each tool. helgrind/drd
+          # scope is intentionally NOT narrowed to unit/ tests only: the
+          # concurrency tests (threadsafety_stress, route_table_concurrency)
+          # are the primary reason for running race detectors (DR-008) and must
+          # not be subsetted out. A per-step timeout-minutes guards against a
+          # hung race-detector run (helgrind/drd can serialize busy-waits into
+          # apparent livelocks).
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
-            build-type: valgrind
+            build-type: valgrind-memcheck
             compiler-family: gcc
             c-compiler: gcc-14
             cc-compiler: g++-14
-            debug: nodebug
+            debug: nodebug  # configure step passes --enable-debug unconditionally for valgrind-* lanes
+            coverage: nocoverage
+            shell: bash
+          - test-group: extra
+            os: ubuntu-latest
+            os-type: ubuntu
+            build-type: valgrind-helgrind
+            compiler-family: gcc
+            c-compiler: gcc-14
+            cc-compiler: g++-14
+            debug: nodebug  # configure step passes --enable-debug unconditionally for valgrind-* lanes
+            coverage: nocoverage
+            shell: bash
+          - test-group: extra
+            os: ubuntu-latest
+            os-type: ubuntu
+            build-type: valgrind-drd
+            compiler-family: gcc
+            c-compiler: gcc-14
+            cc-compiler: g++-14
+            debug: nodebug  # configure step passes --enable-debug unconditionally for valgrind-* lanes
             coverage: nocoverage
             shell: bash
           # Test build without digest auth support (issue #232)
@@ -453,7 +485,7 @@ jobs:
 
     - name: Install valgrind if needed
       run: sudo apt-get install valgrind
-      if: ${{ matrix.build-type == 'valgrind' && matrix.os-type == 'ubuntu' }}
+      if: ${{ startsWith(matrix.build-type, 'valgrind-') && matrix.os-type == 'ubuntu' }}
 
     - name: Install cpplint if needed
       run: sudo pip3 install cpplint ;
@@ -911,16 +943,16 @@ jobs:
           ../configure --enable-debug --enable-coverage --disable-shared --disable-fastopen;
         elif [ "$DEBUG" = "debug" ]; then
           ../configure --enable-debug --disable-shared --disable-fastopen;
-        elif [ "$BUILD_TYPE" = "valgrind" ]; then
-          # TASK-088: the Valgrind lane now runs memcheck + helgrind + drd.
-          # The two race detectors (helgrind and drd) were previously turned
-          # off here, so only memcheck ran and real data races could slip
-          # through. They are re-enabled simply by no longer passing their
-          # per-tool disable flags to configure (all Valgrind tools default
-          # on). sgcheck (exp-sgcheck) stays off: it was removed upstream in
-          # Valgrind 3.20 and ubuntu-latest ships 3.22, so it is disabled by
-          # default in configure.ac via AX_VALGRIND_DFLT([sgcheck],[off])
-          # rather than probed and skipped. memcheck behaviour is unchanged.
+        elif case "$BUILD_TYPE" in valgrind-*) true;; *) false;; esac; then
+          # TASK-088: Valgrind lanes (valgrind-memcheck / valgrind-helgrind /
+          # valgrind-drd). All three share the same configure flags. The race
+          # detectors (helgrind and drd) were previously turned off by per-tool
+          # disable flags; removing those flags re-enables them. Each lane
+          # invokes a single make check-<tool> target derived from BUILD_TYPE,
+          # so GitHub Actions runs memcheck, helgrind, and drd in parallel
+          # rather than serially. sgcheck (exp-sgcheck) stays off: removed
+          # upstream in Valgrind 3.20; ubuntu-latest ships 3.22; disabled in
+          # configure.ac via AX_VALGRIND_DFLT([sgcheck],[off]).
           ../configure --enable-debug --disable-fastopen;
         elif [ "$BUILD_TYPE" = "flag-invariance-on" ]; then
           # TASK-037 / PRD-FLG-REQ-001: explicitly request all four feature
@@ -1176,10 +1208,12 @@ jobs:
       if: ${{ matrix.os-type == 'windows' }}
 
     - name: Run Valgrind checks
+      timeout-minutes: 90
       run: |
         cd build ;
-        make check-valgrind ;
-      if: ${{ matrix.build-type == 'valgrind' }}
+        TOOL="${BUILD_TYPE#valgrind-}" ;
+        make "check-valgrind-${TOOL}" ;
+      if: ${{ startsWith(matrix.build-type, 'valgrind-') }}
 
     - name: Print Valgrind results
       shell: bash
@@ -1194,7 +1228,7 @@ jobs:
             cat "test/$log" ;
           fi
         done
-      if: ${{ always() && matrix.build-type == 'valgrind' }}
+      if: ${{ always() && startsWith(matrix.build-type, 'valgrind-') }}
 
     - name: Run cppcheck
       run: |

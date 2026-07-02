@@ -20,11 +20,16 @@
 # Assertions against `.github/workflows/verify-build.yml`:
 #   (a) the file parses as valid YAML (via python3 + PyYAML; NOT actionlint
 #       or yamllint, which are not guaranteed present on the runner);
-#   (b) a matrix `include:` entry with `build-type: valgrind` exists;
+#   (b) three separate matrix `include:` entries exist with build-type:
+#       valgrind-memcheck, valgrind-helgrind, and valgrind-drd (parallel
+#       lanes so GitHub Actions runs the three tools concurrently);
 #   (c) the valgrind configure branch no longer carries ANY of
 #       --disable-valgrind-helgrind / --disable-valgrind-drd /
 #       --disable-valgrind-sgcheck (grep must find zero);
-#   (d) the "Run Valgrind checks" step still invokes `make check-valgrind`;
+#   (d) the "Run Valgrind checks" step invokes a valid AX_VALGRIND_CHECK
+#       per-tool target via make "check-valgrind-${TOOL}" (TOOL derived from
+#       BUILD_TYPE); bare make "check-${TOOL}" without the "valgrind-" prefix
+#       does not exist and must fail the gate;
 #   (e) the results-print step surfaces helgrind + drd logs
 #       (test-suite-helgrind.log, test-suite-drd.log), not just memcheck.
 #
@@ -78,13 +83,15 @@ if include is None:
     print("  (b) could not locate strategy.matrix.include in any job", file=sys.stderr)
     sys.exit(3)
 
-valgrind = [e for e in include if isinstance(e, dict) and e.get("build-type") == "valgrind"]
-if not valgrind:
-    print("  (b) no matrix include entry with build-type: valgrind", file=sys.stderr)
+VALGRIND_TOOLS = {"valgrind-memcheck", "valgrind-helgrind", "valgrind-drd"}
+found = {e["build-type"] for e in include
+         if isinstance(e, dict) and e.get("build-type") in VALGRIND_TOOLS}
+if found != VALGRIND_TOOLS:
+    missing = VALGRIND_TOOLS - found
+    print(f"  (b) missing valgrind matrix entries: {missing}", file=sys.stderr)
     sys.exit(4)
 
-print(f"  (a) YAML parses; (b) valgrind include entry present "
-      f"(count={len(valgrind)})")
+print("  (a) YAML parses; (b) valgrind-memcheck + valgrind-helgrind + valgrind-drd entries present")
 PY
 then
     echo "  (a)/(b) FAILED" >&2
@@ -105,11 +112,15 @@ else
     echo "  (c) no --disable-valgrind-{helgrind,drd,sgcheck} flags remain"
 fi
 
-# (d) The "Run Valgrind checks" step must still invoke make check-valgrind.
-if grep -qE 'make check-valgrind' "$WF"; then
-    echo "  (d) 'make check-valgrind' invocation present"
+# (d) The "Run Valgrind checks" step must invoke a valid AX_VALGRIND_CHECK
+# per-tool target. AX_VALGRIND_CHECK generates check-valgrind-<tool> targets
+# (check-valgrind-memcheck, check-valgrind-helgrind, check-valgrind-drd);
+# bare check-<tool> targets do NOT exist and would fail the make invocation.
+# The step must use: TOOL="${BUILD_TYPE#valgrind-}" ; make "check-valgrind-${TOOL}"
+if grep -qF 'check-valgrind-${TOOL}' "$WF"; then
+    echo "  (d) per-tool valgrind check-valgrind-\${TOOL} invocation present"
 else
-    echo "  (d) 'make check-valgrind' invocation absent from the workflow" >&2
+    echo "  (d) per-tool check-valgrind-\${TOOL} invocation absent from the workflow" >&2
     fail=1
 fi
 
@@ -132,4 +143,4 @@ if [ "$fail" -ne 0 ]; then
     exit 1
 fi
 
-echo "check-valgrind-lane: PASS — valgrind lane (memcheck + helgrind + drd) structurally wired"
+echo "check-valgrind-lane: PASS — valgrind lanes (memcheck + helgrind + drd, parallel) structurally wired"
