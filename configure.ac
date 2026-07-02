@@ -31,7 +31,12 @@ AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIR([m4])
 AC_CANONICAL_HOST
 
-AX_VALGRIND_DFLT
+# TASK-088: sgcheck (exp-sgcheck) was removed upstream in Valgrind 3.20; the
+# CI Valgrind (ubuntu-latest -> 3.22) no longer ships it, so it is disabled
+# by default here rather than probed and skipped. helgrind + drd stay on
+# (their default) so the Valgrind lane runs memcheck + both race detectors.
+# AX_VALGRIND_DFLT calls must precede AX_VALGRIND_CHECK.
+AX_VALGRIND_DFLT([sgcheck], [off])
 AX_VALGRIND_CHECK
 
 OLD_CXXFLAGS=$CXXFLAGS
@@ -373,6 +378,11 @@ AC_CONFIG_FILES([test/client_key_no_cn.pem:test/client_key_no_cn.pem])
 AC_CONFIG_FILES([test/client_cert_untrusted.pem:test/client_cert_untrusted.pem])
 AC_CONFIG_FILES([test/client_key_untrusted.pem:test/client_key_untrusted.pem])
 AC_CONFIG_FILES([test/libhttpserver.supp:test/libhttpserver.supp])
+# TASK-088: helgrind/drd suppression files must be copied into the build dir
+# so VALGRIND_SUPPRESSIONS_FILES (bare filenames, resolved against builddir)
+# find them in an out-of-tree build — mirroring libhttpserver.supp above.
+AC_CONFIG_FILES([test/valgrind-helgrind.supp:test/valgrind-helgrind.supp])
+AC_CONFIG_FILES([test/valgrind-drd.supp:test/valgrind-drd.supp])
 AC_CONFIG_FILES([examples/cert.pem:examples/cert.pem])
 AC_CONFIG_FILES([examples/key.pem:examples/key.pem])
 AC_CONFIG_FILES([examples/test_content:examples/test_content])

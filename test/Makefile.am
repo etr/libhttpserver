@@ -678,8 +678,16 @@ TESTS = $(check_PROGRAMS)
 # removed when the umbrella went clean.)
 
 @VALGRIND_CHECK_RULES@
-VALGRIND_SUPPRESSIONS_FILES = libhttpserver.supp
+# TASK-088: helgrind + drd race-detector suppression files join the shared
+# VALGRIND_SUPPRESSIONS_FILES list. Suppression blocks are tool-tagged
+# (Memcheck:/Helgrind:/drd:), so each tool ignores blocks meant for another;
+# a single shared list carrying all three is functionally correct. Both new
+# files ship comments-only (no entries) — real entries are added during
+# CI-side finding-triage, never for libhttpserver's own locking.
+VALGRIND_SUPPRESSIONS_FILES = libhttpserver.supp valgrind-helgrind.supp valgrind-drd.supp
 EXTRA_DIST = libhttpserver.supp \
+             valgrind-helgrind.supp \
+             valgrind-drd.supp \
              tsan.supp \
              PERFORMANCE.md \
              bench_harness.hpp \

@@ -11,12 +11,12 @@ Only memcheck runs; the race detectors (helgrind, drd) and stack-overrun
 checks (sgcheck) never execute.
 
 **Action Items:**
-- [ ] Remove the three `--disable-valgrind-*` flags from the configure invocation in the Valgrind lane.
-- [ ] Run the suite locally under helgrind: triage every finding. Fixes go in the source; intentional racing patterns get a narrow entry in a new `test/valgrind-helgrind.supp` with a comment.
-- [ ] Repeat for drd. Note that helgrind and drd produce different shaped warnings on identical code; both must be clean.
-- [ ] Repeat for sgcheck if the upstream Valgrind version in CI still ships it. (Valgrind 3.20+ removed sgcheck — if so, document the removal and skip the sgcheck step.)
-- [ ] Wire the suppression file(s) into the lane.
-- [ ] Update the audit-flagged comment block.
+- [x] Remove the three `--disable-valgrind-*` flags from the configure invocation in the Valgrind lane.
+- [ ] Run the suite locally under helgrind: triage every finding. Fixes go in the source; intentional racing patterns get a narrow entry in a new `test/valgrind-helgrind.supp` with a comment. (deferred to PR — CI-side; valgrind is Linux-only)
+- [ ] Repeat for drd. Note that helgrind and drd produce different shaped warnings on identical code; both must be clean. (deferred to PR — CI-side; valgrind is Linux-only)
+- [x] Repeat for sgcheck if the upstream Valgrind version in CI still ships it. (Valgrind 3.20+ removed sgcheck — documented removal; sgcheck disabled via `AX_VALGRIND_DFLT([sgcheck],[off])` in configure.ac.)
+- [x] Wire the suppression file(s) into the lane.
+- [x] Update the audit-flagged comment block.
 
 **Dependencies:**
 - Blocked by: None
