@@ -72,17 +72,26 @@ jobs:
             debug: debug
             coverage: nocoverage
             shell: bash
-          # This test gives false positives on newer versions of clang
-          # and ubuntu-18.04 is not supported anymore on github
-          #- test-group: extra
-          #  os: ubuntu-18.04
-          #  os-type: ubuntu
-          #  build-type: msan
-          #  compiler-family: clang
-          #  c-compiler: clang-6.0
-          #  cc-compiler: clang++-6.0
-          #  debug: debug
-          #  coverage: nocoverage
+          # TASK-087: restored msan lane. The previous entry (retired
+          # Ubuntu / Clang toolchain) was dropped when GitHub removed that
+          # runner image and never replaced, so MemorySanitizer went
+          # silently absent. This lane runs clang-18 against an
+          # instrumented libc++ + instrumented
+          # libmicrohttpd (both built and cached in-CI), with gnutls and
+          # curl kept out of the picture. See the "instrumented libc++"
+          # and "Run tests" steps below for how the false-positive-free
+          # dependency set is assembled and why coverage is scoped to the
+          # backend-free unit tests.
+          - test-group: extra
+            os: ubuntu-latest
+            os-type: ubuntu
+            build-type: msan
+            compiler-family: clang
+            c-compiler: clang-18
+            cc-compiler: clang++-18
+            debug: debug
+            coverage: nocoverage
+            shell: bash
           - test-group: extra
             os: ubuntu-latest
             os-type: ubuntu
@@ -586,7 +595,10 @@ jobs:
       # TASK-076: also skip on the tls-no-cli lane — it does its own
       # install of libgnutls28-dev WITHOUT gnutls-bin in the next step
       # so the per-test LT_SKIP_IF(!has_gnutls_cli(), ...) gate fires.
-      if: ${{ matrix.os-type == 'ubuntu' && matrix.build-type != 'flag-invariance-off' && matrix.build-type != 'tls-no-cli' }}
+      # TASK-087: also skip on the msan lane — installing gnutls would pull
+      # an uninstrumented gnutls/nettle/gmp tree into LDADD; with no header
+      # present configure auto-detects HAVE_GNUTLS=no and -lgnutls drops out.
+      if: ${{ matrix.os-type == 'ubuntu' && matrix.build-type != 'flag-invariance-off' && matrix.build-type != 'tls-no-cli' && matrix.build-type != 'msan' }}
 
     - name: Setup gnutls dependency WITHOUT gnutls-cli (TASK-076 tls-no-cli lane)
       run: |
@@ -601,6 +613,34 @@ jobs:
         fi
       if: ${{ matrix.build-type == 'tls-no-cli' }}
 
+    # TASK-087: MemorySanitizer reports use-of-uninitialized-value for any
+    # bytes written by uninstrumented code and later read by instrumented
+    # code. libc++ is on nearly every code path, so it must be instrumented
+    # too. Build LLVM libc++/libc++abi with MemoryWithOrigins once and cache
+    # the install prefix (keyed by os + compiler); rebuild only on a miss.
+    - name: Fetch instrumented libc++ from cache (msan lane)
+      id: cache-libcxx-msan
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+      with:
+        path: ${{ github.workspace }}/libcxx-msan
+        key: ${{ matrix.os }}-${{ matrix.c-compiler }}-libcxx-msan-origins-v1
+      if: ${{ matrix.build-type == 'msan' }}
+
+    - name: Build instrumented libc++ (msan lane, if not cached)
+      run: |
+        sudo apt-get install -y ninja-build cmake ;
+        git clone --depth 1 --branch llvmorg-18.1.8 https://github.com/llvm/llvm-project.git llvm-project ;
+        cmake -G Ninja -S llvm-project/runtimes -B build-libcxx-msan \
+          -DCMAKE_C_COMPILER=clang-18 \
+          -DCMAKE_CXX_COMPILER=clang++-18 \
+          -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi" \
+          -DLLVM_USE_SANITIZER=MemoryWithOrigins \
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+          -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/libcxx-msan" ;
+        ninja -C build-libcxx-msan cxx cxxabi ;
+        ninja -C build-libcxx-msan install-cxx install-cxxabi ;
+      if: ${{ matrix.build-type == 'msan' && steps.cache-libcxx-msan.outputs.cache-hit != 'true' }}
+
     - name: Fetch libmicrohttpd from cache
       id: cache-libmicrohttpd
       uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
@@ -612,7 +652,10 @@ jobs:
       # The flag-invariance-on lane uses the stock build because
       # libmicrohttpd 1.0.3 ships TLS/Basic/Digest auth on by default and
       # does NOT ship the websocket extension at all.
-      if: ${{ matrix.os-type != 'windows' && matrix.build-type != 'no-dauth' && matrix.build-type != 'flag-invariance-off' && matrix.compiler-family != 'arm-cross' }}
+      # TASK-087: the msan lane rebuilds libmicrohttpd instrumented (so MHD
+      # output is not read back as uninitialized), so it skips this stock
+      # cache/build too.
+      if: ${{ matrix.os-type != 'windows' && matrix.build-type != 'no-dauth' && matrix.build-type != 'flag-invariance-off' && matrix.build-type != 'msan' && matrix.compiler-family != 'arm-cross' }}
 
     - name: Build libmicrohttpd dependency (if not cached)
       run: |
@@ -625,7 +668,8 @@ jobs:
       # TASK-037: as above -- flag-invariance-off has its own dedicated
       # libmicrohttpd build step below; flag-invariance-on uses the stock
       # build because libmicrohttpd 1.0.3 ships no websocket extension.
-      if: ${{ matrix.os-type != 'windows' && matrix.build-type != 'no-dauth' && matrix.build-type != 'flag-invariance-off' && matrix.compiler-family != 'arm-cross' && steps.cache-libmicrohttpd.outputs.cache-hit != 'true' }}
+      # TASK-087: msan has its own dedicated instrumented build step below.
+      if: ${{ matrix.os-type != 'windows' && matrix.build-type != 'no-dauth' && matrix.build-type != 'flag-invariance-off' && matrix.build-type != 'msan' && matrix.compiler-family != 'arm-cross' && steps.cache-libmicrohttpd.outputs.cache-hit != 'true' }}
 
 
     - name: Build libmicrohttpd without digest auth (no-dauth test)
@@ -655,6 +699,30 @@ jobs:
         ./configure --disable-examples --disable-bauth --disable-dauth --disable-websockets ;
         make ;
       if: ${{ matrix.build-type == 'flag-invariance-off' && steps.cache-libmicrohttpd-off.outputs.cache-hit != 'true' }}
+
+    - name: Fetch libmicrohttpd from cache (msan lane)
+      id: cache-libmicrohttpd-msan
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+      with:
+        path: libmicrohttpd-1.0.3
+        key: ${{ matrix.os }}-${{ matrix.c-compiler }}-libmicrohttpd-1.0.3-msan-v1
+      if: ${{ matrix.build-type == 'msan' }}
+
+    - name: Build instrumented libmicrohttpd (TASK-087 msan lane)
+      run: |
+        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-1.0.3.tar.gz -o libmicrohttpd-1.0.3.tar.gz ;
+        echo "7816b57aae199cf5c3645e8770e1be5f0a4dfafbcb24b3772173dc4ee634126a  libmicrohttpd-1.0.3.tar.gz" | sha256sum -c ;
+        tar -xzf libmicrohttpd-1.0.3.tar.gz ;
+        cd libmicrohttpd-1.0.3 ;
+        # Instrument MHD with MemorySanitizer so its output buffers, which
+        # libhttpserver reads on nearly every code path, are not flagged as
+        # uninitialized. --disable-https keeps gnutls (uninstrumented) out.
+        export CC=clang-18 ;
+        export CFLAGS='-fsanitize=memory -fsanitize-memory-track-origins -fno-omit-frame-pointer -g -O1' ;
+        export LDFLAGS='-fsanitize=memory' ;
+        ./configure --disable-examples --disable-https ;
+        make ;
+      if: ${{ matrix.build-type == 'msan' && steps.cache-libmicrohttpd-msan.outputs.cache-hit != 'true' }}
 
     - name: Install libmicrohttpd
       run: cd libmicrohttpd-1.0.3 ; sudo make install ;
@@ -780,12 +848,30 @@ jobs:
       run: ./scripts/check-skip-rationales.sh
       if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
 
+    - name: Run msan-lane structural gate
+      # TASK-087: asserts the msan CI lane is wired correctly (valid YAML,
+      # matrix entry present with mirrored keys, stale retired-OS commented
+      # block gone, MSAN_OPTIONS + scoped TESTS= wiring present). Mirrors the
+      # check-*.sh gate idiom used by complexity, duplication, file-size,
+      # warning-suppressions, and skip-rationales gates.
+      run: ./scripts/check-msan-lane.sh
+      if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
+
     - name: Run libhttpserver configure
       # TASK-038: fixed CXXLAGS -> CXXFLAGS typo so C++ TUs are instrumented by the sanitizer matrix.
       run: |
         # Set memory check flags. They need to stay in step as env variables don't propagate across steps.
         if [ "$BUILD_TYPE" = "asan" ]; then export CFLAGS='-fsanitize=address'; export CXXFLAGS='-fsanitize=address'; export LDFLAGS='-fsanitize=address'; fi
-        if [ "$BUILD_TYPE" = "msan" ]; then export CFLAGS='-fsanitize=memory'; export CXXFLAGS='-fsanitize=memory'; export LDFLAGS='-fsanitize=memory'; fi
+        # TASK-087: msan needs the instrumented libc++ built above, plus
+        # origins tracking and frame pointers for readable reports. Point
+        # the C++ TUs at the instrumented libc++ headers/libs and drop the
+        # default (uninstrumented) libstdc++ via -nostdinc++/-stdlib=libc++.
+        if [ "$BUILD_TYPE" = "msan" ]; then
+          LIBCXX_MSAN="${{ github.workspace }}/libcxx-msan" ;
+          export CFLAGS="-fsanitize=memory -fsanitize-memory-track-origins -fno-omit-frame-pointer -g -O1" ;
+          export CXXFLAGS="-stdlib=libc++ -nostdinc++ -isystem ${LIBCXX_MSAN}/include/c++/v1 -fsanitize=memory -fsanitize-memory-track-origins -fno-omit-frame-pointer -g -O1" ;
+          export LDFLAGS="-stdlib=libc++ -fsanitize=memory -L${LIBCXX_MSAN}/lib -Wl,-rpath,${LIBCXX_MSAN}/lib -lc++abi" ;
+        fi
         if [ "$BUILD_TYPE" = "lsan" ]; then export CFLAGS='-fsanitize=leak'; export CXXFLAGS='-fsanitize=leak'; export LDFLAGS='-fsanitize=leak'; fi
         if [ "$BUILD_TYPE" = "tsan" ]; then export CFLAGS='-fsanitize=thread'; export CXXFLAGS='-fsanitize=thread'; export LDFLAGS='-fsanitize=thread'; fi
         if [ "$BUILD_TYPE" = "ubsan" ]; then export CFLAGS='-fsanitize=undefined'; export CXXFLAGS='-fsanitize=undefined'; export LDFLAGS='-fsanitize=undefined'; fi
@@ -949,8 +1035,33 @@ jobs:
         # (see test/tsan.supp). All libhttpserver-internal races stay fatal.
         if [ "$BUILD_TYPE" = "tsan" ]; then
           export TSAN_OPTIONS="suppressions=$(pwd)/../test/tsan.supp" ;
+          make check ;
+        elif [ "$BUILD_TYPE" = "msan" ]; then
+          # TASK-087: msan coverage is deliberately scoped to the
+          # backend-free UNIT tests. curl (linked into every integ
+          # round-trip via test/integ/curl_helpers.hpp) cannot be
+          # practically instrumented, so its uninstrumented output would
+          # surface as false use-of-uninitialized-value reports. libc++ and
+          # libmicrohttpd ARE instrumented (see the steps above), so the
+          # unit subset — pure libhttpserver logic plus instrumented-MHD
+          # type inspection — runs clean without wildcard suppressions.
+          export LD_LIBRARY_PATH="${{ github.workspace }}/libcxx-msan/lib:${LD_LIBRARY_PATH:-}" ;
+          export MSAN_OPTIONS="abort_on_error=1" ;
+          # Auto-wire narrow suppressions only if triage produced the file.
+          # test/msan.supp is intentionally ABSENT until a real finding
+          # forces a narrow use-of-uninitialized-value:<symbol> entry with
+          # an upstream-issue comment (never a wildcard over libhttpserver).
+          if [ -f ../test/msan.supp ]; then
+            export MSAN_OPTIONS="${MSAN_OPTIONS}:suppressions=$(pwd)/../test/msan.supp" ;
+          fi
+          # Derive the unit/ subset from the test Makefile so newly-added
+          # unit tests are covered automatically.
+          MSAN_TESTS="$(grep -oE '^[A-Za-z0-9_]+_SOURCES[[:space:]]*=[[:space:]]*unit/' ../test/Makefile.am | sed -E 's/_SOURCES.*//' | tr '\n' ' ')" ;
+          if [ -z "$MSAN_TESTS" ]; then echo "ERROR: msan: derived empty test set — grep pattern found no unit/ targets in test/Makefile.am" >&2; exit 1; fi ;
+          make check TESTS="$MSAN_TESTS" ;
+        else
+          make check ;
         fi
-        make check;
       # TASK-037: flag-invariance-{on,off} are compile/link-only gates, so
       # skip the full `make check` (which spins up real servers and would
       # crash on the OFF lane for the BAUTH/DAUTH/WS unit tests anyway).
