@@ -32,4 +32,4 @@ checks (sgcheck) never execute.
 **Related Requirements:** PRD §2 security NFR, PRD §3.6 sanitizer-clean
 **Related Decisions:** DR-008 (thread-safety contract)
 
-**Status:** Backlog
+**Status:** Done
