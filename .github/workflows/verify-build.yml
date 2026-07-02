@@ -857,6 +857,17 @@ jobs:
       run: ./scripts/check-msan-lane.sh
       if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
 
+    - name: Run valgrind-lane structural gate
+      # TASK-088: asserts the Valgrind CI lane is wired correctly (valid YAML,
+      # valgrind matrix entry present, no --disable-valgrind-{helgrind,drd,
+      # sgcheck} flags remain, `make check-valgrind` still invoked, and the
+      # results-print step surfaces helgrind + drd logs). Valgrind is
+      # Linux-only, so the actual race-detector run + finding-triage happen on
+      # the PR's Linux lane; this gate only guards the wiring. Mirrors the
+      # check-msan-lane.sh gate idiom.
+      run: ./scripts/check-valgrind-lane.sh
+      if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
+
     - name: Run libhttpserver configure
       # TASK-038: fixed CXXLAGS -> CXXFLAGS typo so C++ TUs are instrumented by the sanitizer matrix.
       run: |
@@ -901,7 +912,16 @@ jobs:
         elif [ "$DEBUG" = "debug" ]; then
           ../configure --enable-debug --disable-shared --disable-fastopen;
         elif [ "$BUILD_TYPE" = "valgrind" ]; then
-          ../configure --enable-debug --disable-fastopen --disable-valgrind-helgrind --disable-valgrind-drd --disable-valgrind-sgcheck;
+          # TASK-088: the Valgrind lane now runs memcheck + helgrind + drd.
+          # The two race detectors (helgrind and drd) were previously turned
+          # off here, so only memcheck ran and real data races could slip
+          # through. They are re-enabled simply by no longer passing their
+          # per-tool disable flags to configure (all Valgrind tools default
+          # on). sgcheck (exp-sgcheck) stays off: it was removed upstream in
+          # Valgrind 3.20 and ubuntu-latest ships 3.22, so it is disabled by
+          # default in configure.ac via AX_VALGRIND_DFLT([sgcheck],[off])
+          # rather than probed and skipped. memcheck behaviour is unchanged.
+          ../configure --enable-debug --disable-fastopen;
         elif [ "$BUILD_TYPE" = "flag-invariance-on" ]; then
           # TASK-037 / PRD-FLG-REQ-001: explicitly request all four feature
           # flags so configure fails fast if any dependency is absent, rather
@@ -1161,13 +1181,19 @@ jobs:
         make check-valgrind ;
       if: ${{ matrix.build-type == 'valgrind' }}
 
-    - name: Print Valgrind memcheck results
+    - name: Print Valgrind results
       shell: bash
       run: |
         cd build ;
-        if [ -f test/test-suite-memcheck.log ]; then
-          cat test/test-suite-memcheck.log ;
-        fi
+        # TASK-088: surface memcheck + helgrind + drd logs. Without the
+        # helgrind/drd logs, race-detector failures would be invisible in the
+        # CI output, making finding-triage on the Linux lane blind.
+        for log in test-suite-memcheck.log test-suite-helgrind.log test-suite-drd.log; do
+          if [ -f "test/$log" ]; then
+            echo "===== test/$log =====" ;
+            cat "test/$log" ;
+          fi
+        done
       if: ${{ always() && matrix.build-type == 'valgrind' }}
 
     - name: Run cppcheck
