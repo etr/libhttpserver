@@ -30,4 +30,4 @@ are all wired up; msan went silently absent.
 **Related Requirements:** PRD §2 security NFR, PRD §3.6 sanitizer-clean
 **Related Decisions:** None new
 
-**Status:** Backlog
+**Status:** Done
