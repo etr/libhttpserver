@@ -42,7 +42,10 @@ EXTRA_DIST = libhttpserver.pc.in $(DX_CONFIG) scripts/extract-release-notes.sh s
 	scripts/check-examples.sh scripts/check-readme.sh scripts/check-release-notes.sh \
 	scripts/check-doxygen.sh scripts/check-hooks-doc-spotcheck.sh \
 	scripts/check-soversion.sh scripts/check-parallel-install.sh \
-	scripts/lib/resolve-prefix.sh \
+	scripts/check-parallel-install-lane.sh \
+	scripts/test_check_parallel_install.sh \
+	scripts/test_check_parallel_install_lane.sh \
+	scripts/lib/resolve-prefix.sh scripts/lib/skip-or-fail.sh \
 	scripts/check-complexity.sh scripts/check-duplication.sh \
 	scripts/check-file-size.sh \
 	scripts/check-warning-suppressions.sh \
@@ -362,7 +365,7 @@ check-hygiene:
 # staged the install; sub-check skips the install step to avoid double cost.
 # This knob is set only by check-local; do not set it when invoking sub-checks
 # standalone.
-check-local: check-headers check-examples check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck lint-warning-suppressions lint-server-ready-helper lint-no-tautological-asserts lint-littletest-skip-exit-code
+check-local: check-headers check-examples check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck lint-warning-suppressions lint-server-ready-helper lint-no-tautological-asserts lint-littletest-skip-exit-code lint-parallel-install-skip-contract
 	@echo "=== Shared staged install for check-install-layout and check-hygiene ==="
 	@rm -rf "$(abs_top_builddir)/.shared-check-stage"
 	@$(MAKE) $(AM_MAKEFLAGS) install DESTDIR="$(abs_top_builddir)/.shared-check-stage" >check-shared-install.log 2>&1 || { \
@@ -426,9 +429,11 @@ check-soversion:
 
 # TASK-044: parallel-installability verification. Builds master and installs
 # v1 + v2 into the same DESTDIR and asserts both SONAMEd libraries coexist.
-# Best-effort: emits SKIP and exits 0 if the v1 source cannot be built in
-# this environment (toolchain mismatch, missing libtoolize, etc.).
-# Definitely NOT in `make check` — requires a clean v1 build of master.
+# TASK-089: now invoked by the CI parallel-install lane (see
+# .github/workflows/verify-build.yml, matrix key `parallel-install: check`).
+# The five environment-quirk paths emit SKIP and FAIL the job unless
+# HTTPSERVER_ALLOW_PARALLEL_INSTALL_SKIP=1. Requires a clean v1 build of
+# master, so it stays out of the generic `make check` and runs on its own lane.
 check-parallel-install:
 	@echo "=== check-parallel-install: TASK-044 v1+v2 coexistence ==="
 	@BUILD_DIR="$(abs_top_builddir)" $(top_srcdir)/scripts/check-parallel-install.sh
@@ -501,7 +506,25 @@ lint-littletest-skip-exit-code:
 	@echo "=== lint-littletest-skip-exit-code: pin LT_SKIP exit-code semantics ==="
 	@$(top_srcdir)/scripts/test_check_littletest_skip_exit_code.sh
 
-.PHONY: check-headers check-install-layout check-hygiene check-local check-examples check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck check-soversion check-parallel-install lint-complexity lint-duplication lint-file-size lint-warning-suppressions lint-server-ready-helper lint-no-tautological-asserts lint-littletest-skip-exit-code
+# TASK-089: pin the skip_or_fail() exit-code contract used by the five
+# environment-quirk paths in check-parallel-install.sh. Asserts a SKIP
+# fails the job (exit 1) unless HTTPSERVER_ALLOW_PARALLEL_INSTALL_SKIP=1.
+# Wired into `make check` via check-local; pure bash, runs in every lane.
+lint-parallel-install-skip-contract:
+	@echo "=== lint-parallel-install-skip-contract: pin skip_or_fail exit-code semantics ==="
+	@$(top_srcdir)/scripts/test_check_parallel_install.sh
+
+# TASK-089: structural gate asserting the parallel-install CI lane in
+# verify-build.yml stays wired (opt-in matrix key, master-ref fetch, the
+# `make check-parallel-install` invocation, and no SKIP authorization so
+# environment-quirk SKIPs stay fatal). Parses the workflow file, so it is
+# invoked directly by CI's `lint` lane rather than every check-local run —
+# mirrors the msan/valgrind lane gates.
+lint-parallel-install-lane:
+	@echo "=== lint-parallel-install-lane: verify parallel-install CI wiring ==="
+	@$(top_srcdir)/scripts/check-parallel-install-lane.sh
+
+.PHONY: check-headers check-install-layout check-hygiene check-local check-examples check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck check-soversion check-parallel-install lint-complexity lint-duplication lint-file-size lint-warning-suppressions lint-server-ready-helper lint-no-tautological-asserts lint-littletest-skip-exit-code lint-parallel-install-skip-contract lint-parallel-install-lane
 
 # TASK-039: top-level convenience rule that descends into test/ to
 # build and run the bench binaries (see test/Makefile.am and
