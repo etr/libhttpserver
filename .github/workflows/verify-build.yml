@@ -848,6 +848,15 @@ jobs:
       run: ./scripts/check-skip-rationales.sh
       if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
 
+    - name: Run msan-lane structural gate
+      # TASK-087: asserts the msan CI lane is wired correctly (valid YAML,
+      # matrix entry present with mirrored keys, stale retired-OS commented
+      # block gone, MSAN_OPTIONS + scoped TESTS= wiring present). Mirrors the
+      # check-*.sh gate idiom used by complexity, duplication, file-size,
+      # warning-suppressions, and skip-rationales gates.
+      run: ./scripts/check-msan-lane.sh
+      if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
+
     - name: Run libhttpserver configure
       # TASK-038: fixed CXXLAGS -> CXXFLAGS typo so C++ TUs are instrumented by the sanitizer matrix.
       run: |
@@ -1048,6 +1057,7 @@ jobs:
           # Derive the unit/ subset from the test Makefile so newly-added
           # unit tests are covered automatically.
           MSAN_TESTS="$(grep -oE '^[A-Za-z0-9_]+_SOURCES[[:space:]]*=[[:space:]]*unit/' ../test/Makefile.am | sed -E 's/_SOURCES.*//' | tr '\n' ' ')" ;
+          if [ -z "$MSAN_TESTS" ]; then echo "ERROR: msan: derived empty test set — grep pattern found no unit/ targets in test/Makefile.am" >&2; exit 1; fi ;
           make check TESTS="$MSAN_TESTS" ;
         else
           make check ;

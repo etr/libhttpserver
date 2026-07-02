@@ -80,7 +80,6 @@ fi
 
 # Test 2: missing msan include entry (assertion b) — exit 1
 NO_MSAN="$TMPDIR_BASE/no_msan.yml"
-write_good "$NO_MSAN"
 # Drop the msan build-type by renaming it to something else.
 sed 's/build-type: msan/build-type: none/' "$GOOD" > "$NO_MSAN"
 if ! bash "$SCRIPT" "$NO_MSAN" >/dev/null 2>&1; then
@@ -119,6 +118,11 @@ else
 fi
 
 # Test 5: invalid YAML (assertion a) — exit 1
+# The fixture includes the literal strings checked by assertions (d1) and
+# (d2) so that only assertion (a) — the Python YAML parse check — causes the
+# failure. Without these strings, assertion (d) would independently trigger
+# exit 1 and a regression that removed the Python parse check would go
+# undetected (Test 5 would still pass via (d)).
 BAD_YAML="$TMPDIR_BASE/bad.yml"
 cat > "$BAD_YAML" <<'EOF'
 name: verify
@@ -130,6 +134,8 @@ jobs:
           - build-type: msan
         : this is not valid yaml : : :
       unbalanced: [
+# d1/d2 literals present so only assertion (a) fires:
+# MSAN_OPTIONS=abort_on_error=1 ; make check TESTS="$MSAN_TESTS" ;
 EOF
 if ! bash "$SCRIPT" "$BAD_YAML" >/dev/null 2>&1; then
     ok "invalid YAML exits 1"
