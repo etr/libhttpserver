@@ -53,7 +53,7 @@ TASK-093).
 | TASK-086 | Execute file-size split roadmap (FILE_LOC_MAX 750 → 500) | HIGH | L | Done |
 | TASK-087 | Restore msan CI lane | HIGH | M | Done |
 | TASK-088 | Re-enable helgrind / drd / sgcheck in valgrind CI lane | HIGH | M | Done |
-| TASK-089 | Wire `check-parallel-install` into per-PR CI + remove SKIP-degrades-to-pass | HIGH | M | Backlog |
+| TASK-089 | Wire `check-parallel-install` into per-PR CI + remove SKIP-degrades-to-pass | HIGH | M | Done |
 | TASK-090 | Harden CodeQL workflow and Codecov upload | HIGH | S | Backlog |
 | TASK-091 | Tighten CI script soft-degradations | MED | M | Backlog |
 | TASK-092 | Wire `route_table_concurrency` TSan + `stop()`-from-handler into per-PR CI | MED | S | Backlog |

@@ -30,4 +30,4 @@ acceptance gate from TASK-044 never actually gates anything in CI.
 **Related Requirements:** PRD §1 release strategy, PRD §2 backwards-compat NFR
 **Related Decisions:** DR-011 (SOVERSION-only)
 
-**Status:** Backlog
+**Status:** Done
