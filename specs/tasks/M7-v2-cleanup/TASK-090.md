@@ -30,4 +30,4 @@ Two CI workflow weaknesses called out in the audit:
 **Related Requirements:** PRD §2 supply-chain NFR
 **Related Decisions:** None new
 
-**Status:** In Progress
+**Status:** Complete
