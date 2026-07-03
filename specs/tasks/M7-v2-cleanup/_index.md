@@ -28,9 +28,9 @@ TASK-093).
 | TASK-061 | Mechanical cleanup sweep — unfinished prose, orphan comments, stale doc refs | HIGH | S | Done |
 | TASK-062 | RFC-7616-compliant Digest auth response factory | HIGH | L | Done |
 | TASK-063 | Honor or remove `http_response::pipe` `size_hint` parameter | HIGH | S | Done |
-| TASK-064 | Structured cookie type | HIGH | M | Backlog |
+| TASK-064 | Structured cookie type | HIGH | M | Done |
 | TASK-065 | RFC 5952 IPv6 zero-compression in `peer_address` | HIGH | S | Done |
-| TASK-066 | Runtime setter for hook alias slots | MED | M | Backlog |
+| TASK-066 | Runtime setter for hook alias slots | MED | M | Done |
 | TASK-067 | Remove v1 `registered_resources*` maps and `namespace compat` shim | MED | L | Done |
 | TASK-068 | `connection_state` hardening — CWE-226 / CWE-14 | MED | S | Done |
 | TASK-069 | Remove transitional two-arg `http_request_impl` constructor | MED | S | Done |
