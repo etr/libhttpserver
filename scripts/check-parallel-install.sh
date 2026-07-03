@@ -32,10 +32,15 @@
 #   MASTER_WORKTREE — path for the temporary v1 worktree.
 #                     Default: $BUILD_DIR/.parallel-master-worktree.
 #
-# This script is best-effort and exits 0 with a clear SKIP message if the
-# v1 source tree cannot be built in this environment (e.g. glibtoolize
-# missing). It is NOT wired into `make check` to keep per-PR CI fast; it
-# lives as an opt-in `make check-parallel-install` rule.
+# TASK-089: this gate is wired into per-PR CI on the Linux gcc/libstdc++ lane
+# (see .github/workflows/verify-build.yml, matrix key `parallel-install: check`).
+# The five environment-quirk paths (master ref missing, git worktree add
+# failed, v1 bootstrap/configure/make failed) emit a clear SKIP and FAIL the
+# job (exit 1) via skip_or_fail() — UNLESS HTTPSERVER_ALLOW_PARALLEL_INSTALL_SKIP=1
+# is set, the documented escape hatch for genuine infrastructure breakage. The
+# two developer-ran-without-configure pre-flight guards (BUILD_DIR /
+# config.status missing) remain plain `skip` (exit 0): in CI the build always
+# exists before this runs, so they never fire there.
 #
 # Acceptance:
 #   * On Linux: $STAGE$libdir/libhttpserver.so.0 (or whatever v1 ships)
@@ -45,10 +50,9 @@
 #     (libtool's -version-number A:B:C on Mach-O emits only .A.dylib;
 #     the .A.B.C.dylib intermediate is a Linux-only convention.)
 #
-# This script is intentionally tolerant: any failure to even produce a v1
-# build is treated as a SKIP, because the user-visible promise (the v2
-# install is well-formed; the on-disk filenames don't clash) is verified
-# either way.
+# A failure to even produce a v1 build is reported as a SKIP that, in CI,
+# fails the job (see skip_or_fail() above) so a silently-broken v1 tree
+# cannot mask the parallel-install promise behind a green signal.
 
 # -e is intentionally omitted: every significant command uses explicit
 # '|| fail/skip' error handling for clear diagnostic messages.
@@ -99,6 +103,10 @@ CONFIG_STATUS="$BUILD_DIR/config.status"
 [ -x "$CONFIG_STATUS" ] || skip "$CONFIG_STATUS missing (run ./configure first)"
 # shellcheck source=scripts/lib/resolve-prefix.sh
 source "$(dirname "$0")/lib/resolve-prefix.sh"
+# TASK-089: skip_or_fail() — the five environment-quirk paths below emit SKIP
+# and FAIL the job (exit 1) unless HTTPSERVER_ALLOW_PARALLEL_INSTALL_SKIP=1.
+# shellcheck source=scripts/lib/skip-or-fail.sh
+source "$(dirname "$0")/lib/skip-or-fail.sh"
 LIBDIR="$RESOLVED_PREFIX/lib"
 STAGE_LIB="$SHARED_STAGE$LIBDIR"
 
@@ -151,7 +159,7 @@ pass "v2 install succeeded into $SHARED_STAGE"
 echo "Phase 2: building $MASTER_REF in a temporary git worktree"
 
 if ! git -C "$REPO_ROOT" rev-parse --verify "$MASTER_REF" >/dev/null 2>&1; then
-    skip "ref '$MASTER_REF' not in this repository — cannot do automated v1 build"
+    skip_or_fail "ref '$MASTER_REF' not in this repository — cannot do automated v1 build"
 fi
 
 # Remove a stale worktree from a previous aborted run, if any.
@@ -159,7 +167,7 @@ remove_master_worktree
 
 if ! git -C "$REPO_ROOT" worktree add --detach "$MASTER_WORKTREE" "$MASTER_REF" >"$SHARED_STAGE/.worktree-add.log" 2>&1; then
     cat "$SHARED_STAGE/.worktree-add.log" >&2
-    skip "git worktree add failed; cannot do automated v1 build"
+    skip_or_fail "git worktree add failed; cannot do automated v1 build"
 fi
 
 # Bootstrap, configure, build, install the v1 source.
@@ -167,7 +175,7 @@ echo "  bootstrapping $MASTER_REF in $MASTER_WORKTREE"
 if ! ( cd "$MASTER_WORKTREE" && ./bootstrap ) >"$SHARED_STAGE/.v1-bootstrap.log" 2>&1; then
     echo "  (v1 bootstrap failed; this often means glibtoolize/libtoolize is missing)"
     tail -20 "$SHARED_STAGE/.v1-bootstrap.log" >&2
-    skip "v1 bootstrap failed in $MASTER_WORKTREE (treating as environment limitation)"
+    skip_or_fail "v1 bootstrap failed in $MASTER_WORKTREE (treating as environment limitation)"
 fi
 
 V1_BUILD="$MASTER_WORKTREE/build"
@@ -196,7 +204,7 @@ if ! ( cd "$V1_BUILD" && \
         LIBS="${LIBS:--lgnutls}" \
         ../configure --prefix="$RESOLVED_PREFIX" ) >"$SHARED_STAGE/.v1-configure.log" 2>&1; then
     tail -20 "$SHARED_STAGE/.v1-configure.log" >&2
-    skip "v1 configure failed (treating as environment limitation)"
+    skip_or_fail "v1 configure failed (treating as environment limitation)"
 fi
 
 # Use all available cores; mirror what the parent make would use.
@@ -204,7 +212,7 @@ _NJOBS="$(nproc 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo 4)"
 echo "  building $MASTER_REF (make -j${_NJOBS})"
 if ! ( cd "$V1_BUILD" && make -j"${_NJOBS}" ) >"$SHARED_STAGE/.v1-make.log" 2>&1; then
     tail -30 "$SHARED_STAGE/.v1-make.log" >&2
-    skip "v1 make failed (treating as environment limitation; e.g. v1 sources may not build on this toolchain)"
+    skip_or_fail "v1 make failed (treating as environment limitation; e.g. v1 sources may not build on this toolchain)"
 fi
 
 echo "  installing $MASTER_REF into $SHARED_STAGE"

@@ -394,6 +394,28 @@ DR-011 ([specs/architecture/11-decisions/DR-011.md](specs/architecture/11-decisi
   remaining hygiene sentinels (`<microhttpd.h>`, `<gnutls/gnutls.h>`,
   `<sys/socket.h>`, `<sys/uio.h>`) continue to run on every CI lane.
 
+- **Parallel-install acceptance gate is now live in per-PR CI
+  (TASK-089).** The TASK-044 parallel-installability check
+  (`scripts/check-parallel-install.sh`, which builds `libhttpserver1`
+  from `master` alongside `libhttpserver2` and asserts both SONAMEd
+  shared libraries coexist in one DESTDIR) was previously opt-in only
+  (`make check-parallel-install`) and degraded to a silent pass (exit
+  0) on five environment-quirk paths — so a PR that broke
+  parallel-installability never actually failed anything. It now runs
+  on a single baseline Linux gcc/libstdc++ lane in
+  `.github/workflows/verify-build.yml` (matrix key
+  `parallel-install: check`), and the five environment-quirk paths
+  (master ref missing, `git worktree add` failed, v1
+  bootstrap/configure/make failed) emit a `SKIP` and **fail the job**
+  rather than passing. The escape hatch for genuine infrastructure
+  breakage is the environment variable
+  `HTTPSERVER_ALLOW_PARALLEL_INSTALL_SKIP=1`, which is intentionally
+  not set on the CI lane so skips stay fatal. A structural gate
+  (`scripts/check-parallel-install-lane.sh`, run on the `lint` lane)
+  guards the CI wiring against silent drift, and a unit test
+  (`scripts/test_check_parallel_install.sh`, run in every lane via
+  `make check`) pins the skip-or-fail exit-code contract.
+
 ## See also
 
 - [README.md](README.md) — full v2.0 introduction and worked examples.
