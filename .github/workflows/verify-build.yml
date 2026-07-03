@@ -447,12 +447,22 @@ jobs:
     - name: Install MinGW64 packages
       if: ${{ matrix.os-type == 'windows' && matrix.msys-env == 'MINGW64' }}
       run: |
-        # NB: doxygen + graphviz intentionally excluded — `make check-local`
-        # invokes scripts/check-doxygen.sh which spawns `make doxygen-run`,
-        # and the autoconf-archive-generated MINGW recipe hangs indefinitely
-        # waiting on a cmd.exe batch prompt (job timed out at the 6h ceiling
-        # in CI). The doxygen invariant is exhaustively checked by the Linux
-        # lanes; Windows just builds and tests the library here.
+        # Invariance exclusion (doxygen) — TASK-090, documenting the gap the
+        # v2 audit flagged.
+        #   WHAT: the doxygen zero-warning invariant (scripts/check-doxygen.sh,
+        #     TASK-043) runs via `make check-local` on EVERY lane, but that
+        #     script auto-SKIPs (exit 0) when doxygen is not on $PATH — see its
+        #     `command -v doxygen` guard (scripts/check-doxygen.sh, the
+        #     "SKIP — doxygen not installed" branch). doxygen + graphviz are
+        #     intentionally NOT installed here, so the invariant silently no-ops
+        #     on Windows.
+        #   WHY excluded: `check-doxygen.sh` spawns `make doxygen-run`, and the
+        #     autoconf-archive-generated MINGW recipe hangs indefinitely waiting
+        #     on a cmd.exe batch prompt (the job timed out at the 6h CI ceiling).
+        #   WHY it is safe: the invariant is fully enforced on the Linux lanes,
+        #     where doxygen + graphviz ARE installed, so this is a deliberate
+        #     per-platform exclusion, not a coverage gap. The Windows lane just
+        #     builds and tests the library.
         pacman --noconfirm -S --needed mingw-w64-x86_64-{toolchain,libtool,make,pkg-config,libsystre,gnutls,curl}
 
     - name: Install MSYS packages
@@ -921,6 +931,26 @@ jobs:
       run: ./scripts/check-parallel-install-lane.sh
       if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
 
+    - name: Run CodeQL-workflow structural gate
+      # TASK-090: asserts codeql-analysis.yml stays hardened — every action
+      # SHA-pinned (no floating @vN), the dead Autobuild scaffolding gone, an
+      # explicit ./configure + make build present so CodeQL's C/C++ extractor
+      # traces the real compile, and codeql-action/init + analyze pinned to the
+      # SAME v3 SHA. To rotate the CodeQL SHA see the header comment in
+      # codeql-analysis.yml. Mirrors the check-valgrind-lane.sh gate idiom.
+      run: ./scripts/check-codeql-workflow.sh
+      if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
+
+    - name: Run workflow-pinning / Codecov structural gate
+      # TASK-090: cross-workflow invariants — BOTH codeql-analysis.yml and
+      # verify-build.yml carry only SHA-pinned actions, the Codecov upload
+      # hard-fails CI (fail_ci_if_error: true, an UPLOAD failure — distinct
+      # from a coverage-percentage drop, which codecov.yml gates), and the
+      # Windows doxygen invariance exclusion stays documented. Mirrors the
+      # check-parallel-install-lane.sh gate idiom.
+      run: ./scripts/check-workflow-pinning.sh
+      if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
+
     - name: Run libhttpserver configure
       # TASK-038: fixed CXXLAGS -> CXXFLAGS typo so C++ TUs are instrumented by the sanitizer matrix.
       run: |
@@ -1315,5 +1345,12 @@ jobs:
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         files: build/coverage.xml
-        fail_ci_if_error: false
+        # TASK-090: hard-fail CI on a Codecov UPLOAD error (network / auth /
+        # tokenization / malformed report). Coverage integrity is a
+        # supply-chain + observability signal; a silently-dropped upload used
+        # to mask that the coverage number was stale or missing entirely.
+        # This is distinct from a coverage-PERCENTAGE drop, which is enforced
+        # separately by Codecov's own project/patch status checks driven by
+        # codecov.yml — not by this upload step.
+        fail_ci_if_error: true
       if: ${{ matrix.os-type == 'ubuntu' && matrix.c-compiler == 'gcc' && matrix.debug == 'debug' && matrix.coverage == 'coverage' && success() }}

@@ -43,8 +43,10 @@ EXTRA_DIST = libhttpserver.pc.in $(DX_CONFIG) scripts/extract-release-notes.sh s
 	scripts/check-doxygen.sh scripts/check-hooks-doc-spotcheck.sh \
 	scripts/check-soversion.sh scripts/check-parallel-install.sh \
 	scripts/check-parallel-install-lane.sh \
+	scripts/check-codeql-workflow.sh scripts/check-workflow-pinning.sh \
 	scripts/test_check_parallel_install.sh \
 	scripts/test_check_parallel_install_lane.sh \
+	scripts/test_check_codeql_workflow.sh scripts/test_check_workflow_pinning.sh \
 	scripts/lib/resolve-prefix.sh scripts/lib/skip-or-fail.sh \
 	scripts/check-complexity.sh scripts/check-duplication.sh \
 	scripts/check-file-size.sh \
@@ -524,7 +526,28 @@ lint-parallel-install-lane:
 	@echo "=== lint-parallel-install-lane: verify parallel-install CI wiring ==="
 	@$(top_srcdir)/scripts/check-parallel-install-lane.sh
 
-.PHONY: check-headers check-install-layout check-hygiene check-local check-examples check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck check-soversion check-parallel-install lint-complexity lint-duplication lint-file-size lint-warning-suppressions lint-server-ready-helper lint-no-tautological-asserts lint-littletest-skip-exit-code lint-parallel-install-skip-contract lint-parallel-install-lane
+# TASK-090: structural gate asserting codeql-analysis.yml stays hardened
+# (every action SHA-pinned, Autobuild deleted, explicit ./configure + make
+# build, init/analyze on one v3 SHA). The gate parses the workflow with
+# PyYAML, so — like the parallel-install/msan/valgrind lane gates — it runs on
+# CI's `lint` lane, not on every check-local run. The target also runs the
+# gate's own fixture-driven unit test so `make lint-codeql-workflow` exercises
+# the gate logic.
+lint-codeql-workflow:
+	@echo "=== lint-codeql-workflow: self-test the gate, then verify CodeQL workflow wiring ==="
+	@$(top_srcdir)/scripts/test_check_codeql_workflow.sh
+	@$(top_srcdir)/scripts/check-codeql-workflow.sh
+
+# TASK-090: cross-workflow gate asserting BOTH workflows carry only SHA-pinned
+# actions, the Codecov upload hard-fails CI (fail_ci_if_error: true), and the
+# Windows doxygen invariance exclusion stays documented. PyYAML-parsing, so it
+# runs on CI's `lint` lane. The target also runs the gate's unit test.
+lint-workflow-pinning:
+	@echo "=== lint-workflow-pinning: self-test the gate, then verify pinning + Codecov wiring ==="
+	@$(top_srcdir)/scripts/test_check_workflow_pinning.sh
+	@$(top_srcdir)/scripts/check-workflow-pinning.sh
+
+.PHONY: check-headers check-install-layout check-hygiene check-local check-examples check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck check-soversion check-parallel-install lint-complexity lint-duplication lint-file-size lint-warning-suppressions lint-server-ready-helper lint-no-tautological-asserts lint-littletest-skip-exit-code lint-parallel-install-skip-contract lint-parallel-install-lane lint-codeql-workflow lint-workflow-pinning
 
 # TASK-039: top-level convenience rule that descends into test/ to
 # build and run the bench binaries (see test/Makefile.am and
