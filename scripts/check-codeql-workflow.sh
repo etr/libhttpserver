@@ -138,9 +138,31 @@ else
     echo "  (f) codeql-action/init and analyze pinned to the same SHA ($init_sha)"
 fi
 
+# (g) A permissions block with security-events: write must be declared.
+# Without it the GITHUB_TOKEN defaults to the repo's global permission setting
+# (potentially write-all on public repos). The CodeQL analyze step REQUIRES
+# security-events: write to upload SARIF results to the security dashboard.
+if grep -qE 'security-events:[[:space:]]*write' "$WF"; then
+    echo "  (g) permissions block with security-events: write present"
+else
+    echo "  (g) missing permissions block with security-events: write — add 'permissions: security-events: write' to restrict the GITHUB_TOKEN" >&2
+    fail=1
+fi
+
+# (h) The libmicrohttpd download must be followed by a sha256sum verification
+# step. Without it a tampered S3 object would be compiled and executed inside
+# the CodeQL runner with no detection. The checksum used by verify-build.yml
+# (libmicrohttpd-1.0.3) is the authoritative source; both workflows must agree.
+if grep -qF 'sha256sum -c' "$WF"; then
+    echo "  (h) libmicrohttpd download checksum verification (sha256sum -c) present"
+else
+    echo "  (h) missing sha256sum verification for the libmicrohttpd download — add 'echo \"<sha256>  libmicrohttpd-1.0.3.tar.gz\" | sha256sum -c' after the curl line" >&2
+    fail=1
+fi
+
 if [ "$fail" -ne 0 ]; then
     echo "check-codeql-workflow: FAIL — the CodeQL workflow is not fully hardened" >&2
     exit 1
 fi
 
-echo "check-codeql-workflow: PASS — CodeQL workflow SHA-pinned, autobuild-free, explicit build"
+echo "check-codeql-workflow: PASS — CodeQL workflow SHA-pinned, autobuild-free, explicit build, least-privilege permissions, checksum-verified download"

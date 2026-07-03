@@ -28,19 +28,33 @@ SHA_CHECKOUT="cccccccccccccccccccccccccccccccccccccccc"
 
 # A fully-hardened workflow fixture: valid YAML, all three actions SHA-pinned,
 # init + analyze share one SHA, no autobuild anywhere, an explicit
-# ./configure + make build step. Must exit 0.
+# ./configure + make build step, a permissions block with security-events:
+# write, and sha256sum verification on the libmicrohttpd download. Must
+# exit 0.
 write_good() {
     cat > "$1" <<EOF
 name: "CodeQL"
 on:
   push:
     branches: [master]
+permissions:
+  actions: read
+  contents: read
+  security-events: write
 jobs:
   analyze:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@${SHA_CHECKOUT}  # v4.2.2
+      - name: Install libmicrohttpd dependency
+        run: |
+          curl -fsSL https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-1.0.3.tar.gz -o libmicrohttpd-1.0.3.tar.gz ;
+          echo "7816b57aae199cf5c3645e8770e1be5f0a4dfafbcb24b3772173dc4ee634126a  libmicrohttpd-1.0.3.tar.gz" | sha256sum -c ;
+          tar -xzf libmicrohttpd-1.0.3.tar.gz ;
+          cd libmicrohttpd-1.0.3 ;
+          ./configure --disable-examples ;
+          make ;
       - name: Initialize CodeQL
         uses: github/codeql-action/init@${SHA_A}  # v3.36.3
         with:
@@ -122,6 +136,24 @@ if ! bash "$SCRIPT" "$BAD_YAML" >/dev/null 2>&1; then
     ok "invalid YAML exits 1"
 else
     fail "invalid YAML should exit 1"
+fi
+
+# Test 7: missing permissions block / security-events: write (assertion g) — exit 1
+NO_PERMS="$TMPDIR_BASE/no_perms.yml"
+grep -v 'security-events' "$GOOD" > "$NO_PERMS"
+if ! bash "$SCRIPT" "$NO_PERMS" >/dev/null 2>&1; then
+    ok "missing security-events: write exits 1"
+else
+    fail "missing security-events: write should exit 1"
+fi
+
+# Test 8: missing sha256sum verification on the libmicrohttpd download (assertion h) — exit 1
+NO_SHA256="$TMPDIR_BASE/no_sha256.yml"
+grep -v 'sha256sum' "$GOOD" > "$NO_SHA256"
+if ! bash "$SCRIPT" "$NO_SHA256" >/dev/null 2>&1; then
+    ok "missing sha256sum verification exits 1"
+else
+    fail "missing sha256sum verification should exit 1"
 fi
 
 echo ""

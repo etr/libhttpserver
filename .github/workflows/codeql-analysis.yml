@@ -25,6 +25,17 @@ on:
   schedule:
     - cron: '0 4 * * 4'
 
+# Least-privilege GITHUB_TOKEN: restrict to exactly what the CodeQL scan
+# needs. `security-events: write` is required by github/codeql-action/analyze
+# to upload the SARIF report to the security dashboard. `contents: read` is
+# required by actions/checkout. `actions: read` is required on some GitHub
+# plans/repository configurations to read the workflow run. Without an
+# explicit block the token defaults to the repository's global setting.
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+
 jobs:
   analyze:
     name: Analyze
@@ -53,8 +64,17 @@ jobs:
       if: ${{ github.event_name == 'pull_request' }}
 
     - name: Install libmicrohttpd dependency
+      # Supply-chain: libmicrohttpd-1.0.3.tar.gz is sha256-pinned. The digest
+      # must match the value used in verify-build.yml; both workflows track the
+      # same release. To rotate the libmicrohttpd version, update both the URL
+      # and the digest in the same PR (keep this file and verify-build.yml in
+      # sync). Obtain the new digest by downloading the tarball and running:
+      #   sha256sum libmicrohttpd-<version>.tar.gz
+      # Cross-check against the libmicrohttpd project's official release page.
+      # rotate: sha256 7816b57aae199cf5c3645e8770e1be5f0a4dfafbcb24b3772173dc4ee634126a
       run: |
-        curl https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-1.0.3.tar.gz -o libmicrohttpd-1.0.3.tar.gz ;
+        curl -fsSL https://s3.amazonaws.com/libhttpserver/libmicrohttpd_releases/libmicrohttpd-1.0.3.tar.gz -o libmicrohttpd-1.0.3.tar.gz ;
+        echo "7816b57aae199cf5c3645e8770e1be5f0a4dfafbcb24b3772173dc4ee634126a  libmicrohttpd-1.0.3.tar.gz" | sha256sum -c ;
         tar -xzf libmicrohttpd-1.0.3.tar.gz ;
         cd libmicrohttpd-1.0.3 ;
         ./configure --disable-examples ;
