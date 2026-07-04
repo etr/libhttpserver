@@ -39,7 +39,10 @@ v1.x is end-of-life on the day v2.0 ships.
 - **Paired `no_*` boolean setters.** `no_basic_auth`, `no_digest_auth`,
   `no_ssl`, `no_debug`, `no_pedantic`, `no_deferred`, `no_regex_checking`,
   `no_ban_system`, `no_post_process`, `no_single_resource`, `no_ipv6`,
-  `no_dual_stack` are removed. The remaining single setter takes a `bool`:
+  `no_dual_stack`, `no_alpn`, `no_thread_safety`, `no_listen_socket`,
+  `no_put_processed_data_to_content`, and
+  `no_generate_random_filename_on_upload` are removed (the full v1
+  `no_*` family). The remaining single setter takes a `bool`:
   e.g. `cw.ssl(false)` replaces `cw.no_ssl()`.
 - **`#define` constants in public headers.** `DEFAULT_WS_PORT`,
   `DEFAULT_WS_TIMEOUT`, and the `*_ERROR` / `*_RESPONSE` macros are gone.

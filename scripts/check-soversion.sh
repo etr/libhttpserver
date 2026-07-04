@@ -18,10 +18,12 @@
 #       to libhttpserver.so.2.0.0.
 #       On Darwin: $libdir/libhttpserver.dylib dev symlink exists and
 #       resolves to libhttpserver.2.dylib.
-#   A5. SONAME / install-name: on Linux `readelf -d` (if present) must report
-#       SONAME = libhttpserver.so.2; on Darwin `otool -L` (if present) must
-#       list libhttpserver.2.dylib as the install name. When neither tool is
-#       on PATH, this assertion degrades to a filename-only check (A2-A4).
+#   A5. SONAME / install-name: on Linux `readelf -d` must report
+#       SONAME = libhttpserver.so.2; on Darwin `otool -L` must list
+#       libhttpserver.2.dylib as the install name. The relevant tool is a
+#       HARD prerequisite — if it is absent the script FAILS (rather than
+#       degrading to a filename-only check), so an under-provisioned CI lane
+#       can never mask a broken SONAME behind a green signal.
 #   A6. pkg-config: `pkg-config --modversion libhttpserver` prints 2.0.0,
 #       `--cflags` includes -I.../include, `--libs` includes -lhttpserver.
 #   A7. libhttpserver.la was installed and lists library_names that include
@@ -41,11 +43,14 @@
 # Exits non-zero on the first violation, with a clear FAIL line that names
 # the failing assertion.
 
-# -e is intentionally omitted: every significant command uses explicit
-# '|| fail ...' error handling so that failures produce a clear, named
-# assertion message rather than a silent non-zero exit.  Adding -e would
-# break the 'true'-guarded grep calls and confuse the intentional design.
-set -uo pipefail
+# Run under full -euo pipefail. Every significant command still keeps its
+# explicit '|| fail ...' so failures produce a clear, named assertion message;
+# -e is a belt-and-braces backstop that turns any *unguarded* failure into a
+# hard stop instead of a silent continue. The '|| true'-guarded greps
+# (e.g. readelf ... | grep SONAME || true) and the tee-pipeline install (which
+# brackets itself with set +e / set -e so its PIPESTATUS check still runs)
+# remain safe under -e.
+set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD_DIR="${BUILD_DIR:-$REPO_ROOT/build}"
@@ -109,8 +114,13 @@ echo "  libdir    : $LIBDIR"
 rm -rf "$STAGE"
 mkdir -p "$STAGE"
 # Use tee so CI consoles see streaming progress while the log is also captured.
+# Bracket with set +e/-e so a failing `make install` does not trip the outer
+# `set -e` before the PIPESTATUS[0] check below can emit the clear A1 message.
+set +e
 ( cd "$BUILD_DIR" && make install DESTDIR="$STAGE" ) 2>&1 | tee "$STAGE/.install.log"
-if [ "${PIPESTATUS[0]}" -ne 0 ]; then
+install_rc="${PIPESTATUS[0]}"
+set -e
+if [ "$install_rc" -ne 0 ]; then
     echo "---- install log (tail) ----" >&2
     tail -40 "$STAGE/.install.log" >&2
     fail "A1: 'make install DESTDIR=$STAGE' failed"
@@ -190,7 +200,7 @@ case "$PLATFORM" in
                 fail "A5: ELF SONAME mismatch — got '$extracted_soname', expected '$SONAME_BASENAME'"
             fi
         else
-            echo "  SKIP A5: readelf not on PATH (filename-only verification accepted)"
+            fail "A5: readelf not on PATH — install binutils as a hard CI prerequisite (no filename-only fallback; SONAME must be read from the binary)"
         fi
         ;;
     Darwin)
@@ -207,7 +217,7 @@ case "$PLATFORM" in
                     ;;
             esac
         else
-            echo "  SKIP A5: otool not on PATH (filename-only verification accepted)"
+            fail "A5: otool not on PATH — it ships with the Xcode command-line tools (a hard prerequisite on Darwin CI; no filename-only fallback; install-name must be read from the binary)"
         fi
         ;;
 esac
@@ -242,11 +252,10 @@ if command -v pkg-config >/dev/null 2>&1; then
     esac
     pass "A6: pkg-config reports modversion=2.0.0 and consistent -I/-l flags"
 else
-    # Fall back to grepping the .pc file directly. The @VERSION@ substitution
-    # is performed by configure, so a literal '2.0.0' must be present.
-    grep -q "^Version: 2\.0\.0\$" "$PC_FILE" \
-        || fail "A6: pkg-config not installed AND $PC_FILE lacks 'Version: 2.0.0'"
-    echo "  PARTIAL A6: pkg-config not installed; verified .pc Version line directly"
+    # pkg-config is a hard CI prerequisite: the literal Version-line grep
+    # fallback only proved the .pc string, never that pkg-config could parse
+    # and resolve the module. Fail rather than degrade to that weaker check.
+    fail "A6: pkg-config not on PATH — install it as a hard CI prerequisite (no literal Version-line fallback)"
 fi
 
 # ---- A7: libtool .la --------------------------------------------------------

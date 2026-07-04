@@ -27,11 +27,14 @@
 # quoting convention), and fall back to /usr/local when absent.
 #
 # POSIX-portable sed is used: avoid GNU \? (undefined in POSIX BRE/ERE).
+# The trailing `|| true` matters when the caller runs under `set -e`: a default
+# (unset) prefix makes the grep match nothing and exit 1, which pipefail would
+# otherwise propagate and abort the script before the /usr/local fallback below.
 RESOLVED_PREFIX="$("$CONFIG_STATUS" --config 2>/dev/null \
     | tr ' ' '\n' \
     | grep -E "^'?--prefix=" \
     | head -1 \
-    | sed "s/^'*--prefix=//;s/'*$//")"
+    | sed "s/^'*--prefix=//;s/'*$//" || true)"
 [ -z "$RESOLVED_PREFIX" ] && RESOLVED_PREFIX="/usr/local"
 
 # Guard: an absolute path is required for safe use in rm -rf / mkdir -p.

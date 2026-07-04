@@ -47,7 +47,9 @@ EXTRA_DIST = libhttpserver.pc.in $(DX_CONFIG) scripts/extract-release-notes.sh s
 	scripts/test_check_parallel_install.sh \
 	scripts/test_check_parallel_install_lane.sh \
 	scripts/test_check_codeql_workflow.sh scripts/test_check_workflow_pinning.sh \
+	scripts/test_check_fence_balance.sh \
 	scripts/lib/resolve-prefix.sh scripts/lib/skip-or-fail.sh \
+	scripts/lib/check-fence-balance.sh scripts/lib/v1-no-setters.txt \
 	scripts/check-complexity.sh scripts/check-duplication.sh \
 	scripts/check-file-size.sh \
 	scripts/check-warning-suppressions.sh \
@@ -367,7 +369,7 @@ check-hygiene:
 # staged the install; sub-check skips the install step to avoid double cost.
 # This knob is set only by check-local; do not set it when invoking sub-checks
 # standalone.
-check-local: check-headers check-examples check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck lint-warning-suppressions lint-server-ready-helper lint-no-tautological-asserts lint-littletest-skip-exit-code lint-parallel-install-skip-contract
+check-local: check-headers check-examples check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck lint-warning-suppressions lint-server-ready-helper lint-no-tautological-asserts lint-littletest-skip-exit-code lint-parallel-install-skip-contract lint-fence-balance
 	@echo "=== Shared staged install for check-install-layout and check-hygiene ==="
 	@rm -rf "$(abs_top_builddir)/.shared-check-stage"
 	@$(MAKE) $(AM_MAKEFLAGS) install DESTDIR="$(abs_top_builddir)/.shared-check-stage" >check-shared-install.log 2>&1 || { \
@@ -516,6 +518,15 @@ lint-parallel-install-skip-contract:
 	@echo "=== lint-parallel-install-skip-contract: pin skip_or_fail exit-code semantics ==="
 	@$(top_srcdir)/scripts/test_check_parallel_install.sh
 
+# TASK-091: pin the fence-balance state machine shared by check-readme and
+# check-release-notes (scripts/lib/check-fence-balance.sh). Asserts that two
+# consecutive opening fences (even ``` count) are rejected — the regression the
+# old `count % 2` parity heuristic missed. Pure bash/awk, so it is wired into
+# `make check` via check-local and runs in every lane.
+lint-fence-balance:
+	@echo "=== lint-fence-balance: pin fenced-code-block open/close state machine ==="
+	@$(top_srcdir)/scripts/test_check_fence_balance.sh
+
 # TASK-089: structural gate asserting the parallel-install CI lane in
 # verify-build.yml stays wired (opt-in matrix key, master-ref fetch, the
 # `make check-parallel-install` invocation, and no SKIP authorization so
@@ -547,7 +558,7 @@ lint-workflow-pinning:
 	@$(top_srcdir)/scripts/test_check_workflow_pinning.sh
 	@$(top_srcdir)/scripts/check-workflow-pinning.sh
 
-.PHONY: check-headers check-install-layout check-hygiene check-local check-examples check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck check-soversion check-parallel-install lint-complexity lint-duplication lint-file-size lint-warning-suppressions lint-server-ready-helper lint-no-tautological-asserts lint-littletest-skip-exit-code lint-parallel-install-skip-contract lint-parallel-install-lane lint-codeql-workflow lint-workflow-pinning
+.PHONY: check-headers check-install-layout check-hygiene check-local check-examples check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck check-soversion check-parallel-install lint-complexity lint-duplication lint-file-size lint-warning-suppressions lint-server-ready-helper lint-no-tautological-asserts lint-littletest-skip-exit-code lint-parallel-install-skip-contract lint-fence-balance lint-parallel-install-lane lint-codeql-workflow lint-workflow-pinning
 
 # TASK-039: top-level convenience rule that descends into test/ to
 # build and run the bench binaries (see test/Makefile.am and
