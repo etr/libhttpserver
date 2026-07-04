@@ -26,10 +26,14 @@
 // always taken AFTER table mutex when both are held), this test will
 // either deadlock or race.
 //
-// **Manual TSan gate (documented but not on every CI run):**
-// Rebuild with `CXXFLAGS="-fsanitize=thread -g -O1" LDFLAGS="-fsanitize=thread"`
-// and re-run this test. Adding TSan as a CI matrix variant is a follow-up
-// outside TASK-027 scope.
+// **TSan gate (TASK-092: now wired into per-PR CI):**
+// The `build-type: tsan` lane in .github/workflows/verify-build.yml runs
+// this binary RTC_ITERATIONS times via `make -C test
+// check-route-table-concurrency` (time-boxed to <= 2 min), in addition to
+// the single pass the tsan lane's plain `make check` already performs. To
+// reproduce locally, rebuild with
+// `CXXFLAGS="-fsanitize=thread -g -O1" LDFLAGS="-fsanitize=thread"` and run
+// that target. See test/PERFORMANCE.md ("CI wiring — DR-008 stress gates").
 
 #include <atomic>
 #include <chrono>

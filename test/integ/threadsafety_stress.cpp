@@ -52,8 +52,10 @@
 //   so the parent test binary stays healthy. Either a non-zero child
 //   exit within 5 s or a 5 s timeout (child SIGKILLed by parent)
 //   counts as positive observation of the contract; a zero child exit
-//   would be a regression. Skipped in CI; opt-in via
-//   HTTPSERVER_RUN_STOP_FROM_HANDLER=1.
+//   would be a regression. TASK-092: now run in per-PR CI on the baseline
+//   Linux gcc lane via `make -C test check-stop-from-handler`, which sets
+//   HTTPSERVER_RUN_STOP_FROM_HANDLER=1. Local runs remain opt-in — the
+//   sub-test SKIPs unless that env var is set.
 //
 // **Manual TSan gate (documented):**
 //   Rebuild with `CXXFLAGS="-fsanitize=thread -g -O1"

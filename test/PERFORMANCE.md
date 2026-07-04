@@ -271,6 +271,73 @@ If a CI flake surfaces post-merge, capture the `[STATS]` line from the
 failing job logs, then re-run locally on the same lane shape with
 `HTTPSERVER_STRESS_REPEATS=50` to characterise the new noise floor.
 
+## CI wiring — DR-008 stress gates (TASK-092)
+
+Two DR-008 thread-safety contract tests live in `check_PROGRAMS` (so a
+plain `make check` runs each once) but their concurrency/deadlock
+contracts benefit from a deliberate, repeatable, env-gated invocation on
+the CI matrix. TASK-092 wired both into `.github/workflows/verify-build.yml`
+via two convenience targets in `test/Makefile.am`.
+
+### `route_table_concurrency` — TSan lane
+
+- **What it pins:** the v2 3-tier route table's lock-order discipline
+  (route table mutex taken BEFORE the lookup cache mutex when both are
+  held) and radix-wildcard alloc/free under writer/reader contention.
+  Without correct discipline the test deadlocks or races.
+- **How it runs in CI:** `make -C test check-route-table-concurrency` on
+  the `build-type: tsan` lane, which loops the already-`-fsanitize=thread`
+  binary `RTC_ITERATIONS` times (default 8) so the lane reliably hits the
+  typical regression window rather than the single pass `make check`
+  already performs. The step exports the same
+  `TSAN_OPTIONS=suppressions=…/test/tsan.supp` as the "Run tests" step to
+  mask the benign libstdc++ `std::ctype` narrow-cache race; every
+  libhttpserver-internal race stays fatal.
+- **Time box:** the CI step's `timeout-minutes: 2` is the hard ceiling.
+  Tune the iteration count with `RTC_ITERATIONS=N` if lane timing shifts
+  (a single TSan pass is well under the 2-minute box on the reference
+  runner).
+- **Also runs:** once inside the tsan lane's plain `make check`.
+
+### stop()-from-handler deadlock contract — baseline Linux gcc lane
+
+- **What it pins:** the DR-008 negative case — calling `stop()` from a
+  request-handler thread makes libmicrohttpd self-join and, on the CI MHD
+  version, abort with "Failed to join a thread." (a silent deadlock on
+  other versions). The test forks a child to contain the abort; a
+  non-zero child exit or a 5 s timeout is a positive observation of the
+  contract. A clean zero-exit child would be a **regression** — it would
+  mean `stop()` returned successfully from a handler thread.
+- **How it runs in CI:** `make -C test check-stop-from-handler` on the
+  single baseline Ubuntu gcc / nodebug / dynamic / classic lane. The
+  target sets `HTTPSERVER_RUN_STOP_FROM_HANDLER=1` (the opt-in gate; the
+  sub-test SKIPs without it) and `HTTPSERVER_STRESS_SECONDS=1` (via
+  `STOP_HANDLER_STRESS_SECONDS`, default 1) so the other sub-tests in
+  `threadsafety_stress` shrink to a quick pass while Sub-test B is the
+  point of the run.
+- **Failure mode:** a hang. The CI step's `timeout-minutes: 3` is the
+  safety net that turns a wedged process into a failed job.
+
+### For future test authors
+
+Both gates are **opt-in locally** and must stay wired on two axes:
+
+1. Keep each binary in `check_PROGRAMS` (so `make check` builds and runs
+   it once, everywhere), **and**
+2. Keep the `check-route-table-concurrency` / `check-stop-from-handler`
+   targets and their CI steps in sync — the targets are what let the
+   matrix run the deliberate, iteration-looped / env-gated invocations.
+
+Running either contract by hand:
+
+```sh
+cd build
+# TSan lock-order stress, 8 iterations (default):
+make -C test check-route-table-concurrency
+# stop()-from-handler negative case (forks a child that aborts):
+make -C test check-stop-from-handler
+```
+
 ## How to re-run on this branch
 
 ```sh
