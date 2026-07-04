@@ -56,7 +56,7 @@ TASK-093).
 | TASK-089 | Wire `check-parallel-install` into per-PR CI + remove SKIP-degrades-to-pass | HIGH | M | Done |
 | TASK-090 | Harden CodeQL workflow and Codecov upload | HIGH | S | Done |
 | TASK-091 | Tighten CI script soft-degradations | MED | M | Done |
-| TASK-092 | Wire `route_table_concurrency` TSan + `stop()`-from-handler into per-PR CI | MED | S | Backlog |
+| TASK-092 | Wire `route_table_concurrency` TSan + `stop()`-from-handler into per-PR CI | MED | S | Done |
 | TASK-093 | Tighten example caveats (auth, pipe, access-log) | LOW | S | Backlog |
 | TASK-094 | Extend `threadsafety_stress` with per-resource `add_hook` CAS race | MED | S | Done |
 

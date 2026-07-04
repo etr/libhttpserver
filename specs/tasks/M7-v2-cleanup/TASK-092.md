@@ -31,4 +31,4 @@ Both have history of catching real regressions; wire them into the matrix.
 **Related Requirements:** PRD §2 test reliability NFR, DR-008 (thread-safety contract)
 **Related Decisions:** DR-008
 
-**Status:** Backlog
+**Status:** Done
