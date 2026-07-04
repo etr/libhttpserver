@@ -43,10 +43,11 @@
 // create_webserver().use_ssl(...)).
 //
 // CONSTANT-TIME NOTE: The credential comparison below uses
-// std::string_view::operator==, which short-circuits on the first
-// differing byte and can leak information via timing side-channels
-// (CWE-208). In production, replace with a constant-time comparison
-// (e.g., CRYPTO_memcmp or an equivalent fixed-length loop).
+// `constant_time_equal` (defined further down), which is the
+// production-ready form: it runs in time independent of the secret
+// bytes, closing the CWE-208 timing side-channel that a naive
+// std::string_view::operator== (short-circuiting on the first differing
+// byte) would open.
 //
 // Then:
 //
@@ -60,6 +61,7 @@
 // only a subset of routes need protection without dragging the rest of
 // the surface through an auth_skip_paths list.
 
+#include <cstddef>
 #include <cstdlib>
 #include <functional>
 #include <iostream>
@@ -72,6 +74,19 @@
 namespace hs = httpserver;
 
 namespace {
+
+// Constant-time equality: the runtime depends only on a.size(), never on
+// where a mismatch occurs, closing the CWE-208 timing side-channel. The
+// length is not the secret here, so an early length check is fine (this
+// mirrors OpenSSL's CRYPTO_memcmp, which also requires equal lengths).
+bool constant_time_equal(std::string_view a, std::string_view b) {
+    if (a.size() != b.size()) return false;
+    unsigned char diff = 0;
+    for (std::size_t i = 0; i < a.size(); ++i) {
+        diff |= static_cast<unsigned char>(a[i] ^ b[i]);
+    }
+    return diff == 0;
+}
 
 class hello_resource : public hs::http_resource {
  public:
@@ -122,7 +137,11 @@ int main() {
                 }
                 std::string_view u = ctx.request->get_user();
                 std::string_view p = ctx.request->get_pass();
-                if (u == user && p == pass) {
+                // The && short-circuits at the *field* level (user then
+                // pass), which does not leak per-byte password timing --
+                // each field compare is itself constant-time.
+                if (constant_time_equal(u, user) &&
+                    constant_time_equal(p, pass)) {
                     return hs::hook_action::pass();
                 }
                 return hs::hook_action::respond_with(

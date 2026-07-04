@@ -48,11 +48,11 @@
 #include <httpserver.hpp>
 
 // Returns std::nullopt to allow the request, or an engaged optional
-// carrying an http_response to reject it (TASK-054). NOTE: a production
-// deployment should read AUTH_USER and AUTH_PASS once at startup and
-// stash them in immutable storage; calling std::getenv on every request
-// is not thread-safe with respect to concurrent setenv/putenv from
-// other threads in the same process.
+// carrying an http_response to reject it (TASK-054). For illustration;
+// production must read AUTH_USER and AUTH_PASS once at startup into
+// immutable storage -- calling std::getenv on every request is not
+// thread-safe with respect to concurrent setenv/putenv from other
+// threads in the same process.
 std::optional<httpserver::http_response> auth_handler(
         const httpserver::http_request& req) {
     const char* expected_user = std::getenv("AUTH_USER");

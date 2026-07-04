@@ -30,10 +30,29 @@
 #include <unistd.h>
 #endif
 
+#include <cerrno>
 #include <cstring>
 #include <thread>
 
 #include <httpserver.hpp>
+
+// Production-ready: writes the whole buffer, retrying short writes and
+// resuming after an EINTR-interrupted call. Returns false on a hard
+// error. On Windows `write`/`errno` are the CRT `_write`/`errno`; EINTR
+// never fires there, so the loop is a zero-cost wrapper and stays
+// portable.
+static bool write_all(int fd, const char* buf, size_t len) {
+    size_t off = 0;
+    while (off < len) {
+        ssize_t n = write(fd, buf + off, len - off);
+        if (n < 0) {
+            if (errno == EINTR) continue;
+            return false;
+        }
+        off += static_cast<size_t>(n);
+    }
+    return true;
+}
 
 int main() {
     httpserver::webserver ws{httpserver::create_webserver(8080)};
@@ -51,9 +70,12 @@ int main() {
         std::thread writer([fd = pipefd[1]]() {
             const char* messages[] = {"Hello ", "from ", "a pipe!\n"};
             for (const char* msg : messages) {
-                // return value ignored in this demo; production code must
-                // check it in a loop to handle partial writes and EINTR.
-                (void)write(fd, msg, strlen(msg));
+                // Production-ready: write_all loops to handle partial
+                // writes and EINTR. Stop streaming on a hard error --
+                // closing the write end signals EOF to the reader.
+                if (!write_all(fd, msg, strlen(msg))) {
+                    break;
+                }
             }
             close(fd);
         });

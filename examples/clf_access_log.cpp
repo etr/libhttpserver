@@ -98,14 +98,18 @@ void emit_clf_line(const hs::response_sent_ctx& ctx) {
     int64_t ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                      ctx.elapsed).count();
     // Sanitize before embedding in the CLF line to prevent log injection.
-    // Hardcode 'HTTP/1.1' -- ctx does not expose the protocol version;
-    // the intentional simplification keeps the example self-contained.
-    const std::string method = sanitize_clf(ctx.request->get_method());
-    const std::string path   = sanitize_clf(ctx.request->get_path());
-    std::printf("- - - [%s] \"%s %s HTTP/1.1\" %d %zu %lld\n",
+    // The protocol version is the one the client actually advertised,
+    // read from ctx.request->get_version() (TASK-018). It is sanitized
+    // like method and path for defence-in-depth even though it comes from
+    // MHD's request-line parse.
+    const std::string method  = sanitize_clf(ctx.request->get_method());
+    const std::string path    = sanitize_clf(ctx.request->get_path());
+    const std::string version = sanitize_clf(ctx.request->get_version());
+    std::printf("- - - [%s] \"%s %s %s\" %d %zu %lld\n",
                 ts,
                 method.c_str(),
                 path.c_str(),
+                version.c_str(),
                 ctx.status,
                 ctx.bytes_queued,
                 static_cast<long long>(ms));  // NOLINT(runtime/int)
