@@ -101,18 +101,15 @@ should_skip() {
     case "$base" in
         websocket_echo)
             [ "$HAVE_WS" = "1" ] || return 0 ;;
-        minimal_https_psk)
+        # TASK-091: client_cert_auth joined minimal_https_psk under the
+        # HAVE_GNUTLS conditional in examples/Makefile.am — it is built (and
+        # here, consumer-verified) on GnuTLS lanes and skipped elsewhere.
+        minimal_https_psk|client_cert_auth)
             [ "$HAVE_GNUTLS" = "1" ] || return 0 ;;
         basic_authentication|centralized_authentication)
             [ "$HAVE_BAUTH" = "1" ] || return 0 ;;
         digest_authentication)
             [ "$HAVE_DAUTH" = "1" ] || return 0 ;;
-        # client_cert_auth.cpp ships as a documentation artifact; not in
-        # noinst_PROGRAMS in Makefile.am. Skip from this consumer check too,
-        # since it depends on extra GnuTLS APIs that are not part of the
-        # public libhttpserver consumer surface.
-        client_cert_auth)
-            return 0 ;;
     esac
     return 1
 }

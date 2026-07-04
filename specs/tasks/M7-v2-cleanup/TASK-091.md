@@ -16,12 +16,12 @@ A cluster of soft degradations in CI helper scripts that silently weaken gates:
 Land tighter defaults across the set.
 
 **Action Items:**
-- [ ] `check-soversion.sh`: install `readelf` / `otool` as a hard prerequisite (CI tooling) rather than degrading silently. If a CI lane truly cannot install them, fail with a clear error instead of running the filename-only fallback.
-- [ ] `check-readme.sh` + `check-release-notes.sh`: flip markdownlint to `STRICT=yes` by default; require an explicit `LIBHTTPSERVER_MARKDOWNLINT_ADVISORY=1` env var to downgrade.
-- [ ] `check-readme.sh`: fix the fence-balance check to track open/close *pairs* in order rather than counting parity. Add a unit test (a fixture markdown file with two consecutive openers) that asserts the new check fails on it.
-- [ ] `check-release-notes.sh`: enumerate the full `no_*` setter family by scanning `src/httpserver/create_webserver.hpp` for `[[deprecated]]` markers and feeding the list into the check, so removals are non-optional.
-- [ ] `check-examples.sh`: re-include `client_cert_auth` in the `noinst_PROGRAMS` coverage check; fix the root cause if the program legitimately can't be built on a given lane.
-- [ ] `check-parallel-install.sh` + `check-soversion.sh`: add `-e` to the `set` line. Update the inline comment explaining the choice.
+- [x] `check-soversion.sh`: install `readelf` / `otool` as a hard prerequisite (CI tooling) rather than degrading silently. If a CI lane truly cannot install them, fail with a clear error instead of running the filename-only fallback. (Also promoted the A6 pkg-config-absent fallback to a hard `fail`, per the goal statement's "an absent tool fails the script".)
+- [x] `check-readme.sh` + `check-release-notes.sh`: flip markdownlint to `STRICT=yes` by default; require an explicit `LIBHTTPSERVER_MARKDOWNLINT_ADVISORY=1` env var to downgrade. (Default polarity flipped; legacy `MARKDOWNLINT_STRICT` still honored, default now `yes`. `check-release-notes.sh` now surfaces findings via `2>&1` instead of swallowing them.)
+- [x] `check-readme.sh`: fix the fence-balance check to track open/close *pairs* in order rather than counting parity. Add a unit test (a fixture markdown file with two consecutive openers) that asserts the new check fails on it. (Extracted `scripts/lib/check-fence-balance.sh` — an ordered state machine — shared by both README and RELEASE_NOTES checks; unit test `scripts/test_check_fence_balance.sh`, wired as `lint-fence-balance` into check-local.)
+- [x] `check-release-notes.sh`: enumerate the full `no_*` setter family so removals are non-optional. **DEVIATION (approved):** the literal instruction — scan `src/httpserver/create_webserver.hpp` for `[[deprecated]]` markers — is infeasible: v2 removed the `no_*` setters outright and never marked any `[[deprecated]]` (zero such markers, zero `no_*` setters remain in the v2 header). Instead the full family (17 names) is committed to `scripts/lib/v1-no-setters.txt` (single source of truth, derivation documented in its header), read by both `check-release-notes.sh` (A2 presence) and `check-readme.sh` (forbidden set). A live `git show master:...` scan was rejected as lane-unsafe on shallow CI checkouts. RELEASE_NOTES.md's "What's gone" list was expanded to cover all 17 so A2 is green.
+- [x] `check-examples.sh`: re-include `client_cert_auth` in the `noinst_PROGRAMS` coverage check; fix the root cause if the program legitimately can't be built on a given lane. (Root-cause fix: moved into the `HAVE_GNUTLS` conditional in `examples/Makefile.am` — it builds and links cleanly there, verified. `KNOWN_ARTIFACTS` emptied; `verify-installed-examples.sh` `should_skip()` kept in sync.)
+- [x] `check-parallel-install.sh` + `check-soversion.sh`: add `-e` to the `set` line. Update the inline comment explaining the choice. (Guarded the audited command-substitution / tee-pipeline sites so `-e` does not abort spuriously; also fixed `scripts/lib/resolve-prefix.sh`, which both scripts source.)
 
 **Dependencies:**
 - Blocked by: TASK-044 (Done)
@@ -39,4 +39,4 @@ Land tighter defaults across the set.
 **Related Requirements:** PRD §2 CI hygiene NFR
 **Related Decisions:** None new
 
-**Status:** Backlog
+**Status:** Done

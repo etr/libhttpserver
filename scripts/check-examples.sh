@@ -24,7 +24,7 @@
 #
 # Exits non-zero on the first violation.
 
-set -eu
+set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 HELLO="$REPO_ROOT/examples/hello_world.cpp"
@@ -113,11 +113,10 @@ grep -Eq 'register_path[[:space:]]*\(.*std::make_unique' "$SHARED" \
 #       explicitly acknowledged non-program artifact.
 #
 # KNOWN_ARTIFACTS: .cpp files that are intentionally not in noinst_PROGRAMS.
-# client_cert_auth.cpp ships as a documentation artifact; it depends on extra
-# GnuTLS APIs not part of the public libhttpserver consumer surface and is
-# excluded from the build by design. Mirror the comment in
-# scripts/verify-installed-examples.sh lines 96-101.
-KNOWN_ARTIFACTS="client_cert_auth"
+# Empty by design: every example .cpp — including client_cert_auth.cpp, now
+# built under the HAVE_GNUTLS conditional in examples/Makefile.am (TASK-091) —
+# is listed in noinst_PROGRAMS, so nothing is allow-listed out of coverage.
+KNOWN_ARTIFACTS=""
 
 [ -f "$MAKEFILE_AM" ] || fail "examples/Makefile.am does not exist"
 

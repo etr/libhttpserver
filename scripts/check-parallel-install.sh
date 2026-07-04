@@ -54,9 +54,13 @@
 # fails the job (see skip_or_fail() above) so a silently-broken v1 tree
 # cannot mask the parallel-install promise behind a green signal.
 
-# -e is intentionally omitted: every significant command uses explicit
-# '|| fail/skip' error handling for clear diagnostic messages.
-set -uo pipefail
+# Run under full -euo pipefail. Every significant command still carries its
+# explicit '|| fail/skip' for clear diagnostics; -e is a backstop that turns
+# any *unguarded* failure into a hard stop instead of a silent continue. The
+# two fallible command substitutions that may legitimately produce no output
+# (the library_names grep below, and the fallback v1_hits ls|grep) keep an
+# explicit '|| true' so they do not trip -e under pipefail.
+set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD_DIR="${BUILD_DIR:-$REPO_ROOT/build}"
@@ -235,7 +239,9 @@ if [ -f "$V1_LA" ]; then
     # `library_names='libhttpserver.so.0.x.y libhttpserver.so.0 libhttpserver.so'`
     # The last token in the library_names value is the dev link; the first is
     # the versioned runtime file.  Extract the first token.
-    _raw="$(grep '^library_names=' "$V1_LA" | head -1 | sed "s/^library_names='*//;s/'*$//")"
+    # `|| true`: under `set -e`+pipefail a missing library_names line would make
+    # grep exit 1 and abort; an empty _raw is handled by the check below instead.
+    _raw="$(grep '^library_names=' "$V1_LA" | head -1 | sed "s/^library_names='*//;s/'*$//" || true)"
     V1_EXPECTED_BASENAME="${_raw%% *}"   # first whitespace-delimited token
 fi
 

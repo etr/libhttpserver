@@ -104,9 +104,22 @@ fi
 # The rename/removal source-of-truth. Mirrors V1_TOKENS in check-readme.sh,
 # but inverted polarity: here every name MUST appear at least once so v1
 # users can grep for it.
-# Note: the no_* setter family is spot-checked (no_ssl, no_basic_auth,
-# no_digest_auth); the remaining nine no_* names are documented in prose but
-# not individually checked here — intentional partial coverage.
+#
+# The full no_* setter family is enumerated from scripts/lib/v1-no-setters.txt
+# (the single source of truth shared with check-readme.sh) rather than
+# spot-checked here — dropping any removed setter from RELEASE_NOTES.md now
+# fails A2. See that file's header for how the list was derived.
+
+NO_SETTERS_FILE="$REPO_ROOT/scripts/lib/v1-no-setters.txt"
+[ -f "$NO_SETTERS_FILE" ] || fail "A2: enumeration file missing: $NO_SETTERS_FILE"
+V1_NO_SETTERS=()
+while IFS= read -r _name || [ -n "$_name" ]; do
+    case "$_name" in
+        ''|\#*) continue ;;   # skip blank lines and # comments
+    esac
+    V1_NO_SETTERS+=("\\b${_name}\\b")
+done < "$NO_SETTERS_FILE"
+[ "${#V1_NO_SETTERS[@]}" -gt 0 ] || fail "A2: $NO_SETTERS_FILE enumerated no setter names"
 
 REQUIRED_V1_TOKENS=(
     '\bsweet_kill\b'
@@ -114,9 +127,6 @@ REQUIRED_V1_TOKENS=(
     '\bunban_ip\b'
     '\ballow_ip\b'
     '\bdisallow_ip\b'
-    '\bno_ssl\b'
-    '\bno_basic_auth\b'
-    '\bno_digest_auth\b'
     '\bnot_found_resource\b'
     '\bmethod_not_allowed_resource\b'
     '\binternal_error_resource\b'
@@ -148,6 +158,8 @@ REQUIRED_V1_TOKENS=(
     '\bHAVE_DAUTH\b'
     '\bregister_resource\b'
 )
+# Append the full no_* setter family enumerated from the shared data file.
+REQUIRED_V1_TOKENS+=("${V1_NO_SETTERS[@]}")
 
 check_tokens_present "A2: RELEASE_NOTES.md is missing required v1-era tokens" "$NOTES" "${REQUIRED_V1_TOKENS[@]}"
 
@@ -325,10 +337,11 @@ if ! grep -qiE 'not[[:space:]]+a[[:space:]]+compatibility[[:space:]]+commitment'
 fi
 
 # ---- Markdown sanity --------------------------------------------------------
-# (S1) Balanced ``` fences (count of ``` lines must be even).
-fence_count="$(grep -cE '^```' "$NOTES" || true)"
-if [ "$((fence_count % 2))" -ne 0 ]; then
-    fail "S1: RELEASE_NOTES.md has an odd number of \`\`\` fence lines ($fence_count); fences are unbalanced"
+# (S1) Balanced ``` fences, verified by the shared ordered open/close state
+# machine (scripts/lib/check-fence-balance.sh) rather than a `count % 2`
+# parity heuristic — see check-readme.sh S1 for the regression it closes.
+if ! "$(dirname "$0")/lib/check-fence-balance.sh" "$NOTES"; then
+    fail "S1: RELEASE_NOTES.md has unbalanced \`\`\` fences (see diagnostic above)"
 fi
 
 # (S2) Exactly one top-level `# ` H1 line.
@@ -345,10 +358,19 @@ awk '
     END { exit bad }
 ' "$NOTES" >&2 || fail "S3: fenced code blocks in RELEASE_NOTES.md contain tab characters (must use spaces)"
 
-# ---- Optional: markdownlint advisory ----------------------------------------
+# ---- markdownlint: strict by default ----------------------------------------
+# A markdownlint finding fails the script by default; findings go to stderr
+# (2>&1) so they are visible in CI logs rather than swallowed. Set
+# LIBHTTPSERVER_MARKDOWNLINT_ADVISORY=1 (or the legacy MARKDOWNLINT_STRICT=no)
+# to downgrade to advisory. Mirrors check-readme.sh.
 if command -v markdownlint >/dev/null 2>&1; then
-    if ! markdownlint -q "$NOTES" 2>/dev/null; then
-        echo "check-release-notes: NOTE: markdownlint reported issues (advisory only, not gating)" >&2
+    if ! markdownlint -q "$NOTES" 2>&1; then
+        if [ "${LIBHTTPSERVER_MARKDOWNLINT_ADVISORY:-0}" = "1" ] \
+           || [ "${MARKDOWNLINT_STRICT:-yes}" = "no" ]; then
+            echo "check-release-notes: NOTE: markdownlint reported issues above (advisory only, not gating)" >&2
+        else
+            fail "markdownlint reported issues (set LIBHTTPSERVER_MARKDOWNLINT_ADVISORY=1 to downgrade to advisory)"
+        fi
     fi
 fi
 

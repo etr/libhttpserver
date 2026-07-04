@@ -75,13 +75,27 @@ fi
 # ---- A2: no v1-era tokens ----------------------------------------------------
 # Use a single grep -nE pass over README.md. Any hit fails.
 
+# The full v1 no_* setter family is enumerated from the shared data file
+# scripts/lib/v1-no-setters.txt (same source of truth as check-release-notes.sh)
+# so no removed setter can silently leak back into the v2 README.
+NO_SETTERS_FILE="$REPO_ROOT/scripts/lib/v1-no-setters.txt"
+[ -f "$NO_SETTERS_FILE" ] || fail "A2: enumeration file missing: $NO_SETTERS_FILE"
+V1_NO_SETTERS=()
+while IFS= read -r _name || [ -n "$_name" ]; do
+    case "$_name" in
+        ''|\#*) continue ;;   # skip blank lines and # comments
+    esac
+    V1_NO_SETTERS+=("\\b${_name}\\b")
+done < "$NO_SETTERS_FILE"
+[ "${#V1_NO_SETTERS[@]}" -gt 0 ] || fail "A2: $NO_SETTERS_FILE enumerated no setter names"
+
 V1_TOKENS_ARR=(
     '\bsweet_kill\b'
     '\bban_ip\b'
     '\bunban_ip\b'
     '\ballow_ip\b'
     '\bdisallow_ip\b'
-    '\bno_(basic_auth|digest_auth|ssl|debug|pedantic|deferred|regex_checking|ban_system|post_process|single_resource|ipv6|dual_stack)\b'
+    "${V1_NO_SETTERS[@]}"
     '\brender_(GET|POST|PUT|DELETE|HEAD|OPTIONS|PATCH|CONNECT|TRACE)\b'
     '\bstring_response\b'
     '\bfile_response\b'
@@ -286,14 +300,12 @@ if [ "${#broken_links[@]}" -gt 0 ]; then
 fi
 
 # ---- Markdown sanity --------------------------------------------------------
-# (S1) Balanced ``` fences (count of ``` lines must be even).
-# Known limitation: two consecutive opening fences and two closing fences
-# would still produce an even count but are structurally unbalanced.
-# The S3 awk pass (toggle-based) catches the tab-inside-block case and
-# could be extended to enforce in_block==0 at END for stricter balancing.
-fence_count="$(grep -cE '^```' "$README" || true)"
-if [ $(( ${fence_count:-0} % 2 )) -ne 0 ]; then
-    fail "S1: README.md has an odd number of \`\`\` fence lines ($fence_count); fences are unbalanced"
+# (S1) Balanced ``` fences, verified by an ordered open/close state machine
+# (scripts/lib/check-fence-balance.sh). This replaces the earlier `count % 2`
+# parity heuristic, which silently accepted two consecutive opening fences
+# plus two closing fences (four lines, even) as "balanced".
+if ! "$(dirname "$0")/lib/check-fence-balance.sh" "$README"; then
+    fail "S1: README.md has unbalanced \`\`\` fences (see diagnostic above)"
 fi
 
 # (S2) Exactly one top-level `# ` H1 line.
@@ -317,15 +329,20 @@ if LC_ALL=C grep -qP '\r$' "$README" 2>/dev/null; then
     fail "S4: README.md contains CRLF line endings; convert to LF before committing"
 fi
 
-# ---- Optional: markdownlint advisory ----------------------------------------
-# Lint output goes to stderr so it is visible in CI logs. Not gating: a
-# lint failure here does not fail the script. Set MARKDOWNLINT_STRICT=yes
-# to promote lint failures to a hard gate (analogous to HEADER_HYGIENE_STRICT).
+# ---- markdownlint: strict by default ----------------------------------------
+# A markdownlint finding fails the script by default (findings go to stderr so
+# they are visible in CI logs). Set LIBHTTPSERVER_MARKDOWNLINT_ADVISORY=1 to
+# downgrade findings to advisory (non-gating) — the documented escape hatch for
+# a lane whose markdownlint version flags rules the docs do not yet satisfy.
+# The legacy MARKDOWNLINT_STRICT knob is still honored (default now 'yes');
+# MARKDOWNLINT_STRICT=no also downgrades to advisory.
 if command -v markdownlint >/dev/null 2>&1; then
     if ! markdownlint -q "$README" 2>&1; then
-        echo "check-readme: NOTE: markdownlint reported issues above (advisory only, not gating)" >&2
-        if [ "${MARKDOWNLINT_STRICT:-no}" = "yes" ]; then
-            fail "markdownlint reported issues and MARKDOWNLINT_STRICT=yes"
+        if [ "${LIBHTTPSERVER_MARKDOWNLINT_ADVISORY:-0}" = "1" ] \
+           || [ "${MARKDOWNLINT_STRICT:-yes}" = "no" ]; then
+            echo "check-readme: NOTE: markdownlint reported issues above (advisory only, not gating)" >&2
+        else
+            fail "markdownlint reported issues (set LIBHTTPSERVER_MARKDOWNLINT_ADVISORY=1 to downgrade to advisory)"
         fi
     fi
 fi

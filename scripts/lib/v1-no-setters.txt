@@ -1,0 +1,48 @@
+# v1-no-setters.txt — canonical enumeration of the v1 create_webserver
+# `no_*` boolean setters that were REMOVED in v2.0.
+#
+# This is the single source of truth for both:
+#   * scripts/check-release-notes.sh  — every name MUST be documented in
+#     RELEASE_NOTES.md (so a v1 user can grep for any old setter and find
+#     its removal), and
+#   * scripts/check-readme.sh          — every name MUST be absent from the
+#     v2 README.md (no v1-era tokens leak into current docs).
+#
+# Enumerating from this list (rather than a hand-picked subset spot-checked
+# inside each script) makes the removals non-optional: drop a name from
+# RELEASE_NOTES.md and check-release-notes.sh fails.
+#
+# NOTE ON DERIVATION: v2 removed these setters outright — it did NOT mark
+# them `[[deprecated]]`, so there are no `[[deprecated]]` markers left in
+# src/httpserver/create_webserver.hpp to scan. The list below was derived
+# once, at authoring time, from the v1 header on master:
+#
+#   git show master:src/httpserver/create_webserver.hpp \
+#       | grep -oE 'create_webserver& no_[a-z0-9_]+' \
+#       | sed 's/create_webserver& //' | sort -u
+#
+# A runtime `git show master:...` scan is deliberately avoided: these gates
+# run in check-local on every CI lane, and shallow (fetch-depth 1) checkouts
+# have no `master` ref, so a live scan would fail or degrade on most lanes.
+# This committed file is lane-independent. Re-derive with the command above
+# if the v1 surface is ever revised.
+#
+# One setter name per line. Blank lines and `#` comments are ignored.
+
+no_alpn
+no_ban_system
+no_basic_auth
+no_debug
+no_deferred
+no_digest_auth
+no_dual_stack
+no_generate_random_filename_on_upload
+no_ipv6
+no_listen_socket
+no_pedantic
+no_post_process
+no_put_processed_data_to_content
+no_regex_checking
+no_single_resource
+no_ssl
+no_thread_safety
