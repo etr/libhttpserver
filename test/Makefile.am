@@ -315,8 +315,10 @@ lookup_pipeline_LDADD = $(LDADD) -lmicrohttpd
 # route_table_concurrency: TASK-027 Cycle I. Multi-thread stress test.
 # 4 writers + 16 readers for ~500ms, registering / unregistering /
 # looking up against the v2 3-tier table. Gate for the lock-order
-# discipline (table BEFORE cache). TSan is a documented manual rebuild
-# gate (see file header) — not added to CI matrix in this task.
+# discipline (table BEFORE cache). TASK-092: the tsan CI lane runs this
+# binary RTC_ITERATIONS times via `make -C test
+# check-route-table-concurrency` (time-boxed to <= 2 min); it is also
+# run once implicitly by the tsan lane's plain `make check`.
 # Needs -lmicrohttpd because webserver's PIMPL impl carries
 # microhttpd-typed members.
 route_table_concurrency_SOURCES = integ/route_table_concurrency.cpp
@@ -329,8 +331,10 @@ route_table_concurrency_LDADD = $(LDADD) -lmicrohttpd
 # rerun is the headline acceptance; the CI matrix `build-type: tsan`
 # entry in verify-build.yml picks this binary up via `make check`
 # without further wiring. A second sub-test reproduces the documented
-# stop()-from-handler deadlock; it is skipped by default and runs only
-# when HTTPSERVER_RUN_STOP_FROM_HANDLER=1.
+# stop()-from-handler deadlock; TASK-092: the baseline Linux gcc CI lane
+# now sets that gate via `make -C test check-stop-from-handler`
+# (HTTPSERVER_RUN_STOP_FROM_HANDLER=1). Local runs remain opt-in — the
+# sub-test skips unless the env var is set.
 # Default LDADD (libhttpserver + curl) is sufficient — this test
 # touches only public webserver APIs and does not need a direct
 # microhttpd link.
@@ -784,4 +788,33 @@ bench: $(bench_targets)
 	    ./$$p || exit $$?; \
 	done
 
-.PHONY: bench
+# TASK-092: per-PR CI wiring for the two DR-008 stress gates. Both
+# binaries already live in check_PROGRAMS (so `make check` runs each
+# once), but the concurrency/deadlock contracts benefit from a
+# deliberate, repeatable, env-gated invocation on the matrix. These
+# convenience targets are what the tsan and baseline-gcc CI lanes call;
+# see test/PERFORMANCE.md ("CI wiring — DR-008 stress gates").
+
+# check-route-table-concurrency: loop the TSan stress binary
+# RTC_ITERATIONS times (default 8) so the tsan lane hits the typical
+# regression window instead of a single make-check pass. Time-boxed by
+# the CI step's timeout-minutes (<= 2 min).
+RTC_ITERATIONS ?= 8
+check-route-table-concurrency: route_table_concurrency
+	@for i in $$(seq 1 $(RTC_ITERATIONS)); do \
+	    echo "=== route_table_concurrency iteration $$i/$(RTC_ITERATIONS) ==="; \
+	    ./route_table_concurrency || exit $$?; \
+	done
+
+# check-stop-from-handler: run threadsafety_stress with the DR-008
+# stop()-from-handler deadlock sub-test enabled. Sub-tests A/C are
+# shrunk to STOP_HANDLER_STRESS_SECONDS (default 1s) so Sub-test B is
+# the point of the run. Failure mode is a hang -> the CI step's
+# timeout-minutes catches it.
+STOP_HANDLER_STRESS_SECONDS ?= 1
+check-stop-from-handler: threadsafety_stress
+	@HTTPSERVER_RUN_STOP_FROM_HANDLER=1 \
+	 HTTPSERVER_STRESS_SECONDS=$(STOP_HANDLER_STRESS_SECONDS) \
+	 ./threadsafety_stress
+
+.PHONY: bench check-route-table-concurrency check-stop-from-handler

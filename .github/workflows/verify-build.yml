@@ -1170,6 +1170,36 @@ jobs:
       # crash on the OFF lane for the BAUTH/DAUTH/WS unit tests anyway).
       if: ${{ matrix.build-type != 'iwyu' && matrix.compiler-family != 'arm-cross' && matrix.build-type != 'header-hygiene' && matrix.build-type != 'flag-invariance-on' && matrix.build-type != 'flag-invariance-off' }}
 
+    - name: Run route_table_concurrency under TSan (TASK-092)
+      # TASK-092: deliberate, time-boxed multi-iteration run of the
+      # DR-008 lock-order stress binary on the tsan lane. `make check`
+      # (above) already runs it once; this loops it RTC_ITERATIONS times
+      # so the tsan lane reliably hits the typical regression window.
+      # Reuses the same TSAN_OPTIONS suppression file as "Run tests" to
+      # mask the benign libstdc++ std::ctype narrow-cache race; any
+      # libhttpserver-internal race stays fatal.
+      timeout-minutes: 2
+      run: |
+        cd build ;
+        export TSAN_OPTIONS="suppressions=$(pwd)/../test/tsan.supp" ;
+        make -C test check-route-table-concurrency ;
+      if: ${{ matrix.build-type == 'tsan' }}
+
+    - name: Run stop()-from-handler deadlock contract (TASK-092)
+      # TASK-092: the DR-008 negative case — stop() from a handler thread
+      # makes libmicrohttpd self-join and abort. Gated behind
+      # HTTPSERVER_RUN_STOP_FROM_HANDLER=1 (set by check-stop-from-handler)
+      # so it is skipped by default in local runs. Runs on exactly one
+      # lane: the baseline Ubuntu gcc / nodebug / dynamic / classic job
+      # (os-type ubuntu excludes the identically-keyed Windows classic
+      # lanes). The documented failure mode is a hang -> timeout-minutes
+      # is the safety net; a clean zero-exit child would be a regression.
+      timeout-minutes: 3
+      run: |
+        cd build ;
+        make -C test check-stop-from-handler ;
+      if: ${{ matrix.os-type == 'ubuntu' && matrix.test-group == 'basic' && matrix.c-compiler == 'gcc' && matrix.debug == 'nodebug' && matrix.linking == 'dynamic' && matrix.build-type == 'classic' }}
+
     - name: Fetch master ref for parallel-install
       # TASK-089: the default checkout is shallow (fetch-depth: 2), so the v1
       # ref is absent on the runner and check-parallel-install would SKIP
