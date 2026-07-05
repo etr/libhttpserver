@@ -32,4 +32,4 @@ examples to production code is a known anti-pattern users actually do.
 **Related Requirements:** PRD §2 documentation NFR
 **Related Decisions:** None new
 
-**Status:** Backlog
+**Status:** Done
