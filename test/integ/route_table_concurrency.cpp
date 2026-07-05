@@ -62,7 +62,7 @@ LT_END_SUITE(route_table_concurrency_suite)
 
 LT_BEGIN_AUTO_TEST(route_table_concurrency_suite,
                    concurrent_register_and_lookup_no_data_race)
-    ht::webserver ws{ht::create_webserver(8080)
+    ht::webserver ws{ht::create_webserver(0)
                           .start_method(ht::http::http_utils::INTERNAL_SELECT)};
     auto& impl = *ht::webserver_test_access::impl(ws);
 
@@ -149,7 +149,7 @@ LT_END_AUTO_TEST(concurrent_register_and_lookup_no_data_race)
 // concurrently with readers calling lookup_v2 on those same paths.
 LT_BEGIN_AUTO_TEST(route_table_concurrency_suite,
                    concurrent_wildcard_node_alloc_and_lookup_no_data_race)
-    ht::webserver ws{ht::create_webserver(8080)
+    ht::webserver ws{ht::create_webserver(0)
                           .start_method(ht::http::http_utils::INTERNAL_SELECT)};
     auto& impl = *ht::webserver_test_access::impl(ws);
 

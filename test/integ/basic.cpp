@@ -399,16 +399,6 @@ class content_limit_resource : public http_resource {
      }
 };
 
-#ifdef HTTPSERVER_PORT
-#define PORT HTTPSERVER_PORT
-#else
-#define PORT 8080
-#endif  // PORT
-
-#define STR2(p) #p
-#define STR(p) STR2(p)
-#define PORT_STRING STR(PORT)
-
 
 LT_BEGIN_SUITE(basic_suite)
     std::unique_ptr<webserver> ws;
@@ -423,7 +413,7 @@ LT_BEGIN_SUITE(basic_suite)
         // message-forwarding path through the dispatcher (intentional
         // regression coverage), not the default-body shape.
         ws = std::make_unique<webserver>(
-            create_webserver(PORT).expose_exception_messages(true));
+            create_webserver(0).expose_exception_messages(true));
         ws->start(false);
     }
 
@@ -437,6 +427,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, server_runs)
 LT_END_AUTO_TEST(server_runs)
 
 LT_BEGIN_AUTO_TEST(basic_suite, two_endpoints)
+    const uint16_t port = ws->get_bound_port();
     auto ok = std::make_shared<ok_resource>();
     ws->register_path("OK", ok);
     auto nok = std::make_shared<nok_resource>();
@@ -447,7 +438,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, two_endpoints)
     {
         CURL *curl = curl_easy_init();
         CURLcode res;
-        curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/OK");
+        const std::string url1 = "localhost:" + std::to_string(port) + "/OK";
+        curl_easy_setopt(curl, CURLOPT_URL, url1.c_str());
         curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -461,7 +453,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, two_endpoints)
     {
         CURL *curl = curl_easy_init();
         CURLcode res;
-        curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/NOK");
+        const std::string url2 = "localhost:" + std::to_string(port) + "/NOK";
+        curl_easy_setopt(curl, CURLOPT_URL, url2.c_str());
         curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &t);
@@ -508,6 +501,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, duplicate_endpoints)
 LT_END_AUTO_TEST(duplicate_endpoints)
 
 LT_BEGIN_AUTO_TEST(basic_suite, family_endpoints)
+    const uint16_t port = ws->get_bound_port();
     auto ok1 = std::make_shared<static_resource>("1");
     auto ok2 = std::make_shared<static_resource>("2");
     // TASK-056: pre-TASK-056 this test registered the SAME path "OK"
@@ -523,7 +517,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, family_endpoints)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/EXA");
+    const std::string url3 = "localhost:" + std::to_string(port) + "/EXA";
+    curl_easy_setopt(curl, CURLOPT_URL, url3.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -540,7 +535,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, family_endpoints)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/EXA/");
+    const std::string url4 = "localhost:" + std::to_string(port) + "/EXA/";
+    curl_easy_setopt(curl, CURLOPT_URL, url4.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -554,7 +550,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, family_endpoints)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/FAM/go");
+    const std::string url5 = "localhost:" + std::to_string(port) + "/FAM/go";
+    curl_easy_setopt(curl, CURLOPT_URL, url5.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -571,7 +568,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, family_endpoints)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/exa");
+    const std::string url6 = "localhost:" + std::to_string(port) + "/exa";
+    curl_easy_setopt(curl, CURLOPT_URL, url6.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -585,7 +583,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, family_endpoints)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/exa/");
+    const std::string url7 = "localhost:" + std::to_string(port) + "/exa/";
+    curl_easy_setopt(curl, CURLOPT_URL, url7.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -599,7 +598,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, family_endpoints)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/fam/go");
+    const std::string url8 = "localhost:" + std::to_string(port) + "/fam/go";
+    curl_easy_setopt(curl, CURLOPT_URL, url8.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -612,6 +612,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, family_endpoints)
 LT_END_AUTO_TEST(family_endpoints)
 
 LT_BEGIN_AUTO_TEST(basic_suite, overlapping_endpoints)
+    const uint16_t port = ws->get_bound_port();
     // Setup two different resources that can both match the same URL.
     auto ok1 = std::make_shared<static_resource>("1");
     auto ok2 = std::make_shared<static_resource>("2");
@@ -624,7 +625,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, overlapping_endpoints)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/foo/bar/");
+    const std::string url9 = "localhost:" + std::to_string(port) + "/foo/bar/";
+    curl_easy_setopt(curl, CURLOPT_URL, url9.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -654,7 +656,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, overlapping_endpoints)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/foo/bar/");
+    const std::string url10 = "localhost:" + std::to_string(port) + "/foo/bar/";
+    curl_easy_setopt(curl, CURLOPT_URL, url10.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -666,13 +669,15 @@ LT_BEGIN_AUTO_TEST(basic_suite, overlapping_endpoints)
 LT_END_AUTO_TEST(overlapping_endpoints)
 
 LT_BEGIN_AUTO_TEST(basic_suite, read_body)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<simple_resource>();
     ws->register_path("base", resource);
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url11 = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url11.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -683,13 +688,15 @@ LT_BEGIN_AUTO_TEST(basic_suite, read_body)
 LT_END_AUTO_TEST(read_body)
 
 LT_BEGIN_AUTO_TEST(basic_suite, read_long_body)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<long_content_resource>();
     ws->register_path("base", resource);
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url12 = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url12.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -700,6 +707,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, read_long_body)
 LT_END_AUTO_TEST(read_long_body)
 
 LT_BEGIN_AUTO_TEST(basic_suite, resource_setting_header)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<header_set_test_resource>();
     ws->register_path("base", resource);
     curl_global_init(CURL_GLOBAL_ALL);
@@ -707,7 +715,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, resource_setting_header)
     map<string, string> ss;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url13 = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url13.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -721,13 +730,15 @@ LT_BEGIN_AUTO_TEST(basic_suite, resource_setting_header)
 LT_END_AUTO_TEST(resource_setting_header)
 
 LT_BEGIN_AUTO_TEST(basic_suite, resource_setting_cookie)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<cookie_set_test_resource>();
     ws->register_path("base", resource);
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url14 = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url14.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_COOKIEFILE, "");
     curl_easy_setopt(curl, CURLOPT_COOKIEJAR, "");
@@ -753,13 +764,15 @@ LT_BEGIN_AUTO_TEST(basic_suite, resource_setting_cookie)
 LT_END_AUTO_TEST(resource_setting_cookie)
 
 LT_BEGIN_AUTO_TEST(basic_suite, request_with_header)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<header_reading_resource>();
     ws->register_path("base", resource);
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url15 = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url15.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
 
     struct curl_slist *list = nullptr;
@@ -776,13 +789,15 @@ LT_BEGIN_AUTO_TEST(basic_suite, request_with_header)
 LT_END_AUTO_TEST(request_with_header)
 
 LT_BEGIN_AUTO_TEST(basic_suite, request_with_cookie)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<cookie_reading_resource>();
     ws->register_path("base", resource);
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url16 = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url16.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -794,13 +809,15 @@ LT_BEGIN_AUTO_TEST(basic_suite, request_with_cookie)
 LT_END_AUTO_TEST(request_with_cookie)
 
 LT_BEGIN_AUTO_TEST(basic_suite, complete)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<complete_test_resource>();
     ws->register_path("base", resource);
     curl_global_init(CURL_GLOBAL_ALL);
 
     {
     CURL* curl = curl_easy_init();
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url17 = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url17.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     CURLcode res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
@@ -809,7 +826,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, complete)
 
     {
     CURL* curl = curl_easy_init();
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url18 = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url18.c_str());
     curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "DELETE");
     CURLcode res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
@@ -818,7 +836,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, complete)
 
     {
     CURL* curl = curl_easy_init();
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url19 = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url19.c_str());
     curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "PUT");
     CURLcode res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
@@ -827,7 +846,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, complete)
 
     {
     CURL* curl = curl_easy_init();
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url20 = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url20.c_str());
     curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "PATCH");
     CURLcode res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
@@ -836,7 +856,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, complete)
 
     {
     CURL* curl = curl_easy_init();
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url21 = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url21.c_str());
     curl_easy_setopt(curl, CURLOPT_POST, 1L);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, nullptr);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, 0);
@@ -847,6 +868,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, complete)
 LT_END_AUTO_TEST(complete)
 
 LT_BEGIN_AUTO_TEST(basic_suite, only_render)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<only_render_resource>();
     ws->register_path("base", resource);
     curl_global_init(CURL_GLOBAL_ALL);
@@ -856,7 +878,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, only_render)
 
     s = "";
     curl = curl_easy_init();
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url22 = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url22.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -867,7 +890,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, only_render)
 
     s = "";
     curl = curl_easy_init();
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url23 = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url23.c_str());
     curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "DELETE");
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -878,7 +902,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, only_render)
 
     s = "";
     curl = curl_easy_init();
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url24 = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url24.c_str());
     curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "PUT");
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -889,7 +914,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, only_render)
 
     s = "";
     curl = curl_easy_init();
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url25 = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url25.c_str());
     curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "NOT_EXISTENT");
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -900,7 +926,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, only_render)
 
     s = "";
     curl = curl_easy_init();
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url26 = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url26.c_str());
     curl_easy_setopt(curl, CURLOPT_POST, 1L);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, nullptr);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, 0);
@@ -913,13 +940,15 @@ LT_BEGIN_AUTO_TEST(basic_suite, only_render)
 LT_END_AUTO_TEST(only_render)
 
 LT_BEGIN_AUTO_TEST(basic_suite, postprocessor)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<simple_resource>();
     ws->register_path("base", resource);
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url27 = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url27.c_str());
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, "arg1=lib&arg2=httpserver");
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -930,6 +959,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, postprocessor)
 LT_END_AUTO_TEST(postprocessor)
 
 LT_BEGIN_AUTO_TEST(basic_suite, postprocessor_large_field_last_field)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<large_post_resource_last_value>();
     ws->register_path("base", resource);
     curl_global_init(CURL_GLOBAL_ALL);
@@ -958,7 +988,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, postprocessor_large_field_last_field)
     // Append the suffix
     cString[offset] = '\0';
 
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url28 = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url28.c_str());
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, cString);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -971,6 +1002,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, postprocessor_large_field_last_field)
 LT_END_AUTO_TEST(postprocessor_large_field_last_field)
 
 LT_BEGIN_AUTO_TEST(basic_suite, postprocessor_large_field_first_field)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<large_post_resource_first_value>();
     ws->register_path("base", resource);
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1004,7 +1036,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, postprocessor_large_field_first_field)
     // Append the suffix
     std::snprintf(cString + offset, totalLength + 1 - offset, "%s", suffix);
 
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url29 = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url29.c_str());
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, cString);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1017,6 +1050,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, postprocessor_large_field_first_field)
 LT_END_AUTO_TEST(postprocessor_large_field_first_field)
 
 LT_BEGIN_AUTO_TEST(basic_suite, same_key_different_value)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<arg_value_resource>();
     ws->register_path("base", resource);
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1026,7 +1060,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, same_key_different_value)
     // The curl default content type triggers the file processing
     // logic in the webserver. However, since there is no actual
     // file, the arg handling should be the same.
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url30 = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url30.c_str());
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, "arg=inertia&arg=isaproperty&arg=ofmatter");
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1037,13 +1072,15 @@ LT_BEGIN_AUTO_TEST(basic_suite, same_key_different_value)
 LT_END_AUTO_TEST(same_key_different_value)
 
 LT_BEGIN_AUTO_TEST(basic_suite, same_key_different_value_plain_content)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<arg_value_resource>();
     ws->register_path("base", resource);
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base?arg=beep&arg=boop&arg=hello&arg=what");
+    const std::string url31 = "localhost:" + std::to_string(port) + "/base?arg=beep&arg=boop&arg=hello&arg=what";
+    curl_easy_setopt(curl, CURLOPT_URL, url31.c_str());
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, "arg=beep&arg=boop&arg=hello&arg=what");
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1058,12 +1095,14 @@ LT_BEGIN_AUTO_TEST(basic_suite, same_key_different_value_plain_content)
 LT_END_AUTO_TEST(same_key_different_value_plain_content)
 
 LT_BEGIN_AUTO_TEST(basic_suite, empty_arg)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<simple_resource>();
     ws->register_path("base", resource);
     curl_global_init(CURL_GLOBAL_ALL);
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url32 = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url32.c_str());
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, "arg1");
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     res = curl_easy_perform(curl);
@@ -1072,6 +1111,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, empty_arg)
 LT_END_AUTO_TEST(empty_arg)
 
 LT_BEGIN_AUTO_TEST(basic_suite, empty_arg_value_at_end)
+    const uint16_t port = ws->get_bound_port();
     // Test for issue #268: POST body keys without values at the end
     // are not processed when using application/x-www-form-urlencoded
     auto resource = std::make_shared<simple_resource>();
@@ -1083,7 +1123,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, empty_arg_value_at_end)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url33 = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url33.c_str());
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, "arg1=val1&arg2=");
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1099,7 +1140,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, empty_arg_value_at_end)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url34 = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url34.c_str());
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, "arg1=");
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1115,7 +1157,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, empty_arg_value_at_end)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url35 = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url35.c_str());
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, "arg1=&arg2=");
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1128,12 +1171,14 @@ LT_BEGIN_AUTO_TEST(basic_suite, empty_arg_value_at_end)
 LT_END_AUTO_TEST(empty_arg_value_at_end)
 
 LT_BEGIN_AUTO_TEST(basic_suite, no_response)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<no_response_resource>();
     ws->register_path("base", resource);
     curl_global_init(CURL_GLOBAL_ALL);
 
     CURL* curl = curl_easy_init();
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url36 = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url36.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     CURLcode res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
@@ -1144,12 +1189,14 @@ LT_BEGIN_AUTO_TEST(basic_suite, no_response)
 LT_END_AUTO_TEST(no_response)
 
 LT_BEGIN_AUTO_TEST(basic_suite, empty_response)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<empty_response_resource>();
     ws->register_path("base", resource);
     curl_global_init(CURL_GLOBAL_ALL);
 
     CURL* curl = curl_easy_init();
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url37 = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url37.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     CURLcode res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);
@@ -1160,6 +1207,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, empty_response)
 LT_END_AUTO_TEST(empty_response)
 
 LT_BEGIN_AUTO_TEST(basic_suite, regex_matching)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<simple_resource>();
     ws->register_path("regex/matching/number/[0-9]+", resource);
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1167,7 +1215,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, regex_matching)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/regex/matching/number/10");
+    const std::string url38 = "localhost:" + std::to_string(port) + "/regex/matching/number/10";
+    curl_easy_setopt(curl, CURLOPT_URL, url38.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1178,6 +1227,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, regex_matching)
 LT_END_AUTO_TEST(regex_matching)
 
 LT_BEGIN_AUTO_TEST(basic_suite, regex_matching_arg)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<args_resource>();
     ws->register_path("this/captures/{arg}/passed/in/input", resource);
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1185,7 +1235,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, regex_matching_arg)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/this/captures/whatever/passed/in/input");
+    const std::string url39 = "localhost:" + std::to_string(port) + "/this/captures/whatever/passed/in/input";
+    curl_easy_setopt(curl, CURLOPT_URL, url39.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1196,6 +1247,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, regex_matching_arg)
 LT_END_AUTO_TEST(regex_matching_arg)
 
 LT_BEGIN_AUTO_TEST(basic_suite, regex_matching_arg_with_url_pars)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<args_resource>();
     ws->register_path("this/captures/{arg}/passed/in/input", resource);
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1203,7 +1255,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, regex_matching_arg_with_url_pars)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/this/captures/whatever/passed/in/input?arg2=second_argument");
+    const std::string url40 = "localhost:" + std::to_string(port) + "/this/captures/whatever/passed/in/input?arg2=second_argument";
+    curl_easy_setopt(curl, CURLOPT_URL, url40.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1214,6 +1267,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, regex_matching_arg_with_url_pars)
 LT_END_AUTO_TEST(regex_matching_arg_with_url_pars)
 
 LT_BEGIN_AUTO_TEST(basic_suite, regex_matching_arg_custom)
+    const uint16_t port = ws->get_bound_port();
     // v1 parity restored: the radix tier now enforces `{name|regex}`
     // per-segment constraints, and binds captures under the bare
     // `name` (e.g. "arg") rather than the full source token. A
@@ -1227,7 +1281,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, regex_matching_arg_custom)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/this/captures/numeric/11/passed/in/input");
+    const std::string url41 = "localhost:" + std::to_string(port) + "/this/captures/numeric/11/passed/in/input";
+    curl_easy_setopt(curl, CURLOPT_URL, url41.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1246,7 +1301,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, regex_matching_arg_custom)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/this/captures/numeric/text/passed/in/input");
+    const std::string url42 = "localhost:" + std::to_string(port) + "/this/captures/numeric/text/passed/in/input";
+    curl_easy_setopt(curl, CURLOPT_URL, url42.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1261,6 +1317,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, regex_matching_arg_custom)
 LT_END_AUTO_TEST(regex_matching_arg_custom)
 
 LT_BEGIN_AUTO_TEST(basic_suite, querystring_processing)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<args_resource>();
     ws->register_path("this/captures/args/passed/in/the/querystring", resource);
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1268,7 +1325,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, querystring_processing)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/this/captures/args/passed/in/the/querystring?arg=first&arg2=second");
+    const std::string url43 = "localhost:" + std::to_string(port) + "/this/captures/args/passed/in/the/querystring?arg=first&arg2=second";
+    curl_easy_setopt(curl, CURLOPT_URL, url43.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1279,6 +1337,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, querystring_processing)
 LT_END_AUTO_TEST(querystring_processing)
 
 LT_BEGIN_AUTO_TEST(basic_suite, full_arguments_processing)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<full_args_resource>();
     ws->register_path("this/captures/args/passed/in/the/querystring", resource);
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1286,7 +1345,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, full_arguments_processing)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/this/captures/args/passed/in/the/querystring?arg=argument");
+    const std::string url44 = "localhost:" + std::to_string(port) + "/this/captures/args/passed/in/the/querystring?arg=argument";
+    curl_easy_setopt(curl, CURLOPT_URL, url44.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1297,6 +1357,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, full_arguments_processing)
 LT_END_AUTO_TEST(full_arguments_processing)
 
 LT_BEGIN_AUTO_TEST(basic_suite, querystring_query_processing)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<querystring_resource>();
     ws->register_path("this/captures/args/passed/in/the/querystring", resource);
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1304,7 +1365,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, querystring_query_processing)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/this/captures/args/passed/in/the/querystring?arg1=value1&arg2=value2&arg3=value3");
+    const std::string url45 = "localhost:" + std::to_string(port) + "/this/captures/args/passed/in/the/querystring?arg1=value1&arg2=value2&arg3=value3";
+    curl_easy_setopt(curl, CURLOPT_URL, url45.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1315,6 +1377,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, querystring_query_processing)
 LT_END_AUTO_TEST(querystring_query_processing)
 
 LT_BEGIN_AUTO_TEST(basic_suite, register_unregister)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<simple_resource>();
     ws->register_path("base", resource);
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1323,7 +1386,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, register_unregister)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url46 = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url46.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1338,7 +1402,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, register_unregister)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url47 = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url47.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1359,7 +1424,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, register_unregister)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url48 = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url48.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1372,6 +1438,7 @@ LT_END_AUTO_TEST(register_unregister)
 
 #ifndef HTTPSERVER_NO_LOCAL_FS
 LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<file_response_resource>();
     ws->register_path("base", resource);
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1379,7 +1446,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url49 = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url49.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1390,6 +1458,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource)
 LT_END_AUTO_TEST(file_serving_resource)
 
 LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource_empty)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<file_response_resource_empty>();
     ws->register_path("base", resource);
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1397,7 +1466,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource_empty)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url50 = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url50.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1408,6 +1478,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource_empty)
 LT_END_AUTO_TEST(file_serving_resource_empty)
 
 LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource_default_content_type)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<file_response_resource_default_content_type>();
     ws->register_path("base", resource);
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1415,7 +1486,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource_default_content_type)
     map<string, string> ss;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url51 = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url51.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, headerfunc);
     curl_easy_setopt(curl, CURLOPT_HEADERDATA, &ss);
@@ -1427,6 +1499,7 @@ LT_END_AUTO_TEST(file_serving_resource_default_content_type)
 #endif  // HTTPSERVER_NO_LOCAL_FS
 
 LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource_missing)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<file_response_resource_missing>();
     ws->register_path("base", resource);
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1434,7 +1507,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource_missing)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url52 = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url52.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1456,6 +1530,7 @@ LT_END_AUTO_TEST(file_serving_resource_missing)
 
 #ifndef HTTPSERVER_NO_LOCAL_FS
 LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource_dir)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<file_response_resource_dir>();
     ws->register_path("base", resource);
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1463,7 +1538,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, file_serving_resource_dir)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url53 = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url53.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1491,6 +1567,7 @@ LT_END_AUTO_TEST(file_serving_resource_dir)
 // the default-off behaviour on a dedicated webserver. Finding
 // task031-review #36.
 LT_BEGIN_AUTO_TEST(basic_suite, exception_forces_500)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<exception_resource>();
     ws->register_path("base", resource);
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1498,7 +1575,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, exception_forces_500)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url54 = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url54.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1522,6 +1600,7 @@ LT_END_AUTO_TEST(exception_forces_500)
 // types (char* vs int) exercise the same catch(...) branch; keeping both
 // provides type-diversity coverage. Finding task031-review #37.
 LT_BEGIN_AUTO_TEST(basic_suite, untyped_error_forces_500)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<error_resource>();
     ws->register_path("base", resource);
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1529,7 +1608,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, untyped_error_forces_500)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url55 = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url55.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1547,6 +1627,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, untyped_error_forces_500)
 LT_END_AUTO_TEST(untyped_error_forces_500)
 
 LT_BEGIN_AUTO_TEST(basic_suite, request_is_printable)
+    const uint16_t port = ws->get_bound_port();
     stringstream ss;
     auto resource = std::make_shared<print_request_resource>(&ss);
     ws->register_path("base", resource);
@@ -1555,7 +1636,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, request_is_printable)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url56 = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url56.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1582,6 +1664,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, request_is_printable)
 LT_END_AUTO_TEST(request_is_printable)
 
 LT_BEGIN_AUTO_TEST(basic_suite, response_is_printable)
+    const uint16_t port = ws->get_bound_port();
     stringstream ss;
     auto resource = std::make_shared<print_response_resource>(&ss);
     ws->register_path("base", resource);
@@ -1590,7 +1673,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, response_is_printable)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url57 = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url57.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1615,6 +1699,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, response_is_printable)
 LT_END_AUTO_TEST(response_is_printable)
 
 LT_BEGIN_AUTO_TEST(basic_suite, long_path_pieces)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<path_pieces_resource>();
     ws->register_prefix("/settings", resource);
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1622,7 +1707,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, long_path_pieces)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/settings/somestringthatisreallylong/with_really_a_lot_of_content/and_underscores_and_looooooooooooooooooong_stuff");
+    const std::string url58 = "localhost:" + std::to_string(port) + "/settings/somestringthatisreallylong/with_really_a_lot_of_content/and_underscores_and_looooooooooooooooooong_stuff";
+    curl_easy_setopt(curl, CURLOPT_URL, url58.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1633,6 +1719,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, long_path_pieces)
 LT_END_AUTO_TEST(long_path_pieces)
 
 LT_BEGIN_AUTO_TEST(basic_suite, url_with_regex_like_pieces)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<path_pieces_resource>();
     ws->register_prefix("/settings", resource);
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1640,7 +1727,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, url_with_regex_like_pieces)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/settings/{}");
+    const std::string url59 = "localhost:" + std::to_string(port) + "/settings/{}";
+    curl_easy_setopt(curl, CURLOPT_URL, url59.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1651,6 +1739,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, url_with_regex_like_pieces)
 LT_END_AUTO_TEST(url_with_regex_like_pieces)
 
 LT_BEGIN_AUTO_TEST(basic_suite, non_family_url_with_regex_like_pieces)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<ok_resource>();
     ws->register_path("/settings", resource);
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1658,7 +1747,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, non_family_url_with_regex_like_pieces)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/settings/{}");
+    const std::string url60 = "localhost:" + std::to_string(port) + "/settings/{}";
+    curl_easy_setopt(curl, CURLOPT_URL, url60.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1673,6 +1763,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, non_family_url_with_regex_like_pieces)
 LT_END_AUTO_TEST(non_family_url_with_regex_like_pieces)
 
 LT_BEGIN_AUTO_TEST(basic_suite, regex_url_exact_match)
+    const uint16_t port = ws->get_bound_port();
     // v1 parity restored: the radix tier enforces the `[a-z]`
     // per-segment constraint. `/foo/a/bar/` satisfies it (200);
     // the literal `{v|[a-z]}` segment does not — its first
@@ -1686,7 +1777,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, regex_url_exact_match)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/foo/a/bar/");
+    const std::string url61 = "localhost:" + std::to_string(port) + "/foo/a/bar/";
+    curl_easy_setopt(curl, CURLOPT_URL, url61.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1705,7 +1797,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, regex_url_exact_match)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/foo/{v|[a-z]}/bar/");
+    const std::string url62 = "localhost:" + std::to_string(port) + "/foo/{v|[a-z]}/bar/";
+    curl_easy_setopt(curl, CURLOPT_URL, url62.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1720,6 +1813,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, regex_url_exact_match)
 LT_END_AUTO_TEST(regex_url_exact_match)
 
 LT_BEGIN_AUTO_TEST(basic_suite, method_not_allowed_header)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<simple_resource>();
     resource->disallow_all();
     resource->set_allowing(httpserver::http_method::post, true);
@@ -1730,7 +1824,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, method_not_allowed_header)
     map<string, string> ss;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url63 = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url63.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1750,13 +1845,15 @@ LT_BEGIN_AUTO_TEST(basic_suite, method_not_allowed_header)
 LT_END_AUTO_TEST(method_not_allowed_header)
 
 LT_BEGIN_AUTO_TEST(basic_suite, request_info_getters)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<request_info_resource>();
     ws->register_path("request_info", resource);
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/request_info");
+    const std::string url64 = "localhost:" + std::to_string(port) + "/request_info";
+    curl_easy_setopt(curl, CURLOPT_URL, url64.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1769,6 +1866,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, request_info_getters)
 LT_END_AUTO_TEST(request_info_getters)
 
 LT_BEGIN_AUTO_TEST(basic_suite, unregister_then_404)
+    const uint16_t port = ws->get_bound_port();
     auto res = std::make_shared<simple_resource>();
     ws->register_path("temp", res);
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1777,7 +1875,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, unregister_then_404)
         string s;
         CURL *curl = curl_easy_init();
         CURLcode result;
-        curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/temp");
+        const std::string url65 = "localhost:" + std::to_string(port) + "/temp";
+        curl_easy_setopt(curl, CURLOPT_URL, url65.c_str());
         curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1796,7 +1895,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, unregister_then_404)
         string s;
         CURL *curl = curl_easy_init();
         CURLcode result;
-        curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/temp");
+        const std::string url66 = "localhost:" + std::to_string(port) + "/temp";
+        curl_easy_setopt(curl, CURLOPT_URL, url66.c_str());
         curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1810,6 +1910,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, unregister_then_404)
 LT_END_AUTO_TEST(unregister_then_404)
 
 LT_BEGIN_AUTO_TEST(basic_suite, thread_safety)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<simple_resource>();
 
     std::atomic_bool done = false;
@@ -1825,7 +1926,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, thread_safety)
         while (!done) {
             CURL *curl = curl_easy_init();
             std::string s;
-            std::string url = "localhost:" PORT_STRING "/route" + std::to_string(rand() % 10000000);  // NOLINT(runtime/threadsafe_fn)
+            std::string url = "localhost:" + std::to_string(port) + "/route" + std::to_string(rand() % 10000000);  // NOLINT(runtime/threadsafe_fn)
             curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
             curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
             curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
@@ -1855,13 +1956,15 @@ LT_BEGIN_AUTO_TEST(basic_suite, thread_safety)
 LT_END_AUTO_TEST(thread_safety)
 
 LT_BEGIN_AUTO_TEST(basic_suite, head_request)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<complete_test_resource>();
     ws->register_path("base", resource);
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url67 = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url67.c_str());
     curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1875,6 +1978,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, head_request)
 LT_END_AUTO_TEST(head_request)
 
 LT_BEGIN_AUTO_TEST(basic_suite, options_request)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<complete_test_resource>();
     ws->register_path("base", resource);
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1882,7 +1986,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, options_request)
     map<string, string> ss;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url68 = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url68.c_str());
     curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "OPTIONS");
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1898,13 +2003,15 @@ LT_BEGIN_AUTO_TEST(basic_suite, options_request)
 LT_END_AUTO_TEST(options_request)
 
 LT_BEGIN_AUTO_TEST(basic_suite, trace_request)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<complete_test_resource>();
     ws->register_path("base", resource);
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url69 = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url69.c_str());
     curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "TRACE");
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1923,10 +2030,10 @@ LT_BEGIN_SUITE(content_limit_suite)
     string content_limit_url;
 
     void set_up() {
-        content_limit_port = PORT + 10;
-        content_limit_url = "localhost:" + std::to_string(content_limit_port) + "/limit";
-        ws = std::make_unique<webserver>(create_webserver(content_limit_port).content_size_limit(100));
+        ws = std::make_unique<webserver>(create_webserver(0).content_size_limit(100));
         ws->start(false);
+        content_limit_port = ws->get_bound_port();
+        content_limit_url = "localhost:" + std::to_string(content_limit_port) + "/limit";
     }
 
     void tear_down() {
@@ -1979,13 +2086,15 @@ LT_BEGIN_AUTO_TEST(content_limit_suite, content_within_limit)
 LT_END_AUTO_TEST(content_within_limit)
 
 LT_BEGIN_AUTO_TEST(basic_suite, get_args_flat)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<args_flat_resource>();
     ws->register_path("args_flat", resource);
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/args_flat?foo=bar&baz=qux");
+    const std::string url70 = "localhost:" + std::to_string(port) + "/args_flat?foo=bar&baz=qux";
+    curl_easy_setopt(curl, CURLOPT_URL, url70.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1997,13 +2106,15 @@ LT_BEGIN_AUTO_TEST(basic_suite, get_args_flat)
 LT_END_AUTO_TEST(get_args_flat)
 
 LT_BEGIN_AUTO_TEST(basic_suite, only_render_head)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<only_render_resource>();
     ws->register_path("only_render_head", resource);
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/only_render_head");
+    const std::string url71 = "localhost:" + std::to_string(port) + "/only_render_head";
+    curl_easy_setopt(curl, CURLOPT_URL, url71.c_str());
     curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -2016,13 +2127,15 @@ LT_BEGIN_AUTO_TEST(basic_suite, only_render_head)
 LT_END_AUTO_TEST(only_render_head)
 
 LT_BEGIN_AUTO_TEST(basic_suite, only_render_options)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<only_render_resource>();
     ws->register_path("only_render_options", resource);
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/only_render_options");
+    const std::string url72 = "localhost:" + std::to_string(port) + "/only_render_options";
+    curl_easy_setopt(curl, CURLOPT_URL, url72.c_str());
     curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "OPTIONS");
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -2033,13 +2146,15 @@ LT_BEGIN_AUTO_TEST(basic_suite, only_render_options)
 LT_END_AUTO_TEST(only_render_options)
 
 LT_BEGIN_AUTO_TEST(basic_suite, only_render_trace)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<only_render_resource>();
     ws->register_path("only_render_trace", resource);
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/only_render_trace");
+    const std::string url73 = "localhost:" + std::to_string(port) + "/only_render_trace";
+    curl_easy_setopt(curl, CURLOPT_URL, url73.c_str());
     curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "TRACE");
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -2061,6 +2176,7 @@ class long_error_message_resource : public http_resource {
 };
 
 LT_BEGIN_AUTO_TEST(basic_suite, long_error_message)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<long_error_message_resource>();
     ws->register_path("longerror", resource);
     curl_global_init(CURL_GLOBAL_ALL);
@@ -2068,7 +2184,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, long_error_message)
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/longerror");
+    const std::string url74 = "localhost:" + std::to_string(port) + "/longerror";
+    curl_easy_setopt(curl, CURLOPT_URL, url74.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -2084,13 +2201,15 @@ LT_END_AUTO_TEST(long_error_message)
 
 // Test PATCH request on a resource that only implements render()
 LT_BEGIN_AUTO_TEST(basic_suite, only_render_patch)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<only_render_resource>();
     ws->register_path("only_render_patch", resource);
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/only_render_patch");
+    const std::string url75 = "localhost:" + std::to_string(port) + "/only_render_patch";
+    curl_easy_setopt(curl, CURLOPT_URL, url75.c_str());
     curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "PATCH");
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -2114,16 +2233,17 @@ LT_END_AUTO_TEST(only_render_patch)
 
 // Test tcp_nodelay option
 LT_BEGIN_AUTO_TEST(basic_suite, tcp_nodelay_option)
-    webserver ws2{create_webserver(PORT + 51).tcp_nodelay()};
+    webserver ws2{create_webserver(0).tcp_nodelay()};
     auto resource = std::make_shared<ok_resource>();
     ws2.register_path("nodelay_test", resource);
     ws2.start(false);
+    const uint16_t port = ws2.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    std::string url = "http://localhost:" + std::to_string(PORT + 51) + "/nodelay_test";
+    std::string url = "http://localhost:" + std::to_string(port) + "/nodelay_test";
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
@@ -2154,16 +2274,17 @@ class arg_echo_resource : public http_resource {
 };
 
 LT_BEGIN_AUTO_TEST(basic_suite, custom_unescaper)
-    webserver ws2{create_webserver(PORT + 52).unescaper(my_custom_unescaper)};
+    webserver ws2{create_webserver(0).unescaper(my_custom_unescaper)};
     auto resource = std::make_shared<arg_echo_resource>();
     ws2.register_path("echo", resource);
     ws2.start(false);
+    const uint16_t port = ws2.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    std::string url = "http://localhost:" + std::to_string(PORT + 52) + "/echo?key=hello+world";
+    std::string url = "http://localhost:" + std::to_string(port) + "/echo?key=hello+world";
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
@@ -2182,14 +2303,15 @@ http_response my_custom_not_found(const http_request&) {
 }
 
 LT_BEGIN_AUTO_TEST(basic_suite, custom_not_found_handler)
-    webserver ws2{create_webserver(PORT + 53).not_found_handler(my_custom_not_found)};
+    webserver ws2{create_webserver(0).not_found_handler(my_custom_not_found)};
     ws2.start(false);
+    const uint16_t port = ws2.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    std::string url = "http://localhost:" + std::to_string(PORT + 53) + "/nonexistent";
+    std::string url = "http://localhost:" + std::to_string(port) + "/nonexistent";
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
@@ -2220,16 +2342,17 @@ class post_only_resource : public http_resource {
 };
 
 LT_BEGIN_AUTO_TEST(basic_suite, custom_method_not_allowed_handler)
-    webserver ws2{create_webserver(PORT + 54).method_not_allowed_handler(my_custom_method_not_allowed)};
+    webserver ws2{create_webserver(0).method_not_allowed_handler(my_custom_method_not_allowed)};
     auto resource = std::make_shared<post_only_resource>();
     ws2.register_path("postonly", resource);
     ws2.start(false);
+    const uint16_t port = ws2.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    std::string url = "http://localhost:" + std::to_string(PORT + 54) + "/postonly";
+    std::string url = "http://localhost:" + std::to_string(port) + "/postonly";
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);  // GET on a POST-only resource
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
@@ -2259,16 +2382,17 @@ class requestor_cache_resource : public http_resource {
 };
 
 LT_BEGIN_AUTO_TEST(basic_suite, requestor_info)
-    webserver ws2{create_webserver(PORT + 55)};
+    webserver ws2{create_webserver(0)};
     auto resource = std::make_shared<requestor_cache_resource>();
     ws2.register_path("reqinfo", resource);
     ws2.start(false);
+    const uint16_t port = ws2.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    std::string url = "http://localhost:" + std::to_string(PORT + 55) + "/reqinfo";
+    std::string url = "http://localhost:" + std::to_string(port) + "/reqinfo";
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
@@ -2296,16 +2420,17 @@ class querystring_cache_resource : public http_resource {
 };
 
 LT_BEGIN_AUTO_TEST(basic_suite, querystring_caching)
-    webserver ws2{create_webserver(PORT + 56)};
+    webserver ws2{create_webserver(0)};
     auto resource = std::make_shared<querystring_cache_resource>();
     ws2.register_path("qscache", resource);
     ws2.start(false);
+    const uint16_t port = ws2.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    std::string url = "http://localhost:" + std::to_string(PORT + 56) + "/qscache?foo=bar&baz=qux";
+    std::string url = "http://localhost:" + std::to_string(port) + "/qscache?foo=bar&baz=qux";
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
@@ -2349,16 +2474,17 @@ class args_cache_resource : public http_resource {
 };
 
 LT_BEGIN_AUTO_TEST(basic_suite, args_caching)
-    webserver ws2{create_webserver(PORT + 57)};
+    webserver ws2{create_webserver(0)};
     auto resource = std::make_shared<args_cache_resource>();
     ws2.register_path("argscache", resource);
     ws2.start(false);
+    const uint16_t port = ws2.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    std::string url = "http://localhost:" + std::to_string(PORT + 57) + "/argscache?key1=val1&key2=val2";
+    std::string url = "http://localhost:" + std::to_string(port) + "/argscache?key1=val1&key2=val2";
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
@@ -2394,16 +2520,17 @@ class footer_test_resource : public http_resource {
 };
 
 LT_BEGIN_AUTO_TEST(basic_suite, footer_access_no_trailers)
-    webserver ws2{create_webserver(PORT + 58)};
+    webserver ws2{create_webserver(0)};
     auto resource = std::make_shared<footer_test_resource>();
     ws2.register_path("footers", resource);
     ws2.start(false);
+    const uint16_t port = ws2.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    std::string url = "http://localhost:" + std::to_string(PORT + 58) + "/footers";
+    std::string url = "http://localhost:" + std::to_string(port) + "/footers";
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_POST, 1L);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, "test=data");
@@ -2440,16 +2567,17 @@ class response_footer_resource : public http_resource {
 };
 
 LT_BEGIN_AUTO_TEST(basic_suite, response_with_footers)
-    webserver ws2{create_webserver(PORT + 59)};
+    webserver ws2{create_webserver(0)};
     auto resource = std::make_shared<response_footer_resource>();
     ws2.register_path("resp_footers", resource);
     ws2.start(false);
+    const uint16_t port = ws2.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    std::string url = "http://localhost:" + std::to_string(PORT + 59) + "/resp_footers";
+    std::string url = "http://localhost:" + std::to_string(port) + "/resp_footers";
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
@@ -2475,13 +2603,15 @@ class arg_not_found_resource : public http_resource {
 };
 
 LT_BEGIN_AUTO_TEST(basic_suite, arg_not_found)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<arg_not_found_resource>();
     ws->register_path("arg_not_found", resource);
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/arg_not_found?existing=value");
+    const std::string url76 = "localhost:" + std::to_string(port) + "/arg_not_found?existing=value";
+    curl_easy_setopt(curl, CURLOPT_URL, url76.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -2503,13 +2633,15 @@ class arg_flat_fallback_resource : public http_resource {
 };
 
 LT_BEGIN_AUTO_TEST(basic_suite, arg_flat_fallback)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<arg_flat_fallback_resource>();
     ws->register_path("arg_flat_fb", resource);
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/arg_flat_fb?qparam=myvalue");
+    const std::string url77 = "localhost:" + std::to_string(port) + "/arg_flat_fb?qparam=myvalue";
+    curl_easy_setopt(curl, CURLOPT_URL, url77.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -2532,13 +2664,15 @@ class path_piece_oob_resource : public http_resource {
 };
 
 LT_BEGIN_AUTO_TEST(basic_suite, path_piece_out_of_bounds)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<path_piece_oob_resource>();
     ws->register_path("path/piece/test", resource);
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/path/piece/test");
+    const std::string url78 = "localhost:" + std::to_string(port) + "/path/piece/test";
+    curl_easy_setopt(curl, CURLOPT_URL, url78.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -2559,6 +2693,7 @@ class empty_querystring_resource : public http_resource {
 };
 
 LT_BEGIN_AUTO_TEST(basic_suite, empty_querystring)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<empty_querystring_resource>();
     ws->register_path("empty_qs", resource);
     curl_global_init(CURL_GLOBAL_ALL);
@@ -2566,7 +2701,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, empty_querystring)
     CURL *curl = curl_easy_init();
     CURLcode res;
     // URL without any query string
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/empty_qs");
+    const std::string url79 = "localhost:" + std::to_string(port) + "/empty_qs";
+    curl_easy_setopt(curl, CURLOPT_URL, url79.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -2618,13 +2754,15 @@ class auth_cache_resource : public http_resource {
 
 #ifdef HAVE_BAUTH
 LT_BEGIN_AUTO_TEST(basic_suite, auth_caching)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<auth_cache_resource>();
     ws->register_path("auth_cache", resource);
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/auth_cache");
+    const std::string url80 = "localhost:" + std::to_string(port) + "/auth_cache";
+    curl_easy_setopt(curl, CURLOPT_URL, url80.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -2639,6 +2777,7 @@ LT_END_AUTO_TEST(auth_caching)
 // Test query parameters with null/empty values (e.g., ?keyonly&normal=value)
 // This covers http_request.cpp lines 234 and 248 (arg_value == nullptr branches)
 LT_BEGIN_AUTO_TEST(basic_suite, null_value_query_param)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<null_value_query_resource>();
     ws->register_path("null_val_query", resource);
     curl_global_init(CURL_GLOBAL_ALL);
@@ -2646,7 +2785,8 @@ LT_BEGIN_AUTO_TEST(basic_suite, null_value_query_param)
     CURL *curl = curl_easy_init();
     CURLcode res;
     // Query string with a key that has no value (keyonly) and one with value (normal=test)
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/null_val_query?keyonly&normal=test");
+    const std::string url81 = "localhost:" + std::to_string(port) + "/null_val_query?keyonly&normal=test";
+    curl_easy_setopt(curl, CURLOPT_URL, url81.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -2661,13 +2801,15 @@ LT_END_AUTO_TEST(null_value_query_param)
 
 // Test PUT method on a resource that only implements render()
 LT_BEGIN_AUTO_TEST(basic_suite, only_render_put)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<only_render_resource>();
     ws->register_path("only_render_put", resource);
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/only_render_put");
+    const std::string url82 = "localhost:" + std::to_string(port) + "/only_render_put";
+    curl_easy_setopt(curl, CURLOPT_URL, url82.c_str());
     curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "PUT");
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -2679,13 +2821,15 @@ LT_END_AUTO_TEST(only_render_put)
 
 // Test DELETE method on a resource that only implements render()
 LT_BEGIN_AUTO_TEST(basic_suite, only_render_delete)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<only_render_resource>();
     ws->register_path("only_render_delete", resource);
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/only_render_delete");
+    const std::string url83 = "localhost:" + std::to_string(port) + "/only_render_delete";
+    curl_easy_setopt(curl, CURLOPT_URL, url83.c_str());
     curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "DELETE");
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -2697,13 +2841,15 @@ LT_END_AUTO_TEST(only_render_delete)
 
 // Test POST method on a resource that only implements render()
 LT_BEGIN_AUTO_TEST(basic_suite, only_render_post)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<only_render_resource>();
     ws->register_path("only_render_post", resource);
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/only_render_post");
+    const std::string url84 = "localhost:" + std::to_string(port) + "/only_render_post";
+    curl_easy_setopt(curl, CURLOPT_URL, url84.c_str());
     curl_easy_setopt(curl, CURLOPT_POST, 1L);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, "test=data");
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
@@ -2716,10 +2862,11 @@ LT_END_AUTO_TEST(only_render_post)
 
 // Test unregister_path functionality
 LT_BEGIN_AUTO_TEST(basic_suite, unregister_path)
-    webserver ws2{create_webserver(PORT + 67)};
+    webserver ws2{create_webserver(0)};
     auto resource = std::make_shared<ok_resource>();
     ws2.register_path("test_unreg", resource);
     ws2.start(false);
+    const uint16_t port = ws2.get_bound_port();
 
     // First verify resource works
     {
@@ -2727,7 +2874,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, unregister_path)
         string s;
         CURL *curl = curl_easy_init();
         CURLcode res;
-        std::string url = "http://localhost:" + std::to_string(PORT + 67) + "/test_unreg";
+        std::string url = "http://localhost:" + std::to_string(port) + "/test_unreg";
         curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
         curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
@@ -2746,7 +2893,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, unregister_path)
         string s;
         CURL *curl = curl_easy_init();
         CURLcode res;
-        std::string url = "http://localhost:" + std::to_string(PORT + 67) + "/test_unreg";
+        std::string url = "http://localhost:" + std::to_string(port) + "/test_unreg";
         curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
         curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
@@ -2773,13 +2920,15 @@ class arg_flat_multi_resource : public http_resource {
 };
 
 LT_BEGIN_AUTO_TEST(basic_suite, get_arg_flat_first_value)
+    const uint16_t port = ws->get_bound_port();
     auto resource = std::make_shared<arg_flat_multi_resource>();
     ws->register_path("arg_flat_first", resource);
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/arg_flat_first?key=value1&key=value2");
+    const std::string url85 = "localhost:" + std::to_string(port) + "/arg_flat_first?key=value1&key=value2";
+    curl_easy_setopt(curl, CURLOPT_URL, url85.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -2812,17 +2961,18 @@ void test_error_logger(const std::string& msg) {
 LT_BEGIN_AUTO_TEST(basic_suite, log_access_callback)
     LogCapture::access_log_msg().clear();
 
-    webserver ws2{create_webserver(PORT + 70)
+    webserver ws2{create_webserver(0)
         .log_access(test_access_logger)};
     auto resource = std::make_shared<ok_resource>();
     ws2.register_path("logtest", resource);
     ws2.start(false);
+    const uint16_t port = ws2.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    std::string url = "http://localhost:" + std::to_string(PORT + 70) + "/logtest";
+    std::string url = "http://localhost:" + std::to_string(port) + "/logtest";
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
@@ -2841,12 +2991,13 @@ LT_END_AUTO_TEST(log_access_callback)
 
 // Test single_resource mode
 LT_BEGIN_AUTO_TEST(basic_suite, single_resource_mode)
-    webserver ws2{create_webserver(PORT + 71)
+    webserver ws2{create_webserver(0)
         .single_resource()};
     auto resource = std::make_shared<ok_resource>();
     // In single_resource mode, must register at "/" with family=true
     ws2.register_prefix("/", resource);
     ws2.start(false);
+    const uint16_t port = ws2.get_bound_port();
 
     // All paths should route to the single resource
     {
@@ -2854,7 +3005,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, single_resource_mode)
         string s;
         CURL *curl = curl_easy_init();
         CURLcode res;
-        std::string url = "http://localhost:" + std::to_string(PORT + 71) + "/any/path/here";
+        std::string url = "http://localhost:" + std::to_string(port) + "/any/path/here";
         curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
         curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
@@ -2870,7 +3021,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, single_resource_mode)
         string s;
         CURL *curl = curl_easy_init();
         CURLcode res;
-        std::string url = "http://localhost:" + std::to_string(PORT + 71) + "/";
+        std::string url = "http://localhost:" + std::to_string(port) + "/";
         curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
         curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
@@ -2894,10 +3045,11 @@ class empty_render_resource : public http_resource {
 LT_BEGIN_AUTO_TEST(basic_suite, default_render_method)
     // Test that a resource with no render overrides triggers internal error
     // (because empty_render returns response code -1)
-    webserver ws2{create_webserver(PORT + 73)};
+    webserver ws2{create_webserver(0)};
     auto resource = std::make_shared<empty_render_resource>();
     ws2.register_path("empty", resource);
     ws2.start(false);
+    const uint16_t port = ws2.get_bound_port();
 
     {
         curl_global_init(CURL_GLOBAL_ALL);
@@ -2905,7 +3057,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, default_render_method)
         int64_t http_code = 0;
         CURL *curl = curl_easy_init();
         CURLcode res;
-        std::string url = "http://localhost:" + std::to_string(PORT + 73) + "/empty";
+        std::string url = "http://localhost:" + std::to_string(port) + "/empty";
         curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
         curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
@@ -2931,17 +3083,18 @@ class render_override_resource : public http_resource {
 
 LT_BEGIN_AUTO_TEST(basic_suite, render_fallthrough_to_base)
     // Test that render_get calls render() when not overridden
-    webserver ws2{create_webserver(PORT + 74)};
+    webserver ws2{create_webserver(0)};
     auto resource = std::make_shared<render_override_resource>();
     ws2.register_path("base", resource);
     ws2.start(false);
+    const uint16_t port = ws2.get_bound_port();
 
     {
         curl_global_init(CURL_GLOBAL_ALL);
         string s;
         CURL *curl = curl_easy_init();
         CURLcode res;
-        std::string url = "http://localhost:" + std::to_string(PORT + 74) + "/base";
+        std::string url = "http://localhost:" + std::to_string(port) + "/base";
         curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
         curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
@@ -2963,10 +3116,11 @@ LT_END_AUTO_TEST(render_fallthrough_to_base)
 LT_BEGIN_AUTO_TEST(basic_suite, all_methods_fallthrough_to_render)
     // render_override_resource only defines render(), not render_get/POST/etc.
     // So all method-specific calls should fall through to render()
-    webserver ws2{create_webserver(PORT + 75)};
+    webserver ws2{create_webserver(0)};
     auto resource = std::make_shared<render_override_resource>();
     ws2.register_path("fallthrough", resource);
     ws2.start(false);
+    const uint16_t port = ws2.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     CURL* curl;
@@ -2976,7 +3130,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, all_methods_fallthrough_to_render)
     // Test POST fallthrough
     s = "";
     curl = curl_easy_init();
-    curl_easy_setopt(curl, CURLOPT_URL, ("localhost:" + std::to_string(PORT + 75) + "/fallthrough").c_str());
+    curl_easy_setopt(curl, CURLOPT_URL, ("localhost:" + std::to_string(port) + "/fallthrough").c_str());
     curl_easy_setopt(curl, CURLOPT_POST, 1L);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, "");
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
@@ -2989,7 +3143,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, all_methods_fallthrough_to_render)
     // Test PUT fallthrough
     s = "";
     curl = curl_easy_init();
-    curl_easy_setopt(curl, CURLOPT_URL, ("localhost:" + std::to_string(PORT + 75) + "/fallthrough").c_str());
+    curl_easy_setopt(curl, CURLOPT_URL, ("localhost:" + std::to_string(port) + "/fallthrough").c_str());
     curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "PUT");
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -3001,7 +3155,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, all_methods_fallthrough_to_render)
     // Test DELETE fallthrough
     s = "";
     curl = curl_easy_init();
-    curl_easy_setopt(curl, CURLOPT_URL, ("localhost:" + std::to_string(PORT + 75) + "/fallthrough").c_str());
+    curl_easy_setopt(curl, CURLOPT_URL, ("localhost:" + std::to_string(port) + "/fallthrough").c_str());
     curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "DELETE");
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -3013,7 +3167,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, all_methods_fallthrough_to_render)
     // Test PATCH fallthrough
     s = "";
     curl = curl_easy_init();
-    curl_easy_setopt(curl, CURLOPT_URL, ("localhost:" + std::to_string(PORT + 75) + "/fallthrough").c_str());
+    curl_easy_setopt(curl, CURLOPT_URL, ("localhost:" + std::to_string(port) + "/fallthrough").c_str());
     curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "PATCH");
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -3025,7 +3179,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, all_methods_fallthrough_to_render)
     // Test HEAD fallthrough (body is empty for HEAD)
     s = "";
     curl = curl_easy_init();
-    curl_easy_setopt(curl, CURLOPT_URL, ("localhost:" + std::to_string(PORT + 75) + "/fallthrough").c_str());
+    curl_easy_setopt(curl, CURLOPT_URL, ("localhost:" + std::to_string(port) + "/fallthrough").c_str());
     curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -3037,7 +3191,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, all_methods_fallthrough_to_render)
     // Test OPTIONS fallthrough
     s = "";
     curl = curl_easy_init();
-    curl_easy_setopt(curl, CURLOPT_URL, ("localhost:" + std::to_string(PORT + 75) + "/fallthrough").c_str());
+    curl_easy_setopt(curl, CURLOPT_URL, ("localhost:" + std::to_string(port) + "/fallthrough").c_str());
     curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "OPTIONS");
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -3049,7 +3203,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, all_methods_fallthrough_to_render)
     // Test TRACE fallthrough
     s = "";
     curl = curl_easy_init();
-    curl_easy_setopt(curl, CURLOPT_URL, ("localhost:" + std::to_string(PORT + 75) + "/fallthrough").c_str());
+    curl_easy_setopt(curl, CURLOPT_URL, ("localhost:" + std::to_string(port) + "/fallthrough").c_str());
     curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "TRACE");
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -3063,7 +3217,7 @@ LT_END_AUTO_TEST(all_methods_fallthrough_to_render)
 
 // TASK-031 review cleanup: builder_custom_internal_error_handler was removed
 // here (finding 7). Its behavior (custom handler body is used) is a strict
-// subset of dr009_runtime_error_message_passed_to_handler (PORT+81), which
+// subset of dr009_runtime_error_message_passed_to_handler (port offset 81), which
 // additionally verifies that e.what() is forwarded as the message argument.
 // Port 76 is now free for future tests.
 
@@ -3078,16 +3232,17 @@ class arg_flat_resource : public http_resource {
 };
 
 LT_BEGIN_AUTO_TEST(basic_suite, get_arg_flat_fallback)
-    webserver ws2{create_webserver(PORT + 77)};
+    webserver ws2{create_webserver(0)};
     auto resource = std::make_shared<arg_flat_resource>();
     ws2.register_path("argflat", resource);
     ws2.start(false);
+    const uint16_t port = ws2.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    std::string url = "http://localhost:" + std::to_string(PORT + 77) + "/argflat?q=test_value";
+    std::string url = "http://localhost:" + std::to_string(port) + "/argflat?q=test_value";
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
@@ -3112,10 +3267,11 @@ class large_multipart_resource : public http_resource {
 LT_BEGIN_AUTO_TEST(basic_suite, large_multipart_form_field)
     // This test sends a large text field via multipart form-data
     // to trigger the grow_last_arg path in http_request.cpp (line 544)
-    webserver ws2{create_webserver(PORT + 78)};
+    webserver ws2{create_webserver(0)};
     auto resource = std::make_shared<large_multipart_resource>();
     ws2.register_path("largemp", resource);
     ws2.start(false);
+    const uint16_t port = ws2.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     string s;
@@ -3132,7 +3288,7 @@ LT_BEGIN_AUTO_TEST(basic_suite, large_multipart_form_field)
     curl_mime_name(field, "large_field");
     curl_mime_data(field, large_data.c_str(), CURL_ZERO_TERMINATED);
 
-    std::string url = "http://localhost:" + std::to_string(PORT + 78) + "/largemp";
+    std::string url = "http://localhost:" + std::to_string(port) + "/largemp";
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_MIMEPOST, form);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
@@ -3173,16 +3329,17 @@ class client_cert_non_tls_resource : public http_resource {
 
 // Test that client certificate methods return appropriate values for non-TLS requests
 LT_BEGIN_AUTO_TEST(basic_suite, client_cert_methods_non_tls)
-    webserver ws{create_webserver(PORT + 79)};
+    webserver ws{create_webserver(0)};
     auto ccnr = std::make_shared<client_cert_non_tls_resource>();
     ws.register_path("/cert_test", ccnr);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    std::string url = "http://localhost:" + std::to_string(PORT + 79) + "/cert_test";
+    std::string url = "http://localhost:" + std::to_string(port) + "/cert_test";
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
@@ -3224,20 +3381,20 @@ namespace task031 {
 
 // Port-offset allocation for the DR-009 integration tests (finding
 // task031-review #2: explicit range avoids per-search collisions).
-// TASK-055 / DR-009 Revision 1: PORT+80 and PORT+83 are reused by the
-// post-revision "default body is fixed string" tests; PORT+88 and PORT+89
+// TASK-055 / DR-009 Revision 1: port offset 80 and port offset 83 are reused by the
+// post-revision "default body is fixed string" tests; port offset 88 and port offset 89
 // cover the verbose-mode opt-in for the same exception paths.
-//   PORT + 80  dr009_default_body_is_fixed_string                       (rev1)
-//   PORT + 81  dr009_runtime_error_message_passed_to_handler
-//   PORT + 82  dr009_runtime_error_logged_via_error_logger
-//   PORT + 83  dr009_default_body_is_fixed_string_for_non_std_exception (rev1)
-//   PORT + 84  dr009_non_std_exception_passes_unknown_exception_to_handler
-//   PORT + 85  dr009_throwing_handler_yields_empty_body_500
-//   PORT + 86  dr009_throwing_handler_logs_generically
-//   PORT + 87  dr009_feature_unavailable_lands_as_generic_500
-//   PORT + 88  dr009_verbose_body_surfaces_message_when_opted_in        (rev1)
-//   PORT + 89  dr009_verbose_body_surfaces_unknown_exception_when_opted_in (rev1)
-// Next free: PORT + 90.
+//   port offset 80  dr009_default_body_is_fixed_string                       (rev1)
+//   port offset 81  dr009_runtime_error_message_passed_to_handler
+//   port offset 82  dr009_runtime_error_logged_via_error_logger
+//   port offset 83  dr009_default_body_is_fixed_string_for_non_std_exception (rev1)
+//   port offset 84  dr009_non_std_exception_passes_unknown_exception_to_handler
+//   port offset 85  dr009_throwing_handler_yields_empty_body_500
+//   port offset 86  dr009_throwing_handler_logs_generically
+//   port offset 87  dr009_feature_unavailable_lands_as_generic_500
+//   port offset 88  dr009_verbose_body_surfaces_message_when_opted_in        (rev1)
+//   port offset 89  dr009_verbose_body_surfaces_unknown_exception_when_opted_in (rev1)
+// Next free: port offset 90.
 
 // Thin HTTP GET helper used by the DR-009 integration tests to reduce
 // per-test boilerplate (finding task031-review #1). Sends a GET request to
@@ -3300,14 +3457,15 @@ class feature_unavailable_resource : public http_resource {
 // The verbose opt-in behaviour is covered by
 // dr009_verbose_body_surfaces_message_when_opted_in.
 LT_BEGIN_AUTO_TEST(basic_suite, dr009_default_body_is_fixed_string)
-    webserver ws2{create_webserver(PORT + 80)};
+    webserver ws2{create_webserver(0)};
     auto resource = std::make_shared<task031::boom_resource>();
     ws2.register_path("boom", resource);
     ws2.start(false);
+    const uint16_t port = ws2.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     auto [s, http_code] = task031::do_get(
-        "http://localhost:" + std::to_string(PORT + 80) + "/boom");
+        "http://localhost:" + std::to_string(port) + "/boom");
     LT_ASSERT_EQ(http_code, 500);
     // The body is the fixed sanitized string ...
     LT_CHECK_EQ(s, std::string("Internal Server Error"));
@@ -3322,14 +3480,15 @@ LT_END_AUTO_TEST(dr009_default_body_is_fixed_string)
 // pre-revision behaviour of surfacing the originating exception message.
 // This is the development-only round-trip of the v1 behaviour.
 LT_BEGIN_AUTO_TEST(basic_suite, dr009_verbose_body_surfaces_message_when_opted_in)
-    webserver ws2{create_webserver(PORT + 88).expose_exception_messages(true)};
+    webserver ws2{create_webserver(0).expose_exception_messages(true)};
     auto resource = std::make_shared<task031::boom_resource>();
     ws2.register_path("boom", resource);
     ws2.start(false);
+    const uint16_t port = ws2.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     auto [s, http_code] = task031::do_get(
-        "http://localhost:" + std::to_string(PORT + 88) + "/boom");
+        "http://localhost:" + std::to_string(port) + "/boom");
     LT_ASSERT_EQ(http_code, 500);
     LT_CHECK_NEQ(s.find("boom"), std::string::npos);
 
@@ -3350,15 +3509,16 @@ LT_BEGIN_AUTO_TEST(basic_suite, dr009_runtime_error_message_passed_to_handler)
             .with_status(500);
     };
 
-    webserver ws2{create_webserver(PORT + 81)
+    webserver ws2{create_webserver(0)
         .internal_error_handler(handler)};
     auto resource = std::make_shared<task031::boom_resource>();
     ws2.register_path("boom", resource);
     ws2.start(false);
+    const uint16_t port = ws2.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     auto [s, http_code] = task031::do_get(
-        "http://localhost:" + std::to_string(PORT + 81) + "/boom");
+        "http://localhost:" + std::to_string(port) + "/boom");
     LT_ASSERT_EQ(http_code, 500);
     LT_CHECK_EQ(cap.read_last_msg(), "boom");
     LT_CHECK_EQ(s, "CAPTURED:boom");
@@ -3378,14 +3538,15 @@ LT_BEGIN_AUTO_TEST(basic_suite, dr009_runtime_error_logged_via_error_logger)
         cap.count++;
     };
 
-    webserver ws2{create_webserver(PORT + 82).log_error(logger)};
+    webserver ws2{create_webserver(0).log_error(logger)};
     auto resource = std::make_shared<task031::boom_resource>();
     ws2.register_path("boom", resource);
     ws2.start(false);
+    const uint16_t port = ws2.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     auto [s, http_code] = task031::do_get(
-        "http://localhost:" + std::to_string(PORT + 82) + "/boom");
+        "http://localhost:" + std::to_string(port) + "/boom");
     LT_ASSERT_EQ(http_code, 500);
     std::string log_buf = cap.read_last_msg();
     // AC1.c: the log record must include the dispatch-context prefix AND
@@ -3404,14 +3565,15 @@ LT_END_AUTO_TEST(dr009_runtime_error_logged_via_error_logger)
 // to the configured internal_error_handler and to the log_error callback;
 // it is the *default body* path alone that is sanitized.
 LT_BEGIN_AUTO_TEST(basic_suite, dr009_default_body_is_fixed_string_for_non_std_exception)
-    webserver ws2{create_webserver(PORT + 83)};
+    webserver ws2{create_webserver(0)};
     auto resource = std::make_shared<task031::throw_int_resource>();
     ws2.register_path("non_std", resource);
     ws2.start(false);
+    const uint16_t port = ws2.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     auto [s, http_code] = task031::do_get(
-        "http://localhost:" + std::to_string(PORT + 83) + "/non_std");
+        "http://localhost:" + std::to_string(port) + "/non_std");
     LT_ASSERT_EQ(http_code, 500);
     LT_CHECK_EQ(s, std::string("Internal Server Error"));
 
@@ -3423,14 +3585,15 @@ LT_END_AUTO_TEST(dr009_default_body_is_fixed_string_for_non_std_exception)
 // pre-revision behaviour of surfacing the "unknown exception" sentinel
 // for the non-std::exception throw path.
 LT_BEGIN_AUTO_TEST(basic_suite, dr009_verbose_body_surfaces_unknown_exception_when_opted_in)
-    webserver ws2{create_webserver(PORT + 89).expose_exception_messages(true)};
+    webserver ws2{create_webserver(0).expose_exception_messages(true)};
     auto resource = std::make_shared<task031::throw_int_resource>();
     ws2.register_path("non_std", resource);
     ws2.start(false);
+    const uint16_t port = ws2.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     auto [s, http_code] = task031::do_get(
-        "http://localhost:" + std::to_string(PORT + 89) + "/non_std");
+        "http://localhost:" + std::to_string(port) + "/non_std");
     LT_ASSERT_EQ(http_code, 500);
     LT_CHECK_NEQ(s.find("unknown exception"), std::string::npos);
 
@@ -3450,15 +3613,16 @@ LT_BEGIN_AUTO_TEST(basic_suite, dr009_non_std_exception_passes_unknown_exception
             .with_status(500);
     };
 
-    webserver ws2{create_webserver(PORT + 84)
+    webserver ws2{create_webserver(0)
         .internal_error_handler(handler)};
     auto resource = std::make_shared<task031::throw_int_resource>();
     ws2.register_path("non_std", resource);
     ws2.start(false);
+    const uint16_t port = ws2.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     auto [s, http_code] = task031::do_get(
-        "http://localhost:" + std::to_string(PORT + 84) + "/non_std");
+        "http://localhost:" + std::to_string(port) + "/non_std");
     LT_ASSERT_EQ(http_code, 500);
     LT_CHECK_EQ(cap.read_last_msg(), "unknown exception");
 
@@ -3471,15 +3635,16 @@ LT_BEGIN_AUTO_TEST(basic_suite, dr009_throwing_handler_yields_empty_body_500)
         throw std::runtime_error("handler boom");
     };
 
-    webserver ws2{create_webserver(PORT + 85)
+    webserver ws2{create_webserver(0)
         .internal_error_handler(handler)};
     auto resource = std::make_shared<task031::boom_resource>();
     ws2.register_path("boom", resource);
     ws2.start(false);
+    const uint16_t port = ws2.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     auto [s, http_code] = task031::do_get(
-        "http://localhost:" + std::to_string(PORT + 85) + "/boom");
+        "http://localhost:" + std::to_string(port) + "/boom");
     LT_ASSERT_EQ(http_code, 500);
     LT_CHECK_EQ(s, "");
 
@@ -3502,16 +3667,17 @@ LT_BEGIN_AUTO_TEST(basic_suite, dr009_throwing_handler_logs_generically)
         throw std::runtime_error("handler boom");
     };
 
-    webserver ws2{create_webserver(PORT + 86)
+    webserver ws2{create_webserver(0)
         .internal_error_handler(handler)
         .log_error(logger)};
     auto resource = std::make_shared<task031::boom_resource>();
     ws2.register_path("boom", resource);
     ws2.start(false);
+    const uint16_t port = ws2.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     auto [s, http_code] = task031::do_get(
-        "http://localhost:" + std::to_string(PORT + 86) + "/boom");
+        "http://localhost:" + std::to_string(port) + "/boom");
     LT_ASSERT_EQ(http_code, 500);
     LT_CHECK_EQ(s, "");
 
@@ -3531,14 +3697,15 @@ LT_END_AUTO_TEST(dr009_throwing_handler_logs_generically)
 // body", which is now the development-only verbose path. The
 // post-revision default body is sanitized.
 LT_BEGIN_AUTO_TEST(basic_suite, dr009_feature_unavailable_lands_as_generic_500)
-    webserver ws2{create_webserver(PORT + 87).expose_exception_messages(true)};
+    webserver ws2{create_webserver(0).expose_exception_messages(true)};
     auto resource = std::make_shared<task031::feature_unavailable_resource>();
     ws2.register_path("widget", resource);
     ws2.start(false);
+    const uint16_t port = ws2.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     auto [s, http_code] = task031::do_get(
-        "http://localhost:" + std::to_string(PORT + 87) + "/widget");
+        "http://localhost:" + std::to_string(port) + "/widget");
     LT_ASSERT_EQ(http_code, 500);
     // The feature_unavailable's what() string is surfaced in the body.
     LT_CHECK_NEQ(s.find("widget"), std::string::npos);

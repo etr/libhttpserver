@@ -57,12 +57,6 @@
 #include "./littletest.hpp"
 #include "httpserver/detail/connection_state.hpp"
 
-#ifdef HTTPSERVER_PORT
-#define PORT HTTPSERVER_PORT
-#else
-#define PORT 8080
-#endif
-
 namespace {
 
 std::atomic<bool> g_first_handler_saw_sentinel{false};
@@ -139,7 +133,7 @@ LT_BEGIN_AUTO_TEST(connection_state_body_residue_suite,
 // Windows accept path. Coverage on Linux / Darwin remains unaffected.
 // reason: see test/PORTABILITY.md §connection_state_body_residue_test.cpp.
 #ifndef _WINDOWS
-    httpserver::webserver ws{httpserver::create_webserver(PORT)};
+    httpserver::webserver ws{httpserver::create_webserver(0)};
 
     auto on_open = ws.add_hook(
         httpserver::hook_phase::connection_opened,
@@ -152,11 +146,12 @@ LT_BEGIN_AUTO_TEST(connection_state_body_residue_suite,
     auto r = std::make_shared<peek_resource>();
     ws.register_path("/peek", r);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
     CURL* curl = curl_easy_init();
     LT_ASSERT_NEQ(curl, static_cast<CURL*>(nullptr));
-    std::string url = "http://127.0.0.1:" + std::to_string(PORT) + "/peek";
+    std::string url = "http://127.0.0.1:" + std::to_string(port) + "/peek";
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_FORBID_REUSE, 0L);
     curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1L);

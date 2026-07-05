@@ -60,15 +60,8 @@ using httpserver::webserver;
 using httpserver::create_webserver;
 using httpserver::http::arg_map;
 
-#ifdef HTTPSERVER_PORT
-#define PORT HTTPSERVER_PORT
-#else
-#define PORT 8080
-#endif  // PORT
-
 #define STR2(p) #p
 #define STR(p) STR2(p)
-#define PORT_STRING STR(PORT)
 
 #ifdef HTTPSERVER_DATA_ROOT
 #define ROOT STR(HTTPSERVER_DATA_ROOT)
@@ -105,7 +98,7 @@ static bool file_exists(const string &path) {
     return (stat(path.c_str(), &sb) == 0);
 }
 
-static std::pair<CURLcode, int32_t> send_file_to_webserver(bool add_second_file, bool append_parameters) {
+static std::pair<CURLcode, int32_t> send_file_to_webserver(int port, bool add_second_file, bool append_parameters) {
     curl_global_init(CURL_GLOBAL_ALL);
 
     CURL *curl = curl_easy_init();
@@ -127,7 +120,8 @@ static std::pair<CURLcode, int32_t> send_file_to_webserver(bool add_second_file,
     }
 
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/upload");
+    const std::string url = "localhost:" + std::to_string(port) + "/upload";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_MIMEPOST, form);
 
     res = curl_easy_perform(curl);
@@ -170,7 +164,7 @@ static std::pair<CURLcode, int32_t> send_file_with_content_type(int port, const 
     return {res, http_code};
 }
 
-static std::pair<CURLcode, int32_t> send_large_file(string* content, std::string args = "") {
+static std::pair<CURLcode, int32_t> send_large_file(int port, string* content, std::string args = "") {
     // Generate a large (100K) file of random bytes. Upload the file with
     // a curl request, then delete the file. The default chunk size of MHD
     // appears to be around 16K, so 100K should be enough to trigger the
@@ -192,7 +186,7 @@ static std::pair<CURLcode, int32_t> send_large_file(string* content, std::string
     curl_mime_name(field, LARGE_KEY);
     curl_mime_filedata(field, LARGE_CONTENT_FILEPATH);
 
-    std::string url = "localhost:" PORT_STRING "/upload";
+    std::string url = "localhost:" + std::to_string(port) + "/upload";
     if (!args.empty()) {
         url.append(args);
     }
@@ -210,7 +204,7 @@ static std::pair<CURLcode, int32_t> send_large_file(string* content, std::string
     return {res, http_code};
 }
 
-static std::tuple<bool, CURLcode, int32_t> send_file_via_put() {
+static std::tuple<bool, CURLcode, int32_t> send_file_via_put(int port) {
     curl_global_init(CURL_GLOBAL_ALL);
 
     CURL *curl;
@@ -233,7 +227,8 @@ static std::tuple<bool, CURLcode, int32_t> send_file_via_put() {
         return {false, CURLcode{}, 0L};
     }
 
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/upload");
+    const std::string url = "localhost:" + std::to_string(port) + "/upload";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_UPLOAD, 1L);
     curl_easy_setopt(curl, CURLOPT_READDATA, fd);
     curl_easy_setopt(curl, CURLOPT_INFILESIZE_LARGE, (curl_off_t) file_info.st_size);
@@ -323,18 +318,19 @@ LT_END_AUTO_TEST(check_files)
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk)
     string upload_directory = ".";
 
-    auto ws = std::make_unique<webserver>(create_webserver(PORT)
+    auto ws = std::make_unique<webserver>(create_webserver(0)
                        .put_processed_data_to_content()
                        .file_upload_target(httpserver::FILE_UPLOAD_MEMORY_AND_DISK)
                        .file_upload_dir(upload_directory)
                        .generate_random_filename_on_upload());
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
+    const uint16_t port = ws->get_bound_port();
 
     auto resource = std::make_shared<print_file_upload_resource>();
     ws->register_path("upload", resource);
 
-    auto res = send_file_to_webserver(false, false);
+    auto res = send_file_to_webserver(port, false, false);
     LT_ASSERT_EQ(res.first, 0);
     LT_ASSERT_EQ(res.second, 201);
 
@@ -371,18 +367,19 @@ LT_END_AUTO_TEST(file_upload_memory_and_disk)
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_via_put)
     string upload_directory = ".";
 
-    auto ws = std::make_unique<webserver>(create_webserver(PORT)
+    auto ws = std::make_unique<webserver>(create_webserver(0)
                        .put_processed_data_to_content()
                        .file_upload_target(httpserver::FILE_UPLOAD_MEMORY_AND_DISK)
                        .file_upload_dir(upload_directory)
                        .generate_random_filename_on_upload());
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
+    const uint16_t port = ws->get_bound_port();
 
     auto resource = std::make_shared<print_file_upload_resource>();
     ws->register_path("upload", resource);
 
-    auto ret = send_file_via_put();
+    auto ret = send_file_via_put(port);
     LT_CHECK_EQ(std::get<1>(ret), 0);
     LT_CHECK_EQ(std::get<2>(ret), 200);
     LT_ASSERT_EQ(std::get<0>(ret), true);
@@ -402,18 +399,19 @@ LT_END_AUTO_TEST(file_upload_memory_and_disk_via_put)
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_additional_params)
     string upload_directory = ".";
 
-    auto ws = std::make_unique<webserver>(create_webserver(PORT)
+    auto ws = std::make_unique<webserver>(create_webserver(0)
                        .put_processed_data_to_content()
                        .file_upload_target(httpserver::FILE_UPLOAD_MEMORY_AND_DISK)
                        .file_upload_dir(upload_directory)
                        .generate_random_filename_on_upload());
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
+    const uint16_t port = ws->get_bound_port();
 
     auto resource = std::make_shared<print_file_upload_resource>();
     ws->register_path("upload", resource);
 
-    auto res = send_file_to_webserver(false, true);
+    auto res = send_file_to_webserver(port, false, true);
     LT_ASSERT_EQ(res.first, 0);
     LT_ASSERT_EQ(res.second, 201);
 
@@ -455,18 +453,19 @@ LT_END_AUTO_TEST(file_upload_memory_and_disk_additional_params)
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_and_disk_two_files)
     string upload_directory = ".";
 
-    auto ws = std::make_unique<webserver>(create_webserver(PORT)
+    auto ws = std::make_unique<webserver>(create_webserver(0)
                        .put_processed_data_to_content()
                        .file_upload_target(httpserver::FILE_UPLOAD_MEMORY_AND_DISK)
                        .file_upload_dir(upload_directory)
                        .generate_random_filename_on_upload());
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
+    const uint16_t port = ws->get_bound_port();
 
     auto resource = std::make_shared<print_file_upload_resource>();
     ws->register_path("upload", resource);
 
-    auto res = send_file_to_webserver(true, false);
+    auto res = send_file_to_webserver(port, true, false);
     LT_ASSERT_EQ(res.first, 0);
     LT_ASSERT_EQ(res.second, 201);
 
@@ -523,18 +522,19 @@ LT_END_AUTO_TEST(file_upload_memory_and_disk_two_files)
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_disk_only)
     string upload_directory = ".";
 
-    auto ws = std::make_unique<webserver>(create_webserver(PORT)
+    auto ws = std::make_unique<webserver>(create_webserver(0)
                        .put_processed_data_to_content(false)
                        .file_upload_target(httpserver::FILE_UPLOAD_DISK_ONLY)
                        .file_upload_dir(upload_directory)
                        .generate_random_filename_on_upload());
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
+    const uint16_t port = ws->get_bound_port();
 
     auto resource = std::make_shared<print_file_upload_resource>();
     ws->register_path("upload", resource);
 
-    auto res = send_file_to_webserver(false, false);
+    auto res = send_file_to_webserver(port, false, false);
     LT_ASSERT_EQ(res.first, 0);
     LT_ASSERT_EQ(res.second, 201);
 
@@ -565,16 +565,17 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_disk_only)
 LT_END_AUTO_TEST(file_upload_disk_only)
 
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_only_incl_content)
-    auto ws = std::make_unique<webserver>(create_webserver(PORT)
+    auto ws = std::make_unique<webserver>(create_webserver(0)
                        .put_processed_data_to_content()
                        .file_upload_target(httpserver::FILE_UPLOAD_MEMORY_ONLY));
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
+    const uint16_t port = ws->get_bound_port();
 
     auto resource = std::make_shared<print_file_upload_resource>();
     ws->register_path("upload", resource);
 
-    auto res = send_file_to_webserver(false, false);
+    auto res = send_file_to_webserver(port, false, false);
     LT_ASSERT_EQ(res.first, 0);
     LT_ASSERT_EQ(res.second, 201);
 
@@ -595,18 +596,19 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_only_incl_content)
 LT_END_AUTO_TEST(file_upload_memory_only_incl_content)
 
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_large_content)
-    auto ws = std::make_unique<webserver>(create_webserver(PORT)
+    auto ws = std::make_unique<webserver>(create_webserver(0)
                        .put_processed_data_to_content()
                        .file_upload_target(httpserver::FILE_UPLOAD_MEMORY_ONLY));
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
+    const uint16_t port = ws->get_bound_port();
 
     auto resource = std::make_shared<print_file_upload_resource>();
     ws->register_path("upload", resource);
 
     // Upload a large file to trigger the chunking behavior of MHD.
     std::string file_content;
-    auto res = send_large_file(&file_content);
+    auto res = send_large_file(port, &file_content);
     LT_ASSERT_EQ(res.first, 0);
     LT_ASSERT_EQ(res.second, 201);
 
@@ -632,11 +634,12 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_large_content)
 LT_END_AUTO_TEST(file_upload_large_content)
 
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_large_content_with_args)
-    auto ws = std::make_unique<webserver>(create_webserver(PORT)
+    auto ws = std::make_unique<webserver>(create_webserver(0)
                        .put_processed_data_to_content()
                        .file_upload_target(httpserver::FILE_UPLOAD_MEMORY_ONLY));
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
+    const uint16_t port = ws->get_bound_port();
 
     auto resource = std::make_shared<print_file_upload_resource>();
     ws->register_path("upload", resource);
@@ -644,7 +647,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_large_content_with_args)
     // Upload a large file to trigger the chunking behavior of MHD.
     // Include some additional args to make sure those are processed as well.
     std::string file_content;
-    auto res = send_large_file(&file_content, "?arg1=hello&arg1=world");
+    auto res = send_large_file(port, &file_content, "?arg1=hello&arg1=world");
     LT_ASSERT_EQ(res.first, 0);
     LT_ASSERT_EQ(res.second, 201);
 
@@ -675,16 +678,17 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_large_content_with_args)
 LT_END_AUTO_TEST(file_upload_large_content_with_args)
 
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_memory_only_excl_content)
-    auto ws = std::make_unique<webserver>(create_webserver(PORT)
+    auto ws = std::make_unique<webserver>(create_webserver(0)
                        .put_processed_data_to_content(false)
                        .file_upload_target(httpserver::FILE_UPLOAD_MEMORY_ONLY));
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
+    const uint16_t port = ws->get_bound_port();
 
     auto resource = std::make_shared<print_file_upload_resource>();
     ws->register_path("upload", resource);
 
-    auto res = send_file_to_webserver(false, false);
+    auto res = send_file_to_webserver(port, false, false);
     LT_ASSERT_EQ(res.first, 0);
     LT_ASSERT_EQ(res.second, 201);
 
@@ -710,7 +714,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_cleanup_callback_returns_true)
     // Track callback invocations
     std::vector<std::tuple<string, string, size_t>> callback_invocations;
 
-    auto ws = std::make_unique<webserver>(create_webserver(PORT)
+    auto ws = std::make_unique<webserver>(create_webserver(0)
                        .file_upload_target(httpserver::FILE_UPLOAD_DISK_ONLY)
                        .file_upload_dir(upload_directory)
                        .generate_random_filename_on_upload()
@@ -723,11 +727,12 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_cleanup_callback_returns_true)
                        }));
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
+    const uint16_t port = ws->get_bound_port();
 
     auto resource = std::make_shared<print_file_upload_resource>();
     ws->register_path("upload", resource);
 
-    auto res = send_file_to_webserver(false, false);
+    auto res = send_file_to_webserver(port, false, false);
     LT_ASSERT_EQ(res.first, 0);
     LT_ASSERT_EQ(res.second, 201);
 
@@ -751,7 +756,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_cleanup_callback_returns_false)
     string upload_directory = ".";
     string kept_file_path;
 
-    auto ws = std::make_unique<webserver>(create_webserver(PORT)
+    auto ws = std::make_unique<webserver>(create_webserver(0)
                        .file_upload_target(httpserver::FILE_UPLOAD_DISK_ONLY)
                        .file_upload_dir(upload_directory)
                        .generate_random_filename_on_upload()
@@ -766,11 +771,12 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_cleanup_callback_returns_false)
                        }));
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
+    const uint16_t port = ws->get_bound_port();
 
     auto resource = std::make_shared<print_file_upload_resource>();
     ws->register_path("upload", resource);
 
-    auto res = send_file_to_webserver(false, false);
+    auto res = send_file_to_webserver(port, false, false);
     LT_ASSERT_EQ(res.first, 0);
     LT_ASSERT_EQ(res.second, 201);
 
@@ -789,7 +795,7 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_cleanup_callback_selective)
     string upload_directory = ".";
     string kept_file_path;
 
-    auto ws = std::make_unique<webserver>(create_webserver(PORT)
+    auto ws = std::make_unique<webserver>(create_webserver(0)
                        .file_upload_target(httpserver::FILE_UPLOAD_DISK_ONLY)
                        .file_upload_dir(upload_directory)
                        .generate_random_filename_on_upload()
@@ -807,12 +813,13 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_cleanup_callback_selective)
                        }));
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
+    const uint16_t port = ws->get_bound_port();
 
     auto resource = std::make_shared<print_file_upload_resource>();
     ws->register_path("upload", resource);
 
     // Upload two files
-    auto res = send_file_to_webserver(true, false);
+    auto res = send_file_to_webserver(port, true, false);
     LT_ASSERT_EQ(res.first, 0);
     LT_ASSERT_EQ(res.second, 201);
 
@@ -838,7 +845,7 @@ LT_END_AUTO_TEST(file_cleanup_callback_selective)
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_cleanup_callback_throws)
     string upload_directory = ".";
 
-    auto ws = std::make_unique<webserver>(create_webserver(PORT)
+    auto ws = std::make_unique<webserver>(create_webserver(0)
                        .file_upload_target(httpserver::FILE_UPLOAD_DISK_ONLY)
                        .file_upload_dir(upload_directory)
                        .generate_random_filename_on_upload()
@@ -853,11 +860,12 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_cleanup_callback_throws)
                        }));
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
+    const uint16_t port = ws->get_bound_port();
 
     auto resource = std::make_shared<print_file_upload_resource>();
     ws->register_path("upload", resource);
 
-    auto res = send_file_to_webserver(false, false);
+    auto res = send_file_to_webserver(port, false, false);
     LT_ASSERT_EQ(res.first, 0);
     LT_ASSERT_EQ(res.second, 201);
 
@@ -874,18 +882,19 @@ LT_END_AUTO_TEST(file_cleanup_callback_throws)
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_cleanup_no_callback_deletes)
     string upload_directory = ".";
 
-    auto ws = std::make_unique<webserver>(create_webserver(PORT)
+    auto ws = std::make_unique<webserver>(create_webserver(0)
                        .file_upload_target(httpserver::FILE_UPLOAD_DISK_ONLY)
                        .file_upload_dir(upload_directory)
                        .generate_random_filename_on_upload());
     // No file_cleanup_callback set
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
+    const uint16_t port = ws->get_bound_port();
 
     auto resource = std::make_shared<print_file_upload_resource>();
     ws->register_path("upload", resource);
 
-    auto res = send_file_to_webserver(false, false);
+    auto res = send_file_to_webserver(port, false, false);
     LT_ASSERT_EQ(res.first, 0);
     LT_ASSERT_EQ(res.second, 201);
 
@@ -904,17 +913,18 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_original_filename)
     string upload_directory = "upload_test_dir";
     MKDIR(upload_directory.c_str());
 
-    auto ws = std::make_unique<webserver>(create_webserver(PORT)
+    auto ws = std::make_unique<webserver>(create_webserver(0)
                        .file_upload_target(httpserver::FILE_UPLOAD_DISK_ONLY)
                        .file_upload_dir(upload_directory));
     // Note: NOT using generate_random_filename_on_upload()
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
+    const uint16_t port = ws->get_bound_port();
 
     auto resource = std::make_shared<print_file_upload_resource>();
     ws->register_path("upload", resource);
 
-    auto res = send_file_to_webserver(false, false);
+    auto res = send_file_to_webserver(port, false, false);
     LT_ASSERT_EQ(res.first, 0);
     LT_ASSERT_EQ(res.second, 201);
 
@@ -936,15 +946,15 @@ LT_END_AUTO_TEST(file_upload_original_filename)
 // Test file upload with explicit content-type header
 // This exercises the content_type != nullptr branch in webserver.cpp post_iterator
 LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_with_content_type)
-    int port = PORT + 1;
     string upload_directory = ".";
 
-    auto ws = std::make_unique<webserver>(create_webserver(port)
+    auto ws = std::make_unique<webserver>(create_webserver(0)
                        .file_upload_target(httpserver::FILE_UPLOAD_DISK_ONLY)
                        .file_upload_dir(upload_directory)
                        .generate_random_filename_on_upload());
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
+    const uint16_t port = ws->get_bound_port();
 
     auto resource = std::make_shared<print_file_upload_resource>();
     ws->register_path("upload", resource);
@@ -1001,13 +1011,13 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_path_traversal_rejected)
     string upload_directory = "upload_test_dir";
     MKDIR(upload_directory.c_str());
 
-    int port = PORT + 2;
-    auto ws = std::make_unique<webserver>(create_webserver(port)
+    auto ws = std::make_unique<webserver>(create_webserver(0)
                        .file_upload_target(httpserver::FILE_UPLOAD_DISK_ONLY)
                        .file_upload_dir(upload_directory));
     // NOT using generate_random_filename_on_upload - this is the vulnerable path
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
+    const uint16_t port = ws->get_bound_port();
 
     auto resource = std::make_shared<print_file_upload_resource>();
     ws->register_path("upload", resource);
@@ -1030,12 +1040,12 @@ LT_BEGIN_AUTO_TEST(file_upload_suite, file_upload_sanitize_keeps_basename)
     string upload_directory = "upload_test_dir";
     MKDIR(upload_directory.c_str());
 
-    int port = PORT + 3;
-    auto ws = std::make_unique<webserver>(create_webserver(port)
+    auto ws = std::make_unique<webserver>(create_webserver(0)
                        .file_upload_target(httpserver::FILE_UPLOAD_DISK_ONLY)
                        .file_upload_dir(upload_directory));
     ws->start(false);
     LT_CHECK_EQ(ws->is_running(), true);
+    const uint16_t port = ws->get_bound_port();
 
     auto resource = std::make_shared<print_file_upload_resource>();
     ws->register_path("upload", resource);

@@ -50,15 +50,8 @@
 
 using std::shared_ptr;
 
-#ifdef HTTPSERVER_PORT
-#define PORT HTTPSERVER_PORT
-#else
-#define PORT 8080
-#endif  // PORT
-
 #define STR2(p) #p
 #define STR(p) STR2(p)
-#define PORT_STRING STR(PORT)
 
 #ifdef HTTPSERVER_DATA_ROOT
 #define ROOT STR(HTTPSERVER_DATA_ROOT)
@@ -122,16 +115,18 @@ LT_END_SUITE(ws_start_stop_suite)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, start_stop)
     { // NOLINT (internal scope opening - not method start)
-    httpserver::webserver ws{httpserver::create_webserver(PORT)};
+    httpserver::webserver ws{httpserver::create_webserver(0)};
     auto ok = std::make_shared<ok_resource>();
     ws.register_path("base", ok);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    std::string url = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -144,16 +139,18 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, start_stop)
     }
 
     {
-    httpserver::webserver ws{httpserver::create_webserver(PORT).start_method(httpserver::http::http_utils::INTERNAL_SELECT)};
+    httpserver::webserver ws{httpserver::create_webserver(0).start_method(httpserver::http::http_utils::INTERNAL_SELECT)};
     auto ok = std::make_shared<ok_resource>();
     ws.register_path("base", ok);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    std::string url = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -166,16 +163,18 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, start_stop)
     }
 
     {
-    httpserver::webserver ws{httpserver::create_webserver(PORT).start_method(httpserver::http::http_utils::THREAD_PER_CONNECTION)};
+    httpserver::webserver ws{httpserver::create_webserver(0).start_method(httpserver::http::http_utils::THREAD_PER_CONNECTION)};
     auto ok = std::make_shared<ok_resource>();
     ws.register_path("base", ok);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    std::string url = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -192,16 +191,18 @@ LT_END_AUTO_TEST(start_stop)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ipv6)
     { // NOLINT (internal scope opening - not method start)
-    httpserver::webserver ws{httpserver::create_webserver(PORT).use_ipv6()};
+    httpserver::webserver ws{httpserver::create_webserver(0).use_ipv6()};
     auto ok = std::make_shared<ok_resource>();
     ws.register_path("base", ok);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "http://localhost:" PORT_STRING "/base");
+    std::string url = "http://localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V6);
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
@@ -217,16 +218,18 @@ LT_END_AUTO_TEST(ipv6)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, dual_stack)
     { // NOLINT (internal scope opening - not method start)
-    httpserver::webserver ws{httpserver::create_webserver(PORT).use_dual_stack()};
+    httpserver::webserver ws{httpserver::create_webserver(0).use_dual_stack()};
     auto ok = std::make_shared<ok_resource>();
     ws.register_path("base", ok);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "http://localhost:" PORT_STRING "/base");
+    std::string url = "http://localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V6);
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
@@ -243,17 +246,19 @@ LT_END_AUTO_TEST(dual_stack)
 #endif
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, stop_and_wait)
-    httpserver::webserver ws{httpserver::create_webserver(PORT)};
+    httpserver::webserver ws{httpserver::create_webserver(0)};
     auto ok = std::make_shared<ok_resource>();
     ws.register_path("base", ok);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
 
     {
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    std::string url = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -270,7 +275,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, stop_and_wait)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    std::string url = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -281,7 +287,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, stop_and_wait)
 LT_END_AUTO_TEST(stop_and_wait)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, disable_options)
-    httpserver::webserver ws{httpserver::create_webserver(PORT)
+    httpserver::webserver ws{httpserver::create_webserver(0)
         .use_ssl(false)
         .use_ipv6(false)
         .debug(false)
@@ -297,12 +303,14 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, disable_options)
     auto ok = std::make_shared<ok_resource>();
     ws.register_path("base", ok);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    std::string url = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -315,7 +323,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, disable_options)
 LT_END_AUTO_TEST(disable_options)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, enable_options)
-    httpserver::webserver ws{httpserver::create_webserver(PORT)
+    httpserver::webserver ws{httpserver::create_webserver(0)
         .debug()
         .pedantic()
         .deferred()
@@ -325,12 +333,14 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, enable_options)
     auto ok = std::make_shared<ok_resource>();
     ws.register_path("base", ok);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    std::string url = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -358,9 +368,14 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_socket)
     struct sockaddr_in address;
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = inet_addr("127.0.0.1");
-    address.sin_port = htons(PORT);
+    address.sin_port = htons(0);  // bind an ephemeral port; read it back below
     bind(fd, (struct sockaddr*) &address, sizeof(address));
     listen(fd, 10000);
+
+    struct sockaddr_in bound_addr;
+    socklen_t bound_len = sizeof(bound_addr);
+    getsockname(fd, (struct sockaddr*) &bound_addr, &bound_len);
+    const uint16_t port = ntohs(bound_addr.sin_port);
 
     httpserver::webserver ws{httpserver::create_webserver(-1).bind_socket(fd)};  // whatever port here doesn't matter
     auto ok = std::make_shared<ok_resource>();
@@ -371,7 +386,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_socket)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "127.0.0.1:" PORT_STRING "/base");
+    std::string url = "127.0.0.1:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -384,16 +400,18 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_socket)
 LT_END_AUTO_TEST(custom_socket)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, bind_address_string)
-    httpserver::webserver ws{httpserver::create_webserver(PORT).bind_address("127.0.0.1")};
+    httpserver::webserver ws{httpserver::create_webserver(0).bind_address("127.0.0.1")};
     auto ok = std::make_shared<ok_resource>();
     ws.register_path("base", ok);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "127.0.0.1:" PORT_STRING "/base");
+    std::string url = "127.0.0.1:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -406,21 +424,23 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, bind_address_string)
 LT_END_AUTO_TEST(bind_address_string)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, bind_address_string_invalid)
-    LT_CHECK_THROW(httpserver::create_webserver(PORT).bind_address("not_an_ip"));
+    LT_CHECK_THROW(httpserver::create_webserver(0).bind_address("not_an_ip"));
 LT_END_AUTO_TEST(bind_address_string_invalid)
 #endif
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, single_resource)
-    httpserver::webserver ws{httpserver::create_webserver(PORT).single_resource()};
+    httpserver::webserver ws{httpserver::create_webserver(0).single_resource()};
     auto ok = std::make_shared<ok_resource>();
     ws.register_prefix("/", ok);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/any/url/works");
+    std::string url = "localhost:" + std::to_string(port) + "/any/url/works";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -433,7 +453,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, single_resource)
 LT_END_AUTO_TEST(single_resource)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, single_resource_not_default_resource)
-    httpserver::webserver ws{httpserver::create_webserver(PORT).single_resource()};
+    httpserver::webserver ws{httpserver::create_webserver(0).single_resource()};
     auto ok = std::make_shared<ok_resource>();
     LT_CHECK_THROW(ws.register_prefix("/other", ok));
     LT_CHECK_THROW(ws.register_path("/", ok));
@@ -443,24 +463,26 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, single_resource_not_default_resource)
 LT_END_AUTO_TEST(single_resource_not_default_resource)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, register_path_nullptr_throws)
-    httpserver::webserver ws{httpserver::create_webserver(PORT)};
+    httpserver::webserver ws{httpserver::create_webserver(0)};
     // TASK-023: both smart-pointer overloads throw on null.
     LT_CHECK_THROW(ws.register_path("/test", std::shared_ptr<httpserver::http_resource>{}));
     LT_CHECK_THROW(ws.register_path("/test", std::unique_ptr<httpserver::http_resource>{}));
 LT_END_AUTO_TEST(register_path_nullptr_throws)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, register_empty_resource_non_family)
-    httpserver::webserver ws{httpserver::create_webserver(PORT)};
+    httpserver::webserver ws{httpserver::create_webserver(0)};
     auto ok = std::make_shared<ok_resource>();
     // Register empty resource as exact path (non-prefix)
     ws.register_path("", ok);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/");
+    std::string url = "localhost:" + std::to_string(port) + "/";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -473,17 +495,19 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, register_empty_resource_non_family)
 LT_END_AUTO_TEST(register_empty_resource_non_family)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, register_path_with_url_params_non_family)
-    httpserver::webserver ws{httpserver::create_webserver(PORT).regex_checking()};
+    httpserver::webserver ws{httpserver::create_webserver(0).regex_checking()};
     auto ok = std::make_shared<ok_resource>();
     // Register resource with URL parameters as exact path
     ws.register_path("/user/{id}", ok);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/user/123");
+    std::string url = "localhost:" + std::to_string(port) + "/user/123";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -496,7 +520,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, register_path_with_url_params_non_family
 LT_END_AUTO_TEST(register_path_with_url_params_non_family)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, register_duplicate_resource_throws)
-    httpserver::webserver ws{httpserver::create_webserver(PORT)};
+    httpserver::webserver ws{httpserver::create_webserver(0)};
     auto ok1 = std::make_shared<ok_resource>();
     auto ok2 = std::make_shared<ok_resource>();
     // First registration should succeed.
@@ -512,7 +536,7 @@ LT_END_AUTO_TEST(register_duplicate_resource_throws)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, thread_per_connection_fails_with_max_threads)
     { // NOLINT (internal scope opening - not method start)
-    httpserver::webserver ws{httpserver::create_webserver(PORT)
+    httpserver::webserver ws{httpserver::create_webserver(0)
         .start_method(httpserver::http::http_utils::THREAD_PER_CONNECTION)
         .max_threads(5)};
     LT_CHECK_THROW(ws.start(false));
@@ -521,7 +545,7 @@ LT_END_AUTO_TEST(thread_per_connection_fails_with_max_threads)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, thread_per_connection_fails_with_max_threads_stack_size)
     { // NOLINT (internal scope opening - not method start)
-    httpserver::webserver ws{httpserver::create_webserver(PORT)
+    httpserver::webserver ws{httpserver::create_webserver(0)
         .start_method(httpserver::http::http_utils::THREAD_PER_CONNECTION)
         .max_thread_stack_size(4*1024*1024)};
     LT_CHECK_THROW(ws.start(false));
@@ -529,7 +553,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, thread_per_connection_fails_with_max_thr
 LT_END_AUTO_TEST(thread_per_connection_fails_with_max_threads_stack_size)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, tuning_options)
-    httpserver::webserver ws{httpserver::create_webserver(PORT)
+    httpserver::webserver ws{httpserver::create_webserver(0)
         .max_connections(10)
         .max_threads(10)
         .memory_limit(10000)
@@ -540,12 +564,14 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, tuning_options)
     auto ok = std::make_shared<ok_resource>();
     ws.register_path("base", ok);
     LT_CHECK_NOTHROW(ws.start(false));
+    const uint16_t port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    std::string url = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -563,7 +589,7 @@ LT_END_AUTO_TEST(tuning_options)
 // was built with TLS support, so gate them on HAVE_GNUTLS.
 #ifdef HAVE_GNUTLS
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_base)
-    httpserver::webserver ws{httpserver::create_webserver(PORT)
+    httpserver::webserver ws{httpserver::create_webserver(0)
         .use_ssl()
         .https_mem_key(ROOT "/key.pem")
         .https_mem_cert(ROOT "/cert.pem")};
@@ -571,6 +597,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_base)
     auto ok = std::make_shared<ok_resource>();
     ws.register_path("base", ok);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -578,7 +605,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_base)
     CURLcode res;
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);  // avoid verifying ssl
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);  // avoid verifying ssl
-    curl_easy_setopt(curl, CURLOPT_URL, "https://localhost:" PORT_STRING "/base");
+    std::string url = "https://localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -592,7 +620,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_base)
 LT_END_AUTO_TEST(ssl_base)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_with_protocol_priorities)
-    httpserver::webserver ws{httpserver::create_webserver(PORT)
+    httpserver::webserver ws{httpserver::create_webserver(0)
         .use_ssl()
         .https_mem_key(ROOT "/key.pem")
         .https_mem_cert(ROOT "/cert.pem")
@@ -601,6 +629,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_with_protocol_priorities)
     auto ok = std::make_shared<ok_resource>();
     ws.register_path("base", ok);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -608,7 +637,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_with_protocol_priorities)
     CURLcode res;
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);  // avoid verifying ssl
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);  // avoid verifying ssl
-    curl_easy_setopt(curl, CURLOPT_URL, "https://localhost:" PORT_STRING "/base");
+    std::string url = "https://localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -621,7 +651,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_with_protocol_priorities)
 LT_END_AUTO_TEST(ssl_with_protocol_priorities)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_with_trust)
-    httpserver::webserver ws{httpserver::create_webserver(PORT)
+    httpserver::webserver ws{httpserver::create_webserver(0)
         .use_ssl()
         .https_mem_key(ROOT "/key.pem")
         .https_mem_cert(ROOT "/cert.pem")
@@ -630,6 +660,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_with_trust)
     auto ok = std::make_shared<ok_resource>();
     ws.register_path("base", ok);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -637,7 +668,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_with_trust)
     CURLcode res;
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);  // avoid verifying ssl
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);  // avoid verifying ssl
-    curl_easy_setopt(curl, CURLOPT_URL, "https://localhost:" PORT_STRING "/base");
+    std::string url = "https://localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -664,18 +696,21 @@ void* start_ws_blocking(void* par) {
 }
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, blocking_server)
-    httpserver::webserver ws{httpserver::create_webserver(PORT)};
+    httpserver::webserver ws{httpserver::create_webserver(0)};
 
     pthread_t tid;
     pthread_create(&tid, nullptr, start_ws_blocking, reinterpret_cast<void*>(&ws));
 
     sleep(1);
 
+    const uint16_t port = ws.get_bound_port();
+
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    std::string url = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -693,20 +728,22 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, blocking_server)
 LT_END_AUTO_TEST(blocking_server)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_error_resources)
-    httpserver::webserver ws{httpserver::create_webserver(PORT)
+    httpserver::webserver ws{httpserver::create_webserver(0)
         .not_found_handler(not_found_custom)
         .method_not_allowed_handler(not_allowed_custom)};
 
     auto ok = std::make_shared<ok_resource>();
     ws.register_path("base", ok);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
 
     {
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    std::string url = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -721,7 +758,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_error_resources)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/not_registered");
+    std::string url = "localhost:" + std::to_string(port) + "/not_registered";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -743,7 +781,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_error_resources)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    std::string url = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "PUT");
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -762,7 +801,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_error_resources)
 LT_END_AUTO_TEST(custom_error_resources)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ipv6_webserver)
-    httpserver::webserver ws{httpserver::create_webserver(PORT + 20).use_ipv6()};
+    httpserver::webserver ws{httpserver::create_webserver(0).use_ipv6()};
     auto ok = std::make_shared<ok_resource>();
     ws.register_path("base", ok);
     try {
@@ -774,13 +813,13 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ipv6_webserver)
         LT_SKIP_IF(true, std::string("IPv6 webserver start failed: ") + e.what());
     }
     if (ws.is_running()) {
+        const uint16_t port = ws.get_bound_port();
         curl_global_init(CURL_GLOBAL_ALL);
         std::string s;
         CURL *curl = curl_easy_init();
         CURLcode res;
-        // TASK-076 fix: STR(PORT + 20) stringifies to "8080 + 20" (not
-        // "8100"), so we build the URL at runtime with std::to_string.
-        std::string ipv6_url = "http://[::1]:" + std::to_string(PORT + 20) + "/base";
+        // Bind an ephemeral port; talk to the actual bound port.
+        std::string ipv6_url = "http://[::1]:" + std::to_string(port) + "/base";
         curl_easy_setopt(curl, CURLOPT_URL, ipv6_url.c_str());
         curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
@@ -796,7 +835,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ipv6_webserver)
 LT_END_AUTO_TEST(ipv6_webserver)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, dual_stack_webserver)
-    httpserver::webserver ws{httpserver::create_webserver(PORT + 21).use_dual_stack()};
+    httpserver::webserver ws{httpserver::create_webserver(0).use_dual_stack()};
     auto ok = std::make_shared<ok_resource>();
     ws.register_path("base", ok);
     try {
@@ -808,13 +847,13 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, dual_stack_webserver)
         LT_SKIP_IF(true, std::string("dual-stack webserver start failed: ") + e.what());
     }
     if (ws.is_running()) {
+        const uint16_t port = ws.get_bound_port();
         curl_global_init(CURL_GLOBAL_ALL);
         std::string s;
         CURL *curl = curl_easy_init();
         CURLcode res;
-        // TASK-076 fix: STR(PORT + 21) stringifies to "8080 + 21" (not
-        // "8101"), so we build the URL at runtime with std::to_string.
-        std::string ds_url = "localhost:" + std::to_string(PORT + 21) + "/base";
+        // Bind an ephemeral port; talk to the actual bound port.
+        std::string ds_url = "localhost:" + std::to_string(port) + "/base";
         curl_easy_setopt(curl, CURLOPT_URL, ds_url.c_str());
         curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
@@ -830,11 +869,12 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, dual_stack_webserver)
 LT_END_AUTO_TEST(dual_stack_webserver)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, bind_address_ipv4)
-    int port = PORT + 22;
-    httpserver::webserver ws{httpserver::create_webserver(port).bind_address("127.0.0.1")};
+    int port = 0;  // set to the kernel-assigned port after start
+    httpserver::webserver ws{httpserver::create_webserver(0).bind_address("127.0.0.1")};
     auto ok = std::make_shared<ok_resource>();
     ws.register_path("base", ok);
     ws.start(false);
+    port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -855,7 +895,7 @@ LT_END_AUTO_TEST(bind_address_ipv4)
 
 // Test bind_address with IPv6 address string (covers IPv6 branch in create_webserver.cpp)
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, bind_address_ipv6_string)
-    int port = PORT + 31;
+    int port = 0;  // set to the kernel-assigned port after start
     // TASK-076 fix: webserver is non-movable so we use a shared_ptr to
     // separate construction / start (environmental SKIP) from the curl
     // block (unconditional assertion). Previously a single catch(...)
@@ -863,7 +903,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, bind_address_ipv6_string)
     std::shared_ptr<httpserver::webserver> ws_ptr;
     try {
         ws_ptr = std::make_shared<httpserver::webserver>(
-            httpserver::create_webserver(port).bind_address("::1"));
+            httpserver::create_webserver(0).bind_address("::1"));
     } catch (...) {
         LT_SKIP_IF(true, "IPv6 bind: construction failed on this host");
     }
@@ -871,6 +911,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, bind_address_ipv6_string)
     ws_ptr->register_path("base", ok);
     try {
         ws_ptr->start(false);
+        port = ws_ptr->get_bound_port();
     } catch (...) {
         LT_SKIP_IF(true, "IPv6 bind: start failed on this host");
     }
@@ -906,11 +947,12 @@ class tls_check_non_tls_resource : public httpserver::http_resource {
 };
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, tls_session_on_non_tls_connection)
-    int port = PORT + 25;
-    httpserver::webserver ws{httpserver::create_webserver(port)};  // No SSL
+    int port = 0;  // set to the kernel-assigned port after start
+    httpserver::webserver ws{httpserver::create_webserver(0)};  // No SSL
     auto tls_check = std::make_shared<tls_check_non_tls_resource>();
     ws.register_path("tls_check", tls_check);
     ws.start(false);
+    port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -929,8 +971,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, tls_session_on_non_tls_connection)
     ws.stop();
 LT_END_AUTO_TEST(tls_session_on_non_tls_connection)
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, https_webserver)
-    int port = PORT + 23;
-    httpserver::webserver ws{httpserver::create_webserver(port)
+    int port = 0;  // set to the kernel-assigned port after start
+    httpserver::webserver ws{httpserver::create_webserver(0)
         .use_ssl()
         .https_mem_key(ROOT "/key.pem")
         .https_mem_cert(ROOT "/cert.pem")};
@@ -938,6 +980,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, https_webserver)
     ws.register_path("base", ok);
     try {
         ws.start(false);
+        port = ws.get_bound_port();
     } catch (const std::exception& e) {
         // TASK-076: TLS setup may fail in environments without the
         // certs or library; SKIP rather than tautological-pass so a
@@ -965,8 +1008,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, https_webserver)
 LT_END_AUTO_TEST(https_webserver)
 
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, tls_session_getters)
-    int port = PORT + 24;
-    httpserver::webserver ws{httpserver::create_webserver(port)
+    int port = 0;  // set to the kernel-assigned port after start
+    httpserver::webserver ws{httpserver::create_webserver(0)
         .use_ssl()
         .https_mem_key(ROOT "/key.pem")
         .https_mem_cert(ROOT "/cert.pem")};
@@ -974,6 +1017,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, tls_session_getters)
     ws.register_path("tls_info", tls_info);
     try {
         ws.start(false);
+        port = ws.get_bound_port();
     } catch (const std::exception& e) {
         // TASK-076: TLS setup may fail in environments without the
         // certs or library; SKIP rather than tautological-pass so a
@@ -1033,8 +1077,8 @@ class client_cert_info_resource : public httpserver::http_resource {
 
 // Test client certificate methods without a client certificate (no mTLS)
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_no_certificate)
-    int port = PORT + 46;
-    httpserver::webserver ws{httpserver::create_webserver(port)
+    int port = 0;  // set to the kernel-assigned port after start
+    httpserver::webserver ws{httpserver::create_webserver(0)
         .use_ssl()
         .https_mem_key(ROOT "/key.pem")
         .https_mem_cert(ROOT "/cert.pem")};
@@ -1042,6 +1086,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_no_certificate)
     ws.register_path("cert_info", cert_info);
     try {
         ws.start(false);
+        port = ws.get_bound_port();
     } catch (const std::exception& e) {
         // TASK-076: TLS setup may fail in environments without the
         // certs or library; SKIP rather than tautological-pass so a
@@ -1068,8 +1113,8 @@ LT_END_AUTO_TEST(client_cert_no_certificate)
 
 // Test client certificate methods with mTLS (client sends certificate)
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_with_certificate)
-    int port = PORT + 47;
-    httpserver::webserver ws{httpserver::create_webserver(port)
+    int port = 0;  // set to the kernel-assigned port after start
+    httpserver::webserver ws{httpserver::create_webserver(0)
         .use_ssl()
         .https_mem_key(ROOT "/key.pem")
         .https_mem_cert(ROOT "/cert.pem")
@@ -1078,6 +1123,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_with_certificate)
     ws.register_path("cert_info", cert_info);
     try {
         ws.start(false);
+        port = ws.get_bound_port();
     } catch (const std::exception& e) {
         // TASK-076: TLS setup may fail in environments without the
         // certs or library; SKIP rather than tautological-pass so a
@@ -1109,8 +1155,8 @@ LT_END_AUTO_TEST(client_cert_with_certificate)
 
 // Test client certificate DN extraction
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_dn_extraction)
-    int port = PORT + 48;
-    httpserver::webserver ws{httpserver::create_webserver(port)
+    int port = 0;  // set to the kernel-assigned port after start
+    httpserver::webserver ws{httpserver::create_webserver(0)
         .use_ssl()
         .https_mem_key(ROOT "/key.pem")
         .https_mem_cert(ROOT "/cert.pem")
@@ -1119,6 +1165,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_dn_extraction)
     ws.register_path("cert_info", cert_info);
     try {
         ws.start(false);
+        port = ws.get_bound_port();
     } catch (const std::exception& e) {
         // TASK-076: TLS setup may fail in environments without the
         // certs or library; SKIP rather than tautological-pass so a
@@ -1148,8 +1195,8 @@ LT_END_AUTO_TEST(client_cert_dn_extraction)
 
 // Test client certificate fingerprint generation
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_fingerprint)
-    int port = PORT + 49;
-    httpserver::webserver ws{httpserver::create_webserver(port)
+    int port = 0;  // set to the kernel-assigned port after start
+    httpserver::webserver ws{httpserver::create_webserver(0)
         .use_ssl()
         .https_mem_key(ROOT "/key.pem")
         .https_mem_cert(ROOT "/cert.pem")
@@ -1158,6 +1205,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_fingerprint)
     ws.register_path("cert_info", cert_info);
     try {
         ws.start(false);
+        port = ws.get_bound_port();
     } catch (const std::exception& e) {
         // TASK-076: TLS setup may fail in environments without the
         // certs or library; SKIP rather than tautological-pass so a
@@ -1192,8 +1240,8 @@ LT_END_AUTO_TEST(client_cert_fingerprint)
 
 // Test client certificate without CN field (covers cn_size == 0 branch)
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_no_cn)
-    int port = PORT + 51;
-    httpserver::webserver ws{httpserver::create_webserver(port)
+    int port = 0;  // set to the kernel-assigned port after start
+    httpserver::webserver ws{httpserver::create_webserver(0)
         .use_ssl()
         .https_mem_key(ROOT "/key.pem")
         .https_mem_cert(ROOT "/cert.pem")
@@ -1202,6 +1250,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_no_cn)
     ws.register_path("cert_info", cert_info);
     try {
         ws.start(false);
+        port = ws.get_bound_port();
     } catch (const std::exception& e) {
         // TASK-076: TLS setup may fail in environments without certs;
         // SKIP rather than tautological-pass.
@@ -1233,9 +1282,9 @@ LT_END_AUTO_TEST(client_cert_no_cn)
 
 // Test client certificate that fails verification (covers status != 0 branch)
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_untrusted)
-    int port = PORT + 52;
+    int port = 0;  // set to the kernel-assigned port after start
     // Don't add untrusted cert to trust store - verification should fail
-    httpserver::webserver ws{httpserver::create_webserver(port)
+    httpserver::webserver ws{httpserver::create_webserver(0)
         .use_ssl()
         .https_mem_key(ROOT "/key.pem")
         .https_mem_cert(ROOT "/cert.pem")
@@ -1244,6 +1293,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_untrusted)
     ws.register_path("cert_info", cert_info);
     try {
         ws.start(false);
+        port = ws.get_bound_port();
     } catch (const std::exception& e) {
         // TASK-076: TLS setup may fail in environments without certs;
         // SKIP rather than tautological-pass.
@@ -1284,8 +1334,8 @@ LT_END_AUTO_TEST(client_cert_untrusted)
 //   - is_client_cert_verified() reports true (the test trust store is
 //     the cert itself).
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_accessors_known_values)
-    int port = PORT + 53;
-    httpserver::webserver ws{httpserver::create_webserver(port)
+    int port = 0;  // set to the kernel-assigned port after start
+    httpserver::webserver ws{httpserver::create_webserver(0)
         .use_ssl()
         .https_mem_key(ROOT "/key.pem")
         .https_mem_cert(ROOT "/cert.pem")
@@ -1294,6 +1344,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_accessors_known_values)
     ws.register_path("cert_info", cert_info);
     try {
         ws.start(false);
+        port = ws.get_bound_port();
     } catch (const std::exception& e) {
         // TASK-076: SSL setup may fail in environments without the
         // cert files or the system TLS library. The previous project
@@ -1380,7 +1431,7 @@ LT_END_AUTO_TEST(client_cert_accessors_known_values)
 
 // Test SNI callback configuration
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, sni_callback_setup)
-    int port = PORT + 50;
+    int port = 0;  // set to the kernel-assigned port after start
 
     // Simple SNI callback that returns empty (uses default cert)
     auto sni_cb = [](const std::string& server_name) -> std::pair<std::string, std::string> {
@@ -1388,7 +1439,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, sni_callback_setup)
         return {"", ""};  // Use default cert
     };
 
-    httpserver::webserver ws{httpserver::create_webserver(port)
+    httpserver::webserver ws{httpserver::create_webserver(0)
         .use_ssl()
         .https_mem_key(ROOT "/key.pem")
         .https_mem_cert(ROOT "/cert.pem")
@@ -1398,6 +1449,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, sni_callback_setup)
     ws.register_path("base", ok);
     try {
         ws.start(false);
+        port = ws.get_bound_port();
     } catch (const std::exception& e) {
         // TASK-076: TLS setup may fail in environments without the
         // certs or library; SKIP rather than tautological-pass so a
@@ -1435,16 +1487,18 @@ LT_END_AUTO_TEST(sni_callback_setup)
 // without inheriting the TLS / IPv6 / SNI / PSK / custom-socket flake
 // tracked in test/PORTABILITY.md §ws_start_stop.cpp.
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, windows_smoke)
-    httpserver::webserver ws{httpserver::create_webserver(PORT)};
+    httpserver::webserver ws{httpserver::create_webserver(0)};
     auto ok = std::make_shared<ok_resource>();
     ws.register_path("base", ok);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    std::string url = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1459,11 +1513,12 @@ LT_END_AUTO_TEST(windows_smoke)
 
 // Test pedantic mode configuration
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, pedantic_mode)
-    int port = PORT + 26;
-    httpserver::webserver ws{httpserver::create_webserver(port).pedantic()};
+    int port = 0;  // set to the kernel-assigned port after start
+    httpserver::webserver ws{httpserver::create_webserver(0).pedantic()};
     auto ok = std::make_shared<ok_resource>();
     ws.register_path("base", ok);
     ws.start(false);
+    port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -1485,12 +1540,13 @@ LT_END_AUTO_TEST(pedantic_mode)
 #ifdef HAVE_DAUTH
 // Test digest_auth_random configuration
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, digest_auth_random)
-    int port = PORT + 27;
-    httpserver::webserver ws{httpserver::create_webserver(port)
+    int port = 0;  // set to the kernel-assigned port after start
+    httpserver::webserver ws{httpserver::create_webserver(0)
         .digest_auth_random("random_string_for_digest")};
     auto ok = std::make_shared<ok_resource>();
     ws.register_path("base", ok);
     ws.start(false);
+    port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -1591,8 +1647,7 @@ LT_END_AUTO_TEST(is_psk_unsupported_error_psk_credential_error)
 
 // Test PSK credential handler setup
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_handler_setup)
-    int port = PORT + 28;
-    httpserver::webserver ws{httpserver::create_webserver(port)
+    httpserver::webserver ws{httpserver::create_webserver(0)
         .use_ssl()
         .https_mem_key(ROOT "/key.pem")
         .https_mem_cert(ROOT "/cert.pem")
@@ -1625,8 +1680,7 @@ LT_END_AUTO_TEST(psk_handler_setup)
 
 // Test PSK with empty handler (error path)
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_handler_empty)
-    int port = PORT + 29;
-    httpserver::webserver ws{httpserver::create_webserver(port)
+    httpserver::webserver ws{httpserver::create_webserver(0)
         .use_ssl()
         .https_mem_key(ROOT "/key.pem")
         .https_mem_cert(ROOT "/cert.pem")
@@ -1654,9 +1708,8 @@ LT_END_AUTO_TEST(psk_handler_empty)
 
 // Test PSK without handler (nullptr check)
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_no_handler)
-    int port = PORT + 30;
     // Configure PSK mode but don't set a handler
-    httpserver::webserver ws{httpserver::create_webserver(port)
+    httpserver::webserver ws{httpserver::create_webserver(0)
         .use_ssl()
         .https_mem_key(ROOT "/key.pem")
         .https_mem_cert(ROOT "/cert.pem")
@@ -1690,9 +1743,9 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_connection_success)
     // hid lanes that had broken TLS support.
     LT_SKIP_IF(!has_gnutls_cli(), "gnutls-cli binary not in PATH");
 
-    int port = PORT + 41;
+    int port = 0;  // set to the kernel-assigned port after start
     try {
-        httpserver::webserver ws{httpserver::create_webserver(port)
+        httpserver::webserver ws{httpserver::create_webserver(0)
             .use_ssl()
             .https_mem_key(ROOT "/key.pem")
             .https_mem_cert(ROOT "/cert.pem")
@@ -1704,6 +1757,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_connection_success)
         ws.register_path("base", ok);
 
         ws.start(false);
+        port = ws.get_bound_port();
 
         // Make PSK connection attempt with gnutls-cli
         // This triggers the PSK credential handler callback, providing coverage
@@ -1747,9 +1801,9 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_connection_unknown_user)
     // hid lanes that had broken TLS support.
     LT_SKIP_IF(!has_gnutls_cli(), "gnutls-cli binary not in PATH");
 
-    int port = PORT + 42;
+    int port = 0;  // set to the kernel-assigned port after start
     try {
-        httpserver::webserver ws{httpserver::create_webserver(port)
+        httpserver::webserver ws{httpserver::create_webserver(0)
             .use_ssl()
             .https_mem_key(ROOT "/key.pem")
             .https_mem_cert(ROOT "/cert.pem")
@@ -1761,6 +1815,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_connection_unknown_user)
         ws.register_path("base", ok);
 
         ws.start(false);
+        port = ws.get_bound_port();
 
         // Try to connect with unknown username - should fail
         char cmd[512];
@@ -1793,9 +1848,9 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_connection_empty_handler)
     // hid lanes that had broken TLS support.
     LT_SKIP_IF(!has_gnutls_cli(), "gnutls-cli binary not in PATH");
 
-    int port = PORT + 43;
+    int port = 0;  // set to the kernel-assigned port after start
     try {
-        httpserver::webserver ws{httpserver::create_webserver(port)
+        httpserver::webserver ws{httpserver::create_webserver(0)
             .use_ssl()
             .https_mem_key(ROOT "/key.pem")
             .https_mem_cert(ROOT "/cert.pem")
@@ -1807,6 +1862,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_connection_empty_handler)
         ws.register_path("base", ok);
 
         ws.start(false);
+        port = ws.get_bound_port();
 
         // Try to connect - should fail because handler returns empty
         char cmd[512];
@@ -1839,9 +1895,9 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_connection_invalid_hex)
     // hid lanes that had broken TLS support.
     LT_SKIP_IF(!has_gnutls_cli(), "gnutls-cli binary not in PATH");
 
-    int port = PORT + 44;
+    int port = 0;  // set to the kernel-assigned port after start
     try {
-        httpserver::webserver ws{httpserver::create_webserver(port)
+        httpserver::webserver ws{httpserver::create_webserver(0)
             .use_ssl()
             .https_mem_key(ROOT "/key.pem")
             .https_mem_cert(ROOT "/cert.pem")
@@ -1853,6 +1909,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_connection_invalid_hex)
         ws.register_path("base", ok);
 
         ws.start(false);
+        port = ws.get_bound_port();
 
         // Try to connect - should fail because handler returns invalid hex
         char cmd[512];
@@ -1885,9 +1942,9 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_connection_no_handler)
     // hid lanes that had broken TLS support.
     LT_SKIP_IF(!has_gnutls_cli(), "gnutls-cli binary not in PATH");
 
-    int port = PORT + 45;
+    int port = 0;  // set to the kernel-assigned port after start
     try {
-        httpserver::webserver ws{httpserver::create_webserver(port)
+        httpserver::webserver ws{httpserver::create_webserver(0)
             .use_ssl()
             .https_mem_key(ROOT "/key.pem")
             .https_mem_cert(ROOT "/cert.pem")
@@ -1899,6 +1956,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_connection_no_handler)
         ws.register_path("base", ok);
 
         ws.start(false);
+        port = ws.get_bound_port();
 
         // Try to connect - should fail because no handler is set
         char cmd[512];
@@ -1927,13 +1985,14 @@ LT_END_AUTO_TEST(psk_connection_no_handler)
 
 // Test max_threads configuration with a running server
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, max_threads_running)
-    int port = PORT + 34;
-    httpserver::webserver ws{httpserver::create_webserver(port)
+    int port = 0;  // set to the kernel-assigned port after start
+    httpserver::webserver ws{httpserver::create_webserver(0)
         .max_threads(4)};
 
     auto ok = std::make_shared<ok_resource>();
     ws.register_path("base", ok);
     ws.start(false);
+    port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -1954,13 +2013,14 @@ LT_END_AUTO_TEST(max_threads_running)
 
 // Test max_connections configuration
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, max_connections_running)
-    int port = PORT + 35;
-    httpserver::webserver ws{httpserver::create_webserver(port)
+    int port = 0;  // set to the kernel-assigned port after start
+    httpserver::webserver ws{httpserver::create_webserver(0)
         .max_connections(100)};
 
     auto ok = std::make_shared<ok_resource>();
     ws.register_path("base", ok);
     ws.start(false);
+    port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -1981,13 +2041,14 @@ LT_END_AUTO_TEST(max_connections_running)
 
 // Test memory_limit configuration
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, memory_limit_running)
-    int port = PORT + 36;
-    httpserver::webserver ws{httpserver::create_webserver(port)
+    int port = 0;  // set to the kernel-assigned port after start
+    httpserver::webserver ws{httpserver::create_webserver(0)
         .memory_limit(32 * 1024)};  // 32KB memory limit
 
     auto ok = std::make_shared<ok_resource>();
     ws.register_path("base", ok);
     ws.start(false);
+    port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -2008,13 +2069,14 @@ LT_END_AUTO_TEST(memory_limit_running)
 
 // Test per_IP_connection_limit configuration
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, per_ip_limit_running)
-    int port = PORT + 37;
-    httpserver::webserver ws{httpserver::create_webserver(port)
+    int port = 0;  // set to the kernel-assigned port after start
+    httpserver::webserver ws{httpserver::create_webserver(0)
         .per_IP_connection_limit(5)};
 
     auto ok = std::make_shared<ok_resource>();
     ws.register_path("base", ok);
     ws.start(false);
+    port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -2035,13 +2097,14 @@ LT_END_AUTO_TEST(per_ip_limit_running)
 
 // Test max_thread_stack_size configuration (covers line 257 branch)
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, thread_stack_size_running)
-    int port = PORT + 38;
-    httpserver::webserver ws{httpserver::create_webserver(port)
+    int port = 0;  // set to the kernel-assigned port after start
+    httpserver::webserver ws{httpserver::create_webserver(0)
         .max_thread_stack_size(4 * 1024 * 1024)};  // 4MB stack size
 
     auto ok = std::make_shared<ok_resource>();
     ws.register_path("base", ok);
     ws.start(false);
+    port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -2062,13 +2125,14 @@ LT_END_AUTO_TEST(thread_stack_size_running)
 
 // Test deferred mode
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, deferred_mode_running)
-    int port = PORT + 39;
-    httpserver::webserver ws{httpserver::create_webserver(port)
+    int port = 0;  // set to the kernel-assigned port after start
+    httpserver::webserver ws{httpserver::create_webserver(0)
         .deferred()};
 
     auto ok = std::make_shared<ok_resource>();
     ws.register_path("base", ok);
     ws.start(false);
+    port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -2089,13 +2153,14 @@ LT_END_AUTO_TEST(deferred_mode_running)
 
 // Test debug mode with actual request
 LT_BEGIN_AUTO_TEST(ws_start_stop_suite, debug_mode_running)
-    int port = PORT + 40;
-    httpserver::webserver ws{httpserver::create_webserver(port)
+    int port = 0;  // set to the kernel-assigned port after start
+    httpserver::webserver ws{httpserver::create_webserver(0)
         .debug()};
 
     auto ok = std::make_shared<ok_resource>();
     ws.register_path("base", ok);
     ws.start(false);
+    port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;

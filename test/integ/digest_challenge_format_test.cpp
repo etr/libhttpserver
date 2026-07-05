@@ -61,16 +61,6 @@ using httpserver::http_request;
 using httpserver::digest_challenge;
 using httpserver::http::http_utils;
 
-#ifdef HTTPSERVER_PORT
-#define PORT HTTPSERVER_PORT
-#else
-#define PORT 8080
-#endif  // PORT
-
-#define STR2(p) #p
-#define STR(p) STR2(p)
-#define PORT_STRING STR(PORT)
-
 namespace {
 
 size_t writefunc(void* ptr, size_t size, size_t nmemb, std::string* s) {
@@ -149,13 +139,16 @@ LT_END_SUITE(digest_challenge_format_suite)
 
 LT_BEGIN_AUTO_TEST(digest_challenge_format_suite,
                    rfc7616_challenge_carries_required_fields)
-    webserver ws{create_webserver(PORT)
+    webserver ws{create_webserver(0)
         .digest_auth_random("myrandom")
         .nonce_nc_size(300)};
 
     auto resource = std::make_shared<challenge_resource>();
     ws.register_path("guarded", resource);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
+    const std::string guarded_url =
+        "localhost:" + std::to_string(port) + "/guarded";
 
 #if defined(_WINDOWS)
     curl_global_init(CURL_GLOBAL_WIN32);
@@ -168,8 +161,7 @@ LT_BEGIN_AUTO_TEST(digest_challenge_format_suite,
     CURL* curl = curl_easy_init();
     CURLcode res;
     long http_code = 0;  // NOLINT(runtime/int)
-    curl_easy_setopt(curl, CURLOPT_URL,
-                     "localhost:" PORT_STRING "/guarded");
+    curl_easy_setopt(curl, CURLOPT_URL, guarded_url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &body);
@@ -209,13 +201,16 @@ LT_END_AUTO_TEST(rfc7616_challenge_carries_required_fields)
 // algorithm token serialisation.
 LT_BEGIN_AUTO_TEST(digest_challenge_format_suite,
                    rfc7616_challenge_sha256_algorithm_in_header)
-    webserver ws{create_webserver(PORT)
+    webserver ws{create_webserver(0)
         .digest_auth_random("myrandom")
         .nonce_nc_size(300)};
 
     auto resource = std::make_shared<sha256_challenge_resource>();
     ws.register_path("sha256", resource);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
+    const std::string sha256_url =
+        "localhost:" + std::to_string(port) + "/sha256";
 
 #if defined(_WINDOWS)
     curl_global_init(CURL_GLOBAL_WIN32);
@@ -228,8 +223,7 @@ LT_BEGIN_AUTO_TEST(digest_challenge_format_suite,
     CURL* curl = curl_easy_init();
     CURLcode res;
     long http_code = 0;  // NOLINT(runtime/int)
-    curl_easy_setopt(curl, CURLOPT_URL,
-                     "localhost:" PORT_STRING "/sha256");
+    curl_easy_setopt(curl, CURLOPT_URL, sha256_url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &body);
@@ -257,13 +251,16 @@ LT_END_AUTO_TEST(rfc7616_challenge_sha256_algorithm_in_header)
 // test-quality-reviewer recommendation.
 LT_BEGIN_AUTO_TEST(digest_challenge_format_suite,
                    rfc7616_challenge_opaque_and_domain_in_header)
-    webserver ws{create_webserver(PORT)
+    webserver ws{create_webserver(0)
         .digest_auth_random("myrandom")
         .nonce_nc_size(300)};
 
     auto resource = std::make_shared<opaque_domain_challenge_resource>();
     ws.register_path("od", resource);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
+    const std::string od_url =
+        "localhost:" + std::to_string(port) + "/od";
 
 #if defined(_WINDOWS)
     curl_global_init(CURL_GLOBAL_WIN32);
@@ -276,7 +273,7 @@ LT_BEGIN_AUTO_TEST(digest_challenge_format_suite,
     CURL* curl = curl_easy_init();
     CURLcode res;
     long http_code = 0;  // NOLINT(runtime/int)
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/od");
+    curl_easy_setopt(curl, CURLOPT_URL, od_url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &body);

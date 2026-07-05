@@ -82,16 +82,6 @@ using httpserver::http_response;
 using httpserver::http_resource;
 using httpserver::http_request;
 
-#ifdef HTTPSERVER_PORT
-#define PORT HTTPSERVER_PORT
-#else
-#define PORT 8080
-#endif  // PORT
-
-#define STR2(p) #p
-#define STR(p) STR2(p)
-#define PORT_STRING STR(PORT)
-
 size_t writefunc(void *ptr, size_t size, size_t nmemb, std::string *s) {
     s->append(reinterpret_cast<char*>(ptr), size*nmemb);
     return size*nmemb;
@@ -217,11 +207,12 @@ LT_END_SUITE(authentication_suite)
 
 #ifdef HAVE_BAUTH
 LT_BEGIN_AUTO_TEST(authentication_suite, base_auth)
-    webserver ws{create_webserver(PORT)};
+    webserver ws{create_webserver(0)};
 
     auto user_pass = std::make_shared<user_pass_resource>();
     ws.register_path("base", user_pass);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -229,7 +220,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, base_auth)
     CURLcode res;
     curl_easy_setopt(curl, CURLOPT_USERNAME, "myuser");
     curl_easy_setopt(curl, CURLOPT_PASSWORD, "mypass");
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -242,11 +234,12 @@ LT_BEGIN_AUTO_TEST(authentication_suite, base_auth)
 LT_END_AUTO_TEST(base_auth)
 
 LT_BEGIN_AUTO_TEST(authentication_suite, base_auth_fail)
-    webserver ws{create_webserver(PORT)};
+    webserver ws{create_webserver(0)};
 
     auto user_pass = std::make_shared<user_pass_resource>();
     ws.register_path("base", user_pass);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -254,7 +247,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, base_auth_fail)
     CURLcode res;
     curl_easy_setopt(curl, CURLOPT_USERNAME, "myuser");
     curl_easy_setopt(curl, CURLOPT_PASSWORD, "wrongpass");
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -343,13 +337,14 @@ class digest_ha1_resource : public http_resource {
 // round 2 ships an explicit `Authorization: Digest …` header. Asserts the
 // full handshake terminates in 200 SUCCESS.
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth)
-    webserver ws{create_webserver(PORT)
+    webserver ws{create_webserver(0)
         .digest_auth_random("myrandom")
         .nonce_nc_size(300)};
 
     auto digest = std::make_shared<digest_resource>();
     ws.register_path("base", digest);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
 
 #if defined(_WINDOWS)
     curl_global_init(CURL_GLOBAL_WIN32);
@@ -358,7 +353,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth)
 #endif
 
     // Round 1: plain GET, capture the WWW-Authenticate challenge.
-    auto [http_code1, headers1] = collect_challenge("localhost:" PORT_STRING "/base");
+    const std::string url1 = "localhost:" + std::to_string(port) + "/base";
+    auto [http_code1, headers1] = collect_challenge(url1.c_str());
     LT_CHECK_EQ(http_code1, 401);
 
     auto challenge = httpserver_test::extract_digest_challenge(headers1);
@@ -376,8 +372,9 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth)
             *challenge, "myuser", "/base", cnonce, "00000001", response);
 
     std::string body2;
+    const std::string url2 = "localhost:" + std::to_string(port) + "/base";
     long http_code2 = perform_with_auth_header(  // NOLINT(runtime/int)
-        "localhost:" PORT_STRING "/base", auth_header.c_str(), &body2);
+        url2.c_str(), auth_header.c_str(), &body2);
     LT_CHECK_EQ(http_code2, 200);
     LT_CHECK_EQ(body2, std::string("SUCCESS"));
 
@@ -390,13 +387,14 @@ LT_END_AUTO_TEST(digest_auth)
 // satisfy the body=="FAIL" assertion, but here we explicitly assert the
 // rejection happens after the full handshake completes.
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_wrong_pass)
-    webserver ws{create_webserver(PORT)
+    webserver ws{create_webserver(0)
         .digest_auth_random("myrandom")
         .nonce_nc_size(300)};
 
     auto digest = std::make_shared<digest_resource>();
     ws.register_path("base", digest);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
 
 #if defined(_WINDOWS)
     curl_global_init(CURL_GLOBAL_WIN32);
@@ -405,7 +403,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_wrong_pass)
 #endif
 
     // Round 1.
-    auto [http_code1, headers1] = collect_challenge("localhost:" PORT_STRING "/base");
+    const std::string url1 = "localhost:" + std::to_string(port) + "/base";
+    auto [http_code1, headers1] = collect_challenge(url1.c_str());
     LT_CHECK_EQ(http_code1, 401);
 
     auto challenge = httpserver_test::extract_digest_challenge(headers1);
@@ -421,11 +420,12 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_wrong_pass)
             *challenge, "myuser", "/base", cnonce, "00000001", response);
 
     std::string body2;
+    const std::string url2 = "localhost:" + std::to_string(port) + "/base";
     // The 401 here is the round-2 server-side rejection: check_digest_auth()
     // returned NOT_AUTHORIZED because the response token didn't match what
     // the server computed from the configured password "mypass".
     long http_code2 = perform_with_auth_header(  // NOLINT(runtime/int)
-        "localhost:" PORT_STRING "/base", auth_header.c_str(), &body2);
+        url2.c_str(), auth_header.c_str(), &body2);
     LT_CHECK_EQ(http_code2, 401);
     LT_CHECK_EQ(body2, std::string("FAIL"));
 
@@ -438,7 +438,7 @@ LT_END_AUTO_TEST(digest_auth_wrong_pass)
 // server is verifying against the configured HA1 (not by recomputing
 // MD5("myuser:examplerealm:mypass") from cleartext it never received).
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5)
-    webserver ws{create_webserver(PORT)
+    webserver ws{create_webserver(0)
         .digest_auth_random("myrandom")
         .nonce_nc_size(300)};
 
@@ -447,6 +447,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5)
         PRECOMPUTED_HA1_MD5, httpserver::http::http_utils::md5_digest_size);
     ws.register_path("base", digest_ha1);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
 
 #if defined(_WINDOWS)
     curl_global_init(CURL_GLOBAL_WIN32);
@@ -455,7 +456,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5)
 #endif
 
     // Round 1.
-    auto [http_code1, headers1] = collect_challenge("localhost:" PORT_STRING "/base");
+    const std::string url1 = "localhost:" + std::to_string(port) + "/base";
+    auto [http_code1, headers1] = collect_challenge(url1.c_str());
     LT_CHECK_EQ(http_code1, 401);
 
     auto challenge = httpserver_test::extract_digest_challenge(headers1);
@@ -473,8 +475,9 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5)
             *challenge, "myuser", "/base", cnonce, "00000001", response);
 
     std::string body2;
+    const std::string url2 = "localhost:" + std::to_string(port) + "/base";
     long http_code2 = perform_with_auth_header(  // NOLINT(runtime/int)
-        "localhost:" PORT_STRING "/base", auth_header.c_str(), &body2);
+        url2.c_str(), auth_header.c_str(), &body2);
     LT_CHECK_EQ(http_code2, 200);
     LT_CHECK_EQ(body2, std::string("SUCCESS"));
 
@@ -487,7 +490,7 @@ LT_END_AUTO_TEST(digest_auth_with_ha1_md5)
 // side validation pathway is HA1-driven (it cannot have re-derived the
 // wrong HA1 from cleartext, because it never received cleartext).
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5_wrong_pass)
-    webserver ws{create_webserver(PORT)
+    webserver ws{create_webserver(0)
         .digest_auth_random("myrandom")
         .nonce_nc_size(300)};
 
@@ -496,6 +499,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5_wrong_pass)
         PRECOMPUTED_HA1_MD5, httpserver::http::http_utils::md5_digest_size);
     ws.register_path("base", digest_ha1);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
 
 #if defined(_WINDOWS)
     curl_global_init(CURL_GLOBAL_WIN32);
@@ -504,7 +508,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5_wrong_pass)
 #endif
 
     // Round 1.
-    auto [http_code1, headers1] = collect_challenge("localhost:" PORT_STRING "/base");
+    const std::string url1 = "localhost:" + std::to_string(port) + "/base";
+    auto [http_code1, headers1] = collect_challenge(url1.c_str());
     LT_CHECK_EQ(http_code1, 401);
 
     auto challenge = httpserver_test::extract_digest_challenge(headers1);
@@ -523,8 +528,9 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_md5_wrong_pass)
             *challenge, "myuser", "/base", cnonce, "00000001", response);
 
     std::string body2;
+    const std::string url2 = "localhost:" + std::to_string(port) + "/base";
     long http_code2 = perform_with_auth_header(  // NOLINT(runtime/int)
-        "localhost:" PORT_STRING "/base", auth_header.c_str(), &body2);
+        url2.c_str(), auth_header.c_str(), &body2);
     LT_CHECK_EQ(http_code2, 401);
     LT_CHECK_EQ(body2, std::string("FAIL"));
 
@@ -536,7 +542,7 @@ LT_END_AUTO_TEST(digest_auth_with_ha1_md5_wrong_pass)
 // cleartext). Additionally asserts the algorithm token on the wire is
 // "SHA-256" -- the canonical RFC 7616 §3.3 token, distinct from "MD5".
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256)
-    webserver ws{create_webserver(PORT)
+    webserver ws{create_webserver(0)
         .digest_auth_random("myrandom")
         .nonce_nc_size(300)};
 
@@ -545,6 +551,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256)
         PRECOMPUTED_HA1_SHA256, httpserver::http::http_utils::sha256_digest_size);
     ws.register_path("base", digest_ha1);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
 
 #if defined(_WINDOWS)
     curl_global_init(CURL_GLOBAL_WIN32);
@@ -553,7 +560,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256)
 #endif
 
     // Round 1.
-    auto [http_code1, headers1] = collect_challenge("localhost:" PORT_STRING "/base");
+    const std::string url1 = "localhost:" + std::to_string(port) + "/base";
+    auto [http_code1, headers1] = collect_challenge(url1.c_str());
     LT_CHECK_EQ(http_code1, 401);
 
     auto challenge = httpserver_test::extract_digest_challenge(headers1);
@@ -569,8 +577,9 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256)
             *challenge, "myuser", "/base", cnonce, "00000001", response);
 
     std::string body2;
+    const std::string url2 = "localhost:" + std::to_string(port) + "/base";
     long http_code2 = perform_with_auth_header(  // NOLINT(runtime/int)
-        "localhost:" PORT_STRING "/base", auth_header.c_str(), &body2);
+        url2.c_str(), auth_header.c_str(), &body2);
     LT_CHECK_EQ(http_code2, 200);
     LT_CHECK_EQ(body2, std::string("SUCCESS"));
 
@@ -580,7 +589,7 @@ LT_END_AUTO_TEST(digest_auth_with_ha1_sha256)
 // TASK-079: HA1-precomputed SHA-256 negative variant. Signs with a
 // wrong-password-derived SHA-256 HA1; server rejects with 401.
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256_wrong_pass)
-    webserver ws{create_webserver(PORT)
+    webserver ws{create_webserver(0)
         .digest_auth_random("myrandom")
         .nonce_nc_size(300)};
 
@@ -589,6 +598,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256_wrong_pass)
         PRECOMPUTED_HA1_SHA256, httpserver::http::http_utils::sha256_digest_size);
     ws.register_path("base", digest_ha1);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
 
 #if defined(_WINDOWS)
     curl_global_init(CURL_GLOBAL_WIN32);
@@ -597,7 +607,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256_wrong_pass)
 #endif
 
     // Round 1.
-    auto [http_code1, headers1] = collect_challenge("localhost:" PORT_STRING "/base");
+    const std::string url1 = "localhost:" + std::to_string(port) + "/base";
+    auto [http_code1, headers1] = collect_challenge(url1.c_str());
     LT_CHECK_EQ(http_code1, 401);
 
     auto challenge = httpserver_test::extract_digest_challenge(headers1);
@@ -615,8 +626,9 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth_with_ha1_sha256_wrong_pass)
             *challenge, "myuser", "/base", cnonce, "00000001", response);
 
     std::string body2;
+    const std::string url2 = "localhost:" + std::to_string(port) + "/base";
     long http_code2 = perform_with_auth_header(  // NOLINT(runtime/int)
-        "localhost:" PORT_STRING "/base", auth_header.c_str(), &body2);
+        url2.c_str(), auth_header.c_str(), &body2);
     LT_CHECK_EQ(http_code2, 401);
     LT_CHECK_EQ(body2, std::string("FAIL"));
 
@@ -670,13 +682,14 @@ class digest_user_cache_resource : public http_resource {
 
 // Test digested user caching when no digest auth is provided (nullptr branch)
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_user_cache_no_auth)
-    webserver ws{create_webserver(PORT)
+    webserver ws{create_webserver(0)
         .digest_auth_random("myrandom")
         .nonce_nc_size(300)};
 
     auto resource = std::make_shared<digest_user_cache_resource>();
     ws.register_path("cache_test", resource);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -684,7 +697,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_user_cache_no_auth)
     CURLcode res;
     long http_code = 0;  // NOLINT(runtime/int)
     // No authentication - should trigger 401 challenge
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/cache_test");
+    const std::string url = "localhost:" + std::to_string(port) + "/cache_test";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -703,18 +717,20 @@ LT_END_AUTO_TEST(digest_user_cache_no_auth)
 // digest_user_cache_resource exercises BOTH legs of get_digested_user()
 // caching (the populate + the cache-hit), returning "USER:testuser".
 LT_BEGIN_AUTO_TEST(authentication_suite, digest_user_cache_with_auth)
-    webserver ws{create_webserver(PORT)
+    webserver ws{create_webserver(0)
         .digest_auth_random("myrandom")
         .nonce_nc_size(300)};
 
     auto resource = std::make_shared<digest_user_cache_resource>();
     ws.register_path("cache_test", resource);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
 
     // Round 1 -- collect the challenge.
-    auto [http_code1, headers1] = collect_challenge("localhost:" PORT_STRING "/cache_test");
+    const std::string url1 = "localhost:" + std::to_string(port) + "/cache_test";
+    auto [http_code1, headers1] = collect_challenge(url1.c_str());
     LT_CHECK_EQ(http_code1, 401);
 
     auto challenge = httpserver_test::extract_digest_challenge(headers1);
@@ -730,8 +746,9 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_user_cache_with_auth)
             *challenge, "testuser", "/cache_test", cnonce, "00000001", response);
 
     std::string body2;
+    const std::string url2 = "localhost:" + std::to_string(port) + "/cache_test";
     long http_code2 = perform_with_auth_header(  // NOLINT(runtime/int)
-        "localhost:" PORT_STRING "/cache_test", auth_header.c_str(), &body2);
+        url2.c_str(), auth_header.c_str(), &body2);
     LT_CHECK_EQ(http_code2, 200);
     LT_CHECK_EQ(body2, std::string("USER:testuser"));
 
@@ -760,19 +777,21 @@ std::optional<http_response> centralized_auth_handler(const http_request& req) {
 }
 
 LT_BEGIN_AUTO_TEST(authentication_suite, centralized_auth_fail)
-    webserver ws{create_webserver(PORT)
+    webserver ws{create_webserver(0)
         .auth_handler(centralized_auth_handler)};
 
     auto sr = std::make_shared<simple_resource>();
     ws.register_path("protected", sr);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
     long http_code = 0;  // NOLINT(runtime/int)
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/protected");
+    const std::string url = "localhost:" + std::to_string(port) + "/protected";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -787,12 +806,13 @@ LT_BEGIN_AUTO_TEST(authentication_suite, centralized_auth_fail)
 LT_END_AUTO_TEST(centralized_auth_fail)
 
 LT_BEGIN_AUTO_TEST(authentication_suite, centralized_auth_success)
-    webserver ws{create_webserver(PORT)
+    webserver ws{create_webserver(0)
         .auth_handler(centralized_auth_handler)};
 
     auto sr = std::make_shared<simple_resource>();
     ws.register_path("protected", sr);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -801,7 +821,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, centralized_auth_success)
     long http_code = 0;  // NOLINT(runtime/int)
     curl_easy_setopt(curl, CURLOPT_USERNAME, "admin");
     curl_easy_setopt(curl, CURLOPT_PASSWORD, "secret");
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/protected");
+    const std::string url = "localhost:" + std::to_string(port) + "/protected";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -816,7 +837,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, centralized_auth_success)
 LT_END_AUTO_TEST(centralized_auth_success)
 
 LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_paths)
-    webserver ws{create_webserver(PORT)
+    webserver ws{create_webserver(0)
         .auth_handler(centralized_auth_handler)
         .auth_skip_paths({"/health", "/public/*"})};
 
@@ -825,6 +846,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_paths)
     ws.register_path("public/info", sr);
     ws.register_path("protected", sr);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     CURL *curl;
@@ -835,7 +857,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_paths)
     // Test /health (exact match skip path) - should succeed without auth
     curl = curl_easy_init();
     s = "";
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/health");
+    const std::string url_health = "localhost:" + std::to_string(port) + "/health";
+    curl_easy_setopt(curl, CURLOPT_URL, url_health.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -850,7 +873,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_paths)
     curl = curl_easy_init();
     s = "";
     http_code = 0;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/public/info");
+    const std::string url_public = "localhost:" + std::to_string(port) + "/public/info";
+    curl_easy_setopt(curl, CURLOPT_URL, url_public.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -865,7 +889,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_paths)
     curl = curl_easy_init();
     s = "";
     http_code = 0;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/protected");
+    const std::string url_protected = "localhost:" + std::to_string(port) + "/protected";
+    curl_easy_setopt(curl, CURLOPT_URL, url_protected.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -881,13 +906,14 @@ LT_END_AUTO_TEST(auth_skip_paths)
 // Test that wildcard doesn't match partial prefix
 // /publicinfo should NOT match /public/* (wildcard requires the slash)
 LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_paths_no_partial_match)
-    webserver ws{create_webserver(PORT)
+    webserver ws{create_webserver(0)
         .auth_handler(centralized_auth_handler)
         .auth_skip_paths({"/public/*"})};
 
     auto sr = std::make_shared<simple_resource>();
     ws.register_path("publicinfo", sr);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -896,7 +922,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_paths_no_partial_match)
     long http_code = 0;  // NOLINT(runtime/int)
 
     // /publicinfo should NOT be skipped (doesn't match /public/*)
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/publicinfo");
+    const std::string url = "localhost:" + std::to_string(port) + "/publicinfo";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -911,13 +938,14 @@ LT_END_AUTO_TEST(auth_skip_paths_no_partial_match)
 
 // Test deeply nested wildcard paths
 LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_paths_deep_nested)
-    webserver ws{create_webserver(PORT)
+    webserver ws{create_webserver(0)
         .auth_handler(centralized_auth_handler)
         .auth_skip_paths({"/api/v1/public/*"})};
 
     auto sr = std::make_shared<simple_resource>();
     ws.register_path("api/v1/public/users/list", sr);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -926,7 +954,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_paths_deep_nested)
     long http_code = 0;  // NOLINT(runtime/int)
 
     // Deep nested path should be skipped
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/api/v1/public/users/list");
+    const std::string url = "localhost:" + std::to_string(port) + "/api/v1/public/users/list";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -949,12 +978,13 @@ class post_resource : public http_resource {
 };
 
 LT_BEGIN_AUTO_TEST(authentication_suite, centralized_auth_post_method)
-    webserver ws{create_webserver(PORT)
+    webserver ws{create_webserver(0)
         .auth_handler(centralized_auth_handler)};
 
     auto pr = std::make_shared<post_resource>();
     ws.register_path("data", pr);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -963,7 +993,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, centralized_auth_post_method)
     long http_code = 0;  // NOLINT(runtime/int)
 
     // POST without auth should fail
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/data");
+    const std::string url1 = "localhost:" + std::to_string(port) + "/data";
+    curl_easy_setopt(curl, CURLOPT_URL, url1.c_str());
     curl_easy_setopt(curl, CURLOPT_POST, 1L);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, "test=data");
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
@@ -980,7 +1011,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, centralized_auth_post_method)
     http_code = 0;
     curl_easy_setopt(curl, CURLOPT_USERNAME, "admin");
     curl_easy_setopt(curl, CURLOPT_PASSWORD, "secret");
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/data");
+    const std::string url2 = "localhost:" + std::to_string(port) + "/data";
+    curl_easy_setopt(curl, CURLOPT_URL, url2.c_str());
     curl_easy_setopt(curl, CURLOPT_POST, 1L);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, "test=data");
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
@@ -997,12 +1029,13 @@ LT_END_AUTO_TEST(centralized_auth_post_method)
 
 // Test wrong credentials (different from no credentials)
 LT_BEGIN_AUTO_TEST(authentication_suite, centralized_auth_wrong_credentials)
-    webserver ws{create_webserver(PORT)
+    webserver ws{create_webserver(0)
         .auth_handler(centralized_auth_handler)};
 
     auto sr = std::make_shared<simple_resource>();
     ws.register_path("protected", sr);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -1013,7 +1046,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, centralized_auth_wrong_credentials)
     // Wrong username
     curl_easy_setopt(curl, CURLOPT_USERNAME, "wronguser");
     curl_easy_setopt(curl, CURLOPT_PASSWORD, "secret");
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/protected");
+    const std::string url1 = "localhost:" + std::to_string(port) + "/protected";
+    curl_easy_setopt(curl, CURLOPT_URL, url1.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1029,7 +1063,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, centralized_auth_wrong_credentials)
     http_code = 0;
     curl_easy_setopt(curl, CURLOPT_USERNAME, "admin");
     curl_easy_setopt(curl, CURLOPT_PASSWORD, "wrongpass");
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/protected");
+    const std::string url2 = "localhost:" + std::to_string(port) + "/protected";
+    curl_easy_setopt(curl, CURLOPT_URL, url2.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1044,12 +1079,13 @@ LT_END_AUTO_TEST(centralized_auth_wrong_credentials)
 
 // Test that 404 is returned for non-existent resources (auth doesn't interfere)
 LT_BEGIN_AUTO_TEST(authentication_suite, centralized_auth_not_found)
-    webserver ws{create_webserver(PORT)
+    webserver ws{create_webserver(0)
         .auth_handler(centralized_auth_handler)};
 
     auto sr = std::make_shared<simple_resource>();
     ws.register_path("exists", sr);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -1058,7 +1094,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, centralized_auth_not_found)
     long http_code = 0;  // NOLINT(runtime/int)
 
     // Non-existent resource without auth - should get 401 (auth checked first)
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/nonexistent");
+    const std::string url = "localhost:" + std::to_string(port) + "/nonexistent";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1074,11 +1111,12 @@ LT_END_AUTO_TEST(centralized_auth_not_found)
 
 // Test no auth handler (default behavior - no auth required)
 LT_BEGIN_AUTO_TEST(authentication_suite, no_auth_handler_default)
-    webserver ws{create_webserver(PORT)};  // No auth_handler
+    webserver ws{create_webserver(0)};  // No auth_handler
 
     auto sr = std::make_shared<simple_resource>();
     ws.register_path("open", sr);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -1087,7 +1125,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, no_auth_handler_default)
     long http_code = 0;  // NOLINT(runtime/int)
 
     // Should succeed without any auth
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/open");
+    const std::string url = "localhost:" + std::to_string(port) + "/open";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1103,7 +1142,7 @@ LT_END_AUTO_TEST(no_auth_handler_default)
 
 // Test multiple skip paths
 LT_BEGIN_AUTO_TEST(authentication_suite, auth_multiple_skip_paths)
-    webserver ws{create_webserver(PORT)
+    webserver ws{create_webserver(0)
         .auth_handler(centralized_auth_handler)
         .auth_skip_paths({"/health", "/metrics", "/status", "/public/*"})};
 
@@ -1113,6 +1152,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, auth_multiple_skip_paths)
     ws.register_path("status", sr);
     ws.register_path("protected", sr);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     CURL *curl;
@@ -1124,7 +1164,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, auth_multiple_skip_paths)
     curl = curl_easy_init();
     s = "";
     http_code = 0;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/health");
+    const std::string url_health = "localhost:" + std::to_string(port) + "/health";
+    curl_easy_setopt(curl, CURLOPT_URL, url_health.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1138,7 +1179,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, auth_multiple_skip_paths)
     curl = curl_easy_init();
     s = "";
     http_code = 0;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/metrics");
+    const std::string url_metrics = "localhost:" + std::to_string(port) + "/metrics";
+    curl_easy_setopt(curl, CURLOPT_URL, url_metrics.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1152,7 +1194,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, auth_multiple_skip_paths)
     curl = curl_easy_init();
     s = "";
     http_code = 0;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/status");
+    const std::string url_status = "localhost:" + std::to_string(port) + "/status";
+    curl_easy_setopt(curl, CURLOPT_URL, url_status.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1166,7 +1209,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, auth_multiple_skip_paths)
     curl = curl_easy_init();
     s = "";
     http_code = 0;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/protected");
+    const std::string url_protected = "localhost:" + std::to_string(port) + "/protected";
+    curl_easy_setopt(curl, CURLOPT_URL, url_protected.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1181,13 +1225,14 @@ LT_END_AUTO_TEST(auth_multiple_skip_paths)
 
 // Test skip path for root "/"
 LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_path_root)
-    webserver ws{create_webserver(PORT)
+    webserver ws{create_webserver(0)
         .auth_handler(centralized_auth_handler)
         .auth_skip_paths({"/"})};
 
     auto sr = std::make_shared<simple_resource>();
     ws.register_prefix("/", sr);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -1196,7 +1241,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_path_root)
     long http_code = 0;  // NOLINT(runtime/int)
 
     // Root path should be skipped
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/");
+    const std::string url = "localhost:" + std::to_string(port) + "/";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1212,7 +1258,7 @@ LT_END_AUTO_TEST(auth_skip_path_root)
 
 // Test wildcard path matching "/pub/*"
 LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_path_wildcard)
-    webserver ws{create_webserver(PORT)
+    webserver ws{create_webserver(0)
         .auth_handler(centralized_auth_handler)
         .auth_skip_paths({"/pub/*"})};
 
@@ -1221,6 +1267,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_path_wildcard)
     ws.register_path("pub/nested/path", sr);
     ws.register_path("private/secret", sr);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     CURL *curl;
@@ -1231,7 +1278,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_path_wildcard)
     // /pub/anything should be skipped (matches /pub/*)
     curl = curl_easy_init();
     s = "";
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/pub/anything");
+    const std::string url1 = "localhost:" + std::to_string(port) + "/pub/anything";
+    curl_easy_setopt(curl, CURLOPT_URL, url1.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1245,7 +1293,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_path_wildcard)
     curl = curl_easy_init();
     s = "";
     http_code = 0;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/pub/nested/path");
+    const std::string url2 = "localhost:" + std::to_string(port) + "/pub/nested/path";
+    curl_easy_setopt(curl, CURLOPT_URL, url2.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1259,7 +1308,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_path_wildcard)
     curl = curl_easy_init();
     s = "";
     http_code = 0;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/private/secret");
+    const std::string url3 = "localhost:" + std::to_string(port) + "/private/secret";
+    curl_easy_setopt(curl, CURLOPT_URL, url3.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1274,13 +1324,14 @@ LT_END_AUTO_TEST(auth_skip_path_wildcard)
 
 // Test empty skip paths (should require auth for everything)
 LT_BEGIN_AUTO_TEST(authentication_suite, auth_empty_skip_paths)
-    webserver ws{create_webserver(PORT)
+    webserver ws{create_webserver(0)
         .auth_handler(centralized_auth_handler)
         .auth_skip_paths({})};  // Empty skip paths
 
     auto sr = std::make_shared<simple_resource>();
     ws.register_path("test", sr);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -1289,7 +1340,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, auth_empty_skip_paths)
     long http_code = 0;  // NOLINT(runtime/int)
 
     // Should require auth
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/test");
+    const std::string url = "localhost:" + std::to_string(port) + "/test";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -1305,7 +1357,7 @@ LT_END_AUTO_TEST(auth_empty_skip_paths)
 // Test that path traversal cannot bypass auth skip paths
 // Requesting /public/../protected should NOT skip auth
 LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_path_traversal_bypass)
-    webserver ws{create_webserver(PORT)
+    webserver ws{create_webserver(0)
         .auth_handler(centralized_auth_handler)
         .auth_skip_paths({"/public/*"})};
 
@@ -1313,6 +1365,7 @@ LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_path_traversal_bypass)
     ws.register_path("protected", sr);
     ws.register_path("public/info", sr);
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -1322,7 +1375,8 @@ LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_path_traversal_bypass)
 
     // /public/../protected should normalize to /protected, which requires auth
     curl = curl_easy_init();
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/public/../protected");
+    const std::string url = "localhost:" + std::to_string(port) + "/public/../protected";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
