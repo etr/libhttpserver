@@ -36,16 +36,6 @@ using httpserver::http_resource;
 using httpserver::webserver;
 using httpserver::create_webserver;
 
-#ifdef HTTPSERVER_PORT
-#define PORT HTTPSERVER_PORT
-#else
-#define PORT 8080
-#endif  // PORT
-
-#define STR2(p) #p
-#define STR(p) STR2(p)
-#define PORT_STRING STR(PORT)
-
 class ok_resource : public http_resource {
  public:
      http_response render_get(const http_request&) {
@@ -55,10 +45,12 @@ class ok_resource : public http_resource {
 
 LT_BEGIN_SUITE(threaded_suite)
     std::unique_ptr<webserver> ws;
+    uint16_t port = 0;
 
     void set_up() {
-        ws = std::make_unique<webserver>(create_webserver(PORT));
+        ws = std::make_unique<webserver>(create_webserver(0));
         ws->start(false);
+        port = ws->get_bound_port();
     }
 
     void tear_down() {
@@ -75,7 +67,8 @@ LT_BEGIN_AUTO_TEST(threaded_suite, base)
     CURLcode res;
 
     curl = curl_easy_init();
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string base_url = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, base_url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     res = curl_easy_perform(curl);
     LT_ASSERT_EQ(res, 0);

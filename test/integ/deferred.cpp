@@ -154,22 +154,14 @@ class deferred_resource_empty_content : public http_resource {
      }
 };
 
-#ifdef HTTPSERVER_PORT
-#define PORT HTTPSERVER_PORT
-#else
-#define PORT 8080
-#endif  // PORT
-
-#define STR2(p) #p
-#define STR(p) STR2(p)
-#define PORT_STRING STR(PORT)
-
 LT_BEGIN_SUITE(deferred_suite)
     std::unique_ptr<webserver> ws;
+    uint16_t port = 0;
 
     void set_up() {
-        ws = std::make_unique<webserver>(create_webserver(PORT));
+        ws = std::make_unique<webserver>(create_webserver(0));
         ws->start(false);
+        port = ws->get_bound_port();
     }
 
     void tear_down() {
@@ -188,7 +180,8 @@ LT_BEGIN_AUTO_TEST(deferred_suite, deferred_response_with_prefix_content)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -207,7 +200,8 @@ LT_BEGIN_AUTO_TEST(deferred_suite, deferred_response_with_data)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -226,7 +220,8 @@ LT_BEGIN_AUTO_TEST(deferred_suite, deferred_response_empty_content)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    const std::string url = "localhost:" + std::to_string(port) + "/base";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -310,8 +305,8 @@ LT_BEGIN_AUTO_TEST(deferred_suite, on_get_lambda_returns_value)
 
     std::string body;
     CURL* curl = curl_easy_init();
-    curl_easy_setopt(curl, CURLOPT_URL,
-                     "localhost:" PORT_STRING "/by_value");
+    const std::string url = "localhost:" + std::to_string(port) + "/by_value";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &body);
@@ -336,8 +331,9 @@ LT_BEGIN_AUTO_TEST(deferred_suite, on_post_lambda_returns_value)
 
     std::string body;
     CURL* curl = curl_easy_init();
-    curl_easy_setopt(curl, CURLOPT_URL,
-                     "localhost:" PORT_STRING "/post_by_value");
+    const std::string url =
+        "localhost:" + std::to_string(port) + "/post_by_value";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_POST, 1L);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, "");
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
@@ -360,8 +356,8 @@ LT_BEGIN_AUTO_TEST(deferred_suite, class_render_get_returns_value)
 
     std::string body;
     CURL* curl = curl_easy_init();
-    curl_easy_setopt(curl, CURLOPT_URL,
-                     "localhost:" PORT_STRING "/class_path");
+    const std::string url = "localhost:" + std::to_string(port) + "/class_path";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &body);
@@ -433,8 +429,8 @@ LT_BEGIN_AUTO_TEST(deferred_suite, deferred_producer_destroyed_in_request_comple
     curl_global_init(CURL_GLOBAL_ALL);
     std::string body;
     CURL* curl = curl_easy_init();
-    curl_easy_setopt(curl, CURLOPT_URL,
-                     "localhost:" PORT_STRING "/lifetime");
+    const std::string url = "localhost:" + std::to_string(port) + "/lifetime";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &body);

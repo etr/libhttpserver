@@ -37,16 +37,6 @@ using httpserver::http_response;
 using httpserver::http_request;
 using httpserver::http::http_utils;
 
-#ifdef HTTPSERVER_PORT
-#define PORT HTTPSERVER_PORT
-#else
-#define PORT 8080
-#endif  // PORT
-
-#define STR2(p) #p
-#define STR(p) STR2(p)
-#define PORT_STRING STR(PORT)
-
 size_t writefunc(void *ptr, size_t size, size_t nmemb, std::string *s) {
     s->append(reinterpret_cast<char*>(ptr), size*nmemb);
     return size*nmemb;
@@ -77,8 +67,10 @@ LT_END_SUITE(ban_system_suite)
 // allow_ip / disallow_ip symbols.
 
 LT_BEGIN_AUTO_TEST(ban_system_suite, accept_default_block_blocks)
-    webserver ws{create_webserver(PORT).default_policy(http_utils::ACCEPT)};
+    webserver ws{create_webserver(0).default_policy(http_utils::ACCEPT)};
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
+    const std::string base_url = "localhost:" + std::to_string(port) + "/base";
 
     auto resource = std::make_shared<ok_resource>();
     ws.register_path("base", resource);
@@ -89,7 +81,7 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, accept_default_block_blocks)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl, CURLOPT_URL, base_url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -104,7 +96,7 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, accept_default_block_blocks)
 
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl, CURLOPT_URL, base_url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     res = curl_easy_perform(curl);
     LT_ASSERT_NEQ(res, 0);
@@ -117,7 +109,7 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, accept_default_block_blocks)
     std::string s;
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl, CURLOPT_URL, base_url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
@@ -135,8 +127,10 @@ LT_END_AUTO_TEST(accept_default_block_blocks)
 // Tests default REJECT behavior — drives policy_callback's default path
 // without touching the (now-private) allow list.
 LT_BEGIN_AUTO_TEST(ban_system_suite, reject_policy_neither_allowed_nor_blocked)
-    webserver ws{create_webserver(PORT).default_policy(http_utils::REJECT)};
+    webserver ws{create_webserver(0).default_policy(http_utils::REJECT)};
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
+    const std::string base_url = "localhost:" + std::to_string(port) + "/base";
 
     auto resource = std::make_shared<ok_resource>();
     ws.register_path("base", resource);
@@ -147,7 +141,7 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, reject_policy_neither_allowed_nor_blocked)
     {
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl, CURLOPT_URL, base_url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     res = curl_easy_perform(curl);
     LT_ASSERT_NEQ(res, 0);
@@ -161,8 +155,10 @@ LT_END_AUTO_TEST(reject_policy_neither_allowed_nor_blocked)
 // Test block_ip with wildcard then more specific IP.
 // Drives the weight comparison branch in block_ip.
 LT_BEGIN_AUTO_TEST(ban_system_suite, block_with_weight_comparison)
-    webserver ws{create_webserver(PORT).default_policy(http_utils::ACCEPT)};
+    webserver ws{create_webserver(0).default_policy(http_utils::ACCEPT)};
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
+    const std::string base_url = "localhost:" + std::to_string(port) + "/base";
 
     auto resource = std::make_shared<ok_resource>();
     ws.register_path("base", resource);
@@ -180,7 +176,7 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, block_with_weight_comparison)
     {
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl, CURLOPT_URL, base_url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     res = curl_easy_perform(curl);
     LT_ASSERT_NEQ(res, 0);
@@ -195,8 +191,10 @@ LT_END_AUTO_TEST(block_with_weight_comparison)
 // higher). Drives the t_ip.weight() < (*it).weight() erase-and-insert
 // branch in block_ip.
 LT_BEGIN_AUTO_TEST(ban_system_suite, block_specific_then_wildcard)
-    webserver ws{create_webserver(PORT).default_policy(http_utils::ACCEPT)};
+    webserver ws{create_webserver(0).default_policy(http_utils::ACCEPT)};
     ws.start(false);
+    const uint16_t port = ws.get_bound_port();
+    const std::string base_url = "localhost:" + std::to_string(port) + "/base";
 
     auto resource = std::make_shared<ok_resource>();
     ws.register_path("base", resource);
@@ -214,7 +212,7 @@ LT_BEGIN_AUTO_TEST(ban_system_suite, block_specific_then_wildcard)
     {
     CURL *curl = curl_easy_init();
     CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_URL, "localhost:" PORT_STRING "/base");
+    curl_easy_setopt(curl, CURLOPT_URL, base_url.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     res = curl_easy_perform(curl);
     LT_ASSERT_NEQ(res, 0);
