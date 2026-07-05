@@ -60,8 +60,9 @@
 
 #include <httpserver.hpp>
 
-// Set of allowed certificate fingerprints (SHA-256, hex-encoded)
-// In a real application, this would be loaded from a database or config file
+// Set of allowed certificate fingerprints (SHA-256, hex-encoded).
+// For illustration; production must load allowed fingerprints from a
+// database or config file, not an in-process set.
 std::set<std::string> allowed_fingerprints;
 
 // Resource that requires client certificate authentication

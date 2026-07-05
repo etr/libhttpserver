@@ -26,6 +26,13 @@
 // SECURITY NOTE: Credentials MUST NOT be hardcoded in source code (CWE-798).
 // This example loads AUTH_USER and AUTH_PASS from environment variables.
 //
+// CONSTANT-TIME NOTE: The credential comparison below uses
+// `constant_time_equal` (defined further down), which is the
+// production-ready form: it runs in time independent of the secret
+// bytes, closing the CWE-208 timing side-channel that a naive
+// std::string::operator!= (short-circuiting on the first differing
+// byte) would open.
+//
 // Usage:
 //   # Set credentials and start the server
 //   export AUTH_USER=myuser AUTH_PASS=mysecretpassword
@@ -40,19 +47,38 @@
 //   # Health endpoint (skip path) - works without auth
 //   curl http://localhost:8080/health
 
+#include <cstddef>
 #include <cstdlib>
 #include <iostream>
 #include <optional>
 #include <string>
+#include <string_view>
 
 #include <httpserver.hpp>
 
+namespace {
+
+// Constant-time equality: the runtime depends only on a.size(), never on
+// where a mismatch occurs, closing the CWE-208 timing side-channel. The
+// length is not the secret here, so an early length check is fine (this
+// mirrors OpenSSL's CRYPTO_memcmp, which also requires equal lengths).
+bool constant_time_equal(std::string_view a, std::string_view b) {
+    if (a.size() != b.size()) return false;
+    unsigned char diff = 0;
+    for (std::size_t i = 0; i < a.size(); ++i) {
+        diff |= static_cast<unsigned char>(a[i] ^ b[i]);
+    }
+    return diff == 0;
+}
+
+}  // namespace
+
 // Returns std::nullopt to allow the request, or an engaged optional
-// carrying an http_response to reject it (TASK-054). NOTE: a production
-// deployment should read AUTH_USER and AUTH_PASS once at startup and
-// stash them in immutable storage; calling std::getenv on every request
-// is not thread-safe with respect to concurrent setenv/putenv from
-// other threads in the same process.
+// carrying an http_response to reject it (TASK-054). For illustration;
+// production must read AUTH_USER and AUTH_PASS once at startup into
+// immutable storage -- calling std::getenv on every request is not
+// thread-safe with respect to concurrent setenv/putenv from other
+// threads in the same process.
 std::optional<httpserver::http_response> auth_handler(
         const httpserver::http_request& req) {
     const char* expected_user = std::getenv("AUTH_USER");
@@ -63,7 +89,11 @@ std::optional<httpserver::http_response> auth_handler(
         return httpserver::http_response::string("Server configuration error")
             .with_status(500);
     }
-    if (req.get_user() != expected_user || req.get_pass() != expected_pass) {
+    // The || short-circuits at the *field* level (user then pass), which
+    // does not leak per-byte password timing -- each field compare is
+    // itself constant-time.
+    if (!constant_time_equal(req.get_user(), expected_user) ||
+            !constant_time_equal(req.get_pass(), expected_pass)) {
         return httpserver::http_response::unauthorized(
             "Basic", "MyRealm", "Unauthorized");
     }
