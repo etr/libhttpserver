@@ -54,8 +54,6 @@
 
 #define HTTPSERVER_COMPILATION 1  // unlock webserver_test_access
 
-#include <algorithm>
-#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
@@ -68,7 +66,7 @@
 #include "httpserver/http_utils.hpp"
 #include "httpserver/webserver.hpp"
 #include "httpserver/detail/webserver_impl.hpp"
-#include "bench_harness.hpp"  // NOLINT(build/include_subdir) -- do_not_optimize
+#include "bench_harness.hpp"  // NOLINT(build/include_subdir) -- do_not_optimize, measure_median_ns
 
 namespace hs = httpserver;
 
@@ -105,55 +103,6 @@ class noop_resource : public hs::http_resource {
         return hs::http_response::string("ok");
     }
 };
-
-double sort_and_median(std::vector<double>& v) {
-    std::sort(v.begin(), v.end());
-    return v[v.size() / 2];
-}
-
-double p99_of_sorted(std::vector<double>& v) {
-    // Precondition: v is sorted ascending (call sort_and_median first).
-    const std::size_t idx = (v.size() * 99) / 100;
-    return v[std::min(idx, v.size() - 1)];
-}
-
-// Measure a no-arg lambda's median ns/call over OUTER rounds of
-// INNER iterations each. Prints a one-line summary.
-template <typename F>
-double measure_median_ns(const char* label, F op,
-                         std::size_t outer, std::size_t inner) {
-    using clock = std::chrono::steady_clock;
-    std::vector<double> samples_ns;
-    samples_ns.reserve(outer);
-
-    // Warmup: prime instruction cache + branch predictor. The first
-    // outer round handles thermal warmup at INNER scale; this short
-    // pre-loop just gets the trampoline hot.
-    for (std::size_t i = 0; i < 10'000; ++i) {
-        op();
-    }
-
-    for (std::size_t r = 0; r < outer; ++r) {
-        const auto t0 = clock::now();
-        for (std::size_t i = 0; i < inner; ++i) {
-            op();
-        }
-        const auto t1 = clock::now();
-        const double ns_per_call =
-            std::chrono::duration<double, std::nano>(t1 - t0).count() / inner;
-        samples_ns.push_back(ns_per_call);
-    }
-
-    const double min_ns =
-        *std::min_element(samples_ns.begin(), samples_ns.end());
-    const double max_ns =
-        *std::max_element(samples_ns.begin(), samples_ns.end());
-    const double median = sort_and_median(samples_ns);
-    const double p99 = p99_of_sorted(samples_ns);
-    std::printf("  %s: median=%.3fns  p99=%.3fns  (min=%.3fns max=%.3fns)\n",
-                label, median, p99, min_ns, max_ns);
-    return median;
-}
 
 // Build a webserver with the bench routes registered. We never start
 // the daemon (no MHD, no socket) -- the bench exercises only the
@@ -268,42 +217,22 @@ int main() {
 
     double median_radix_pure_ns = 0.0;
     {
-        using clock = std::chrono::steady_clock;
-        std::vector<double> samples_ns;
-        samples_ns.reserve(OUTER);
-
-        // Warmup: rotate through the path set once (cache live) to get the
-        // trie and instruction cache hot before timing.
+        // The warmup rotates through the path set (cache live) to get the
+        // trie and instruction cache hot before timing; the pre-round
+        // callback then forces a cold cache before every timed round.
+        // idx carries over from warmup into the timed rounds, so the
+        // rotation never restarts (consecutive lookups stay distinct).
         std::size_t idx = 0;
-        for (std::size_t i = 0; i < 10'000; ++i) {
-            auto r = impl->lookup_v2(hs::http_method::get, kManyPaths[idx]);
-            do_not_optimize(r);
-            idx = (idx + 1) % kManyPaths.size();
-        }
-
-        for (std::size_t round = 0; round < OUTER; ++round) {
-            impl->invalidate_route_cache();   // prelude: force cold cache
-            const auto t0 = clock::now();
-            for (std::size_t i = 0; i < INNER_RADIX; ++i) {
+        median_radix_pure_ns = measure_median_ns(
+            "radix_pure",
+            [&]() {
                 auto r = impl->lookup_v2(hs::http_method::get, kManyPaths[idx]);
                 do_not_optimize(r);
                 idx = (idx + 1) % kManyPaths.size();
-            }
-            const auto t1 = clock::now();
-            const double ns_per_call =
-                std::chrono::duration<double, std::nano>(t1 - t0).count() /
-                INNER_RADIX;
-            samples_ns.push_back(ns_per_call);
-        }
-        const double min_ns =
-            *std::min_element(samples_ns.begin(), samples_ns.end());
-        const double max_ns =
-            *std::max_element(samples_ns.begin(), samples_ns.end());
-        median_radix_pure_ns = sort_and_median(samples_ns);
-        const double p99 = p99_of_sorted(samples_ns);
-        std::printf("  radix_pure: median=%.3fns  p99=%.3fns  "
-                    "(min=%.3fns max=%.3fns)\n",
-                    median_radix_pure_ns, p99, min_ns, max_ns);
+            },
+            OUTER, INNER_RADIX,
+            /*warmup=*/10'000,
+            [&]() { impl->invalidate_route_cache(); });
     }
 
     // ----- Summary + gates -----

@@ -390,7 +390,10 @@ class http_response final {
      void do_set_header(std::string key, std::string value);
      void do_set_footer(std::string key, std::string value);
      // Legacy entry point: forwards through the structured path so
-     // wire rendering goes through a single code path.
+     // wire rendering goes through a single code path. Preserves v1
+     // overwrite semantics: a cookie with the same name (compared with
+     // http::header_comparator, matching `cookies_`) replaces the
+     // existing structured entry instead of appending a duplicate.
      void do_set_cookie(std::string key, std::string value);
      // TASK-064: structured entry point. Appends `c` to
      // `structured_cookies_` and mirrors name/value into `cookies_`

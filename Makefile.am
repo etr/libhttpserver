@@ -50,11 +50,14 @@ EXTRA_DIST = libhttpserver.pc.in $(DX_CONFIG) scripts/extract-release-notes.sh s
 	scripts/test_check_fence_balance.sh \
 	scripts/lib/resolve-prefix.sh scripts/lib/skip-or-fail.sh \
 	scripts/lib/check-fence-balance.sh scripts/lib/v1-no-setters.txt \
+	scripts/lib/find-matrix-includes.py \
 	scripts/check-complexity.sh scripts/check-duplication.sh \
 	scripts/check-file-size.sh \
 	scripts/check-warning-suppressions.sh \
 	scripts/check-server-ready-helper.sh \
+	scripts/test_check_server_ready_helper.sh \
 	scripts/check-no-tautological-asserts.sh \
+	scripts/check-deprecated-cookie-overload.sh \
 	scripts/test_check_littletest_skip_exit_code.sh \
 	scripts/verify-installed-examples.sh \
 	test/headers/consumer_direct.cpp test/headers/consumer_detail.cpp test/headers/consumer_detail_modded.cpp \
@@ -369,7 +372,7 @@ check-hygiene:
 # staged the install; sub-check skips the install step to avoid double cost.
 # This knob is set only by check-local; do not set it when invoking sub-checks
 # standalone.
-check-local: check-headers check-examples check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck lint-warning-suppressions lint-server-ready-helper lint-no-tautological-asserts lint-littletest-skip-exit-code lint-parallel-install-skip-contract lint-fence-balance
+check-local: check-headers check-examples check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck lint-warning-suppressions lint-server-ready-helper lint-server-ready-helper-selftest lint-no-tautological-asserts lint-deprecated-cookie-overload lint-littletest-skip-exit-code lint-parallel-install-skip-contract lint-fence-balance
 	@echo "=== Shared staged install for check-install-layout and check-hygiene ==="
 	@rm -rf "$(abs_top_builddir)/.shared-check-stage"
 	@$(MAKE) $(AM_MAKEFLAGS) install DESTDIR="$(abs_top_builddir)/.shared-check-stage" >check-shared-install.log 2>&1 || { \
@@ -487,6 +490,14 @@ lint-server-ready-helper:
 	@echo "=== lint-server-ready-helper: forbid bare server-ready sleeps in hooks_* integ tests ==="
 	@$(top_srcdir)/scripts/check-server-ready-helper.sh
 
+# TASK-075: unit test for the server-ready helper gate itself. Runs the
+# gate against synthetic pass/fail fixtures so a regression in the
+# gate's detection logic is caught by `make check`, not just trusted.
+# Pure bash/awk/grep, runs in every CI lane.
+lint-server-ready-helper-selftest:
+	@echo "=== lint-server-ready-helper-selftest: self-test the server-ready gate ==="
+	@$(top_srcdir)/scripts/test_check_server_ready_helper.sh
+
 # TASK-076: forbid `LT_CHECK_EQ(1, 1)` in test/integ/ws_start_stop.cpp.
 # Pre-TASK-076 ~33 catches in the TLS test suite used the tautological
 # assertion as a fake "skip" — a build that silently lost TLS support
@@ -498,6 +509,19 @@ lint-server-ready-helper:
 lint-no-tautological-asserts:
 	@echo "=== lint-no-tautological-asserts: forbid tautological pseudo-skip in ws_start_stop.cpp ==="
 	@$(top_srcdir)/scripts/check-no-tautological-asserts.sh
+
+# TASK-064 code review: negative-compile gate pinning the [[deprecated]]
+# attribute on the legacy string-blob overload
+# http_response::with_cookie(std::string, std::string). Compiles a TU
+# calling the deprecated overload with -Werror=deprecated-declarations
+# and asserts the compile FAILS (plus a positive control proving the
+# structured overload builds cleanly). Complements the positive-side pin
+# in test/unit/cookie_deprecation_sentinel_test.cpp. Wired into `make
+# check` via check-local; needs only a C++ compiler on $PATH (no build
+# tree or libmicrohttpd), so it runs in every lane.
+lint-deprecated-cookie-overload:
+	@echo "=== lint-deprecated-cookie-overload: pin [[deprecated]] on legacy with_cookie(string, string) ==="
+	@CXX="$(CXX)" $(top_srcdir)/scripts/check-deprecated-cookie-overload.sh
 
 # TASK-076: pin the LT_SKIP exit-code semantics in test/littletest.hpp.
 # Asserts (a) an all-skip binary exits 77 (Automake SKIP), (b) a mixed
@@ -558,7 +582,7 @@ lint-workflow-pinning:
 	@$(top_srcdir)/scripts/test_check_workflow_pinning.sh
 	@$(top_srcdir)/scripts/check-workflow-pinning.sh
 
-.PHONY: check-headers check-install-layout check-hygiene check-local check-examples check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck check-soversion check-parallel-install lint-complexity lint-duplication lint-file-size lint-warning-suppressions lint-server-ready-helper lint-no-tautological-asserts lint-littletest-skip-exit-code lint-parallel-install-skip-contract lint-fence-balance lint-parallel-install-lane lint-codeql-workflow lint-workflow-pinning
+.PHONY: check-headers check-install-layout check-hygiene check-local check-examples check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck check-soversion check-parallel-install lint-complexity lint-duplication lint-file-size lint-warning-suppressions lint-server-ready-helper lint-server-ready-helper-selftest lint-no-tautological-asserts lint-deprecated-cookie-overload lint-littletest-skip-exit-code lint-parallel-install-skip-contract lint-fence-balance lint-parallel-install-lane lint-codeql-workflow lint-workflow-pinning
 
 # TASK-039: top-level convenience rule that descends into test/ to
 # build and run the bench binaries (see test/Makefile.am and

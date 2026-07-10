@@ -248,6 +248,24 @@ LT_BEGIN_AUTO_TEST(http_response_digest_factory_suite,
     LT_CHECK_EQ(caught, true);
 LT_END_AUTO_TEST(digest_challenge_lf_in_domain_throws)
 
+// qop="auth-int" has no dispatch mapping (map_to_mhd_digest_args_
+// ignores it), so the factory rejects it loudly instead of letting a
+// caller believe integrity protection was negotiated.
+LT_BEGIN_AUTO_TEST(http_response_digest_factory_suite,
+                   digest_challenge_qop_auth_int_throws)
+    bool caught = false;
+    try {
+        digest_challenge ch;
+        ch.realm = "r";
+        ch.qop_auth_int = true;
+        auto r = http_response::unauthorized(std::move(ch));
+        (void)r;
+    } catch (const std::invalid_argument&) {
+        caught = true;
+    }
+    LT_CHECK_EQ(caught, true);
+LT_END_AUTO_TEST(digest_challenge_qop_auth_int_throws)
+
 LT_BEGIN_AUTO_TEST(http_response_digest_factory_suite,
                    digest_challenge_nul_in_realm_throws)
     bool caught = false;

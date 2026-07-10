@@ -26,7 +26,7 @@
 // duplicate of do_not_optimize, so the hardened MSVC sink could not reach
 // them. They now all include this single canonical definition.
 //
-// Two utilities are provided:
+// The utilities provided:
 //
 //   do_not_optimize(value) — defeat dead-store elimination by feeding
 //     the argument's address through an asm-volatile memory clobber.
@@ -39,12 +39,21 @@
 //     outer * inner calls, sort the per-outer-rep ns/call samples, and
 //     return the median sample. [outer] should be odd so that
 //     samples[outer/2] is an unambiguous middle element.
+//
+//   sort_and_median(v) / p99_of_sorted(v) — sample statistics shared by
+//     the hook/route/warm benches (previously duplicated per-TU).
+//
+//   measure_median_ns(label, op, outer, inner[, warmup][, pre_round]) —
+//     the full warmup + outer-rounds-of-inner-iterations timing loop
+//     with median/p99/min/max reporting (previously triplicated per-TU).
 
 #ifndef TEST_BENCH_HARNESS_HPP_
 #define TEST_BENCH_HARNESS_HPP_
 
 #include <algorithm>
 #include <chrono>
+#include <cstddef>
+#include <cstdio>
 #include <vector>
 
 #if defined(_MSC_VER)
@@ -135,6 +144,94 @@ double run_bench_median(F callable, int outer, int inner) {
     }
     std::sort(samples_ns.begin(), samples_ns.end());
     return samples_ns[static_cast<std::size_t>(outer / 2)];
+}
+
+// ---------------------------------------------------------------------------
+// sort_and_median / p99_of_sorted
+// ---------------------------------------------------------------------------
+// Sorts `v` in-place and returns the median. Callers MUST call this
+// before p99_of_sorted because p99_of_sorted requires a pre-sorted
+// vector (its precondition).
+inline double sort_and_median(std::vector<double>& v) {
+    std::sort(v.begin(), v.end());
+    return v[v.size() / 2];
+}
+
+inline double p99_of_sorted(std::vector<double>& v) {
+    // Precondition: v is sorted ascending (call sort_and_median first).
+    const std::size_t idx = (v.size() * 99) / 100;
+    return v[std::min(idx, v.size() - 1)];
+}
+
+// Default (no-op) pre-round callback for measure_median_ns below.
+struct bench_no_pre_round {
+    void operator()() const {}
+};
+
+// ---------------------------------------------------------------------------
+// measure_median_ns
+// ---------------------------------------------------------------------------
+// Measure a no-arg callable's median ns/call over [outer] rounds of
+// [inner] iterations each, after [warmup] untimed calls that prime the
+// instruction cache and branch predictor (the true thermal warmup
+// happens during the first outer round at INNER scale; the median over
+// many rounds is robust to 1-2 high outlier early rounds).
+//
+// [pre_round] runs before the timed region of EVERY outer round
+// (default: no-op). Benches that need a per-round cold start — e.g.
+// bench_route_lookup's radix_pure, which invalidates the route cache —
+// pass a callback here; its cost lands outside the timed window.
+//
+// Prints one summary line and returns the median:
+//   label != nullptr:  "  <label>: median=...ns  p99=...ns  (min=... max=...)"
+//   label == nullptr:  "    median=...ns  p99=...ns  (min=... max=...)"
+// Keep these printf formats stable: CI may parse them.
+//
+// min_ns / max_ns are arrival-order extremes recorded BEFORE sorting
+// (the cheapest and most expensive outer rounds in wall-clock order,
+// useful for spotting warm-up outliers).
+template <typename F, typename PreRound = bench_no_pre_round>
+double measure_median_ns(const char* label, F op,
+                         std::size_t outer, std::size_t inner,
+                         std::size_t warmup = 10'000,
+                         PreRound pre_round = PreRound{}) {
+    using clock = std::chrono::steady_clock;
+    std::vector<double> samples_ns;
+    samples_ns.reserve(outer);
+
+    for (std::size_t i = 0; i < warmup; ++i) {
+        op();
+    }
+
+    for (std::size_t r = 0; r < outer; ++r) {
+        pre_round();
+        const auto t0 = clock::now();
+        for (std::size_t i = 0; i < inner; ++i) {
+            op();
+        }
+        const auto t1 = clock::now();
+        const double ns_per_call =
+            std::chrono::duration<double, std::nano>(t1 - t0).count() / inner;
+        samples_ns.push_back(ns_per_call);
+    }
+
+    const double min_ns =
+        *std::min_element(samples_ns.begin(), samples_ns.end());
+    const double max_ns =
+        *std::max_element(samples_ns.begin(), samples_ns.end());
+    // sort_and_median sorts samples_ns in-place; p99_of_sorted relies on
+    // this sorted state (precondition), so this call order is mandatory.
+    const double median = sort_and_median(samples_ns);
+    const double p99 = p99_of_sorted(samples_ns);
+    if (label != nullptr) {
+        std::printf(
+            "  %s: median=%.3fns  p99=%.3fns  (min=%.3fns max=%.3fns)\n",
+            label, median, p99, min_ns, max_ns);
+    } else {
+        std::printf("    median=%.3fns  p99=%.3fns  (min=%.3fns max=%.3fns)\n",
+                    median, p99, min_ns, max_ns);
+    }
+    return median;
 }
 
 #endif  // TEST_BENCH_HARNESS_HPP_

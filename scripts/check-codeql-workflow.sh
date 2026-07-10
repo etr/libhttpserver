@@ -89,16 +89,11 @@ if [ -z "$uses_lines" ]; then
     echo "  (c) no `uses:` action steps found in the workflow" >&2
     fail=1
 else
-    bad_pins=""
-    while IFS= read -r line; do
-        [ -z "$line" ] && continue
-        if ! printf '%s\n' "$line" | grep -qE '@[0-9a-f]{40}([[:space:]]|$)'; then
-            bad_pins="$bad_pins\n    $line"
-        fi
-    done <<< "$uses_lines"
+    bad_pins="$(printf '%s\n' "$uses_lines" \
+        | grep -vE '@[0-9a-f]{40}([[:space:]]|$)' || true)"
     if [ -n "$bad_pins" ]; then
         echo "  (c) uses: line(s) not pinned to a 40-hex SHA:" >&2
-        printf '%b\n' "$bad_pins" >&2
+        printf '%s\n' "$bad_pins" | sed 's/^/    /' >&2
         fail=1
     else
         echo "  (c) every uses: line pinned to a 40-hex commit SHA"

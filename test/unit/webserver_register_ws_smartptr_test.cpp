@@ -48,6 +48,7 @@
 
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
+#include "./unit/throw_probe.hpp"
 
 using httpserver::create_webserver;
 using httpserver::webserver;
@@ -326,22 +327,17 @@ LT_END_AUTO_TEST(features_reports_websocket_off)
 // generic catch (the unavailable test only checks that
 // feature_unavailable's what() names "websocket" + "HAVE_WEBSOCKET";
 // it does NOT verify that a different exception type doesn't ALSO
-// fire). Catching the std::invalid_argument variant explicitly here
-// adds the missing pin.
+// fire). The dual-flag verdict from probe_throw_type (see
+// test/unit/throw_probe.hpp for the idiom's rationale) adds the
+// missing pin.
 LT_BEGIN_AUTO_TEST(webserver_register_ws_smartptr_off_suite,
                    null_unique_ptr_throws_feature_unavailable_on_ws_off)
     webserver ws{create_webserver(PORT + 9)};
-    bool caught_feature_unavailable = false;
-    bool caught_invalid_argument = false;
-    try {
+    const auto verdict = httpserver_test::probe_throw_type([&ws] {
         ws.register_ws_resource("/ws", std::unique_ptr<websocket_handler>{});
-    } catch (const httpserver::feature_unavailable&) {
-        caught_feature_unavailable = true;
-    } catch (const std::invalid_argument&) {
-        caught_invalid_argument = true;
-    }
-    LT_CHECK(caught_feature_unavailable);
-    LT_CHECK(!caught_invalid_argument);
+    });
+    LT_CHECK(verdict.feature_unavailable);
+    LT_CHECK(!verdict.invalid_argument);
 LT_END_AUTO_TEST(null_unique_ptr_throws_feature_unavailable_on_ws_off)
 #endif  // !HAVE_WEBSOCKET
 

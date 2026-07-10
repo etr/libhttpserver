@@ -26,16 +26,14 @@
 // this TU is built with -Wall and would trip [[deprecated]] otherwise).
 //
 // The negative side -- that the warning IS emitted on a flag-free
-// compile -- is harder to assert portably. We document the expectation
-// in this comment and rely on the existing CI warning-summary step plus
-// the spot-checked grep in scripts/check-doxygen.sh.
-//
-// test-quality-reviewer-iter3-5: mechanical verification of the negative
-// compile (i.e. a CMake try_compile() sentinel that confirms
-// with_cookie(string,string) emits -Wdeprecated-declarations with -Werror)
-// is recorded as a follow-up task. The cookie_header_sentinel_test.cpp
-// pattern shows the project has infrastructure for compile-only tests;
-// the CMake-side negative-compile harness is the missing piece.
+// compile -- is verified mechanically by the
+// lint-deprecated-cookie-overload gate
+// (scripts/check-deprecated-cookie-overload.sh, wired into `make check`
+// via check-local): it compiles a TU calling with_cookie(string,string)
+// with -Werror=deprecated-declarations and asserts the compile FAILS
+// with a deprecation diagnostic (plus a positive control proving the
+// structured overload builds cleanly). Removing the [[deprecated]]
+// attribute therefore breaks `make check`, not just this comment.
 //
 // Pure compile test -- empty LDADD.
 

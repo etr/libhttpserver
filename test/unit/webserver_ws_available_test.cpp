@@ -54,6 +54,7 @@
 
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
+#include "./unit/throw_probe.hpp"
 
 LT_BEGIN_SUITE(webserver_ws_available_suite)
     void set_up() {
@@ -80,35 +81,23 @@ LT_END_AUTO_TEST(features_reports_websocket_on)
 LT_BEGIN_AUTO_TEST(webserver_ws_available_suite,
                    unique_ptr_null_throws_invalid_argument)
     httpserver::webserver ws{httpserver::create_webserver(8190)};
-    bool caught_invalid_argument = false;
-    bool caught_feature_unavailable = false;
-    try {
+    const auto verdict = httpserver_test::probe_throw_type([&ws] {
         ws.register_ws_resource(
             "/ws", std::unique_ptr<httpserver::websocket_handler>{});
-    } catch (const httpserver::feature_unavailable&) {
-        caught_feature_unavailable = true;
-    } catch (const std::invalid_argument&) {
-        caught_invalid_argument = true;
-    }
-    LT_CHECK(caught_invalid_argument);
-    LT_CHECK(!caught_feature_unavailable);
+    });
+    LT_CHECK(verdict.invalid_argument);
+    LT_CHECK(!verdict.feature_unavailable);
 LT_END_AUTO_TEST(unique_ptr_null_throws_invalid_argument)
 
 LT_BEGIN_AUTO_TEST(webserver_ws_available_suite,
                    shared_ptr_null_throws_invalid_argument)
     httpserver::webserver ws{httpserver::create_webserver(8191)};
-    bool caught_invalid_argument = false;
-    bool caught_feature_unavailable = false;
-    try {
+    const auto verdict = httpserver_test::probe_throw_type([&ws] {
         ws.register_ws_resource(
             "/ws", std::shared_ptr<httpserver::websocket_handler>{});
-    } catch (const httpserver::feature_unavailable&) {
-        caught_feature_unavailable = true;
-    } catch (const std::invalid_argument&) {
-        caught_invalid_argument = true;
-    }
-    LT_CHECK(caught_invalid_argument);
-    LT_CHECK(!caught_feature_unavailable);
+    });
+    LT_CHECK(verdict.invalid_argument);
+    LT_CHECK(!verdict.feature_unavailable);
 LT_END_AUTO_TEST(shared_ptr_null_throws_invalid_argument)
 #endif  // HAVE_WEBSOCKET
 

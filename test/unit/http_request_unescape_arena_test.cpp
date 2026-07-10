@@ -294,6 +294,21 @@ LT_BEGIN_AUTO_TEST(http_request_unescape_arena_suite,
     LT_CHECK_EQ(decode_via_arena("abc%"), std::string("abc%"));
 LT_END_AUTO_TEST(unescape_trailing_percent_passthrough)
 
+// (5b) '+' decodes to space: distinct production branch in
+// unescape_buf_raw (case '+') not covered by the %HH cases.
+LT_BEGIN_AUTO_TEST(http_request_unescape_arena_suite,
+                   unescape_plus_decodes_to_space)
+    LT_CHECK_EQ(decode_via_arena("a+b"), std::string("a b"));
+LT_END_AUTO_TEST(unescape_plus_decodes_to_space)
+
+// (5c) '%' followed by only one hex digit at end-of-string: exercises
+// the `size - rpos > 2` bound (one byte short of a full %HH triplet),
+// a different boundary from "abc%" (zero bytes after '%').
+LT_BEGIN_AUTO_TEST(http_request_unescape_arena_suite,
+                   unescape_single_hex_digit_after_percent_passthrough)
+    LT_CHECK_EQ(decode_via_arena("abc%2"), std::string("abc%2"));
+LT_END_AUTO_TEST(unescape_single_hex_digit_after_percent_passthrough)
+
 // (6) Empty value: produces an empty arg without crashing.
 LT_BEGIN_AUTO_TEST(http_request_unescape_arena_suite,
                    unescape_empty_value)

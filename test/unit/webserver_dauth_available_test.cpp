@@ -42,6 +42,7 @@
 
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
+#include "./unit/throw_probe.hpp"
 
 LT_BEGIN_SUITE(webserver_dauth_available_suite)
     void set_up() {
@@ -64,17 +65,14 @@ LT_END_AUTO_TEST(features_reports_digest_auth_on)
 // listen_socket(false) keeps the test port-safe (no real bind).
 LT_BEGIN_AUTO_TEST(webserver_dauth_available_suite,
                    digest_auth_true_does_not_throw_on_dauth_on)
-    bool caught_feature_unavailable = false;
-    try {
+    const auto verdict = httpserver_test::probe_throw_type([] {
         httpserver::webserver ws{
             httpserver::create_webserver(8194)
                 .digest_auth(true)
                 .listen_socket(false)};
         (void)ws;
-    } catch (const httpserver::feature_unavailable&) {
-        caught_feature_unavailable = true;
-    }
-    LT_CHECK(!caught_feature_unavailable);
+    });
+    LT_CHECK(!verdict.feature_unavailable);
 LT_END_AUTO_TEST(digest_auth_true_does_not_throw_on_dauth_on)
 
 // Explicit digest_auth(false) on a HAVE_DAUTH-on build must construct
@@ -84,17 +82,14 @@ LT_END_AUTO_TEST(digest_auth_true_does_not_throw_on_dauth_on)
 // catch (its #ifndef HAVE_DAUTH gate makes it dormant here).
 LT_BEGIN_AUTO_TEST(webserver_dauth_available_suite,
                    explicit_digest_auth_false_does_not_throw_on_dauth_on)
-    bool caught_feature_unavailable = false;
-    try {
+    const auto verdict = httpserver_test::probe_throw_type([] {
         httpserver::webserver ws{
             httpserver::create_webserver(8195)
                 .digest_auth(false)
                 .listen_socket(false)};
         (void)ws;
-    } catch (const httpserver::feature_unavailable&) {
-        caught_feature_unavailable = true;
-    }
-    LT_CHECK(!caught_feature_unavailable);
+    });
+    LT_CHECK(!verdict.feature_unavailable);
 LT_END_AUTO_TEST(explicit_digest_auth_false_does_not_throw_on_dauth_on)
 #endif  // HAVE_DAUTH
 
