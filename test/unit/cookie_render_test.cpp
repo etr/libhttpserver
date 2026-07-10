@@ -437,16 +437,41 @@ LT_END_AUTO_TEST(roundtrip_first_token_is_name_value)
 // Note: parse_cookie_header splits on ';', so no cookie object produced
 // by it will ever have a ';' in its name — the parser always handles that
 // before any cookie object is constructed. The render guard for ';' in
-// name_ is therefore only reachable via direct field injection (not via
-// the normal API). The space (0x20) test below exercises the same render-
-// guard code path and acts as the mechanical pin for the guard contract.
+// name_ is therefore structurally unreachable via parse_cookie_header and
+// only reachable via direct field injection (not via the normal API). The
+// test below pins that parser property mechanically; the space (0x20)
+// test after it exercises the render-guard code path itself and acts as
+// the mechanical pin for the guard contract.
+
+// Honest replacement for the former disjunctive
+// render_throws_when_parsed_name_contains_semicolon test (which passed
+// tautologically): assert the parser behaviour directly. Feeding
+// "a;Secure=1=x" — an attempt to smuggle ';' into a name — the parser
+// splits the header on ';' FIRST (src/cookie.cpp,
+// cookie::parse_cookie_header: header_value.find(';', pos)), drops the
+// "a" token (no '='), and parses "Secure=1=x" as name="Secure",
+// value="1=x". A parsed cookie name can therefore never contain ';'.
+LT_BEGIN_AUTO_TEST(cookie_render_suite, parser_splits_on_semicolon_so_name_cannot_contain_it)
+    auto cookies = cookie::parse_cookie_header("a;Secure=1=x");
+    LT_CHECK_EQ(cookies.size(), static_cast<std::size_t>(1));
+    LT_CHECK_EQ(cookies[0].name(), std::string("Secure"));
+    LT_CHECK_EQ(cookies[0].value(), std::string("1=x"));
+    LT_CHECK_EQ(cookies[0].name().find(';') == std::string::npos, true);
+LT_END_AUTO_TEST(parser_splits_on_semicolon_so_name_cannot_contain_it)
+
 LT_BEGIN_AUTO_TEST(cookie_render_suite, render_guard_rejects_space_in_parsed_name)
     // Directly manipulate via the raw parse path: inject a cookie name with
     // a space (0x20), which is rejected by is_invalid_name_byte but NOT split
     // on by the parser's semicolon delimiter.
-    // Cookie: "a b=val" => parser does NOT trim whitespace inside the name token,
-    // giving name "a b" (the trim only removes leading/trailing whitespace around
-    // the whole token, not within it after splitting on '=').
+    //
+    // Parser behaviour relied upon (src/cookie.cpp): trim_ws() strips only
+    // ' ' and '\t' from BOTH ENDS of each ';'-delimited token
+    // (`tok = trim_ws(tok)`) and again from the ends of the name portion
+    // after splitting at the first '=' (`name_sv = trim_ws(name_sv)`).
+    // Interior bytes are never touched, so "a b=val" yields the name
+    // "a b" with its interior space preserved. If trim_ws ever starts
+    // collapsing interior whitespace, the precondition checks below fail
+    // and this test must be updated.
     auto cookies = cookie::parse_cookie_header("a b=val");
 
     // Precondition: the parser must have produced a non-empty result and the
@@ -489,7 +514,8 @@ LT_END_AUTO_TEST(with_path_rejects_comma)
 // parse_cookie_header() stores value_ raw (bypassing validate_value()).
 // to_set_cookie_header() must detect forbidden bytes in value_ at render
 // time and throw, matching the existing name_ guard (CWE-113 defence-in-depth).
-// Tests pin CR, LF, NUL, and ';' in a reflected parsed cookie value.
+// Tests pin CR, LF, and NUL in a reflected parsed cookie value; ';' cannot
+// reach value_ via the parse path (see with_value_rejects_semicolon_setter_path).
 
 LT_BEGIN_AUTO_TEST(cookie_render_suite, render_guard_rejects_cr_in_parsed_value)
     // Simulate a reflected parsed cookie: parse_cookie_header stores value_ raw.
@@ -536,34 +562,18 @@ LT_BEGIN_AUTO_TEST(cookie_render_suite, render_guard_rejects_nul_in_parsed_value
     LT_CHECK_EQ(threw, true);
 LT_END_AUTO_TEST(render_guard_rejects_nul_in_parsed_value)
 
-LT_BEGIN_AUTO_TEST(cookie_render_suite, render_guard_rejects_semicolon_in_parsed_value)
-    // The parser does NOT split the value on ';' (only the name portion is
-    // delimited by ';'). A raw value like "abc;Secure" can therefore be stored
-    // by parse_cookie_header, and to_set_cookie_header must catch it.
-    // Cookie: "sid=abc%3bSecure" (URL-encoded) is not decoded, but we can
-    // fabricate the raw Cookie header "sid=abc;extra=y" where the parser sees
-    // "sid=abc" (value "abc") and "extra=y". We therefore inject via a crafted
-    // header where the value itself is split at a ';' separator that becomes
-    // part of the value — this is not achievable via normal parse_cookie_header
-    // splitting. Instead, embed via raw string with a string literal length:
-    // Feed parse_cookie_header("sid=ab;cd=y") — here "ab" is sid's value
-    // (parser splits on ';'), so this particular path cannot produce a value
-    // containing ';'. We demonstrate the guard by constructing the raw value
-    // via a two-cookie header where the first value would be empty: this is
-    // not straightforward. Instead we directly verify the guard via a crafted
-    // cookie header string that includes the embedded semicolon in value position
-    // by exploiting that parse_cookie_header splits the overall header on ';'.
-    // Since that always splits the value, we cannot inject ';' via the normal
-    // parse path. Therefore: document the coverage gap here and note that the
-    // guard for ';' in value_ is verified by code inspection (the loop covers
-    // all four forbidden bytes identically). The CR/LF/NUL tests above exercise
-    // the same code path through the same loop iteration. This test verifies
-    // the with_value setter still rejects ';' (setter path, not render-guard):
+// Setter-path pin only — NOT render-guard coverage. parse_cookie_header
+// splits the whole header on ';' before extracting any value, so no
+// parsed cookie can carry ';' in value_: the render guard's ';' branch is
+// unreachable via the public API and is covered by inspection (the same
+// guard loop is exercised by the CR/LF/NUL tests above). What CAN be
+// pinned mechanically is the setter: with_value must reject ';'.
+LT_BEGIN_AUTO_TEST(cookie_render_suite, with_value_rejects_semicolon_setter_path)
     bool threw = false;
     try { cookie{}.with_name("sid").with_value("ab;cd"); }
     catch (const std::invalid_argument&) { threw = true; }
     LT_CHECK_EQ(threw, true);
-LT_END_AUTO_TEST(render_guard_rejects_semicolon_in_parsed_value)
+LT_END_AUTO_TEST(with_value_rejects_semicolon_setter_path)
 
 // ---------------- Cycle 8: same_site=None + secure=true no-double-emit (test-quality-iter3-3) ----------------
 

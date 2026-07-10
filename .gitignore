@@ -5,6 +5,7 @@
 *.php
 *.pm
 *.py
+!scripts/lib/*.py
 *_wrap.*
 *.gcov
 *.gcno
@@ -16,6 +17,7 @@
 libhttpserver.iml
 build/*
 build-debug/
+_build/
 aclocal.m4
 autom4te.cache/
 config.guess

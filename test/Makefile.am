@@ -665,7 +665,7 @@ littletest_skip_semantics_LDADD =
 digest_client_self_test_SOURCES = unit/digest_client_self_test.cpp
 digest_client_self_test_LDADD =
 
-noinst_HEADERS = littletest.hpp integ/test_utils.hpp integ/curl_helpers.hpp integ/server_ready.hpp integ/digest_client.hpp
+noinst_HEADERS = littletest.hpp integ/test_utils.hpp integ/curl_helpers.hpp integ/server_ready.hpp integ/digest_client.hpp integ/stream_capture_helpers.hpp unit/throw_probe.hpp
 AM_CXXFLAGS += -Wall -fPIC -Wno-overloaded-virtual
 
 if COND_GCOV

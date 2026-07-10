@@ -49,44 +49,25 @@ fi
 fail=0
 
 # (a) valid YAML  +  (b) an include entry carrying `parallel-install: check`.
-# Both are structural, so PyYAML parses the file and inspects the matrix.
-if ! python3 - "$WF" <<'PY'
+# Both are structural: the shared locator (scripts/lib/find-matrix-includes.py)
+# parses the file with PyYAML and emits strategy.matrix.include as JSON; the
+# short per-gate check below inspects it.
+if ! include_json="$(python3 scripts/lib/find-matrix-includes.py "$WF")" \
+   || ! printf '%s' "$include_json" | python3 -c '
+import json
 import sys
-try:
-    import yaml
-except ImportError:
-    print("  PyYAML not importable — install with 'pip install pyyaml'", file=sys.stderr)
-    sys.exit(10)
 
-path = sys.argv[1]
-try:
-    doc = yaml.safe_load(open(path))
-except Exception as e:  # noqa: BLE001 - surface any parse failure
-    print(f"  (a) YAML parse error: {e}", file=sys.stderr)
-    sys.exit(2)
-
-# Locate the matrix include list in whichever job defines it (job name is
-# not hard-coded so the gate survives a rename).
-include = None
-for job_name, job in (doc.get("jobs") or {}).items():
-    if not isinstance(job, dict):
-        continue
-    inc = (((job.get("strategy") or {}).get("matrix") or {}).get("include"))
-    if isinstance(inc, list):
-        include = inc
-        break
-if include is None:
-    print("  (b) could not locate strategy.matrix.include in any job", file=sys.stderr)
-    sys.exit(3)
-
+include = json.load(sys.stdin)
 opted_in = [e for e in include
             if isinstance(e, dict) and e.get("parallel-install") == "check"]
 if not opted_in:
-    print("  (b) no matrix entry carries `parallel-install: check`", file=sys.stderr)
+    print("  (b) no matrix entry carries `parallel-install: check`",
+          file=sys.stderr)
     sys.exit(4)
 
-print(f"  (a) YAML parses; (b) {len(opted_in)} matrix entry(ies) carry parallel-install: check")
-PY
+print(f"  (a) YAML parses; "
+      f"(b) {len(opted_in)} matrix entry(ies) carry parallel-install: check")
+'
 then
     echo "  (a)/(b) FAILED" >&2
     fail=1

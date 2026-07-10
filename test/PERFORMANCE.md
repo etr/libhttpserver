@@ -257,7 +257,11 @@ HTTPSERVER_STRESS_SECONDS=15 HTTPSERVER_STRESS_REPEATS=20 \
 
 The TASK-080 acceptance criterion "test has not flaked in the last 50
 CI runs across the matrix" cannot be enforced at PR-time (a PR has 1
-run per lane, not 50). The proxy used at merge:
+run per lane, not 50). **This criterion was therefore formally DEFERRED
+at merge** — it is tracked as the unchecked verification item in
+`specs/tasks/M7-v2-cleanup/TASK-080.md` and is satisfied only once 50
+post-merge `feature/v2.0` CI runs have passed without a flake of this
+test. The proxy used at merge:
 
 1. Local 10-round sweep on the maintainer's reference host (Apple
    Silicon, `-O3 -DNDEBUG`, no pinning) — worst observed p95 ratio
@@ -266,6 +270,12 @@ run per lane, not 50). The proxy used at merge:
    `feature/v2.0` CI within the first week of merge is grounds for
    re-opening TASK-080 and re-running the noise-floor sweep on the
    flaking lane.
+
+Known characterisation gap: the 13.4× worst observed ratio comes from
+the Apple Silicon reference host only; no equivalent multi-round sweep
+has been captured on a Linux/GHA runner, so the 20× gate's headroom on
+Linux is inferred from single CI runs rather than measured. If a Linux
+lane flakes, treat it as the missing sweep surfacing, not as noise.
 
 If a CI flake surfaces post-merge, capture the `[STATS]` line from the
 failing job logs, then re-run locally on the same lane shape with

@@ -59,6 +59,7 @@ TASK-093).
 | TASK-092 | Wire `route_table_concurrency` TSan + `stop()`-from-handler into per-PR CI | MED | S | Done |
 | TASK-093 | Tighten example caveats (auth, pipe, access-log) | LOW | S | Done |
 | TASK-094 | Extend `threadsafety_stress` with per-resource `add_hook` CAS race | MED | S | Done |
+| TASK-095 | Zero arena *overflow* blocks on connection reuse (CWE-226 residue from TASK-068) | MED (sec) | M | Backlog |
 
 ## Dependency notes
 

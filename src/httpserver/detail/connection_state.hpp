@@ -142,11 +142,11 @@ struct connection_state {
     // process. The buffer is sized to hold typical requests without
     // overflow (see the sizing comment above); credentials are several
     // hundred bytes at most, so they are reliably inside the 8 KiB
-    // window in practice. A follow-up task is required to close the
-    // overflow gap (hand-rolled arena or a zero-on-deallocate upstream
-    // adapter); the current task explicitly accepts this residue.
-    // (security-reviewer-iter1-3, code-quality-reviewer-iter1-5,
-    // TASK-068.)
+    // window in practice. TASK-095 (specs/tasks/M7-v2-cleanup/
+    // TASK-095.md) tracks closing the overflow gap (hand-rolled arena
+    // or a zero-on-deallocate upstream adapter); TASK-068 explicitly
+    // accepted this residue. (security-reviewer-iter1-3,
+    // code-quality-reviewer-iter1-5, TASK-068.)
     void reset_arena() noexcept {
         arena_.release();
         secure_zero(initial_buffer_.data(), ARENA_INITIAL_BYTES);

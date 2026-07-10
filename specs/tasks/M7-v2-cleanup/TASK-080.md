@@ -23,6 +23,10 @@ noise rather than the threshold.
 **Acceptance Criteria:**
 - The latency gate is at 10× warmup median (or the documented tightest stable floor) with measurement data.
 - The test has not flaked in the last 50 CI runs across the matrix.
+  *(DEFERRED at merge — unenforceable at PR-time; verified by post-merge
+  monitoring of `feature/v2.0` CI. See `test/PERFORMANCE.md` §"Acceptance
+  criterion verification — 50-run stability" for the proxy evidence and
+  the Linux-sweep gap.)*
 - A `test/PERFORMANCE.md` entry records the gate, the runner profile, and the noise floor.
 - Typecheck passes.
 - Tests pass.

@@ -72,7 +72,10 @@ inline std::size_t unescape_buf_raw(char* data, std::size_t size) noexcept {
                 ++rpos;
                 break;
             case '%':
-                if (size > rpos + 2) {
+                // Overflow-safe bound: rpos < size here, so size - rpos
+                // cannot underflow, unlike the `size > rpos + 2` form
+                // which would wrap if rpos were ever near SIZE_MAX.
+                if (size - rpos > 2) {
                     const int hi = hex_digit_value(data[rpos + 1]);
                     const int lo = hex_digit_value(data[rpos + 2]);
                     if (hi >= 0 && lo >= 0) {

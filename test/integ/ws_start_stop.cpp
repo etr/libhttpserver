@@ -64,6 +64,30 @@ size_t writefunc(void *ptr, size_t size, size_t nmemb, std::string *s) {
     return size*nmemb;
 }
 
+// File-local helper owning the curl easy-handle lifecycle for the
+// plain GET round-trip repeated throughout this file: init, set the
+// URL / HTTPGET / write-callback options (disabling TLS peer/host
+// verification when verify_ssl is false), perform, cleanup. Returns
+// the CURLcode from curl_easy_perform. Call sites that need extra
+// options (client certs, CURLOPT_IPRESOLVE, CURLINFO_RESPONSE_CODE,
+// custom methods, ...) keep their explicit easy-handles.
+namespace {
+CURLcode curl_get(const std::string& url, std::string* out, bool verify_ssl = true) {
+    CURL *curl = curl_easy_init();
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, out);
+    if (!verify_ssl) {
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+    }
+    CURLcode res = curl_easy_perform(curl);
+    curl_easy_cleanup(curl);
+    return res;
+}
+}  // namespace
+
 class ok_resource : public httpserver::http_resource {
  public:
      httpserver::http_response render_get(const httpserver::http_request&) {
@@ -123,17 +147,10 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, start_stop)
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
     std::string url = "localhost:" + std::to_string(port) + "/base";
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    res = curl_easy_perform(curl);
+    CURLcode res = curl_get(url, &s);
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "OK");
-    curl_easy_cleanup(curl);
 
     ws.stop();
     }
@@ -147,17 +164,10 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, start_stop)
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
     std::string url = "localhost:" + std::to_string(port) + "/base";
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    res = curl_easy_perform(curl);
+    CURLcode res = curl_get(url, &s);
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "OK");
-    curl_easy_cleanup(curl);
 
     ws.stop();
     }
@@ -171,17 +181,10 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, start_stop)
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
     std::string url = "localhost:" + std::to_string(port) + "/base";
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    res = curl_easy_perform(curl);
+    CURLcode res = curl_get(url, &s);
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "OK");
-    curl_easy_cleanup(curl);
 
     ws.stop();
     }
@@ -255,17 +258,10 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, stop_and_wait)
     {
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
     std::string url = "localhost:" + std::to_string(port) + "/base";
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    res = curl_easy_perform(curl);
+    CURLcode res = curl_get(url, &s);
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "OK");
-    curl_easy_cleanup(curl);
     }
 
     ws.stop_and_wait();
@@ -273,16 +269,9 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, stop_and_wait)
     {
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
     std::string url = "localhost:" + std::to_string(port) + "/base";
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    res = curl_easy_perform(curl);
+    CURLcode res = curl_get(url, &s);
     LT_ASSERT_EQ(res, 7);
-    curl_easy_cleanup(curl);
     }
 LT_END_AUTO_TEST(stop_and_wait)
 
@@ -307,17 +296,10 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, disable_options)
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
     std::string url = "localhost:" + std::to_string(port) + "/base";
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    res = curl_easy_perform(curl);
+    CURLcode res = curl_get(url, &s);
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "OK");
-    curl_easy_cleanup(curl);
 
     ws.stop();
 LT_END_AUTO_TEST(disable_options)
@@ -337,17 +319,10 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, enable_options)
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
     std::string url = "localhost:" + std::to_string(port) + "/base";
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    res = curl_easy_perform(curl);
+    CURLcode res = curl_get(url, &s);
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "OK");
-    curl_easy_cleanup(curl);
 
     ws.stop();
 LT_END_AUTO_TEST(enable_options)
@@ -384,17 +359,10 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_socket)
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
     std::string url = "127.0.0.1:" + std::to_string(port) + "/base";
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    res = curl_easy_perform(curl);
+    CURLcode res = curl_get(url, &s);
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "OK");
-    curl_easy_cleanup(curl);
 
     ws.stop();
 LT_END_AUTO_TEST(custom_socket)
@@ -408,17 +376,10 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, bind_address_string)
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
     std::string url = "127.0.0.1:" + std::to_string(port) + "/base";
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    res = curl_easy_perform(curl);
+    CURLcode res = curl_get(url, &s);
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "OK");
-    curl_easy_cleanup(curl);
 
     ws.stop();
 LT_END_AUTO_TEST(bind_address_string)
@@ -437,17 +398,10 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, single_resource)
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
     std::string url = "localhost:" + std::to_string(port) + "/any/url/works";
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    res = curl_easy_perform(curl);
+    CURLcode res = curl_get(url, &s);
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "OK");
-    curl_easy_cleanup(curl);
 
     ws.stop();
 LT_END_AUTO_TEST(single_resource)
@@ -479,17 +433,10 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, register_empty_resource_non_family)
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
     std::string url = "localhost:" + std::to_string(port) + "/";
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    res = curl_easy_perform(curl);
+    CURLcode res = curl_get(url, &s);
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "OK");
-    curl_easy_cleanup(curl);
 
     ws.stop();
 LT_END_AUTO_TEST(register_empty_resource_non_family)
@@ -504,17 +451,10 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, register_path_with_url_params_non_family
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
     std::string url = "localhost:" + std::to_string(port) + "/user/123";
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    res = curl_easy_perform(curl);
+    CURLcode res = curl_get(url, &s);
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "OK");
-    curl_easy_cleanup(curl);
 
     ws.stop();
 LT_END_AUTO_TEST(register_path_with_url_params_non_family)
@@ -568,17 +508,10 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, tuning_options)
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
     std::string url = "localhost:" + std::to_string(port) + "/base";
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    res = curl_easy_perform(curl);
+    CURLcode res = curl_get(url, &s);
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "OK");
-    curl_easy_cleanup(curl);
 
     ws.stop();
 LT_END_AUTO_TEST(tuning_options)
@@ -601,19 +534,10 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_base)
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);  // avoid verifying ssl
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);  // avoid verifying ssl
     std::string url = "https://localhost:" + std::to_string(port) + "/base";
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    res = curl_easy_perform(curl);
+    CURLcode res = curl_get(url, &s, false);
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "OK");
-    curl_easy_cleanup(curl);
     curl_global_cleanup();
 
     ws.stop();
@@ -633,19 +557,10 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_with_protocol_priorities)
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);  // avoid verifying ssl
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);  // avoid verifying ssl
     std::string url = "https://localhost:" + std::to_string(port) + "/base";
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    res = curl_easy_perform(curl);
+    CURLcode res = curl_get(url, &s, false);
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "OK");
-    curl_easy_cleanup(curl);
 
     ws.stop();
 LT_END_AUTO_TEST(ssl_with_protocol_priorities)
@@ -664,19 +579,10 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ssl_with_trust)
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);  // avoid verifying ssl
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);  // avoid verifying ssl
     std::string url = "https://localhost:" + std::to_string(port) + "/base";
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    res = curl_easy_perform(curl);
+    CURLcode res = curl_get(url, &s, false);
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "OK");
-    curl_easy_cleanup(curl);
 
     ws.stop();
 LT_END_AUTO_TEST(ssl_with_trust)
@@ -707,17 +613,10 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, blocking_server)
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
     std::string url = "localhost:" + std::to_string(port) + "/base";
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    res = curl_easy_perform(curl);
+    CURLcode res = curl_get(url, &s);
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "OK");
-    curl_easy_cleanup(curl);
 
     ws.stop();
 
@@ -740,17 +639,10 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, custom_error_resources)
     {
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
     std::string url = "localhost:" + std::to_string(port) + "/base";
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    res = curl_easy_perform(curl);
+    CURLcode res = curl_get(url, &s);
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "OK");
-    curl_easy_cleanup(curl);
     }
 
     {
@@ -810,26 +702,19 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ipv6_webserver)
         // TASK-076: IPv6 may be unavailable in the host network stack;
         // distinguish that from "TLS support actually broke" by emitting
         // a SKIP rather than a tautological pass.
-        LT_SKIP_IF(true, std::string("IPv6 webserver start failed: ") + e.what());
+        LT_SKIP(std::string("IPv6 webserver start failed: ") + e.what());
     }
     if (ws.is_running()) {
         const uint16_t port = ws.get_bound_port();
         curl_global_init(CURL_GLOBAL_ALL);
         std::string s;
-        CURL *curl = curl_easy_init();
-        CURLcode res;
         // Bind an ephemeral port; talk to the actual bound port.
         std::string ipv6_url = "http://[::1]:" + std::to_string(port) + "/base";
-        curl_easy_setopt(curl, CURLOPT_URL, ipv6_url.c_str());
-        curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-        res = curl_easy_perform(curl);
+        CURLcode res = curl_get(ipv6_url, &s);
         // Once the server is confirmed running, a curl failure is a
         // genuine test failure — not an environmental skip.
         LT_ASSERT_EQ(res, 0);
         LT_CHECK_EQ(s, "OK");
-        curl_easy_cleanup(curl);
         ws.stop();
     }
 LT_END_AUTO_TEST(ipv6_webserver)
@@ -844,26 +729,19 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, dual_stack_webserver)
         // TASK-076: dual-stack may be disabled on the host kernel; SKIP
         // rather than tautological-pass so a broken-build regression is
         // observable.
-        LT_SKIP_IF(true, std::string("dual-stack webserver start failed: ") + e.what());
+        LT_SKIP(std::string("dual-stack webserver start failed: ") + e.what());
     }
     if (ws.is_running()) {
         const uint16_t port = ws.get_bound_port();
         curl_global_init(CURL_GLOBAL_ALL);
         std::string s;
-        CURL *curl = curl_easy_init();
-        CURLcode res;
         // Bind an ephemeral port; talk to the actual bound port.
         std::string ds_url = "localhost:" + std::to_string(port) + "/base";
-        curl_easy_setopt(curl, CURLOPT_URL, ds_url.c_str());
-        curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-        res = curl_easy_perform(curl);
+        CURLcode res = curl_get(ds_url, &s);
         // Once the server is confirmed running, a curl failure is a
         // genuine test failure — not an environmental skip.
         LT_ASSERT_EQ(res, 0);
         LT_CHECK_EQ(s, "OK");
-        curl_easy_cleanup(curl);
         ws.stop();
     }
 LT_END_AUTO_TEST(dual_stack_webserver)
@@ -878,17 +756,10 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, bind_address_ipv4)
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
     std::string url = "http://127.0.0.1:" + std::to_string(port) + "/base";
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    res = curl_easy_perform(curl);
+    CURLcode res = curl_get(url, &s);
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "OK");
-    curl_easy_cleanup(curl);
 
     ws.stop();
 LT_END_AUTO_TEST(bind_address_ipv4)
@@ -905,7 +776,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, bind_address_ipv6_string)
         ws_ptr = std::make_shared<httpserver::webserver>(
             httpserver::create_webserver(0).bind_address("::1"));
     } catch (...) {
-        LT_SKIP_IF(true, "IPv6 bind: construction failed on this host");
+        LT_SKIP("IPv6 bind: construction failed on this host");
     }
     auto ok = std::make_shared<ok_resource>();
     ws_ptr->register_path("base", ok);
@@ -913,24 +784,17 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, bind_address_ipv6_string)
         ws_ptr->start(false);
         port = ws_ptr->get_bound_port();
     } catch (...) {
-        LT_SKIP_IF(true, "IPv6 bind: start failed on this host");
+        LT_SKIP("IPv6 bind: start failed on this host");
     }
     if (ws_ptr->is_running()) {
         curl_global_init(CURL_GLOBAL_ALL);
         std::string s;
-        CURL *curl = curl_easy_init();
-        CURLcode res;
         std::string url = "http://[::1]:" + std::to_string(port) + "/base";
-        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-        curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-        res = curl_easy_perform(curl);
+        CURLcode res = curl_get(url, &s);
         // Once the server is confirmed running, a curl failure is a
         // genuine test failure — not an environmental skip.
         LT_ASSERT_EQ(res, 0);
         LT_CHECK_EQ(s, "OK");
-        curl_easy_cleanup(curl);
         ws_ptr->stop();
     }
 LT_END_AUTO_TEST(bind_address_ipv6_string)
@@ -956,17 +820,10 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, tls_session_on_non_tls_connection)
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
     std::string url = "http://localhost:" + std::to_string(port) + "/tls_check";
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    res = curl_easy_perform(curl);
+    CURLcode res = curl_get(url, &s);
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "NO_TLS");
-    curl_easy_cleanup(curl);
 
     ws.stop();
 LT_END_AUTO_TEST(tls_session_on_non_tls_connection)
@@ -985,24 +842,15 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, https_webserver)
         // TASK-076: TLS setup may fail in environments without the
         // certs or library; SKIP rather than tautological-pass so a
         // build that silently lost TLS support reports SKIP, not PASS.
-        LT_SKIP_IF(true, std::string("TLS start failed: ") + e.what());
+        LT_SKIP(std::string("TLS start failed: ") + e.what());
     }
     {
         curl_global_init(CURL_GLOBAL_ALL);
         std::string s;
-        CURL *curl = curl_easy_init();
-        CURLcode res;
         std::string url = "https://localhost:" + std::to_string(port) + "/base";
-        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-        curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
-        res = curl_easy_perform(curl);
+        CURLcode res = curl_get(url, &s, false);
         LT_ASSERT_EQ(res, 0);
         LT_CHECK_EQ(s, "OK");
-        curl_easy_cleanup(curl);
         ws.stop();
     }
 LT_END_AUTO_TEST(https_webserver)
@@ -1022,23 +870,14 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, tls_session_getters)
         // TASK-076: TLS setup may fail in environments without the
         // certs or library; SKIP rather than tautological-pass so a
         // build that silently lost TLS support reports SKIP, not PASS.
-        LT_SKIP_IF(true, std::string("TLS start failed: ") + e.what());
+        LT_SKIP(std::string("TLS start failed: ") + e.what());
     }
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
     std::string url = "https://localhost:" + std::to_string(port) + "/tls_info";
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
-    res = curl_easy_perform(curl);
+    CURLcode res = curl_get(url, &s, false);
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "TLS_SESSION_PRESENT");
-    curl_easy_cleanup(curl);
     ws.stop();
 LT_END_AUTO_TEST(tls_session_getters)
 
@@ -1091,23 +930,14 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_no_certificate)
         // TASK-076: TLS setup may fail in environments without the
         // certs or library; SKIP rather than tautological-pass so a
         // build that silently lost TLS support reports SKIP, not PASS.
-        LT_SKIP_IF(true, std::string("TLS start failed: ") + e.what());
+        LT_SKIP(std::string("TLS start failed: ") + e.what());
     }
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
     std::string url = "https://localhost:" + std::to_string(port) + "/cert_info";
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
-    res = curl_easy_perform(curl);
+    CURLcode res = curl_get(url, &s, false);
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "NO_CLIENT_CERT");
-    curl_easy_cleanup(curl);
     ws.stop();
 LT_END_AUTO_TEST(client_cert_no_certificate)
 
@@ -1128,7 +958,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_with_certificate)
         // TASK-076: TLS setup may fail in environments without the
         // certs or library; SKIP rather than tautological-pass so a
         // build that silently lost TLS support reports SKIP, not PASS.
-        LT_SKIP_IF(true, std::string("TLS start failed: ") + e.what());
+        LT_SKIP(std::string("TLS start failed: ") + e.what());
     }
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -1170,7 +1000,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_dn_extraction)
         // TASK-076: TLS setup may fail in environments without the
         // certs or library; SKIP rather than tautological-pass so a
         // build that silently lost TLS support reports SKIP, not PASS.
-        LT_SKIP_IF(true, std::string("TLS start failed: ") + e.what());
+        LT_SKIP(std::string("TLS start failed: ") + e.what());
     }
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -1210,7 +1040,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_fingerprint)
         // TASK-076: TLS setup may fail in environments without the
         // certs or library; SKIP rather than tautological-pass so a
         // build that silently lost TLS support reports SKIP, not PASS.
-        LT_SKIP_IF(true, std::string("TLS start failed: ") + e.what());
+        LT_SKIP(std::string("TLS start failed: ") + e.what());
     }
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -1254,7 +1084,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_no_cn)
     } catch (const std::exception& e) {
         // TASK-076: TLS setup may fail in environments without certs;
         // SKIP rather than tautological-pass.
-        LT_SKIP_IF(true, std::string("TLS start failed: ") + e.what());
+        LT_SKIP(std::string("TLS start failed: ") + e.what());
     }
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -1297,7 +1127,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_untrusted)
     } catch (const std::exception& e) {
         // TASK-076: TLS setup may fail in environments without certs;
         // SKIP rather than tautological-pass.
-        LT_SKIP_IF(true, std::string("TLS start failed: ") + e.what());
+        LT_SKIP(std::string("TLS start failed: ") + e.what());
     }
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
@@ -1351,7 +1181,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, client_cert_accessors_known_values)
         // convention recorded a passing tautological assertion; under
         // TASK-076 we now emit a proper SKIP so a build that silently
         // lost TLS support is reportable.
-        LT_SKIP_IF(true, std::string("TLS start failed: ") + e.what());
+        LT_SKIP(std::string("TLS start failed: ") + e.what());
     }
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -1454,24 +1284,15 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, sni_callback_setup)
         // TASK-076: TLS setup may fail in environments without the
         // certs or library; SKIP rather than tautological-pass so a
         // build that silently lost TLS support reports SKIP, not PASS.
-        LT_SKIP_IF(true, std::string("TLS start failed: ") + e.what());
+        LT_SKIP(std::string("TLS start failed: ") + e.what());
     }
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
     std::string url = "https://localhost:" + std::to_string(port) + "/base";
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
-    res = curl_easy_perform(curl);
+    CURLcode res = curl_get(url, &s, false);
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "OK");
-    curl_easy_cleanup(curl);
     ws.stop();
 LT_END_AUTO_TEST(sni_callback_setup)
 #endif  // HAVE_GNUTLS
@@ -1495,17 +1316,10 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, windows_smoke)
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
     std::string url = "localhost:" + std::to_string(port) + "/base";
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    res = curl_easy_perform(curl);
+    CURLcode res = curl_get(url, &s);
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "OK");
-    curl_easy_cleanup(curl);
 
     ws.stop();
 LT_END_AUTO_TEST(windows_smoke)
@@ -1522,17 +1336,10 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, pedantic_mode)
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
     std::string url = "http://localhost:" + std::to_string(port) + "/base";
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    res = curl_easy_perform(curl);
+    CURLcode res = curl_get(url, &s);
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "OK");
-    curl_easy_cleanup(curl);
 
     ws.stop();
 LT_END_AUTO_TEST(pedantic_mode)
@@ -1550,17 +1357,10 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, digest_auth_random)
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
     std::string url = "http://localhost:" + std::to_string(port) + "/base";
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    res = curl_easy_perform(curl);
+    CURLcode res = curl_get(url, &s);
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "OK");
-    curl_easy_cleanup(curl);
 
     ws.stop();
 LT_END_AUTO_TEST(digest_auth_random)
@@ -1996,17 +1796,10 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, max_threads_running)
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
     std::string url = "http://localhost:" + std::to_string(port) + "/base";
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    res = curl_easy_perform(curl);
+    CURLcode res = curl_get(url, &s);
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "OK");
-    curl_easy_cleanup(curl);
 
     ws.stop();
 LT_END_AUTO_TEST(max_threads_running)
@@ -2024,17 +1817,10 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, max_connections_running)
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
     std::string url = "http://localhost:" + std::to_string(port) + "/base";
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    res = curl_easy_perform(curl);
+    CURLcode res = curl_get(url, &s);
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "OK");
-    curl_easy_cleanup(curl);
 
     ws.stop();
 LT_END_AUTO_TEST(max_connections_running)
@@ -2052,17 +1838,10 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, memory_limit_running)
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
     std::string url = "http://localhost:" + std::to_string(port) + "/base";
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    res = curl_easy_perform(curl);
+    CURLcode res = curl_get(url, &s);
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "OK");
-    curl_easy_cleanup(curl);
 
     ws.stop();
 LT_END_AUTO_TEST(memory_limit_running)
@@ -2080,17 +1859,10 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, per_ip_limit_running)
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
     std::string url = "http://localhost:" + std::to_string(port) + "/base";
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    res = curl_easy_perform(curl);
+    CURLcode res = curl_get(url, &s);
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "OK");
-    curl_easy_cleanup(curl);
 
     ws.stop();
 LT_END_AUTO_TEST(per_ip_limit_running)
@@ -2108,17 +1880,10 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, thread_stack_size_running)
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
     std::string url = "http://localhost:" + std::to_string(port) + "/base";
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    res = curl_easy_perform(curl);
+    CURLcode res = curl_get(url, &s);
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "OK");
-    curl_easy_cleanup(curl);
 
     ws.stop();
 LT_END_AUTO_TEST(thread_stack_size_running)
@@ -2136,17 +1901,10 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, deferred_mode_running)
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
     std::string url = "http://localhost:" + std::to_string(port) + "/base";
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    res = curl_easy_perform(curl);
+    CURLcode res = curl_get(url, &s);
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "OK");
-    curl_easy_cleanup(curl);
 
     ws.stop();
 LT_END_AUTO_TEST(deferred_mode_running)
@@ -2164,17 +1922,10 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, debug_mode_running)
 
     curl_global_init(CURL_GLOBAL_ALL);
     std::string s;
-    CURL *curl = curl_easy_init();
-    CURLcode res;
     std::string url = "http://localhost:" + std::to_string(port) + "/base";
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
-    res = curl_easy_perform(curl);
+    CURLcode res = curl_get(url, &s);
     LT_ASSERT_EQ(res, 0);
     LT_CHECK_EQ(s, "OK");
-    curl_easy_cleanup(curl);
 
     ws.stop();
 LT_END_AUTO_TEST(debug_mode_running)

@@ -260,6 +260,17 @@ http_response http_response::unauthorized(digest_challenge challenge) {
     reject_ctrl_chars("domain", challenge.domain);
     reject_ctrl_chars("body",   challenge.body);
 
+    // qop="auth-int" is not implemented: the dispatch path
+    // (map_to_mhd_digest_args_) has no MHD mapping for it and would
+    // silently ignore the flag. Fail loudly rather than let a caller
+    // believe integrity protection was negotiated.
+    if (challenge.qop_auth_int) {
+        throw std::invalid_argument(
+            "http_response::unauthorized(digest_challenge): "
+            "qop_auth_int (qop=\"auth-int\") is not implemented; "
+            "leave it false");
+    }
+
     detail::digest_challenge_body::params p{
         /*realm=*/        std::move(challenge.realm),
         /*opaque=*/       std::move(challenge.opaque),

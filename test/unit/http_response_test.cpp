@@ -18,6 +18,7 @@
      USA
 */
 
+#include <cstddef>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -202,6 +203,26 @@ LT_BEGIN_AUTO_TEST(http_response_suite, overwrite_cookie)
     resp.with_cookie("Cookie", "NewValue");
     LT_CHECK_EQ(resp.get_cookie("Cookie"), "NewValue");
 LT_END_AUTO_TEST(overwrite_cookie)
+
+// TASK-064 code-review finding: the legacy with_cookie(string, string)
+// path must overwrite the STRUCTURED mirror too, not just the legacy
+// map. Before the fix, two calls with the same name appended two
+// entries to structured_cookies_ and the dispatch path emitted TWO
+// Set-Cookie headers — a wire-level regression from v1, which silently
+// overwrote. Pin: same name twice -> exactly one structured entry
+// carrying the second value; a different name still appends.
+LT_BEGIN_AUTO_TEST(http_response_suite, overwrite_cookie_single_structured_entry)
+    http_response resp = http_response::string("body");
+    resp.with_cookie("sid", "old");
+    resp.with_cookie("sid", "new");
+    const auto& parsed = resp.get_cookies_parsed();
+    LT_CHECK_EQ(parsed.size(), static_cast<std::size_t>(1));
+    LT_CHECK_EQ(parsed[0].name(), string("sid"));
+    LT_CHECK_EQ(parsed[0].value(), string("new"));
+    // A genuinely new name must still append.
+    resp.with_cookie("other", "v");
+    LT_CHECK_EQ(resp.get_cookies_parsed().size(), static_cast<std::size_t>(2));
+LT_END_AUTO_TEST(overwrite_cookie_single_structured_entry)
 
 // Test empty headers map (using default constructor to get truly empty headers)
 LT_BEGIN_AUTO_TEST(http_response_suite, empty_headers_map)

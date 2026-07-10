@@ -22,6 +22,7 @@
 
 #include <sys/types.h>          // ssize_t (for the deferred() producer)
 
+#include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -229,10 +230,33 @@ void http_response::do_set_cookie(std::string key, std::string value) {
     // Calling validate_http_field first would give an incorrect
     // earlier error citing 'forbidden control character' rather than
     // the real reason.
+    //
+    // v1 overwrite semantics (code-review finding on TASK-064): in v1,
+    // calling with_cookie("sid", "old") then with_cookie("sid", "new")
+    // silently overwrote — one Set-Cookie header on the wire. The
+    // legacy `cookies_` map already preserves that (insert_or_assign),
+    // so the structured mirror must too: an existing structured cookie
+    // with the same name is REPLACED in place (keeping its position);
+    // only a genuinely new name is appended. Name equivalence uses
+    // http::header_comparator — the same case-insensitive ordering that
+    // keys `cookies_` — so the two stores can never diverge. The
+    // structured path (do_set_cookie_struct) intentionally keeps append
+    // semantics.
     cookie new_cookie;
     new_cookie.with_name(key).with_value(value);  // throws before any map mutation
     cookies_.insert_or_assign(std::move(key), std::move(value));
-    structured_cookies_.push_back(std::move(new_cookie));
+    const http::header_comparator name_less;
+    auto it = std::find_if(
+        structured_cookies_.begin(), structured_cookies_.end(),
+        [&](const cookie& existing) {
+            return !name_less(existing.name(), new_cookie.name())
+                && !name_less(new_cookie.name(), existing.name());
+        });
+    if (it != structured_cookies_.end()) {
+        *it = std::move(new_cookie);
+    } else {
+        structured_cookies_.push_back(std::move(new_cookie));
+    }
 }
 
 void http_response::do_set_cookie_struct(cookie c) {

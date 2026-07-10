@@ -52,37 +52,16 @@ fi
 
 fail=0
 
-# (a) valid YAML  +  (b) valgrind include entry.
-# Both are structural, so PyYAML parses the file and inspects the matrix.
-if ! python3 - "$WF" <<'PY'
+# (a) valid YAML  +  (b) valgrind include entries.
+# Both are structural: the shared locator (scripts/lib/find-matrix-includes.py)
+# parses the file with PyYAML and emits strategy.matrix.include as JSON; the
+# short per-gate check below inspects it.
+if ! include_json="$(python3 scripts/lib/find-matrix-includes.py "$WF")" \
+   || ! printf '%s' "$include_json" | python3 -c '
+import json
 import sys
-try:
-    import yaml
-except ImportError:
-    print("  PyYAML not importable — install with 'pip install pyyaml'", file=sys.stderr)
-    sys.exit(10)
 
-path = sys.argv[1]
-try:
-    doc = yaml.safe_load(open(path))
-except Exception as e:  # noqa: BLE001 - surface any parse failure
-    print(f"  (a) YAML parse error: {e}", file=sys.stderr)
-    sys.exit(2)
-
-# Locate the matrix include list in whichever job defines it (job name is
-# not hard-coded so the gate survives a rename).
-include = None
-for job_name, job in (doc.get("jobs") or {}).items():
-    if not isinstance(job, dict):
-        continue
-    inc = (((job.get("strategy") or {}).get("matrix") or {}).get("include"))
-    if isinstance(inc, list):
-        include = inc
-        break
-if include is None:
-    print("  (b) could not locate strategy.matrix.include in any job", file=sys.stderr)
-    sys.exit(3)
-
+include = json.load(sys.stdin)
 VALGRIND_TOOLS = {"valgrind-memcheck", "valgrind-helgrind", "valgrind-drd"}
 found = {e["build-type"] for e in include
          if isinstance(e, dict) and e.get("build-type") in VALGRIND_TOOLS}
@@ -91,8 +70,9 @@ if found != VALGRIND_TOOLS:
     print(f"  (b) missing valgrind matrix entries: {missing}", file=sys.stderr)
     sys.exit(4)
 
-print("  (a) YAML parses; (b) valgrind-memcheck + valgrind-helgrind + valgrind-drd entries present")
-PY
+print("  (a) YAML parses; (b) valgrind-memcheck + valgrind-helgrind"
+      " + valgrind-drd entries present")
+'
 then
     echo "  (a)/(b) FAILED" >&2
     fail=1

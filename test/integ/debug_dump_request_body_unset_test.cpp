@@ -39,12 +39,22 @@
 
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
+#include "./curl_helpers.hpp"
+
+// Stream capture (dup2 to a tmp file) lets us read what the process
+// writes to stdout/stderr in-test (the magic-static cache in the body
+// pipeline means we cannot easily re-test a different value of the env
+// var after the first webserver dispatch in the same process).
+#include "./stream_capture_helpers.hpp"
 
 using httpserver::webserver;
 using httpserver::create_webserver;
 using httpserver::http_request;
 using httpserver::http_response;
 using httpserver::http_resource;
+using httpserver_test::begin_capture;
+using httpserver_test::end_capture;
+using httpserver_test::writefunc;
 
 namespace {
 
@@ -54,57 +64,6 @@ class echo_resource : public http_resource {
         return http_response::string("OK");
     }
 };
-
-// Redirect FILENO to a tmp file via dup2 so we can read what the
-// process writes to stdout/stderr in-test (the magic-static cache in
-// the body pipeline means we cannot easily re-test a different value
-// of the env var after the first webserver dispatch in the same
-// process).
-struct stream_capture {
-    int saved_fd = -1;
-    int captured_fd = -1;
-    std::string path;
-};
-
-stream_capture begin_capture(int fileno_to_capture, const char* tmp_label) {
-    stream_capture c;
-    char tpl[256];
-    std::snprintf(tpl, sizeof(tpl),
-                  "/tmp/libhttpserver_%s_XXXXXX", tmp_label);
-    c.captured_fd = mkstemp(tpl);
-    c.path = tpl;
-    c.saved_fd = dup(fileno_to_capture);
-    if (fileno_to_capture == STDOUT_FILENO) std::fflush(stdout);
-    else if (fileno_to_capture == STDERR_FILENO) std::fflush(stderr);
-    dup2(c.captured_fd, fileno_to_capture);
-    return c;
-}
-
-std::string end_capture(stream_capture& c, int fileno_to_restore) {
-    if (fileno_to_restore == STDOUT_FILENO) std::fflush(stdout);
-    else if (fileno_to_restore == STDERR_FILENO) std::fflush(stderr);
-    dup2(c.saved_fd, fileno_to_restore);
-    ::close(c.saved_fd);
-    ::close(c.captured_fd);
-    FILE* f = std::fopen(c.path.c_str(), "rb");
-    std::string out;
-    if (f != nullptr) {
-        char buf[4096];
-        size_t n;
-        while ((n = std::fread(buf, 1, sizeof(buf), f)) > 0) {
-            out.append(buf, n);
-        }
-        std::fclose(f);
-    }
-    ::unlink(c.path.c_str());
-    return out;
-}
-
-size_t writefunc(void* contents, size_t size, size_t nmemb, void* userp) {
-    auto* s = static_cast<std::string*>(userp);
-    s->append(static_cast<const char*>(contents), size * nmemb);
-    return size * nmemb;
-}
 
 }  // namespace
 

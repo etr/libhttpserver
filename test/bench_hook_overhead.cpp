@@ -71,12 +71,9 @@
 #define HTTPSERVER_COMPILATION 1  // unlock webserver_test_access
 
 #include <atomic>
-#include <algorithm>
-#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <functional>
-#include <vector>
 
 #include "httpserver/create_webserver.hpp"
 #include "httpserver/hook_handle.hpp"
@@ -85,7 +82,7 @@
 #include "httpserver/webserver.hpp"
 #include "httpserver/detail/webserver_impl.hpp"
 
-#include "bench_harness.hpp"  // NOLINT(build/include_subdir) -- do_not_optimize
+#include "bench_harness.hpp"  // NOLINT(build/include_subdir) -- do_not_optimize, measure_median_ns
 
 namespace hs = httpserver;
 
@@ -126,61 +123,27 @@ constexpr double kAbsoluteGateNsCeiling = 50.0;
 // where HOOK_BASELINE_NS is (a)'s median measured in the same run.
 constexpr double kRelativeGateFactor = 2.0;
 
-// Sorts `v` in-place and returns the median. Callers MUST call this
-// before p99_of_sorted because p99_of_sorted requires a pre-sorted
-// vector (its precondition).
-double sort_and_median(std::vector<double>& v) {
-    std::sort(v.begin(), v.end());
-    return v[v.size() / 2];
-}
-
-double p99_of_sorted(std::vector<double>& v) {
-    // Precondition: v is sorted ascending (call sort_and_median first).
-    const std::size_t idx = (v.size() * 99) / 100;
-    return v[std::min(idx, v.size() - 1)];
-}
-
 double measure_gate_cost(hs::webserver& ws, std::size_t outer, std::size_t inner) {
     auto* impl = hs::webserver_test_access::impl(ws);
     constexpr std::size_t kPhaseIdx =
         static_cast<std::size_t>(hs::hook_phase::response_sent);
     auto& gate = impl->any_hooks_[kPhaseIdx];
 
-    // Warmup: 10 000 iterations prime the branch predictor. The true
-    // thermal / instruction-cache warmup happens during the first outer
-    // round (1 M loads), which dwarfs this explicit pre-loop — the
-    // median of 51 rounds is robust to 1-2 high outlier early rounds.
-    for (std::size_t i = 0; i < 10'000; ++i) {
-        const bool v = gate.load(std::memory_order_relaxed);
-        do_not_optimize(v);
-    }
-
-    using clock = std::chrono::steady_clock;
-    std::vector<double> samples_ns;
-    samples_ns.reserve(outer);
-    for (std::size_t r = 0; r < outer; ++r) {
-        const auto t0 = clock::now();
-        for (std::size_t i = 0; i < inner; ++i) {
+    // measure_median_ns's default 10 000-iteration warmup primes the
+    // branch predictor. The true thermal / instruction-cache warmup
+    // happens during the first outer round (1 M loads), which dwarfs the
+    // explicit pre-loop — the median of 51 rounds is robust to 1-2 high
+    // outlier early rounds.
+    //
+    // label=nullptr keeps this bench's historical unlabeled output line
+    // ("    median=..."), which CI may parse.
+    return measure_median_ns(
+        nullptr,
+        [&]() {
             const bool v = gate.load(std::memory_order_relaxed);
             do_not_optimize(v);
-        }
-        const auto t1 = clock::now();
-        const double ns_per_call =
-            std::chrono::duration<double, std::nano>(t1 - t0).count() / inner;
-        samples_ns.push_back(ns_per_call);
-    }
-    // Record arrival-order extremes BEFORE sorting (min_ns / max_ns are
-    // the cheapest and most expensive outer rounds in wall-clock order,
-    // useful for spotting warm-up outliers).
-    const double min_ns = *std::min_element(samples_ns.begin(), samples_ns.end());
-    const double max_ns = *std::max_element(samples_ns.begin(), samples_ns.end());
-    // sort_and_median sorts samples_ns in-place; p99_of_sorted relies on
-    // this sorted state (precondition), so this call order is mandatory.
-    const double median = sort_and_median(samples_ns);
-    const double p99 = p99_of_sorted(samples_ns);
-    std::printf("    median=%.3fns  p99=%.3fns  (min=%.3fns max=%.3fns)\n",
-                median, p99, min_ns, max_ns);
-    return median;
+        },
+        outer, inner);
 }
 
 }  // namespace

@@ -13,11 +13,11 @@ Three transitional surfaces survive TASK-053's v1→v2 dispatch cutover:
 Cut them in a single, well-tested PR so the v2 dispatch path is the only one.
 
 **Action Items:**
-- [ ] Identify every reader of `registered_resources*` (grep `src/`). For each: rewrite to consume the v2 route table or registration journal directly.
-- [ ] Delete `registered_resources*` maps + mutex from `webserver_impl`.
-- [ ] Delete `namespace compat` from `create_webserver.hpp`, the `[[deprecated]]` overload, and the paired `-Wdeprecated-declarations` push/pop.
-- [ ] Drop the same `-Wdeprecated-declarations` suppression in `src/http_resource.cpp:81-115` once the migration to `std::atomic<std::shared_ptr<T>>` (TASK-070) makes it unnecessary, or hand it off to TASK-070 explicitly if scope expands.
-- [ ] RELEASE_NOTES.md: document the binary/source incompatibility under "Removals".
+- [x] Identify every reader of `registered_resources*` (grep `src/`). For each: rewrite to consume the v2 route table or registration journal directly.
+- [x] Delete `registered_resources*` maps + mutex from `webserver_impl`.
+- [x] Delete `namespace compat` from `create_webserver.hpp`, the `[[deprecated]]` overload, and the paired `-Wdeprecated-declarations` push/pop.
+- [x] Drop the same `-Wdeprecated-declarations` suppression in `src/http_resource.cpp:81-115` once the migration to `std::atomic<std::shared_ptr<T>>` (TASK-070) makes it unnecessary, or hand it off to TASK-070 explicitly if scope expands. *(Handed off to TASK-070, which carries it in its action items; deliberately deferred, not forgotten.)*
+- [x] RELEASE_NOTES.md: document the binary/source incompatibility under "Removals".
 
 **Dependencies:**
 - Blocked by: TASK-053 (Done)

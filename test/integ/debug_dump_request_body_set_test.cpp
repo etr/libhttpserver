@@ -45,12 +45,17 @@
 
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
+#include "./curl_helpers.hpp"
+#include "./stream_capture_helpers.hpp"
 
 using httpserver::webserver;
 using httpserver::create_webserver;
 using httpserver::http_request;
 using httpserver::http_response;
 using httpserver::http_resource;
+using httpserver_test::begin_capture;
+using httpserver_test::end_capture;
+using httpserver_test::writefunc;
 
 namespace {
 
@@ -60,52 +65,6 @@ class echo_resource : public http_resource {
         return http_response::string("OK");
     }
 };
-
-struct stream_capture {
-    int saved_fd = -1;
-    int captured_fd = -1;
-    std::string path;
-};
-
-stream_capture begin_capture(int fileno_to_capture, const char* tmp_label) {
-    stream_capture c;
-    char tpl[256];
-    std::snprintf(tpl, sizeof(tpl),
-                  "/tmp/libhttpserver_%s_XXXXXX", tmp_label);
-    c.captured_fd = mkstemp(tpl);
-    c.path = tpl;
-    c.saved_fd = dup(fileno_to_capture);
-    if (fileno_to_capture == STDOUT_FILENO) std::fflush(stdout);
-    else if (fileno_to_capture == STDERR_FILENO) std::fflush(stderr);
-    dup2(c.captured_fd, fileno_to_capture);
-    return c;
-}
-
-std::string end_capture(stream_capture& c, int fileno_to_restore) {
-    if (fileno_to_restore == STDOUT_FILENO) std::fflush(stdout);
-    else if (fileno_to_restore == STDERR_FILENO) std::fflush(stderr);
-    dup2(c.saved_fd, fileno_to_restore);
-    ::close(c.saved_fd);
-    ::close(c.captured_fd);
-    FILE* f = std::fopen(c.path.c_str(), "rb");
-    std::string out;
-    if (f != nullptr) {
-        char buf[4096];
-        size_t n;
-        while ((n = std::fread(buf, 1, sizeof(buf), f)) > 0) {
-            out.append(buf, n);
-        }
-        std::fclose(f);
-    }
-    ::unlink(c.path.c_str());
-    return out;
-}
-
-size_t writefunc(void* contents, size_t size, size_t nmemb, void* userp) {
-    auto* s = static_cast<std::string*>(userp);
-    s->append(static_cast<const char*>(contents), size * nmemb);
-    return size * nmemb;
-}
 
 CURLcode run_one_post(uint16_t port, const std::string& path,
                       const std::string& body) {
@@ -143,6 +102,16 @@ LT_BEGIN_AUTO_TEST(dump_set_suite, dump_and_warn_then_warn_only_once)
     ws1->start(false);
     CURLcode res1 = run_one_post(9182, "echo", "secret=opted-in-body");
     ws1->stop();
+    // Quiesce point for the one-warning-per-process assertion below:
+    // webserver::stop() (called above and again by ~webserver via
+    // reset()) invokes MHD_stop_daemon(), which blocks until all active
+    // connections are drained and every libmicrohttpd worker thread has
+    // been joined (see webserver::stop() in src/detail/webserver_setup.cpp
+    // and the stop_and_wait() contract in src/webserver.cpp). ws1's MHD
+    // threads are therefore fully gone before ws2 starts -- nothing from
+    // ws1 can write to the captured stderr concurrently with ws2's
+    // start(), so counting "SECURITY WARNING" occurrences across both
+    // lifetimes is race-free.
     ws1.reset();
 
     // ---- Second webserver: warning must NOT fire again ------------------

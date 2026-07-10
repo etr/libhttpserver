@@ -88,26 +88,10 @@ LT_BEGIN_AUTO_TEST(hooks_log_access_alias_slot_suite,
                 static_cast<std::size_t>(0));
 LT_END_AUTO_TEST(log_access_populates_alias_slot_not_vector)
 
-LT_BEGIN_AUTO_TEST(hooks_log_access_alias_slot_suite,
-                   user_add_hook_grows_vector_alias_slot_untouched)
-    auto logger = [](const std::string&) {};
-    webserver ws{create_webserver(8244)
-        .log_access(logger)};
-    auto* impl = impl_of(ws);
-
-    LT_CHECK(static_cast<bool>(impl->log_access_alias_));
-    LT_CHECK_EQ(impl->hooks_response_sent_.size(),
-                static_cast<std::size_t>(0));
-
-    auto h = ws.add_hook(hook_phase::response_sent,
-        std::function<void(const response_sent_ctx&)>(
-            [](const response_sent_ctx&) {}));
-
-    // The user vector grew by 1; the alias slot is still set independently.
-    LT_CHECK(static_cast<bool>(impl->log_access_alias_));
-    LT_CHECK_EQ(impl->hooks_response_sent_.size(),
-                static_cast<std::size_t>(1));
-LT_END_AUTO_TEST(user_add_hook_grows_vector_alias_slot_untouched)
+// NOTE: a former user_add_hook_grows_vector_alias_slot_untouched test
+// duplicated steps (a) and (b) of
+// log_access_alias_is_immutable_after_construction below; that test is
+// now the single owner of the full add/remove/invoke alias contract.
 
 // SECURITY: path with embedded newline must not appear verbatim in the
 // logged line. Control characters (< 0x20 or == 0x7F) must be replaced

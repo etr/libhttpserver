@@ -61,6 +61,10 @@ namespace {
 
 std::atomic<bool> g_first_handler_saw_sentinel{false};
 std::atomic<bool> g_second_handler_saw_sentinel{false};
+// Black-box companion to the buffer peek: request 2 sends no
+// Authorization header, so its get_user() must never surface the
+// sentinel through the public API regardless of arena internals.
+std::atomic<bool> g_second_get_user_leaked_sentinel{false};
 std::atomic<int> g_request_count{0};
 std::atomic<int> g_connection_opened_count{0};
 
@@ -101,7 +105,14 @@ class peek_resource : public httpserver::http_resource {
         // (Authorization header present) this is where the sentinel
         // lands; on request 2 (no Authorization header) this is a no-op
         // returning an empty string.
-        (void)req.get_user();
+        const std::string user{req.get_user()};
+        // Raw buffer peek: WHITE-BOX belt-and-suspenders coupled to the
+        // connection_state layout (the unit-level CWE-226 pin lives in
+        // connection_state_sentinel_test.cpp). The black-box acceptance
+        // signal is the get_user() check below: if request 2's decoded
+        // credentials ever surface request 1's sentinel through the
+        // public API, that is a true information leak independent of
+        // how the arena is stored or laid out.
         const bool found =
             buffer_contains_sentinel(cs->initial_buffer_.data(),
                                      cs->initial_buffer_.size());
@@ -109,6 +120,8 @@ class peek_resource : public httpserver::http_resource {
             g_first_handler_saw_sentinel.store(found);
         } else if (n == 2) {
             g_second_handler_saw_sentinel.store(found);
+            g_second_get_user_leaked_sentinel.store(
+                user.find(kSentinel) != std::string::npos);
         }
         return httpserver::http_response::string("OK");
     }
@@ -120,6 +133,7 @@ LT_BEGIN_SUITE(connection_state_body_residue_suite)
     void set_up() {
         g_first_handler_saw_sentinel.store(false);
         g_second_handler_saw_sentinel.store(false);
+        g_second_get_user_leaked_sentinel.store(false);
         g_request_count.store(0);
         g_connection_opened_count.store(0);
     }
@@ -197,6 +211,11 @@ LT_BEGIN_AUTO_TEST(connection_state_body_residue_suite,
     // handler on the same connection, the buffer has been cleared by
     // reset_arena() and the credential sentinel is not observable.
     LT_CHECK(!g_second_handler_saw_sentinel.load());
+    // Black-box assertion: request 2's get_user() (public API, no
+    // Authorization header sent) must never surface request 1's
+    // credentials. Unlike the buffer peek above this survives any
+    // refactor of how connection_state is stored or laid out.
+    LT_CHECK(!g_second_get_user_leaked_sentinel.load());
 #endif
 LT_END_AUTO_TEST(sentinel_in_first_body_not_observable_in_second)
 
