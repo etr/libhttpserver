@@ -3108,10 +3108,6 @@ LT_BEGIN_AUTO_TEST(basic_suite, render_fallthrough_to_base)
     ws2.stop();
 LT_END_AUTO_TEST(render_fallthrough_to_base)
 
-// Note: CONNECT method is a special HTTP method for tunneling that
-// behaves differently than standard HTTP methods, so we don't test
-// it the same way as other methods.
-
 // Test all HTTP methods falling through to base render()
 LT_BEGIN_AUTO_TEST(basic_suite, all_methods_fallthrough_to_render)
     // render_override_resource only defines render(), not render_get/POST/etc.

@@ -197,7 +197,6 @@ LT_END_AUTO_TEST(unique_ptr_overload_compiles_and_serves)
 LT_BEGIN_AUTO_TEST(webserver_register_smartptr_suite,
                    unique_ptr_dtor_runs_on_webserver_destruction)
     std::atomic<int> dtor_count{0};
-    LT_CHECK_EQ(dtor_count.load(), 0);
     {
         webserver ws{create_webserver(0)};
         ws.register_resource(
@@ -213,7 +212,6 @@ LT_END_AUTO_TEST(unique_ptr_dtor_runs_on_webserver_destruction)
 LT_BEGIN_AUTO_TEST(webserver_register_smartptr_suite,
                    shared_ptr_caller_keeps_resource_alive)
     std::atomic<int> dtor_count{0};
-    LT_CHECK_EQ(dtor_count.load(), 0);
     auto sp = std::make_shared<counted_resource>(&dtor_count);
     {
         webserver ws{create_webserver(0)};

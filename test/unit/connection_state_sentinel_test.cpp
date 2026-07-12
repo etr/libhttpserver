@@ -33,29 +33,28 @@ LT_END_SUITE(connection_state_sentinel_suite)
 // reset_arena() leaves every byte at 0.
 LT_BEGIN_AUTO_TEST(connection_state_sentinel_suite, reset_arena_zeros_full_buffer)
     httpserver::detail::connection_state cs;
+    auto byte_val = [&cs](std::size_t i) {
+        return static_cast<unsigned>(
+                   static_cast<unsigned char>(cs.initial_buffer_[i]));
+    };
 
     // Prefill every byte with 0xDE so a no-op would be detected.
     std::memset(cs.initial_buffer_.data(), 0xDE,
                 httpserver::detail::connection_state::ARENA_INITIAL_BYTES);
-    // Sanity check: the prefill landed.
-    LT_CHECK_EQ(static_cast<unsigned>(
-                    static_cast<unsigned char>(cs.initial_buffer_[0])),
-                0xDEu);
-    LT_CHECK_EQ(static_cast<unsigned>(
-                    static_cast<unsigned char>(
-                        cs.initial_buffer_[
-                            httpserver::detail::connection_state::
-                                ARENA_INITIAL_BYTES - 1])),
-                0xDEu);
+    // Sanity check: the prefill landed. ASSERT (not CHECK) so a broken
+    // prefill aborts immediately instead of continuing into the
+    // post-reset_arena() assertions below, which would then be meaningless.
+    LT_ASSERT_EQ(byte_val(0), 0xDEu);
+    LT_ASSERT_EQ(byte_val(httpserver::detail::connection_state::
+                              ARENA_INITIAL_BYTES - 1),
+                 0xDEu);
 
     cs.reset_arena();
 
     // Every byte must be zero after reset_arena().
     for (std::size_t i = 0;
          i < httpserver::detail::connection_state::ARENA_INITIAL_BYTES; ++i) {
-        const auto v = static_cast<unsigned>(
-                          static_cast<unsigned char>(cs.initial_buffer_[i]));
-        if (v != 0u) {
+        if (byte_val(i) != 0u) {
             LT_FAIL("reset_arena left non-zero byte in initial_buffer_");
             break;
         }

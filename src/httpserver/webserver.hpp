@@ -93,6 +93,13 @@ namespace httpserver {
  *      @ref unregister_resource, @ref register_ws_resource,
  *      @ref unregister_ws_resource, @ref block_ip, @ref unblock_ip) are
  *      thread-safe and re-entrant from inside a request handler.
+ *      The route lookup LRU cache (`detail::route_lru_cache`) is consulted
+ *      outside `route_table_mutex_`, so an in-flight request that hit the
+ *      cache may still be served by a resource whose @ref unregister_path /
+ *      @ref unregister_resource call already completed concurrently. No
+ *      use-after-free results -- the cache holds a `shared_ptr` that keeps
+ *      the resource alive -- but the response for that one request may be
+ *      logically stale (served by the just-unregistered handler).
  *   2. The exceptions are @ref stop, @ref stop_and_wait, and the
  *      destructor: each joins libmicrohttpd's worker threads and
  *      therefore deadlocks (or aborts with "Failed to join a thread."
@@ -247,6 +254,7 @@ class webserver {
 
      /// Returns the configured request-validator callback; null if none was set.
      /// The callback may be invoked concurrently from MHD worker threads.
+     [[deprecated("validator callback is not invoked by v2 dispatch; use webserver::add_hook(hook_phase::request_received, ...) instead")]]
      validator_ptr get_request_validator() const {
          return validator;
      }

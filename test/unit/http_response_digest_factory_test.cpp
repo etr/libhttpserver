@@ -167,6 +167,20 @@ LT_BEGIN_AUTO_TEST(http_response_digest_factory_suite,
 LT_END_AUTO_TEST(digest_challenge_sha256_produces_digest_challenge_kind)
 
 LT_BEGIN_AUTO_TEST(http_response_digest_factory_suite,
+                   digest_challenge_sha512_256_produces_digest_challenge_kind)
+    // Observable contract: kind() == digest_challenge regardless of
+    // which algorithm is selected (mirrors the SHA-256 test above for the
+    // SHA512_256 enumerator).
+    digest_challenge ch;
+    ch.realm = "r";
+    ch.algorithm = http_utils::digest_algorithm::SHA512_256;
+    auto r = http_response::unauthorized(std::move(ch));
+    LT_CHECK_EQ(static_cast<int>(r.kind()),
+                static_cast<int>(body_kind::digest_challenge));
+    LT_CHECK_EQ(r.get_status(), 401);
+LT_END_AUTO_TEST(digest_challenge_sha512_256_produces_digest_challenge_kind)
+
+LT_BEGIN_AUTO_TEST(http_response_digest_factory_suite,
                    digest_challenge_opaque_and_domain_produce_digest_challenge_kind)
     // Observable contract: kind() == digest_challenge when opaque and
     // domain are set.  Wire-format coverage lives in
@@ -282,6 +296,42 @@ LT_BEGIN_AUTO_TEST(http_response_digest_factory_suite,
     }
     LT_CHECK_EQ(caught, true);
 LT_END_AUTO_TEST(digest_challenge_nul_in_realm_throws)
+
+LT_BEGIN_AUTO_TEST(http_response_digest_factory_suite,
+                   digest_challenge_nul_in_opaque_throws)
+    bool caught = false;
+    try {
+        digest_challenge ch;
+        ch.realm = "r";
+        std::string r_opaque("opaque");
+        r_opaque.push_back('\0');
+        r_opaque += "evil";
+        ch.opaque = r_opaque;
+        auto r = http_response::unauthorized(std::move(ch));
+        (void)r;
+    } catch (const std::invalid_argument&) {
+        caught = true;
+    }
+    LT_CHECK_EQ(caught, true);
+LT_END_AUTO_TEST(digest_challenge_nul_in_opaque_throws)
+
+LT_BEGIN_AUTO_TEST(http_response_digest_factory_suite,
+                   digest_challenge_nul_in_domain_throws)
+    bool caught = false;
+    try {
+        digest_challenge ch;
+        ch.realm = "r";
+        std::string r_domain("/protected");
+        r_domain.push_back('\0');
+        r_domain += "evil";
+        ch.domain = r_domain;
+        auto r = http_response::unauthorized(std::move(ch));
+        (void)r;
+    } catch (const std::invalid_argument&) {
+        caught = true;
+    }
+    LT_CHECK_EQ(caught, true);
+LT_END_AUTO_TEST(digest_challenge_nul_in_domain_throws)
 
 // ---------------------------------------------------------------------
 // Backward compatibility: the existing string-based

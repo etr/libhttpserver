@@ -290,10 +290,6 @@ int webserver_impl::sni_cert_callback_func(void* cls,
 #endif  // MHD_OPTION_HTTPS_CERT_CALLBACK
 #endif  // HAVE_GNUTLS
 
-}  // namespace detail
-
-namespace detail {
-
 void* webserver_impl::uri_log(void* cls, const char* uri, struct MHD_Connection *con) {
     // Parameter needed to respect MHD interface, but not needed here.
     std::ignore = cls;
@@ -343,7 +339,8 @@ size_t webserver_impl::unescaper_func(void * cls, struct MHD_Connection *c, char
     // No-op unescaper: returns the input length and does not mutate `s`,
     // so MHD ships raw percent-encoded bytes to our get_connection_values
     // callbacks. Decoding is performed by libhttpserver itself:
-    //   - URL path: base_unescaper() in webserver_request.cpp
+    //   - request URL: base_unescaper() in webserver_request.cpp
+    //     (answer_to_connection, line ~418)
     //   - GET args: unescape_in_arena() in http_request_impl.cpp (TASK-072)
     // This is required so we can honour a user-registered unescaper hook
     // (create_webserver::unescaper(...)) and route GET-arg decoding through
@@ -361,16 +358,13 @@ size_t webserver_impl::unescaper_func(void * cls, struct MHD_Connection *c, char
     // binary-zero-aware key/value storage and the size-carrying
     // MHD_KeyValueIteratorN callback in libmicrohttpd 0.9.64 (released
     // 2019-06-09; see ChangeLog entries dated 2019-03-20, 2019-05-01,
-    // 2019-05-03). configure.ac requires libmicrohttpd >= 1.0.0
-    // (released 2024-02), so the original v0.99 bug is no longer
-    // reachable; the no-op stays for the architectural reasons above.
+    // 2019-05-03; https://git.gnunet.org/libmicrohttpd.git/log/?qt=grep&q=0.9.64).
+    // configure.ac requires libmicrohttpd >= 1.0.0 (released 2024-02-01),
+    // so the original v0.99 bug is no longer reachable; the no-op stays
+    // for the architectural reasons above.
     if (s == nullptr) return 0;
     return std::char_traits<char>::length(s);
 }
-
-}  // namespace detail
-
-namespace detail {
 
 MHD_Result webserver_impl::handle_post_form_arg(detail::modded_request* mr,
         const char* key, const char* data, size_t size, uint64_t off) {

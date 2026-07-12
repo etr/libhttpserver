@@ -86,26 +86,6 @@
 
 namespace hs = httpserver;
 
-static constexpr bool kSanitizerBuild =
-#if defined(__SANITIZE_ADDRESS__) \
-    || defined(__SANITIZE_THREAD__) \
-    || defined(__SANITIZE_MEMORY__) \
-    || defined(__SANITIZE_HWADDRESS__)
-    true
-#elif defined(__has_feature)
-#  if __has_feature(address_sanitizer) \
-      || __has_feature(thread_sanitizer) \
-      || __has_feature(memory_sanitizer) \
-      || __has_feature(undefined_behavior_sanitizer)
-    true
-#  else
-    false
-#  endif
-#else
-    false
-#endif
-    ;  // NOLINT(whitespace/semicolon)
-
 namespace {
 
 // Absolute sanity bound on the no-hooks gate-load (a). The dispatch
@@ -184,9 +164,10 @@ int main() {
         (void)h;   // keep the registration alive across the measure
     }
 
-    // HOOK_BASELINE_NS is the no-hooks gate-load median, measured in this
-    // same run so the relative gate auto-tracks runner speed.
-    const double HOOK_BASELINE_NS = median_a;
+    // hook_baseline_ns is the no-hooks gate-load median (HOOK_BASELINE_NS in
+    // the design docs), measured in this same run so the relative gate
+    // auto-tracks runner speed.
+    const double hook_baseline_ns = median_a;
 
     // Relative ceiling: 2 x baseline. At the sub-nanosecond magnitudes
     // these gate loads run at, 2x of a tiny baseline is itself tiny, and
@@ -197,7 +178,7 @@ int main() {
     // real, attributable hook-bus regression appears.
     constexpr double kRelativeGateNoiseFloorNs = 2.0;
     const double relative_gate_ns =
-        kRelativeGateFactor * HOOK_BASELINE_NS + kRelativeGateNoiseFloorNs;
+        kRelativeGateFactor * hook_baseline_ns + kRelativeGateNoiseFloorNs;
 
     std::printf("\nbench_hook_overhead summary:\n");
     std::printf("  (a) zero hooks  median = %.3f ns/call  (HOOK_BASELINE_NS)\n",
@@ -207,7 +188,7 @@ int main() {
                 kAbsoluteGateNsCeiling);
     std::printf("  relative ceiling on (b)       = %.3f ns/call "
                 "(%.1f x %.3f + %.1f floor)\n",
-                relative_gate_ns, kRelativeGateFactor, HOOK_BASELINE_NS,
+                relative_gate_ns, kRelativeGateFactor, hook_baseline_ns,
                 kRelativeGateNoiseFloorNs);
 
     int rc = 0;

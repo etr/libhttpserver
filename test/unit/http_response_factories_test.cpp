@@ -227,6 +227,26 @@ LT_BEGIN_AUTO_TEST(http_response_factories_suite, iovec_factory_single_entry)
     LT_CHECK_EQ(SBO::body_inline(r), true);
 LT_END_AUTO_TEST(iovec_factory_single_entry)
 
+// Pin: pipe() must accept exactly one argument (the fd). Any future
+// reintroduction of a size_hint / chunk_size / Content-Length parameter
+// is a deliberate API change and must update this assertion. See
+// TASK-063 — rationale: an accepted-but-ignored parameter teaches
+// callers a lie; honoring it would require synthesising Content-Length
+// without ground truth from the pipe fd.
+//
+// http_response::pipe is declared unconditionally (no platform guard), so
+// this compile-time signature check has no platform dependency and runs
+// on every CI lane, including Windows.
+using pipe_fn_t = http_response (*)(int);
+static_assert(std::is_same_v<decltype(&http_response::pipe), pipe_fn_t>,
+              "http_response::pipe must take exactly one parameter "
+              "(int fd); see TASK-063");
+
+LT_BEGIN_AUTO_TEST(http_response_factories_suite,
+                   pipe_factory_signature_is_single_arg)
+    LT_CHECK_EQ(true, true);  // littletest needs at least one runtime check
+LT_END_AUTO_TEST(pipe_factory_signature_is_single_arg)
+
 // -----------------------------------------------------------------------
 // pipe() — owns the fd, destructor closes it when not materialized.
 // reason: Windows uses _pipe()/CreatePipe() rather than POSIX ::pipe();
@@ -250,21 +270,6 @@ LT_BEGIN_AUTO_TEST(http_response_factories_suite, pipe_factory_kind)
     LT_CHECK_EQ(errno, EBADF);
     ::close(fds[1]);
 LT_END_AUTO_TEST(pipe_factory_kind)
-
-// Pin: pipe() must accept exactly one argument (the fd). Any future
-// reintroduction of a size_hint / chunk_size / Content-Length parameter
-// is a deliberate API change and must update this assertion. See
-// TASK-063 — rationale: an accepted-but-ignored parameter teaches
-// callers a lie; honoring it would require synthesising Content-Length
-// without ground truth from the pipe fd.
-LT_BEGIN_AUTO_TEST(http_response_factories_suite,
-                   pipe_factory_signature_is_single_arg)
-    using pipe_fn_t = http_response (*)(int);
-    static_assert(std::is_same_v<decltype(&http_response::pipe), pipe_fn_t>,
-                  "http_response::pipe must take exactly one parameter "
-                  "(int fd); see TASK-063");
-    LT_CHECK_EQ(true, true);  // littletest needs at least one runtime check
-LT_END_AUTO_TEST(pipe_factory_signature_is_single_arg)
 #endif  // !_WIN32
 
 // -----------------------------------------------------------------------

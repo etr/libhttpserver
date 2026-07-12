@@ -14,7 +14,7 @@
   - `block_ip(ip)`, `unblock_ip(ip)`
   - `features()` returning a `struct features { bool basic_auth, digest_auth, tls, websocket; }`
   - Operational: `run`, `run_wait`, `get_fdset`, `get_timeout`, `add_connection`, `quiesce`, `get_listen_fd`, `get_active_connections`, `get_bound_port`
-- Consumes: `create_webserver` (builder); user-provided `log_access` / `log_error` / `validator` / `unescaper` / `auth_handler`.
+- Consumes: `create_webserver` (builder); user-provided `log_access` / `log_error` / `validator` (retained for source compatibility; callback is not invoked in dispatch — see RELEASE_NOTES.md "What's gone") / `unescaper` / `auth_handler`.
 
 **Key design notes:**
 - Public methods are thread-safe and re-entrant from handlers, with two documented exceptions (`stop()` and `~webserver()` deadlock from inside a handler — they wait for the calling thread to drain).

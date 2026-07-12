@@ -46,14 +46,12 @@ LT_BEGIN_AUTO_TEST(cookie_render_suite, with_name_returns_lvalue_ref_on_lvalue)
     cookie c;
     static_assert(std::is_same_v<decltype(c.with_name(std::string{})), cookie&>,
                   "lvalue with_name must return cookie&");
-    LT_CHECK_EQ(true, true);
 LT_END_AUTO_TEST(with_name_returns_lvalue_ref_on_lvalue)
 
 LT_BEGIN_AUTO_TEST(cookie_render_suite, with_name_returns_rvalue_ref_on_rvalue)
     static_assert(std::is_same_v<decltype(cookie{}.with_name(std::string{})),
                                  cookie&&>,
                   "rvalue with_name must return cookie&&");
-    LT_CHECK_EQ(true, true);
 LT_END_AUTO_TEST(with_name_returns_rvalue_ref_on_rvalue)
 
 LT_BEGIN_AUTO_TEST(cookie_render_suite, fluent_chain_round_trip_getters)
@@ -240,6 +238,23 @@ LT_BEGIN_AUTO_TEST(cookie_render_suite, render_both_expires_and_max_age)
     LT_CHECK_EQ(expires_pos < max_age_pos, true);
 LT_END_AUTO_TEST(render_both_expires_and_max_age)
 
+LT_BEGIN_AUTO_TEST(cookie_render_suite, roundtrip_expires_and_max_age_name_value)
+    // A cookie with both time-related attributes: rendering then
+    // splitting on the first ';' and re-parsing must recover the
+    // original name=value pair (mirrors roundtrip_first_token_is_name_value
+    // for the Expires + Max-Age attribute combination specifically).
+    std::string out = cookie{}.with_name("sid").with_value("abc")
+                          .with_expires(784111777).with_max_age(3600)
+                          .to_set_cookie_header();
+    auto semi = out.find(';');
+    std::string token = (semi == std::string::npos)
+                              ? out : out.substr(0, semi);
+    auto parsed = cookie::parse_cookie_header(token);
+    LT_CHECK_EQ(parsed.size(), static_cast<std::size_t>(1));
+    LT_CHECK_EQ(parsed[0].name(), std::string("sid"));
+    LT_CHECK_EQ(parsed[0].value(), std::string("abc"));
+LT_END_AUTO_TEST(roundtrip_expires_and_max_age_name_value)
+
 LT_BEGIN_AUTO_TEST(cookie_render_suite, render_same_site_strict)
     LT_CHECK_EQ(cookie{}.with_name("sid").with_value("x")
                 .with_same_site(same_site_mode::strict).to_set_cookie_header(),
@@ -310,6 +325,21 @@ LT_BEGIN_AUTO_TEST(cookie_render_suite, render_throws_when_name_empty)
     catch (const std::invalid_argument&) { threw = true; }
     LT_CHECK_EQ(threw, true);
 LT_END_AUTO_TEST(render_throws_when_name_empty)
+
+// with_name("") is a two-stage contract: validate_name's byte-rejection
+// loop has nothing to iterate over on an empty string, so the setter
+// itself accepts an empty name without throwing. Rejection is deferred
+// to to_set_cookie_header() (pinned above by render_throws_when_name_empty).
+// This test pins the setter-level half of that contract.
+LT_BEGIN_AUTO_TEST(cookie_render_suite, with_name_accepts_empty_string)
+    bool threw = false;
+    try {
+        cookie c = cookie{}.with_name("");
+        LT_CHECK_EQ(c.name(), std::string(""));
+    }
+    catch (const std::invalid_argument&) { threw = true; }
+    LT_CHECK_EQ(threw, false);
+LT_END_AUTO_TEST(with_name_accepts_empty_string)
 
 // ---------------- Cycle 5: parse_cookie_header() ----------------
 
@@ -586,15 +616,10 @@ LT_BEGIN_AUTO_TEST(cookie_render_suite, same_site_none_with_explicit_secure_emit
     std::string out = cookie{}.with_name("sid").with_value("x")
                          .with_secure(true).with_same_site(same_site_mode::none)
                          .to_set_cookie_header();
+    // The exact-string equality above already fully pins the output --
+    // if it matches, "; Secure" occurs exactly once by definition, so a
+    // separate occurrence-count loop would be dead confirmation.
     LT_CHECK_EQ(out, std::string("sid=x; Secure; SameSite=None"));
-    // Belt-and-suspenders: count occurrences of "; Secure" in the output.
-    std::size_t count = 0;
-    std::size_t pos = 0;
-    while ((pos = out.find("; Secure", pos)) != std::string::npos) {
-        ++count;
-        pos += 8; // len("; Secure")
-    }
-    LT_CHECK_EQ(count, static_cast<std::size_t>(1));
 LT_END_AUTO_TEST(same_site_none_with_explicit_secure_emits_single_secure_token)
 
 LT_BEGIN_AUTO_TEST_ENV()

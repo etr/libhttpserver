@@ -117,13 +117,25 @@ else
     fail "missing per-tool check-valgrind-\${TOOL} invocation should exit 1"
 fi
 
-# Test 5: results-print step surfaces only memcheck (assertion e) — exit 1
-NO_LOGS="$TMPDIR_BASE/no_logs.yml"
-sed 's/test-suite-memcheck.log test-suite-helgrind.log test-suite-drd.log/test-suite-memcheck.log/' "$GOOD" > "$NO_LOGS"
-if ! bash "$SCRIPT" "$NO_LOGS" >/dev/null 2>&1; then
-    ok "helgrind/drd logs not surfaced exits 1"
+# Test 5a: results-print step surfaces memcheck + drd but not helgrind
+# (assertion e1) — exit 1. Isolates e1 from e2 so a regression that only
+# breaks the helgrind-log check cannot hide behind a still-passing e2.
+NO_HELGRIND_LOG="$TMPDIR_BASE/no_helgrind_log.yml"
+sed 's/test-suite-memcheck.log test-suite-helgrind.log test-suite-drd.log/test-suite-memcheck.log test-suite-drd.log/' "$GOOD" > "$NO_HELGRIND_LOG"
+if ! bash "$SCRIPT" "$NO_HELGRIND_LOG" >/dev/null 2>&1; then
+    ok "helgrind log not surfaced exits 1 (e1)"
 else
-    fail "helgrind/drd logs not surfaced should exit 1"
+    fail "helgrind log not surfaced should exit 1 (e1)"
+fi
+
+# Test 5b: results-print step surfaces memcheck + helgrind but not drd
+# (assertion e2) — exit 1. Isolates e2 from e1 the same way.
+NO_DRD_LOG="$TMPDIR_BASE/no_drd_log.yml"
+sed 's/test-suite-memcheck.log test-suite-helgrind.log test-suite-drd.log/test-suite-memcheck.log test-suite-helgrind.log/' "$GOOD" > "$NO_DRD_LOG"
+if ! bash "$SCRIPT" "$NO_DRD_LOG" >/dev/null 2>&1; then
+    ok "drd log not surfaced exits 1 (e2)"
+else
+    fail "drd log not surfaced should exit 1 (e2)"
 fi
 
 # Test 6: invalid YAML (assertion a) — exit 1
@@ -159,11 +171,10 @@ fi
 # `make "check-valgrind-${TOOL}"` must fail assertion (d) because the target
 # does not exist in AX_VALGRIND_CHECK (which only generates check-valgrind-*).
 BARE_TARGET="$TMPDIR_BASE/bare_target.yml"
-# Build the fixture from the good fixture but replace check-valgrind-${TOOL}
-# with check-${TOOL}.  write_good already uses check-${TOOL} (which is what the
-# old gate incorrectly accepted); once the gate is tightened this test catches
-# any regression back to the loose check.
-# We generate the fixture independently so the test is decoupled from write_good.
+# The fixture is generated independently (not derived from write_good) using
+# the bare "check-${TOOL}" target, missing the "valgrind-" prefix. write_good
+# correctly uses "check-valgrind-${TOOL}"; this fixture intentionally uses
+# the old, non-existent bare form so assertion (d) must catch it.
 cat > "$BARE_TARGET" <<'EOF'
 name: verify
 on: [push]
@@ -218,6 +229,42 @@ if ! bash "$SCRIPT" "$BARE_TARGET" >/dev/null 2>&1; then
     ok "bare check-\${TOOL} (missing valgrind- prefix) exits 1"
 else
     fail "bare check-\${TOOL} (missing valgrind- prefix) should exit 1 — gate too loose"
+fi
+
+# Test 8: workflow file does not exist (early file-existence guard) — exit 1
+if ! bash "$SCRIPT" "$TMPDIR_BASE/does-not-exist.yml" >/dev/null 2>&1; then
+    ok "missing workflow file exits 1"
+else
+    fail "missing workflow file should exit 1"
+fi
+
+# Test 9: configure.ac has AX_VALGRIND_CHECK before
+# AX_VALGRIND_DFLT([sgcheck]...) (assertion f) — exit 1. Uses the optional
+# second positional argument so assertion (f) is exercised against a
+# synthetic configure.ac instead of the real repo file.
+BAD_CONFIGURE_AC="$TMPDIR_BASE/bad_configure.ac"
+cat > "$BAD_CONFIGURE_AC" <<'EOF'
+AC_INIT([libhttpserver], [2.0.0])
+AX_VALGRIND_CHECK
+AX_VALGRIND_DFLT([sgcheck], [off])
+EOF
+if ! bash "$SCRIPT" "$GOOD" "$BAD_CONFIGURE_AC" >/dev/null 2>&1; then
+    ok "AX_VALGRIND_DFLT([sgcheck]...) after AX_VALGRIND_CHECK exits 1 (f)"
+else
+    fail "AX_VALGRIND_DFLT([sgcheck]...) after AX_VALGRIND_CHECK should exit 1 (f)"
+fi
+
+# Test 10: configure.ac missing AX_VALGRIND_DFLT([sgcheck]...) entirely
+# (assertion f) — exit 1.
+MISSING_DFLT_CONFIGURE_AC="$TMPDIR_BASE/missing_dflt_configure.ac"
+cat > "$MISSING_DFLT_CONFIGURE_AC" <<'EOF'
+AC_INIT([libhttpserver], [2.0.0])
+AX_VALGRIND_CHECK
+EOF
+if ! bash "$SCRIPT" "$GOOD" "$MISSING_DFLT_CONFIGURE_AC" >/dev/null 2>&1; then
+    ok "missing AX_VALGRIND_DFLT([sgcheck]...) exits 1 (f)"
+else
+    fail "missing AX_VALGRIND_DFLT([sgcheck]...) should exit 1 (f)"
 fi
 
 echo ""

@@ -136,6 +136,24 @@ else
     fail "invalid YAML should exit 1"
 fi
 
+# Test 7: valid YAML but no strategy.matrix.include at all (covers the
+# shared locator's scripts/lib/find-matrix-includes.py sys.exit(3) path,
+# distinct from Test 2's "include present but no opted-in entry" case,
+# which is find-matrix-includes.py's sys.exit(4) path) — exit 1.
+NO_INCLUDE="$TMPDIR_BASE/no_include.yml"
+cat > "$NO_INCLUDE" <<'EOF'
+name: verify
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps: []
+EOF
+if ! bash "$SCRIPT" "$NO_INCLUDE" >/dev/null 2>&1; then
+    ok "no strategy.matrix.include at all exits 1"
+else
+    fail "no strategy.matrix.include at all should exit 1"
+fi
+
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

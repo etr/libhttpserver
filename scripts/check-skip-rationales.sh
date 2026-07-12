@@ -84,7 +84,7 @@ for file in "${WATCHED_FILES[@]}"; do
 
         if [ "$has_reason" != "1" ]; then
             # Trim leading whitespace from the directive for the report.
-            trimmed_directive="${directive#"${directive%%[![:space:]]*}"}"
+            trimmed_directive=$(printf '%s' "${directive}" | sed 's/^[[:space:]]*//')
             echo "  $file:$lineno: missing // reason: comment for '$trimmed_directive'" >&2
             violations=$((violations + 1))
         fi

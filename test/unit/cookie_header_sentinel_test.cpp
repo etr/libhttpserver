@@ -45,7 +45,6 @@ LT_END_SUITE(cookie_header_sentinel_suite)
 LT_BEGIN_AUTO_TEST(cookie_header_sentinel_suite, cookie_is_class_type)
     static_assert(std::is_class_v<cookie>,
                   "httpserver::cookie must be a class type");
-    LT_CHECK_EQ(std::is_class_v<cookie>, true);
 LT_END_AUTO_TEST(cookie_is_class_type)
 
 LT_BEGIN_AUTO_TEST(cookie_header_sentinel_suite, cookie_default_constructible_empty)
@@ -71,7 +70,6 @@ LT_BEGIN_AUTO_TEST(cookie_header_sentinel_suite, same_site_mode_enum_values_dist
     static_assert(static_cast<int>(same_site_mode::lax)
                       != static_cast<int>(same_site_mode::none),
                   "lax and none must be distinct");
-    LT_CHECK_EQ(true, true);
 LT_END_AUTO_TEST(same_site_mode_enum_values_distinct)
 
 LT_BEGIN_AUTO_TEST(cookie_header_sentinel_suite, cookie_is_copy_and_move_constructible)
@@ -83,13 +81,11 @@ LT_BEGIN_AUTO_TEST(cookie_header_sentinel_suite, cookie_is_copy_and_move_constru
                   "cookie must be move-constructible");
     static_assert(std::is_move_assignable_v<cookie>,
                   "cookie must be move-assignable");
-    LT_CHECK_EQ(true, true);
 LT_END_AUTO_TEST(cookie_is_copy_and_move_constructible)
 
 LT_BEGIN_AUTO_TEST(cookie_header_sentinel_suite, cookie_is_default_constructible_noexcept)
     static_assert(std::is_nothrow_default_constructible_v<cookie>,
                   "cookie default constructor must be noexcept");
-    LT_CHECK_EQ(true, true);
 LT_END_AUTO_TEST(cookie_is_default_constructible_noexcept)
 
 LT_BEGIN_AUTO_TEST_ENV()

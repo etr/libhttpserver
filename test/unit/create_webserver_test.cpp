@@ -346,13 +346,20 @@ LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_log_error)
     LT_CHECK_NOTHROW(create_webserver(8080).log_error(log_error_handler));
 LT_END_AUTO_TEST(builder_log_error)
 
-// Test validator callback
+// Test validator callback. Deprecated (validator is not invoked by v2
+// dispatch; see webserver.hpp get_request_validator()); this test only
+// pins that the deprecated setter still compiles and stores the callback.
+// Suppress the deprecation warning locally so the test binary still
+// builds with -Werror.
 LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_validator)
     auto validator_handler = [](const std::string& url) {
         (void)url;
         return true;
     };
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     LT_CHECK_NOTHROW(create_webserver(8080).validator(validator_handler));
+#pragma GCC diagnostic pop
 LT_END_AUTO_TEST(builder_validator)
 
 // Test unescaper callback (signature: void(*)(std::string&))

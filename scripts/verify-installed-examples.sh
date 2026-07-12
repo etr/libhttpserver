@@ -23,7 +23,7 @@
 # Reports all compile failures before exiting non-zero, rather than stopping
 # at the first failure, so a single CI run surfaces all broken examples.
 
-set -eu
+set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD_DIR="${BUILD_DIR:-$REPO_ROOT/build}"
@@ -78,7 +78,8 @@ HAVE_BAUTH=0
 HAVE_DAUTH=0
 HAVE_WS=0
 if [ -f "$TOP_MAKEFILE" ]; then
-    cxxflags_line="$(grep -E '^AM_CXXFLAGS' "$TOP_MAKEFILE" | head -1)"
+    cxxflags_line="$(grep -E '^AM_CXXFLAGS' "$TOP_MAKEFILE" | head -1 || true)"
+    [ -n "$cxxflags_line" ] || echo "verify-installed-examples: WARNING: no AM_CXXFLAGS line found in $TOP_MAKEFILE; HAVE_* feature flags will default to 0" >&2
     case "$cxxflags_line" in
         *-DHAVE_GNUTLS*) HAVE_GNUTLS=1 ;;
     esac

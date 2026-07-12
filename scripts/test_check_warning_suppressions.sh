@@ -15,10 +15,10 @@ SCRIPT="$(cd "$(dirname "$0")" && pwd)/check-warning-suppressions.sh"
 # Create a temp work area and override the src/ search inside the script.
 # We do this by creating a temp directory tree that mimics src/ and then
 # running the script with REPO_ROOT overridden via a symlink approach.
-TMPDIR_BASE="$(mktemp -d)"
-trap 'rm -rf "$TMPDIR_BASE"' EXIT
+WORK_DIR="$(mktemp -d)"
+trap 'rm -rf "$WORK_DIR"' EXIT
 
-FAKE_REPO="$TMPDIR_BASE/repo"
+FAKE_REPO="$WORK_DIR/repo"
 mkdir -p "$FAKE_REPO/scripts" "$FAKE_REPO/src"
 
 # Copy the script so it can be run from the fake repo root.
@@ -88,6 +88,45 @@ if ! (cd "$FAKE_REPO" && bash scripts/check-warning-suppressions.sh 2>/dev/null)
     ok "no-push-pop exits 1"
 else
     fail "no-push-pop should exit 1"
+fi
+
+# Test 6: interleaved push/pop/pragma/pop — documents the KNOWN LIMITATION
+# called out in check-warning-suppressions.sh's header comment. The script's
+# "nearest push before" / "nearest pop after" heuristic does not track
+# bracket depth, so a pragma that sits AFTER an already-closed push/pop pair
+# but BEFORE a later, unrelated pop is incorrectly treated as bracketed
+# (push_before and pop_after are both non-zero even though the pragma is not
+# actually inside any push/pop block). This fixture pins that current
+# (permissive) behaviour — should exit 0 — so any change tightening the
+# bracket-depth tracking is a deliberate, visible improvement rather than an
+# accidental behaviour change.
+#
+# Uses its OWN isolated fake repo (not $FAKE_REPO): the script scans every
+# file under src/, and $FAKE_REPO/src/ already accumulated real violations
+# from Tests 3-5 above, which would make this assertion vacuously true
+# regardless of the interleaved fixture's own (allowed) shape.
+FAKE_REPO2="$WORK_DIR/repo2"
+mkdir -p "$FAKE_REPO2/scripts" "$FAKE_REPO2/src"
+cp "$SCRIPT" "$FAKE_REPO2/scripts/check-warning-suppressions.sh"
+chmod +x "$FAKE_REPO2/scripts/check-warning-suppressions.sh"
+cat > "$FAKE_REPO2/src/interleaved_known_limitation.cpp" <<'EOF'
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-variable"
+int unused_var = 0;
+#pragma GCC diagnostic pop
+// Unrelated code between the closed push/pop block above and the
+// nominally-unbracketed pragma below.
+#pragma GCC diagnostic ignored "-Warray-bounds"
+int arr[5];
+int x = arr[10];
+int y = arr[11];
+#pragma GCC diagnostic pop
+int main() { return 0; }
+EOF
+if (cd "$FAKE_REPO2" && bash scripts/check-warning-suppressions.sh 2>/dev/null); then
+    ok "interleaved push/pop/pragma/pop (known limitation) exits 0"
+else
+    fail "interleaved push/pop/pragma/pop (known limitation) should exit 0"
 fi
 
 echo ""

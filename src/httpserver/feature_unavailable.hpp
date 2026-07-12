@@ -57,6 +57,9 @@ namespace httpserver {
  *     `HAVE_DAUTH`-off build. The `create_webserver` setters accept all
  *     values without throwing; feature-unavailability is validated
  *     lazily at `webserver` construction, not at the setter call.
+ *   - @ref http_response::unauthorized(digest_challenge) — thrown on a
+ *     `HAVE_DAUTH`-off build. The declaration is unconditional
+ *     (PRD-FLG-REQ-001); only the definition branches on `HAVE_DAUTH`.
  *   - @ref webserver::register_ws_resource and
  *     @ref webserver::unregister_ws_resource — on a `HAVE_WEBSOCKET`-off
  *     build (every websocket entry point throws this).

@@ -159,6 +159,14 @@ namespace detail {
 // "unpredictable enough that clients cannot guess server state"
 // property the RFC requires; the strong nonce HMAC keying is owned by
 // libmicrohttpd (MHD_OPTION_DIGEST_AUTH_RANDOM seed on the create_webserver).
+//
+// Note: std::random_device's fallback behaviour when no hardware/OS entropy
+// source is available is implementation-defined -- it may fall back to a
+// deterministic PRNG on some platforms/standard libraries. That does not
+// weaken security here: the RFC 7616 opaque is an identifier (not a
+// secret), and the anti-guessing guarantee for digest auth comes from
+// libmicrohttpd's HMAC-keyed nonce (MHD_OPTION_DIGEST_AUTH_RANDOM), not
+// from this value.
 #ifdef HAVE_DAUTH
 static std::string generate_random_hex_opaque_() {
     std::random_device rd;
@@ -166,12 +174,12 @@ static std::string generate_random_hex_opaque_() {
     std::string out;
     out.reserve(32);
     for (int i = 0; i < 8; ++i) {
-        unsigned int v = rd();
+        uint32_t sample = static_cast<uint32_t>(rd());
         // Pack 4 bytes -> 8 hex chars per std::random_device sample.
         for (int b = 0; b < 4; ++b) {
-            unsigned int byte = (v >> (b * 8)) & 0xFFu;
-            out.push_back(kHex[(byte >> 4) & 0xFu]);
-            out.push_back(kHex[byte & 0xFu]);
+            uint32_t octet = (sample >> (b * 8)) & 0xFFu;
+            out.push_back(kHex[(octet >> 4) & 0xFu]);
+            out.push_back(kHex[octet & 0xFu]);
         }
     }
     return out;

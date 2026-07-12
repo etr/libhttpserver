@@ -29,6 +29,13 @@
 # Exit codes:
 #   0  workflow is wired correctly
 #   1  one or more assertions failed
+#
+# (Internally, the embedded python3 + PyYAML helper below uses its own
+# distinguished exit codes -- notably 10 for "PyYAML not importable" -- to
+# let the caller tell a missing local dependency apart from a genuine
+# parse/structural failure. That distinction is used to print a SKIP
+# notice instead of a hard FAIL for assertions (a)/(b); it does not change
+# this script's own 0/1 contract above.)
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -47,7 +54,11 @@ fail=0
 
 # (a) valid YAML  +  (b) msan include entry with mirrored keys.
 # Both are structural, so PyYAML parses the file and inspects the matrix.
-if ! python3 - "$WF" <<'PY'
+# Exit code is captured explicitly (rather than a plain `if ! ... ; then`)
+# so py_rc == 10 (PyYAML not importable) can be told apart from any other
+# nonzero code and reported as a SKIP rather than a FAIL.
+py_rc=0
+python3 - "$WF" <<'PY' || py_rc=$?
 import sys
 try:
     import yaml
@@ -58,7 +69,7 @@ except ImportError:
 path = sys.argv[1]
 try:
     doc = yaml.safe_load(open(path))
-except Exception as e:  # noqa: BLE001 - surface any parse failure
+except Exception as e:  # broad catch: surface any YAML parse error to stderr
     print(f"  (a) YAML parse error: {e}", file=sys.stderr)
     sys.exit(2)
 
@@ -110,7 +121,10 @@ if problems:
 print(f"  (a) YAML parses; (b) msan include entry present with mirrored keys "
       f"(os={entry['os']}, c-compiler={entry['c-compiler']})")
 PY
-then
+
+if [ "$py_rc" -eq 10 ]; then
+    echo "  (a)/(b) SKIP — PyYAML unavailable (pip install pyyaml)"
+elif [ "$py_rc" -ne 0 ]; then
     echo "  (a)/(b) FAILED" >&2
     fail=1
 fi
@@ -118,7 +132,11 @@ fi
 # (c) The stale ubuntu-18.04 / clang-6.0 commented msan block must be gone.
 # Look for a commented-out matrix entry that pairs a msan build-type with the
 # retired ubuntu-18.04 / clang-6.0 toolchain.
-if grep -qE '^[[:space:]]*#.*ubuntu-18\.04' "$WF" || grep -qE '^[[:space:]]*#.*clang-6\.0' "$WF"; then
+# NOTE: this heuristic is intentionally coarse -- it matches ANY commented
+# line containing one of the two retired strings anywhere in the file, not
+# specifically a commented-out msan matrix entry. Good enough to catch the
+# known-stale block; a future maintainer should not assume it is precise.
+if grep -qE '^[[:space:]]*#.*(ubuntu-18\.04|clang-6\.0)' "$WF"; then
     echo "  (c) stale commented msan block (ubuntu-18.04 / clang-6.0) is still present" >&2
     fail=1
 else

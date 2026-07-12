@@ -301,6 +301,12 @@ bool webserver::start(bool blocking) {
     // notice on every fresh process invocation that actually starts
     // accepting traffic. Defined in webserver_body_pipeline.cpp
     // alongside the consumer of the opt-in flag.
+    // Maintenance invariant: this call must happen before any request
+    // is dispatched, and therefore before
+    // debug_dump_request_body_opted_in()'s magic-static is first
+    // initialised by the body pipeline. A future refactor that moves
+    // work ahead of webserver::start() (or reorders the body pipeline)
+    // must preserve or replicate this ordering.
     detail::maybe_warn_debug_dump_request_body(this);
 
     vector<struct MHD_OptionItem> iov;

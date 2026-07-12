@@ -29,6 +29,12 @@
 #       five environment-quirk SKIP paths stay FATAL in CI (a set value would
 #       silently re-open the SKIP-becomes-pass hole this task closed).
 #
+# Review requirement: this gate and the workflow it guards live in the same
+# repository, so a single PR could weaken assertion (e) by editing both files
+# together. Reviewers must verify that neither this script nor the
+# parallel-install workflow steps were modified to reintroduce the SKIP
+# escape hatch in CI.
+#
 # Exit codes:
 #   0  workflow is wired correctly
 #   1  one or more assertions failed

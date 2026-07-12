@@ -13,7 +13,13 @@
 #   (b) A binary that mixes passes and skips exits 0 (the existing
 #       behaviour; SKIPs do not "infect" a successful run).
 #
-# The script compiles two tiny throwaway TUs against the in-tree
+#   (c) A binary that mixes a failure and a skip exits with the failure
+#       count (neither 0 nor 77) — failures dominate skips, per
+#       test_runner::operator()() in littletest.hpp: `to_ret` is only
+#       overridden to 77 when failures_counter == 0 && success_counter
+#       == 0 && skip_counter > 0; any failure short-circuits that.
+#
+# The script compiles three tiny throwaway TUs against the in-tree
 # `test/littletest.hpp` and runs them. It is wired into Makefile.am as a
 # `lint-`-style script (no library link required); it does NOT depend on
 # anything libhttpserver-specific so it can run on any host with a C++
@@ -120,4 +126,40 @@ if ! grep -qE '^-> [0-9]+ skipped' "$TMPDIR_/mixed.log"; then
     exit 1
 fi
 
-echo "PASS — littletest SKIP exit-code semantics held (77 for all-skip, 0 for mixed)"
+# ---- (c) fail + skip → exit == failure count (neither 0 nor 77) ------------
+cat > "$TMPDIR_/fail_and_skip.cpp" <<'EOF'
+#include "littletest.hpp"
+
+LT_BEGIN_SUITE(fail_and_skip_suite)
+    void set_up() {}
+    void tear_down() {}
+LT_END_SUITE(fail_and_skip_suite)
+
+LT_BEGIN_AUTO_TEST(fail_and_skip_suite, this_fails)
+    LT_CHECK_EQ(1, 2);
+LT_END_AUTO_TEST(this_fails)
+
+LT_BEGIN_AUTO_TEST(fail_and_skip_suite, this_skips)
+    LT_SKIP("dependency missing");
+LT_END_AUTO_TEST(this_skips)
+
+LT_BEGIN_AUTO_TEST_ENV()
+    AUTORUN_TESTS()
+LT_END_AUTO_TEST_ENV()
+EOF
+
+"$CXX" -std=c++20 -I"$REPO_ROOT/test" \
+    "$TMPDIR_/fail_and_skip.cpp" -o "$TMPDIR_/fail_and_skip"
+
+set +e
+"$TMPDIR_/fail_and_skip" > "$TMPDIR_/fail_and_skip.log" 2>&1
+ec_c=$?
+set -e
+
+if [ "$ec_c" -ne 1 ]; then
+    echo "FAIL (c): fail+skip binary exited $ec_c, expected 1 (the failure count)" >&2
+    cat "$TMPDIR_/fail_and_skip.log" >&2
+    exit 1
+fi
+
+echo "PASS — littletest SKIP exit-code semantics held (77 for all-skip, 0 for mixed pass+skip, failure count for fail+skip)"

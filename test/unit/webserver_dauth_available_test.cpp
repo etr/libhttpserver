@@ -45,11 +45,8 @@
 #include "./unit/throw_probe.hpp"
 
 LT_BEGIN_SUITE(webserver_dauth_available_suite)
-    void set_up() {
-    }
-
-    void tear_down() {
-    }
+    void set_up() {}
+    void tear_down() {}
 LT_END_SUITE(webserver_dauth_available_suite)
 
 #ifdef HAVE_DAUTH

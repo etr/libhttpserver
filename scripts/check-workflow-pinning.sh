@@ -66,7 +66,8 @@ except ImportError:
 
 path = sys.argv[1]
 try:
-    yaml.safe_load(open(path))
+    with open(path, encoding='utf-8') as fh:
+        yaml.safe_load(fh)
 except Exception as e:  # noqa: BLE001 - surface any parse failure
     print(f"  (a) YAML parse error in {path}: {e}", file=sys.stderr)
     sys.exit(2)

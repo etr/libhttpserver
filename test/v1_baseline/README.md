@@ -36,10 +36,12 @@ assertions still pass.
 
 ### Step 1 — set up a master worktree
 
-From the libhttpserver clone:
+From the libhttpserver clone. `WORKDIR` is reused by Steps 2 and 3 below,
+so keep it set in the same shell session:
 
 ```sh
-git worktree add /tmp/libhttpserver-v1 master
+WORKDIR=$(mktemp -d)
+git worktree add "${WORKDIR}/libhttpserver-v1" master
 ```
 
 ### Step 2 — measure `sizeof(http_resource)` and `sizeof(std::map<std::string,bool>)`
@@ -49,10 +51,10 @@ worktree:
 
 ```sh
 c++ -std=c++20 -O3 -DHTTPSERVER_COMPILATION \
-    -I/tmp/libhttpserver-v1/src \
+    -I"${WORKDIR}/libhttpserver-v1/src" \
     test/v1_baseline/measure_v1_sizes.cpp \
-    -o /tmp/measure_v1_sizes
-/tmp/measure_v1_sizes
+    -o "${WORKDIR}/measure_v1_sizes"
+"${WORKDIR}/measure_v1_sizes"
 ```
 
 Expected output on Darwin/arm64 (Apple clang / libc++):
@@ -89,8 +91,8 @@ On macOS / Apple clang / libc++ (Homebrew `microhttpd.h`):
 c++ -std=c++20 -O3 \
     -I/opt/homebrew/include \
     test/v1_baseline/measure_v1_get_headers.cpp \
-    -o /tmp/measure_v1_get_headers
-/tmp/measure_v1_get_headers
+    -o "${WORKDIR}/measure_v1_get_headers"
+"${WORKDIR}/measure_v1_get_headers"
 ```
 
 On Linux / GCC / libstdc++ (Ubuntu `apt-get install libmicrohttpd-dev`;
@@ -100,8 +102,8 @@ the verify-build.yml performance lane uses `g++-14`):
 g++-14 -std=c++20 -O3 -DNDEBUG \
     -I/usr/include \
     test/v1_baseline/measure_v1_get_headers.cpp \
-    -o /tmp/measure_v1_get_headers
-/tmp/measure_v1_get_headers
+    -o "${WORKDIR}/measure_v1_get_headers"
+"${WORKDIR}/measure_v1_get_headers"
 ```
 
 Sample output (Apple Silicon, Apple clang 21, libc++):

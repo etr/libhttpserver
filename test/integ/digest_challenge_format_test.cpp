@@ -46,6 +46,7 @@
 
 #include <curl/curl.h>
 
+#include <algorithm>
 #include <cctype>
 #include <memory>
 #include <string>
@@ -68,28 +69,13 @@ size_t writefunc(void* ptr, size_t size, size_t nmemb, std::string* s) {
     return size * nmemb;
 }
 
-size_t headerfunc(void* ptr, size_t size, size_t nmemb, std::string* s) {
-    s->append(reinterpret_cast<char*>(ptr), size * nmemb);
-    return size * nmemb;
-}
-
 // Case-insensitive substring search (HTTP header tokens are ASCII).
 bool ci_contains(const std::string& haystack, const std::string& needle) {
-    if (needle.size() > haystack.size()) return false;
-    auto tolower_char = [](unsigned char c) {
-        return static_cast<char>(std::tolower(c));
-    };
-    for (std::size_t i = 0; i + needle.size() <= haystack.size(); ++i) {
-        bool ok = true;
-        for (std::size_t j = 0; j < needle.size(); ++j) {
-            if (tolower_char(haystack[i + j]) != tolower_char(needle[j])) {
-                ok = false;
-                break;
-            }
-        }
-        if (ok) return true;
-    }
-    return false;
+    return std::search(haystack.begin(), haystack.end(),
+                        needle.begin(), needle.end(),
+                        [](unsigned char a, unsigned char b) {
+                            return std::tolower(a) == std::tolower(b);
+                        }) != haystack.end();
 }
 
 #ifdef HAVE_DAUTH
@@ -165,7 +151,7 @@ LT_BEGIN_AUTO_TEST(digest_challenge_format_suite,
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &body);
-    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, headerfunc);
+    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_HEADERDATA, &headers);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 150L);
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 150L);
@@ -227,7 +213,7 @@ LT_BEGIN_AUTO_TEST(digest_challenge_format_suite,
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &body);
-    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, headerfunc);
+    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_HEADERDATA, &headers);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 150L);
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 150L);
@@ -277,7 +263,7 @@ LT_BEGIN_AUTO_TEST(digest_challenge_format_suite,
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &body);
-    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, headerfunc);
+    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_HEADERDATA, &headers);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 150L);
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 150L);
@@ -287,10 +273,12 @@ LT_BEGIN_AUTO_TEST(digest_challenge_format_suite,
     LT_ASSERT_EQ(res, 0);
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
     LT_CHECK_EQ(http_code, 401);
-    // The opaque value we set must appear verbatim in the challenge header.
-    LT_CHECK_EQ(ci_contains(headers, "deadbeef"), true);
-    // The domain URI must appear in the challenge header.
-    LT_CHECK_EQ(ci_contains(headers, "/protected"), true);
+    // The opaque and domain fields must appear as RFC 7616 §3.3
+    // quoted-string auth-params, not merely as bare substrings anywhere in
+    // the header (a bare-substring check would also pass if the value
+    // leaked into e.g. realm= or nonce= by accident).
+    LT_CHECK_EQ(ci_contains(headers, "opaque=\"deadbeef\""), true);
+    LT_CHECK_EQ(ci_contains(headers, "domain=\"/protected\""), true);
 
     curl_easy_cleanup(curl);
     ws.stop();

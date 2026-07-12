@@ -22,6 +22,17 @@ The two-arg `http_request_impl` constructor at `http_request_impl.hpp:95-99` is 
 - Typecheck passes.
 - Tests pass.
 
+**Verification:**
+- `make check -j1` (release build): 98/98 pass.
+- `make check -j1` (`--enable-debug`, `-Werror -Wextra`): 98/98 pass.
+- Header-only cross-flag sweep: the sentinel TU (the new static_asserts
+  in `test/unit/http_request_pimpl_test.cpp`) compiles cleanly under
+  each of `-UHAVE_BAUTH` / `-UHAVE_DAUTH` / `-UHAVE_GNUTLS` /
+  `-UHAVE_WEBSOCKET`, proving the canonical constructor's
+  `#ifdef`-conditioned member-init list still works under every
+  flag-off permutation (satisfies action item 3). See commit `2a37e9e`
+  for the full verification log.
+
 **Related Requirements:** PRD §2 API minimalism
 **Related Decisions:** None new
 

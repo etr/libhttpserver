@@ -83,7 +83,6 @@ LT_BEGIN_AUTO_TEST(http_response_cookie_wire_suite,
     static_assert(std::is_same_v<
         decltype(std::declval<R&>().with_cookie(std::declval<cookie>())),
         R&>, "with_cookie(cookie) & must return http_response&");
-    LT_CHECK_EQ(true, true);
 LT_END_AUTO_TEST(with_cookie_struct_lvalue_returns_lvalue_ref)
 
 LT_BEGIN_AUTO_TEST(http_response_cookie_wire_suite,
@@ -92,7 +91,6 @@ LT_BEGIN_AUTO_TEST(http_response_cookie_wire_suite,
     static_assert(std::is_same_v<
         decltype(std::declval<R&&>().with_cookie(std::declval<cookie>())),
         R&&>, "with_cookie(cookie) && must return http_response&&");
-    LT_CHECK_EQ(true, true);
 LT_END_AUTO_TEST(with_cookie_struct_rvalue_returns_rvalue_ref)
 
 LT_BEGIN_AUTO_TEST(http_response_cookie_wire_suite,
@@ -104,7 +102,6 @@ LT_BEGIN_AUTO_TEST(http_response_cookie_wire_suite,
         "get_cookies_parsed() must return const std::vector<cookie>&");
     static_assert(noexcept(std::declval<const R&>().get_cookies_parsed()),
                   "get_cookies_parsed() must be noexcept");
-    LT_CHECK_EQ(true, true);
 LT_END_AUTO_TEST(get_cookies_parsed_return_type_is_const_vector_ref)
 
 LT_BEGIN_AUTO_TEST(http_response_cookie_wire_suite,
@@ -240,6 +237,26 @@ LT_BEGIN_AUTO_TEST(http_response_cookie_wire_suite,
     // The structured vector must also be empty.
     LT_CHECK_EQ(r.get_cookies_parsed().empty(), true);
 LT_END_AUTO_TEST(legacy_with_cookie_bad_key_leaves_maps_clean)
+
+LT_BEGIN_AUTO_TEST(http_response_cookie_wire_suite,
+                   legacy_with_cookie_bad_value_leaves_maps_clean)
+    // Symmetric to legacy_with_cookie_bad_key_leaves_maps_clean above:
+    // with_value throws before any map mutation when the value contains
+    // ';', so the same clean-on-failure guarantee must hold for a bad
+    // value as it does for a bad key.
+    http_response r = http_response::string("body");
+    bool threw = false;
+    try {
+        r.with_cookie("good_key", "bad;value");
+    } catch (const std::invalid_argument&) {
+        threw = true;
+    }
+    LT_CHECK_EQ(threw, true);
+    // The good key must NOT appear in the legacy map either.
+    LT_CHECK_EQ(r.get_cookie("good_key"), std::string_view(""));
+    // The structured vector must also be empty.
+    LT_CHECK_EQ(r.get_cookies_parsed().empty(), true);
+LT_END_AUTO_TEST(legacy_with_cookie_bad_value_leaves_maps_clean)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

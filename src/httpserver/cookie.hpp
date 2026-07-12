@@ -55,6 +55,10 @@
 
 namespace httpserver {
 
+namespace detail {
+class http_request_impl;
+}  // namespace detail
+
 /// RFC 6265bis SameSite attribute values (`Strict`, `Lax`, `None`),
 /// plus the `unset` sentinel meaning "do not emit a SameSite attribute
 /// at all". `none` rendering MUST coexist with `Secure`; the renderer
@@ -138,6 +142,19 @@ class cookie final {
         return max_age_;
     }
     [[nodiscard]] bool is_secure() const noexcept { return secure_; }
+    /// Whether the `Secure` attribute will actually be emitted on the
+    /// wire by `to_set_cookie_header()`. Unlike `is_secure()` (which
+    /// reflects only an explicit `with_secure(true)` call), this also
+    /// accounts for the SameSite=None auto-coercion that
+    /// `append_flag_attributes` applies at render time -- browsers
+    /// require `Secure` alongside `SameSite=None`, so the renderer
+    /// forces it even when the caller never called `with_secure(true)`.
+    /// `is_secure()` remains unchanged (and is pinned as such by
+    /// `render_same_site_none_forces_secure`) for callers that need the
+    /// caller-set intent specifically.
+    [[nodiscard]] bool is_effective_secure() const noexcept {
+        return secure_ || same_site_ == same_site_mode::none;
+    }
     [[nodiscard]] bool is_http_only() const noexcept { return http_only_; }
     [[nodiscard]] same_site_mode same_site() const noexcept {
         return same_site_;
@@ -164,6 +181,12 @@ class cookie final {
         std::string_view header_value);
 
  private:
+    // Grants detail::http_request_impl direct access to name_/value_ so
+    // the test-request path in ensure_cookies_parsed_cached() can build
+    // a cookie from an already-split (name, value) pair without a
+    // concatenate-then-parse round trip through parse_cookie_header().
+    friend class detail::http_request_impl;
+
     std::string name_;
     std::string value_;
     std::string domain_;

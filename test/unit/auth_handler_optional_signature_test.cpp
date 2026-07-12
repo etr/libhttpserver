@@ -81,6 +81,8 @@ static_assert(std::is_same_v<
 #define PORT_3_STRING "8293"
 #define PORT_4 (PORT + 4)
 #define PORT_4_STRING "8294"
+#define PORT_5 (PORT + 5)
+#define PORT_5_STRING "8295"
 
 namespace {
 
@@ -192,10 +194,36 @@ LT_BEGIN_AUTO_TEST(auth_handler_optional_signature_suite,
     fetch_result fr = fetch("localhost:" PORT_3_STRING "/protected");
     // Fail-closed: the request must NOT reach the resource.
     LT_CHECK_EQ(fr.response_code, 500);
-    LT_CHECK(fr.body != std::string("SUCCESS"));
+    // The fail-closed 500 is built via http_response::empty(), which is
+    // documented to produce no body — pin the exact contract rather than
+    // just a weak negative (fr.body != "SUCCESS").
+    LT_CHECK(fr.body.empty());
 
     ws.stop();
 LT_END_AUTO_TEST(throwing_auth_handler_fails_closed_with_500)
+
+// 3b. Auth handler throwing a non-std::exception value (e.g. a bare
+//     int): the alias's `catch (...)` branch must fail closed exactly
+//     like the `catch (const std::exception&)` branch above — pins the
+//     unnamed-exception arm of the fail-closed contract in
+//     src/detail/webserver_aliases.cpp.
+LT_BEGIN_AUTO_TEST(auth_handler_optional_signature_suite,
+                   throwing_auth_handler_non_std_exception_fails_closed_with_500)
+    webserver ws{create_webserver(PORT_5)
+        .auth_handler([](const http_request&)
+                          -> std::optional<http_response> {
+            throw 42;
+        })};
+    simple_resource sr;
+    ws.register_path("/protected", std::shared_ptr<http_resource>(&sr, [](http_resource*){}));
+    ws.start(false);
+
+    fetch_result fr = fetch("localhost:" PORT_5_STRING "/protected");
+    // Fail-closed: the request must NOT reach the resource.
+    LT_CHECK_EQ(fr.response_code, 500);
+
+    ws.stop();
+LT_END_AUTO_TEST(throwing_auth_handler_non_std_exception_fails_closed_with_500)
 
 // 4. Engaged optional carrying a 64 KB body arrives uncorrupted on the
 //    wire. Regression target for the MOVE from the optional into

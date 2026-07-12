@@ -173,6 +173,7 @@ LT_END_AUTO_TEST(file_body_kind_and_materialize_existing_file)
 // side-effect, no TOCTOU window on the size).
 LT_BEGIN_AUTO_TEST(body_suite, file_body_size_known_before_materialize)
     // test_content is 21 bytes ("test content of file\n").
+    // Update this assertion if test_content is intentionally changed.
     httpserver::detail::file_body b("test_content");
     // size() must be non-zero and correct at construction time — the file is
     // opened and fstat'd in the constructor, not in materialize().
@@ -206,6 +207,13 @@ LT_END_AUTO_TEST(file_body_returns_null_for_non_regular_file)
 // Technique: open the file to get a known fd number, close it, then construct
 // file_body (which re-opens and gets the same slot). After file_body goes out
 // of scope without materialize(), the slot must be closed — EBADF confirms it.
+//
+// Caveat: this anchor-fd technique assumes nothing else in the process opens
+// an fd between the close() in step 1 and the file_body construction in step
+// 2, so the freed slot is still the lowest available one. That is true for
+// this single-threaded test body, but could rarely flake under a heavily
+// parallel `make check -j` if another thread/OS activity opens an fd in that
+// narrow window.
 LT_BEGIN_AUTO_TEST(body_suite, file_body_destructor_closes_fd_when_not_materialized)
     // Step 1: open the file to get a stable fd slot number, then close it.
     int anchor = ::open("test_content", O_RDONLY);
@@ -342,6 +350,41 @@ LT_BEGIN_AUTO_TEST(body_suite, deferred_body_trampoline_null_cls_returns_error)
         nullptr, 0, out, sizeof(out));
     LT_CHECK_EQ(n, static_cast<ssize_t>(MHD_CONTENT_READER_END_WITH_ERROR));
 LT_END_AUTO_TEST(deferred_body_trampoline_null_cls_returns_error)
+
+// Companion to the null-cls case above: pins the other half of the
+// `!self || !self->producer_` guard in deferred_body::trampoline
+// (src/detail/body.cpp). A move-constructed-from deferred_body has a
+// non-null `self` but an empty producer_, so trampoline must still return
+// MHD_CONTENT_READER_END_WITH_ERROR rather than invoking an empty
+// std::function (which would throw std::bad_function_call and terminate
+// in MHD's IO thread).
+//
+// The capture below is deliberately oversized (well past std::function's
+// small-object-optimization threshold on every mainstream stdlib) so the
+// lambda is heap-allocated by std::function. This is required for the
+// test to be meaningful: empirically (verified on libc++/Apple Clang),
+// std::function's move constructor for a *small*, SBO-eligible captureless
+// lambda may leave the source still holding a live (copied) target rather
+// than becoming empty, since the standard only guarantees the moved-from
+// std::function is left in a valid, unspecified state -- not that it is
+// empty. A heap-allocated target must have its owning pointer transferred
+// (and the source's pointer nulled) on move, so the source reliably
+// becomes empty in that case.
+LT_BEGIN_AUTO_TEST(body_suite, deferred_body_trampoline_moved_from_producer_returns_error)
+    std::string oversized_capture(256, 'z');  // forces heap allocation in std::function
+    httpserver::detail::deferred_body b(
+        [oversized_capture](uint64_t, char*, std::size_t) -> ssize_t {
+            (void)oversized_capture;
+            return MHD_CONTENT_READER_END_OF_STREAM;
+        });
+    httpserver::detail::deferred_body moved_to(std::move(b));
+    (void)moved_to;
+
+    char out[16] = {};
+    ssize_t n = httpserver::detail::deferred_body::trampoline(
+        &b, 0, out, sizeof(out));
+    LT_CHECK_EQ(n, static_cast<ssize_t>(MHD_CONTENT_READER_END_WITH_ERROR));
+LT_END_AUTO_TEST(deferred_body_trampoline_moved_from_producer_returns_error)
 
 LT_BEGIN_AUTO_TEST(body_suite, deferred_body_destructor_releases_callable)
     auto sentinel = std::make_shared<int>(42);

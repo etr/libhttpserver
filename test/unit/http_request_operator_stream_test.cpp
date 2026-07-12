@@ -60,6 +60,7 @@ LT_END_SUITE(http_request_operator_stream_suite)
 // credentials when streamed via operator<<.
 LT_BEGIN_AUTO_TEST(http_request_operator_stream_suite, operator_stream_redacts_credentials)
     auto req = create_test_request()
+        // Fictitious test fixture — not a real credential.
         .user("admin")
         .pass("hunter2")
         .header("Authorization", "Basic YWRtaW46aHVudGVyMg==")
@@ -108,6 +109,7 @@ LT_END_AUTO_TEST(operator_stream_redacts_credentials)
 // the output when the opt-in is set.
 LT_BEGIN_AUTO_TEST(http_request_operator_stream_suite, operator_stream_exposes_credentials_when_opted_in)
     auto req = create_test_request()
+        // Fictitious test fixture — not a real credential.
         .user("admin")
         .pass("hunter2")
         .header("Authorization", "Basic YWRtaW46aHVudGVyMg==")
@@ -149,6 +151,16 @@ LT_END_AUTO_TEST(operator_stream_exposes_credentials_when_opted_in)
 // the builder calls become no-ops at the field level, and the streamed
 // line is `user:"" pass:"<redacted>"`. The Authorization and Cookie
 // redaction continues to fire.
+namespace {
+// Shared by the three HAVE_BAUTH-off tests below: stream a request
+// through operator<< and return the resulting string.
+auto dump = [](const httpserver::http_request& r) {
+    std::ostringstream o;
+    o << r;
+    return o.str();
+};
+}  // namespace
+
 LT_BEGIN_AUTO_TEST(http_request_operator_stream_suite,
                    operator_stream_credential_surfaces_absent_on_bauth_off)
     auto req = create_test_request()
@@ -156,17 +168,22 @@ LT_BEGIN_AUTO_TEST(http_request_operator_stream_suite,
         .pass("hunter2")
         .build();
 
-    std::ostringstream oss;
-    oss << req;
-    const std::string out = oss.str();
+    const std::string out = dump(req);
 
     // user/pass field values must not leak — the surfaces are absent on
     // a HAVE_BAUTH-off build by construction.
     LT_CHECK(out.find("admin") == std::string::npos);
     LT_CHECK(out.find("hunter2") == std::string::npos);
 
+    // The user field is emitted with an empty value on this build.
+    LT_CHECK(out.find("user:\"\"") != std::string::npos);
+
     // The pass redaction token still appears (the field is emitted
-    // unconditionally; the value is the redacted token).
+    // unconditionally; the value is the redacted token). Both fields
+    // are always streamed regardless of HAVE_BAUTH or the expose flag:
+    // see src/http_request.cpp:465-467 (the expose ternary at
+    // lines 462-464 only changes pass_out's value, not whether the
+    // fields are emitted).
     LT_CHECK(out.find("pass:\"<redacted>\"") != std::string::npos);
 LT_END_AUTO_TEST(operator_stream_credential_surfaces_absent_on_bauth_off)
 
@@ -178,9 +195,7 @@ LT_BEGIN_AUTO_TEST(http_request_operator_stream_suite,
         .footer("Authorization", "Bearer footertoken")
         .build();
 
-    std::ostringstream oss;
-    oss << req;
-    const std::string out = oss.str();
+    const std::string out = dump(req);
 
     // Authorization-class header redaction is independent of HAVE_BAUTH
     // (dump_header_map_redacted has no HAVE_BAUTH gate). The credential
@@ -199,9 +214,7 @@ LT_BEGIN_AUTO_TEST(http_request_operator_stream_suite,
         .cookie("csrf", "csrf-token-abad1dea")
         .build();
 
-    std::ostringstream oss;
-    oss << req;
-    const std::string out = oss.str();
+    const std::string out = dump(req);
 
     // Cookie redaction is independent of HAVE_BAUTH
     // (dump_cookie_map_redacted has no HAVE_BAUTH gate). Every cookie

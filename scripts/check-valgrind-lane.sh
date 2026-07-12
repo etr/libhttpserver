@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
-# check-valgrind-lane.sh — structural gate for TASK-088 ("Re-enable helgrind /
-# drd / sgcheck in the valgrind CI lane").
+# check-valgrind-lane.sh — structural gate for TASK-088 ("Re-enable helgrind +
+# drd in the valgrind CI lane (sgcheck intentionally off — removed upstream in
+# Valgrind 3.20)").
 #
 # The v2-branch-gap audit flagged that the Valgrind lane in
 # `.github/workflows/verify-build.yml` configured with
@@ -33,6 +34,15 @@
 #   (e) the results-print step surfaces helgrind + drd logs
 #       (test-suite-helgrind.log, test-suite-drd.log), not just memcheck.
 #
+# Assertion against `configure.ac`:
+#   (f) AX_VALGRIND_DFLT([sgcheck], ...) precedes AX_VALGRIND_CHECK (the
+#       macro order autoconf requires for the sgcheck default to take
+#       effect).
+#
+# Usage: check-valgrind-lane.sh [workflow-file] [configure.ac-path]
+# Both paths default to the real repo files; the second positional argument
+# exists so the unit test can point assertion (f) at a synthetic fixture.
+#
 # Exit codes:
 #   0  workflow is wired correctly
 #   1  one or more assertions failed
@@ -42,6 +52,7 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
 WF="${1:-.github/workflows/verify-build.yml}"
+CONFIGURE_AC="${2:-configure.ac}"
 
 echo "check-valgrind-lane: inspecting $WF"
 
@@ -58,17 +69,23 @@ fail=0
 # short per-gate check below inspects it.
 if ! include_json="$(python3 scripts/lib/find-matrix-includes.py "$WF")" \
    || ! printf '%s' "$include_json" | python3 -c '
+import collections
 import json
 import sys
 
 include = json.load(sys.stdin)
 VALGRIND_TOOLS = {"valgrind-memcheck", "valgrind-helgrind", "valgrind-drd"}
-found = {e["build-type"] for e in include
-         if isinstance(e, dict) and e.get("build-type") in VALGRIND_TOOLS}
+build_types = [e["build-type"] for e in include
+               if isinstance(e, dict) and e.get("build-type") in VALGRIND_TOOLS]
+found = set(build_types)
 if found != VALGRIND_TOOLS:
     missing = VALGRIND_TOOLS - found
     print(f"  (b) missing valgrind matrix entries: {missing}", file=sys.stderr)
     sys.exit(4)
+dupes = {bt: n for bt, n in collections.Counter(build_types).items() if n > 1}
+if dupes:
+    print(f"  (b) duplicate valgrind matrix entries: {dupes}", file=sys.stderr)
+    sys.exit(5)
 
 print("  (a) YAML parses; (b) valgrind-memcheck + valgrind-helgrind"
       " + valgrind-drd entries present")
@@ -79,6 +96,11 @@ then
 fi
 
 # (c) The valgrind configure branch must no longer disable helgrind/drd/sgcheck.
+# NOTE: this grep is intentionally whole-file/literal (not scoped to the
+# configure step), so a future YAML comment that happens to mention one of
+# these exact --disable-valgrind-{helgrind,drd,sgcheck} strings would also
+# trip this assertion. Avoid using these literal strings in unrelated
+# comments elsewhere in the workflow file.
 disabled=""
 for flag in --disable-valgrind-helgrind --disable-valgrind-drd --disable-valgrind-sgcheck; do
     if grep -qF -- "$flag" "$WF"; then
@@ -116,6 +138,28 @@ if grep -qF 'test-suite-drd.log' "$WF"; then
 else
     echo "  (e2) test-suite-drd.log not surfaced in the workflow" >&2
     fail=1
+fi
+
+# (f) configure.ac: AX_VALGRIND_DFLT([sgcheck], ...) must precede
+# AX_VALGRIND_CHECK, or the sgcheck default is not honored.
+if [ ! -f "$CONFIGURE_AC" ]; then
+    echo "  (f) configure.ac not found at $CONFIGURE_AC" >&2
+    fail=1
+else
+    # Skip comment-only lines so a prose mention of these macro names (e.g.
+    # "AX_VALGRIND_DFLT calls must precede AX_VALGRIND_CHECK.") does not
+    # itself satisfy the assertion.
+    dflt_line="$(awk '/^[[:space:]]*#/ { next } /AX_VALGRIND_DFLT\(\[sgcheck\]/ { print NR; exit }' "$CONFIGURE_AC")"
+    check_line="$(awk '/^[[:space:]]*#/ { next } /AX_VALGRIND_CHECK/ { print NR; exit }' "$CONFIGURE_AC")"
+    if [ -z "$dflt_line" ] || [ -z "$check_line" ]; then
+        echo "  (f) configure.ac missing AX_VALGRIND_DFLT([sgcheck]...) and/or AX_VALGRIND_CHECK" >&2
+        fail=1
+    elif [ "$dflt_line" -ge "$check_line" ]; then
+        echo "  (f) AX_VALGRIND_DFLT([sgcheck]...) (line $dflt_line) must precede AX_VALGRIND_CHECK (line $check_line)" >&2
+        fail=1
+    else
+        echo "  (f) AX_VALGRIND_DFLT([sgcheck]...) precedes AX_VALGRIND_CHECK in configure.ac"
+    fi
 fi
 
 if [ "$fail" -ne 0 ]; then

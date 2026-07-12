@@ -159,7 +159,7 @@ Today, even the simplest stateless handler forces the user to subclass `http_res
 The response hierarchy has eight subclasses (`string_response`, `file_response`, `iovec_response`, `pipe_response`, `deferred_response`, `empty_response`, `basic_auth_fail_response`, `digest_auth_fail_response`). `http_response` itself uses `shared_ptr` returns when there is no shared ownership, exposes mutable getters that aren't `const` (`get_header` calls `headers[key]` and inserts on miss), and `with_header`/`with_footer`/`with_cookie` look fluent but return `void`. Cookies and headers are stored in separate maps despite cookies being headers. After this work `http_response` is a value type with factory functions, `const`-correct getters, and a true fluent `with_*` chain.
 
 **In scope**
-- `http_response` is a sealed value type built via factory functions: `http_response::string(...)`, `http_response::file(...)`, `http_response::iovec(...)`, `http_response::pipe(...)`, `http_response::empty(...)`, `http_response::deferred(...)`, `http_response::unauthorized(scheme, realm, ...)`.
+- `http_response` is a sealed value type built via factory functions: `http_response::string(...)`, `http_response::file(...)`, `http_response::iovec(...)`, `http_response::pipe(...)`, `http_response::empty(...)`, `http_response::deferred(...)`, `http_response::unauthorized(scheme, realm, ...)`, `http_response::unauthorized(digest_challenge)` (RFC 7616-compliant Digest challenge overload, TASK-062; declared only when `HAVE_DAUTH` is compiled in).
 - Remove the `*_response` subclasses entirely.
 - `with_header`/`with_footer`/`with_cookie` return `http_response&`.
 - `get_header`/`get_footer`/`get_cookie` are `const`, return `string_view`, do not insert on miss.
@@ -174,6 +174,7 @@ The response hierarchy has eight subclasses (`string_response`, `file_response`,
 - `PRD-RSP-REQ-003` When a user calls `get_header` on a missing key then the system shall return an empty `string_view`, not insert a new entry.
 - `PRD-RSP-REQ-004` When a user calls `with_header`, `with_footer`, or `with_cookie` then the system shall return a reference to `*this` to support chaining.
 - `PRD-RSP-REQ-005` When a user wants to send an authentication failure then the system shall expose `http_response::unauthorized(scheme, realm, …)`.
+- `PRD-RSP-REQ-005a` When a user wants to send an RFC 7616-compliant Digest authentication challenge then the system shall expose `http_response::unauthorized(digest_challenge)`, declared only when `HAVE_DAUTH` is compiled in (TASK-062).
 - `PRD-RSP-REQ-006` When v2.0 ships then `string_response`, `file_response`, `iovec_response`, `pipe_response`, `deferred_response`, `empty_response`, `basic_auth_fail_response`, and `digest_auth_fail_response` shall not exist in the public API.
 - `PRD-RSP-REQ-007` When a user returns a response from a handler then the system shall accept `http_response` by value, with the library moving the value into the dispatch path. Neither `std::unique_ptr<http_response>` nor `std::shared_ptr<http_response>` shall be required.
 
@@ -198,7 +199,7 @@ The v1 `with_cookie(string, string)` / `get_cookie(string)` API stored cookies a
 - `http_request::get_cookies_parsed()` returns `const std::vector<cookie>&`, parsed once and cached.
 - Injection guard: CR, LF, NUL, and `;` are rejected in name, value, domain, and path at setter time (CWE-113).
 - SameSite=None auto-coerces `Secure` at render time (browser requirement per draft-west-cookie-incrementalism).
-- Transitional policy: legacy `get_cookie(string)`, `get_cookies()`, and `with_cookie(string, string)` are `[[deprecated]]` and compile with a diagnostic in v2.0.
+- Transitional policy: legacy `http_response::get_cookie(string_view)`, `http_response::get_cookies()`, and `http_response::with_cookie(string, string)` are `[[deprecated]]` and compile with a diagnostic in v2.0.
 
 **Out of scope**
 - Removing the deprecated string-blob path before v2.1.

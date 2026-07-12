@@ -29,6 +29,9 @@
 #   (f) the two CodeQL sub-actions (codeql-action/init and codeql-action/analyze)
 #       are both present and pinned to the SAME commit SHA — they ship from one
 #       repo/release and a split pin is a rotation bug.
+#   (g) a permissions block with security-events: write must be declared;
+#   (h) the libmicrohttpd download must be followed by a sha256sum -c
+#       verification step.
 #
 # Exit codes:
 #   0  workflow is hardened correctly
@@ -62,7 +65,8 @@ except ImportError:
 
 path = sys.argv[1]
 try:
-    yaml.safe_load(open(path))
+    with open(path, encoding='utf-8') as fh:
+        yaml.safe_load(fh)
 except Exception as e:  # noqa: BLE001 - surface any parse failure
     print(f"  (a) YAML parse error: {e}", file=sys.stderr)
     sys.exit(2)
@@ -108,6 +112,8 @@ else
     echo "  (d) no codeql-action/autobuild reference remains"
 fi
 
+# (sufficient: both must appear anywhere in the file, independent of step;
+# false-positives from comments are negligible for this file's shape)
 # (e) An explicit build must be present so CodeQL's C/C++ extractor traces
 # the real compile commands (autobuild is deliberately not used).
 if grep -qF './configure' "$WF" && grep -qE '(^|[[:space:]])make([[:space:]]|;|$)' "$WF"; then
@@ -118,8 +124,8 @@ else
 fi
 
 # (f) init and analyze must be pinned to the SAME commit SHA.
-init_sha="$(grep -oE 'codeql-action/init@[0-9a-f]{40}' "$WF" | head -1 | sed 's/.*@//')"
-analyze_sha="$(grep -oE 'codeql-action/analyze@[0-9a-f]{40}' "$WF" | head -1 | sed 's/.*@//')"
+init_sha="$(grep -oE 'codeql-action/init@[0-9a-f]{40}' "$WF" | head -1 | cut -d@ -f2)"
+analyze_sha="$(grep -oE 'codeql-action/analyze@[0-9a-f]{40}' "$WF" | head -1 | cut -d@ -f2)"
 if [ -z "$init_sha" ]; then
     echo "  (f) codeql-action/init not present or not SHA-pinned" >&2
     fail=1
@@ -151,7 +157,7 @@ fi
 if grep -qF 'sha256sum -c' "$WF"; then
     echo "  (h) libmicrohttpd download checksum verification (sha256sum -c) present"
 else
-    echo "  (h) missing sha256sum verification for the libmicrohttpd download — add 'echo \"<sha256>  libmicrohttpd-1.0.3.tar.gz\" | sha256sum -c' after the curl line" >&2
+    echo "  (h) missing sha256sum verification for the libmicrohttpd download — add 'echo \"7816b57aae199cf5c3645e8770e1be5f0a4dfafbcb24b3772173dc4ee634126a  libmicrohttpd-1.0.3.tar.gz\" | sha256sum -c' after the curl line" >&2
     fail=1
 fi
 

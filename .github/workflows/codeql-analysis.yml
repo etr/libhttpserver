@@ -63,7 +63,14 @@ jobs:
     - run: git checkout HEAD^2
       if: ${{ github.event_name == 'pull_request' }}
 
-    - name: Install libmicrohttpd dependency
+    - name: Fetch libmicrohttpd from cache
+      id: cache-libmicrohttpd
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+      with:
+        path: libmicrohttpd-1.0.3
+        key: ${{ runner.os }}-libmicrohttpd-1.0.3-codeql
+
+    - name: Build libmicrohttpd dependency (if not cached)
       # Supply-chain: libmicrohttpd-1.0.3.tar.gz is sha256-pinned. The digest
       # must match the value used in verify-build.yml; both workflows track the
       # same release. To rotate the libmicrohttpd version, update both the URL
@@ -79,7 +86,12 @@ jobs:
         cd libmicrohttpd-1.0.3 ;
         ./configure --disable-examples ;
         make ;
-        sudo make install ;
+      timeout-minutes: 30
+      if: steps.cache-libmicrohttpd.outputs.cache-hit != 'true'
+
+    - name: Install libmicrohttpd dependency
+      run: cd libmicrohttpd-1.0.3 ; sudo make install ;
+      timeout-minutes: 30
 
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
@@ -98,6 +110,8 @@ jobs:
         ./bootstrap ;
         ./configure --enable-same-directory-build ;
         make ;
+      timeout-minutes: 30
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@411c4c9a36b3fca4d674f06b6396b2c6d23522c6  # v3.36.3
+      timeout-minutes: 30

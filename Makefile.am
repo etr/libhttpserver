@@ -43,6 +43,7 @@ EXTRA_DIST = libhttpserver.pc.in $(DX_CONFIG) scripts/extract-release-notes.sh s
 	scripts/check-doxygen.sh scripts/check-hooks-doc-spotcheck.sh \
 	scripts/check-soversion.sh scripts/check-parallel-install.sh \
 	scripts/check-parallel-install-lane.sh \
+	scripts/check-msan-lane.sh scripts/check-valgrind-lane.sh \
 	scripts/check-codeql-workflow.sh scripts/check-workflow-pinning.sh \
 	scripts/test_check_parallel_install.sh \
 	scripts/test_check_parallel_install_lane.sh \
@@ -54,6 +55,7 @@ EXTRA_DIST = libhttpserver.pc.in $(DX_CONFIG) scripts/extract-release-notes.sh s
 	scripts/check-complexity.sh scripts/check-duplication.sh \
 	scripts/check-file-size.sh \
 	scripts/check-warning-suppressions.sh \
+	scripts/test_check_warning_suppressions.sh \
 	scripts/check-server-ready-helper.sh \
 	scripts/test_check_server_ready_helper.sh \
 	scripts/check-no-tautological-asserts.sh \
@@ -556,10 +558,34 @@ lint-fence-balance:
 # `make check-parallel-install` invocation, and no SKIP authorization so
 # environment-quirk SKIPs stay fatal). Parses the workflow file, so it is
 # invoked directly by CI's `lint` lane rather than every check-local run —
-# mirrors the msan/valgrind lane gates.
+# mirrors the msan/valgrind lane gates below.
+# Unlike the newer lint-codeql-workflow/lint-workflow-pinning targets, this
+# target does not run test_check_parallel_install_lane.sh first -- that is
+# the original (TASK-089) idiom; the self-test-then-gate pattern in the
+# newer targets is an intentional TASK-090 enhancement, not a regression to
+# fix here.
 lint-parallel-install-lane:
 	@echo "=== lint-parallel-install-lane: verify parallel-install CI wiring ==="
 	@$(top_srcdir)/scripts/check-parallel-install-lane.sh
+
+# TASK-087: structural gate asserting the msan CI lane in verify-build.yml
+# stays wired (matrix entry present, stale commented-out block gone,
+# MSAN_OPTIONS + scoped TESTS= wiring on the run step). Parses the workflow
+# file, so — like lint-parallel-install-lane — it is invoked directly by
+# CI's `lint` lane rather than every check-local run.
+lint-msan-lane:
+	@echo "=== lint-msan-lane: verify msan CI wiring ==="
+	@$(top_srcdir)/scripts/check-msan-lane.sh
+
+# TASK-088: structural gate asserting the valgrind CI lane in
+# verify-build.yml stays wired (helgrind/drd matrix entries present, the
+# --disable-valgrind-* configure flags gone, per-tool check-valgrind-*
+# targets invoked, helgrind/drd logs surfaced). Parses the workflow file, so
+# — like lint-parallel-install-lane — it is invoked directly by CI's `lint`
+# lane rather than every check-local run.
+lint-valgrind-lane:
+	@echo "=== lint-valgrind-lane: verify valgrind CI wiring ==="
+	@$(top_srcdir)/scripts/check-valgrind-lane.sh
 
 # TASK-090: structural gate asserting codeql-analysis.yml stays hardened
 # (every action SHA-pinned, Autobuild deleted, explicit ./configure + make
@@ -582,7 +608,7 @@ lint-workflow-pinning:
 	@$(top_srcdir)/scripts/test_check_workflow_pinning.sh
 	@$(top_srcdir)/scripts/check-workflow-pinning.sh
 
-.PHONY: check-headers check-install-layout check-hygiene check-local check-examples check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck check-soversion check-parallel-install lint-complexity lint-duplication lint-file-size lint-warning-suppressions lint-server-ready-helper lint-server-ready-helper-selftest lint-no-tautological-asserts lint-deprecated-cookie-overload lint-littletest-skip-exit-code lint-parallel-install-skip-contract lint-fence-balance lint-parallel-install-lane lint-codeql-workflow lint-workflow-pinning
+.PHONY: check-headers check-install-layout check-hygiene check-local check-examples check-readme check-release-notes check-doxygen check-hooks-doc-spotcheck check-soversion check-parallel-install lint-complexity lint-duplication lint-file-size lint-warning-suppressions lint-server-ready-helper lint-server-ready-helper-selftest lint-no-tautological-asserts lint-deprecated-cookie-overload lint-littletest-skip-exit-code lint-parallel-install-skip-contract lint-fence-balance lint-parallel-install-lane lint-msan-lane lint-valgrind-lane lint-codeql-workflow lint-workflow-pinning
 
 # TASK-039: top-level convenience rule that descends into test/ to
 # build and run the bench binaries (see test/Makefile.am and

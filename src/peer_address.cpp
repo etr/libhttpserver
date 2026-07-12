@@ -72,12 +72,12 @@ bool is_ipv4_mapped(const ipv6_groups& g) {
 // Format the IPv4-mapped form per RFC 5952 §5.
 std::string format_ipv4_mapped(const std::array<std::uint8_t, 16>& bytes) {
     char buf[24];  // "::ffff:255.255.255.255" + NUL = 23
-    std::snprintf(buf, sizeof(buf), "::ffff:%u.%u.%u.%u",
-                  static_cast<unsigned>(bytes[12]),
-                  static_cast<unsigned>(bytes[13]),
-                  static_cast<unsigned>(bytes[14]),
-                  static_cast<unsigned>(bytes[15]));
-    return std::string{buf};
+    int n = std::snprintf(buf, sizeof(buf), "::ffff:%u.%u.%u.%u",
+                           static_cast<unsigned>(bytes[12]),
+                           static_cast<unsigned>(bytes[13]),
+                           static_cast<unsigned>(bytes[14]),
+                           static_cast<unsigned>(bytes[15]));
+    return std::string(buf, static_cast<std::size_t>(n));
 }
 
 // Find the longest run of consecutive zero groups of length >= 2.
@@ -85,18 +85,18 @@ std::string format_ipv4_mapped(const std::array<std::uint8_t, 16>& bytes) {
 // §4.2.3); runs of length 1 are dropped per RFC 5952 §4.3.
 zero_run find_longest_zero_run(const ipv6_groups& g) {
     zero_run best;
-    int cur_start = -1;
-    int cur_len = 0;
+    int run_start = 0;  // always overwritten before use
+    int run_len = 0;
     for (int i = 0; i < 8; ++i) {
         if (g[i] != 0) {
-            cur_len = 0;
+            run_len = 0;
             continue;
         }
-        if (cur_len == 0) cur_start = i;
-        ++cur_len;
-        if (cur_len > best.len) {
-            best.len = cur_len;
-            best.start = cur_start;
+        if (run_len == 0) run_start = i;
+        ++run_len;
+        if (run_len > best.len) {
+            best.len = run_len;
+            best.start = run_start;
         }
     }
     if (best.len < 2) return zero_run{};
@@ -115,6 +115,8 @@ zero_run find_longest_zero_run(const ipv6_groups& g) {
 std::string emit_canonical(const ipv6_groups& g, const zero_run& collapse) {
     char buf[40];  // "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff" = 39 + NUL
     std::size_t pos = 0;
+    // `i` is advanced in two places below: via `i += collapse.len` on the
+    // collapse branch, via `++i` on the normal per-group branch.
     for (int i = 0; i < 8;) {
         if (i == collapse.start) {
             buf[pos++] = ':';
@@ -122,10 +124,9 @@ std::string emit_canonical(const ipv6_groups& g, const zero_run& collapse) {
             i += collapse.len;
             continue;
         }
-        char scratch[5];
-        std::snprintf(scratch, sizeof(scratch), "%x",
-                      static_cast<unsigned>(g[i]));
-        for (char* p = scratch; *p; ++p) buf[pos++] = *p;
+        int n = std::snprintf(buf + pos, sizeof(buf) - pos, "%x",
+                               static_cast<unsigned>(g[i]));
+        pos += static_cast<std::size_t>(n);
         ++i;
         // Emit a ':' separator if more groups remain AND the next slot
         // is not the collapse window (which brings its own leading ':').
@@ -165,12 +166,12 @@ std::string peer_address::to_string() const {
     switch (fam) {
     case family::ipv4: {
         char buf[16];  // "255.255.255.255" + NUL = 16
-        std::snprintf(buf, sizeof(buf), "%u.%u.%u.%u",
-                      static_cast<unsigned>(bytes[0]),
-                      static_cast<unsigned>(bytes[1]),
-                      static_cast<unsigned>(bytes[2]),
-                      static_cast<unsigned>(bytes[3]));
-        return std::string{buf};
+        int n = std::snprintf(buf, sizeof(buf), "%u.%u.%u.%u",
+                               static_cast<unsigned>(bytes[0]),
+                               static_cast<unsigned>(bytes[1]),
+                               static_cast<unsigned>(bytes[2]),
+                               static_cast<unsigned>(bytes[3]));
+        return std::string(buf, static_cast<std::size_t>(n));
     }
     case family::ipv6:
         return ipv6_canonical(bytes);

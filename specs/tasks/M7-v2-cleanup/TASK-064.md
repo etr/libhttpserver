@@ -19,7 +19,7 @@ Replace the string-blob cookie surface on `http_response` with a structured `htt
 - Blocks: None
 
 **Acceptance Criteria:**
-- `http_response::ok().with_cookie(cookie{}.with_name("sid").with_secure(true).with_same_site(same_site_mode::strict))` compiles and emits a single, well-formed `Set-Cookie` header.
+- `http_response::string("body").with_cookie(cookie{}.with_name("sid").with_secure(true).with_same_site(same_site_mode::strict))` compiles and emits a single, well-formed `Set-Cookie` header.
 - `http_request::get_cookies()` returns `const std::vector<cookie>&` (or `span<const cookie>`) for read-only access; never allocates after the first call.
 - RFC 6265 round-trip examples pass.
 - Deprecated string-blob path still compiles with a `[[deprecated]]` warning.

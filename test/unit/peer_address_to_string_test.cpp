@@ -71,12 +71,14 @@ LT_BEGIN_AUTO_TEST(peer_address_to_string_suite, rfc5952_loopback)
     LT_CHECK_EQ(p.to_string(), std::string{"::1"});
 LT_END_AUTO_TEST(rfc5952_loopback)
 
-// §4.2.2: unspecified all-zero address renders as "::".
-LT_BEGIN_AUTO_TEST(peer_address_to_string_suite, rfc5952_all_zero)
+// §4.2.2: the IPv6 all-zero ("::") address under family::ipv6. Distinct
+// from unspec_returns_empty below, which covers family::unspec (no
+// address family set at all).
+LT_BEGIN_AUTO_TEST(peer_address_to_string_suite, rfc5952_ipv6_unspecified_address)
     auto p = make_v6({0, 0, 0, 0, 0, 0, 0, 0,
                       0, 0, 0, 0, 0, 0, 0, 0});
     LT_CHECK_EQ(p.to_string(), std::string{"::"});
-LT_END_AUTO_TEST(rfc5952_all_zero)
+LT_END_AUTO_TEST(rfc5952_ipv6_unspecified_address)
 
 // §4.3: a single 16-bit zero group MUST NOT be shortened.
 LT_BEGIN_AUTO_TEST(peer_address_to_string_suite, rfc5952_single_zero_no_collapse)
@@ -85,6 +87,16 @@ LT_BEGIN_AUTO_TEST(peer_address_to_string_suite, rfc5952_single_zero_no_collapse
                       0,    0x01, 0,    0x01, 0, 0x01, 0, 0x01});
     LT_CHECK_EQ(p.to_string(), std::string{"2001:db8:0:1:1:1:1:1"});
 LT_END_AUTO_TEST(rfc5952_single_zero_no_collapse)
+
+// No zero-groups at all: the zero_run{} "no qualifying run" sentinel path
+// (distinct from rfc5952_single_zero_no_collapse, which has one zero group).
+// Pins the fully-expanded, no-"::" straight-through emit_canonical path.
+LT_BEGIN_AUTO_TEST(peer_address_to_string_suite, rfc5952_fully_expanded_no_zero_groups)
+    // Groups: fe80:1:2:3:4:5:6:7
+    auto p = make_v6({0xfe, 0x80, 0, 0x01, 0, 0x02, 0, 0x03,
+                      0,    0x04, 0, 0x05, 0, 0x06, 0, 0x07});
+    LT_CHECK_EQ(p.to_string(), std::string{"fe80:1:2:3:4:5:6:7"});
+LT_END_AUTO_TEST(rfc5952_fully_expanded_no_zero_groups)
 
 // §4.2.3 tie-break: longest run wins (3-group run over 2-group run).
 LT_BEGIN_AUTO_TEST(peer_address_to_string_suite, rfc5952_longest_run_wins)
@@ -109,6 +121,22 @@ LT_BEGIN_AUTO_TEST(peer_address_to_string_suite, rfc5952_ipv4_mapped_dotted_quad
                       0, 0, 0xff, 0xff, 192, 0, 2, 1});
     LT_CHECK_EQ(p.to_string(), std::string{"::ffff:192.0.2.1"});
 LT_END_AUTO_TEST(rfc5952_ipv4_mapped_dotted_quad)
+
+// §5: IPv4-mapped boundary — the all-zero dotted-quad at the low end of
+// the ::ffff:0.0.0.0/96 range.
+LT_BEGIN_AUTO_TEST(peer_address_to_string_suite, rfc5952_ipv4_mapped_dotted_quad_min)
+    auto p = make_v6({0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0xff, 0xff, 0, 0, 0, 0});
+    LT_CHECK_EQ(p.to_string(), std::string{"::ffff:0.0.0.0"});
+LT_END_AUTO_TEST(rfc5952_ipv4_mapped_dotted_quad_min)
+
+// §5: IPv4-mapped boundary — the all-ones dotted-quad at the high end of
+// the ::ffff:0.0.0.0/96 range.
+LT_BEGIN_AUTO_TEST(peer_address_to_string_suite, rfc5952_ipv4_mapped_dotted_quad_max)
+    auto p = make_v6({0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0xff, 0xff, 255, 255, 255, 255});
+    LT_CHECK_EQ(p.to_string(), std::string{"::ffff:255.255.255.255"});
+LT_END_AUTO_TEST(rfc5952_ipv4_mapped_dotted_quad_max)
 
 // Regression: IPv4 path stays unchanged (acceptance criterion).
 LT_BEGIN_AUTO_TEST(peer_address_to_string_suite, ipv4_path_unchanged)

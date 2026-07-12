@@ -15,6 +15,8 @@ Several unit suites have near-zero effective coverage on the CI lanes that matte
 
 Make sure every suite actually exercises code on the build configuration where the feature is *available* (the inverse of what each gate currently does).
 
+**Resolution note:** for the `_unavailable`-suite gaps, the chosen resolution added paired companion translation units (`webserver_ws_available_test.cpp`, `webserver_dauth_available_test.cpp`) rather than inverting the existing unavailable-suite guards in place — so the original `_unavailable` TUs and the new `_available` TUs coexist by design, each exercising its own build configuration.
+
 **Action Items:**
 - [x] `webserver_ws_unavailable_test.cpp`: invert the guard so the suite exercises the `HAVE_WEBSOCKET`-off path (or rename + add a paired `webserver_ws_available_test.cpp` for the on-path). Goal: each build flag has a unit suite that runs.
 - [x] `webserver_dauth_unavailable_test.cpp`: same pattern.

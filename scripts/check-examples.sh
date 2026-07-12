@@ -123,15 +123,25 @@ KNOWN_ARTIFACTS=""
 # Extract all tokens from noinst_PROGRAMS lines (handles = and +=).
 # Strip the variable name and assignment operator, then collect program names.
 # Use awk for portability (avoids sed \s and \? which differ between GNU/BSD).
-programs="$(awk '/^[[:space:]]*noinst_PROGRAMS[[:space:]]*(=|\+=)/ {
+# Collect into a real bash array (rather than a flat string) so the loops
+# below iterate over exact program names instead of word-splitting an
+# unquoted string. Uses a while-read loop rather than `mapfile` for bash
+# 3.x / macOS compatibility (same pattern as check-warning-suppressions.sh
+# and check-server-ready-helper.sh); the `tr` step explodes any multi-name
+# awk output line into one program name per line/array element, preserving
+# the original word-splitting semantics without the unquoted-expansion risk.
+programs=()
+while IFS= read -r prog; do
+    [ -n "$prog" ] && programs+=("$prog")
+done < <(awk '/^[[:space:]]*noinst_PROGRAMS[[:space:]]*(=|\+=)/ {
     sub(/^[[:space:]]*noinst_PROGRAMS[[:space:]]*(=|\+=)[[:space:]]*/, "")
     gsub(/\\$/, "")
     print
-}' "$MAKEFILE_AM")"
+}' "$MAKEFILE_AM" | tr -s '[:space:]' '\n')
 
 # (a) Makefile.am → disk: every listed program must have a .cpp file.
 missing=0
-for prog in $programs; do
+for prog in ${programs[@]+"${programs[@]}"}; do
     src="$REPO_ROOT/examples/${prog}.cpp"
     if [ ! -f "$src" ]; then
         echo "check-examples: FAIL: noinst_PROGRAMS lists '$prog' but examples/${prog}.cpp does not exist" >&2
@@ -148,7 +158,7 @@ for src in "$REPO_ROOT"/examples/*.cpp; do
     base="$(basename "$src" .cpp)"
     # Check if in noinst_PROGRAMS.
     found=0
-    for prog in $programs; do
+    for prog in ${programs[@]+"${programs[@]}"}; do
         if [ "$prog" = "$base" ]; then
             found=1
             break

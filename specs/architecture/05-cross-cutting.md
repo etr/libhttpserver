@@ -14,6 +14,8 @@
 - `bans_mutex` (`std::shared_mutex`) — block list.
 - `mutexwait` / `mutexcond` (`pthread_mutex_t` / `pthread_cond_t`) — start/stop handshake (kept as POSIX primitives because MHD's start path expects them).
 
+**`thread_local` scratch buffers.** Request-scoped `thread_local` scratch storage is an approved amortisation pattern for ABI-locked callback signatures that cannot take an arena-backed type directly — e.g. `unescape_in_arena`'s `thread_value` in `src/detail/http_request_impl_args.cpp`, which routes the public `void(std::string&)` unescape-callback signature through a per-thread `std::string` so repeated calls on the same worker thread amortise to zero global-heap allocations. This is constrained to stateless, capacity-only scratch state (the buffer holds no data or identity that outlives a single call) — it must never be used to stash connection-scoped or cross-request state, which would violate the per-request isolation implied by §5.1 point 3.
+
 ### 5.2 Error propagation
 
 **Contract (committed in DR-9, revised 2026-05-29 — Revision 1):**
@@ -72,7 +74,9 @@ src/
 │       ├── http_request_impl.hpp         # NEW
 │       ├── body.hpp                      # NEW — detail::body + subclasses
 │       ├── http_endpoint.hpp             # existing
-│       └── modded_request.hpp            # existing
+│       ├── modded_request.hpp            # existing
+│       ├── secure_zero.hpp               # NEW — non-elidable secure-zero helper (TASK-068)
+│       └── unescape_helpers.hpp          # NEW — shared percent-decode helpers (TASK-072)
 └── *.cpp                                  # implementations
 ```
 
@@ -89,7 +93,7 @@ Public headers gate on `_HTTPSERVER_HPP_INSIDE_` or `HTTPSERVER_COMPILATION`. `d
 5. **Thread safety.** `webserver::add_hook`, `http_resource::add_hook`, and `hook_handle::remove` are safe to call from inside a hook (mirrors §5.1 for `register_resource`). The dispatch site copies the relevant phase vector under a `shared_lock`, releases the lock, then iterates the copy — so an in-flight chain sees a stable snapshot.
 6. **Zero-cost when unused.** Per-phase `std::atomic<bool> any_hooks_` short-circuits the hot path to a relaxed atomic load + compare-with-zero when no subscribers exist. Verified by `bench_hook_overhead`.
 
-**Lock order (additive to §5.1):** `route_table_mutex_` → resource's `hook_table_mutex_` → server-wide `hook_table_mutex_`. No two are held across an iteration step; each is taken, the vector is copied, and the lock is released before invocation.
+**Lock order (additive to §5.1):** `route_table_mutex_` → resource's `hook_table_mutex_` → server-wide `hook_table_mutex_`. No two are held across an iteration step; each is taken, the vector is copied, and the lock is released before invocation. (TSan-validated in full by Sub-test D of `test/integ/threadsafety_stress.cpp`, TASK-094.)
 
 **v1-shorthand aliases.** `log_access`, `not_found_handler`, `method_not_allowed_handler`, `internal_error_handler`, `auth_handler` survive on `create_webserver` as documented sugar. Each setter's Doxygen, the README, and `RELEASE_NOTES.md` identify it as an alias that internally registers a hook at the corresponding phase (see §4.10 table). `log_error` and `file_cleanup_callback` are NOT hook aliases — they are MHD-level / post-upload concerns distinct from the request lifecycle.
 

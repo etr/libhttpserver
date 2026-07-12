@@ -57,11 +57,8 @@
 #include "./unit/throw_probe.hpp"
 
 LT_BEGIN_SUITE(webserver_ws_available_suite)
-    void set_up() {
-    }
-
-    void tear_down() {
-    }
+    void set_up() {}
+    void tear_down() {}
 LT_END_SUITE(webserver_ws_available_suite)
 
 #ifdef HAVE_WEBSOCKET
@@ -78,9 +75,12 @@ LT_END_AUTO_TEST(features_reports_websocket_on)
 // If the throw routing ever regresses to feature_unavailable on the
 // ON-build, the unavailable test would still pass on the OFF lane but
 // the unique_ptr_null_throws_invalid_argument check here would fail.
+// Paired with shared_ptr_null_throws_invalid_argument below (same
+// null-guard contract, unique_ptr vs. shared_ptr overload).
 LT_BEGIN_AUTO_TEST(webserver_ws_available_suite,
                    unique_ptr_null_throws_invalid_argument)
-    httpserver::webserver ws{httpserver::create_webserver(8190)};
+    httpserver::webserver ws{
+        httpserver::create_webserver(8190).listen_socket(false)};
     const auto verdict = httpserver_test::probe_throw_type([&ws] {
         ws.register_ws_resource(
             "/ws", std::unique_ptr<httpserver::websocket_handler>{});
@@ -89,9 +89,12 @@ LT_BEGIN_AUTO_TEST(webserver_ws_available_suite,
     LT_CHECK(!verdict.feature_unavailable);
 LT_END_AUTO_TEST(unique_ptr_null_throws_invalid_argument)
 
+// Paired with unique_ptr_null_throws_invalid_argument above (same
+// null-guard contract, unique_ptr vs. shared_ptr overload).
 LT_BEGIN_AUTO_TEST(webserver_ws_available_suite,
                    shared_ptr_null_throws_invalid_argument)
-    httpserver::webserver ws{httpserver::create_webserver(8191)};
+    httpserver::webserver ws{
+        httpserver::create_webserver(8191).listen_socket(false)};
     const auto verdict = httpserver_test::probe_throw_type([&ws] {
         ws.register_ws_resource(
             "/ws", std::shared_ptr<httpserver::websocket_handler>{});

@@ -57,6 +57,11 @@ static_assert(
     V1_GET_HEADERS_NS_PER_CALL != 760.0,
     "libstdc++ v1 get_headers baseline must be the re-measured libstdc++ "
     "value (TASK-084), not the reused libc++ 760ns literal");
+// 500.0 is ~25% below the committed 640.0 value, giving re-measurement
+// latitude while still catching an accidental reversion to a near-zero
+// placeholder; 760.0 matches the libc++ literal, but the preceding != assert
+// already rejects an exact copy-paste, so this range only needs to bound
+// plausible libstdc++ measurements.
 static_assert(
     V1_GET_HEADERS_NS_PER_CALL >= 500.0
         && V1_GET_HEADERS_NS_PER_CALL <= 760.0,
@@ -134,12 +139,11 @@ int main() {
         const auto& h = req.get_headers();
         do_not_optimize(h);
     }, OUTER, INNER);
-    const double v1_ns = V1_GET_HEADERS_NS_PER_CALL;
-    const double ratio = v1_ns / v2_median_ns;
+    const double ratio = V1_GET_HEADERS_NS_PER_CALL / v2_median_ns;
 
     std::printf("bench_get_headers v1=%.3fns v2=%.3fns ratio=%.2fx "
                 "(median over %d reps x %d iters)\n",
-                v1_ns, v2_median_ns, ratio, OUTER, INNER);
+                V1_GET_HEADERS_NS_PER_CALL, v2_median_ns, ratio, OUTER, INNER);
 
     constexpr double kMinRatio = 10.0;
     if (ratio < kMinRatio) {

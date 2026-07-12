@@ -54,17 +54,26 @@ using detail::classify_route_tier;
 using detail::route_tier_kind;
 using detail::route_tier_result;
 
-//   2. Looks up any existing entry at the path. If it's a class-based
-//      http_resource, throw -- lambda and class registrations cannot
-//      share a path. If it's an existing lambda_resource shim, check
-//      that EVERY requested method slot is empty before mutating any
-//      of them (atomic all-or-nothing); otherwise throw.
-//   3. If no entry exists, build a fresh lambda_resource shim and
-//      insert it into the same three storage maps used by
-//      register_impl_ (master ordered map; the str fast-path map iff
-//      exact non-parameterized; the regex map iff parameterized).
-//   4. Write @p handler into each requested method slot.
-//   5. Invalidate the LRU route cache.
+// prepare_or_create_lambda_shim implements steps 2-3 of the on_methods_
+// upsert sequence; step 1 (input validation) happens in
+// webserver_routes.cpp::validate_on_methods_inputs_ before this file's
+// sequence runs:
+//   2. Look up any existing entry at the path (find_v2_entry_by_path_
+//      below). If it's a class-based http_resource, throw -- lambda and
+//      class registrations cannot share a path. If it's an existing
+//      lambda_resource shim, check that EVERY requested method slot is
+//      empty before mutating any of them (atomic all-or-nothing);
+//      otherwise throw.
+//   3. If no entry exists, build a fresh lambda_resource shim. A later
+//      step (upsert_v2_table_entry_locked_ below) inserts it into
+//      whichever of the three v2 route-table tiers the endpoint's shape
+//      selects: the exact_routes_ hash map, the regex_routes_ vector, or
+//      the param_and_prefix_routes_ radix tier.
+//   4. Write @p handler into each requested method slot
+//      (commit_handlers_to_shim below).
+//   5. Invalidate the LRU route cache -- done by the caller
+//      (webserver_routes.cpp::on_methods_) after the table lock is
+//      released, not in this file.
 //
 // The dispatch path in finalize_answer is not modified: it already
 // looks up via shared_ptr<http_resource>, calls is_allowed(method)
@@ -137,14 +146,12 @@ const detail::route_entry* webserver_impl::find_v2_entry_by_path_(
 // upsert_v2_table_entry_locked_) mutate; holding the lock across the
 // whole prepare->commit->upsert sequence prevents a concurrent registration
 // from racing in between.
-std::shared_ptr<detail::lambda_resource>
+std::pair<std::shared_ptr<detail::lambda_resource>, bool>
 webserver_impl::prepare_or_create_lambda_shim(const detail::http_endpoint& idx,
-                                              method_set methods,
-                                              bool& fresh_out) {
+                                              method_set methods) {
     const detail::route_entry* existing = find_v2_entry_by_path_(idx);
     if (existing == nullptr) {
-        fresh_out = true;
-        return std::make_shared<detail::lambda_resource>();
+        return {std::make_shared<detail::lambda_resource>(), /*fresh=*/true};
     }
     // Existing entry. route_entry::handler is a shared_ptr<http_resource>
     // (TASK-071 collapsed the prior variant). Dynamic-cast to
@@ -167,8 +174,7 @@ webserver_impl::prepare_or_create_lambda_shim(const detail::http_endpoint& idx,
                 "requested methods on this path");
         }
     });
-    fresh_out = false;
-    return shim;
+    return {shim, /*fresh=*/false};
 }
 
 void webserver_impl::commit_handlers_to_shim(detail::lambda_resource& shim,
@@ -214,11 +220,17 @@ void webserver_impl::reject_terminus_collision(const std::string& key,
     // Throws BEFORE any mutation so the atomicity guarantee pinned by
     // upsert_param_route_failed_duplicate_leaves_original_intact holds
     // for the new throw too.
-    const bool collision = !want_is_prefix
-        ? param_and_prefix_routes_.has_terminus_at(key, /*is_prefix=*/true)
-        : (exact_routes_.find(key) != exact_routes_.end()
-           || param_and_prefix_routes_.has_terminus_at(
-                  key, /*is_prefix=*/false));
+    bool collision = false;
+    if (!want_is_prefix) {
+        // New exact: refuse if a prefix entry already exists at this key.
+        collision = param_and_prefix_routes_.has_terminus_at(
+            key, /*is_prefix=*/true);
+    } else {
+        // New prefix: refuse if an exact entry already exists at this key.
+        collision = exact_routes_.find(key) != exact_routes_.end()
+            || param_and_prefix_routes_.has_terminus_at(
+                   key, /*is_prefix=*/false);
+    }
     if (collision) {
         const char* incoming_kind = want_is_prefix ? "prefix" : "exact";
         const char* existing_kind = want_is_prefix ? "exact" : "prefix";
@@ -303,6 +315,8 @@ void webserver_impl::update_existing_v2_entry(const std::string& key,
         target.handler = shim;
         target.is_prefix = false;
     };
+    // Radix-tier updates are handled by upsert_v2_radix_route; only exact
+    // and regex entries reach here.
     auto exact_it = exact_routes_.find(key);
     if (exact_it != exact_routes_.end()) {
         merge_into(exact_it->second);

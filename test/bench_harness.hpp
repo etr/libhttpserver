@@ -51,22 +51,54 @@
 #define TEST_BENCH_HARNESS_HPP_
 
 #include <algorithm>
+#include <cassert>
 #include <chrono>
 #include <cstddef>
 #include <cstdio>
 #include <vector>
 
+// Single guarded block: both the MSVC-only include and the ODR-safe sink
+// declaration it supports (also shared by the unknown-compiler fallback in
+// do_not_optimize below) are gated together here.
+#if defined(_MSC_VER) || (!defined(__GNUC__) && !defined(__clang__))
 #if defined(_MSC_VER)
 #include <intrin.h>  // _ReadWriteBarrier
 #endif
 
-#if defined(_MSC_VER)
-// Single, ODR-safe sink for the MSVC do_not_optimize fallback (below). An
-// `inline` variable gives exactly one definition across every TU that
-// includes this header (C++17). do_not_optimize writes through it on each
-// call, so the compiler must materialise the value being protected.
+// Single, ODR-safe sink for the MSVC and unknown-compiler do_not_optimize
+// fallbacks (below). An `inline` variable gives exactly one definition
+// across every TU that includes this header (C++17). do_not_optimize writes
+// through it on each call, so the compiler must materialise the value being
+// protected.
+// pointer is volatile so the store to it is an observable side effect;
+// pointee is const void* to accept any address.
 inline volatile const void* volatile do_not_optimize_sink = nullptr;
 #endif
+
+// TASK-083: sanitizer-build detection, shared by every bench TU that
+// includes this header (previously copy-pasted verbatim in
+// bench_hook_overhead.cpp, bench_route_lookup.cpp, and bench_warm_path.cpp).
+// constexpr (without `inline`) gives each TU its own internal-linkage copy,
+// so no ODR issue arises from the duplication across TUs.
+constexpr bool kSanitizerBuild =
+#if defined(__SANITIZE_ADDRESS__) \
+    || defined(__SANITIZE_THREAD__) \
+    || defined(__SANITIZE_MEMORY__) \
+    || defined(__SANITIZE_HWADDRESS__)
+    true
+#elif defined(__has_feature)
+#  if __has_feature(address_sanitizer) \
+      || __has_feature(thread_sanitizer) \
+      || __has_feature(memory_sanitizer) \
+      || __has_feature(undefined_behavior_sanitizer)
+    true
+#  else
+    false
+#  endif
+#else
+    false
+#endif
+    ;  // NOLINT(whitespace/semicolon)
 
 // ---------------------------------------------------------------------------
 // do_not_optimize
@@ -108,12 +140,12 @@ template <typename T>
     do_not_optimize_sink = static_cast<const void*>(&value);
     _ReadWriteBarrier();
 #else
-    // Unknown compiler: best-effort volatile-write fallback (still better
-    // than a discarded local because the store target is volatile-qualified
-    // at file scope and therefore observable).
-    static volatile const void* volatile fallback_sink = nullptr;
-    fallback_sink = static_cast<const void*>(&value);
-    (void)fallback_sink;
+    // Unknown compiler: best-effort volatile-write fallback through the
+    // same ODR-safe inline sink used by the MSVC branch above (still
+    // better than a discarded function-local static because the store
+    // target is volatile-qualified at file scope and therefore observable,
+    // with a single definition across every TU regardless of compiler).
+    do_not_optimize_sink = static_cast<const void*>(&value);
 #endif
 }
 
@@ -153,6 +185,8 @@ double run_bench_median(F callable, int outer, int inner) {
 // before p99_of_sorted because p99_of_sorted requires a pre-sorted
 // vector (its precondition).
 inline double sort_and_median(std::vector<double>& v) {
+    // Precondition: v is non-empty (callers always pass outer>=1 samples).
+    assert(!v.empty());
     std::sort(v.begin(), v.end());
     return v[v.size() / 2];
 }

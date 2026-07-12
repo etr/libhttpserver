@@ -60,6 +60,41 @@ cat > "$ODD" <<'EOF'
 int main() { return 0; }
 EOF
 
+# Fixture (iv): two separate, sequentially-balanced ```cpp ... ``` blocks.
+# Pins the in_block 1 -> 0 -> 1 -> 0 reset path — a document with a second
+# block must not accidentally latch open (or closed) after the first
+# block's close. Must exit 0.
+TWO_BLOCKS="$TMPDIR_BASE/two_blocks.md"
+cat > "$TWO_BLOCKS" <<'EOF'
+# Title
+
+```cpp
+int main() { return 0; }
+```
+
+Some prose in between.
+
+```cpp
+int second() { return 1; }
+```
+
+Done.
+EOF
+
+# Fixture (v): a bare ``` opener and a bare ``` closer (no info string).
+# Pins the in_block == 0 branch for a bare opener, distinct from the
+# info-string ```cpp opener used by every other fixture. Must exit 0.
+BARE="$TMPDIR_BASE/bare.md"
+cat > "$BARE" <<'EOF'
+# Title
+
+```
+plain code, no language tag
+```
+
+Done.
+EOF
+
 # Test 1: balanced document exits 0.
 if bash "$GATE" "$BALANCED" >/dev/null 2>&1; then
     ok "balanced fenced block exits 0"
@@ -80,6 +115,20 @@ if ! bash "$GATE" "$ODD" >/dev/null 2>&1; then
     ok "odd fence count (unclosed block) exits non-zero"
 else
     fail "odd fence count should exit non-zero"
+fi
+
+# Test 4: two sequentially-balanced blocks exit 0 (in_block reset path).
+if bash "$GATE" "$TWO_BLOCKS" >/dev/null 2>&1; then
+    ok "two sequential balanced blocks exit 0"
+else
+    fail "two sequential balanced blocks should exit 0"
+fi
+
+# Test 5: a bare ``` opener/closer pair (no info string) exits 0.
+if bash "$GATE" "$BARE" >/dev/null 2>&1; then
+    ok "bare fence opener/closer exits 0"
+else
+    fail "bare fence opener/closer should exit 0"
 fi
 
 echo ""

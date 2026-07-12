@@ -77,6 +77,27 @@ else
     fail "test 3: reason 3 lines above should exit 0"
 fi
 
+# Test 3b: `#ifndef _WINDOWS` with `// reason:` exactly 5 lines above the
+# directive (the awk window's inclusive boundary, `NR >= target - 5`) —
+# should exit 0. Closes the gap between test 3 (3 lines, in-window) and
+# test 4 (6 lines, out-of-window).
+reset_repo
+cat > "$FAKE_REPO/test/integ/window_boundary.cpp" <<'EOF'
+// reason: exactly five lines above the directive (boundary case).
+//
+//
+//
+//
+#ifndef _WINDOWS
+int x = 1;
+#endif
+EOF
+if (cd "$FAKE_REPO" && bash scripts/check-skip-rationales.sh 2>/dev/null); then
+    ok "test 3b: reason exactly 5 lines above (boundary) exits 0"
+else
+    fail "test 3b: reason exactly 5 lines above (boundary) should exit 0"
+fi
+
 # Test 4: `#ifndef _WINDOWS` with `// reason:` 6 lines above (outside window)
 # — should exit 1.
 reset_repo
@@ -139,6 +160,21 @@ else
     fail "test 7: #ifdef _WINDOWS (additive) should exit 0"
 fi
 
+# Test 7b: `#ifdef DARWIN` (opposite polarity — additive, not a skip)
+# does NOT require `// reason:`; should exit 0. Mirrors test 7 for DARWIN.
+reset_repo
+cat > "$FAKE_REPO/test/integ/additive_darwin.cpp" <<'EOF'
+// No reason comment here.
+#ifdef DARWIN
+int x = 1;
+#endif
+EOF
+if (cd "$FAKE_REPO" && bash scripts/check-skip-rationales.sh 2>/dev/null); then
+    ok "test 7b: #ifdef DARWIN (additive) exits 0"
+else
+    fail "test 7b: #ifdef DARWIN (additive) should exit 0"
+fi
+
 # Test 8: `#if !defined(_WINDOWS) && defined(HAVE_DAUTH)` form (the
 # authentication.cpp digest-auth guard) without a reason — should exit 1.
 reset_repo
@@ -167,6 +203,80 @@ else
     fail "test 9: #if !defined(_WINDOWS) with reason should exit 0"
 fi
 
+# Test 9b: `#if !defined(DARWIN)` form (no `&&` conjunction) without a
+# reason — should exit 1, mirroring test 8 but for DARWIN.
+reset_repo
+cat > "$FAKE_REPO/test/integ/if_not_defined_darwin.cpp" <<'EOF'
+#if !defined(DARWIN)
+int x = 1;
+#endif
+EOF
+if ! (cd "$FAKE_REPO" && bash scripts/check-skip-rationales.sh 2>/dev/null); then
+    ok "test 9b: #if !defined(DARWIN) bare exits 1"
+else
+    fail "test 9b: #if !defined(DARWIN) bare should exit 1"
+fi
+
+# Test 9c: bare `#if !defined(_WINDOWS)` (no `&&` conjunction) without a
+# reason — should exit 1. Tests 8/9 only ever exercise the compound
+# `&& defined(HAVE_DAUTH)` form; this pins the conjunction-free form.
+reset_repo
+cat > "$FAKE_REPO/test/integ/if_not_defined_bare.cpp" <<'EOF'
+#if !defined(_WINDOWS)
+int x = 1;
+#endif
+EOF
+if ! (cd "$FAKE_REPO" && bash scripts/check-skip-rationales.sh 2>/dev/null); then
+    ok "test 9c: #if !defined(_WINDOWS) (no conjunction) bare exits 1"
+else
+    fail "test 9c: #if !defined(_WINDOWS) (no conjunction) bare should exit 1"
+fi
+
+# Test 9d: same conjunction-free `#if !defined(_WINDOWS)` form with a
+# `// reason:` comment adjacent — should exit 0.
+reset_repo
+cat > "$FAKE_REPO/test/integ/if_not_defined_bare_ok.cpp" <<'EOF'
+// reason: MinGW64 lacks the syscall this test exercises.
+#if !defined(_WINDOWS)
+int x = 1;
+#endif
+EOF
+if (cd "$FAKE_REPO" && bash scripts/check-skip-rationales.sh 2>/dev/null); then
+    ok "test 9d: #if !defined(_WINDOWS) (no conjunction) with reason exits 0"
+else
+    fail "test 9d: #if !defined(_WINDOWS) (no conjunction) with reason should exit 0"
+fi
+
+# Test 9e: two guarded directives in one file — the first compliant (a
+# `// reason:` comment precedes it), the second not. Exercises the
+# inner while-read loop's handling of multiple candidates per file, which
+# no single-directive fixture above touches. Should exit 1 and stderr
+# should name the second (non-compliant) directive's line number.
+reset_repo
+cat > "$FAKE_REPO/test/integ/two_directives.cpp" <<'EOF'
+// reason: first block is documented.
+#ifndef _WINDOWS
+int x = 1;
+#endif
+//
+//
+//
+//
+#ifndef _WINDOWS
+int y = 2;
+#endif
+EOF
+STDERR_OUT="$TMPDIR_BASE/two_directives.stderr"
+if ! (cd "$FAKE_REPO" && bash scripts/check-skip-rationales.sh 2>"$STDERR_OUT"); then
+    if grep -q "two_directives.cpp:9:" "$STDERR_OUT"; then
+        ok "test 9e: second (non-compliant) directive of two exits 1 and is named at its line"
+    else
+        fail "test 9e: stderr should name the second directive's line (5); got: $(cat "$STDERR_OUT")"
+    fi
+else
+    fail "test 9e: file with one compliant and one non-compliant directive should exit 1"
+fi
+
 # Test 10: the live repo's test/integ/ — should exit 0 after rationale
 # comments have been added to every skip site. Skipped if the live tree
 # does not exist or is in the middle of the implementation (the
@@ -178,6 +288,8 @@ if [ -d "$REAL_REPO/test/integ" ]; then
     else
         fail "test 10: live test/integ/ tree should exit 0 (add // reason: comments to all #ifndef _WINDOWS/DARWIN blocks)"
     fi
+else
+    echo "  SKIP: test 10 — live test/integ/ not found"
 fi
 
 echo ""

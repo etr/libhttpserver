@@ -57,11 +57,18 @@
 //   HTTPSERVER_RUN_STOP_FROM_HANDLER=1. Local runs remain opt-in — the
 //   sub-test SKIPs unless that env var is set.
 //
-// **Manual TSan gate (documented):**
+// **Local TSan reproduction (already covered automatically by the tsan CI lane):**
 //   Rebuild with `CXXFLAGS="-fsanitize=thread -g -O1"
 //   LDFLAGS="-fsanitize=thread"` and re-run this binary; expect no
 //   "WARNING: ThreadSanitizer: data race" output. Same pattern as
 //   route_table_concurrency.cpp (TASK-027).
+
+// Linux-only: pthread_setaffinity_np for the noise-reduction pin in
+// adversarial_segments_registration_no_latency_spike (TASK-080).
+// _GNU_SOURCE must be defined before the first system header is included.
+#if defined(__linux__) && !defined(_WIN32)
+#define _GNU_SOURCE
+#endif
 
 #include <curl/curl.h>
 #ifndef _WIN32
@@ -69,10 +76,7 @@
 #include <unistd.h>
 #endif
 
-// Linux-only: pthread_setaffinity_np for the noise-reduction pin in
-// adversarial_segments_registration_no_latency_spike (TASK-080).
 #if defined(__linux__) && !defined(_WIN32)
-#define _GNU_SOURCE
 #include <pthread.h>
 #include <sched.h>
 #endif
@@ -246,9 +250,12 @@ ht::http_response driver_body(const ht::http_request& req,
         std::string i_s{req.get_arg("i")};
         if (!op_s.empty()) op = std::stoi(op_s);
         if (!i_s.empty()) i = std::stoi(i_s);
-    } catch (...) {
+    } catch (const std::exception& e) {
         // Malformed query — still return 200; we only need lock
-        // exercise.
+        // exercise. Surface it so malformed URLs are visible in CI logs,
+        // mirroring the unregister_path exception diagnostic below.
+        std::cerr << "[stress] malformed op/i query param: " << e.what()
+                  << '\n';
     }
 
     const int slot = i & (kDynSlots - 1);
@@ -315,9 +322,11 @@ ht::http_response driver_body(const ht::http_request& req,
             if (hooks->handles.size() >= HookBag::kCap) {
                 // Recycle: move the oldest handle out, erase the slot,
                 // then call remove() so the moved-from dtor is a no-op.
-                // erase(begin()) is O(n) on vector; acceptable at
-                // kCap=256, but switch to std::deque if kCap grows
-                // significantly.
+                // erase(begin()) is O(n) on vector, so this already
+                // costs up to a 255-element shift at today's kCap=256
+                // (~25 evictions/s in practice) — judged acceptable now,
+                // not merely a future-growth risk; switch to std::deque
+                // if kCap grows significantly.
                 ht::hook_handle dead = std::move(hooks->handles.front());
                 hooks->handles.erase(hooks->handles.begin());
                 dead.remove();  // deregisters; dtor is now a no-op
@@ -365,6 +374,11 @@ ht::http_response driver_body(const ht::http_request& req,
             //   thread's CAS or short-circuit in ensure_table()) ->
             //   server-wide hook_table (other threads'
             //   webserver::add_hook in cases 4/5).
+            // Note this is exercised as a cross-thread, TSan-observable
+            // concurrent interleaving across separate handler
+            // invocations — not the single-thread sequential nested
+            // lock acquisition documented in architecture doc §5.6.
+            // Sub-test D provides the standalone per-resource CAS proof.
             // remove() runs immediately so registrations on the
             // long-lived pool resources do not accumulate.
             ht::hook_handle h =
@@ -402,11 +416,17 @@ ht::http_response driver_body(const ht::http_request& req,
 // Stress duration: default 60 s (acceptance criterion), overridable
 // via HTTPSERVER_STRESS_SECONDS for fast local iteration.
 // Capped at 3600 s to prevent runaway in CI (CWE-1284).
+// NOTE: this single knob budgets wall-clock for BOTH Sub-test A's client
+// loop and Sub-test C's watchdog (TASK-094) — an operator setting a large
+// value (up to the 3600s cap) should budget for both sub-tests combined.
 int stress_seconds() {
     if (const char* s = std::getenv("HTTPSERVER_STRESS_SECONDS")) {
         try {
             int v = std::stoi(s);
             if (v > 0 && v <= 3600) return v;
+        } catch (const std::out_of_range&) {
+            std::cerr << "[WARN] HTTPSERVER_STRESS_SECONDS value out of "
+                         "range, using default\n";
         } catch (...) {
         }
     }
@@ -424,6 +444,9 @@ int stress_repeats() {
         try {
             int v = std::stoi(s);
             if (v > 0 && v <= 200) return v;
+        } catch (const std::out_of_range&) {
+            std::cerr << "[WARN] HTTPSERVER_STRESS_REPEATS value out of "
+                         "range, using default\n";
         } catch (...) {
         }
     }
@@ -446,6 +469,9 @@ int stress_pin_cpu() {
         try {
             int v = std::stoi(s);
             if (v >= 0 && v < 4096) return v;
+        } catch (const std::out_of_range&) {
+            std::cerr << "[WARN] HTTPSERVER_STRESS_PIN_CPU value out of "
+                         "range, using default\n";
         } catch (...) {
         }
     }
@@ -664,6 +690,14 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
                                 std::to_string(port) + "/wedge";
 
         CURL* curl = curl_easy_init();
+        if (!curl) {
+            // Resource exhaustion — cannot exercise the curl side of the
+            // contract; exit with the same sentinel as a completed-without-
+            // abort curl call so the parent's outcome classification stays
+            // simple (mirrors the `if (!curl) return;` guard used in the
+            // Sub-test A client threads).
+            std::_Exit(kExitCodeCurlCompleted);
+        }
         curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, discard_write);
         // 3 s < parent's 5 s deadline: curl's window expires before the
@@ -790,11 +824,26 @@ std::string adversarial_segment(std::string_view parent_tag, uint32_t i) {
     return s;
 }
 
+// Per-run stats for one adversarial_segments stress round. Hoisted to
+// namespace scope (next to adversarial_segment()) rather than declared
+// inline in the test body for searchability.
+struct round_result {
+    bool gate_ran = false;
+    int64_t warmup_median = 0;  // ns
+    int64_t median = 0;         // ns
+    int64_t p95 = 0;            // ns
+    int64_t p99 = 0;            // ns
+    int64_t p999 = 0;           // ns
+    int64_t max_ns = 0;
+    size_t samples = 0;
+    int collisions = 0;
+};
+
 }  // namespace
 
 LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
                    adversarial_segments_registration_no_latency_spike)
-    using clock_t = std::chrono::steady_clock;
+    using StressClock = std::chrono::steady_clock;
     using ns = std::chrono::nanoseconds;
 
     constexpr int kWriterThreads = 4;
@@ -809,17 +858,6 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
     // the round in a lambda lets HTTPSERVER_STRESS_REPEATS=N drive N
     // back-to-back rounds for noise-floor characterisation without
     // touching the surrounding test harness.
-    struct round_result {
-        bool gate_ran = false;
-        int64_t warmup_median = 0;
-        int64_t median = 0;
-        int64_t p95 = 0;
-        int64_t p99 = 0;
-        int64_t p999 = 0;
-        int64_t max_ns = 0;
-        size_t samples = 0;
-        int collisions = 0;
-    };
     auto run_one_round = [&]() -> round_result {
         round_result r;
         ht::webserver ws{
@@ -867,12 +905,12 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
                 for (const char* parent : kParents) {
                     const std::string path = std::string("/") + parent + "/"
                         + adversarial_segment(parent, i);
-                    const auto t0 = clock_t::now();
+                    const auto t0 = StressClock::now();
                     try {
                         ws.register_path(
                             path, std::make_shared<noop_resource>());
                         const auto dt = std::chrono::duration_cast<ns>(
-                            clock_t::now() - t0).count();
+                            StressClock::now() - t0).count();
                         register_ok.fetch_add(
                             1, std::memory_order_relaxed);
                         samples.push_back(dt);
@@ -895,9 +933,9 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
         // deadline expires. Writers poll `stop` between ops, so they exit
         // cleanly even if the corpus would otherwise outrun the budget.
         std::thread watchdog([&] {
-            const auto deadline = clock_t::now()
+            const auto deadline = StressClock::now()
                 + std::chrono::seconds(stress_seconds());
-            while (clock_t::now() < deadline
+            while (StressClock::now() < deadline
                    && register_ok.load(std::memory_order_relaxed)
                       < kMaxRoutesPerParent
                           * static_cast<int>(kParents.size())) {
@@ -972,11 +1010,15 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
         r.median = sorted[n / 2];
         // Use ceiling integer arithmetic for percentile indices to avoid
         // floating-point truncation returning a sub-percentile sample.
-        // Formula: min((n * k + (100-1)) / 100, n-1) gives the ceiling
-        // index for the k-th percentile boundary.
-        r.p95  = sorted[std::min((n * 95  + 99) / 100, n - 1)];
-        r.p99  = sorted[std::min((n * 99  + 99) / 100, n - 1)];
-        r.p999 = sorted[std::min((n * 999 + 999) / 1000, n - 1)];
+        // Formula: min((n * k + (denom-1)) / denom, n-1) gives the ceiling
+        // index for the k/denom-th percentile boundary; bias = denom - 1
+        // in every case (100-1 for p95/p99, 1000-1 for p999).
+        auto percentile_idx = [n](size_t k, size_t denom) {
+            return std::min((n * k + (denom - 1)) / denom, n - 1);
+        };
+        r.p95  = sorted[percentile_idx(95, 100)];
+        r.p99  = sorted[percentile_idx(99, 100)];
+        r.p999 = sorted[percentile_idx(999, 1000)];
         r.max_ns = sorted.back();
 
         // Baseline: median of the first quarter of insertion-order
@@ -997,6 +1039,10 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
             samples_ns.begin(),
             samples_ns.begin() + static_cast<std::ptrdiff_t>(quarter));
         std::sort(warmup.begin(), warmup.end());
+        // Floor index (lower-middle element for even-length `warmup`)
+        // rather than a true median: this is intentionally conservative
+        // — it never overstates the baseline, so the ratio gate below
+        // stays at least as strict as a true median would produce.
         r.warmup_median = warmup[warmup.size() / 2];
         r.gate_ran = true;
 
@@ -1042,7 +1088,7 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
                   << " p95_ratio=" << (r.p95 * 100 / baseline) << "%"
                   << "\n";
 
-        if (r.p95 > worst_p95) {
+        if (r.p95 >= worst_p95) {
             worst_p95 = r.p95;
             worst_baseline = baseline;
         }
@@ -1107,7 +1153,9 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
                      "HTTPSERVER_STRESS_SECONDS.\n";
     }
     LT_CHECK(rounds_ran > 0);
-    LT_CHECK_LT(worst_p95, worst_baseline * 20);
+    if (rounds_ran > 0) {
+        LT_CHECK_LT(worst_p95, worst_baseline * 20);
+    }
 LT_END_AUTO_TEST(adversarial_segments_registration_no_latency_spike)
 
 // ---------------------------------------------------------------------
@@ -1134,21 +1182,29 @@ LT_END_AUTO_TEST(adversarial_segments_registration_no_latency_spike)
 // register_path / unregister_path).
 //
 // Wall-clock: shape-bounded (~1-5 s under TSan slowdown); no
-// HTTPSERVER_STRESS_SECONDS integration. Total CAS races per run =
-// kRepeats * kThreads = 64 * 8 = 512.
+// HTTPSERVER_STRESS_SECONDS integration. Total add_hook calls racing
+// the null CAS slot per run = kRepeats * kThreads (64 * 8 = 512 with
+// current constants); at most 1 per iteration wins the CAS, the rest
+// either lose or take the load-acquire short-circuit.
 // ---------------------------------------------------------------------
 
 LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
                    per_resource_add_hook_first_call_cas_no_data_race)
     constexpr int kRepeats = 64;
     constexpr int kThreads = 8;
+    // Post-race mixed add/remove burst tuning knobs (action item 1.c) —
+    // grouped here with the other Sub-test D tunables rather than at
+    // point-of-use inside the iter loop.
+    constexpr int kBurstThreads = 4;
+    constexpr int kBurstOpsPerThread = 8;
 
     // Cumulative witnesses across all iterations. The accumulator is
-    // the falsifiable gate for the cycle: it must reach kRepeats (each
-    // iteration must drive at least one successful add_hook installing
-    // the table). On the cycle-1 RED step the worker threads do not
-    // call add_hook, so total_post_race_nonnull stays at 0 and the
-    // LT_CHECK_GT fails as designed.
+    // the falsifiable gate for the cycle: it is a lower-bound sentinel
+    // asserting that AT LEAST ONE iteration drove a successful add_hook
+    // that installed the table (LT_CHECK_GT(..., 0) below does not
+    // verify a per-iteration invariant). On the cycle-1 RED step the
+    // worker threads do not call add_hook, so total_post_race_nonnull
+    // stays at 0 and the LT_CHECK_GT fails as designed.
     std::atomic<int> total_post_race_nonnull{0};
     // Cumulative count of iterations where >= 2 workers had passed
     // the latch by the time main sampled the counter after joining.
@@ -1228,18 +1284,51 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
         // burst hits the now-installed resource_hook_table from
         // multiple threads, exercising concurrent registration +
         // dispatch contention on the middle tier of the lock order.
-        constexpr int kBurstThreads = 4;
-        constexpr int kBurstOpsPerThread = 8;
+        // The phase is varied per burst-thread index `b` (matching the
+        // pattern in install_random_hook) so all four of the other
+        // post-route-resolution phases get concurrent multi-phase
+        // append coverage on resource_hook_table, in addition to the
+        // request_completed coverage already exercised by the CAS-race
+        // section above.
         std::vector<std::thread> burst;
         burst.reserve(kBurstThreads);
         for (int b = 0; b < kBurstThreads; ++b) {
-            burst.emplace_back([&] {
+            burst.emplace_back([&, b] {
                 for (int op = 0; op < kBurstOpsPerThread; ++op) {
-                    ht::hook_handle h = r.add_hook(
-                        ht::hook_phase::request_completed,
-                        std::function<void(
-                            const ht::request_completed_ctx&)>(
-                            [](const ht::request_completed_ctx&) {}));
+                    ht::hook_handle h = [&]() -> ht::hook_handle {
+                        switch (b % 4) {
+                            case 0:
+                                return r.add_hook(
+                                    ht::hook_phase::before_handler,
+                                    std::function<ht::hook_action(
+                                        ht::before_handler_ctx&)>(
+                                        [](ht::before_handler_ctx&) {
+                                            return ht::hook_action::pass();
+                                        }));
+                            case 1:
+                                return r.add_hook(
+                                    ht::hook_phase::handler_exception,
+                                    std::function<ht::hook_action(
+                                        const ht::handler_exception_ctx&)>(
+                                        [](const ht::handler_exception_ctx&) {
+                                            return ht::hook_action::pass();
+                                        }));
+                            case 2:
+                                return r.add_hook(
+                                    ht::hook_phase::after_handler,
+                                    std::function<ht::hook_action(
+                                        ht::after_handler_ctx&)>(
+                                        [](ht::after_handler_ctx&) {
+                                            return ht::hook_action::pass();
+                                        }));
+                            default:
+                                return r.add_hook(
+                                    ht::hook_phase::response_sent,
+                                    std::function<void(
+                                        const ht::response_sent_ctx&)>(
+                                        [](const ht::response_sent_ctx&) {}));
+                        }
+                    }();
                     h.remove();
                 }
             });
@@ -1278,10 +1367,12 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
               << " contended_window_iters="
               << contended_window_iters.load() << "\n";
 
-    // Falsifiable gate: every iteration must install a table (some
-    // thread must have driven ensure_table() to completion). On the
-    // cycle-1 RED step this is 0 — proves the witness mechanism is
-    // wired and observably distinguishes install vs no-install.
+    // Falsifiable gate: at least one iteration installed a table (some
+    // thread must have driven ensure_table() to completion at least
+    // once across all kRepeats iterations) — a lower-bound sentinel,
+    // not a per-iteration invariant. On the cycle-1 RED step this is 0
+    // — proves the witness mechanism is wired and observably
+    // distinguishes install vs no-install.
     LT_CHECK_GT(total_post_race_nonnull.load(), 0);
     // Scheduling-proxy gate: at least one iteration released >= 2
     // workers through the latch. With kThreads workers per iteration

@@ -136,8 +136,6 @@ case "$PLATFORM" in
         fail "unsupported platform '$PLATFORM' (need Linux or Darwin)"
         ;;
 esac
-# Alias for backward-compatibility with the fallback grep path below.
-V1_PATTERN="$V1_SONAME_PATTERN"
 
 echo "=== check-parallel-install: v2 + v1 coexistence on the same DESTDIR ==="
 echo "  BUILD_DIR       : $BUILD_DIR"
@@ -162,12 +160,18 @@ pass "v2 install succeeded into $SHARED_STAGE"
 # ---- Phase 2: materialise v1 source via git worktree --------------------------
 echo "Phase 2: building $MASTER_REF in a temporary git worktree"
 
-if ! git -C "$REPO_ROOT" rev-parse --verify "$MASTER_REF" >/dev/null 2>&1; then
+if ! git -C "$REPO_ROOT" rev-parse --verify -- "$MASTER_REF" >/dev/null 2>&1; then
     skip_or_fail "ref '$MASTER_REF' not in this repository — cannot do automated v1 build"
 fi
 
 # Remove a stale worktree from a previous aborted run, if any.
 remove_master_worktree
+
+# Defense-in-depth: MASTER_REF is always "origin/master" in CI, but guard
+# against a locally-set MASTER_REF containing option-like or otherwise
+# invalid characters before handing it to `git worktree add`.
+git check-ref-format --allow-onelevel "$MASTER_REF" \
+    || fail "MASTER_REF contains invalid characters: $MASTER_REF"
 
 if ! git -C "$REPO_ROOT" worktree add --detach "$MASTER_WORKTREE" "$MASTER_REF" >"$SHARED_STAGE/.worktree-add.log" 2>&1; then
     cat "$SHARED_STAGE/.worktree-add.log" >&2
@@ -197,6 +201,9 @@ if [ "$PLATFORM" = "Darwin" ]; then
     else
         _BREW_PREFIX="/opt/homebrew"   # best-effort fallback for arm64
     fi
+    # Defense-in-depth: a space-containing prefix would corrupt the
+    # unquoted-at-use CPPFLAGS/LDFLAGS below. Discard rather than propagate.
+    case "$_BREW_PREFIX" in *' '*) _BREW_PREFIX="" ;; esac
     if [ -n "$_BREW_PREFIX" ]; then
         _HOMEBREW_CPPFLAGS="-I${_BREW_PREFIX}/include -I${_BREW_PREFIX}/opt/gnutls/include"
         _HOMEBREW_LDFLAGS="-L${_BREW_PREFIX}/lib -L${_BREW_PREFIX}/opt/gnutls/lib"
@@ -257,10 +264,10 @@ if [ -n "$V1_EXPECTED_BASENAME" ]; then
     echo "  v1 artefact coexisting with v2: $V1_EXPECTED_BASENAME"
     pass "v1 ($V1_EXPECTED_BASENAME) and v2 ($V2_FULL_BASENAME) SONAMEd libraries coexist in $STAGE_LIB"
 else
-    # Fallback: broad pattern-match (V1_PATTERN covers .so.0, .so.1, etc.).
-    v1_hits="$(ls "$STAGE_LIB" 2>/dev/null | grep -E "$V1_PATTERN" | grep -v "^$V2_FULL_BASENAME\$" || true)"
+    # Fallback: broad pattern-match (V1_SONAME_PATTERN covers .so.0, .so.1, etc.).
+    v1_hits="$(ls "$STAGE_LIB" 2>/dev/null | grep -E "$V1_SONAME_PATTERN" | grep -v "^$V2_FULL_BASENAME\$" || true)"
     if [ -z "$v1_hits" ]; then
-        fail "no v1-style library file (matching $V1_PATTERN, excluding $V2_FULL_BASENAME) found in $STAGE_LIB; install contents: $(ls "$STAGE_LIB" 2>/dev/null)"
+        fail "no v1-style library file (matching $V1_SONAME_PATTERN, excluding $V2_FULL_BASENAME) found in $STAGE_LIB; install contents: $(ls "$STAGE_LIB" 2>/dev/null)"
     fi
     echo "  v1 artefacts coexisting with v2:"
     while IFS= read -r f; do

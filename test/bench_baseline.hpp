@@ -62,10 +62,10 @@ inline constexpr double WARM_SHOULD_SKIP_AUTH_EMPTY_NS    = 2.0;
 inline constexpr double WARM_SERIALIZE_ALLOW_405_NS       = 40.0;
 inline constexpr double WARM_BUILD_REQUEST_ARGS_PCT2F_NS  = 650.0;
 inline constexpr double WARM_BUILD_REQUEST_ARGS_PLAIN_NS  = 640.0;
-#elif defined(__linux__) && defined(__GLIBCXX__)
-// libstdc++ on Linux. TODO(TASK-084): re-measure on the verify-build.yml
-// runner and tighten. Placeholders are ~3x the apple-silicon medians so
-// the gate cannot false-fail before calibration.
+#elif defined(__linux__)
+// Any C++ stdlib on Linux. TODO(TASK-084): re-measure on the
+// verify-build.yml runner and tighten. Placeholders are ~3x the
+// apple-silicon medians so the gate cannot false-fail before calibration.
 inline constexpr double WARM_CANONICALIZE_NS              = 48.0;
 inline constexpr double WARM_SHOULD_SKIP_AUTH_NONEMPTY_NS = 390.0;
 inline constexpr double WARM_SHOULD_SKIP_AUTH_EMPTY_NS    = 6.0;

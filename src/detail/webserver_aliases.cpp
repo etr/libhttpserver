@@ -145,15 +145,20 @@ void install_log_access_alias(
         [user_logger = std::move(user_logger)](
                 const response_sent_ctx& ctx) {
         if (ctx.request == nullptr) return;
+        std::string_view path = ctx.request->get_path();
+        std::string_view method = ctx.request->get_method();
         std::string line;
-        line.reserve(64);
+        // Reserve exactly what this request needs (path + " METHOD: " +
+        // method) instead of a fixed guess, so paths/methods longer than
+        // ~50 bytes don't trigger a reallocation mid-append.
+        line.reserve(path.size() + method.size() + 9);
         // Append path and method with control-character sanitization
         // (CWE-117). Append string_view directly to avoid intermediate
         // heap allocations (performance: saves two alloc/dealloc pairs
         // per request vs. the previous std::string(sv) approach).
-        append_sanitized(line, ctx.request->get_path());
+        append_sanitized(line, path);
         line += " METHOD: ";
-        append_sanitized(line, ctx.request->get_method());
+        append_sanitized(line, method);
         user_logger(line);
     };
 }
@@ -214,8 +219,7 @@ void webserver::install_auth_alias_() {
                 // should_skip_auth's own empty-list early-out from
                 // TASK-058 still fires for the non-empty path).
                 if (!ws_ptr->auth_skip_paths_normalized.empty()) {
-                    std::string path(ctx.request->get_path());
-                    if (impl_ptr->should_skip_auth(path)) {
+                    if (impl_ptr->should_skip_auth(ctx.request->get_path())) {
                         return hook_action::pass();
                     }
                 }
@@ -239,18 +243,25 @@ void webserver::install_auth_alias_() {
                 // exception thrown by a hook is routed through the same
                 // path as a throwing resource handler (which yields 500).
                 std::optional<http_response> rejection;
+                bool auth_threw = false;
                 try {
                     rejection = ws_ptr->auth_handler(*ctx.request);
                 } catch (const std::exception& e) {
                     impl_ptr->log_dispatch_error(
                         std::string("auth_handler threw: ").append(e.what())
                             .append("; failing closed with 500"));
-                    return hook_action::respond_with(
-                        http_response::empty().with_status(500));
+                    auth_threw = true;
                 } catch (...) {
                     impl_ptr->log_dispatch_error(
                         "auth_handler threw unknown exception; "
                         "failing closed with 500");
+                    auth_threw = true;
+                }
+                if (auth_threw) {
+                    // Deliberately ignores create_webserver::expose_exception_
+                    // messages: the auth fail-closed 500 always has an empty
+                    // body, unlike internal_error_page (webserver_error_pages.cpp),
+                    // to keep the auth boundary fail-safe by default.
                     return hook_action::respond_with(
                         http_response::empty().with_status(500));
                 }
@@ -329,27 +340,20 @@ void webserver::install_method_not_allowed_alias_() {
 // a known phase boundary to subscribe alongside. The on-wire 404
 // body shape is pinned by hooks_not_found_alias_test (default and
 // custom branches) and by basic.cpp:custom_not_found_handler.
-//
-// TASK-071: previously labelled "structurally deferred (TASK-048)".
-// TASK-048 shipped; the deferral was a misread of the design — the
-// phase being observation-only is not a deferral, it IS the design
-// (see DR-012 §4.10). The body remains a documented no-op observation
-// marker; the forward-debt comment has been removed.
 void webserver::install_not_found_alias_() {
     if (not_found_handler == nullptr) return;
     add_hook(hook_phase::route_resolved,
         std::function<void(const route_resolved_ctx&)>(
-            [](const route_resolved_ctx& ctx) {
+            [](const route_resolved_ctx&) {
                 // Pure observation marker. The on-wire 404 body is
                 // synthesised by webserver_impl::not_found_page; this
                 // hook intentionally does NOT re-invoke the user
                 // handler (doing so would double-count the user
                 // handler's call rate and violate v1 observed-call-
                 // count semantics). DR-012 §4.10 forbids mutating the
-                // response from this phase. The discard of `ctx` makes
+                // response from this phase. The unused parameter makes
                 // explicit that no response-shaping decision is taken
                 // here.
-                (void) ctx;
             }))
         .detach();
 }

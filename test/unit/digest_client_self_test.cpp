@@ -32,6 +32,12 @@
 #include <string>
 #include <string_view>
 
+// Intentional upward include: this file exists specifically to unit-verify
+// the integ-only digest_client.hpp primitives (crypto vectors, challenge
+// parsing) in isolation before any integ test consumes them, so the
+// cross-directory include is a deliberate exception rather than an
+// accidental layering violation (see architecture 09-testing.md §9 for the
+// unit/integ test-surface split).
 #include "../integ/digest_client.hpp"
 #include "./littletest.hpp"
 
@@ -46,27 +52,12 @@ LT_BEGIN_SUITE(digest_client_self_test_suite)
     void tear_down() {}
 LT_END_SUITE(digest_client_self_test_suite)
 
-namespace {
-
-std::string hex_of(const unsigned char* bytes, std::size_t n) {
-    static const char digits[] = "0123456789abcdef";
-    std::string out;
-    out.reserve(n * 2);
-    for (std::size_t i = 0; i < n; ++i) {
-        out.push_back(digits[(bytes[i] >> 4) & 0xF]);
-        out.push_back(digits[bytes[i] & 0xF]);
-    }
-    return out;
-}
-
-}  // namespace
-
 // FIPS 180-2 / RFC 1321 canonical MD5 vector: MD5("abc")
 LT_BEGIN_AUTO_TEST(digest_client_self_test_suite, md5_abc_vector)
     unsigned char out[16];
     httpserver_test::detail::md5(
         reinterpret_cast<const unsigned char*>("abc"), 3, out);
-    LT_CHECK_EQ(hex_of(out, 16),
+    LT_CHECK_EQ(httpserver_test::detail::to_hex_lower(out, 16),
                 std::string("900150983cd24fb0d6963f7d28e17f72"));
 LT_END_AUTO_TEST(md5_abc_vector)
 
@@ -75,7 +66,7 @@ LT_BEGIN_AUTO_TEST(digest_client_self_test_suite, sha256_abc_vector)
     unsigned char out[32];
     httpserver_test::detail::sha256(
         reinterpret_cast<const unsigned char*>("abc"), 3, out);
-    LT_CHECK_EQ(hex_of(out, 32),
+    LT_CHECK_EQ(httpserver_test::detail::to_hex_lower(out, 32),
                 std::string("ba7816bf8f01cfea414140de5dae2223"
                             "b00361a396177a9cb410ff61f20015ad"));
 LT_END_AUTO_TEST(sha256_abc_vector)
@@ -85,7 +76,7 @@ LT_BEGIN_AUTO_TEST(digest_client_self_test_suite, md5_empty_vector)
     unsigned char out[16];
     httpserver_test::detail::md5(
         reinterpret_cast<const unsigned char*>(""), 0, out);
-    LT_CHECK_EQ(hex_of(out, 16),
+    LT_CHECK_EQ(httpserver_test::detail::to_hex_lower(out, 16),
                 std::string("d41d8cd98f00b204e9800998ecf8427e"));
 LT_END_AUTO_TEST(md5_empty_vector)
 
@@ -93,7 +84,7 @@ LT_BEGIN_AUTO_TEST(digest_client_self_test_suite, sha256_empty_vector)
     unsigned char out[32];
     httpserver_test::detail::sha256(
         reinterpret_cast<const unsigned char*>(""), 0, out);
-    LT_CHECK_EQ(hex_of(out, 32),
+    LT_CHECK_EQ(httpserver_test::detail::to_hex_lower(out, 32),
                 std::string("e3b0c44298fc1c149afbf4c8996fb924"
                             "27ae41e4649b934ca495991b7852b855"));
 LT_END_AUTO_TEST(sha256_empty_vector)
@@ -124,6 +115,26 @@ LT_BEGIN_AUTO_TEST(digest_client_self_test_suite, parse_sha256_algorithm)
     LT_CHECK_EQ(parsed->algorithm, std::string("SHA-256"));
 LT_END_AUTO_TEST(parse_sha256_algorithm)
 
+// parse_www_authenticate must reject a non-Digest scheme.
+LT_BEGIN_AUTO_TEST(digest_client_self_test_suite, parse_rejects_non_digest_scheme)
+    auto parsed = parse_www_authenticate(R"(Basic realm="x")");
+    LT_CHECK_EQ(parsed.has_value(), false);
+LT_END_AUTO_TEST(parse_rejects_non_digest_scheme)
+
+// parse_www_authenticate must reject a challenge missing the mandatory
+// `nonce` field.
+LT_BEGIN_AUTO_TEST(digest_client_self_test_suite, parse_rejects_missing_nonce)
+    auto parsed = parse_www_authenticate(R"(Digest realm="r")");
+    LT_CHECK_EQ(parsed.has_value(), false);
+LT_END_AUTO_TEST(parse_rejects_missing_nonce)
+
+// parse_www_authenticate must reject a challenge missing the mandatory
+// `realm` field.
+LT_BEGIN_AUTO_TEST(digest_client_self_test_suite, parse_rejects_missing_realm)
+    auto parsed = parse_www_authenticate(R"(Digest nonce="n")");
+    LT_CHECK_EQ(parsed.has_value(), false);
+LT_END_AUTO_TEST(parse_rejects_missing_realm)
+
 // Extracting a Digest challenge from a multi-line raw header block.
 LT_BEGIN_AUTO_TEST(digest_client_self_test_suite, extract_from_header_block)
     std::string headers =
@@ -140,6 +151,31 @@ LT_BEGIN_AUTO_TEST(digest_client_self_test_suite, extract_from_header_block)
     LT_CHECK_EQ(parsed->qop, std::string("auth"));
     LT_CHECK_EQ(parsed->opaque, std::string("o"));
 LT_END_AUTO_TEST(extract_from_header_block)
+
+// A header block with a Basic challenge line preceding the Digest one must
+// skip the non-Digest challenge and return the Digest one.
+LT_BEGIN_AUTO_TEST(digest_client_self_test_suite, extract_skips_leading_basic_challenge)
+    std::string headers =
+        "HTTP/1.1 401 Unauthorized\r\n"
+        "WWW-Authenticate: Basic realm=\"r\"\r\n"
+        "WWW-Authenticate: Digest realm=\"r\", nonce=\"n\", "
+        "qop=\"auth\", algorithm=MD5\r\n"
+        "\r\n";
+    auto parsed = extract_digest_challenge(headers);
+    LT_ASSERT_EQ(parsed.has_value(), true);
+    LT_CHECK_EQ(parsed->realm, std::string("r"));
+    LT_CHECK_EQ(parsed->nonce, std::string("n"));
+LT_END_AUTO_TEST(extract_skips_leading_basic_challenge)
+
+// A header block with no WWW-Authenticate line at all must yield nullopt.
+LT_BEGIN_AUTO_TEST(digest_client_self_test_suite, extract_returns_nullopt_without_challenge)
+    std::string headers =
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: text/plain\r\n"
+        "\r\n";
+    auto parsed = extract_digest_challenge(headers);
+    LT_CHECK_EQ(parsed.has_value(), false);
+LT_END_AUTO_TEST(extract_returns_nullopt_without_challenge)
 
 // RFC 7616 §3.9.1 worked-example: MD5, qop=auth.
 //   username = "Mufasa"
@@ -219,6 +255,38 @@ LT_BEGIN_AUTO_TEST(digest_client_self_test_suite, ha1_path_matches_cleartext_pat
     LT_CHECK_EQ(cleartext_response, ha1_response);
 LT_END_AUTO_TEST(ha1_path_matches_cleartext_path)
 
+// SHA-256 analogue of ha1_path_matches_cleartext_path: compute_response_ha1
+// must match compute_response_cleartext when fed the cleartext-derived
+// SHA-256 HA1, pinning the SHA-256 branch of the HA1-precomputed path at
+// the unit level (the MD5 branch alone does not exercise this code path).
+LT_BEGIN_AUTO_TEST(digest_client_self_test_suite, ha1_path_matches_cleartext_path_sha256)
+    parsed_challenge ch{};
+    ch.realm     = "examplerealm";
+    ch.nonce     = "abcdef0123456789";
+    ch.opaque    = "deadbeef";
+    ch.algorithm = "SHA-256";
+    ch.qop       = "auth";
+    std::string cleartext_response = compute_response_cleartext(
+        ch, digest_hash::sha256,
+        "GET", "/base",
+        "myuser", "mypass",
+        "01234567abcdef00", "00000001");
+    // Pre-derived SHA-256("myuser:examplerealm:mypass") from the same
+    // constants used by ha1_path_matches_cleartext_path above.
+    unsigned char ha1[32] = {
+        0xd4, 0xff, 0x5b, 0x17, 0x95, 0xb2, 0x3b, 0x4c,
+        0x62, 0x59, 0x75, 0x95, 0x9f, 0x32, 0x76, 0x52,
+        0x6f, 0x3f, 0x4f, 0x4e, 0xf7, 0xd2, 0x20, 0x83,
+        0x20, 0x7e, 0x02, 0xd7, 0xc4, 0xbd, 0x8a, 0x05
+    };
+    std::string ha1_response = httpserver_test::compute_response_ha1(
+        ch, digest_hash::sha256,
+        "GET", "/base",
+        ha1, 32,
+        "01234567abcdef00", "00000001");
+    LT_CHECK_EQ(cleartext_response, ha1_response);
+LT_END_AUTO_TEST(ha1_path_matches_cleartext_path_sha256)
+
 // make_cnonce must produce a 32-hex-char string (16 bytes of random data
 // encoded as full hex pairs, not nibble-only encoding) so that every bit of
 // each source byte contributes to the output. The output must consist solely
@@ -237,6 +305,23 @@ LT_BEGIN_AUTO_TEST(digest_client_self_test_suite, make_cnonce_produces_valid_hex
     }
     LT_CHECK_EQ(all_hex, true);
 LT_END_AUTO_TEST(make_cnonce_produces_valid_hex)
+
+// Successive calls must produce distinct cnonces (each draws fresh entropy
+// from std::random_device), not a fixed or memoized value.
+LT_BEGIN_AUTO_TEST(digest_client_self_test_suite, make_cnonce_produces_distinct_values)
+    std::string first = httpserver_test::make_cnonce();
+    std::string second = httpserver_test::make_cnonce();
+    LT_CHECK_EQ(second.size(), std::size_t(32));
+    bool all_hex = true;
+    for (char c : second) {
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) {
+            all_hex = false;
+            break;
+        }
+    }
+    LT_CHECK_EQ(all_hex, true);
+    LT_CHECK_NEQ(first, second);
+LT_END_AUTO_TEST(make_cnonce_produces_distinct_values)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

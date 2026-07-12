@@ -12,8 +12,7 @@
 // raced with MHD_start_daemon on loaded CI runners and produced
 // intermittent CURLE_COULDNT_CONNECT failures.
 //
-// Design notes (see specs/tasks/M7-v2-cleanup/TASK-075.md, and the
-// migration plan in .groundwork-plans/TASK-075-plan.md):
+// Design notes (see specs/tasks/M7-v2-cleanup/TASK-075.md):
 //
 //   * The probe uses CURLOPT_CONNECT_ONLY — i.e. no HTTP request line is
 //     ever sent. The kernel completes the TCP three-way handshake and
@@ -66,9 +65,13 @@ inline void wait_for_server_ready(
     const auto end = clock::now() + deadline;
     const std::string url
         = "http://127.0.0.1:" + std::to_string(port) + "/";
+
     while (clock::now() < end) {
         CURL* curl = curl_easy_init();
-        if (curl == nullptr) return;
+        if (curl == nullptr) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            continue;
+        }
         curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
         // TCP-only probe: no HTTP request is sent on the wire.
         curl_easy_setopt(curl, CURLOPT_CONNECT_ONLY, 1L);

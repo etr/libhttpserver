@@ -20,7 +20,7 @@ Two related forward-debt items in the alias/dispatch plumbing:
 - Blocks: None
 
 **Acceptance Criteria:**
-- `install_not_found_alias_` is wired and produces the same 404 response shape as the v1 `not_found_handler` setter on a fresh `webserver` with no explicit not-found handler.
+- `install_not_found_alias_` is wired and produces the same 404 response shape as the v1 `not_found_handler` setter on a fresh `webserver` with no explicit not-found handler (the end-to-end wire contract is preserved via `webserver_impl::not_found_page`; the alias hook body itself is observation-only and does not synthesize the response).
 - The dead `lambda_handler` variant arm either exercises a real code path or no longer exists.
 - Typecheck passes.
 - Tests pass.

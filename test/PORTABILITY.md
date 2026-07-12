@@ -33,10 +33,11 @@ Each section names a specific skip site (`<file>:<line>`) and records:
   `accept()` or fails the single curl round-trip with a connection-refused
   error.
 - **Root cause**: the suite exercises
-  `start_method(INTERNAL_SELECT).max_threads(5)`. libmicrohttpd on the
-  Windows CI lanes is configured with `--enable-poll=no` (see the
-  `mingw-w64-x86_64-libmicrohttpd` package in `.github/workflows/verify-build.yml`),
-  and MHD's `INTERNAL_SELECT` thread-pool path under that build is known to
+  `start_method(INTERNAL_SELECT).max_threads(5)`. libmicrohttpd is built
+  from source on the Windows CI lanes with `./configure --enable-poll=no`
+  (see the "Build and install libmicrohttpd (Windows)" step in
+  `.github/workflows/verify-build.yml`), and MHD's `INTERNAL_SELECT`
+  thread-pool path under that build is known to
   interact poorly with the MSYS curl shim — the same scenario is already
   documented as flaky in MHD's release notes from the libmicrohttpd 0.9.x
   series. libhttpserver's `start_method()` enum does not surface an IOCP-
@@ -51,7 +52,7 @@ Each section names a specific skip site (`<file>:<line>`) and records:
   already verifies. Re-open if a future Windows-specific bug is suspected
   in the thread-pool dispatch path.
 
-### `ws_start_stop.cpp` — wide skip (lines 113–1413)
+### `ws_start_stop.cpp` — wide skip (rationale comment 130–137, directive 138, closes at line 1300)
 
 - **Symptom**: TLS / IPv6 / SNI / PSK / custom-socket / bind-address tests
   fail to compile or fail at runtime on the MinGW64 / MSYS lanes.
@@ -68,7 +69,7 @@ Each section names a specific skip site (`<file>:<line>`) and records:
   follow-up task and are NOT in TASK-077's scope. Reopen if a specific
   Windows TLS bug is suspected.
 
-### `authentication.cpp` — digest-auth block (line 201)
+### `authentication.cpp` — digest-auth block (line 265)
 
 - **Symptom**: the curl client on MinGW64 returns parsing errors when
   presented with the digest challenge that MHD's
@@ -170,20 +171,23 @@ blocks.
   Linux/macOS lanes; the Windows gap is the same defence-in-depth
   loss as for pipe_body above.
 
-### `http_response_factories_test.cpp` — pipe() factory tests (lines 235–267)
+### `http_response_factories_test.cpp` — pipe() factory tests (lines 256–273)
 
-- **Symptom**: `pipe_factory_kind` and
-  `pipe_factory_signature_is_single_arg` call POSIX `::pipe()` to feed
+- **Symptom**: `pipe_factory_kind` calls POSIX `::pipe()` to feed
   `http_response::pipe(int)`.
 - **Root cause**: same as body_test pipe_body — pipe creation is
-  platform-specific. The factory's signature pin (`static_assert` that
-  `http_response::pipe` takes exactly one `int` argument) is wrapped
-  inside the `#ifndef _WIN32` block but is itself portable; a future
-  Windows port could split the static_assert out so it runs on every
-  lane while the runtime test stays gated.
-- **Restoration plan**: same follow-up as body_test pipe_body. Until
-  then, the Linux/macOS CI lanes cover the factory and the Windows
-  lanes do not.
+  platform-specific, so `pipe_factory_kind` stays gated behind
+  `#ifndef _WIN32`. The factory's signature pin (the `static_assert`
+  that `http_response::pipe` takes exactly one `int` argument, plus
+  the `pipe_factory_signature_is_single_arg` test that hosts it) has
+  no platform dependency and has been hoisted out of the `#ifndef
+  _WIN32` block to file scope, so it now compiles and runs on every
+  CI lane, including Windows.
+- **Restoration plan**: same follow-up as body_test pipe_body for the
+  remaining runtime `pipe_factory_kind` test. Until then, the
+  Linux/macOS CI lanes cover the runtime factory behaviour and the
+  Windows lanes do not; the compile-time signature contract is now
+  covered everywhere.
 
 ### `iovec_entry_test.cpp` — POSIX struct iovec bridge (line 86)
 

@@ -86,26 +86,6 @@
 
 namespace hs = httpserver;
 
-static constexpr bool kSanitizerBuild =
-#if defined(__SANITIZE_ADDRESS__) \
-    || defined(__SANITIZE_THREAD__) \
-    || defined(__SANITIZE_MEMORY__) \
-    || defined(__SANITIZE_HWADDRESS__)
-    true
-#elif defined(__has_feature)
-#  if __has_feature(address_sanitizer) \
-      || __has_feature(thread_sanitizer) \
-      || __has_feature(memory_sanitizer) \
-      || __has_feature(undefined_behavior_sanitizer)
-    true
-#  else
-    false
-#  endif
-#else
-    false
-#endif
-    ;  // NOLINT(whitespace/semicolon)
-
 namespace {
 
 class noop_resource : public hs::http_resource {
@@ -138,6 +118,90 @@ std::unique_ptr<hs::webserver> make_bench_webserver(
     return ws;
 }
 
+// OUTER=51 matches bench_hook_overhead and bench_route_lookup: with 51
+// rounds the median is the 26th sorted value (exact midpoint), so 1-2
+// high outlier rounds from OS scheduling noise cannot shift the median.
+// With OUTER=11 (the old value) the median was the 6th value and a
+// single outlier round could flip a <10 ns gate; on a shared CI runner
+// this produced spurious failures independent of real regressions.
+// Wall-clock cost: 51 rounds * 1M inner at ~12 ns/call ≈ 612 ms total,
+// acceptable for an out-of-band `make bench` run.
+//
+// INNER_405=100K: serialize_allow_405 is more expensive than the other
+// measurements (~40 ns), so 100K inner (4 ms of signal per outer round)
+// keeps wall time bounded. The 51-outer median is still stable at this
+// inner count because we care about median ns/call, not absolute signal.
+constexpr std::size_t OUTER = 51;
+constexpr std::size_t INNER = 1'000'000;
+constexpr std::size_t INNER_405 = 100'000;
+
+// TASK-072: shared setup for bench sections (5) and (6) in main() below.
+// Both insert one GET arg into a fresh arena-backed http_request_impl and
+// differ only in whether `value` contains a %2F escape sequence (and
+// therefore in the printed `label`). Extracting the common buf/arena/impl/
+// accumulator plumbing keeps that setup in one place instead of duplicated
+// per section.
+//
+// Each measured call mirrors the full production request lifecycle:
+// allocate a fresh arena-backed impl, insert one arg (the warm path the
+// task targets), and destroy the impl.  The 65536-byte arena is more than
+// large enough for a single insert, so all pmr::string allocations stay
+// inside the arena and zero global-heap allocation occurs during the
+// measured window.
+//
+// Prior design flaw (TASK-083): the old loop accumulated all 1M values
+// under a single key without resetting the arena.  The arena was
+// exhausted after ~819 iterations (~65536 / 80 bytes per pmr::string),
+// so every subsequent call spilled to the upstream heap -- measuring
+// exactly the allocation overhead the task was supposed to eliminate.
+// The current design (fresh monotonic_buffer_resource per call) removes
+// this flaw and makes the bench an honest proof of the zero-heap-alloc
+// guarantee.
+//
+// buf is declared OUTSIDE the lambda: zero-initialising a 65536-byte stack
+// array inside the inner loop would touch 64 KiB of cache traffic per
+// iteration (64 GB/round), swamping the measured pmr/string cost.  Instead,
+// buf is zeroed ONCE before the timed loop and the lambda constructs a
+// fresh monotonic_buffer_resource from the same backing storage on every
+// call (cheap: just sets two internal pointers), which resets the
+// bump-pointer without re-zeroing the memory.  The arena writes over
+// stale bytes from the previous call, which is correct.
+double run_build_args_bench(const char* label, const char* value) {
+    using httpserver::detail::http_request_impl;
+    using httpserver::detail::arguments_accumulator;
+    using impl_alloc_t =
+        std::pmr::polymorphic_allocator<http_request_impl>;
+
+    // Backing buffer zeroed once; reused across all inner iterations
+    // by constructing a fresh monotonic_buffer_resource each call.
+    alignas(std::max_align_t) std::array<std::byte, 65536> buf{};
+    // defence-in-depth: ensures the compiler treats buf as potentially
+    // read by the monotonic_buffer_resource.
+    do_not_optimize(buf);
+
+    return measure_median_ns(
+        label,
+        [&]() {
+            // Fresh monotonic_buffer_resource resets the bump pointer
+            // to buf.data() without touching the bytes -- cheap.
+            std::pmr::monotonic_buffer_resource arena(
+                buf.data(), buf.size(), std::pmr::null_memory_resource());
+            impl_alloc_t alloc(&arena);
+            auto* p = alloc.new_object<http_request_impl>(
+                nullptr, nullptr, alloc);
+            arguments_accumulator aa;
+            aa.unescaper = nullptr;
+            aa.arguments = &p->unescaped_args;
+            aa.max_args_count = 64;
+            aa.max_args_bytes = 64 * 128;
+            http_request_impl::build_request_args(
+                &aa, MHD_GET_ARGUMENT_KIND, "k", value);
+            do_not_optimize(p->unescaped_args);
+            alloc.delete_object(p);
+        },
+        OUTER, INNER);
+}
+
 }  // namespace
 
 int main() {
@@ -146,23 +210,6 @@ int main() {
                     "would distort ns/call)\n");
         return 0;
     }
-
-    // OUTER=51 matches bench_hook_overhead and bench_route_lookup: with 51
-    // rounds the median is the 26th sorted value (exact midpoint), so 1-2
-    // high outlier rounds from OS scheduling noise cannot shift the median.
-    // With OUTER=11 (the old value) the median was the 6th value and a
-    // single outlier round could flip a <10 ns gate; on a shared CI runner
-    // this produced spurious failures independent of real regressions.
-    // Wall-clock cost: 51 rounds * 1M inner at ~12 ns/call ≈ 612 ms total,
-    // acceptable for an out-of-band `make bench` run. (test-quality-reviewer-iter1-1)
-    //
-    // INNER_405=100K: serialize_allow_405 is more expensive than the other
-    // measurements (~40 ns), so 100K inner (4 ms of signal per outer round)
-    // keeps wall time bounded. The 51-outer median is still stable at this
-    // inner count because we care about median ns/call, not absolute signal.
-    constexpr std::size_t OUTER = 51;
-    constexpr std::size_t INNER = 1'000'000;
-    constexpr std::size_t INNER_405 = 100'000;
 
     // Medians for the six measurements, lifted out of their per-scope
     // blocks so the gate at the end of main() can compare each against
@@ -257,115 +304,46 @@ int main() {
             OUTER, INNER_405);
     }
 
-    // ----- (5) TASK-072: build_request_args with a %2F-containing
-    // value, one insert per fresh per-request arena.
-    //
-    // Each measured call mirrors the full production request lifecycle:
-    // allocate a fresh arena-backed impl, insert one arg (the warm path
-    // the task targets), and destroy the impl.  The 65536-byte arena is
-    // more than large enough for a single insert, so all pmr::string
-    // allocations stay inside the arena and zero global-heap allocation
-    // occurs during the measured window.
-    //
-    // Prior design flaw (TASK-083): the old loop accumulated all 1M values
-    // under a single key without resetting the arena.  The arena was
-    // exhausted after ~819 iterations (~65536 / 80 bytes per pmr::string),
-    // so every subsequent call spilled to the upstream heap -- measuring
-    // exactly the allocation overhead the task was supposed to eliminate.
-    // The new design (fresh monotonic_buffer_resource per call) removes
-    // this flaw and makes the bench an honest proof of the zero-heap-alloc
-    // guarantee.
-    //
-    // buf is declared OUTSIDE the lambda (performance-reviewer-iter1-2):
-    // zero-initialising a 65536-byte stack array inside the inner loop
-    // would touch 64 KiB of cache traffic per iteration (64 GB/round),
-    // swamping the measured pmr/string cost.  Instead, buf is zeroed ONCE
-    // before the timed loop and the lambda constructs a fresh
-    // monotonic_buffer_resource from the same backing storage on every
-    // call (cheap: just sets two internal pointers), which resets the
-    // bump-pointer without re-zeroing the memory.  The arena writes over
-    // stale bytes from the previous call, which is correct. -----
+    // ----- (5) TASK-072: build_request_args with a %2F-containing value,
+    // one insert per fresh per-request arena. See run_build_args_bench
+    // above for the shared setup and the reasoning behind it. -----
     {
-        using httpserver::detail::http_request_impl;
-        using httpserver::detail::arguments_accumulator;
-        using impl_alloc_t =
-            std::pmr::polymorphic_allocator<http_request_impl>;
-
         // Long enough to exceed std::string SSO on libc++ and libstdc++.
         // Contains "%2F" so the default unescape path does real work.
-        static const char* kValue =
+        static const char* kValuePct2f =
             "a%2Fbcdefghijklmnopqrstuvwxyz_padding_to_force_heap";
-
-        // Backing buffer zeroed once; reused across all inner iterations
-        // by constructing a fresh monotonic_buffer_resource each call.
-        alignas(std::max_align_t) std::array<std::byte, 65536> buf5{};
-        do_not_optimize(buf5);  // prevent compiler from eliding the buffer
 
         std::printf("bench_warm_path (5): build_request_args "
                     "(%%2F unescape via arena, fresh impl per call)\n");
-        med_build_args_pct2f = measure_median_ns(
-            "build_request_args_pct2f",
-            [&]() {
-                // Fresh monotonic_buffer_resource resets the bump pointer
-                // to buf5.data() without touching the bytes -- cheap.
-                std::pmr::monotonic_buffer_resource arena(
-                    buf5.data(), buf5.size(), std::pmr::null_memory_resource());
-                impl_alloc_t alloc(&arena);
-                auto* p = alloc.new_object<http_request_impl>(
-                    nullptr, nullptr, alloc);
-                arguments_accumulator aa;
-                aa.unescaper = nullptr;
-                aa.arguments = &p->unescaped_args;
-                aa.max_args_count = 64;
-                aa.max_args_bytes = 64 * 128;
-                http_request_impl::build_request_args(
-                    &aa, MHD_GET_ARGUMENT_KIND, "k", kValue);
-                do_not_optimize(p->unescaped_args);
-                alloc.delete_object(p);
-            },
-            OUTER, INNER);
+        med_build_args_pct2f =
+            run_build_args_bench("build_request_args_pct2f", kValuePct2f);
     }
 
     // ----- (6) TASK-072: baseline with no percent-encoded sequences.
     // Same fresh-impl-per-call structure as (5) so the timings are
     // directly comparable.  The median for (5) should land within noise
-    // of this baseline once TASK-072 lands.
-    // buf declared outside the lambda for the same reason as (5) above
-    // (performance-reviewer-iter1-2). -----
+    // of this baseline once TASK-072 lands. -----
     {
-        using httpserver::detail::http_request_impl;
-        using httpserver::detail::arguments_accumulator;
-        using impl_alloc_t =
-            std::pmr::polymorphic_allocator<http_request_impl>;
-
-        static const char* kValue =
+        static const char* kValuePlain =
             "abcdefghijklmnopqrstuvwxyz_no_escape_baseline_padding";
-
-        alignas(std::max_align_t) std::array<std::byte, 65536> buf6{};
-        do_not_optimize(buf6);
 
         std::printf("bench_warm_path (6): build_request_args "
                     "(no-escape baseline, fresh impl per call)\n");
-        med_build_args_plain = measure_median_ns(
-            "build_request_args_plain",
-            [&]() {
-                std::pmr::monotonic_buffer_resource arena(
-                    buf6.data(), buf6.size(), std::pmr::null_memory_resource());
-                impl_alloc_t alloc(&arena);
-                auto* p = alloc.new_object<http_request_impl>(
-                    nullptr, nullptr, alloc);
-                arguments_accumulator aa;
-                aa.unescaper = nullptr;
-                aa.arguments = &p->unescaped_args;
-                aa.max_args_count = 64;
-                aa.max_args_bytes = 64 * 128;
-                http_request_impl::build_request_args(
-                    &aa, MHD_GET_ARGUMENT_KIND, "k", kValue);
-                do_not_optimize(p->unescaped_args);
-                alloc.delete_object(p);
-            },
-            OUTER, INNER);
+        med_build_args_plain =
+            run_build_args_bench("build_request_args_plain", kValuePlain);
     }
+
+#if !defined(__APPLE__)
+    // TASK-083/TASK-084: the baselines below for this platform are
+    // conservative, uncalibrated TODO(TASK-084) placeholders (~3x the
+    // apple-silicon medians, see bench_baseline.hpp) -- surface that in
+    // the bench output/CI logs so the reduced gating confidence is visible
+    // even when nobody is reading bench_baseline.hpp's comments.
+    std::printf("\nNOTE: warm-path baselines on this platform are "
+                "uncalibrated TODO(TASK-084) placeholders (~3x "
+                "apple-silicon medians); the regression gate below has "
+                "reduced confidence until TASK-084 calibrates them.\n");
+#endif
 
     // ----- Summary + gates (TASK-083) -----
     // Each median is compared against its committed per-platform baseline
@@ -377,7 +355,6 @@ int main() {
     // which is below steady_clock resolution on many platforms. We add an absolute
     // additive floor so the gate ceiling is at least baseline + kAbsoluteNoiseFloorNs
     // regardless of the ratio, matching the pattern used in bench_hook_overhead.
-    // (test-quality-reviewer-iter1-2, performance-reviewer-iter1-3)
     constexpr double kAbsoluteNoiseFloorNs = 5.0;
 
     namespace bb = httpserver::bench_baseline;

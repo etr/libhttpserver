@@ -1,7 +1,9 @@
 # v2.0 Performance Acceptance Gates
 
 This document records the v1 baseline measurements that drive the
-two PRD §3.6 numeric acceptance criteria for libhttpserver v2.0:
+two PRD §3.6 numeric acceptance criteria for libhttpserver v2.0. It
+also documents the CI wiring for the DR-008 concurrency/deadlock stress
+gates (see "CI wiring — DR-008 stress gates" below):
 
 | PRD requirement | Criterion | Verified by |
 |---|---|---|
@@ -46,6 +48,18 @@ rounded down to 640) so the ratio assertion stays conservative under host
 jitter — a lower v1 baseline makes the gate strictly harder, never
 spuriously easier. The sizeof constants are likewise selected per-stdlib;
 see the table above for both platform values.
+
+**Measurement-host caveat (libstdc++ 640 ns figure):** a native x86-64
+Linux host — the architecture verify-build.yml's libstdc++ CI lane
+actually runs on — was not reachable at TASK-084 measurement time. The
+committed 640 ns value was instead measured on a native **aarch64** Linux
+container (running on the Apple-silicon maintainer host, no emulation);
+an emulated x86-64 run was also taken but discarded as a basis for the
+constant (binary translation inflated it ~6×) and used only to confirm
+libstdc++'s map is comparable-or-slower than libc++'s. Re-measure on a
+bare-metal Linux x86-64 host if/when one becomes available, per the
+procedure in `test/v1_baseline/v1_constants.hpp` and
+`test/v1_baseline/README.md`.
 
 ## v2.0 measured values (re-run `make bench` to refresh)
 
@@ -185,9 +199,17 @@ the warmup-window median.
 
 | Parameter | Value | Rationale |
 |---|---|---|
-| Statistic | p95 of overall samples vs median of first quarter | p99 too sensitive to OS preemption on shared CI |
+| Statistic | p95 of overall samples vs warmup-window median (first quarter of insertion-order samples) | p99 too sensitive to OS preemption on shared CI |
 | Threshold ratio | < 20× warmup median | TASK-080 noise-floor study (see below) |
 | Baseline floor clamp | warmup_median = max(actual, 1 µs) | Prevents degenerate gate when timer quantises |
+
+The warmup window (first quarter of merged samples) is an approximation —
+round-robin merge preserves per-thread ordering but not cross-thread
+wall-clock ordering. The approximation is conservative: if thread
+scheduling causes fast early samples to appear later in the merge, the
+warmup_median is inflated, making the gate stricter, not looser. (See the
+`PRECONDITION` / `NOTE` comments around the round-robin merge and
+warmup-window computation in `test/integ/threadsafety_stress.cpp`.)
 
 ### Stabilisation techniques in effect
 
@@ -198,6 +220,7 @@ the warmup-window median.
 | Statistic switch p99 → p95 | adopted | See "Why p95, not p99" below |
 | Top-N% trimming | rejected | "Trim before gate" is unprincipled and looks like hiding regressions. Switching the statistic (p99 → p95) is principled — the gate now uses a more robust order statistic, not censored data |
 | `__rdtsc` high-precision timer | rejected | `std::chrono::steady_clock` (≈20 ns resolution on Linux, ≈40 ns on macOS) is fine for 10-100+ µs samples; TSC drift across cores is not worth the portability cost |
+| Median-of-medians (vs single median) | rejected | Per-thread sample buffers already isolate hot-path timing from cross-thread lock-wait jitter (see "Per-thread sample buffers" above); the residual noise floor is legitimate `route_table_mutex_` contention, not the OS-preemption skew that median-of-medians is designed to smooth out, so the added complexity would not buy a tighter gate |
 
 ### Why p95, not p99
 
@@ -303,9 +326,9 @@ via two convenience targets in `test/Makefile.am`.
   `TSAN_OPTIONS=suppressions=…/test/tsan.supp` as the "Run tests" step to
   mask the benign libstdc++ `std::ctype` narrow-cache race; every
   libhttpserver-internal race stays fatal.
-- **Time box:** the CI step's `timeout-minutes: 2` is the hard ceiling.
+- **Time box:** the CI step's `timeout-minutes: 5` is the hard ceiling.
   Tune the iteration count with `RTC_ITERATIONS=N` if lane timing shifts
-  (a single TSan pass is well under the 2-minute box on the reference
+  (a single TSan pass is well under the 5-minute box on the reference
   runner).
 - **Also runs:** once inside the tsan lane's plain `make check`.
 
@@ -390,6 +413,15 @@ See [`test/v1_baseline/README.md`](v1_baseline/README.md).
   flaky CI. Release-readiness is gated on `make bench` succeeding
   once on a quiet release-mode host. The release runbook
   (TASK-040+) calls it.
+- **Platform-gated bench (`bench_warm_path`):** unlike
+  `bench_hook_overhead` and `bench_route_lookup` (which carry no
+  compile-time platform gate), `bench_warm_path.cpp`'s baselines
+  (`test/bench_baseline.hpp`) are selected via `#if defined(__APPLE__)`
+  / `#elif defined(__linux__)` / `#elif defined(_WIN32)`, with a hard
+  `#error` on any other platform. A `make bench` on, e.g., FreeBSD or a
+  musl-libc container will fail to *compile* `bench_warm_path` until a
+  baseline arm is added for that platform (see TASK-084 in
+  `bench_baseline.hpp`'s header comment for the refresh procedure).
 
 ## Known noise sources / mitigations
 

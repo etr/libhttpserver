@@ -68,23 +68,25 @@ void validate_name(std::string_view v,
     }
 }
 
-void validate_value(std::string_view v) {
+void validate_value(std::string_view v,
+                    std::string_view ctx = "cookie::with_value") {
     // Reject CR/LF/NUL plus `;` (attribute injection guard). The rest
     // of the RFC 6265 cookie-value ABNF (DQUOTE handling, etc.) is left
     // to the renderer; the value field is byte-transparent otherwise.
-    for (unsigned char c : v) {
-        if (c == '\r' || c == '\n' || c == '\0' || c == ';') {
-            throw std::invalid_argument(
-                "cookie::with_value: value contains forbidden character "
-                "(CR, LF, NUL, or ';')");
-        }
+    if (v.find_first_of(kForbiddenCtrlChars) != std::string_view::npos ||
+        v.find(';') != std::string_view::npos) {
+        throw std::invalid_argument(
+            std::string(ctx) +
+            ": value contains forbidden character "
+            "(CR, LF, NUL, or ';')");
     }
 }
 
 void validate_attr_param(std::string_view setter, std::string_view v) {
+    const std::string setter_str(setter);
     if (v.find_first_of(kForbiddenCtrlChars) != std::string_view::npos) {
         throw std::invalid_argument(
-            std::string(setter) +
+            setter_str +
             ": attribute value contains forbidden control character "
             "(CR, LF, or NUL)");
     }
@@ -95,7 +97,7 @@ void validate_attr_param(std::string_view setter, std::string_view v) {
     // meant to set a path).
     if (v.find(';') != std::string_view::npos) {
         throw std::invalid_argument(
-            std::string(setter) +
+            setter_str +
             ": attribute value contains forbidden character (';')");
     }
     // Defense-in-depth: HTTP/1.0 legacy parsers and some CDN edge
@@ -106,7 +108,7 @@ void validate_attr_param(std::string_view setter, std::string_view v) {
     // commas, but we reject them here to be safe.
     if (v.find(',') != std::string_view::npos) {
         throw std::invalid_argument(
-            std::string(setter) +
+            setter_str +
             ": attribute value contains forbidden character (','); "
             "commas can split Set-Cookie headers in legacy HTTP/1.0 parsers");
     }
@@ -311,15 +313,7 @@ std::string cookie::to_set_cookie_header() const {
     // emitted verbatim. We catch both here so the injection window is
     // closed even when the application skips re-construction.
     validate_name(name_, "cookie::to_set_cookie_header");
-    for (unsigned char c : value_) {
-        if (c == '\r' || c == '\n' || c == '\0' || c == ';') {
-            throw std::invalid_argument(
-                "cookie::to_set_cookie_header: value contains a byte that "
-                "is forbidden in a Set-Cookie header (CR, LF, NUL, or ';'); "
-                "do not reflect cookies returned by parse_cookie_header() "
-                "without re-constructing them via with_value()");
-        }
-    }
+    validate_value(value_, "cookie::to_set_cookie_header");
 
     // Reserve enough for a typical cookie. The exact growth is
     // irrelevant; one reserve avoids most reallocations.

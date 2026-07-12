@@ -403,8 +403,8 @@ class http_resource {
      //   or after an acquire fence/lock that sequenced-after the last
      //   atomic_store in ensure_table().  Do NOT call this from a thread
      //   that races with ensure_table() without external synchronisation.
-     //   (ensure_table() itself uses the deprecated free-function
-     //   std::atomic_*_explicit overloads; once TASK-070 migrates the
+     //   (ensure_table() itself uses the non-member std::atomic_*_explicit
+     //   overloads (deprecated as of C++26); once TASK-070 migrates the
      //   field to std::atomic<std::shared_ptr<T>>, an acquire load should
      //   replace the .get() call here too.)
      detail::resource_hook_table* hook_table_raw_() const noexcept {
