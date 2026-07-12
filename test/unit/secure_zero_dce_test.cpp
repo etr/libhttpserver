@@ -35,7 +35,6 @@
 #include "httpserver/detail/secure_zero.hpp"
 
 #include <cstddef>
-#include <cstdint>
 
 #include "./littletest.hpp"
 
@@ -58,38 +57,40 @@ LT_BEGIN_AUTO_TEST(secure_zero_suite, writes_zero_bytes_to_buffer)
         buf[i] = static_cast<unsigned char>(0xA5);
     }
 
-    // secure_zero expects a non-volatile void*; pass via const_cast to
-    // strip the volatile qualifier. The volatile declaration on buf
+    // secure_zero expects a non-volatile pointer; pass via const_cast to
+    // strip the volatile qualifier. buf already decays implicitly from
+    // `volatile unsigned char[kSize]` to `volatile unsigned char*`, so no
+    // intermediate static_cast is needed. The volatile declaration on buf
     // already ensures the compiler cannot cache element values across the
     // call boundary.
-    httpserver::detail::secure_zero(
-        const_cast<unsigned char*>(
-            static_cast<volatile unsigned char*>(buf)),
-        kSize);
+    httpserver::detail::secure_zero(const_cast<unsigned char*>(buf), kSize);
 
     // Each load from buf[i] is an observable side effect (buf is
     // volatile). The compiler must read from memory and cannot substitute
-    // the pre-zeroing constant.
+    // the pre-zeroing constant. Stop at the first mismatch and report its
+    // index rather than emitting up to kSize identical failures.
     for (std::size_t i = 0; i < kSize; ++i) {
-        LT_CHECK_EQ(static_cast<unsigned>(buf[i]), 0u);
+        if (buf[i] != 0) {
+            LT_FAIL("secure_zero left non-zero byte at index " + std::to_string(i));
+            break;
+        }
     }
 LT_END_AUTO_TEST(writes_zero_bytes_to_buffer)
 
 LT_BEGIN_AUTO_TEST(secure_zero_suite, zero_sized_input_is_safe)
-    unsigned char buf[1] = {0x55};
-    httpserver::detail::secure_zero(buf, 0);
+    // buf is volatile so the post-call read-back below is a genuine memory
+    // round-trip rather than a value the compiler could constant-fold away.
+    volatile unsigned char buf[1] = {0x55};
+    httpserver::detail::secure_zero(const_cast<unsigned char*>(buf), 0);
     LT_CHECK_EQ(static_cast<unsigned>(buf[0]), 0x55u);
 LT_END_AUTO_TEST(zero_sized_input_is_safe)
 
 LT_BEGIN_AUTO_TEST(secure_zero_suite, nullptr_with_zero_size_is_safe)
-    // Documented contract: secure_zero(nullptr, 0) is a no-op.
-    // Pass criterion for this test is successful completion (no crash,
-    // no undefined behaviour). The adjacent buffer verifies the call
-    // did not write past the intended (zero-length) region.
-    volatile unsigned char adjacent[4];
-    for (std::size_t i = 0; i < 4; ++i) {
-        adjacent[i] = static_cast<unsigned char>(0xCC);
-    }
+    // Documented contract: secure_zero(nullptr, 0) is a no-op. This test
+    // verifies both that the call completes without crashing or invoking
+    // undefined behaviour, AND that adjacent memory is left unmolested (see
+    // the verification loop below) -- not "successful completion" alone.
+    unsigned char adjacent[4] = {0xCC, 0xCC, 0xCC, 0xCC};
     httpserver::detail::secure_zero(nullptr, 0);
     // If secure_zero(nullptr,0) wrote anything at all, the adjacent
     // sentinel would be overwritten. Verify it is unmolested.
@@ -97,6 +98,32 @@ LT_BEGIN_AUTO_TEST(secure_zero_suite, nullptr_with_zero_size_is_safe)
         LT_CHECK_EQ(static_cast<unsigned>(adjacent[i]), 0xCCu);
     }
 LT_END_AUTO_TEST(nullptr_with_zero_size_is_safe)
+
+// TASK-068 finding-34: pin that secure_zero() zeroes the FULL requested
+// length, not just a prefix. A buggy implementation that stops early (e.g.
+// zeroes only the first N/2 bytes) would pass the other tests in this file
+// (which prefill uniformly) but fail here, where the two halves start with
+// different sentinel values.
+LT_BEGIN_AUTO_TEST(secure_zero_suite, zeroes_full_length_not_just_prefix)
+    constexpr std::size_t kSize = 256;
+    constexpr std::size_t kHalf = kSize / 2;
+    volatile unsigned char buf[kSize];
+    for (std::size_t i = 0; i < kHalf; ++i) {
+        buf[i] = static_cast<unsigned char>(0xA5);
+    }
+    for (std::size_t i = kHalf; i < kSize; ++i) {
+        buf[i] = static_cast<unsigned char>(0x5A);
+    }
+
+    httpserver::detail::secure_zero(const_cast<unsigned char*>(buf), kSize);
+
+    for (std::size_t i = 0; i < kSize; ++i) {
+        if (buf[i] != 0) {
+            LT_FAIL("secure_zero left non-zero byte at index " + std::to_string(i));
+            break;
+        }
+    }
+LT_END_AUTO_TEST(zeroes_full_length_not_just_prefix)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

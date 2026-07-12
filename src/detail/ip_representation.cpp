@@ -141,10 +141,11 @@ void ip_representation::parse_ipv4(const std::string& ip) {
             clear_bit(mask, static_cast<unsigned int>(12 + i));
             continue;
         }
-        pieces[12+i] = strtol(parts[i].c_str(), nullptr, 10);
-        if (pieces[12+i] > 255) {
+        const long piece = strtol(parts[i].c_str(), nullptr, 10);
+        if (piece < 0 || piece > 255) {
             throw std::invalid_argument("IP is badly formatted. 255 is max value for ip part.");
         }
+        pieces[12+i] = static_cast<uint16_t>(piece);
     }
 }
 
@@ -205,10 +206,11 @@ void ip_representation::parse_nested_ipv4(const std::vector<std::string>& parts,
             clear_bit(mask, static_cast<unsigned int>(y + ii));
             continue;
         }
-        pieces[y+ii] = strtol(subparts[ii].c_str(), nullptr, 10);
-        if (pieces[y+ii] > 255) {
+        const long subpart = strtol(subparts[ii].c_str(), nullptr, 10);
+        if (subpart < 0 || subpart > 255) {
             throw std::invalid_argument("IP is badly formatted. 255 is max value for ip part.");
         }
+        pieces[y+ii] = static_cast<uint16_t>(subpart);
     }
 }
 
@@ -238,8 +240,21 @@ void ip_representation::apply_ipv6_part(std::vector<std::string>& parts, unsigne
         part = ss.str();
     }
     if (part.size() == 4) {
-        pieces[y]   = strtol(part.substr(0, 2).c_str(), nullptr, 16);
-        pieces[y+1] = strtol(part.substr(2, 2).c_str(), nullptr, 16);
+        const std::string hi_str = part.substr(0, 2);
+        const std::string lo_str = part.substr(2, 2);
+        char* endp = nullptr;
+        const long hi = strtol(hi_str.c_str(), &endp, 16);
+        if (*endp != '\0') {
+            throw std::invalid_argument(
+                "IP is badly formatted. IPV6 part contains a non-hex character.");
+        }
+        const long lo = strtol(lo_str.c_str(), &endp, 16);
+        if (*endp != '\0') {
+            throw std::invalid_argument(
+                "IP is badly formatted. IPV6 part contains a non-hex character.");
+        }
+        pieces[y]   = static_cast<uint16_t>(hi);
+        pieces[y+1] = static_cast<uint16_t>(lo);
         y += 2;
         return;
     }

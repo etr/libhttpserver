@@ -72,7 +72,10 @@ namespace {
 // std::atomic<bool> + compare_exchange_strong matches the lock-free
 // atomic style used elsewhere (e.g. g_arena_fallback_count). The
 // idempotence is process-wide -- multiple webservers in the same
-// process trigger exactly one stderr warning.
+// process trigger exactly one stderr warning. Its only consumer,
+// detail::maybe_warn_debug_dump_request_body(), is defined later in
+// this same translation unit, which is what makes this anonymous-
+// namespace (TU-local) visibility sufficient.
 std::atomic<bool> g_debug_dump_warning_emitted{false};
 
 // Wrap the body_chunk firing site so requests_answer_second_step stays a
@@ -126,23 +129,14 @@ void run_post_processor_if_attached(modded_request* mr,
 }  // namespace
 
 // TASK-074: free function in namespace detail, declared in
-// webserver_impl.hpp. Gates the raw-body dump in
-// requests_answer_second_step behind an explicit, runtime, opt-in
-// environment variable, and is consulted by webserver::start()'s
-// security-warning emitter to decide whether to fire the one-shot
-// stderr notice.
-//
-// The check is cached in a function-local static so getenv() is called
-// at most once per process; subsequent setenv() calls are intentionally
-// ignored (debug-knob semantics, matches the cheap race-free choice
-// described in DR-009 / TASK-074 plan). C++11 guarantees thread-safe
-// init of function-local statics, so the first call from MHD's
-// request-handling threads is safe even under concurrent first-touch.
-//
-// Default behaviour is silent on RELEASE and DEBUG builds alike; the
-// env var is the ONLY gate. A debug build accidentally shipped to
-// production therefore still does not leak credentials/PII unless the
-// operator explicitly opted in. Accepts any non-empty, non-"0" value.
+// webserver_impl.hpp -- see the Doxygen comment there for the full
+// contract (env var name, accepted-value rule, default-silent
+// guarantee). The check is cached in a function-local static so
+// getenv() is called at most once per process; subsequent setenv()
+// calls are intentionally ignored (debug-knob semantics). C++11
+// guarantees thread-safe init of function-local statics, so the first
+// call from MHD's request-handling threads is safe even under
+// concurrent first-touch.
 bool debug_dump_request_body_opted_in() {
     static const bool enabled = [] {
         const char* v = std::getenv("LIBHTTPSERVER_DEBUG_DUMP_REQUEST_BODY");
@@ -282,8 +276,10 @@ MHD_Result webserver_impl::requests_answer_second_step(MHD_Connection* connectio
     // The operator<< redaction policy (TASK-057) does NOT cover this
     // code path: raw bytes are written verbatim.
     if (debug_dump_request_body_opted_in()) {
-        std::cout << "Writing content: "
-                  << std::string(upload_data, *upload_data_size) << std::endl;
+        std::cout << "Writing content: ";
+        std::cout.write(upload_data,
+                        static_cast<std::streamsize>(*upload_data_size));
+        std::cout << std::endl;
     }
     // The post iterator is only created from the libmicrohttpd for content of type
     // multipart/form-data and application/x-www-form-urlencoded

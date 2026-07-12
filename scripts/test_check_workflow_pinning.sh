@@ -123,6 +123,31 @@ else
     fail "invalid YAML should exit 1"
 fi
 
+# Test 7: fail_ci_if_error key absent entirely (assertion c's else-branch,
+# distinct from Test 2's explicit "false" value) — exit 1
+VERIFY_NOKEY="$TMPDIR_BASE/verify_nokey.yml"
+grep -v fail_ci_if_error "$VERIFY_GOOD" > "$VERIFY_NOKEY"
+if ! bash "$SCRIPT" "$CODEQL_GOOD" "$VERIFY_NOKEY" >/dev/null 2>&1; then
+    ok "missing fail_ci_if_error key exits 1"
+else
+    fail "missing fail_ci_if_error key should exit 1"
+fi
+
+# Test 8: invalid YAML in the codeql workflow (assertion a), symmetric to
+# Test 6 which only exercised invalid YAML on the verify-build side — exit 1
+CODEQL_BAD="$TMPDIR_BASE/codeql_bad.yml"
+cat > "$CODEQL_BAD" <<EOF
+name: CodeQL
+jobs:
+  analyze:
+    steps: [
+EOF
+if ! bash "$SCRIPT" "$CODEQL_BAD" "$VERIFY_GOOD" >/dev/null 2>&1; then
+    ok "invalid YAML in codeql workflow exits 1"
+else
+    fail "invalid YAML in codeql workflow should exit 1"
+fi
+
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

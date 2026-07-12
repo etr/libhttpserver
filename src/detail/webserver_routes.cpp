@@ -132,6 +132,15 @@ void webserver::validate_on_methods_inputs_(method_set methods,
         throw std::invalid_argument(
             "Route path must not contain embedded null bytes");
     }
+    // Hardening (security-reviewer): registration is a privileged
+    // server-setup call, not a network-reachable path, but an
+    // accidentally megabyte-scale path would still be stored in the
+    // route table data structures for no benefit. Reject unreasonably
+    // long paths early with a clear diagnostic.
+    if (path.size() > 8192) {
+        throw std::invalid_argument(
+            "Route path exceeds maximum length of 8192 bytes");
+    }
 }
 
 void webserver::on_methods_(method_set methods,
@@ -142,8 +151,6 @@ void webserver::on_methods_(method_set methods,
     detail::http_endpoint idx(path, /*family=*/false,
                               /*registration=*/true, regex_checking);
 
-    bool is_new_entry = false;
-    std::shared_ptr<detail::lambda_resource> shim;
     {
         // TASK-067: single-locked window across the v2 conflict probe,
         // the per-method atomicity pre-check, the slot writes, and the
@@ -157,7 +164,8 @@ void webserver::on_methods_(method_set methods,
         // unreferenced and discarded -- no rollback required since the
         // table itself was never touched.
         std::unique_lock table_lock(impl_->route_table_mutex_);
-        shim = impl_->prepare_or_create_lambda_shim(idx, methods, is_new_entry);
+        auto [shim, is_new_entry] =
+            impl_->prepare_or_create_lambda_shim(idx, methods);
         impl_->commit_handlers_to_shim(*shim, methods, std::move(handler));
         impl_->upsert_v2_table_entry_locked_(idx, methods, shim, is_new_entry);
     }

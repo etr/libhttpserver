@@ -54,10 +54,10 @@ namespace {
 // Detection idiom: accepts<CW, F>::value is true iff
 // declval<CW&>().auth_handler(declval<F>()) is a well-formed expression.
 template <class CW, class F, class = void>
-struct accepts_legacy : std::false_type {};
+struct accepts_auth_handler : std::false_type {};
 
 template <class CW, class F>
-struct accepts_legacy<CW, F, std::void_t<
+struct accepts_auth_handler<CW, F, std::void_t<
 decltype(std::declval<CW&>().auth_handler(std::declval<F>()))>>
 : std::true_type {};
 
@@ -67,7 +67,7 @@ decltype(std::declval<CW&>().auth_handler(std::declval<F>()))>>
 using legacy_sig = std::function<
 std::shared_ptr<httpserver::http_response>(const httpserver::http_request&)>;
 
-static_assert(!accepts_legacy<httpserver::create_webserver, legacy_sig>::value,
+static_assert(!accepts_auth_handler<httpserver::create_webserver, legacy_sig>::value,
 "TASK-067: create_webserver::auth_handler must not accept the v1 "
 "std::shared_ptr<http_response> callable shape. The compat shim was "
 "scheduled for removal in v2.1; if you intentionally re-introduced it, "
@@ -76,7 +76,7 @@ static_assert(!accepts_legacy<httpserver::create_webserver, legacy_sig>::value,
 // And a positive control: the canonical v2 shape MUST still be accepted.
 using canonical_sig = std::function<
 std::optional<httpserver::http_response>(const httpserver::http_request&)>;
-static_assert(accepts_legacy<httpserver::create_webserver, canonical_sig>::value,
+static_assert(accepts_auth_handler<httpserver::create_webserver, canonical_sig>::value,
 "TASK-067: create_webserver::auth_handler must accept the canonical "
 "std::optional<http_response> callable shape.");
 

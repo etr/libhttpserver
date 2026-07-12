@@ -38,6 +38,8 @@
 #include <vector>
 
 #include "httpserver/detail/body.hpp"   // complete type for body_->~body()
+#include "httpserver/detail/http_field_validation.hpp"
+#include "httpserver/feature_unavailable.hpp"
 #include "httpserver/http_utils.hpp"
 #include "httpserver/iovec_entry.hpp"
 
@@ -52,14 +54,6 @@ namespace httpserver {
 // http_response.cpp) because every instantiation lives in this file's
 // factories, so no separate-TU instantiation is needed. No behaviour
 // change: the bodies are moved verbatim.
-
-namespace {
-// Duplicated from http_response.cpp (anonymous-namespace, internal
-// linkage): the unauthorized() factories below reject these control
-// characters in scheme / realm / header values, the same set
-// validate_http_field uses for with_header/with_footer.
-constexpr std::string_view kForbiddenFieldChars("\r\n\0", 3);
-}  // namespace
 
 // -----------------------------------------------------------------------
 // emplace_body — single placement-new entry point shared by all
@@ -177,14 +171,15 @@ http_response http_response::unauthorized(std::string_view scheme,
     // caller error — callers must never pass untrusted user input as scheme
     // or realm without first validating it. Throw std::invalid_argument so
     // the error is visible and cannot be silently swallowed.
-    // kForbiddenFieldChars is the same constant used by validate_http_field
-    // above — reused here to avoid a duplicate definition.
-    if (scheme.find_first_of(kForbiddenFieldChars) != std::string_view::npos) {
+    // detail::kForbiddenFieldChars is the same constant used by
+    // validate_http_field in http_response.cpp — shared to avoid a
+    // duplicate definition.
+    if (scheme.find_first_of(detail::kForbiddenFieldChars) != std::string_view::npos) {
         throw std::invalid_argument(
             "http_response::unauthorized: scheme contains forbidden control "
             "character (CR, LF, or NUL)");
     }
-    if (realm.find_first_of(kForbiddenFieldChars) != std::string_view::npos) {
+    if (realm.find_first_of(detail::kForbiddenFieldChars) != std::string_view::npos) {
         throw std::invalid_argument(
             "http_response::unauthorized: realm contains forbidden control "
             "character (CR, LF, or NUL)");
@@ -197,26 +192,33 @@ http_response http_response::unauthorized(std::string_view scheme,
     // misinterpreted as starting an escape sequence by strict parsers.
     // Backslash must be escaped first to avoid double-escaping the
     // backslashes we insert for double-quote escaping.
-    std::string escaped_realm;
-    escaped_realm.reserve(realm.size());
-    for (char c : realm) {
-        if (c == '\\') {
-            escaped_realm.push_back('\\');  // escape backslash first
-        } else if (c == '"') {
-            escaped_realm.push_back('\\');  // escape double-quote
-        }
-        escaped_realm.push_back(c);
-    }
-
+    //
+    // Fast path: the common case (e.g. the canonical `Basic realm="myrealm"`)
+    // has no backslash or double-quote to escape, so realm can be appended
+    // directly and the char-by-char copy + heap allocation below is skipped.
     http_response r;
     r.status_code_ = http::http_utils::http_unauthorized;        // 401
     // Build `<scheme> realm="<escaped_realm>"`. AC #3 requires byte-for-byte
     // `Basic realm="myrealm"` for the canonical case (which has no quotes).
     std::string challenge;
-    challenge.reserve(scheme.size() + escaped_realm.size() + 10);
+    challenge.reserve(scheme.size() + realm.size() + 10);
     challenge.append(scheme.data(), scheme.size());
-    challenge.append(" realm=\"", 8);
-    challenge.append(escaped_realm);
+    challenge.append(" realm=\"");
+    if (realm.find_first_of("\\\"") == std::string_view::npos) {
+        challenge.append(realm.data(), realm.size());
+    } else {
+        std::string escaped_realm;
+        escaped_realm.reserve(realm.size());
+        for (char c : realm) {
+            if (c == '\\') {
+                escaped_realm.push_back('\\');  // escape backslash first
+            } else if (c == '"') {
+                escaped_realm.push_back('\\');  // escape double-quote
+            }
+            escaped_realm.push_back(c);
+        }
+        challenge.append(escaped_realm);
+    }
     challenge.push_back('"');
     r.with_header(http::http_utils::http_header_www_authenticate,
                   challenge);
@@ -247,7 +249,7 @@ http_response http_response::unauthorized(digest_challenge challenge) {
     // Same forbidden-character set as validate_http_field above.
     auto reject_ctrl_chars = [](std::string_view field,
                                 std::string_view value) {
-        if (value.find_first_of(kForbiddenFieldChars) !=
+        if (value.find_first_of(detail::kForbiddenFieldChars) !=
                 std::string_view::npos) {
             throw std::invalid_argument(
                 std::string("http_response::unauthorized(digest_challenge): ") +
@@ -289,6 +291,15 @@ http_response http_response::unauthorized(digest_challenge challenge) {
     r.emplace_body<detail::digest_challenge_body>(
         body_kind::digest_challenge, std::move(p));
     return r;
+}
+#else  // !HAVE_DAUTH
+// PRD-FLG-REQ-002/004: the declaration in http_response_factories.hpp is
+// unconditional, so a HAVE_DAUTH-off build must still define this overload
+// rather than leave it as a link error. Throw feature_unavailable instead
+// of constructing a response.
+http_response http_response::unauthorized(digest_challenge challenge) {
+    (void)challenge;
+    throw feature_unavailable("digest_auth", "HAVE_DAUTH");
 }
 #endif  // HAVE_DAUTH
 

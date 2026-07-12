@@ -39,6 +39,7 @@
 using httpserver::create_webserver;
 using httpserver::hook_phase;
 using httpserver::http_request;
+using httpserver::http_resource;
 using httpserver::http_response;
 using httpserver::route_resolved_ctx;
 using httpserver::webserver;
@@ -71,6 +72,16 @@ CURLcode get_url(int port, const std::string& path,
     return rc;
 }
 
+// Trivial registered resource used to exercise the hit path (a request
+// that DOES resolve to a route) alongside the miss path in the ordering
+// test below.
+class hit_resource : public http_resource {
+ public:
+    http_response render_get(const http_request&) override {
+        return http_response::string("HIT");
+    }
+};
+
 }  // namespace
 
 LT_BEGIN_SUITE(hooks_not_found_alias_suite)
@@ -92,11 +103,11 @@ LT_BEGIN_AUTO_TEST(hooks_not_found_alias_suite,
     std::string body;
     LT_CHECK_EQ(get_url(PORT_DEFAULT, "/nonexistent", &code, &body), CURLE_OK);
 
-    ws.stop();
-
     LT_CHECK_EQ(code, 404L);
     // constants::NOT_FOUND_ERROR == "Not Found" (src/httpserver/constants.hpp:51).
     LT_CHECK_EQ(body, std::string("Not Found"));
+
+    ws.stop();
 LT_END_AUTO_TEST(not_found_alias_default_body_when_no_user_handler)
 
 // AC-1, custom branch. With an explicit not_found_handler, a request for
@@ -106,7 +117,7 @@ LT_END_AUTO_TEST(not_found_alias_default_body_when_no_user_handler)
 // the same handler — the user handler is invoked exactly once per miss
 // (not double-counted by the alias hook body, which is observation-only).
 LT_BEGIN_AUTO_TEST(hooks_not_found_alias_suite,
-                   not_found_alias_invokes_user_handler_on_miss_with_v1_body)
+                   not_found_alias_custom_handler_returns_user_body_on_miss)
     std::atomic<int> handler_calls{0};
     auto user_not_found = [&handler_calls](const http_request&) {
         handler_calls.fetch_add(1, std::memory_order_relaxed);
@@ -121,15 +132,15 @@ LT_BEGIN_AUTO_TEST(hooks_not_found_alias_suite,
     std::string body;
     LT_CHECK_EQ(get_url(PORT_CUSTOM, "/nonexistent", &code, &body), CURLE_OK);
 
-    ws.stop();
-
     LT_CHECK_EQ(code, 404L);
     LT_CHECK_EQ(body, std::string("CUSTOM_404"));
     // The user handler fires exactly once. The alias hook body is a
     // pure observation marker (DR-012 §4.10); it does NOT re-invoke
     // the user handler. The on-wire body comes from not_found_page.
     LT_CHECK_EQ(handler_calls.load(), 1);
-LT_END_AUTO_TEST(not_found_alias_invokes_user_handler_on_miss_with_v1_body)
+
+    ws.stop();
+LT_END_AUTO_TEST(not_found_alias_custom_handler_returns_user_body_on_miss)
 
 // DR-012 §4.10 ordering pin. The alias seat installs hook[0] at
 // route_resolved when not_found_handler is set; a user-added observation
@@ -157,6 +168,9 @@ LT_BEGIN_AUTO_TEST(hooks_not_found_alias_suite,
                 }
             }));
 
+    auto resource = std::make_shared<hit_resource>();
+    ws.register_path("/exists", resource);
+
     ws.start(false);
     httpserver_test::wait_for_server_ready(PORT_ORDER);
 
@@ -164,13 +178,26 @@ LT_BEGIN_AUTO_TEST(hooks_not_found_alias_suite,
     std::string body;
     LT_CHECK_EQ(get_url(PORT_ORDER, "/nonexistent", &code, &body), CURLE_OK);
 
-    ws.stop();
-
     LT_CHECK_EQ(code, 404L);
     LT_CHECK_EQ(body, std::string("CUSTOM_404"));
     // User observation hook fired once on the miss path.
     LT_CHECK_EQ(user_observer_calls.load(), 1);
     LT_CHECK_EQ(user_observer_misses.load(), 1);
+
+    // Hit path: a request that DOES resolve to a route must also invoke
+    // the user observation hook (ctx.matched.has_value() == true), but
+    // must NOT bump the miss counter. Proves ctx.matched is exercised in
+    // both directions, not just the miss branch above.
+    long hit_code = 0;  // NOLINT(runtime/int)
+    std::string hit_body;
+    LT_CHECK_EQ(get_url(PORT_ORDER, "/exists", &hit_code, &hit_body), CURLE_OK);
+
+    LT_CHECK_EQ(hit_code, 200L);
+    LT_CHECK_EQ(hit_body, std::string("HIT"));
+    LT_CHECK_EQ(user_observer_calls.load(), 2);
+    LT_CHECK_EQ(user_observer_misses.load(), 1);
+
+    ws.stop();
 LT_END_AUTO_TEST(not_found_alias_does_not_suppress_user_route_resolved_hook)
 
 LT_BEGIN_AUTO_TEST_ENV()

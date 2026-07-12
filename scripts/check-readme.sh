@@ -288,6 +288,13 @@ while IFS= read -r target; do
     # Strip fragment identifiers (#section) before existence check to avoid
     # false failures when a link like [foo](examples/foo.cpp#line) is added.
     target="${target%%#*}"
+    # Reject path-traversal targets rather than testing them against the
+    # filesystem: README.md content could originate from an external PR, and
+    # joining an untrusted "../../../etc/shadow"-style target directly to
+    # REPO_ROOT would let this check probe paths outside the repo tree.
+    case "$target" in
+        *../*|../*) continue ;;
+    esac
     if [ ! -e "$REPO_ROOT/$target" ]; then
         broken_links+=("$target")
     fi
@@ -315,6 +322,11 @@ if [ "$h1_count" -ne 1 ]; then
 fi
 
 # (S3) No literal tab characters inside fenced code blocks.
+# Note: this uses the simple open/close toggle (not the S1 ordered state
+# machine in lib/check-fence-balance.sh) — S3 only scans for tabs inside
+# whatever it thinks is a block, it does not gate structural balance (S1
+# already does that), so the weaker toggle model is intentionally retained
+# here.
 awk '
     BEGIN { in_block = 0; bad = 0 }
     /^```/ { in_block = !in_block; next }
@@ -330,22 +342,17 @@ if LC_ALL=C grep -qP '\r$' "$README" 2>/dev/null; then
 fi
 
 # ---- markdownlint: strict by default ----------------------------------------
-# A markdownlint finding fails the script by default (findings go to stderr so
-# they are visible in CI logs). Set LIBHTTPSERVER_MARKDOWNLINT_ADVISORY=1 to
-# downgrade findings to advisory (non-gating) — the documented escape hatch for
-# a lane whose markdownlint version flags rules the docs do not yet satisfy.
-# The legacy MARKDOWNLINT_STRICT knob is still honored (default now 'yes');
-# MARKDOWNLINT_STRICT=no also downgrades to advisory.
-if command -v markdownlint >/dev/null 2>&1; then
-    if ! markdownlint -q "$README" 2>&1; then
-        if [ "${LIBHTTPSERVER_MARKDOWNLINT_ADVISORY:-0}" = "1" ] \
-           || [ "${MARKDOWNLINT_STRICT:-yes}" = "no" ]; then
-            echo "check-readme: NOTE: markdownlint reported issues above (advisory only, not gating)" >&2
-        else
-            fail "markdownlint reported issues (set LIBHTTPSERVER_MARKDOWNLINT_ADVISORY=1 to downgrade to advisory)"
-        fi
-    fi
-fi
+# A markdownlint finding fails the script by default. Set
+# LIBHTTPSERVER_MARKDOWNLINT_ADVISORY=1 to downgrade findings to advisory
+# (non-gating) — the documented escape hatch for a lane whose markdownlint
+# version flags rules the docs do not yet satisfy. The legacy
+# MARKDOWNLINT_STRICT knob is still honored (default now 'yes');
+# MARKDOWNLINT_STRICT=no also downgrades to advisory. See
+# scripts/lib/check-markdownlint.sh for the shared decision logic (also used
+# by check-release-notes.sh).
+# shellcheck source=scripts/lib/check-markdownlint.sh
+source "$(dirname "$0")/lib/check-markdownlint.sh"
+run_markdownlint_advisory "check-readme" "$README"
 
 echo "check-readme: OK (A1 byte-for-byte snippet; A2 no v1 tokens; A3 ${#REQUIRED_V2_TOKENS[@]} v2 tokens; A4 threading+error citations; A5 ${#REQUIRED_SECTIONS[@]} sections; A6 cross-links; fences balanced)"
 exit 0

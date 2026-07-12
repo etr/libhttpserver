@@ -293,23 +293,15 @@ class http_response final {
      // the return type to a non-`[[nodiscard]]` reference is strictly
      // source-compatible — the reference is silently ignored.
      //
-     // Cookie API decision (action item #4 of TASK-012): the v2.0 cookie
-     // surface is the v1 (name, value) string-pair shape. `with_cookie`
-     // overwrites any prior entry for `name` (the cookie map is keyed
-     // case-insensitively). The value is rendered verbatim into the
-     // `Set-Cookie` header by decorate_response, so callers who need
-     // attributes (Path, Secure, HttpOnly, SameSite, ...) pre-format the
-     // value, e.g. with_cookie("sid", "abc; Path=/; Secure; HttpOnly").
-     // A structured cookie type with first-class attribute fields is
-     // intentionally deferred to a follow-up task; it can be added as a
-     // non-breaking overload alongside this string-pair API.
-     //
-     // Security warning: the value is rendered verbatim. A semicolon in the
-     // value will inject synthetic cookie attributes into the same Set-Cookie
-     // header (attribute injection). Callers MUST NOT pass attacker-controlled
-     // data as the value without first ensuring it does not contain semicolons
-     // or other Set-Cookie syntax characters. The pre-formatted attribute style
-     // above is intended for trusted, developer-supplied strings only.
+     // Cookie API (TASK-064, superseding the TASK-012 action item #4
+     // decision below): the structured `cookie` type (see cookie.hpp) is
+     // the current surface. `with_cookie(cookie{}.with_name(...)
+     // .with_value(...))` validates the name and value at the cookie's
+     // own setter sites and throws on a `;` in the value (attribute
+     // injection guard), rather than rendering it verbatim. The v1
+     // `with_cookie(std::string name, std::string value)` string-pair
+     // overloads below are deprecated and will be removed in v2.1 --
+     // new code should use the structured overload.
      //
      // Note on with_status: status replaces the stored code outright,
      // including any flag bits set by shoutCAST() (which ORs

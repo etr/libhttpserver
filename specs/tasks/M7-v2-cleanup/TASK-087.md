@@ -27,7 +27,7 @@ are all wired up; msan went silently absent.
 - Typecheck passes.
 - Tests pass.
 
-**Related Requirements:** PRD §2 security NFR, PRD §3.6 sanitizer-clean
+**Related Requirements:** PRD §2 non-functional/cross-cutting quality bar (implicit correctness/memory-safety intent; §2 and §3.6 do not name an explicit sanitizer-clean requirement)
 **Related Decisions:** None new
 
 **Status:** Done

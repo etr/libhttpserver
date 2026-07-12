@@ -489,6 +489,11 @@ inline bool ieq_prefix(std::string_view s, std::string_view prefix) {
     return true;
 }
 
+// Compare two strings for exact equality, case-insensitively.
+inline bool ieq(std::string_view a, std::string_view b) {
+    return a.size() == b.size() && ieq_prefix(a, b);
+}
+
 // Parse one auth-param: NAME=VALUE or NAME="QUOTED". Returns name/value via
 // out params and advances `s` past the param (and any trailing comma/space).
 inline bool parse_one_param(std::string_view& s,
@@ -614,6 +619,7 @@ inline std::string compute_response_from_ha1_hex(
 // values per RFC 7616 §3.3 / RFC 7235 §2.1. Returns std::nullopt when the
 // scheme is not "Digest" or when a mandatory field (realm, nonce) is missing.
 inline std::optional<parsed_challenge> parse_www_authenticate(std::string_view raw) {
+    using digest_client_internal::ieq;
     using digest_client_internal::ieq_prefix;
     using digest_client_internal::skip_ws;
     using digest_client_internal::parse_one_param;
@@ -630,16 +636,6 @@ inline std::optional<parsed_challenge> parse_www_authenticate(std::string_view r
     std::string name, value;
     while (parse_one_param(raw, name, value)) {
         // Compare names case-insensitively.
-        auto ieq = [](std::string_view a, std::string_view b) {
-            if (a.size() != b.size()) return false;
-            for (std::size_t i = 0; i < a.size(); ++i) {
-                if (std::tolower(static_cast<unsigned char>(a[i])) !=
-                    std::tolower(static_cast<unsigned char>(b[i]))) {
-                    return false;
-                }
-            }
-            return true;
-        };
         if (ieq(name, "realm"))          out.realm = value;
         else if (ieq(name, "nonce"))     out.nonce = value;
         else if (ieq(name, "opaque"))    out.opaque = value;
@@ -676,10 +672,8 @@ inline std::optional<parsed_challenge> extract_digest_challenge(std::string_view
 
         if (ieq_prefix(line, "WWW-Authenticate:")) {
             line.remove_prefix(std::strlen("WWW-Authenticate:"));
-            // Strip leading whitespace.
-            while (!line.empty() && (line.front() == ' ' || line.front() == '\t')) {
-                line.remove_prefix(1);
-            }
+            // Leading whitespace is stripped by parse_www_authenticate's own
+            // skip_ws(raw) call at entry; no need to duplicate that here.
             auto parsed = parse_www_authenticate(line);
             if (parsed) return parsed;
             // Skip non-Digest WWW-Authenticate headers and keep scanning.

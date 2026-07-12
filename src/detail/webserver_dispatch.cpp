@@ -96,6 +96,10 @@ namespace detail {
 
 void webserver_impl::invalidate_route_cache() {
     // Called by registration callers after any table mutation.
+    // Contract: caller must NOT hold route_table_mutex_ here -- the lock is
+    // taken internally by route_cache::clear() (route_cache.hpp), and
+    // holding route_table_mutex_ across this call is unnecessary and risks
+    // a lock-ordering inversion with the 3-tier lookup path below.
     route_lru_cache.clear();
 }
 

@@ -70,7 +70,7 @@ std::atomic<int> g_connection_opened_count{0};
 
 // Printable sentinel used as the basic-auth username on the first
 // request. Long enough to be unambiguous when grep-ing for it.
-constexpr const char kSentinel[] = "DEADBEEFCRED_SENTINEL_USERNAME_FROM_REQUEST_1";  // NOLINT(whitespace/line_length)
+constexpr const char kSentinel[] = "DEADBEEFCRED_SENTINEL_USERNAME_FROM_REQUEST_1";
 
 bool buffer_contains_sentinel(const std::byte* p, std::size_t n) noexcept {
     constexpr std::size_t k = sizeof(kSentinel) - 1;
@@ -98,7 +98,7 @@ class peek_resource : public httpserver::http_resource {
         if (ci == nullptr || ci->socket_context == nullptr) {
             return httpserver::http_response::string("no-ctx");
         }
-        auto* cs = static_cast<httpserver::detail::connection_state*>(
+        auto* cs = httpserver::detail::connection_state::from_socket_context(
             ci->socket_context);
         // Touch get_user() once so the lazy basic-auth credential cache
         // populates the arena-backed username pmr::string. On request 1
@@ -169,6 +169,10 @@ LT_BEGIN_AUTO_TEST(connection_state_body_residue_suite,
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_FORBID_REUSE, 0L);
     curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1L);
+    // Bound both requests below so a hung server cannot stall
+    // curl_easy_perform() indefinitely and block the CI runner.
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 150L);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 150L);
     // Force HTTP/1.1 to guarantee keep-alive semantics (HTTP/2 has
     // stream multiplexing rather than connection reuse in the HTTP/1.1
     // sense, so the connection_opened hook count would differ).

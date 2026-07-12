@@ -27,7 +27,7 @@ Two CI workflow weaknesses called out in the audit:
 - Typecheck passes.
 - Tests pass.
 
-**Related Requirements:** PRD §2 supply-chain NFR
+**Related Requirements:** None (CI-internal tooling; no product-facing requirement)
 **Related Decisions:** None new
 
 **Status:** Complete

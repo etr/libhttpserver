@@ -204,6 +204,13 @@ int webserver_impl::queue_response_dispatching_kind(
     if (mr->response->kind() == body_kind::digest_challenge) {
         auto* dch = static_cast<detail::digest_challenge_body*>(
             mr->response->body_);
+        if (dch == nullptr) {
+            // Defensive guard (CWE-476): kind() reported digest_challenge
+            // but body_ is null. Fall back to the plain queue path instead
+            // of dereferencing a null pointer in get_params() below.
+            return static_cast<int>(MHD_queue_response(
+                connection, mr->response->get_status(), raw_response));
+        }
         const auto& p = dch->get_params();
         auto args = map_to_mhd_digest_args_(p, digest_opaque_);
         return static_cast<int>(MHD_queue_auth_required_response3(

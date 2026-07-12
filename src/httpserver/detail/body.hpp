@@ -395,7 +395,10 @@ class digest_challenge_body final : public body {
         bool prefer_utf8;
     };
 
-    explicit digest_challenge_body(params p) noexcept
+    // Not noexcept: std::make_unique heap-allocates and can throw
+    // std::bad_alloc. Only the move constructor and move_into() (used by
+    // http_response's noexcept move path) need to be noexcept.
+    explicit digest_challenge_body(params p)
         : params_(std::make_unique<params>(std::move(p))) {}
 
     digest_challenge_body(digest_challenge_body&&) noexcept = default;

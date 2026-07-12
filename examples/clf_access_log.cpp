@@ -75,7 +75,10 @@ std::string sanitize_clf(std::string_view sv) {
     std::string out;
     out.reserve(sv.size());
     for (unsigned char c : sv) {
-        out += (c < 0x20 || c == 0x7f) ? '-' : static_cast<char>(c);
+        // '"' is also replaced: an unescaped double-quote inside a CLF
+        // quoted field ("METHOD PATH VERSION") would prematurely close
+        // the quoted-string and corrupt the log line's structure.
+        out += (c < 0x20 || c == 0x7f || c == '"') ? '-' : static_cast<char>(c);
     }
     return out;
 }
@@ -102,8 +105,8 @@ void emit_clf_line(const hs::response_sent_ctx& ctx) {
     // read from ctx.request->get_version() (TASK-018). It is sanitized
     // like method and path for defence-in-depth even though it comes from
     // MHD's request-line parse.
-    const std::string method  = sanitize_clf(ctx.request->get_method());
-    const std::string path    = sanitize_clf(ctx.request->get_path());
+    const std::string method = sanitize_clf(ctx.request->get_method());
+    const std::string path = sanitize_clf(ctx.request->get_path());
     const std::string version = sanitize_clf(ctx.request->get_version());
     std::printf("- - - [%s] \"%s %s %s\" %d %zu %lld\n",
                 ts,

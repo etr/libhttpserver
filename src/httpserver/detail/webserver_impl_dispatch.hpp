@@ -248,7 +248,7 @@ bool fire_before_handler_gated(
 ::httpserver::http_response
     run_internal_error_handler_safely(modded_request* mr,
                                       std::string_view msg) const;
-bool should_skip_auth(const std::string& path) const;
+bool should_skip_auth(std::string_view path) const;
 void invalidate_route_cache();
 
 // Helpers for webserver::start(). Each appends a logical subset of
@@ -359,10 +359,12 @@ int queue_response_dispatching_kind(MHD_Connection* connection,
 // and the table mutation are atomic against concurrent registrations.
 const detail::route_entry* find_v2_entry_by_path_(
         const detail::http_endpoint& idx) const noexcept;
-std::shared_ptr<detail::lambda_resource>
+// Returns {shim, is_fresh}: is_fresh is true when a brand-new
+// lambda_resource shim was created (no entry previously existed at
+// this path), false when an existing shim was reused.
+std::pair<std::shared_ptr<detail::lambda_resource>, bool>
     prepare_or_create_lambda_shim(const detail::http_endpoint& idx,
-                                  method_set methods,
-                                  bool& fresh_out);
+                                  method_set methods);
 void commit_handlers_to_shim(detail::lambda_resource& shim,
                              method_set methods,
                              std::function<::httpserver::http_response(

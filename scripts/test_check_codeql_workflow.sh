@@ -87,6 +87,16 @@ else
     fail "floating @v3 ref should exit 1"
 fi
 
+# Test 2b: a short-hash pin (not a full 40-hex SHA) present — exercises
+# assertion (c) independently of (b) (a short hash is not a floating @vN tag).
+SHORT_HASH="$TMPDIR_BASE/short_hash.yml"
+awk '/codeql-action\/analyze@/ { print "        uses: github/codeql-action/analyze@abc1234"; next } { print }' "$GOOD" > "$SHORT_HASH"
+if ! bash "$SCRIPT" "$SHORT_HASH" >/dev/null 2>&1; then
+    ok "short-hash pin (not 40-hex) exits 1"
+else
+    fail "short-hash pin (not 40-hex) should exit 1"
+fi
+
 # Test 3: a commented autobuild line present (assertion d) — exit 1
 AUTOBUILD="$TMPDIR_BASE/autobuild.yml"
 awk '1; /Initialize CodeQL/ {print "      # - uses: github/codeql-action/autobuild@'"${SHA_A}"'"}' "$GOOD" > "$AUTOBUILD"
@@ -111,7 +121,7 @@ fi
 
 # Test 5: missing explicit build step (assertion e) — exit 1
 NO_BUILD="$TMPDIR_BASE/no_build.yml"
-grep -v -e './configure' -e './bootstrap' -e 'make ;' "$GOOD" > "$NO_BUILD"
+grep -v -e './configure' -e 'make ;' "$GOOD" > "$NO_BUILD"
 if ! bash "$SCRIPT" "$NO_BUILD" >/dev/null 2>&1; then
     ok "missing ./configure + make build step exits 1"
 else
@@ -119,7 +129,9 @@ else
 fi
 
 # Test 6: invalid YAML (assertion a) — exit 1
-# The fixture keeps SHA-pinned refs + a build step so only assertion (a) fires.
+# Note: this fixture also lacks a permissions block and sha256sum
+# verification, so assertions (g) and (h) independently fire alongside (a);
+# the test only asserts exit 1, which holds regardless.
 BAD_YAML="$TMPDIR_BASE/bad.yml"
 cat > "$BAD_YAML" <<EOF
 name: "CodeQL"

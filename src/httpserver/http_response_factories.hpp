@@ -123,7 +123,6 @@
          std::string_view realm,
          std::string body = {});  // NOLINT(build/include_what_you_use)
 
-#ifdef HAVE_DAUTH
      /// Construct an RFC 7616 §3.3 Digest 401 Unauthorized response
      /// (TASK-062).
      ///
@@ -151,13 +150,14 @@
      /// are rejected with `std::invalid_argument` if they contain CR,
      /// LF, or NUL (CWE-113).
      ///
-     /// Only declared when libmicrohttpd Digest support is compiled in
-     /// (`HAVE_DAUTH`); the build-time gate matches the gate on
-     /// `http_request::check_digest_auth(...)`.
+     /// Always declared, regardless of `HAVE_DAUTH` (PRD-FLG-REQ-001:
+     /// public declarations must not be conditionally compiled). On a
+     /// `HAVE_DAUTH`-off build the call throws
+     /// `feature_unavailable("digest_auth", "HAVE_DAUTH")`
+     /// (PRD-FLG-REQ-002/004) instead of constructing a response.
      ///
      /// @see http_response::unauthorized(std::string_view,std::string_view,std::string)
      [[nodiscard]] static http_response unauthorized(
          digest_challenge challenge);
-#endif  // HAVE_DAUTH
 
 #endif  // SRC_HTTPSERVER_HTTP_RESPONSE_FACTORIES_HPP_

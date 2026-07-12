@@ -202,6 +202,9 @@ class websocket_handler {
       * @param session the closing session.
       * @param code    the WebSocket close code as received or sent.
       * @param reason  the UTF-8 close reason; empty if none was provided.
+      *                Comes directly from the peer's CLOSE frame payload
+      *                and is not validated by libhttpserver for length or
+      *                UTF-8 correctness; treat it as untrusted input.
       */
      virtual void on_close(websocket_session& session, uint16_t code, const std::string& reason);
 };

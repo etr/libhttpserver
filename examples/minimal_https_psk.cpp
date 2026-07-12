@@ -32,8 +32,7 @@
 // PSK database loaded from environment variables at startup.
 //
 // SECURITY NOTE: Never hardcode PSK keys in source code (CWE-321 / CWE-798).
-// The values below are illustrative placeholders. For illustration;
-// production must:
+// The values below are placeholders. For illustration; production must:
 //   - Load keys from environment variables, a key file, or a secrets manager.
 //   - Use at least 128 bits of cryptographically-random key material.
 //   - Rotate keys regularly.

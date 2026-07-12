@@ -177,12 +177,14 @@ no way to drive a CONNECT round-trip through `curl_easy_perform` and the
 high-level easy API has no other shape that produces a useful integ
 assertion against an HTTP server that is not also a proxy.
 
-Server-side CONNECT dispatch IS exercised: the method-to-render-fn table
-in `src/detail/webserver_request.cpp` (the `methods[]` array around line
-608) maps the `CONNECT` wire token to `http_resource::render_connect`,
-and `test/unit/http_resource_test.cpp::render_connect_returns_by_value`
-pins the public signature. The deleted integ blocks added no coverage
-beyond that.
+The method-to-render-fn table in `src/detail/webserver_request.cpp` (the
+`methods[]` array around line 608) maps the `CONNECT` wire token to
+`http_resource::render_connect`. The `render_connect` return-type
+contract is pinned by a file-scope `static_assert` in
+`test/unit/http_resource_test.cpp` (around line 138) — there is no named
+test/symbol `render_connect_returns_by_value`. No test exercises the
+`methods[]` dispatch-table mapping itself. The deleted integ blocks
+added no coverage beyond the static_assert.
 
 No port required; not a v1-only feature, but a v1-era libcurl misuse.
 

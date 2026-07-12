@@ -179,6 +179,7 @@ class create_webserver {
       */
      create_webserver& log_access(log_access_ptr v) { _log_access = std::move(v); return *this; }
      create_webserver& log_error(log_error_ptr v) { _log_error = std::move(v); return *this; }
+     [[deprecated("validator callback is not invoked by v2 dispatch; use webserver::add_hook(hook_phase::request_received, ...) instead")]]
      create_webserver& validator(validator_ptr v) { _validator = std::move(v); return *this; }
      create_webserver& unescaper(unescaper_ptr v) { _unescaper = v; return *this; }
      create_webserver& bind_address(const struct sockaddr* v) { _bind_address = v; return *this; }

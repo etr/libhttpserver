@@ -70,26 +70,6 @@
 
 namespace hs = httpserver;
 
-static constexpr bool kSanitizerBuild =
-#if defined(__SANITIZE_ADDRESS__) \
-    || defined(__SANITIZE_THREAD__) \
-    || defined(__SANITIZE_MEMORY__) \
-    || defined(__SANITIZE_HWADDRESS__)
-    true
-#elif defined(__has_feature)
-#  if __has_feature(address_sanitizer) \
-      || __has_feature(thread_sanitizer) \
-      || __has_feature(memory_sanitizer) \
-      || __has_feature(undefined_behavior_sanitizer)
-    true
-#  else
-    false
-#  endif
-#else
-    false
-#endif
-    ;  // NOLINT(whitespace/semicolon)
-
 namespace {
 
 // Ceilings from the TASK-053 deferred-backlog plan, step 4.
@@ -188,27 +168,32 @@ int main() {
     // its capacity, so the steady-state hit rate is effectively zero and
     // each lookup pays the full radix walk.
     //
-    // Note (performance-reviewer-iter1-1): during the first ≤256 iterations
-    // of each outer round, the LRU progressively re-warms from the
-    // invalidated state. These iterations see a mix of cold-miss and
-    // warming costs rather than pure radix latency. However, with
-    // INNER_RADIX=100K this warm-up window is only ~0.25% of inner
-    // iterations per round (256 / 100K), so its effect on the median
-    // ns/call across OUTER rounds is negligible and conservative (slightly
-    // inflates the measured cost, making the gate stricter, not looser).
-    // The comment "each lookup pays the full radix walk" holds for >99.75%
-    // of measured iterations; the first-256-per-round warm-up does not
-    // compromise the gate intent.
+    // Note: during the first ≤256 iterations of each outer round, the LRU
+    // progressively re-warms from the invalidated state. These iterations
+    // see a mix of cold-miss and warming costs rather than pure radix
+    // latency. However, with INNER_RADIX=100K this warm-up window is only
+    // ~0.25% of inner iterations per round (256 / 100K), so its effect on
+    // the median ns/call across OUTER rounds is negligible and conservative
+    // (slightly inflates the measured cost, making the gate stricter, not
+    // looser). The comment "each lookup pays the full radix walk" holds for
+    // >99.75% of measured iterations; the first-256-per-round warm-up does
+    // not compromise the gate intent.
     //
     // If kNumPaths is ever changed, keep it above ROUTE_CACHE_MAX_SIZE
-    // (currently 256) so the LRU-eviction guarantee holds. If
-    // ROUTE_CACHE_MAX_SIZE itself changes, this constant must be updated
-    // manually -- see test-quality-reviewer-iter1-3.
+    // (currently 256) so the LRU-eviction guarantee holds; the static_assert
+    // below enforces this at compile time if ROUTE_CACHE_MAX_SIZE changes.
     //
     // invalidate_route_cache() runs once per OUTER round (not per inner
     // iteration), so its cost (clearing a ≤256-entry map) is amortised
     // across INNER_RADIX (100K) lookups and does not taint the median.
     constexpr std::size_t kNumPaths = 320;  // > ROUTE_CACHE_MAX_SIZE (256)
+    static_assert(kNumPaths <= 9999,
+                  "buf[64] in make_radix_paths is sized for at most "
+                  "4-digit path indices");
+    static_assert(kNumPaths > hs::detail::webserver_impl::ROUTE_CACHE_MAX_SIZE,
+                  "kNumPaths must exceed ROUTE_CACHE_MAX_SIZE so the LRU is "
+                  "guaranteed to evict every iteration (radix_pure must "
+                  "measure a cold cache)");
     static const std::vector<std::string> kManyPaths =
         make_radix_paths(kNumPaths);
 

@@ -58,10 +58,10 @@ static_assert(!std::is_move_assignable_v<httpserver::webserver>,
 //   | CI lane                                      | observed bytes |
 //   |----------------------------------------------|----------------|
 //   | macos-latest / Apple clang 21 / libc++       |            776 |  24-byte std::string SSO
-//   | ubuntu-latest / gcc 11..14 / libstdc++       |           ~848 |  32-byte std::string SSO dominates
-//   | ubuntu-latest / clang 13..18 / libstdc++     |           ~848 |
-//   | windows-latest / MINGW64 gcc / libstdc++     |           ~848 |
-//   | windows-latest / MSYS gcc / libstdc++        |           ~848 |
+//   | ubuntu-latest / gcc 11..14 / libstdc++       |           ~848 |  32-byte std::string SSO dominates (inferred from libstdc++ ABI; not directly measured on this lane)
+//   | ubuntu-latest / clang 13..18 / libstdc++     |           ~848 |  same ABI as above (inferred, not directly measured on this lane)
+//   | windows-latest / MINGW64 gcc / libstdc++     |           ~848 |  inferred from libstdc++ ABI (32-byte std::string SSO); not directly measured on this lane
+//   | windows-latest / MSYS gcc / libstdc++        |           ~848 |  inferred from libstdc++ ABI (32-byte std::string SSO); not directly measured on this lane
 //
 // Slack: +16 bytes (one alignment-step worth of forgiveness for a
 // padding shift across an ABI bump).  Tight enough that any new field
@@ -84,6 +84,6 @@ static_assert(sizeof(httpserver::webserver) <= 864,
 //     state back in without changing the public class, this catches
 //     the case where the type somehow collapses to an empty shell.
 static_assert(sizeof(httpserver::webserver) >= sizeof(void*),
-              "webserver is suspiciously small — impl_ pointer may be missing");
+              "webserver is suspiciously small: impl_ pointer may be missing");
 
 int main() { return 0; }

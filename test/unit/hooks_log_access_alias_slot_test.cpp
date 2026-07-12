@@ -149,16 +149,8 @@ LT_BEGIN_AUTO_TEST(hooks_log_access_alias_slot_suite,
     LT_CHECK(captured.find("GET") != std::string::npos);
 LT_END_AUTO_TEST(alias_sanitizes_control_chars_in_method)
 
-// TASK-066: alias slots are construction-time-only. The previous test on
-// this site (`log_access_second_registration_replaces_first`) simulated
-// re-registration by constructing two webservers and asserting they did
-// not pollute each other -- but that was not a runtime "replace"
-// semantics pin, because no runtime replacement path exists or is
-// planned (DR-012, §4.10). The two tests below replace that simulated
-// scenario with the real contract: alias slots are written exactly once
-// at webserver construction and are immutable thereafter; the public
-// runtime extension surface for both phases is add_hook(), which lives
-// in the per-phase user vector and never touches the alias slot.
+// TASK-066: alias slots are construction-time-only; add_hook() and
+// remove() must not reseat them (DR-012 / §4.10; see hook_handle.hpp).
 LT_BEGIN_AUTO_TEST(hooks_log_access_alias_slot_suite,
                    log_access_alias_is_immutable_after_construction)
     int direct_calls = 0;
@@ -208,10 +200,12 @@ LT_BEGIN_AUTO_TEST(hooks_log_access_alias_slot_suite,
     // Construction wires the slot; user add_hook() at handler_exception
     // grows hooks_handler_exception_ but does not displace or clear the
     // alias slot. Removing the user hook leaves the alias slot intact.
+    int handler_calls = 0;
     webserver ws{create_webserver(8244)
         .internal_error_handler(
-            [](const httpserver::http_request&, std::string_view)
+            [&handler_calls](const httpserver::http_request&, std::string_view)
                 -> httpserver::http_response {
+                ++handler_calls;
                 return httpserver::http_response::string("oops");
             })};
     auto* impl = impl_of(ws);
@@ -239,6 +233,14 @@ LT_BEGIN_AUTO_TEST(hooks_log_access_alias_slot_suite,
     LT_CHECK(static_cast<bool>(impl->handler_exception_alias_));
     LT_CHECK_EQ(impl->hooks_handler_exception_.size(),
                 static_cast<std::size_t>(0));
+
+    // (d) Direct invocation still reaches the construction-time callable.
+    http_request req =
+        create_test_request().path("/a").method("GET").build();
+    httpserver::handler_exception_ctx ctx{};
+    ctx.request = &req;
+    impl->handler_exception_alias_(ctx);
+    LT_CHECK_EQ(handler_calls, 1);
 LT_END_AUTO_TEST(handler_exception_alias_is_immutable_after_construction)
 
 LT_BEGIN_AUTO_TEST_ENV()

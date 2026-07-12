@@ -290,6 +290,14 @@ LT_END_AUTO_TEST(derived_unique_ptr_accepted_by_shim)
 
 // ---- HAVE_WEBSOCKET-off runtime tests (TASK-081 cycle 3) --------------
 //
+// This TU intentionally defines a second LT_BEGIN_SUITE/LT_END_SUITE
+// block below (webserver_register_ws_smartptr_unavailable_suite),
+// alongside webserver_register_ws_smartptr_suite above: the two suites
+// are mutually exclusive under #ifdef HAVE_WEBSOCKET / #ifndef
+// HAVE_WEBSOCKET, so exactly one of them compiles into any given build,
+// and housing both here keeps the on-path and off-path runtime tests
+// for the same public surface side by side in one file.
+//
 // Before TASK-081, on a HAVE_WEBSOCKET-off build the only thing this TU
 // exercised at run-time was an empty suite (the compile-time signature
 // asserts above fire either way, but littletest cannot count them as
@@ -309,12 +317,12 @@ LT_END_AUTO_TEST(derived_unique_ptr_accepted_by_shim)
 //      slipped past the unavailable TU's null-handler check.
 
 #ifndef HAVE_WEBSOCKET
-LT_BEGIN_SUITE(webserver_register_ws_smartptr_off_suite)
+LT_BEGIN_SUITE(webserver_register_ws_smartptr_unavailable_suite)
     void set_up() {}
     void tear_down() {}
-LT_END_SUITE(webserver_register_ws_smartptr_off_suite)
+LT_END_SUITE(webserver_register_ws_smartptr_unavailable_suite)
 
-LT_BEGIN_AUTO_TEST(webserver_register_ws_smartptr_off_suite,
+LT_BEGIN_AUTO_TEST(webserver_register_ws_smartptr_unavailable_suite,
                    features_reports_websocket_off)
     const auto f = webserver::features();
     LT_CHECK_EQ(f.websocket, false);
@@ -330,7 +338,7 @@ LT_END_AUTO_TEST(features_reports_websocket_off)
 // fire). The dual-flag verdict from probe_throw_type (see
 // test/unit/throw_probe.hpp for the idiom's rationale) adds the
 // missing pin.
-LT_BEGIN_AUTO_TEST(webserver_register_ws_smartptr_off_suite,
+LT_BEGIN_AUTO_TEST(webserver_register_ws_smartptr_unavailable_suite,
                    null_unique_ptr_throws_feature_unavailable_on_ws_off)
     webserver ws{create_webserver(PORT + 9)};
     const auto verdict = httpserver_test::probe_throw_type([&ws] {

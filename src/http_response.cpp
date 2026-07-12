@@ -39,6 +39,7 @@
 #include <vector>
 
 #include "httpserver/detail/body.hpp"   // complete type for body_->~body()
+#include "httpserver/detail/http_field_validation.hpp"
 #include "httpserver/http_utils.hpp"
 #include "httpserver/iovec_entry.hpp"
 
@@ -181,23 +182,20 @@ void http_response::shoutCAST() {
 // overload pairs delegate to do_set_*() private helpers.
 // -----------------------------------------------------------------------
 
-// Shared forbidden-character set for header/footer/cookie field names
-// and values. The string_view spans all three bytes including the
-// embedded NUL.
-namespace {
-constexpr std::string_view kForbiddenFieldChars("\r\n\0", 3);
-
 // Validates any HTTP field name/value pair for forbidden control characters
 // (CR, LF, NUL — CWE-113). Used for headers, footers, and cookies.
+// kForbiddenFieldChars lives in detail/http_field_validation.hpp, shared
+// with the unauthorized() factories in http_response_factories.cpp.
+namespace {
 void validate_http_field(std::string_view setter_name,
                          std::string_view key,
                          std::string_view value) {
-    if (key.find_first_of(kForbiddenFieldChars) != std::string_view::npos) {
+    if (key.find_first_of(detail::kForbiddenFieldChars) != std::string_view::npos) {
         throw std::invalid_argument(
             std::string(setter_name) +
             ": key contains forbidden control character (CR, LF, or NUL)");
     }
-    if (value.find_first_of(kForbiddenFieldChars) != std::string_view::npos) {
+    if (value.find_first_of(detail::kForbiddenFieldChars) != std::string_view::npos) {
         throw std::invalid_argument(
             std::string(setter_name) +
             ": value contains forbidden control character (CR, LF, or NUL)");
@@ -244,6 +242,9 @@ void http_response::do_set_cookie(std::string key, std::string value) {
     // semantics.
     cookie new_cookie;
     new_cookie.with_name(key).with_value(value);  // throws before any map mutation
+    // with_name/with_value take std::string BY VALUE, so they copy out of
+    // the key/value lvalues above; key and value are therefore still valid
+    // here regardless of call ordering, and the moves below are safe.
     cookies_.insert_or_assign(std::move(key), std::move(value));
     const http::header_comparator name_less;
     auto it = std::find_if(

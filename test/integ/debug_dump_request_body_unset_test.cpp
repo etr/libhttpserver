@@ -76,6 +76,8 @@ LT_BEGIN_AUTO_TEST(dump_unset_suite, no_stdout_no_warning)
     auto stdout_cap = begin_capture(STDOUT_FILENO, "unset_stdout");
     auto stderr_cap = begin_capture(STDERR_FILENO, "unset_stderr");
 
+    curl_global_init(CURL_GLOBAL_ALL);
+
     auto ws = std::make_unique<webserver>(
         create_webserver(9181)
             .start_method(httpserver::http::http_utils::INTERNAL_SELECT)
@@ -84,7 +86,6 @@ LT_BEGIN_AUTO_TEST(dump_unset_suite, no_stdout_no_warning)
     ws->register_path("echo", resource);
     ws->start(false);
 
-    curl_global_init(CURL_GLOBAL_ALL);
     std::string body;
     CURL* curl = curl_easy_init();
     curl_easy_setopt(curl, CURLOPT_URL, "http://localhost:9181/echo");
@@ -93,13 +94,29 @@ LT_BEGIN_AUTO_TEST(dump_unset_suite, no_stdout_no_warning)
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &body);
     CURLcode res = curl_easy_perform(curl);
     curl_easy_cleanup(curl);
+
+    // Second dispatch: confirms the silence observed after the first POST
+    // isn't merely an artifact of that first call (e.g. a cache not yet
+    // warmed), but holds steady across repeated requests.
+    std::string body2;
+    CURL* curl2 = curl_easy_init();
+    curl_easy_setopt(curl2, CURLOPT_URL, "http://localhost:9181/echo");
+    curl_easy_setopt(curl2, CURLOPT_POSTFIELDS, "secret=hello-world-2");
+    curl_easy_setopt(curl2, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl2, CURLOPT_WRITEDATA, &body2);
+    CURLcode res2 = curl_easy_perform(curl2);
+    curl_easy_cleanup(curl2);
+
+    curl_global_cleanup();
     ws->stop();
 
     std::string captured_stdout = end_capture(stdout_cap, STDOUT_FILENO);
     std::string captured_stderr = end_capture(stderr_cap, STDERR_FILENO);
 
     LT_ASSERT_EQ(res, 0);
+    LT_ASSERT_EQ(res2, 0);
     LT_CHECK_EQ(body, std::string("OK"));
+    LT_CHECK_EQ(body2, std::string("OK"));
 
     // Core acceptance criterion: env-var unset => silent on stdout
     // even though the body was POSTed.

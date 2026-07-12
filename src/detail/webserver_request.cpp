@@ -102,22 +102,23 @@ namespace {
 // ".." pops, anything else pushes. Pulled out of normalize_path so the
 // caller stays a flat tokenize-and-rebuild loop.
 void apply_normalized_segment(std::vector<std::string>& segments,
-                              const std::string& seg) {
+                              std::string_view seg) {
     if (seg == "..") {
         if (!segments.empty()) segments.pop_back();
         return;
     }
     if (seg.empty() || seg == ".") return;
-    segments.push_back(seg);
+    segments.emplace_back(seg);
 }
 
 // NOTE: the caller (should_skip_auth) must receive an already-unescaped
-// path (i.e., no %XX sequences remain). MHD's unescaper_func runs before
-// should_skip_auth, so this invariant is satisfied on the dispatch path.
-// Double slashes (//) and trailing slashes are collapsed automatically:
-// apply_normalized_segment skips empty segment strings, so consecutive
-// '/' separators produce zero segments (same as a single '/').
-std::string normalize_path(const std::string& path) {
+// path (i.e., no %XX sequences remain). libhttpserver's base_unescaper()
+// (called in answer_to_connection) runs before should_skip_auth, so this
+// invariant is satisfied on the dispatch path. Double slashes (//) and
+// trailing slashes are collapsed automatically: apply_normalized_segment
+// skips empty segment strings, so consecutive '/' separators produce zero
+// segments (same as a single '/').
+std::string normalize_path(std::string_view path) {
     std::vector<std::string> segments;
     std::string::size_type start = 0;
     if (!path.empty() && path[0] == '/') start = 1;
@@ -149,10 +150,10 @@ std::string normalize_path(const std::string& path) {
 //
 // security-reviewer-iter1-3: entries containing '%' are rejected with
 // std::invalid_argument.  Skip-path entries must be provided in
-// decoded form (the same form as the request path after MHD's
-// unescaper runs).  A '%'-encoded entry would never match a decoded
-// request path and would silently bypass auth for no route -- a
-// misconfiguration hazard caught early here.
+// decoded form (the same form as the request path after
+// libhttpserver's base_unescaper() runs).  A '%'-encoded entry would
+// never match a decoded request path and would silently bypass auth
+// for no route -- a misconfiguration hazard caught early here.
 std::vector<std::string> normalize_auth_skip_paths(
         const std::vector<std::string>& raw) {
     std::vector<std::string> out;
@@ -161,7 +162,7 @@ std::vector<std::string> normalize_auth_skip_paths(
         // Reject percent-encoded entries: skip-path entries must be
         // provided in decoded form.  A '%' in the entry indicates a
         // URL-encoded sequence that would never match the decoded
-        // request path produced by MHD's unescaper.
+        // request path produced by libhttpserver's base_unescaper().
         if (entry.find('%') != std::string::npos) {
             throw std::invalid_argument(
                 "auth_skip_paths entry contains a percent-encoded "
@@ -195,7 +196,7 @@ std::vector<std::string> normalize_auth_skip_paths(
     return out;
 }
 
-bool webserver_impl::should_skip_auth(const std::string& path) const {
+bool webserver_impl::should_skip_auth(std::string_view path) const {
     // TASK-058 step 2: empty-list early-out.  Servers with no
     // auth_skip_paths configured pay zero normalization cost.  This
     // is the production-typical case for any server whose auth

@@ -116,7 +116,7 @@ struct connection_state {
     // CWE-14 mitigation (TASK-068): the clear uses
     // httpserver::detail::secure_zero (defined in
     // httpserver/detail/secure_zero.hpp), which dispatches to
-    // explicit_bzero / memset_s / RtlSecureZeroMemory where available
+    // explicit_bzero / RtlSecureZeroMemory where available
     // and falls back to a volatile-pointer loop plus an inline-asm
     // memory clobber. The previous std::memset path was vulnerable to
     // dead-store elimination at -O2 / LTO under the right conditions
@@ -150,6 +150,17 @@ struct connection_state {
     void reset_arena() noexcept {
         arena_.release();
         secure_zero(initial_buffer_.data(), ARENA_INITIAL_BYTES);
+    }
+
+    // Named accessor documenting the invariant relied on at every call
+    // site that reads MHD's `MHD_ConnectionInfo::socket_context`: for
+    // this library, that field always holds exactly a connection_state*
+    // (set in webserver_impl::connection_notify on
+    // MHD_CONNECTION_NOTIFY_STARTED). Prefer this over a raw
+    // static_cast so the invariant is documented once rather than
+    // repeated at each cast site.
+    static connection_state* from_socket_context(void* ctx) noexcept {
+        return static_cast<connection_state*>(ctx);
     }
 };
 

@@ -136,8 +136,9 @@ static_assert(std::is_same_v<
 
 // TASK-069: pin the http_request_impl construction surface. After v2
 // cutover, the only public constructors are the no-arg default
-// (test-request path, delegates to the three-arg form) and the
-// allocator-aware three-arg form. The transitional two-arg overload
+// (test-request path, delegates to the three-arg form with nullptr
+// connection and unescaper) and the allocator-aware three-arg form.
+// The transitional two-arg overload
 // (MHD_Connection*, unescaper_ptr) is gone. If it ever returns, the
 // negative is_constructible assertion below breaks the build.
 static_assert(std::is_constructible_v<httpserver::detail::http_request_impl>,

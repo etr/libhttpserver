@@ -372,6 +372,11 @@ struct arguments_accumulator {
     static constexpr std::size_t DEFAULT_MAX_ARGS_COUNT = 64;
     static constexpr std::size_t DEFAULT_MAX_ARGS_BYTES = 65536;
     std::size_t max_args_count = DEFAULT_MAX_ARGS_COUNT;
+    // Bounds pre-unescape (raw) key+value bytes only. A user-registered
+    // unescaper (unescaper_ptr above) that expands its input (e.g.
+    // base64 or HTML-entity decoding) is NOT constrained by this limit —
+    // the budget check runs against the raw wire bytes before the
+    // callback runs.
     std::size_t max_args_bytes = DEFAULT_MAX_ARGS_BYTES;
     // Running byte total (key + value lengths) across all calls.
     std::size_t accumulated_bytes = 0;

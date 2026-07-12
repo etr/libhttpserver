@@ -269,13 +269,9 @@ detail::webserver_impl::fire_handler_exception(
                     return std::move(action).take_response();
                 }
             } catch (const std::exception& e) {
-                // Use .append() to avoid two intermediate heap strings.
-                log_dispatch_error(
-                    std::string("hook[handler_exception] threw: ")
-                        .append(e.what()));
+                log_hook_threw(this, "handler_exception", e.what());
             } catch (...) {
-                log_dispatch_error(
-                    "hook[handler_exception] threw unknown exception");
+                log_hook_threw_unknown(this, "handler_exception");
             }
         }
     } catch (...) {

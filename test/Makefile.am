@@ -26,7 +26,7 @@ LDADD += -lcurl
 
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_srcdir)/src/httpserver/ -DHTTPSERVER_COMPILATION
 METASOURCES = AUTO
-check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication digest_challenge_format deferred http_resource http_response create_webserver create_webserver_explicit new_response_types daemon_info uri_log post_iterator_null_key feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories http_response_digest_factory http_response_move_sanitizer webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_unescape_arena http_request_const_getters http_request_tls_accessors http_request_operator_stream webserver_register_smartptr webserver_register_path_prefix webserver_on_methods webserver_route route_table lookup_pipeline route_table_concurrency routing_regression route_lookup_canonicalize auth_skip_normalize http_resource_allow_cache v2_dispatch_contract threadsafety_stress webserver_features webserver_ws_unavailable webserver_ws_available webserver_register_ws_smartptr webserver_dauth_unavailable webserver_dauth_available consumer_fixture header_hygiene_hooks hook_api_shape hooks_no_firing hooks_accept_ctx_shape hooks_connection_lifecycle hooks_accept_decision_banned hooks_accept_decision_throwing hooks_body_chunk_ctx_shape hooks_request_received_short_circuit hooks_body_chunk_observes_progress hooks_body_chunk_short_circuit_no_leak hooks_before_handler_ctx_shape hooks_route_resolved_miss_and_hit hooks_before_handler_short_circuit hooks_alias_count hooks_alias_functional hooks_handler_exception_chain hooks_handler_exception_user_handler_throws_continues_chain hooks_handler_exception_fallback_to_hardcoded_500 hooks_handler_exception_slot hooks_response_sent_ctx_shape hooks_request_completed_ctx_shape hooks_after_handler_replaces_response hooks_after_handler_mutates_response_in_place hooks_response_sent_carries_status_bytes_timing hooks_request_completed_fires_on_early_failure hooks_log_access_alias_slot hooks_per_route_invalid_phase_throws hooks_per_route_order hooks_per_route_early_413_per_endpoint hooks_per_route_resource_destroyed_first hooks_per_route_concurrent_registration hooks_not_found_alias auth_handler_optional_signature no_v1_compat_shim cookie_header_sentinel cookie_render cookie_deprecation_sentinel http_response_cookie_wire http_request_cookies_parsed peer_address_to_string secure_zero_dce connection_state_sentinel connection_state_body_residue debug_dump_request_body_unset debug_dump_request_body_set littletest_skip_semantics digest_client_self_test
+check_PROGRAMS = basic file_upload http_utils threaded nodelay string_utilities http_endpoint ban_system ws_start_stop authentication digest_challenge_format deferred http_resource http_response create_webserver create_webserver_explicit new_response_types daemon_info uri_log post_iterator_null_key feature_unavailable header_hygiene_iovec header_hygiene iovec_entry http_method constants body http_response_sbo http_response_factories http_response_digest_factory http_response_move_sanitizer webserver_pimpl http_request_pimpl create_test_request http_request_arena http_request_unescape_arena http_request_const_getters http_request_tls_accessors http_request_operator_stream webserver_register_smartptr webserver_register_path_prefix webserver_on_methods webserver_route route_table lookup_pipeline route_table_concurrency routing_regression route_lookup_canonicalize auth_skip_normalize http_resource_allow_cache v2_dispatch_contract threadsafety_stress webserver_features webserver_ws_unavailable webserver_ws_available webserver_register_ws_smartptr webserver_dauth_unavailable webserver_dauth_available consumer_fixture header_hygiene_hooks hook_api_shape hooks_no_firing hooks_accept_ctx_shape hooks_connection_lifecycle hooks_accept_decision_banned hooks_accept_decision_throwing hooks_body_chunk_ctx_shape hooks_request_received_short_circuit hooks_body_chunk_observes_progress hooks_body_chunk_short_circuit_no_leak hooks_before_handler_ctx_shape hooks_route_resolved_miss_and_hit hooks_before_handler_short_circuit hooks_alias_count hooks_alias_functional hooks_handler_exception_chain hooks_handler_exception_user_handler_throws_continues_chain hooks_handler_exception_fallback_to_hardcoded_500 hooks_handler_exception_slot hooks_response_sent_ctx_shape hooks_request_completed_ctx_shape hooks_after_handler_replaces_response hooks_after_handler_mutates_response_in_place hooks_response_sent_carries_status_bytes_timing hooks_request_completed_fires_on_early_failure hooks_log_access_alias_slot hooks_per_route_invalid_phase_throws hooks_per_route_order hooks_per_route_early_413_per_endpoint hooks_per_route_resource_destroyed_first hooks_per_route_concurrent_registration hooks_not_found_alias auth_handler_optional_signature no_v1_compat_shim cookie_header_sentinel cookie_render cookie_deprecation_sentinel http_response_cookie_wire http_request_cookies_parsed peer_address_to_string secure_zero_dce connection_state_sentinel connection_state_body_residue debug_dump_request_body_unset debug_dump_request_body_set debug_dump_request_body_zero littletest_skip_semantics digest_client_self_test unescaper_func
 
 MOSTLYCLEANFILES = *.gcda *.gcno *.gcov
 
@@ -98,6 +98,13 @@ uri_log_SOURCES = unit/uri_log_test.cpp
 # it needs an explicit -lmicrohttpd in its link line on top of the default
 # LDADD (modern ld enforces --no-copy-dt-needed-entries).
 uri_log_LDADD = $(LDADD) -lmicrohttpd
+# unescaper_func: TASK-073. Pins the static webserver_impl::unescaper_func
+# MHD_OPTION_UNESCAPE_CALLBACK directly -- it must leave its buffer
+# unmutated and return the string length (or 0 for a null string). See
+# the historical note above the definition in
+# src/detail/webserver_callbacks.cpp. Does not touch any libmicrohttpd
+# symbol directly, so no extra -lmicrohttpd link override is needed.
+unescaper_func_SOURCES = unit/unescaper_func_test.cpp
 # post_iterator_null_key: issue #375 regression. Drives the static
 # webserver_impl::post_iterator callback with a null key (the continuation-
 # chunk case MHD hits when a field is split across callbacks) and asserts it
@@ -116,8 +123,8 @@ header_hygiene_iovec_SOURCES = unit/header_hygiene_iovec_test.cpp
 # - LDADD is overridden to empty: this is a pure-compile assertion, the
 #   `int main(){}` body has no library dependencies.
 # Now an unconditional PASS: TASK-020 landed and the <httpserver.hpp>
-# umbrella is free of backend-header leakage. See lines ~532-535 below
-# for the historical XFAIL_TESTS note.
+# umbrella is free of backend-header leakage. See the historical
+# XFAIL_TESTS note near the TESTS = $(check_PROGRAMS) assignment below.
 header_hygiene_SOURCES = unit/header_hygiene_test.cpp
 header_hygiene_CPPFLAGS = -I$(top_srcdir)/src $(CPPFLAGS)
 header_hygiene_LDADD =
@@ -642,14 +649,16 @@ connection_state_sentinel_LDADD =
 connection_state_body_residue_SOURCES = integ/connection_state_body_residue_test.cpp
 connection_state_body_residue_LDADD = $(LDADD) -lmicrohttpd
 
-# TASK-074: dual integration tests gating the LIBHTTPSERVER_DEBUG_DUMP_REQUEST_BODY
+# TASK-074: integration tests gating the LIBHTTPSERVER_DEBUG_DUMP_REQUEST_BODY
 # opt-in env var. Each binary calls setenv()/unsetenv() at the top of main()
 # BEFORE any libhttpserver code runs so the function-local-static cache in
-# webserver_body_pipeline.cpp sees a deterministic value. Split into two
+# webserver_body_pipeline.cpp sees a deterministic value. Split into separate
 # binaries because the magic-static cache means the first observation in
-# the process locks in for the remainder.
+# the process locks in for the remainder. debug_dump_request_body_zero pins
+# the explicit "0" value distinctly from the unset (absent-var) case.
 debug_dump_request_body_unset_SOURCES = integ/debug_dump_request_body_unset_test.cpp
 debug_dump_request_body_set_SOURCES = integ/debug_dump_request_body_set_test.cpp
+debug_dump_request_body_zero_SOURCES = integ/debug_dump_request_body_zero_test.cpp
 
 # TASK-076 Cycle 1: pin LT_SKIP / LT_SKIP_IF runtime semantics. Pure-host
 # CPU test of the littletest framework itself — no library linkage
@@ -799,7 +808,10 @@ bench: $(bench_targets)
 # RTC_ITERATIONS times (default 8) so the tsan lane hits the typical
 # regression window instead of a single make-check pass. Time-boxed by
 # the CI step's timeout-minutes (<= 2 min).
+# RTC = route_table_concurrency
 RTC_ITERATIONS ?= 8
+# exit $$? (not exit 1) preserves route_table_concurrency's real exit code
+# in the CI log and stops the loop on first failure.
 check-route-table-concurrency: route_table_concurrency
 	@for i in $$(seq 1 $(RTC_ITERATIONS)); do \
 	    echo "=== route_table_concurrency iteration $$i/$(RTC_ITERATIONS) ==="; \

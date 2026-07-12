@@ -58,6 +58,19 @@ Multiple `webserver` instances constructed in the same process share a
 process-wide print-once flag, so the warning is emitted exactly once
 per process.
 
+**stdout/stderr are independent streams.** The request-body dump goes to
+`stdout`; the `SECURITY WARNING` above goes to `stderr`. Process
+supervisors, container log aggregators, and the systemd journal may
+capture these two streams separately (different files, different log
+sinks, or different retention policies) rather than interleaving them
+into one ordered log. If only `stdout` is retained/shipped, the leaked
+credential/PII lines can end up with no accompanying warning context;
+if only `stderr` is retained, the warning fires with no visible dump to
+correlate it against. Operators enabling this variable must ensure both
+streams are captured together (e.g. `2>&1` redirection, or a supervisor
+configured to merge/correlate them) so the warning and the dump it
+describes stay associated.
+
 ### How to disable
 
 ```sh

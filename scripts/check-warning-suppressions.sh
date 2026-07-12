@@ -11,11 +11,11 @@
 # the regression visible by failing if any TU in src/ grows a new
 # file-scoped suppression.
 #
-# Watched files: all .cpp files under src/, discovered at runtime via
-# `find`. This is safe because at the time TASK-060 landed no TU in
-# src/ carried an unscoped -Warray-bounds pragma; the broad scan ensures
-# that future work which introduces new TUs is also guarded without
-# needing to remember to update a static list.
+# Watched files: all .cpp and .hpp files under src/, discovered at
+# runtime via `find`. This is safe because at the time TASK-060 landed
+# no TU in src/ carried an unscoped -Warray-bounds pragma; the broad
+# scan ensures that future work which introduces new TUs is also
+# guarded without needing to remember to update a static list.
 #
 # Detection logic:
 #   1. Any `#pragma GCC diagnostic ignored "-Warray-bounds"` at the
@@ -44,30 +44,27 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
-# Discover all .cpp files under src/ at runtime so new TUs are
-# automatically included without requiring a manual list update.
+# Discover all .cpp and .hpp files under src/ at runtime so new TUs
+# are automatically included without requiring a manual list update.
 # Use a while-read loop for bash 3.x / macOS compatibility (no mapfile).
 WATCHED_FILES=()
 while IFS= read -r f; do
     WATCHED_FILES+=("$f")
-done < <(find src -name '*.cpp' | sort)
+done < <(find src \( -name '*.cpp' -o -name '*.hpp' \) | sort)
 
 echo "check-warning-suppressions: scanning ${#WATCHED_FILES[@]} file(s)"
 
 violations=0
 for file in "${WATCHED_FILES[@]}"; do
-    if [ ! -f "$file" ]; then
-        echo "  $file: missing — watched file no longer present" >&2
-        violations=$((violations + 1))
-        continue
-    fi
+    # A file the loop just got from `find` can vanish mid-run (e.g. a
+    # concurrent rebuild); that race is outside what this gate enforces.
+    [ -f "$file" ] || continue
 
-    # Each line that begins with the warning-suppression pragma is a
-    # candidate. We then verify it is bracketed by push/pop.
-    while IFS=: read -r lineno _; do
+    while IFS=: read -r lineno _rest; do
         # Single-pass awk: find the nearest push before and pop after
         # the candidate line in one read of the file.
         read -r push_before pop_after < <(awk -v target="$lineno" '
+            BEGIN { last_push = 0; first_pop = 0 }
             /^#pragma[[:space:]]+GCC[[:space:]]+diagnostic[[:space:]]+push/ {
                 if (NR < target) last_push = NR
             }

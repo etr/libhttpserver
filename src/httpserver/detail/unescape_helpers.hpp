@@ -29,6 +29,12 @@
 // that bug-fixes and RFC-3986 edge-case corrections propagate uniformly.
 // (code-simplifier-iter1-1, code-simplifier-iter1-2)
 
+// Internal detail header. Strict gate: reachable only from libhttpserver
+// translation units.
+#if !defined(HTTPSERVER_COMPILATION)
+#error "unescape_helpers.hpp is internal; only reachable when compiling libhttpserver."
+#endif
+
 #pragma once
 
 #include <cstddef>
@@ -80,12 +86,12 @@ inline std::size_t unescape_buf_raw(char* data, std::size_t size) noexcept {
                     const int lo = hex_digit_value(data[rpos + 2]);
                     if (hi >= 0 && lo >= 0) {
                         data[wpos++] =
-                            static_cast<char>((hi << 4) | lo);
+                            static_cast<unsigned char>((hi << 4) | lo);
                         rpos += 3;
                         break;
                     }
                 }
-            // intentional fall through!
+                [[fallthrough]];
             default:
                 data[wpos++] = data[rpos++];
         }

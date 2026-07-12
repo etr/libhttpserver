@@ -22,7 +22,7 @@ set -uo pipefail
 PASS=0
 FAIL=0
 ok() { echo "  OK: $1"; PASS=$((PASS + 1)); }
-bad() { echo "  FAIL: $1"; FAIL=$((FAIL + 1)); }
+fail() { echo "  FAIL: $1"; FAIL=$((FAIL + 1)); }
 
 HELPER="$(cd "$(dirname "$0")" && pwd)/lib/skip-or-fail.sh"
 
@@ -65,19 +65,26 @@ assert_case() {
     local want_rc="$4"
     run_case "$val" "$msg"
     local rc=$?
+    local passed=1
+
+    # Evaluate all three checks independently (rather than returning on
+    # the first failure) so a single bad run reports every symptom, not
+    # just the first one encountered.
     if [ "$rc" -ne "$want_rc" ]; then
-        bad "$label: expected exit $want_rc, got $rc"
-        return
+        fail "$label: expected exit $want_rc, got $rc"
+        passed=0
     fi
     if ! grep -q "SKIP:" "$ERRLOG"; then
-        bad "$label: stderr missing 'SKIP:' marker"
-        return
+        fail "$label: stderr missing 'SKIP:' marker"
+        passed=0
     fi
     if ! grep -qF "$msg" "$ERRLOG"; then
-        bad "$label: stderr missing message text '$msg'"
-        return
+        fail "$label: stderr missing message text '$msg'"
+        passed=0
     fi
-    ok "$label: exit $rc, stderr carries SKIP + message"
+    if [ "$passed" -eq 1 ]; then
+        ok "$label: exit $rc, stderr carries SKIP + message"
+    fi
 }
 
 # 1. Unauthorized (unset) — a SKIP must FAIL the job.

@@ -36,12 +36,13 @@
 
 #include <httpserver.hpp>
 
+namespace {
 // Production-ready: writes the whole buffer, retrying short writes and
 // resuming after an EINTR-interrupted call. Returns false on a hard
 // error. On Windows `write`/`errno` are the CRT `_write`/`errno`; EINTR
 // never fires there, so the loop is a zero-cost wrapper and stays
 // portable.
-static bool write_all(int fd, const char* buf, size_t len) {
+bool write_all(int fd, const char* buf, size_t len) {
     size_t off = 0;
     while (off < len) {
         ssize_t n = write(fd, buf + off, len - off);
@@ -49,10 +50,12 @@ static bool write_all(int fd, const char* buf, size_t len) {
             if (errno == EINTR) continue;
             return false;
         }
+        if (n == 0) return false;
         off += static_cast<size_t>(n);
     }
     return true;
 }
+}  // namespace
 
 int main() {
     httpserver::webserver ws{httpserver::create_webserver(8080)};

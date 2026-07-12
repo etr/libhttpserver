@@ -35,11 +35,6 @@
 #define WARN 0
 #define CHECK 1
 #define ASSERT 2
-// TASK-076: SKIP severity. Distinct from WARN/CHECK/ASSERT — LT_SKIP
-// halts the enclosing test body (like ASSERT) but does NOT record a
-// failure; instead it bumps a separate skip counter on the runner. A
-// binary whose only outcomes are SKIPs exits 77 (Automake's SKIP code).
-#define SKIP 3
 
 #define LT_BEGIN_TEST_ENV() int main() {
 

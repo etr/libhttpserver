@@ -102,7 +102,7 @@ else
     fail "stale ubuntu-18.04/clang-6.0 comment should exit 1"
 fi
 
-# Test 4: no MSAN_OPTIONS / scoped TESTS wiring (assertion d) — exit 1
+# Test 4: no MSAN_OPTIONS / scoped TESTS wiring at all (assertion d) — exit 1
 NO_WIRING="$TMPDIR_BASE/no_wiring.yml"
 # Rebuild good but strip the Run tests msan branch down to a plain make check.
 awk '
@@ -115,6 +115,27 @@ if ! bash "$SCRIPT" "$NO_WIRING" >/dev/null 2>&1; then
     ok "missing MSAN_OPTIONS/scoped-TESTS wiring exits 1"
 else
     fail "missing MSAN_OPTIONS/scoped-TESTS wiring should exit 1"
+fi
+
+# Test 4a: MSAN_OPTIONS retained but scoped TESTS= dropped (assertion d2
+# only) — exit 1. Isolates d2 from d1 so a regression that removed only the
+# scoped-TESTS check could not hide behind a still-passing d1.
+NO_TESTS_SCOPE="$TMPDIR_BASE/no_tests_scope.yml"
+sed 's/make check TESTS="\$MSAN_TESTS" ;/make check ;/' "$GOOD" > "$NO_TESTS_SCOPE"
+if ! bash "$SCRIPT" "$NO_TESTS_SCOPE" >/dev/null 2>&1; then
+    ok "MSAN_OPTIONS present but scoped TESTS= missing exits 1 (d2)"
+else
+    fail "MSAN_OPTIONS present but scoped TESTS= missing should exit 1 (d2)"
+fi
+
+# Test 4b: scoped TESTS= retained but MSAN_OPTIONS dropped (assertion d1
+# only) — exit 1. Isolates d1 from d2 the same way.
+NO_MSAN_OPTIONS="$TMPDIR_BASE/no_msan_options.yml"
+sed '/export MSAN_OPTIONS="abort_on_error=1" ;/d' "$GOOD" > "$NO_MSAN_OPTIONS"
+if ! bash "$SCRIPT" "$NO_MSAN_OPTIONS" >/dev/null 2>&1; then
+    ok "scoped TESTS= present but MSAN_OPTIONS missing exits 1 (d1)"
+else
+    fail "scoped TESTS= present but MSAN_OPTIONS missing should exit 1 (d1)"
 fi
 
 # Test 5: invalid YAML (assertion a) — exit 1
@@ -141,6 +162,128 @@ if ! bash "$SCRIPT" "$BAD_YAML" >/dev/null 2>&1; then
     ok "invalid YAML exits 1"
 else
     fail "invalid YAML should exit 1"
+fi
+
+# Test 6: workflow file does not exist (missing-workflow-file guard) — exit 1
+if ! bash "$SCRIPT" "$TMPDIR_BASE/does_not_exist.yml" >/dev/null 2>&1; then
+    ok "missing workflow file exits 1"
+else
+    fail "missing workflow file should exit 1"
+fi
+
+# Test 7: two build-type: msan include entries (duplicate-entry branch,
+# Python sys.exit(5)) — exit 1.
+DUP_MSAN="$TMPDIR_BASE/dup_msan.yml"
+cat > "$DUP_MSAN" <<'EOF'
+name: verify
+on: [push]
+jobs:
+  verify:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - test-group: extra
+            os: ubuntu-latest
+            os-type: ubuntu
+            build-type: msan
+            compiler-family: clang
+            c-compiler: clang-18
+            cc-compiler: clang++-18
+            debug: debug
+            coverage: nocoverage
+            shell: bash
+          - test-group: extra
+            os: ubuntu-latest
+            os-type: ubuntu
+            build-type: msan
+            compiler-family: clang
+            c-compiler: clang-18
+            cc-compiler: clang++-18
+            debug: debug
+            coverage: nocoverage
+            shell: bash
+    steps:
+      - name: Run tests
+        run: |
+          cd build
+          if [ "$BUILD_TYPE" = "msan" ]; then
+            export MSAN_OPTIONS="abort_on_error=1" ;
+            make check TESTS="$MSAN_TESTS" ;
+          else
+            make check ;
+          fi
+EOF
+if ! bash "$SCRIPT" "$DUP_MSAN" >/dev/null 2>&1; then
+    ok "duplicate msan include entries exits 1"
+else
+    fail "duplicate msan include entries should exit 1"
+fi
+
+# Test 8: msan entry present but with a wrong fixed-key value
+# (compiler-family: gcc instead of clang) — exit 1 via sys.exit(6).
+WRONG_KEY="$TMPDIR_BASE/wrong_key.yml"
+awk '
+  /build-type: msan/ { in_msan=1 }
+  in_msan && /compiler-family: clang/ { sub(/compiler-family: clang/, "compiler-family: gcc"); in_msan=0 }
+  { print }
+' "$GOOD" > "$WRONG_KEY"
+if ! bash "$SCRIPT" "$WRONG_KEY" >/dev/null 2>&1; then
+    ok "msan entry with wrong fixed-key value exits 1 (b, exit 6)"
+else
+    fail "msan entry with wrong fixed-key value should exit 1 (b, exit 6)"
+fi
+
+# Test 9: msan entry present but missing a presence-only key (os) — exit 1
+# via sys.exit(6). Built directly (not derived from $GOOD via sed/awk) since
+# the "os:" key precedes "build-type: msan" in the entry, making a reliable
+# block-scoped removal awkward with line-oriented tools.
+MISSING_KEY="$TMPDIR_BASE/missing_key.yml"
+cat > "$MISSING_KEY" <<'EOF'
+name: verify
+on: [push]
+jobs:
+  verify:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - test-group: extra
+            os: ubuntu-latest
+            os-type: ubuntu
+            build-type: asan
+            compiler-family: clang
+            c-compiler: clang-18
+            cc-compiler: clang++-18
+            debug: debug
+            coverage: nocoverage
+            shell: bash
+          - test-group: extra
+            os-type: ubuntu
+            build-type: msan
+            compiler-family: clang
+            c-compiler: clang-18
+            cc-compiler: clang++-18
+            debug: debug
+            coverage: nocoverage
+            shell: bash
+    steps:
+      - name: Run tests
+        run: |
+          cd build
+          if [ "$BUILD_TYPE" = "msan" ]; then
+            export MSAN_OPTIONS="abort_on_error=1" ;
+            make check TESTS="$MSAN_TESTS" ;
+          else
+            make check ;
+          fi
+EOF
+if ! bash "$SCRIPT" "$MISSING_KEY" >/dev/null 2>&1; then
+    ok "msan entry missing presence-only key (os) exits 1 (b, exit 6)"
+else
+    fail "msan entry missing presence-only key (os) should exit 1 (b, exit 6)"
 fi
 
 echo ""

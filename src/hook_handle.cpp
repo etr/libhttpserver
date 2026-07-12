@@ -141,9 +141,15 @@ void erase_slot_for_handler_phase_(detail::webserver_impl* impl,
     case hook_phase::handler_exception:
         // The alias slot (handler_exception_alias_) is immutable after
         // construction (DR-012 / §4.10), so remove() only touches the
-        // user vector here; any_hooks_ remains true while the alias is
-        // wired, which is correct -- the alias is the "still has a
-        // hook" signal.
+        // user vector here. install_internal_error_alias()
+        // (src/detail/webserver_aliases.cpp) is the place that sets
+        // any_hooks_[handler_exception] = true at construction time when
+        // only the alias is wired (no user hooks yet), so the gate stays
+        // the single source of truth even before any add_hook() call.
+        // erase_and_reset (below, in hook_handle::remove()) re-checks
+        // handler_exception_alias_ before clearing any_hooks_ on an
+        // empty user vector, so the gate correctly remains true for as
+        // long as the alias is still wired.
         erase_and_reset(impl->hooks_handler_exception_); break;
     case hook_phase::after_handler:
         erase_and_reset(impl->hooks_after_handler_); break;
@@ -216,8 +222,23 @@ void hook_handle::remove() noexcept {
             if (it->slot_id == id) {
                 vec.erase(it);
                 if (vec.empty()) {
-                    impl->any_hooks_[static_cast<std::size_t>(phase)].store(
-                        false, std::memory_order_release);
+                    // Don't clear the gate out from under a still-wired
+                    // alias slot: handler_exception_alias_ / log_access_
+                    // alias_ are the "still has a hook" signal for their
+                    // phases even after the last user-vector entry is
+                    // removed. Both slots are write-once at webserver
+                    // construction and immutable thereafter (DR-012 /
+                    // §4.10), so reading them here under
+                    // hook_table_mutex_ needs no extra synchronization.
+                    const bool alias_still_wired =
+                        (phase == hook_phase::handler_exception &&
+                         impl->handler_exception_alias_) ||
+                        (phase == hook_phase::response_sent &&
+                         impl->log_access_alias_);
+                    if (!alias_still_wired) {
+                        impl->any_hooks_[static_cast<std::size_t>(phase)]
+                            .store(false, std::memory_order_release);
+                    }
                 }
                 return;
             }

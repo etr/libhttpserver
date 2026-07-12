@@ -15,10 +15,10 @@
 # without updating a static list.
 #
 # Detection logic:
-#   1. Any line matching `std::this_thread::sleep_for(.*ms)` or
-#      `std::this_thread::sleep_for(std::chrono::milliseconds(...))` in a
-#      watched file is a candidate violation. Whitespace before the call
-#      is allowed; the call must syntactically be at statement scope.
+#   1. Any line matching `std::this_thread::sleep_for(` in a watched file
+#      is a candidate violation, regardless of the duration unit (ms, us,
+#      seconds, ...). Whitespace before the call is allowed; the call must
+#      syntactically be at statement scope.
 #   2. A candidate is allowed iff the candidate line OR the previous
 #      non-blank line contains the marker
 #          // NON-READINESS-SLEEP: <reason>
@@ -57,6 +57,9 @@ for file in ${WATCHED_FILES[@]+"${WATCHED_FILES[@]}"}; do
     while IFS=: read -r lineno _; do
         # An allow-marker on the candidate line itself, or on the
         # nearest previous non-blank line, exempts the sleep.
+        # NOTE: this awk script re-scans the file from the beginning for
+        # every candidate line (O(n*k), n=file-lines, k=matching-lines).
+        # Acceptable here because hooks_*.cpp files are short.
         allowed=$(awk -v target="$lineno" '
             NR == target {
                 if ($0 ~ /\/\/[[:space:]]*NON-READINESS-SLEEP:/) {
@@ -82,7 +85,7 @@ for file in ${WATCHED_FILES[@]+"${WATCHED_FILES[@]}"}; do
             echo "  $file:$lineno: bare std::this_thread::sleep_for used as server-ready wait" >&2
             violations=$((violations + 1))
         fi
-    done < <(grep -nE '^[[:space:]]*std::this_thread::sleep_for\(([^)]*ms\)|std::chrono::milliseconds)' "$file" || true)
+    done < <(grep -nE '^[[:space:]]*std::this_thread::sleep_for\(' "$file" || true)
 done
 
 if [ "$violations" -gt 0 ]; then

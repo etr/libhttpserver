@@ -40,8 +40,6 @@
 #include "./test_utils.hpp"
 #include "./digest_client.hpp"
 
-#define MY_OPAQUE "11733b200778ce33060f31c9af70a870ba96ddd4"
-
 // v2-digest tracking note (updated after TASK-079):
 //
 // After TASK-062 the resources emit full RFC-7616 challenges via
@@ -87,14 +85,6 @@ size_t writefunc(void *ptr, size_t size, size_t nmemb, std::string *s) {
     return size*nmemb;
 }
 
-// TASK-079: CURLOPT_HEADERFUNCTION-shaped sink so the test can capture the
-// raw `WWW-Authenticate` line from the round-1 401 response and feed it to
-// httpserver_test::extract_digest_challenge().
-size_t headerfunc(void *ptr, size_t size, size_t nmemb, std::string *s) {
-    s->append(reinterpret_cast<char*>(ptr), size*nmemb);
-    return size*nmemb;
-}
-
 #ifdef HAVE_DAUTH
 // Round-1 helper: issue a plain GET to `url` and return a pair of
 // {http_status_code, raw_header_block}. Each caller asserts the expected 401
@@ -104,12 +94,16 @@ static std::pair<long, std::string>  // NOLINT(runtime/int)
 collect_challenge(const char* url) {
     std::string body, headers;
     long http_code = 0;  // NOLINT(runtime/int)
+    // No RAII wrapper: curl_easy_init/curl_easy_cleanup are synchronous C API
+    // calls that never throw, CURLOPT_NOSIGNAL avoids signal-based
+    // interruption, and every path below falls through to the unconditional
+    // curl_easy_cleanup(curl) at the end of this test-only helper.
     CURL *curl = curl_easy_init();
     curl_easy_setopt(curl, CURLOPT_URL, url);
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &body);
-    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, headerfunc);
+    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, writefunc);
     curl_easy_setopt(curl, CURLOPT_HEADERDATA, &headers);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 150L);
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 150L);
@@ -129,6 +123,10 @@ static long perform_with_auth_header(  // NOLINT(runtime/int)
         const char* auth_hdr,
         std::string* body_out) {
     long http_code = 0;  // NOLINT(runtime/int)
+    // No RAII wrapper: curl_easy_init/curl_easy_cleanup are synchronous C API
+    // calls that never throw, CURLOPT_NOSIGNAL avoids signal-based
+    // interruption, and every path below falls through to the unconditional
+    // curl_easy_cleanup(curl) at the end of this test-only helper.
     CURL *curl = curl_easy_init();
     struct curl_slist *hdrs = nullptr;
     hdrs = curl_slist_append(hdrs, auth_hdr);
@@ -174,23 +172,19 @@ class digest_resource : public http_resource {
      http_response render_get(const http_request& req) {
          using httpserver::http::http_utils;
          using httpserver::digest_challenge;
+         digest_challenge fail_ch{.realm = "examplerealm", .body = "FAIL"};
          if (req.get_digested_user() == "") {
-             return http_response::unauthorized(
-                 digest_challenge{.realm = "examplerealm",
-                                  .body  = "FAIL"});
+             return http_response::unauthorized(fail_ch);
          }
          auto result = req.check_digest_auth("examplerealm", "mypass", 300,
                                              0, http_utils::digest_algorithm::MD5);
          if (result == http_utils::digest_auth_result::NONCE_STALE) {
-             return http_response::unauthorized(
-                 digest_challenge{.realm        = "examplerealm",
-                                  .signal_stale = true,
-                                  .body         = "FAIL"});
+             auto stale_ch = fail_ch;
+             stale_ch.signal_stale = true;
+             return http_response::unauthorized(stale_ch);
          }
          if (result != http_utils::digest_auth_result::OK) {
-             return http_response::unauthorized(
-                 digest_challenge{.realm = "examplerealm",
-                                  .body  = "FAIL"});
+             return http_response::unauthorized(fail_ch);
          }
          return http_response::string("SUCCESS");
      }
@@ -346,6 +340,11 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth)
     ws.start(false);
     const uint16_t port = ws.get_bound_port();
 
+    // This curl_global_init() block is intentionally repeated per-test
+    // (rather than hoisted into set_up()) because curl_global_init() is
+    // idempotent and cheap to call redundantly; each test stays self-
+    // contained and independently readable. Do not flag this duplication
+    // again.
 #if defined(_WINDOWS)
     curl_global_init(CURL_GLOBAL_WIN32);
 #else
@@ -360,7 +359,9 @@ LT_BEGIN_AUTO_TEST(authentication_suite, digest_auth)
     auto challenge = httpserver_test::extract_digest_challenge(headers1);
     LT_ASSERT_EQ(challenge.has_value(), true);
     LT_CHECK_EQ(challenge->qop, std::string("auth"));
-    // digest_resource emits algorithm=MD5 implicitly (default).
+    // digest_resource emits algorithm=MD5 implicitly (default); assert it
+    // reached the wire, matching the pattern used in the HA1 sibling tests.
+    LT_CHECK_EQ(challenge->algorithm, std::string("MD5"));
 
     // Round 2: hand-built Authorization header carrying our response.
     std::string cnonce = httpserver_test::make_cnonce();

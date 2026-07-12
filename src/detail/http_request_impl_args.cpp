@@ -18,10 +18,19 @@
      USA
 */
 
-// detail::http_request_impl method bodies (non-TLS section). The TLS /
-// client-cert section lives in src/detail/http_request_impl_tls.cpp;
-// the public-API forwarders + ctor live in src/http_request.cpp; the
-// auth-surface public-API forwarders live in src/http_request_auth.cpp.
+// http_request_impl_args.cpp -- GET-argument and querystring population.
+//
+// Carved out of src/detail/http_request_impl.cpp in TASK-086 to keep both
+// translation units under the project per-file LOC ceiling (FILE_LOC_MAX in
+// scripts/check-file-size.sh). Holds the build_request_args /
+// build_request_querystring MHD enumeration callbacks, populate_args, and
+// the anonymous-namespace unescape_in_arena helper they share. No
+// behaviour change from the original: the bodies were moved verbatim.
+//
+// Sibling translation units: the TLS / client-cert section lives in
+// src/detail/http_request_impl_tls.cpp; the public-API forwarders + ctor
+// live in src/http_request.cpp; the auth-surface public-API forwarders
+// live in src/http_request_auth.cpp.
 
 #include "httpserver/http_request.hpp"
 
@@ -46,24 +55,14 @@ namespace httpserver {
 
 namespace detail {
 
-// http_request_impl_args.cpp -- GET-argument and querystring population.
-//
-// Carved out of src/detail/http_request_impl.cpp in TASK-086 to keep both
-// translation units under the project per-file LOC ceiling (FILE_LOC_MAX in
-// scripts/check-file-size.sh). Holds the build_request_args /
-// build_request_querystring MHD enumeration callbacks, populate_args, and
-// the anonymous-namespace unescape_in_arena helper they share. No
-// behaviour change: the bodies are moved verbatim.
 namespace {
 
 // TASK-072: arena-routed unescape. The caller passes an arena-backed
 // pmr::string already holding the raw bytes; we run the unescape
 // transformation directly on the pmr::string's storage so no
-// global-heap allocation occurs on the warm path.
-//
-// Default path: calls httpserver::detail::unescape_buf_raw (shared
-// helper from unescape_helpers.hpp -- same algorithm as the
-// http_unescape wrapper in http_utils.cpp, one truth-source).
+// global-heap allocation occurs on the warm path. The default (no
+// user-callback) path delegates to httpserver::detail::unescape_buf_raw
+// (unescape_helpers.hpp), which documents the decode algorithm itself.
 //
 // User-callback path: the public callback signature is
 // `void(std::string&)` (ABI-locked), so we route through a

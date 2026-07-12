@@ -26,10 +26,11 @@
 //   - write each POST body chunk to stdout prefixed by
 //     "Writing content:".
 //
-// The env var is opted in via setenv() at the top of main() before
-// any libhttpserver code runs. Both assertions live in a single
-// binary (the magic-static body-pipeline cache means the first
-// observation locks in for the rest of the process).
+// The env var is opted in via setenv() before the test bodies run (and
+// before the magic-static cache in the body pipeline is initialised on
+// first dispatch). Both assertions live in a single binary (the
+// magic-static body-pipeline cache means the first observation locks in
+// for the rest of the process).
 
 #include <curl/curl.h>
 #include <unistd.h>
@@ -88,11 +89,20 @@ LT_BEGIN_SUITE(dump_set_suite)
     void tear_down() {}
 LT_END_SUITE(dump_set_suite)
 
-LT_BEGIN_AUTO_TEST(dump_set_suite, dump_and_warn_then_warn_only_once)
-    auto stdout_cap = begin_capture(STDOUT_FILENO, "set_stdout");
+// NOTE ON TEST ORDER: this test is deliberately defined (and therefore
+// runs, per littletest's definition-order registration -- see
+// LT_BEGIN_TEST in littletest.hpp) BEFORE
+// dump_body_to_stdout_when_env_set below. The startup-warning is a
+// one-shot, process-lifetime, magic-static-gated event: whichever test
+// starts a webserver first in this binary is the one that observes it.
+// This test must run first so its own ws1 start is that first
+// observation; if the stdout-only test ran first instead, the warning
+// would already be latched by the time this test's assertions run and
+// the idempotence check below would see zero occurrences instead of one.
+LT_BEGIN_AUTO_TEST(dump_set_suite, startup_warning_emitted_exactly_once_across_multiple_webservers)
     auto stderr_cap = begin_capture(STDERR_FILENO, "set_stderr");
 
-    // ---- First webserver: should warn + dump ----------------------------
+    // ---- First webserver: should warn ------------------------------------
     auto ws1 = std::make_unique<webserver>(
         create_webserver(9182)
             .start_method(httpserver::http::http_utils::INTERNAL_SELECT)
@@ -126,18 +136,11 @@ LT_BEGIN_AUTO_TEST(dump_set_suite, dump_and_warn_then_warn_only_once)
     ws2->stop();
     ws2.reset();
 
-    std::string captured_stdout = end_capture(stdout_cap, STDOUT_FILENO);
     std::string captured_stderr = end_capture(stderr_cap, STDERR_FILENO);
 
     LT_CHECK_EQ(res1, 0);
     LT_CHECK_EQ(res2, 0);
 
-    // ---- stdout assertions --------------------------------------------
-    LT_CHECK(captured_stdout.find("Writing content:") != std::string::npos);
-    LT_CHECK(captured_stdout.find("secret=opted-in-body") != std::string::npos);
-    LT_CHECK(captured_stdout.find("trailing=body") != std::string::npos);
-
-    // ---- stderr assertions --------------------------------------------
     // The warning is fired through the project's tagged-prefix shape and
     // names the env var, the SECURITY WARNING marker, and the
     // credential / PII risk.
@@ -164,7 +167,32 @@ LT_BEGIN_AUTO_TEST(dump_set_suite, dump_and_warn_then_warn_only_once)
     };
     LT_CHECK_EQ(count_substring(captured_stderr, "SECURITY WARNING"),
                 static_cast<size_t>(1));
-LT_END_AUTO_TEST(dump_and_warn_then_warn_only_once)
+LT_END_AUTO_TEST(startup_warning_emitted_exactly_once_across_multiple_webservers)
+
+// Runs after startup_warning_emitted_exactly_once_across_multiple_webservers
+// above (see the test-order note there) -- the one-shot startup warning has
+// already latched by this point, so this test only exercises the per-request
+// stdout body dump, which is not one-shot and fires on every dispatch.
+LT_BEGIN_AUTO_TEST(dump_set_suite, dump_body_to_stdout_when_env_set)
+    auto stdout_cap = begin_capture(STDOUT_FILENO, "set_stdout2");
+
+    auto ws3 = std::make_unique<webserver>(
+        create_webserver(9185)
+            .start_method(httpserver::http::http_utils::INTERNAL_SELECT)
+            .max_threads(2));
+    auto r3 = std::make_shared<echo_resource>();
+    ws3->register_path("echo", r3);
+    ws3->start(false);
+    CURLcode res3 = run_one_post(9185, "echo", "solo=body-dump");
+    ws3->stop();
+    ws3.reset();
+
+    std::string captured_stdout = end_capture(stdout_cap, STDOUT_FILENO);
+
+    LT_CHECK_EQ(res3, 0);
+    LT_CHECK(captured_stdout.find("Writing content:") != std::string::npos);
+    LT_CHECK(captured_stdout.find("solo=body-dump") != std::string::npos);
+LT_END_AUTO_TEST(dump_body_to_stdout_when_env_set)
 
 LT_BEGIN_AUTO_TEST_ENV()
     // Opt in BEFORE the test bodies run (and BEFORE the magic-static

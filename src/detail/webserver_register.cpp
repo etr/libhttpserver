@@ -113,6 +113,16 @@ void webserver::validate_register_inputs_(const std::string& resource,
             "The resource should be '' or '/' and be registered via "
             "register_prefix when using a single_resource server");
     }
+    // Lightweight input hygiene (CWE-20): reject paths containing embedded
+    // null bytes, matching validate_on_methods_inputs_'s guard for on_*/
+    // route. A std::string can hold '\0' but the underlying regex and
+    // routing engines treat it as a string terminator, producing silent
+    // mismatches. Reject early with a clear diagnostic rather than letting
+    // the error surface deep in regex compilation or route matching.
+    if (resource.find('\0') != std::string::npos) {
+        throw std::invalid_argument(
+            "Route path must not contain embedded null bytes");
+    }
 }
 
 void webserver::register_impl_(const std::string& resource,
@@ -149,33 +159,38 @@ namespace detail {
 // Caller must hold route_table_mutex_ (unique_lock). The reject_terminus_
 // collision guard (prefix-vs-exact polarity) is run separately in
 // register_v2_route.
+namespace {
+[[noreturn]] void throw_duplicate_registration(const std::string& key) {
+    throw std::invalid_argument(
+        "A resource is already registered at this path: '" + key + "'");
+}
+}  // namespace
+
 void webserver_impl::reject_duplicate_v2_entry_(
         const detail::http_endpoint& idx, bool family) {
     const std::string& key = idx.get_url_complete();
-    auto duplicate_throw = [&key]() {
-        throw std::invalid_argument(
-            "A resource is already registered at this path: '" + key + "'");
-    };
     if (family) {
         if (param_and_prefix_routes_.has_terminus_at(key, /*is_prefix=*/true)) {
-            duplicate_throw();
+            throw_duplicate_registration(key);
         }
         return;
     }
     auto pre_tier = classify_route_tier(idx);
     switch (pre_tier.kind) {
     case route_tier_kind::exact:
-        if (exact_routes_.find(key) != exact_routes_.end()) duplicate_throw();
+        if (exact_routes_.find(key) != exact_routes_.end()) {
+            throw_duplicate_registration(key);
+        }
         break;
     case route_tier_kind::radix:
         if (param_and_prefix_routes_.has_terminus_at(
                 key, /*is_prefix=*/false)) {
-            duplicate_throw();
+            throw_duplicate_registration(key);
         }
         break;
     case route_tier_kind::pattern:
         for (const auto& rr : regex_routes_) {
-            if (rr.url_complete == key) duplicate_throw();
+            if (rr.url_complete == key) throw_duplicate_registration(key);
         }
         break;
     }
@@ -320,6 +335,7 @@ void webserver::unregister_resource(const string& resource) {
     impl_->invalidate_route_cache();
 }
 
+// IP-control API history:
 // TASK-029: The v2.0 public IP-control API is the pair block_ip / unblock_ip.
 // The historical ban_ip / unban_ip / allow_ip / disallow_ip quartet was
 // collapsed to a single name pair operating on the deny list. The internal

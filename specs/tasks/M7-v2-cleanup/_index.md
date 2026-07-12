@@ -69,11 +69,11 @@ TASK-093).
 - TASK-061 and TASK-085 overlap on the `test/Makefile.am:67-74` stale comment — either lands it.
 - TASK-093 partially depends on TASK-052's docs sweep noting any hook-context protocol-version gap.
 
-Everything else is parallelizable. Recommended sequencing: knock out the
-mechanical Ss (TASK-060, TASK-061, TASK-069, TASK-073, TASK-074, TASK-085,
-TASK-090, TASK-093) in week one, then bunch the Ms across one engineer per
-domain (src / test / CI), then close out the Ls (TASK-062, TASK-067,
-TASK-077, TASK-086).
+Everything else is parallelizable. The originally recommended sequencing
+(mechanical Ss first, then the Ms, then the Ls) has been overtaken by
+events: the task table above shows every task in this milestone is Done
+except TASK-070 (blocked on libc++'s missing `atomic<shared_ptr<T>>`
+support) and TASK-095, both still Backlog.
 
 ## Notes for groundwork
 

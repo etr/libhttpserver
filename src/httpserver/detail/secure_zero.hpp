@@ -54,6 +54,14 @@
 
 // Internal detail header. Strict gate: reachable only from libhttpserver
 // translation units, never from the public umbrella.
+//
+// This #error check intentionally precedes the include guard below: a
+// consumer TU must never reach this file at all, so the check has to fire
+// on *every* inclusion attempt, not just the first. The include guard
+// below only needs to protect internal TUs that legitimately include this
+// header more than once (which is the normal, allowed case); if it were
+// placed first, a second internal include would short-circuit past the
+// #error and silently hide a first, illegitimate include from a consumer.
 #if !defined(HTTPSERVER_COMPILATION)
 #error "secure_zero.hpp is internal; only reachable when compiling libhttpserver."
 #endif
@@ -89,7 +97,12 @@ namespace detail {
 // Contract:
 //   - secure_zero(nullptr, 0) is a no-op (precondition for callers that
 //     hold a possibly-empty buffer).
-//   - For n > 0, p must point at a writable region of at least n bytes.
+//   - secure_zero(p, 0) is a no-op for ANY p, including non-null p: the
+//     n == 0 guard short-circuits before p is ever dereferenced.
+//   - For n > 0, p must be non-null and point at a writable region of at
+//     least n bytes. secure_zero(nullptr, n) with n > 0 is undefined
+//     behaviour -- callers must not pass a null pointer with a nonzero
+//     length.
 //   - The function is noexcept.
 //
 // Trade-off: relative to plain std::memset, the fallback walks the
@@ -117,8 +130,22 @@ inline void secure_zero(void* p, std::size_t n) noexcept {
     for (std::size_t i = 0; i < n; ++i) {
         q[i] = 0;
     }
+    // Memory barrier for GCC/Clang; on other compilers the volatile loop
+    // above is relied upon as the sole DCE-resistance mechanism.
 #if defined(__GNUC__) || defined(__clang__)
     __asm__ __volatile__("" : : "r"(p) : "memory");
+#else
+    // No verified DCE barrier exists for this compiler: the volatile
+    // pointer loop is not, by itself, a proof against an aggressive/LTO
+    // optimizer eliding the writes. Fail loudly at compile time rather
+    // than silently ship an unverified CWE-14 gap; add and verify a
+    // barrier for this compiler before removing this static_assert. This
+    // only compiles for a non-_WIN32, non-HAVE_EXPLICIT_BZERO,
+    // non-GCC/Clang target, so it is a no-op for every currently
+    // supported toolchain.
+    static_assert(false,
+        "secure_zero: no verified DCE barrier for this compiler; add and "
+        "verify one before enabling this fallback target.");
 #endif
 #endif
 }

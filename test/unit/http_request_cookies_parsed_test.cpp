@@ -68,6 +68,8 @@ LT_BEGIN_AUTO_TEST(http_request_cookies_parsed_suite,
         .build();
     const auto& v = req.get_cookies_parsed();
     LT_CHECK_EQ(v.size(), static_cast<std::size_t>(2));
+    LT_CHECK_EQ(v[0].name(), std::string("a"));
+    LT_CHECK_EQ(v[1].name(), std::string("b"));
 LT_END_AUTO_TEST(one_per_cookie_set_via_builder)
 
 LT_BEGIN_AUTO_TEST(http_request_cookies_parsed_suite,

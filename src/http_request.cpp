@@ -134,21 +134,22 @@ MHD_Connection* http_request::underlying_connection_for_testing() const noexcept
 http_request::http_request(struct MHD_Connection* underlying_connection, unescaper_ptr unescaper)
     : impl_(nullptr, detail::http_request_impl_deleter{nullptr}) {
     auto* res = pick_resource(underlying_connection);
+    std::pmr::polymorphic_allocator<> alloc(res);
     if (res == std::pmr::get_default_resource()) {
         // Heap-fallback: matches v1 lifetime exactly; deleter frees via
         // operator delete.
         impl_.reset(new detail::http_request_impl(
-            underlying_connection, unescaper,
-            std::pmr::polymorphic_allocator<>(std::pmr::get_default_resource())));
+            underlying_connection, unescaper, alloc));
         impl_.get_deleter().fn = &detail::delete_impl_heap;
     } else {
         // Arena-backed: allocate and construct via polymorphic_allocator
         // so the impl's pmr-aware members propagate the arena allocator.
         // Reclamation is by destructor only; arena_.release() in
         // webserver_impl::request_completed reclaims the bytes.
-        std::pmr::polymorphic_allocator<detail::http_request_impl> alloc(res);
+        // new_object<T> does not depend on alloc's declared value_type, so
+        // reusing the untyped `alloc` from above is behavior-preserving.
         auto* p = alloc.new_object<detail::http_request_impl>(
-            underlying_connection, unescaper, std::pmr::polymorphic_allocator<>(res));
+            underlying_connection, unescaper, alloc);
         impl_.reset(p);
         impl_.get_deleter().fn = &detail::destroy_impl_arena;
     }

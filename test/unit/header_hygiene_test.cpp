@@ -135,7 +135,7 @@ int main() {
 #endif
 
     // `leaks` is incremented from inside #ifdef blocks whose macros (MHD_VERSION,
-    // _PTHREAD_H/_PTHREAD_H_, GNUTLS_GNUTLS_H, _SYS_SOCKET_H/_H_, _SYS_UIO_H/_H_)
+    // GNUTLS_GNUTLS_H, _SYS_SOCKET_H/_SYS_SOCKET_H_, _SYS_UIO_H/_SYS_UIO_H_)
     // are platform/STL/config dependent. cppcheck statically assumes they are
     // undefined and reports the comparison as always-false; the conditional is
     // load-bearing for any platform where a forbidden header does leak.

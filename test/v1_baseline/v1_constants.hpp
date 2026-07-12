@@ -127,7 +127,8 @@ inline constexpr std::size_t V1_STD_MAP_STRING_BOOL_SIZEOF = 24;
 //     NOT used to set the literal.
 // We commit the rounded lower end of the un-emulated native range
 // (~667 ns rounded down to 640 ns) as the conservative libstdc++
-// baseline.
+// baseline (wider margin than the libc++ branch's 756->760 rounding;
+// intentional given the wider observed native/emulated spread).
 inline constexpr double V1_GET_HEADERS_NS_PER_CALL = 640.0;
 #elif defined(_LIBCPP_VERSION)
 // libc++ (macOS / Apple clang) -- the original TASK-039 measurement.

@@ -165,9 +165,9 @@ check_tokens_present "A2: RELEASE_NOTES.md is missing required v1-era tokens" "$
 
 # ---- A3: required v2-era tokens appear --------------------------------------
 # Replacement list. Kept in lock-step with check-readme.sh A3 (shared core).
-# Note: check-readme.sh may carry additional tokens not required in RELEASE_NOTES.md
-# (e.g. tokens that appear in README.md code examples but not in release notes prose).
-# When adding a new v2 surface, update both scripts.
+# Note: check-release-notes.sh may carry additional tokens not required in
+# README.md (e.g. tokens that appear in release-notes prose but not in code
+# examples). When adding a new v2 surface, update both scripts.
 
 REQUIRED_V2_TOKENS=(
     '\bon_get\b'
@@ -351,6 +351,11 @@ if [ "$h1_count" -ne 1 ]; then
 fi
 
 # (S3) No literal tab characters inside fenced code blocks.
+# Note: this uses the simple open/close toggle (not the S1 ordered state
+# machine in lib/check-fence-balance.sh) — S3 only scans for tabs inside
+# whatever it thinks is a block, it does not gate structural balance (S1
+# already does that), so the weaker toggle model is intentionally retained
+# here.
 awk '
     BEGIN { in_block = 0; bad = 0 }
     /^```/ { in_block = !in_block; next }
@@ -359,20 +364,13 @@ awk '
 ' "$NOTES" >&2 || fail "S3: fenced code blocks in RELEASE_NOTES.md contain tab characters (must use spaces)"
 
 # ---- markdownlint: strict by default ----------------------------------------
-# A markdownlint finding fails the script by default; findings go to stderr
-# (2>&1) so they are visible in CI logs rather than swallowed. Set
+# A markdownlint finding fails the script by default. Set
 # LIBHTTPSERVER_MARKDOWNLINT_ADVISORY=1 (or the legacy MARKDOWNLINT_STRICT=no)
-# to downgrade to advisory. Mirrors check-readme.sh.
-if command -v markdownlint >/dev/null 2>&1; then
-    if ! markdownlint -q "$NOTES" 2>&1; then
-        if [ "${LIBHTTPSERVER_MARKDOWNLINT_ADVISORY:-0}" = "1" ] \
-           || [ "${MARKDOWNLINT_STRICT:-yes}" = "no" ]; then
-            echo "check-release-notes: NOTE: markdownlint reported issues above (advisory only, not gating)" >&2
-        else
-            fail "markdownlint reported issues (set LIBHTTPSERVER_MARKDOWNLINT_ADVISORY=1 to downgrade to advisory)"
-        fi
-    fi
-fi
+# to downgrade to advisory. Mirrors check-readme.sh via the shared
+# scripts/lib/check-markdownlint.sh decision logic.
+# shellcheck source=scripts/lib/check-markdownlint.sh
+source "$(dirname "$0")/lib/check-markdownlint.sh"
+run_markdownlint_advisory "check-release-notes" "$NOTES"
 
 echo "check-release-notes: OK (A1 exists; A2 ${#REQUIRED_V1_TOKENS[@]} v1 tokens; A3 ${#REQUIRED_V2_TOKENS[@]} v2 tokens; A4 ${#REQUIRED_SECTIONS[@]} sections; A5 ${#RENAME_PAIRS[@]} rename pairs; A6 threading+error citations; A7 disclaimer; fences balanced)"
 exit 0

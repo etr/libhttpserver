@@ -224,15 +224,15 @@ void http_request_impl::ensure_cookies_parsed_cached() const {
             // builder writes arbitrary user-controlled bytes (the
             // common case is fine, but the validators reject ';' / '='
             // / whitespace in names which the v1 test API permitted).
-            // We populate via the static `parse_cookie_header` so the
-            // outer parser path is the single source of truth -- but
-            // for the test-request fallback we just assemble entries
-            // directly via a small helper to avoid round-tripping
-            // through a wire-formatted string.
-            auto parsed = cookie::parse_cookie_header(k + std::string("=") + v);
-            if (!parsed.empty()) {
-                cookies_parsed_cached_.push_back(std::move(parsed.front()));
-            }
+            // http_request_impl is a friend of cookie (see cookie.hpp),
+            // so name_/value_ are assigned directly rather than
+            // round-tripping through a concatenated "k=v" string and
+            // cookie::parse_cookie_header -- that round trip would also
+            // mis-split a synthetic key containing '='.
+            cookie c;
+            c.name_ = k;
+            c.value_ = v;
+            cookies_parsed_cached_.push_back(std::move(c));
         }
         cookies_parsed_cache_built_ = true;
         return;

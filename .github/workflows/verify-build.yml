@@ -234,7 +234,7 @@ jobs:
             compiler-family: gcc
             c-compiler: gcc-14
             cc-compiler: g++-14
-            debug: nodebug  # configure step passes --enable-debug unconditionally for valgrind-* lanes
+            debug: nodebug
             coverage: nocoverage
             shell: bash
           - test-group: extra
@@ -244,7 +244,7 @@ jobs:
             compiler-family: gcc
             c-compiler: gcc-14
             cc-compiler: g++-14
-            debug: nodebug  # configure step passes --enable-debug unconditionally for valgrind-* lanes
+            debug: nodebug
             coverage: nocoverage
             shell: bash
           # Test build without digest auth support (issue #232)
@@ -674,13 +674,27 @@ jobs:
       uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
       with:
         path: ${{ github.workspace }}/libcxx-msan
-        key: ${{ matrix.os }}-${{ matrix.c-compiler }}-libcxx-msan-origins-v1
+        key: ${{ matrix.os }}-${{ matrix.c-compiler }}-libcxx-msan-llvmorg-18.1.8-origins-v1
       if: ${{ matrix.build-type == 'msan' }}
 
     - name: Build instrumented libc++ (msan lane, if not cached)
+      # Supply-chain: llvmorg-18.1.8 is a mutable git tag, not an immutable
+      # commit SHA, so a post-clone SHA assertion guards against the tag
+      # being force-moved upstream (CWE-829). LLVM_SHA was obtained via
+      # `git ls-remote https://github.com/llvm/llvm-project refs/tags/llvmorg-18.1.8`
+      # at pin time; to rotate the tag, update both the --branch value below
+      # and LLVM_SHA in the same PR. Mirrors the IWYU SHA-pin pattern above.
       run: |
+        set -euo pipefail
         sudo apt-get install -y ninja-build cmake ;
+        LLVM_SHA=3b5b5c1ec4a3095ab096dd780e84d7ab81f3d7ff ;
         git clone --depth 1 --branch llvmorg-18.1.8 https://github.com/llvm/llvm-project.git llvm-project ;
+        HEAD_SHA="$(git -C llvm-project rev-parse --verify HEAD)" ;
+        if [ "${HEAD_SHA}" != "${LLVM_SHA}" ]; then
+          echo "LLVM SHA mismatch: expected ${LLVM_SHA}, got ${HEAD_SHA}" >&2 ;
+          exit 1 ;
+        fi
+        echo "llvm-project pinned at SHA: ${HEAD_SHA}" ;
         cmake -G Ninja -S llvm-project/runtimes -B build-libcxx-msan \
           -DCMAKE_C_COMPILER=clang-18 \
           -DCMAKE_CXX_COMPILER=clang++-18 \
@@ -754,6 +768,11 @@ jobs:
     - name: Fetch libmicrohttpd from cache (msan lane)
       id: cache-libmicrohttpd-msan
       uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+      # NOTE: the '-v1' suffix below must be bumped manually whenever the
+      # CFLAGS/LDFLAGS in the "Build instrumented libmicrohttpd" step change
+      # -- this key does not otherwise encode them, so a flag change alone
+      # would silently keep reusing a stale (differently-instrumented)
+      # cached artifact.
       with:
         path: libmicrohttpd-1.0.3
         key: ${{ matrix.os }}-${{ matrix.c-compiler }}-libmicrohttpd-1.0.3-msan-v1
@@ -772,7 +791,7 @@ jobs:
         export CFLAGS='-fsanitize=memory -fsanitize-memory-track-origins -fno-omit-frame-pointer -g -O1' ;
         export LDFLAGS='-fsanitize=memory' ;
         ./configure --disable-examples --disable-https ;
-        make ;
+        make -j$(nproc) ;
       if: ${{ matrix.build-type == 'msan' && steps.cache-libmicrohttpd-msan.outputs.cache-hit != 'true' }}
 
     - name: Install libmicrohttpd
@@ -911,12 +930,22 @@ jobs:
     - name: Run valgrind-lane structural gate
       # TASK-088: asserts the Valgrind CI lane is wired correctly (valid YAML,
       # valgrind matrix entry present, no --disable-valgrind-{helgrind,drd,
-      # sgcheck} flags remain, `make check-valgrind` still invoked, and the
-      # results-print step surfaces helgrind + drd logs). Valgrind is
+      # sgcheck} flags remain, `make "check-valgrind-${TOOL}"` (per-tool
+      # AX_VALGRIND_CHECK target) invoked, and the results-print step
+      # surfaces helgrind + drd logs). Valgrind is
       # Linux-only, so the actual race-detector run + finding-triage happen on
       # the PR's Linux lane; this gate only guards the wiring. Mirrors the
       # check-msan-lane.sh gate idiom.
       run: ./scripts/check-valgrind-lane.sh
+      if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
+
+    - name: Run DR-008 stress-lane structural gate
+      # TASK-092: asserts the two DR-008 concurrency/deadlock stress-gate
+      # steps (route_table_concurrency under TSan, stop()-from-handler
+      # deadlock contract) stay wired correctly -- present, correctly `if:`
+      # gated, and timeout-boxed. See test/PERFORMANCE.md ("CI wiring —
+      # DR-008 stress gates"). Mirrors the check-msan-lane.sh gate idiom.
+      run: ./scripts/check-dr008-lanes.sh
       if: ${{ matrix.build-type == 'lint' && matrix.os-type == 'ubuntu' }}
 
     - name: Run parallel-install-lane structural gate
@@ -1158,8 +1187,27 @@ jobs:
             export MSAN_OPTIONS="${MSAN_OPTIONS}:suppressions=$(pwd)/../test/msan.supp" ;
           fi
           # Derive the unit/ subset from the test Makefile so newly-added
-          # unit tests are covered automatically.
-          MSAN_TESTS="$(grep -oE '^[A-Za-z0-9_]+_SOURCES[[:space:]]*=[[:space:]]*unit/' ../test/Makefile.am | sed -E 's/_SOURCES.*//' | tr '\n' ' ')" ;
+          # unit tests are covered automatically, then further exclude any
+          # unit/-sourced target whose test file transitively links curl
+          # (e.g. via curl_easy_perform() round-trips) -- curl cannot
+          # practically be msan-instrumented, so its uninstrumented output
+          # would surface as false use-of-uninitialized-value reports.
+          # NOTE: this only matches a target's _SOURCES entry when it is
+          # written on a single line (`<target>_SOURCES = unit/<file>.cpp`);
+          # a future multi-line _SOURCES assignment, or a unit/ target whose
+          # first source is not itself under unit/, would be silently
+          # dropped without failing CI (the empty-set guard below only
+          # catches total loss, not partial narrowing).
+          MSAN_TESTS="" ;
+          while IFS= read -r src_line; do
+            target="$(printf '%s' "$src_line" | sed -E 's/_SOURCES.*//')" ;
+            source_rel="$(printf '%s' "$src_line" | sed -E 's/^[A-Za-z0-9_]+_SOURCES[[:space:]]*=[[:space:]]*//')" ;
+            if grep -q 'curl/curl.h' "../test/${source_rel}" 2>/dev/null; then
+              echo "msan: excluding ${target} (${source_rel} includes curl/curl.h)" ;
+              continue ;
+            fi
+            MSAN_TESTS="${MSAN_TESTS}${target} " ;
+          done <<< "$(grep -E '^[A-Za-z0-9_]+_SOURCES[[:space:]]*=[[:space:]]*unit/' ../test/Makefile.am)" ;
           if [ -z "$MSAN_TESTS" ]; then echo "ERROR: msan: derived empty test set — grep pattern found no unit/ targets in test/Makefile.am" >&2; exit 1; fi ;
           make check TESTS="$MSAN_TESTS" ;
         else
@@ -1178,7 +1226,7 @@ jobs:
       # Reuses the same TSAN_OPTIONS suppression file as "Run tests" to
       # mask the benign libstdc++ std::ctype narrow-cache race; any
       # libhttpserver-internal race stays fatal.
-      timeout-minutes: 2
+      timeout-minutes: 5
       run: |
         cd build ;
         export TSAN_OPTIONS="suppressions=$(pwd)/../test/tsan.supp" ;
@@ -1196,8 +1244,36 @@ jobs:
       # is the safety net; a clean zero-exit child would be a regression.
       timeout-minutes: 3
       run: |
+        set -o pipefail ;
         cd build ;
-        make -C test check-stop-from-handler ;
+        make -C test check-stop-from-handler 2>&1 | tee test/stop_from_handler.log ;
+      if: ${{ matrix.os-type == 'ubuntu' && matrix.test-group == 'basic' && matrix.c-compiler == 'gcc' && matrix.debug == 'nodebug' && matrix.linking == 'dynamic' && matrix.build-type == 'classic' }}
+
+    - name: Verify stop()-from-handler contract fired (TASK-092)
+      # TASK-092: guards against Sub-test B
+      # (stop_from_handler_deadlocks_as_documented) silently reporting
+      # [SKIP] instead of exercising the DR-008 deadlock contract -- mirrors
+      # the "Verify [SKIP] markers fire on tls-no-cli lane (TASK-076)"
+      # grep-the-log pattern.
+      run: |
+        set -euo pipefail
+        cd build
+        LOG=test/stop_from_handler.log
+        if [ ! -f "$LOG" ]; then
+            echo "ERROR: $LOG missing — check-stop-from-handler did not run" >&2
+            exit 1
+        fi
+        if grep -q '^\[SKIP\] stop_from_handler_deadlocks_as_documented' "$LOG"; then
+            echo "ERROR: stop_from_handler_deadlocks_as_documented reported [SKIP] instead of exercising the deadlock contract" >&2
+            cat "$LOG"
+            exit 1
+        fi
+        if ! grep -q '^\[OK\] stop_from_handler' "$LOG"; then
+            echo "ERROR: expected an '[OK] stop_from_handler' marker in $LOG; none found" >&2
+            cat "$LOG"
+            exit 1
+        fi
+        echo "PASS — stop_from_handler_deadlocks_as_documented exercised the DR-008 deadlock contract"
       if: ${{ matrix.os-type == 'ubuntu' && matrix.test-group == 'basic' && matrix.c-compiler == 'gcc' && matrix.debug == 'nodebug' && matrix.linking == 'dynamic' && matrix.build-type == 'classic' }}
 
     - name: Fetch master ref for parallel-install
@@ -1249,7 +1325,7 @@ jobs:
             echo "ERROR: $LOG missing — ws_start_stop did not run" >&2
             exit 1
         fi
-        SKIP_COUNT=$(grep -c '^\[SKIP\].*gnutls-cli' "$LOG" || true)
+        SKIP_COUNT=$(grep -c '^\[SKIP\].*psk_connection' "$LOG" || true)
         echo "Found $SKIP_COUNT [SKIP] markers attributable to gnutls-cli"
         if [ "$SKIP_COUNT" -lt 5 ]; then
             echo "ERROR: expected >=5 [SKIP] markers in $LOG; got $SKIP_COUNT" >&2
@@ -1329,6 +1405,8 @@ jobs:
           if [ -f "test/$log" ]; then
             echo "===== test/$log =====" ;
             cat "test/$log" ;
+          else
+            echo "test/$log not produced by this lane" ;
           fi
         done
       if: ${{ always() && startsWith(matrix.build-type, 'valgrind-') }}

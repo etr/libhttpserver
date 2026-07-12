@@ -263,7 +263,11 @@ LA_FILE="$STAGE_LIB/libhttpserver.la"
 [ -f "$LA_FILE" ] || fail "A7: libtool control file missing: $LA_FILE"
 # Verify the SONAME appears specifically in the library_names= field, not just
 # anywhere in the file (e.g. not in a comment or dlname-only reference).
-if ! grep -E "^library_names=.*$SONAME_BASENAME" "$LA_FILE" >/dev/null 2>&1; then
+# SONAME_BASENAME is escaped before interpolation so its literal dots (e.g.
+# in "libhttpserver.so.2") are matched as literal dots, not the ERE
+# any-character wildcard.
+_soname_escaped="$(printf '%s' "$SONAME_BASENAME" | sed 's/[.[\*^$]/\\&/g')"
+if ! grep -E "^library_names=.*$_soname_escaped" "$LA_FILE" >/dev/null 2>&1; then
     fail "A7: $LA_FILE library_names= field does not reference $SONAME_BASENAME"
 fi
 pass "A7: $(basename "$LA_FILE") library_names references $SONAME_BASENAME"

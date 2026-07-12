@@ -17,7 +17,9 @@
 #   * a non-zero in_block at EOF (an unclosed block) fails.
 #
 # Usage:  check-fence-balance.sh <markdown-file>
-# Exit:   0 = balanced; non-zero = unbalanced (with a diagnostic on stderr).
+# Exit: 0 = balanced; 2 = info-string fence inside an open block
+#       (consecutive openers); 3 = unclosed block at EOF. Callers may
+#       treat any non-zero as unbalanced.
 set -euo pipefail
 
 _fence_target="${1:?usage: check-fence-balance.sh <markdown-file>}"

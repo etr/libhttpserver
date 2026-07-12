@@ -55,11 +55,11 @@ class simple_resource : public http_resource {
 //
 //   | CI lane                                      | observed bytes |
 //   |----------------------------------------------|----------------|
-//   | macos-latest / Apple clang 21 / libc++       |            232 |  <- dominates: std::shared_mutex ~168B on libc++
-//   | ubuntu-latest / gcc 11..14 / libstdc++       |           ~104 |  std::shared_mutex ~56B on libstdc++
-//   | ubuntu-latest / clang 13..18 / libstdc++     |           ~104 |  same ABI as above
-//   | windows-latest / MINGW64 gcc / libstdc++     |           ~104 |
-//   | windows-latest / MSYS gcc / libstdc++        |           ~104 |
+//   | macos-latest / Apple clang 21 / libc++       |            232 |  <- dominates: std::shared_mutex ~168B on libc++ (directly measured)
+//   | ubuntu-latest / gcc 11..14 / libstdc++       |           ~104 |  std::shared_mutex ~56B on libstdc++ (inferred from libstdc++ ABI; not directly measured on this lane)
+//   | ubuntu-latest / clang 13..18 / libstdc++     |           ~104 |  same ABI as above (inferred, not directly measured on this lane)
+//   | windows-latest / MINGW64 gcc / libstdc++     |           ~104 |  inferred from libstdc++ ABI (shared_mutex/string sizes); not directly measured on this lane
+//   | windows-latest / MSYS gcc / libstdc++        |           ~104 |  inferred from libstdc++ ABI (shared_mutex/string sizes); not directly measured on this lane
 //
 // Layout: vptr (8) + methods_allowed_ (4) + pad (4) +
 //   shared_ptr<resource_hook_table> hook_table_ (16) +
@@ -151,6 +151,8 @@ static_assert(noexcept(std::declval<const http_resource&>()
               "get_allowed_methods() must be const noexcept");
 
 LT_BEGIN_SUITE(http_resource_suite)
+    // The littletest framework invokes set_up() and tear_down() via CRTP
+    // on the suite base; they must be defined even when empty.
     void set_up() {
     }
 
@@ -236,25 +238,46 @@ LT_BEGIN_AUTO_TEST(http_resource_suite, default_render_returns_sentinel)
     http_request req = create_test_request().build();
     http_response resp = er.render(req);
     LT_CHECK_EQ(resp.get_status(), -1);
-    // render_get / render_post / etc. forward to render(), so they also
-    // return the -1 sentinel by default.
-    http_response resp_get = er.render_get(req);
-    LT_CHECK_EQ(resp_get.get_status(), -1);
 LT_END_AUTO_TEST(default_render_returns_sentinel)
 
-LT_BEGIN_AUTO_TEST(http_resource_suite, render_only_resource_methods_allowed)
+// render_get / render_post / render_delete / etc. all forward to render(),
+// so they also return the -1 sentinel by default. Split from
+// default_render_returns_sentinel above (and extended to more than one
+// verb) so a failure localises to the specific forwarding path that broke
+// rather than an ambiguous single test body.
+LT_BEGIN_AUTO_TEST(http_resource_suite, default_render_get_returns_sentinel)
+    empty_resource er;
+    http_request req = create_test_request().build();
+    http_response resp_get = er.render_get(req);
+    LT_CHECK_EQ(resp_get.get_status(), -1);
+LT_END_AUTO_TEST(default_render_get_returns_sentinel)
+
+LT_BEGIN_AUTO_TEST(http_resource_suite, default_render_post_returns_sentinel)
+    empty_resource er;
+    http_request req = create_test_request().build();
+    http_response resp_post = er.render_post(req);
+    LT_CHECK_EQ(resp_post.get_status(), -1);
+    http_response resp_delete = er.render_delete(req);
+    LT_CHECK_EQ(resp_delete.get_status(), -1);
+LT_END_AUTO_TEST(default_render_post_returns_sentinel)
+
+// render_only_resource's default-allowed-method state is already covered
+// by is_allowed_known_methods (canonical for that contract) and by
+// resource_init_sets_all_methods / allow_all_methods. This test's unique
+// purpose is verifying that render_only_resource's render() override is
+// actually invoked through dispatch (render_get() forwards to render()
+// when only render() is overridden); it previously re-checked the
+// already-covered allowed-method state instead.
+// render() constructs its body via http_response::string(), whose status
+// defaults to 200 (vs. the base http_resource::render()'s -1 sentinel --
+// see default_render_returns_sentinel above), so a non-sentinel status
+// here pins that the override actually ran.
+LT_BEGIN_AUTO_TEST(http_resource_suite, render_only_resource_dispatches_through_render)
     render_only_resource ror;
-    // All methods should be allowed by default
-    LT_CHECK_EQ(ror.is_allowed(http_method::get), true);
-    LT_CHECK_EQ(ror.is_allowed(http_method::post), true);
-    LT_CHECK_EQ(ror.is_allowed(http_method::put), true);
-    LT_CHECK_EQ(ror.is_allowed(http_method::head), true);
-    LT_CHECK_EQ(ror.is_allowed(http_method::del), true);
-    LT_CHECK_EQ(ror.is_allowed(http_method::trace), true);
-    LT_CHECK_EQ(ror.is_allowed(http_method::connect), true);
-    LT_CHECK_EQ(ror.is_allowed(http_method::options), true);
-    LT_CHECK_EQ(ror.is_allowed(http_method::patch), true);
-LT_END_AUTO_TEST(render_only_resource_methods_allowed)
+    http_request req = create_test_request().build();
+    LT_CHECK_EQ(ror.render(req).get_status(), 200);
+    LT_CHECK_EQ(ror.render_get(req).get_status(), 200);
+LT_END_AUTO_TEST(render_only_resource_dispatches_through_render)
 
 LT_BEGIN_AUTO_TEST(http_resource_suite, resource_init_sets_all_methods)
     simple_resource sr;
@@ -301,17 +324,21 @@ LT_BEGIN_AUTO_TEST(http_resource_suite, allow_all_after_disallow_all)
     LT_CHECK_EQ(sr.get_allowed_methods().bits, method_set{}.set_all().bits);
 LT_END_AUTO_TEST(allow_all_after_disallow_all)
 
-LT_BEGIN_AUTO_TEST(http_resource_suite, set_allowing_multiple_times)
+LT_BEGIN_AUTO_TEST(http_resource_suite, set_allowing_toggle_round_trip)
     simple_resource sr;
     LT_CHECK_EQ(sr.is_allowed(http_method::get), true);
     sr.set_allowing(http_method::get, false);
     LT_CHECK_EQ(sr.is_allowed(http_method::get), false);
     sr.set_allowing(http_method::get, true);
     LT_CHECK_EQ(sr.is_allowed(http_method::get), true);
+LT_END_AUTO_TEST(set_allowing_toggle_round_trip)
+
+LT_BEGIN_AUTO_TEST(http_resource_suite, set_allowing_double_false_idempotent)
+    simple_resource sr;
     sr.set_allowing(http_method::get, false);
     sr.set_allowing(http_method::get, false);  // Double false
     LT_CHECK_EQ(sr.is_allowed(http_method::get), false);
-LT_END_AUTO_TEST(set_allowing_multiple_times)
+LT_END_AUTO_TEST(set_allowing_double_false_idempotent)
 
 // security: set_allowing(count_, true) must have no effect — the sentinel
 // must never appear in the allowed-set so is_allowed(count_) stays false.

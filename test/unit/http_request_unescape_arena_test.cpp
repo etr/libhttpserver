@@ -114,28 +114,6 @@ struct count_new_window {
     }
 };
 
-// Counting upstream resource. Wraps new_delete_resource and bumps a
-// counter on every do_allocate. Used to assert that the warm-path
-// build_request_args call does not spill out of the arena.
-// (Same shape as assert_no_upstream_resource in http_request_arena_test.cpp.)
-class assert_no_upstream_resource final : public std::pmr::memory_resource {
- public:
-    void* do_allocate(std::size_t bytes, std::size_t align) override {
-        ++upstream_alloc_count_;
-        return std::pmr::new_delete_resource()->allocate(bytes, align);
-    }
-    void do_deallocate(void* p, std::size_t bytes, std::size_t align) override {
-        std::pmr::new_delete_resource()->deallocate(p, bytes, align);
-    }
-    bool do_is_equal(const std::pmr::memory_resource& o) const noexcept override {
-        return this == &o;
-    }
-    std::size_t upstream_alloc_count() const { return upstream_alloc_count_; }
-
- private:
-    std::size_t upstream_alloc_count_ = 0;
-};
-
 // Test-only user unescaper: pass-through (does not mutate val). Used
 // to exercise the user-unescaper code path without changing semantics.
 void passthrough_unescaper(std::string& /*val*/) {
@@ -233,6 +211,34 @@ std::size_t run_alloc_pin(httpserver::unescaper_ptr fn,
     return alloc_count;
 }
 
+// ---------------------------------------------------------------------------
+// Fixture for the multi-step correctness tests (6)-(8), which need direct
+// access to the impl pointer and accumulator across several assertions and
+// so cannot reuse decode_via_arena()'s single-call/single-string-return
+// shape. Owns the arena/impl/accumulator triple those tests previously
+// open-coded verbatim.
+// ---------------------------------------------------------------------------
+struct arena_impl_fixture {
+    alignas(std::max_align_t) std::array<std::byte, 8192> buf{};
+    std::pmr::monotonic_buffer_resource arena{
+        buf.data(), buf.size(), std::pmr::new_delete_resource()};
+    impl_alloc_t alloc{&arena};
+    http_request_impl* p =
+        alloc.new_object<http_request_impl>(nullptr, nullptr, alloc);
+    arguments_accumulator aa;
+
+    explicit arena_impl_fixture(httpserver::unescaper_ptr unescaper = nullptr) {
+        aa.unescaper = unescaper;
+        aa.arguments = &p->unescaped_args;
+    }
+    ~arena_impl_fixture() { alloc.delete_object(p); }
+
+    // monotonic_buffer_resource is neither copyable nor movable, and this
+    // fixture holds pointers into its own `buf` member, so disable both.
+    arena_impl_fixture(const arena_impl_fixture&) = delete;
+    arena_impl_fixture& operator=(const arena_impl_fixture&) = delete;
+};
+
 }  // namespace
 
 // The suite has no shared fixture state: each test constructs its own
@@ -283,10 +289,23 @@ LT_END_AUTO_TEST(unescape_pct2f_decodes_to_slash)
 
 // (4) Invalid hex passthrough: "%%" stays as "%%" (consistent with
 // http_unescape's fall-through behavior on non-hex digits after '%').
+// Named for the invariant under test (a non-hex digit after '%' falls
+// through to the default case) rather than "double percent": '%%' is
+// preserved because the second '%' is also not a valid two-hex-digit
+// sequence, not because consecutive percents are special-cased.
 LT_BEGIN_AUTO_TEST(http_request_unescape_arena_suite,
-                   unescape_double_percent_passthrough)
+                   unescape_invalid_hex_after_percent_passthrough)
     LT_CHECK_EQ(decode_via_arena("a%%b"), std::string("a%%b"));
-LT_END_AUTO_TEST(unescape_double_percent_passthrough)
+LT_END_AUTO_TEST(unescape_invalid_hex_after_percent_passthrough)
+
+// (4b) Bare trailing "%%" (string ends immediately after the second '%',
+// no third character): a different boundary from "a%%b" (mid-string,
+// third char present) and "abc%" (single trailing '%'). Pins that both
+// percent signs are preserved when the pair sits at end-of-string.
+LT_BEGIN_AUTO_TEST(http_request_unescape_arena_suite,
+                   unescape_double_percent_at_end_passthrough)
+    LT_CHECK_EQ(decode_via_arena("a%%"), std::string("a%%"));
+LT_END_AUTO_TEST(unescape_double_percent_at_end_passthrough)
 
 // (5) Trailing percent: "abc%" stays as "abc%".
 LT_BEGIN_AUTO_TEST(http_request_unescape_arena_suite,
@@ -312,25 +331,15 @@ LT_END_AUTO_TEST(unescape_single_hex_digit_after_percent_passthrough)
 // (6) Empty value: produces an empty arg without crashing.
 LT_BEGIN_AUTO_TEST(http_request_unescape_arena_suite,
                    unescape_empty_value)
-    alignas(std::max_align_t) std::array<std::byte, 8192> buf{};
-    std::pmr::monotonic_buffer_resource arena(buf.data(), buf.size(),
-                                              std::pmr::new_delete_resource());
-    impl_alloc_t alloc(&arena);
-    auto* p = alloc.new_object<http_request_impl>(nullptr, nullptr, alloc);
-
-    arguments_accumulator aa;
-    aa.unescaper = nullptr;
-    aa.arguments = &p->unescaped_args;
+    arena_impl_fixture f;
 
     http_request_impl::build_request_args(
-        &aa, MHD_GET_ARGUMENT_KIND, "k", "");
+        &f.aa, MHD_GET_ARGUMENT_KIND, "k", "");
 
-    auto it = p->unescaped_args.find(std::string_view("k"));
-    LT_CHECK(it != p->unescaped_args.end());
+    auto it = f.p->unescaped_args.find(std::string_view("k"));
+    LT_CHECK(it != f.p->unescaped_args.end());
     LT_CHECK_EQ(it->second.size(), std::size_t{1});
     LT_CHECK_EQ(it->second[0].size(), std::size_t{0});
-
-    alloc.delete_object(p);
 LT_END_AUTO_TEST(unescape_empty_value)
 
 // (7) Lifetime pin: a string_view obtained from unescaped_args after
@@ -339,37 +348,27 @@ LT_END_AUTO_TEST(unescape_empty_value)
 // TASK-018 lifetime contract on the arena-routed path.
 LT_BEGIN_AUTO_TEST(http_request_unescape_arena_suite,
                    unescape_view_outlives_subsequent_inserts)
-    alignas(std::max_align_t) std::array<std::byte, 8192> buf{};
-    std::pmr::monotonic_buffer_resource arena(buf.data(), buf.size(),
-                                              std::pmr::new_delete_resource());
-    impl_alloc_t alloc(&arena);
-    auto* p = alloc.new_object<http_request_impl>(nullptr, nullptr, alloc);
-
-    arguments_accumulator aa;
-    aa.unescaper = nullptr;
-    aa.arguments = &p->unescaped_args;
+    arena_impl_fixture f;
 
     http_request_impl::build_request_args(
-        &aa, MHD_GET_ARGUMENT_KIND, "k1", "a%2Fb");
+        &f.aa, MHD_GET_ARGUMENT_KIND, "k1", "a%2Fb");
 
     // Capture a view of the stored arg value.
-    auto it1 = p->unescaped_args.find(std::string_view("k1"));
-    LT_CHECK(it1 != p->unescaped_args.end());
+    auto it1 = f.p->unescaped_args.find(std::string_view("k1"));
+    LT_CHECK(it1 != f.p->unescaped_args.end());
     std::string_view sv(it1->second[0].data(), it1->second[0].size());
 
     // Insert several more args to force the map to grow (additional
     // arena allocations for the new pmr::string keys + vectors).
     http_request_impl::build_request_args(
-        &aa, MHD_GET_ARGUMENT_KIND, "k2", "v2%2F");
+        &f.aa, MHD_GET_ARGUMENT_KIND, "k2", "v2%2F");
     http_request_impl::build_request_args(
-        &aa, MHD_GET_ARGUMENT_KIND, "k3", "another_value_here");
+        &f.aa, MHD_GET_ARGUMENT_KIND, "k3", "another_value_here");
     http_request_impl::build_request_args(
-        &aa, MHD_GET_ARGUMENT_KIND, "k4", "yet_another_one");
+        &f.aa, MHD_GET_ARGUMENT_KIND, "k4", "yet_another_one");
 
     // The original view must still read "a/b".
     LT_CHECK_EQ(std::string(sv), std::string("a/b"));
-
-    alloc.delete_object(p);
 LT_END_AUTO_TEST(unescape_view_outlives_subsequent_inserts)
 
 // (8) User-callback can grow the value (HTML-entity-style expander).
@@ -377,25 +376,19 @@ LT_END_AUTO_TEST(unescape_view_outlives_subsequent_inserts)
 // arena-backed sink may legitimately grow past the input size.
 LT_BEGIN_AUTO_TEST(http_request_unescape_arena_suite,
                    unescape_user_callback_can_grow_value)
-    alignas(std::max_align_t) std::array<std::byte, 8192> buf{};
-    std::pmr::monotonic_buffer_resource arena(buf.data(), buf.size(),
-                                              std::pmr::new_delete_resource());
-    impl_alloc_t alloc(&arena);
-    auto* p = alloc.new_object<http_request_impl>(nullptr, nullptr, alloc);
-
-    arguments_accumulator aa;
-    aa.unescaper = &prepend_x_dash_unescaper;
-    aa.arguments = &p->unescaped_args;
+    arena_impl_fixture f(&prepend_x_dash_unescaper);
 
     http_request_impl::build_request_args(
-        &aa, MHD_GET_ARGUMENT_KIND, "k", "original");
+        &f.aa, MHD_GET_ARGUMENT_KIND, "k", "original");
 
-    auto it = p->unescaped_args.find(std::string_view("k"));
-    LT_CHECK(it != p->unescaped_args.end());
+    auto it = f.p->unescaped_args.find(std::string_view("k"));
+    LT_CHECK(it != f.p->unescaped_args.end());
     LT_CHECK_EQ(std::string(it->second[0].data(), it->second[0].size()),
                 std::string("X-original"));
-
-    alloc.delete_object(p);
+    // Pin that the arena-backed sink itself was grown to the expanded
+    // value's length ("X-original" = 10 bytes), not just that the
+    // returned content matches.
+    LT_CHECK_EQ(it->second[0].size(), std::size_t{10});
 LT_END_AUTO_TEST(unescape_user_callback_can_grow_value)
 
 LT_BEGIN_AUTO_TEST_ENV()

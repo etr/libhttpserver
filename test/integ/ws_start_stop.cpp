@@ -709,8 +709,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, ipv6_webserver)
         curl_global_init(CURL_GLOBAL_ALL);
         std::string s;
         // Bind an ephemeral port; talk to the actual bound port.
-        std::string ipv6_url = "http://[::1]:" + std::to_string(port) + "/base";
-        CURLcode res = curl_get(ipv6_url, &s);
+        std::string url = "http://[::1]:" + std::to_string(port) + "/base";
+        CURLcode res = curl_get(url, &s);
         // Once the server is confirmed running, a curl failure is a
         // genuine test failure — not an environmental skip.
         LT_ASSERT_EQ(res, 0);
@@ -736,8 +736,8 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, dual_stack_webserver)
         curl_global_init(CURL_GLOBAL_ALL);
         std::string s;
         // Bind an ephemeral port; talk to the actual bound port.
-        std::string ds_url = "localhost:" + std::to_string(port) + "/base";
-        CURLcode res = curl_get(ds_url, &s);
+        std::string url = "localhost:" + std::to_string(port) + "/base";
+        CURLcode res = curl_get(url, &s);
         // Once the server is confirmed running, a curl failure is a
         // genuine test failure — not an environmental skip.
         LT_ASSERT_EQ(res, 0);
@@ -778,6 +778,10 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, bind_address_ipv6_string)
     } catch (...) {
         LT_SKIP("IPv6 bind: construction failed on this host");
     }
+    // ws_ptr is guaranteed non-null here: LT_SKIP() always throws
+    // skip_unattended and unwinds the entire test body on failure, so
+    // execution only reaches this point when the try block above
+    // completed successfully.
     auto ok = std::make_shared<ok_resource>();
     ws_ptr->register_path("base", ok);
     try {
@@ -1386,9 +1390,13 @@ std::string invalid_hex_psk_handler(const std::string&) {
     return "ZZZZ";  // Invalid hex characters
 }
 
-// Helper to check if gnutls-cli is available
+// Helper to check if gnutls-cli is available. Memoized: the five
+// psk_connection_* tests below each call this, and the underlying
+// system() spawns a shell + `which` subprocess, so caching the result
+// avoids paying that cost up to five times per test binary run.
 bool has_gnutls_cli() {
-    return system("which gnutls-cli > /dev/null 2>&1") == 0;
+    static const bool cached = (system("which gnutls-cli > /dev/null 2>&1") == 0);
+    return cached;
 }
 
 // TASK-076: detect libmicrohttpd/gnutls builds where PSK isn't
@@ -1399,15 +1407,14 @@ bool has_gnutls_cli() {
 // changes the exact wording, we just fall through to `throw;` and the
 // test reports a real failure rather than masking it as a skip.
 bool is_psk_unsupported_error(const std::exception& e) {
-    std::string msg = e.what();
-    if (msg.find("PSK") == std::string::npos &&
-        msg.find("psk") == std::string::npos) {
-        return false;
-    }
-    return msg.find("not supported") != std::string::npos ||
-           msg.find("unsupported") != std::string::npos ||
-           msg.find("not available") != std::string::npos ||
-           msg.find("disabled") != std::string::npos;
+    const std::string msg = e.what();
+    const bool has_psk = msg.find("PSK") != std::string::npos ||
+                          msg.find("psk") != std::string::npos;
+    const bool has_unsupported = msg.find("not supported") != std::string::npos ||
+                                  msg.find("unsupported") != std::string::npos ||
+                                  msg.find("not available") != std::string::npos ||
+                                  msg.find("disabled") != std::string::npos;
+    return has_psk && has_unsupported;
 }
 
 // TASK-076: pin is_psk_unsupported_error triage logic so a future
@@ -1469,10 +1476,10 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_handler_setup)
         throw;
     }
 
-    // Just verify the server can be configured with PSK options
-    if (ws.is_running()) {
-        ws.stop();
-    }
+    // Just verify the server can be configured with PSK options.
+    // ws.stop() is a no-op (returns false) when the server never
+    // started, so the unconditional call is safe here.
+    ws.stop();
     // TASK-076: replaced tautological-pass with a real postcondition
     // assertion. After `ws.stop()` the server must report not-running.
     LT_CHECK_EQ(ws.is_running(), false);
@@ -1499,9 +1506,9 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_handler_empty)
         throw;
     }
 
-    if (ws.is_running()) {
-        ws.stop();
-    }
+    // ws.stop() is a no-op (returns false) when the server never
+    // started, so the unconditional call is safe here.
+    ws.stop();
     // TASK-076: strengthened tail-position liveness assertion.
     LT_CHECK_EQ(ws.is_running(), false);
 LT_END_AUTO_TEST(psk_handler_empty)
@@ -1527,9 +1534,9 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_no_handler)
         throw;
     }
 
-    if (ws.is_running()) {
-        ws.stop();
-    }
+    // ws.stop() is a no-op (returns false) when the server never
+    // started, so the unconditional call is safe here.
+    ws.stop();
     // TASK-076: strengthened tail-position liveness assertion.
     LT_CHECK_EQ(ws.is_running(), false);
 LT_END_AUTO_TEST(psk_no_handler)
@@ -1571,16 +1578,9 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, psk_connection_success)
             "--insecure localhost -p %d 2>&1 || true",
             port);
 
-        // Execute the command to trigger the PSK handler callback.
-        // TASK-076: previously this discarded `system`'s return and
-        // recorded a tautological pass. We now capture the exit code
-        // and assert it is not 127 (command-not-found). Any other
-        // exit code (including non-zero from the actual TLS handshake)
-        // is acceptable because the assertion target is "the PSK
-        // callback was reached at all" — which the `has_gnutls_cli()`
-        // gate above already ensures the cli was on PATH at probe
-        // time; a 127 here would mean the env changed between probe
-        // and exec.
+        // Assertion target: the PSK callback was reached (exit 127
+        // means gnutls-cli itself was not found). Any other exit code,
+        // including a failed handshake, is acceptable.
         int cmd_exit = system(cmd);
         ws.stop();
         LT_CHECK_NEQ(cmd_exit, 127);
