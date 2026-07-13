@@ -208,6 +208,9 @@ LT_BEGIN_AUTO_TEST_ENV()
     // Opt in BEFORE the test bodies run (and BEFORE the magic-static
     // cache in the body pipeline is initialised on first dispatch).
     ::setenv("LIBHTTPSERVER_DEBUG_DUMP_REQUEST_BODY", "1", 1);
-    AUTORUN_TESTS()
 #endif
+    // Kept outside the #if/#else so AUTORUN_TESTS() (which declares the
+    // __lt_result__ that LT_END_AUTO_TEST_ENV returns) is always compiled;
+    // on Windows it is unreachable after the return 77 above.
+    AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()
