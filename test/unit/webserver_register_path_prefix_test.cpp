@@ -26,9 +26,9 @@
 //   - register_path(path, ptr)   -> exact match (does NOT match a longer URL)
 //   - register_prefix(path, ptr) -> prefix match (matches the path and all
 //                                   children of it)
-//   - register_resource(path, ptr) is kept as a [[deprecated]] alias for
-//     register_path so TASK-023-era call sites still compile.
-//   - The 3-arg `bool family` overloads of register_resource are gone.
+//   - register_resource is gone entirely (clean break): neither the
+//     smart-pointer overloads nor the 3-arg `bool family` overloads exist.
+//     Call register_path for exact match or register_prefix for prefix.
 //
 // This TU pins both the compile-time signature contract (the new methods
 // exist with the right shape; the bool-family overload is removed) and
@@ -150,36 +150,35 @@ static_assert(std::is_same_v<
                   void>,
               "unregister_prefix(const string&) must exist and return void");
 
-// (6) Negative SFINAE: the 3-arg bool-family overload of register_resource
-//     must be gone. (Acceptance criterion #1 of TASK-024 pinned at compile
-//     time.) The probe expression is a call with a trailing `bool` arg; if
-//     such an overload existed, the call would be well-formed and ::value
-//     would flip to true.
+// (6) Negative SFINAE: register_resource is removed entirely (clean break).
+//     None of its historical shapes may exist — the templated unique_ptr
+//     overload, the shared_ptr overload, or the 3-arg bool-family overloads.
+//     The probe covers the smart-pointer shapes (the templated/typed
+//     overloads); if any survived, the call would be well-formed and
+//     ::value would flip to true. Callers use register_path / register_prefix.
 template <typename, typename = void>
-struct has_bool_family_register : std::false_type {};
+struct has_register_resource_shared : std::false_type {};
 
 template <typename WS>
-struct has_bool_family_register<WS, std::void_t<
+struct has_register_resource_shared<WS, std::void_t<
     decltype(std::declval<WS&>().register_resource(
         std::declval<const std::string&>(),
-        std::declval<std::shared_ptr<http_resource>>(),
-        std::declval<bool>()))>> : std::true_type {};
+        std::declval<std::shared_ptr<http_resource>>()))>> : std::true_type {};
 
-static_assert(!has_bool_family_register<webserver>::value,
-              "the bool-family register_resource overload must be removed");
+static_assert(!has_register_resource_shared<webserver>::value,
+              "register_resource(const string&, shared_ptr) must be removed");
 
 template <typename, typename = void>
-struct has_bool_family_register_unique : std::false_type {};
+struct has_register_resource_unique : std::false_type {};
 
 template <typename WS>
-struct has_bool_family_register_unique<WS, std::void_t<
+struct has_register_resource_unique<WS, std::void_t<
     decltype(std::declval<WS&>().register_resource(
         std::declval<const std::string&>(),
-        std::declval<std::unique_ptr<http_resource>>(),
-        std::declval<bool>()))>> : std::true_type {};
+        std::declval<std::unique_ptr<http_resource>>()))>> : std::true_type {};
 
-static_assert(!has_bool_family_register_unique<webserver>::value,
-              "the bool-family register_resource unique_ptr overload must be removed");
+static_assert(!has_register_resource_unique<webserver>::value,
+              "register_resource(const string&, unique_ptr) must be removed");
 
 // ---- Runtime behaviour tests -------------------------------------------
 
@@ -291,26 +290,6 @@ LT_BEGIN_AUTO_TEST(webserver_register_path_prefix_suite,
 
     ws.stop();
 LT_END_AUTO_TEST(unregister_resource_alias_handles_both_kinds)
-
-// The deprecated register_resource(path, ptr) forwarder must still compile
-// and behave like register_path (exact match, no longer-URL match).
-// Suppress the deprecation warning locally so the test binary still
-// builds with -Werror.
-LT_BEGIN_AUTO_TEST(webserver_register_path_prefix_suite,
-                   register_resource_deprecated_forwarder_behaves_like_register_path)
-    webserver ws{create_webserver(PORT + 6)};
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-    ws.register_resource("/d", std::make_shared<ok_resource>());
-#pragma GCC diagnostic pop
-    ws.start(false);
-
-    LT_CHECK_EQ(fetch("localhost:8186/d").response_code, 200);
-    // Exact-match behaviour: a longer URL must 404.
-    LT_CHECK_EQ(fetch("localhost:8186/d/extra").response_code, 404);
-
-    ws.stop();
-LT_END_AUTO_TEST(register_resource_deprecated_forwarder_behaves_like_register_path)
 
 // TASK-056: registering the SAME path as both exact and prefix is no
 // longer permitted (the (method, path) cache key cannot discriminate
@@ -525,9 +504,9 @@ LT_END_AUTO_TEST(register_prefix_unique_ptr_transfers_ownership_and_serves)
 
 // ---- Error-path tests for register_prefix (findings 9 / 32) -------------
 //
-// register_resource (deprecated alias) is tested for null / duplicate in
+// register_path is tested for null / duplicate in
 // webserver_register_smartptr_test.cpp. The tests below pin the same
-// invariants on the new register_prefix API surface so this TU is
+// invariants on the register_prefix API surface so this TU is
 // self-contained.
 
 LT_BEGIN_AUTO_TEST(webserver_register_path_prefix_suite,

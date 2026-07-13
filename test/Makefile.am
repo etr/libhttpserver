@@ -253,25 +253,23 @@ http_request_const_getters_LDADD =
 http_request_tls_accessors_SOURCES = unit/http_request_tls_accessors_test.cpp
 http_request_tls_accessors_LDADD =
 
-# webserver_register_smartptr: TASK-023. Compile-time signature
-# assertions that the new unique_ptr/shared_ptr register_resource
-# overloads exist and the raw-pointer overload is gone, plus runtime
-# tests for ownership semantics (unique_ptr ownership transfer,
-# shared_ptr caller-retains-ref, throw-on-null, throw-on-duplicate).
-# Default LDADD (libhttpserver + curl) is sufficient; no microhttpd
-# direct link needed.
+# webserver_register_smartptr: TASK-023. Runtime tests for the
+# register_path smart-pointer ownership semantics (unique_ptr ownership
+# transfer, shared_ptr caller-retains-ref, throw-on-null,
+# throw-on-duplicate). The compile-time signature contract lives in
+# webserver_register_path_prefix. Default LDADD (libhttpserver + curl) is
+# sufficient; no microhttpd direct link needed.
 webserver_register_smartptr_SOURCES = unit/webserver_register_smartptr_test.cpp
 
 # webserver_register_path_prefix: TASK-024. Compile-time signature
 # assertions that register_path / register_prefix exist with both
 # unique_ptr and shared_ptr overloads, that unregister_path /
-# unregister_prefix exist, and that the bool-family register_resource
-# overload has been removed (negative SFINAE pin for acceptance criterion
-# #1). Runtime tests: register_prefix matches a longer URL; register_path
-# does not; parameterized exact paths bind their args; unregister_path /
-# unregister_prefix / the umbrella unregister_resource alias all 404 the
-# route after removal; the [[deprecated]] register_resource forwarder
-# still serves and behaves like register_path.
+# unregister_prefix exist, and that register_resource has been removed
+# entirely (negative SFINAE pin — clean break; no smart-pointer or
+# bool-family overloads survive). Runtime tests: register_prefix matches a
+# longer URL; register_path does not; parameterized exact paths bind their
+# args; unregister_path / unregister_prefix / the umbrella
+# unregister_resource alias all 404 the route after removal.
 webserver_register_path_prefix_SOURCES = unit/webserver_register_path_prefix_test.cpp
 
 # webserver_on_methods: TASK-025. Compile-time signature contract for

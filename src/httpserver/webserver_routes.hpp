@@ -27,8 +27,8 @@
 // Carries member-function DECLARATIONS only; meant to be included from
 // WITHIN the body of `class webserver` defined in
 // httpserver/webserver.hpp. Including it elsewhere raises a #error.
-// Covers register_path / register_prefix / register_resource (templated
-// + shared_ptr overloads), the on_* HTTP-verb shortcuts (on_get,
+// Covers register_path / register_prefix (templated + shared_ptr
+// overloads), the on_* HTTP-verb shortcuts (on_get,
 // on_post, on_put, on_delete, on_patch, on_options, on_head), the
 // table-driven route() entry points, and the matching unregister_*
 // counterparts.
@@ -126,27 +126,6 @@ void register_prefix(const std::string& path, std::unique_ptr<T> res) {
 **/
 void register_prefix(const std::string& path,
                      std::shared_ptr<http_resource> res);
-
-/**
- * Deprecated alias for register_path(). Kept for backward compatibility;
- * use register_path() for exact match or register_prefix() for prefix match.
- *
- * @param path The url pointing to the resource.
- * @param res  unique_ptr to the http_resource (or any derived type).
-**/
-template <typename T,
-          typename = std::enable_if_t<
-              std::is_base_of_v<http_resource, T>>>
-[[deprecated("use register_path() for exact match or register_prefix() for prefix match")]]
-// This file is included inside the webserver class body; transitive
-// <utility>/<memory>/<string> live in the parent webserver.hpp.
-void register_resource(const std::string& path, std::unique_ptr<T> res) {  // NOLINT(build/include_what_you_use)
-    register_path(path, std::move(res));  // NOLINT(build/include_what_you_use)
-}
-/// @copydoc register_resource(const std::string&, std::unique_ptr<T>)
-[[deprecated("use register_path() for exact match or register_prefix() for prefix match")]]
-void register_resource(const std::string& path,
-                       std::shared_ptr<http_resource> res);  // NOLINT(build/include_what_you_use)
 
 /**
  * Register a lambda handler for HTTP GET on @p path.

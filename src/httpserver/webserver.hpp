@@ -88,7 +88,7 @@ namespace httpserver {
  * threads. The thread-safety contract:
  *
  *   1. Public registration / un-registration methods (@ref register_path,
- *      @ref register_prefix, @ref register_resource, the @ref on_get
+ *      @ref register_prefix, the @ref on_get
  *      family, @ref route, @ref unregister_path, @ref unregister_prefix,
  *      @ref unregister_resource, @ref register_ws_resource,
  *      @ref unregister_ws_resource, @ref deny_ip, @ref remove_denied_ip,

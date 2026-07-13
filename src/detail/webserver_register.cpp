@@ -253,13 +253,6 @@ void webserver::register_prefix(const std::string& path,
     register_impl_(path, std::move(res), /*family=*/true);
 }
 
-// Deprecated forwarder kept for backward compatibility. Users that want
-// prefix matching must call register_prefix().
-void webserver::register_resource(const std::string& resource,
-                                  std::shared_ptr<http_resource> res) {
-    register_path(resource, std::move(res));
-}
-
 // TASK-024: erase a single registration of the requested kind (family).
 // Each kind keeps a distinct v2-table entry (parameterized routes live in
 // the radix tier, regex routes in the regex_routes_ vector, exact routes

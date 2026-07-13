@@ -105,7 +105,7 @@ V1_TOKENS_ARR=(
     '\bbasic_auth_fail_response\b'
     '\bdigest_auth_fail_response\b'
     'new[[:space:]]+[A-Za-z_]*_response[[:space:]]*\('
-    'register_resource[[:space:]]*\([^,]*,[[:space:]]*new[[:space:]]+'
+    '\bregister_resource\b'
     '\bnot_found_resource\b'
     '\bmethod_not_allowed_resource\b'
     '\binternal_error_resource\b'

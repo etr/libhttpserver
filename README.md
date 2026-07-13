@@ -882,15 +882,6 @@ on the builder if you need pure literal-path semantics.
 remove a previously registered resource by path. (`unregister_resource`
 exists as a deprecated alias for `unregister_path`.)
 
-### A note on `register_resource`
-
-`register_resource(path, resource)` is a deprecated alias for
-`register_path` retained for migration convenience and marked
-`[[deprecated]]`. New code should call `register_path` for exact
-matches and `register_prefix` for subtrees.
-
-[Back to TOC](#table-of-contents)
-
 ## Request
 
 `http_request` is read-only inside a handler. The accessors are designed

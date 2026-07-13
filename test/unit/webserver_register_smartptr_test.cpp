@@ -18,10 +18,10 @@
      USA
 */
 
-// TASK-023: smart-pointer register_resource overloads.
+// Smart-pointer register_path ownership semantics.
 //
-// This TU pins both the compile-time signature contract for the new
-// register_resource overloads and the runtime ownership semantics:
+// This TU pins the runtime ownership contract of the register_path
+// smart-pointer overloads:
 //   - unique_ptr overload: webserver takes ownership; resource dtor
 //     runs when the webserver is destroyed (acceptance criterion).
 //   - shared_ptr overload: caller retains a reference; resource lives
@@ -30,6 +30,10 @@
 //   - Duplicate registrations throw std::invalid_argument (replacing
 //     the v1 "return false" silent-fail behavior, which is gone with
 //     the new void return type).
+//
+// The compile-time signature contract for register_path (and the
+// negative pin that register_resource is removed entirely) lives in
+// webserver_register_path_prefix_test.cpp.
 
 #include <curl/curl.h>
 
@@ -37,17 +41,10 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
-#include <type_traits>
 #include <utility>
 
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
-
-// TASK-024: register_resource is now [[deprecated]] in favor of
-// register_path / register_prefix. This TU continues to exercise the
-// deprecated forwarder so its ownership semantics stay verified;
-// suppress the file-wide deprecation warning so -Werror still passes.
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
 using httpserver::create_webserver;
 using httpserver::http_request;
@@ -101,53 +98,6 @@ class counted_resource : public http_resource {
 
 }  // namespace
 
-// ---- Compile-time signature contract -----------------------------------
-//
-// Probing overloaded members through `decltype` of a call expression: a
-// well-formed call means the overload exists with the given argument
-// shape; an ill-formed expression would fail SFINAE inside the
-// surrounding decltype. We exercise each overload through its natural
-// call syntax.
-
-// (1) unique_ptr overload exists and returns void.
-static_assert(std::is_same_v<
-                  decltype(std::declval<webserver&>().register_resource(
-                      std::declval<const std::string&>(),
-                      std::declval<std::unique_ptr<http_resource>>())),
-                  void>,
-              "register_resource(const string&, unique_ptr<http_resource>) "
-              "must exist and return void");
-
-// (2) shared_ptr overload exists and returns void.
-static_assert(std::is_same_v<
-                  decltype(std::declval<webserver&>().register_resource(
-                      std::declval<const std::string&>(),
-                      std::declval<std::shared_ptr<http_resource>>())),
-                  void>,
-              "register_resource(const string&, shared_ptr<http_resource>) "
-              "must exist and return void");
-
-// (3) TASK-024 removed the trailing `bool family` parameter from both
-//     overloads. The bool-family overload is now pinned absent by the
-//     negative SFINAE in webserver_register_path_prefix_test.cpp; users
-//     that want prefix matching must call register_prefix() directly.
-
-// (4) Negative: the raw-pointer overload must be gone. SFINAE template
-//     specialization on a void_t of the call expression — if the call
-//     is well-formed for any overload, the partial specialization
-//     selects and ::value flips to true.
-template <typename, typename = void>
-struct has_raw_register_resource : std::false_type {};
-
-template <typename WS>
-struct has_raw_register_resource<WS, std::void_t<
-    decltype(std::declval<WS&>().register_resource(
-        std::declval<const std::string&>(),
-        std::declval<http_resource*>()))>> : std::true_type {};
-
-static_assert(!has_raw_register_resource<webserver>::value,
-              "the raw-pointer register_resource overload must be removed");
-
 // ---- Runtime ownership tests ------------------------------------------
 
 LT_BEGIN_SUITE(webserver_register_smartptr_suite)
@@ -159,18 +109,19 @@ LT_END_SUITE(webserver_register_smartptr_suite)
 
 // Acceptance criterion (verbatim from TASK-023 spec):
 //   "auto r = std::make_unique<my_resource>();
-//    ws.register_resource('/foo', std::move(r)); compiles and serves."
+//    ws.register_path('/foo', std::move(r)); compiles and serves."
 //
-// Note: the static_asserts above (lines 101-137) already verify the
-// compile-time contract. This test adds the runtime "serves" signal via a
-// real curl round-trip, making it effectively an integration test embedded
-// in this unit TU. The network I/O is intentional — it satisfies the spec's
-// explicit "compiles AND serves" requirement.
+// Note: the compile-time signature contract is verified in
+// webserver_register_path_prefix_test.cpp. This test adds the runtime
+// "serves" signal via a real curl round-trip, making it effectively an
+// integration test embedded in this unit TU. The network I/O is
+// intentional — it satisfies the spec's explicit "compiles AND serves"
+// requirement.
 LT_BEGIN_AUTO_TEST(webserver_register_smartptr_suite,
                    unique_ptr_overload_compiles_and_serves)
     webserver ws{create_webserver(0)};
     auto r = std::make_unique<ok_resource>();
-    ws.register_resource("/foo", std::move(r));
+    ws.register_path("/foo", std::move(r));
     ws.start(false);
     // OS-assigned ephemeral port: no fixed port to collide under a
     // parallel runner (TASK-085).
@@ -199,7 +150,7 @@ LT_BEGIN_AUTO_TEST(webserver_register_smartptr_suite,
     std::atomic<int> dtor_count{0};
     {
         webserver ws{create_webserver(0)};
-        ws.register_resource(
+        ws.register_path(
             "/x", std::make_unique<counted_resource>(&dtor_count));
         // No start/stop needed — registration alone must transfer
         // ownership; webserver destruction must run the dtor.
@@ -215,7 +166,7 @@ LT_BEGIN_AUTO_TEST(webserver_register_smartptr_suite,
     auto sp = std::make_shared<counted_resource>(&dtor_count);
     {
         webserver ws{create_webserver(0)};
-        ws.register_resource("/x", sp);
+        ws.register_path("/x", sp);
     }
     // Webserver destroyed; caller still holds a ref.
     LT_CHECK_EQ(dtor_count.load(), 0);
@@ -228,7 +179,7 @@ LT_BEGIN_AUTO_TEST(webserver_register_smartptr_suite,
     webserver ws{create_webserver(0)};
     bool caught_invalid_argument = false;
     try {
-        ws.register_resource("/x", std::unique_ptr<http_resource>{});
+        ws.register_path("/x", std::unique_ptr<http_resource>{});
     } catch (const std::invalid_argument&) {
         caught_invalid_argument = true;
     }
@@ -242,7 +193,7 @@ LT_BEGIN_AUTO_TEST(webserver_register_smartptr_suite,
     webserver ws{create_webserver(0)};
     bool caught_invalid_argument = false;
     try {
-        ws.register_resource("/x", std::shared_ptr<http_resource>{});
+        ws.register_path("/x", std::shared_ptr<http_resource>{});
     } catch (const std::invalid_argument&) {
         caught_invalid_argument = true;
     }
@@ -255,10 +206,10 @@ LT_END_AUTO_TEST(null_shared_ptr_throws)
 LT_BEGIN_AUTO_TEST(webserver_register_smartptr_suite,
                    duplicate_registration_throws)
     webserver ws{create_webserver(0)};
-    ws.register_resource("/dup", std::make_shared<ok_resource>());
+    ws.register_path("/dup", std::make_shared<ok_resource>());
     bool caught_invalid_argument = false;
     try {
-        ws.register_resource("/dup", std::make_shared<ok_resource>());
+        ws.register_path("/dup", std::make_shared<ok_resource>());
     } catch (const std::invalid_argument&) {
         caught_invalid_argument = true;
     }
