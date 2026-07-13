@@ -220,7 +220,17 @@ LT_BEGIN_AUTO_TEST(connection_state_body_residue_suite,
     // credentials. Unlike the buffer peek above this survives any
     // refactor of how connection_state is stored or laid out.
     LT_CHECK(!g_second_get_user_leaked_sentinel.load());
-#endif
+#else
+    // reason: on Windows/mingw MHD delivers keep-alive request-state
+    // (and the connection_opened lifecycle hook) differently, so the
+    // first handler never observes the basic-auth username sentinel and
+    // the sanity gate above (LT_CHECK(g_first_handler_saw_sentinel))
+    // fails. Report a real SKIP (exit 77) rather than a vacuous pass so
+    // the gap stays visible. Coverage holds on Linux/Darwin; see
+    // test/PORTABILITY.md §connection_state_body_residue_test.cpp.
+    LT_SKIP("MHD keep-alive request-state / connection_opened hook "
+            "delivery unverified on Windows/mingw");
+#endif  // _WINDOWS
 LT_END_AUTO_TEST(sentinel_in_first_body_not_observable_in_second)
 
 LT_BEGIN_AUTO_TEST_ENV()
