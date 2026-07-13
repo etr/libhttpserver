@@ -689,19 +689,6 @@ TESTS = $(check_PROGRAMS)
 # removed when the umbrella went clean.)
 
 @VALGRIND_CHECK_RULES@
-# Override the ax_valgrind_check default (--history-level=approx). `approx`
-# drops the full happens-before history, so helgrind cannot see the
-# synchronisation that MHD_start_daemon()'s pthread_create establishes
-# between the main thread's pre-start setup and the worker threads that read
-# that (immutable-after-start) state during dispatch. That produced a flood
-# of benign "data race" reports on libhttpserver frames (resolve_method_callback,
-# get_allowed_methods, method_set::contains, webserver::get_bound_port, ...)
-# whose conflicting access was literally "the start of the thread". `full`
-# tracks the complete happens-before graph and correctly proves those reads
-# are ordered after setup, eliminating the false positives at the source.
-# This assignment follows @VALGRIND_CHECK_RULES@, so it wins over the macro's
-# conditional (?=) default.
-VALGRIND_helgrind_FLAGS = --history-level=full
 # TASK-088: helgrind + drd race-detector suppression files join the shared
 # VALGRIND_SUPPRESSIONS_FILES list. Suppression blocks are tool-tagged
 # (Memcheck:/Helgrind:/drd:), so each tool ignores blocks meant for another;

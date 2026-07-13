@@ -1394,7 +1394,19 @@ jobs:
       run: |
         cd build ;
         TOOL="${BUILD_TYPE#valgrind-}" ;
-        make "check-valgrind-${TOOL}" ;
+        # Override ax_valgrind_check's --history-level=approx default for
+        # helgrind. approx drops the happens-before history, so helgrind can't
+        # see the synchronisation MHD_start_daemon()'s pthread_create
+        # establishes between the main thread's pre-start setup and the worker
+        # threads reading that immutable-after-start state during dispatch,
+        # producing a flood of benign "data race" reports on libhttpserver
+        # frames whose conflicting access was "the start of the thread". full
+        # tracks the complete graph and proves those reads ordered, removing
+        # the false positives at the source (no libhttpserver-frame suppression,
+        # per DR-008). A make command-line assignment overrides the Makefile's
+        # ?= default and propagates to the recursive check-TESTS make; it is
+        # inert for the memcheck/drd tools that don't consume it.
+        make VALGRIND_helgrind_FLAGS=--history-level=full "check-valgrind-${TOOL}" ;
       if: ${{ startsWith(matrix.build-type, 'valgrind-') }}
 
     - name: Print Valgrind results
