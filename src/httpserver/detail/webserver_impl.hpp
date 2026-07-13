@@ -156,7 +156,13 @@ class webserver_impl {
     // Set in the constructor to the owning webserver.
     webserver* parent = nullptr;
 
-    struct MHD_Daemon* daemon = nullptr;
+    // Atomic so start() publishes the daemon pointer (and the immutable
+    // MHD daemon struct it points at, including the ephemeral bind port set
+    // before publication) with release semantics, and get_bound_port() et al.
+    // read it with acquire. This lets the ephemeral port be read safely from
+    // another thread while a blocking start() runs on a worker thread; fixes
+    // a TSan-flagged data race in the ws_start_stop integ test.
+    std::atomic<struct MHD_Daemon*> daemon{nullptr};
     // MHD_socket (int on POSIX, SOCKET on Windows) for a caller-supplied
     // pre-bound socket passed via create_webserver().bind_socket().
     // MHD_INVALID_SOCKET (-1 on POSIX, INVALID_SOCKET on Windows) is the

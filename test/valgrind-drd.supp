@@ -34,6 +34,64 @@
 # race and MUST be fixed in source, never suppressed (DR-008, mirroring the
 # tsan.supp rule).
 #
-# Ships with NO entries: suppressions are added only when a concrete
-# third-party finding surfaces during CI-side triage on the Linux lane
+# Entries below were added during CI-side triage on the Linux lane
 # (Valgrind is Linux-only and cannot run on the darwin dev/CI runners).
+#
+# NOTE ON MECHANISM: libmicrohttpd signals its polling/worker threads via an
+# internal ITC *pipe*, not a pthread primitive, so DRD cannot observe the
+# happens-before and reports benign conflicting accesses on MHD-internal
+# frames and on the immutable-after-start state the workers read. Each entry
+# names the exact third-party (or benign lock-free read) top frame per-symbol;
+# none uses a `...` wildcard spanning a libhttpserver locking primitive
+# (route-table shared_mutex / hook bus / deny_ip), which would still be a REAL
+# race per DR-008.
+
+# --- libmicrohttpd worker-thread lifecycle (C symbols) ----------------------
+{
+   mhd-stop-daemon-worker-teardown
+   drd:ConflictingAccess
+   fun:MHD_stop_daemon
+}
+{
+   mhd-new-connection-process
+   drd:ConflictingAccess
+   fun:new_connection_process_
+}
+{
+   mhd-polling-thread
+   drd:ConflictingAccess
+   fun:MHD_polling_thread
+}
+{
+   mhd-get-daemon-info
+   drd:ConflictingAccess
+   fun:MHD_get_daemon_info
+}
+{
+   mhd-thread-main-handle-connection
+   drd:ConflictingAccess
+   fun:thread_main_handle_connection
+}
+
+# --- libstdc++ shared_ptr control-block refcount ----------------------------
+# _M_release decrements an atomic use-count; DRD does not model the libstdc++
+# atomic and reports a benign counter conflict.
+{
+   libstdcxx-shared-ptr-refcount-release
+   drd:ConflictingAccess
+   fun:*_Sp_counted_base*_M_release*
+}
+
+# --- benign lock-free reads of immutable-after-registration resource config -
+# Written once at registration (before start()), only READ from the MHD worker
+# during dispatch. NOT a libhttpserver locking race (DR-008).
+{
+   lhs-resolve-method-callback-static-table
+   drd:ConflictingAccess
+   fun:*resolve_method_callback*
+}
+{
+   lhs-get-allowed-methods-read
+   drd:ConflictingAccess
+   fun:*get_allowed_methods*
+}

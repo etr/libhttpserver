@@ -313,18 +313,22 @@ bool webserver::start(bool blocking) {
     impl_->build_mhd_option_array(iov);
     const int start_conf = impl_->compose_start_flags();
 
-    impl_->daemon = nullptr;
+    struct MHD_Daemon* d = nullptr;
     if (bind_address == nullptr) {
-        impl_->daemon = MHD_start_daemon(start_conf, port, &detail::webserver_impl::policy_callback, this,
+        d = MHD_start_daemon(start_conf, port, &detail::webserver_impl::policy_callback, this,
                 &detail::webserver_impl::answer_to_connection, impl_.get(), MHD_OPTION_ARRAY,
                 &iov[0], MHD_OPTION_END);
     } else {
-        impl_->daemon = MHD_start_daemon(start_conf, 1, &detail::webserver_impl::policy_callback, this,
+        d = MHD_start_daemon(start_conf, 1, &detail::webserver_impl::policy_callback, this,
                 &detail::webserver_impl::answer_to_connection, impl_.get(), MHD_OPTION_ARRAY,
                 &iov[0], MHD_OPTION_SOCK_ADDR, bind_address, MHD_OPTION_END);
     }
 
-    if (impl_->daemon == nullptr) {
+    // Release store publishes the daemon and the bind-port it carries so a
+    // concurrent get_bound_port() on another thread observes them fully.
+    impl_->daemon.store(d, std::memory_order_release);
+
+    if (d == nullptr) {
         throw std::invalid_argument("Unable to connect daemon to port: " + std::to_string(port));
     }
 
@@ -353,11 +357,11 @@ bool webserver::stop() {
     pthread_cond_signal(&impl_->mutexcond);
     pthread_mutex_unlock(&impl_->mutexwait);
 
-    MHD_stop_daemon(impl_->daemon);
+    MHD_stop_daemon(impl_->daemon.load(std::memory_order_acquire));
     // Reset after stop so the daemon != nullptr guards in get_bound_port(),
     // get_listen_fd(), run(), etc. correctly treat the daemon as absent on
     // any subsequent (unsupported) call after stop().
-    impl_->daemon = nullptr;
+    impl_->daemon.store(nullptr, std::memory_order_release);
 
     // Only shut down the pre-bound socket if one was actually provided.
     // MHD_INVALID_SOCKET (-1 on POSIX, INVALID_SOCKET on Windows) is the
@@ -375,40 +379,46 @@ bool webserver::stop() {
 }
 
 int webserver::quiesce() {
-    if (impl_->daemon == nullptr) return -1;
-    MHD_socket fd = MHD_quiesce_daemon(impl_->daemon);
+    struct MHD_Daemon* d = impl_->daemon.load(std::memory_order_acquire);
+    if (d == nullptr) return -1;
+    MHD_socket fd = MHD_quiesce_daemon(d);
     return static_cast<int>(fd);
 }
 
 int webserver::get_listen_fd() const {
-    if (impl_->daemon == nullptr) return -1;
-    const union MHD_DaemonInfo* info = MHD_get_daemon_info(impl_->daemon, MHD_DAEMON_INFO_LISTEN_FD);
+    struct MHD_Daemon* d = impl_->daemon.load(std::memory_order_acquire);
+    if (d == nullptr) return -1;
+    const union MHD_DaemonInfo* info = MHD_get_daemon_info(d, MHD_DAEMON_INFO_LISTEN_FD);
     if (info == nullptr) return -1;
     return static_cast<int>(info->listen_fd);
 }
 
 unsigned int webserver::get_active_connections() const {
-    if (impl_->daemon == nullptr) return 0;
-    const union MHD_DaemonInfo* info = MHD_get_daemon_info(impl_->daemon, MHD_DAEMON_INFO_CURRENT_CONNECTIONS);
+    struct MHD_Daemon* d = impl_->daemon.load(std::memory_order_acquire);
+    if (d == nullptr) return 0;
+    const union MHD_DaemonInfo* info = MHD_get_daemon_info(d, MHD_DAEMON_INFO_CURRENT_CONNECTIONS);
     if (info == nullptr) return 0;
     return info->num_connections;
 }
 
 uint16_t webserver::get_bound_port() const {
-    if (impl_->daemon == nullptr) return 0;
-    const union MHD_DaemonInfo* info = MHD_get_daemon_info(impl_->daemon, MHD_DAEMON_INFO_BIND_PORT);
+    struct MHD_Daemon* d = impl_->daemon.load(std::memory_order_acquire);
+    if (d == nullptr) return 0;
+    const union MHD_DaemonInfo* info = MHD_get_daemon_info(d, MHD_DAEMON_INFO_BIND_PORT);
     if (info == nullptr) return 0;
     return info->port;
 }
 
 bool webserver::run() {
-    if (impl_->daemon == nullptr) return false;
-    return MHD_run(impl_->daemon) == MHD_YES;
+    struct MHD_Daemon* d = impl_->daemon.load(std::memory_order_acquire);
+    if (d == nullptr) return false;
+    return MHD_run(d) == MHD_YES;
 }
 
 bool webserver::run_wait(int32_t millisec) {
-    if (impl_->daemon == nullptr) return false;
-    return MHD_run_wait(impl_->daemon, millisec) == MHD_YES;
+    struct MHD_Daemon* d = impl_->daemon.load(std::memory_order_acquire);
+    if (d == nullptr) return false;
+    return MHD_run_wait(d, millisec) == MHD_YES;
 }
 
 bool webserver::get_fdset(fd_set* read_fd_set, fd_set* write_fd_set,
@@ -417,9 +427,10 @@ bool webserver::get_fdset(fd_set* read_fd_set, fd_set* write_fd_set,
     // restoring compile-time type safety. The public header pulls in
     // <sys/select.h> / <winsock2.h> directly because fd_set is a typedef
     // and cannot be portably forward-declared.
-    if (impl_->daemon == nullptr) return false;
+    struct MHD_Daemon* d = impl_->daemon.load(std::memory_order_acquire);
+    if (d == nullptr) return false;
     MHD_socket mhd_max_fd = 0;
-    if (MHD_get_fdset(impl_->daemon,
+    if (MHD_get_fdset(d,
                       read_fd_set,
                       write_fd_set,
                       except_fd_set,
@@ -431,9 +442,10 @@ bool webserver::get_fdset(fd_set* read_fd_set, fd_set* write_fd_set,
 }
 
 bool webserver::get_timeout(uint64_t* timeout) {
-    if (impl_->daemon == nullptr) return false;
+    struct MHD_Daemon* d = impl_->daemon.load(std::memory_order_acquire);
+    if (d == nullptr) return false;
     MHD_UNSIGNED_LONG_LONG mhd_timeout = 0;
-    if (MHD_get_timeout(impl_->daemon, &mhd_timeout) != MHD_YES) {
+    if (MHD_get_timeout(d, &mhd_timeout) != MHD_YES) {
         return false;
     }
     *timeout = static_cast<uint64_t>(mhd_timeout);
@@ -446,8 +458,9 @@ bool webserver::add_connection(int client_socket, const struct sockaddr* addr, u
     // POSIX guarantees `socklen_t` is an unsigned integer of at least 32
     // bits; `unsigned int` matches on every supported platform.
     // (The sizeof static_assert is at file scope above.)
-    if (impl_->daemon == nullptr) return false;
-    return MHD_add_connection(impl_->daemon, client_socket, addr,
+    struct MHD_Daemon* d = impl_->daemon.load(std::memory_order_acquire);
+    if (d == nullptr) return false;
+    return MHD_add_connection(d, client_socket, addr,
                               static_cast<socklen_t>(addrlen)) == MHD_YES;
 }
 

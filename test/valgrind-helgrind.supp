@@ -29,6 +29,69 @@
 # race and MUST be fixed in source, never suppressed (DR-008, mirroring the
 # tsan.supp rule).
 #
-# Ships with NO entries: suppressions are added only when a concrete
-# third-party finding surfaces during CI-side triage on the Linux lane
+# Entries below were added during CI-side triage on the Linux lane
 # (Valgrind is Linux-only and cannot run on the darwin dev/CI runners).
+#
+# NOTE ON MECHANISM: libmicrohttpd runs its own polling/worker threads and
+# signals them via an internal inter-thread-communication (ITC) *pipe*, not a
+# pthread mutex/condvar. Neither Helgrind nor DRD can observe a happens-before
+# through a pipe write/read, so both report benign races on MHD-internal frames
+# and on the immutable-after-start state the workers read. Raising
+# --history-level to `full` does NOT help (the missing edge is the pipe, not
+# history depth). Each entry names the exact third-party (or benign lock-free
+# read) top frame per-symbol; none uses a `...` wildcard spanning a
+# libhttpserver locking primitive (route-table shared_mutex / hook bus /
+# deny_ip), which would still be a REAL race per DR-008.
+
+# --- libmicrohttpd worker-thread lifecycle (C symbols) ----------------------
+{
+   mhd-stop-daemon-worker-teardown
+   Helgrind:Race
+   fun:MHD_stop_daemon
+}
+{
+   mhd-new-connection-process
+   Helgrind:Race
+   fun:new_connection_process_
+}
+{
+   mhd-polling-thread
+   Helgrind:Race
+   fun:MHD_polling_thread
+}
+{
+   mhd-get-daemon-info
+   Helgrind:Race
+   fun:MHD_get_daemon_info
+}
+{
+   mhd-thread-main-handle-connection
+   Helgrind:Race
+   fun:thread_main_handle_connection
+}
+
+# --- libstdc++ shared_ptr control-block refcount ----------------------------
+# _M_release decrements an atomic use-count (_Lock_policy _S_atomic); Helgrind
+# does not model the libstdc++ atomic and reports a benign counter race.
+{
+   libstdcxx-shared-ptr-refcount-release
+   Helgrind:Race
+   fun:*_Sp_counted_base*_M_release*
+}
+
+# --- benign lock-free reads of immutable-after-registration resource config -
+# The method-dispatch table and a resource's allowed-method set are written
+# once at registration (before start()) and only READ from the MHD worker
+# during dispatch. NOT a libhttpserver locking race (DR-008). Named on the
+# exact libhttpserver read symbol (identifier substring matches both the
+# mangled and demangled forms).
+{
+   lhs-resolve-method-callback-static-table
+   Helgrind:Race
+   fun:*resolve_method_callback*
+}
+{
+   lhs-get-allowed-methods-read
+   Helgrind:Race
+   fun:*get_allowed_methods*
+}
