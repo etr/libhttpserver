@@ -1579,7 +1579,7 @@ so the registration persists for the webserver's lifetime.
 | Phase | Fires at | Short-circuit | Per-route eligible |
 |-------|----------|---------------|--------------------|
 | `connection_opened` | New TCP / TLS connection accepted by MHD | No | No |
-| `accept_decision` | After the default-policy / block-list verdict; the connection has been accepted or denied | No | No |
+| `accept_decision` | After the default-policy / deny-list / allow-list verdict; the connection has been accepted or denied | No | No |
 | `request_received` | Request line and headers parsed, body not yet consumed | Yes (`hook_action`) | No |
 | `body_chunk` | Each upload-body chunk delivered by MHD | Yes (`hook_action`) | No |
 | `route_resolved` | After URL → resource resolution; carries the matched route or "no match" | No | No |
