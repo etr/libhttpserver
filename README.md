@@ -879,8 +879,10 @@ Regex validation is on by default; disable with `regex_checking(false)`
 on the builder if you need pure literal-path semantics.
 
 **Unregistration.** `unregister_path(path)` and `unregister_prefix(path)`
-remove a previously registered resource by path. (`unregister_resource`
-exists as a deprecated alias for `unregister_path`.)
+remove an exact-match or prefix-match registration respectively.
+`unregister_resource(path)` is a kind-agnostic convenience that atomically
+clears whichever kind (exact or prefix) is registered at `path` — use it
+when the caller does not track how the resource was registered.
 
 ## Request
 
