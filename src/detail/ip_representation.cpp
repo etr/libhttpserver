@@ -141,7 +141,7 @@ void ip_representation::parse_ipv4(const std::string& ip) {
             clear_bit(mask, static_cast<unsigned int>(12 + i));
             continue;
         }
-        const long piece = strtol(parts[i].c_str(), nullptr, 10);
+        const int64_t piece = strtol(parts[i].c_str(), nullptr, 10);
         if (piece < 0 || piece > 255) {
             throw std::invalid_argument("IP is badly formatted. 255 is max value for ip part.");
         }
@@ -206,7 +206,7 @@ void ip_representation::parse_nested_ipv4(const std::vector<std::string>& parts,
             clear_bit(mask, static_cast<unsigned int>(y + ii));
             continue;
         }
-        const long subpart = strtol(subparts[ii].c_str(), nullptr, 10);
+        const int64_t subpart = strtol(subparts[ii].c_str(), nullptr, 10);
         if (subpart < 0 || subpart > 255) {
             throw std::invalid_argument("IP is badly formatted. 255 is max value for ip part.");
         }
@@ -243,12 +243,12 @@ void ip_representation::apply_ipv6_part(std::vector<std::string>& parts, unsigne
         const std::string hi_str = part.substr(0, 2);
         const std::string lo_str = part.substr(2, 2);
         char* endp = nullptr;
-        const long hi = strtol(hi_str.c_str(), &endp, 16);
+        const int64_t hi = strtol(hi_str.c_str(), &endp, 16);
         if (*endp != '\0') {
             throw std::invalid_argument(
                 "IP is badly formatted. IPV6 part contains a non-hex character.");
         }
-        const long lo = strtol(lo_str.c_str(), &endp, 16);
+        const int64_t lo = strtol(lo_str.c_str(), &endp, 16);
         if (*endp != '\0') {
             throw std::invalid_argument(
                 "IP is badly formatted. IPV6 part contains a non-hex character.");

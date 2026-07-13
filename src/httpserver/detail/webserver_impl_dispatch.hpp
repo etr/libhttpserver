@@ -362,7 +362,7 @@ const detail::route_entry* find_v2_entry_by_path_(
 // Returns {shim, is_fresh}: is_fresh is true when a brand-new
 // lambda_resource shim was created (no entry previously existed at
 // this path), false when an existing shim was reused.
-std::pair<std::shared_ptr<detail::lambda_resource>, bool>
+std::pair<std::shared_ptr<detail::lambda_resource>, bool>  // NOLINT(build/include_what_you_use)
     prepare_or_create_lambda_shim(const detail::http_endpoint& idx,
                                   method_set methods);
 void commit_handlers_to_shim(detail::lambda_resource& shim,

@@ -196,6 +196,11 @@ LT_END_AUTO_TEST(dump_body_to_stdout_when_env_set)
 LT_BEGIN_AUTO_TEST_ENV()
     // Opt in BEFORE the test bodies run (and BEFORE the magic-static
     // cache in the body pipeline is initialised on first dispatch).
+#ifdef _WIN32
+    // MinGW's <stdlib.h> does not always declare POSIX setenv.
+    _putenv("LIBHTTPSERVER_DEBUG_DUMP_REQUEST_BODY=1");
+#else
     ::setenv("LIBHTTPSERVER_DEBUG_DUMP_REQUEST_BODY", "1", 1);
+#endif
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

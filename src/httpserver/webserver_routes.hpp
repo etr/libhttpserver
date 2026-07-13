@@ -112,7 +112,7 @@ template <typename T,
               std::is_base_of_v<http_resource, T>>>
 void register_prefix(const std::string& path, std::unique_ptr<T> res) {
     register_prefix(path,
-                    std::shared_ptr<http_resource>(std::move(res)));
+                    std::shared_ptr<http_resource>(std::move(res)));  // NOLINT(build/include_what_you_use)
 }
 /**
  * Register a resource for a prefix URL match (shared_ptr overload).
@@ -125,7 +125,7 @@ void register_prefix(const std::string& path, std::unique_ptr<T> res) {
  *             a reference.
 **/
 void register_prefix(const std::string& path,
-                     std::shared_ptr<http_resource> res);
+                     std::shared_ptr<http_resource> res);  // NOLINT(build/include_what_you_use)
 
 /**
  * Register a lambda handler for HTTP GET on @p path.

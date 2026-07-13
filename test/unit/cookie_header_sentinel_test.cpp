@@ -30,6 +30,7 @@
 
 #include <type_traits>
 #include <cstdint>
+#include <string>
 
 #include "./httpserver.hpp"      // public umbrella -- must transitively pull in cookie.hpp
 #include "./littletest.hpp"

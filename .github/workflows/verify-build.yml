@@ -992,11 +992,14 @@ jobs:
         if [ "$BUILD_TYPE" = "msan" ]; then
           LIBCXX_MSAN="${{ github.workspace }}/libcxx-msan" ;
           export CFLAGS="-fsanitize=memory -fsanitize-memory-track-origins -fno-omit-frame-pointer -g -O1" ;
-          export CXXFLAGS="-stdlib=libc++ -nostdinc++ -isystem ${LIBCXX_MSAN}/include/c++/v1 -fsanitize=memory -fsanitize-memory-track-origins -fno-omit-frame-pointer -g -O1" ;
+          export CXXFLAGS="-stdlib=libc++ -nostdinc++ -isystem ${LIBCXX_MSAN}/include/c++/v1 -fsanitize=memory -fsanitize-memory-track-origins -fno-omit-frame-pointer -g -O1 -DLHS_SANITIZER_OWNS_OPERATOR_NEW" ;
           export LDFLAGS="-stdlib=libc++ -fsanitize=memory -L${LIBCXX_MSAN}/lib -Wl,-rpath,${LIBCXX_MSAN}/lib -lc++abi" ;
         fi
-        if [ "$BUILD_TYPE" = "lsan" ]; then export CFLAGS='-fsanitize=leak'; export CXXFLAGS='-fsanitize=leak'; export LDFLAGS='-fsanitize=leak'; fi
-        if [ "$BUILD_TYPE" = "tsan" ]; then export CFLAGS='-fsanitize=thread'; export CXXFLAGS='-fsanitize=thread'; export LDFLAGS='-fsanitize=thread'; fi
+        # tsan/msan/lsan runtimes define their own global operator new/delete;
+        # -DLHS_SANITIZER_OWNS_OPERATOR_NEW makes the arena alloc-pin test drop
+        # its overrides so it links (see test/unit/http_request_unescape_arena_test.cpp).
+        if [ "$BUILD_TYPE" = "lsan" ]; then export CFLAGS='-fsanitize=leak'; export CXXFLAGS='-fsanitize=leak -DLHS_SANITIZER_OWNS_OPERATOR_NEW'; export LDFLAGS='-fsanitize=leak'; fi
+        if [ "$BUILD_TYPE" = "tsan" ]; then export CFLAGS='-fsanitize=thread'; export CXXFLAGS='-fsanitize=thread -DLHS_SANITIZER_OWNS_OPERATOR_NEW'; export LDFLAGS='-fsanitize=thread'; fi
         if [ "$BUILD_TYPE" = "ubsan" ]; then export CFLAGS='-fsanitize=undefined'; export CXXFLAGS='-fsanitize=undefined'; export LDFLAGS='-fsanitize=undefined'; fi
 
         # Additional flags on mac. They need to stay in step as env variables don't propagate across steps.

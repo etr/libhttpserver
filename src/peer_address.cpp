@@ -126,6 +126,14 @@ std::string emit_canonical(const ipv6_groups& g, const zero_run& collapse) {
         }
         int n = std::snprintf(buf + pos, sizeof(buf) - pos, "%x",
                                static_cast<unsigned>(g[i]));
+        // snprintf returns the length it WOULD have written (excl. NUL).
+        // A group is at most 4 hex digits, so with buf[40] this branch is
+        // never taken; the explicit guard keeps `pos` provably within the
+        // buffer so the `sizeof(buf) - pos` size argument can never
+        // underflow into a huge size_t (cpp/overflowing-snprintf, CWE-190).
+        if (n < 0 || static_cast<std::size_t>(n) >= sizeof(buf) - pos) {
+            return std::string(buf, pos);
+        }
         pos += static_cast<std::size_t>(n);
         ++i;
         // Emit a ':' separator if more groups remain AND the next slot

@@ -80,42 +80,54 @@ LT_END_AUTO_TEST(fluent_chain_round_trip_getters)
 
 LT_BEGIN_AUTO_TEST(cookie_render_suite, with_name_rejects_crlf)
     bool threw = false;
-    try { cookie{}.with_name("a\r\nb"); }
+    try {
+        cookie{}.with_name("a\r\nb");
+    }
     catch (const std::invalid_argument&) { threw = true; }
     LT_CHECK_EQ(threw, true);
 LT_END_AUTO_TEST(with_name_rejects_crlf)
 
 LT_BEGIN_AUTO_TEST(cookie_render_suite, with_name_rejects_semicolon)
     bool threw = false;
-    try { cookie{}.with_name("a;b"); }
+    try {
+        cookie{}.with_name("a;b");
+    }
     catch (const std::invalid_argument&) { threw = true; }
     LT_CHECK_EQ(threw, true);
 LT_END_AUTO_TEST(with_name_rejects_semicolon)
 
 LT_BEGIN_AUTO_TEST(cookie_render_suite, with_name_rejects_equals)
     bool threw = false;
-    try { cookie{}.with_name("a=b"); }
+    try {
+        cookie{}.with_name("a=b");
+    }
     catch (const std::invalid_argument&) { threw = true; }
     LT_CHECK_EQ(threw, true);
 LT_END_AUTO_TEST(with_name_rejects_equals)
 
 LT_BEGIN_AUTO_TEST(cookie_render_suite, with_name_rejects_space)
     bool threw = false;
-    try { cookie{}.with_name("a b"); }
+    try {
+        cookie{}.with_name("a b");
+    }
     catch (const std::invalid_argument&) { threw = true; }
     LT_CHECK_EQ(threw, true);
 LT_END_AUTO_TEST(with_name_rejects_space)
 
 LT_BEGIN_AUTO_TEST(cookie_render_suite, with_value_rejects_crlf)
     bool threw = false;
-    try { cookie{}.with_value("a\r\nb"); }
+    try {
+        cookie{}.with_value("a\r\nb");
+    }
     catch (const std::invalid_argument&) { threw = true; }
     LT_CHECK_EQ(threw, true);
 LT_END_AUTO_TEST(with_value_rejects_crlf)
 
 LT_BEGIN_AUTO_TEST(cookie_render_suite, with_value_rejects_semicolon)
     bool threw = false;
-    try { cookie{}.with_value("a;b"); }
+    try {
+        cookie{}.with_value("a;b");
+    }
     catch (const std::invalid_argument&) { threw = true; }
     LT_CHECK_EQ(threw, true);
 LT_END_AUTO_TEST(with_value_rejects_semicolon)
@@ -125,7 +137,9 @@ LT_BEGIN_AUTO_TEST(cookie_render_suite, with_value_rejects_nul)
     std::string val("a");
     val.push_back('\0');
     val.append("b");
-    try { cookie{}.with_value(val); }
+    try {
+        cookie{}.with_value(val);
+    }
     catch (const std::invalid_argument&) { threw = true; }
     LT_CHECK_EQ(threw, true);
 LT_END_AUTO_TEST(with_value_rejects_nul)
@@ -139,14 +153,18 @@ LT_END_AUTO_TEST(with_value_accepts_equals)
 
 LT_BEGIN_AUTO_TEST(cookie_render_suite, with_domain_rejects_crlf)
     bool threw = false;
-    try { cookie{}.with_domain("ex\r\nample.com"); }
+    try {
+        cookie{}.with_domain("ex\r\nample.com");
+    }
     catch (const std::invalid_argument&) { threw = true; }
     LT_CHECK_EQ(threw, true);
 LT_END_AUTO_TEST(with_domain_rejects_crlf)
 
 LT_BEGIN_AUTO_TEST(cookie_render_suite, with_path_rejects_crlf)
     bool threw = false;
-    try { cookie{}.with_path("/foo\r\nbar"); }
+    try {
+        cookie{}.with_path("/foo\r\nbar");
+    }
     catch (const std::invalid_argument&) { threw = true; }
     LT_CHECK_EQ(threw, true);
 LT_END_AUTO_TEST(with_path_rejects_crlf)
@@ -155,7 +173,9 @@ LT_BEGIN_AUTO_TEST(cookie_render_suite, with_path_rejects_semicolon)
     // CWE-113: a semicolon in Path would inject synthetic attributes
     // into the Set-Cookie header.
     bool threw = false;
-    try { cookie{}.with_path("/; Secure"); }
+    try {
+        cookie{}.with_path("/; Secure");
+    }
     catch (const std::invalid_argument&) { threw = true; }
     LT_CHECK_EQ(threw, true);
 LT_END_AUTO_TEST(with_path_rejects_semicolon)
@@ -163,7 +183,9 @@ LT_END_AUTO_TEST(with_path_rejects_semicolon)
 LT_BEGIN_AUTO_TEST(cookie_render_suite, with_domain_rejects_semicolon)
     // CWE-113: a semicolon in Domain would inject synthetic attributes.
     bool threw = false;
-    try { cookie{}.with_domain("example.com; Secure"); }
+    try {
+        cookie{}.with_domain("example.com; Secure");
+    }
     catch (const std::invalid_argument&) { threw = true; }
     LT_CHECK_EQ(threw, true);
 LT_END_AUTO_TEST(with_domain_rejects_semicolon)
@@ -528,14 +550,18 @@ LT_BEGIN_AUTO_TEST(cookie_render_suite, with_domain_rejects_comma)
     // HTTP/1.0 legacy parsers split Set-Cookie on commas, so a Domain
     // value containing a comma can produce a split-header injection.
     bool threw = false;
-    try { cookie{}.with_domain("evil.com,other.com"); }
+    try {
+        cookie{}.with_domain("evil.com,other.com");
+    }
     catch (const std::invalid_argument&) { threw = true; }
     LT_CHECK_EQ(threw, true);
 LT_END_AUTO_TEST(with_domain_rejects_comma)
 
 LT_BEGIN_AUTO_TEST(cookie_render_suite, with_path_rejects_comma)
     bool threw = false;
-    try { cookie{}.with_path("/foo,/bar"); }
+    try {
+        cookie{}.with_path("/foo,/bar");
+    }
     catch (const std::invalid_argument&) { threw = true; }
     LT_CHECK_EQ(threw, true);
 LT_END_AUTO_TEST(with_path_rejects_comma)
@@ -600,7 +626,9 @@ LT_END_AUTO_TEST(render_guard_rejects_nul_in_parsed_value)
 // pinned mechanically is the setter: with_value must reject ';'.
 LT_BEGIN_AUTO_TEST(cookie_render_suite, with_value_rejects_semicolon_setter_path)
     bool threw = false;
-    try { cookie{}.with_name("sid").with_value("ab;cd"); }
+    try {
+        cookie{}.with_name("sid").with_value("ab;cd");
+    }
     catch (const std::invalid_argument&) { threw = true; }
     LT_CHECK_EQ(threw, true);
 LT_END_AUTO_TEST(with_value_rejects_semicolon_setter_path)

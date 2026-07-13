@@ -284,6 +284,7 @@ class http_request {
      // NOT part of the public ABI; only visible when the library itself
      // is being compiled (gated by HTTPSERVER_COMPILATION).
      MHD_Connection* underlying_connection_for_testing() const noexcept;
+
  private:
 #endif  // HTTPSERVER_COMPILATION
 

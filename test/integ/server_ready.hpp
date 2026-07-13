@@ -3,8 +3,8 @@
      Copyright (C) 2011-2026 Sebastiano Merlino
 */
 
-#ifndef SRC_TEST_INTEG_SERVER_READY_HPP_
-#define SRC_TEST_INTEG_SERVER_READY_HPP_
+#ifndef TEST_INTEG_SERVER_READY_HPP_
+#define TEST_INTEG_SERVER_READY_HPP_
 
 // TASK-075: shared server-ready wait helper for the hooks_* integ tests.
 //
@@ -85,4 +85,4 @@ inline void wait_for_server_ready(
 
 }  // namespace httpserver_test
 
-#endif  // SRC_TEST_INTEG_SERVER_READY_HPP_
+#endif  // TEST_INTEG_SERVER_READY_HPP_

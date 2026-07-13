@@ -63,6 +63,27 @@ std::atomic<std::size_t> g_new_count{0};
 std::atomic<bool> g_count_new_enabled{false};
 }  // namespace
 
+// tsan/msan/lsan ship their own strong `operator new`/`operator delete`
+// in their runtime archives, so our global overrides below collide at
+// link time (multiple definition). On those lanes we compile the
+// overrides out entirely: the counter simply never increments, so the
+// zero-global-allocation pins below trivially hold (0 == 0) while the
+// correctness/lifetime pins still exercise the real arena path. The
+// -DLHS_SANITIZER_OWNS_OPERATOR_NEW define is set by the CI sanitizer
+// lanes (see .github/workflows/verify-build.yml); the feature-macro
+// fallbacks cover local/tooling builds that don't pass it.
+#if defined(LHS_SANITIZER_OWNS_OPERATOR_NEW)
+#  define LHS_SKIP_NEW_OVERRIDE 1
+#elif defined(__has_feature)
+#  if __has_feature(thread_sanitizer) || __has_feature(memory_sanitizer) || __has_feature(leak_sanitizer)
+#    define LHS_SKIP_NEW_OVERRIDE 1
+#  endif
+#endif
+#if defined(__SANITIZE_THREAD__)
+#  define LHS_SKIP_NEW_OVERRIDE 1
+#endif
+
+#ifndef LHS_SKIP_NEW_OVERRIDE
 void* operator new(std::size_t n) {
     if (g_count_new_enabled.load(std::memory_order_relaxed)) {
         g_new_count.fetch_add(1, std::memory_order_relaxed);
@@ -95,6 +116,7 @@ void operator delete(void* p) noexcept { std::free(p); }
 void operator delete[](void* p) noexcept { std::free(p); }
 void operator delete(void* p, std::size_t) noexcept { std::free(p); }
 void operator delete[](void* p, std::size_t) noexcept { std::free(p); }
+#endif  // LHS_SKIP_NEW_OVERRIDE
 
 namespace {
 
@@ -248,7 +270,7 @@ struct arena_impl_fixture {
 // (code-simplifier-iter1-4)
 LT_BEGIN_SUITE(http_request_unescape_arena_suite)
     void set_up() {}    // per-test setup is in the helpers above
-    void tear_down() {} // per-test teardown is in the helpers above
+    void tear_down() {}  // per-test teardown is in the helpers above
 LT_END_SUITE(http_request_unescape_arena_suite)
 
 // (1) Headline pin -- default unescaper. With a value strictly longer

@@ -34,6 +34,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 
 #include "./httpserver.hpp"
 #include "./littletest.hpp"
@@ -320,6 +321,7 @@ class digest_ha1_resource : public http_resource {
          }
          return http_response::string("SUCCESS");
      }
+
  private:
     http_utils::digest_algorithm algo_;
     const unsigned char* ha1_;

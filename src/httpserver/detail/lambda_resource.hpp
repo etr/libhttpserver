@@ -75,8 +75,7 @@ namespace detail {
 // variant arm was dead code (no writer stored a lambda directly — every
 // on_*/route path funnels through lambda_resource), so it was removed.
 // The typedef relocates here, where its remaining uses are.
-using lambda_handler =
-    std::function<::httpserver::http_response(const ::httpserver::http_request&)>;
+using lambda_handler = std::function<::httpserver::http_response(const ::httpserver::http_request&)>;
 
 // Tiny adapter that wraps a single lambda_handler as an http_resource
 // virtual override. We keep one slot per method enum and dispatch in

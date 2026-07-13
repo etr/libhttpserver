@@ -88,7 +88,7 @@ using httpserver::v1_baseline::V1_STD_MAP_STRING_BOOL_SIZEOF;
 // TASK-058's Allow cache needed, this assertion breaks at compile
 // time and the growth gets reviewed.
 //
-// TODO: unlike V1_GET_HEADERS_NS_PER_CALL in bench_get_headers.cpp (which
+// TODO(etr): unlike V1_GET_HEADERS_NS_PER_CALL in bench_get_headers.cpp (which
 // carries a per-stdlib defensive static_assert against an accidental
 // cross-stdlib swap, e.g. a libstdc++ value silently reused on libc++),
 // V1_HTTP_RESOURCE_SIZEOF / V1_STD_MAP_STRING_BOOL_SIZEOF below have no

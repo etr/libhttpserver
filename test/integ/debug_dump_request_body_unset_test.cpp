@@ -133,6 +133,12 @@ LT_BEGIN_AUTO_TEST_ENV()
     // Scrub env var BEFORE the test bodies run, defensive against an
     // inherited LIBHTTPSERVER_DEBUG_DUMP_REQUEST_BODY in the parent
     // shell.
+#ifdef _WIN32
+    // MinGW's <stdlib.h> does not declare POSIX unsetenv; _putenv("VAR=")
+    // removes the variable under the MSVCRT runtime.
+    _putenv("LIBHTTPSERVER_DEBUG_DUMP_REQUEST_BODY=");
+#else
     ::unsetenv("LIBHTTPSERVER_DEBUG_DUMP_REQUEST_BODY");
+#endif
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()
