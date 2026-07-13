@@ -160,7 +160,11 @@ pass "v2 install succeeded into $SHARED_STAGE"
 # ---- Phase 2: materialise v1 source via git worktree --------------------------
 echo "Phase 2: building $MASTER_REF in a temporary git worktree"
 
-if ! git -C "$REPO_ROOT" rev-parse --verify -- "$MASTER_REF" >/dev/null 2>&1; then
+# `--end-of-options` (not `--`) guards against an option-like MASTER_REF while
+# still treating it as a revision: `rev-parse --verify -- <ref>` interprets the
+# arg after `--` as a PATHSPEC, so it never resolves the ref and the gate always
+# false-SKIPped ("ref not in this repository") even when origin/master was fetched.
+if ! git -C "$REPO_ROOT" rev-parse --verify --end-of-options "$MASTER_REF" >/dev/null 2>&1; then
     skip_or_fail "ref '$MASTER_REF' not in this repository — cannot do automated v1 build"
 fi
 
