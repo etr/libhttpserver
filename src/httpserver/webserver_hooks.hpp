@@ -123,14 +123,20 @@ static hook_handle make_hook_handle_(detail::webserver_impl* impl,
                                      hook_phase phase,
                                      std::uint64_t slot_id) noexcept;
 
-// TASK-048: install the three default hook-bus aliases at webserver
+// TASK-048: install the default hook-bus aliases at webserver
 // construction. For each of `not_found_handler`, `method_not_allowed_handler`,
 // and `auth_handler` that the user set on the builder, registers a hook
 // at the matching phase (route_resolved, before_handler, before_handler).
-// The hooks are observation-only stubs whose presence is the alias
-// relationship; the existing inline dispatch code continues to consult
-// the user-supplied callable, so the on-the-wire behaviour is byte-for-
-// byte identical to v1.
+//
+// These are NOT inert stubs: `auth_handler` and `method_not_allowed_handler`
+// are FUNCTIONAL — the hook IS the dispatch path (the old inline
+// apply_auth_short_circuit / 405 branch was removed, not duplicated), so
+// the auth alias is the security boundary and the method-not-allowed alias
+// emits the 405. Only `not_found_handler` is observation-only: its body is
+// empty because `route_resolved_ctx` has no mutable response slot (DR-012
+// §4.10) and the 404 bytes are produced by webserver_impl::not_found_page;
+// the seat still exists so hook-count introspection reflects it
+// (PRD-HOOK-REQ-009). On-the-wire behaviour remains identical to v1.
 //
 // Called once from the webserver ctor body; never re-called. The
 // registrations are detach()-ed so they live for the webserver's
