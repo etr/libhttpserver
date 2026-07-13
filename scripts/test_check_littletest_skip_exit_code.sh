@@ -39,7 +39,11 @@ if [ ! -f "$LITTLETEST_HDR" ]; then
     exit 1
 fi
 
-CXX="${CXX:-c++}"
+# $CXX may carry flags (CI sets e.g. "g++ -std=c++20"), so split it into an
+# array and expand with "${CXX_CMD[@]}" rather than quoting the whole string
+# as a single command word (which would fail with "command not found").
+# Mirrors scripts/check-deprecated-cookie-overload.sh.
+read -r -a CXX_CMD <<< "${CXX:-c++}"
 
 TMPDIR_=$(mktemp -d)
 trap 'rm -rf "$TMPDIR_"' EXIT
@@ -62,7 +66,7 @@ LT_BEGIN_AUTO_TEST_ENV()
 LT_END_AUTO_TEST_ENV()
 EOF
 
-"$CXX" -std=c++20 -I"$REPO_ROOT/test" \
+"${CXX_CMD[@]}" -std=c++20 -I"$REPO_ROOT/test" \
     "$TMPDIR_/only_skips.cpp" -o "$TMPDIR_/only_skips"
 
 set +e
@@ -98,7 +102,7 @@ LT_BEGIN_AUTO_TEST_ENV()
 LT_END_AUTO_TEST_ENV()
 EOF
 
-"$CXX" -std=c++20 -I"$REPO_ROOT/test" \
+"${CXX_CMD[@]}" -std=c++20 -I"$REPO_ROOT/test" \
     "$TMPDIR_/mixed.cpp" -o "$TMPDIR_/mixed"
 
 set +e
@@ -148,7 +152,7 @@ LT_BEGIN_AUTO_TEST_ENV()
 LT_END_AUTO_TEST_ENV()
 EOF
 
-"$CXX" -std=c++20 -I"$REPO_ROOT/test" \
+"${CXX_CMD[@]}" -std=c++20 -I"$REPO_ROOT/test" \
     "$TMPDIR_/fail_and_skip.cpp" -o "$TMPDIR_/fail_and_skip"
 
 set +e

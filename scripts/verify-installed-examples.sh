@@ -36,7 +36,10 @@ else
     trap 'rm -rf "$PREFIX"' EXIT
 fi
 
-CXX="${CXX:-g++}"
+# $CXX may carry flags (CI sets e.g. "g++ -std=c++20"); split into an array
+# and expand with "${CXX_CMD[@]}" so the compiler word and its flags are
+# separate argv entries (quoting the whole string yields "command not found").
+read -r -a CXX_CMD <<< "${CXX:-g++}"
 CXXFLAGS_EXTRA="${CXXFLAGS:-}"
 # macOS / Homebrew: pick up gnutls + microhttpd if installed.
 EXTRA_INC=""
@@ -140,7 +143,7 @@ for src in "$REPO_ROOT"/examples/*.cpp; do
     # The installed prefix must appear before Homebrew paths so that the
     # freshly-installed headers win over any stale system/Homebrew copies.
     # shellcheck disable=SC2086
-    if ! "$CXX" -std=c++20 $CXXFLAGS_EXTRA $extra_defines \
+    if ! "${CXX_CMD[@]}" -std=c++20 $CXXFLAGS_EXTRA $extra_defines \
             -I"$INCLUDE" $EXTRA_INC \
             "$src" \
             -L"$LIBDIR" $EXTRA_LIB \
