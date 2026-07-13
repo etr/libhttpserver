@@ -100,7 +100,6 @@ using httpserver::http::http_utils;
 using httpserver::http::ip_representation;
 using httpserver::http::base_unescaper;
 
-
 namespace detail {
 
 // Wrap MHD_OptionItem aggregate-init so each push reads uniformly
@@ -323,11 +322,8 @@ bool webserver::start(bool blocking) {
                 &detail::webserver_impl::answer_to_connection, impl_.get(), MHD_OPTION_ARRAY,
                 &iov[0], MHD_OPTION_SOCK_ADDR, bind_address, MHD_OPTION_END);
     }
-
-    // Release store publishes the daemon and the bind-port it carries so a
-    // concurrent get_bound_port() on another thread observes them fully.
+    // Release store: publish the daemon (+ its bind-port) so a concurrent get_bound_port() on another thread sees it.
     impl_->daemon.store(d, std::memory_order_release);
-
     if (d == nullptr) {
         throw std::invalid_argument("Unable to connect daemon to port: " + std::to_string(port));
     }
@@ -358,9 +354,7 @@ bool webserver::stop() {
     pthread_mutex_unlock(&impl_->mutexwait);
 
     MHD_stop_daemon(impl_->daemon.load(std::memory_order_acquire));
-    // Reset after stop so the daemon != nullptr guards in get_bound_port(),
-    // get_listen_fd(), run(), etc. correctly treat the daemon as absent on
-    // any subsequent (unsupported) call after stop().
+    // Reset so the daemon != nullptr guards treat it as absent after stop().
     impl_->daemon.store(nullptr, std::memory_order_release);
 
     // Only shut down the pre-bound socket if one was actually provided.
