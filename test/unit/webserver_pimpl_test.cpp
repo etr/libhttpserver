@@ -74,10 +74,22 @@ static_assert(!std::is_move_assignable_v<httpserver::webserver>,
 //   3) update the table above.
 //
 // Threshold = max(observed) + 16 = 848 + 16 = 864.
+//
+// The msan CI lane is excluded: it compiles against a from-source,
+// MemorySanitizer-instrumented libc++ (LLVM 18.1.8, rebuilt on cache miss)
+// whose container/string layout is NOT the canonical ABI this cap was
+// measured against (Apple libc++ 776 / libstdc++ 848), so it reports an
+// unrepresentative, larger sizeof. That lane's purpose is memory-safety, not
+// ABI-size stability, and the gate is fully enforced on every non-instrumented
+// lane above — so skip the upper-bound cap under MemorySanitizer rather than
+// record a fourth, meaningless number. (__has_feature is clang-only; the
+// !defined() arm keeps the assert active on the gcc/libstdc++ lanes.)
+#if !defined(__has_feature) || !__has_feature(memory_sanitizer)
 static_assert(sizeof(httpserver::webserver) <= 864,
               "webserver size grew beyond the recorded per-lane "
               "max + 16-byte slack; see comment table above for the "
               "re-measurement procedure");
+#endif
 
 //     Lower bound (symmetrical): webserver must contain at least the
 //     impl_ pointer itself. If someone accidentally links the backend
