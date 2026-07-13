@@ -15,7 +15,7 @@
 //    return value)."
 //
 // Two sub-scenarios:
-//   (a) Banned 127.0.0.1 + throwing hook: curl request still rejected.
+//   (a) Denied 127.0.0.1 + throwing hook: curl request still rejected.
 //   (b) Unbanned 127.0.0.1 + throwing hook: curl request still accepted
 //       and returns "OK".
 //
@@ -47,7 +47,7 @@ using httpserver::http::http_utils;
 
 // Each sub-test gets its own named port constant so adding a third test
 // in the future does not require renaming the existing arithmetic.
-#define PORT_BANNED   8201
+#define PORT_DENIED   8201
 #define PORT_ACCEPTED 8202
 
 namespace {
@@ -73,9 +73,9 @@ LT_END_SUITE(hooks_accept_decision_throwing_suite)
 
 LT_BEGIN_AUTO_TEST(hooks_accept_decision_throwing_suite,
                    banned_with_throwing_hook_still_rejected)
-    webserver ws{create_webserver(PORT_BANNED)
+    webserver ws{create_webserver(PORT_DENIED)
                      .default_policy(http_utils::ACCEPT)};
-    ws.block_ip("127.0.0.1");
+    ws.deny_ip("127.0.0.1");
 
     std::atomic<std::size_t> fired{0};
     auto h = ws.add_hook(hook_phase::accept_decision,
@@ -89,13 +89,13 @@ LT_BEGIN_AUTO_TEST(hooks_accept_decision_throwing_suite,
     auto resource = std::make_shared<hello_resource>();
     ws.register_path("/hello", resource);
     ws.start(false);
-    // TCP-level probe — works even though ws.block_ip("127.0.0.1") rejects HTTP
+    // TCP-level probe — works even though ws.deny_ip("127.0.0.1") rejects HTTP
     // probes (the kernel completes the handshake before MHD's policy_callback runs).
-    httpserver_test::wait_for_server_ready(PORT_BANNED);
+    httpserver_test::wait_for_server_ready(PORT_DENIED);
 
     CURL* curl = curl_easy_init();
     LT_ASSERT_NEQ(curl, static_cast<CURL*>(nullptr));
-    std::string url = "http://127.0.0.1:" + std::to_string(PORT_BANNED) + "/hello";
+    std::string url = "http://127.0.0.1:" + std::to_string(PORT_DENIED) + "/hello";
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 2L);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 4L);

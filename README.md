@@ -42,7 +42,7 @@ thread-safe by contract.
 - External event-loop integration (`run`, `run_wait`, `get_fdset`, `add_connection`)
 - Daemon introspection (bound port, active connections, listen FD)
 - Turbo mode, TCP_FASTOPEN, suppressed `Date` headers, configurable backlog
-- IP blocking with wildcard ranges (`block_ip` / `unblock_ip`), IPv4 & IPv6
+- IP access control with wildcard ranges — deny list (`deny_ip`) and allow list (`allow_ip`), IPv4 & IPv6
 - Architecture contracts you can rely on: threading (DR-008 / §5.1) and error propagation (DR-009 / §5.2)
 
 This README is a guided reference: it walks the v2.0 API surface section by
@@ -568,8 +568,10 @@ The rest of this section is a reference of every group of options.
 * **`.pedantic(bool = true)`** — strict HTTP-RFC parsing.
 * **`.regex_checking(bool = true)`** — validate path regexes at
   registration. Default `true`.
-* **`.ban_system(bool = true)`** — enable the IP block-list machinery
-  used by `block_ip` / `unblock_ip`. Default `true`.
+* **`.ip_access_control(bool = true)`** — enable the IP access-control
+  machinery used by `deny_ip` / `allow_ip` (and their `remove_*`
+  counterparts). Default `true`. When `false`, every connection is
+  admitted and both lists are ignored.
 * **`.post_process(bool = true)`** — auto-parse `application/x-www-form-urlencoded`
   and `multipart/form-data` bodies into the request's argument map.
   Default `true`.
@@ -691,11 +693,13 @@ httpserver::webserver ws{cfg};
 
 These dovetail with the runtime methods covered under [Daemon
 introspection and external event loops](#daemon-introspection-and-external-event-loops).
-The `default_policy` controls the IP block list semantics:
+The `default_policy` selects which list is the exception list — i.e. what
+happens to an address on neither list:
 
 * **`.default_policy(http::http_utils::policy_T p)`** — `ACCEPT` (default)
-  treats `block_ip` as a deny list; `REJECT` flips the semantics so
-  `block_ip` becomes an allow list.
+  admits every address except those on the deny list (`deny_ip`); `REJECT`
+  refuses every address except those on the allow list (`allow_ip`). Under
+  either policy an allow entry overrides a matching deny entry.
 
 ### Runtime operations on `webserver`
 
@@ -1089,16 +1093,22 @@ The only requirement for IPv6 is that it is enabled on the underlying
 server — set `use_ipv6(true)` on `create_webserver` (or `use_dual_stack(true)`
 for both stacks on the same socket).
 
-You can explicitly block or unblock IP addresses (or wildcard ranges)
-at runtime using these methods on `webserver`:
+You can populate the deny list and the allow list (with individual IPs or
+wildcard ranges) at runtime using these methods on `webserver`:
 
-* **`void block_ip(std::string_view ip)`** — add one IP (or a range,
-  e.g. `"127.0.0.*"`) to the block list. Connections from a matching
-  address are refused at the policy callback. Intended for use under the
-  default `ACCEPT` policy.
-* **`void unblock_ip(std::string_view ip)`** — remove one IP (or a
-  range) from the block list. Idempotent: removing an entry that is not
-  currently blocked is a no-op.
+* **`void deny_ip(std::string_view ip)`** — add one IP (or a range,
+  e.g. `"127.0.0.*"`) to the deny list. Connections from a matching
+  address are refused at the policy callback. This is the exception list
+  under the default `ACCEPT` policy.
+* **`void remove_denied_ip(std::string_view ip)`** — remove one IP (or a
+  range) from the deny list. Idempotent: removing an entry that is not
+  currently denied is a no-op.
+* **`void allow_ip(std::string_view ip)`** — add one IP (or a range) to
+  the allow list. This is the exception list under the `REJECT` policy
+  (permit only these). Under `ACCEPT`, an allow entry overrides a
+  matching `deny_ip` entry.
+* **`void remove_allowed_ip(std::string_view ip)`** — remove one IP (or a
+  range) from the allow list. Idempotent.
 
 ### IP string format
 
@@ -1120,19 +1130,19 @@ Examples of valid IPs include:
 
 ### Allow-list mode
 
-By default, `block_ip` defines a deny list under the `ACCEPT` policy.
-To flip the semantics so `block_ip` defines an *allow* list under a
-default-deny policy, set the policy on the builder:
+By default (`ACCEPT` policy) the deny list is the exception list: use
+`deny_ip` to refuse specific addresses and admit everyone else. To invert
+this into an allow list — refuse everyone except specific addresses — set
+the default policy to `REJECT` and populate the allow list with `allow_ip`:
 
 ```cpp
 webserver ws{create_webserver(8080)
     .default_policy(http::http_utils::REJECT)};
-ws.block_ip("192.168.0.*");  // permits 192.168.0.0/24, blocks everything else
+ws.allow_ip("192.168.0.*");  // permits 192.168.0.0/24, refuses everything else
 ```
 
-See [`examples/minimal_ip_ban.cpp`](examples/minimal_ip_ban.cpp) for a
-worked example of `block_ip` and `unblock_ip` under the default
-`ACCEPT` policy.
+See [`examples/minimal_ip_access_control.cpp`](examples/minimal_ip_access_control.cpp)
+for a worked example of both modes.
 
 [Back to TOC](#table-of-contents)
 
@@ -1605,8 +1615,8 @@ worked example.
 
 ### Examples
 
-* [`examples/banned_ip_log.cpp`](examples/banned_ip_log.cpp) — log every
-  banned-IP rejection via a single `accept_decision` hook.
+* [`examples/denied_ip_log.cpp`](examples/denied_ip_log.cpp) — log every
+  denied-IP rejection via a single `accept_decision` hook.
 * [`examples/early_413.cpp`](examples/early_413.cpp) — return 413 from
   a `request_received` hook before the body is consumed.
 * [`examples/clf_access_log.cpp`](examples/clf_access_log.cpp) — write
@@ -1780,10 +1790,11 @@ try {
 }
 ```
 
-Block lists, IP-allow handling, and similar features that do not depend
-on external libraries are always available: `webserver::block_ip(addr)`
-and `webserver::unblock_ip(addr)` install and clear per-server blocks at
-runtime regardless of build flags.
+Deny lists, IP-allow handling, and similar features that do not depend
+on external libraries are always available: `webserver::deny_ip(addr)` /
+`webserver::remove_denied_ip(addr)` and `webserver::allow_ip(addr)` /
+`webserver::remove_allowed_ip(addr)` install and clear per-server access
+rules at runtime regardless of build flags.
 
 [Back to TOC](#table-of-contents)
 
@@ -1864,8 +1875,8 @@ to the canonical example for each topic covered in this manual.
 
 ### Lifecycle hooks
 
-* [`examples/banned_ip_log.cpp`](examples/banned_ip_log.cpp) — log every
-  banned-IP rejection from a single `accept_decision` hook (issue #332).
+* [`examples/denied_ip_log.cpp`](examples/denied_ip_log.cpp) — log every
+  denied-IP rejection from a single `accept_decision` hook (issue #332).
 * [`examples/early_413.cpp`](examples/early_413.cpp) — short-circuit
   oversized uploads with 413 before any body bytes are consumed via a
   `request_received` hook (issue #273).
@@ -1885,8 +1896,8 @@ to the canonical example for each topic covered in this manual.
   drive `EXTERNAL_SELECT` from the application's loop via `run_wait`.
 * [`examples/custom_access_log.cpp`](examples/custom_access_log.cpp) —
   server-wide access-log callback.
-* [`examples/minimal_ip_ban.cpp`](examples/minimal_ip_ban.cpp) —
-  `block_ip` / `unblock_ip` under the default `ACCEPT` policy.
+* [`examples/minimal_ip_access_control.cpp`](examples/minimal_ip_access_control.cpp) —
+  `deny_ip` / `allow_ip` under the `ACCEPT` and `REJECT` policies.
 * [`examples/turbo_mode.cpp`](examples/turbo_mode.cpp) — turbo,
   suppressed Date header, fastopen queue, listen backlog.
 * [`examples/service.cpp`](examples/service.cpp) — kitchen-sink

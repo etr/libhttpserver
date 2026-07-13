@@ -287,7 +287,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, disable_options)
         .digest_auth(false)
         .deferred(false)
         .regex_checking(false)
-        .ban_system(false)
+        .ip_access_control(false)
         .post_process(false)};
     auto ok = std::make_shared<ok_resource>();
     ws.register_path("base", ok);
@@ -310,7 +310,7 @@ LT_BEGIN_AUTO_TEST(ws_start_stop_suite, enable_options)
         .pedantic()
         .deferred()
         .regex_checking()
-        .ban_system()
+        .ip_access_control()
         .post_process()};
     auto ok = std::make_shared<ok_resource>();
     ws.register_path("base", ok);

@@ -78,8 +78,8 @@ every interesting point in the request lifecycle. The four examples
 below demonstrate the user-visible resolution of issues #332, #273,
 #281, #69, and the per-route hook contract introduced in TASK-051.
 
-* `banned_ip_log.cpp` — a single `accept_decision` hook logs every
-  banned-IP rejection to stderr. Resolves issue #332.
+* `denied_ip_log.cpp` — a single `accept_decision` hook logs every
+  denied-IP rejection to stderr. Resolves issue #332.
 * `early_413.cpp` — a single `request_received` hook returns
   `respond_with(http_response::empty().with_status(413))` when
   `Content-Length` exceeds the configured cap. The request body never
@@ -99,8 +99,8 @@ Operations
 * `external_event_loop.cpp` — drive `EXTERNAL_SELECT` from the
   application's loop via `run_wait`.
 * `custom_access_log.cpp` — server-wide access-log callback.
-* `minimal_ip_ban.cpp` — `block_ip` / `unblock_ip` under the default
-  ACCEPT policy.
+* `minimal_ip_access_control.cpp` — `deny_ip` / `allow_ip` under the
+  `ACCEPT` and `REJECT` policies.
 * `turbo_mode.cpp` — turbo, suppressed Date header, fastopen queue,
   listen backlog.
 * `service.cpp` — the kitchen-sink reference example: CLI args,

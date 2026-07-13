@@ -7,9 +7,9 @@
 #
 #   A1. Quotes examples/hello_world.cpp byte-for-byte in its first ```cpp fence.
 #   A2. Contains no v1-era tokens (sweet_kill, *_response subclasses, no_* setters,
-#       render_GET-style virtuals, ban_ip/allow_ip family, raw-pointer registration).
+#       render_GET-style virtuals, ban_ip/unban_ip/disallow_ip, raw-pointer registration).
 #   A3. Mentions every load-bearing v2 surface (on_get, register_path, http_response::*,
-#       block_ip/unblock_ip, stop_and_wait, features(), feature_unavailable, ...).
+#       deny_ip/allow_ip, stop_and_wait, features(), feature_unavailable, ...).
 #   A4. The Threading and Error-propagation sections cite their architecture sources
 #       (DR-008/§5.1 and DR-009/§5.2) and mention the load-bearing details
 #       (stop() deadlock per DR-008; internal_error_handler + feature_unavailable).
@@ -93,7 +93,6 @@ V1_TOKENS_ARR=(
     '\bsweet_kill\b'
     '\bban_ip\b'
     '\bunban_ip\b'
-    '\ballow_ip\b'
     '\bdisallow_ip\b'
     "${V1_NO_SETTERS[@]}"
     '\brender_(GET|POST|PUT|DELETE|HEAD|OPTIONS|PATCH|CONNECT|TRACE)\b'
@@ -140,8 +139,10 @@ REQUIRED_V2_TOKENS=(
     '\bhttp_response::unauthorized\b'
     '\bwith_header\b'
     '\bwith_status\b'
-    '\bblock_ip\b'
-    '\bunblock_ip\b'
+    '\bdeny_ip\b'
+    '\bremove_denied_ip\b'
+    '\ballow_ip\b'
+    '\bremove_allowed_ip\b'
     '\bstop_and_wait\b'
     '\bfeatures\(\)'
     '\bfeature_unavailable\b'
@@ -258,7 +259,7 @@ for alias_name in log_access not_found_handler method_not_allowed_handler intern
         fail "A4b: Lifecycle hooks section must mention v1 alias '${alias_name}'"
     fi
 done
-for example_base in banned_ip_log early_413 clf_access_log per_route_auth; do
+for example_base in denied_ip_log early_413 clf_access_log per_route_auth; do
     if ! echo "$hooks_body" | grep -qE "${example_base}\\.cpp"; then
         fail "A4b: Lifecycle hooks section must reference example ${example_base}.cpp"
     fi

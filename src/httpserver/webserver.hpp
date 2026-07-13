@@ -91,7 +91,8 @@ namespace httpserver {
  *      @ref register_prefix, @ref register_resource, the @ref on_get
  *      family, @ref route, @ref unregister_path, @ref unregister_prefix,
  *      @ref unregister_resource, @ref register_ws_resource,
- *      @ref unregister_ws_resource, @ref block_ip, @ref unblock_ip) are
+ *      @ref unregister_ws_resource, @ref deny_ip, @ref remove_denied_ip,
+      *      @ref allow_ip, @ref remove_allowed_ip) are
  *      thread-safe and re-entrant from inside a request handler.
  *      The route lookup LRU cache (`detail::route_lru_cache`) is consulted
  *      outside `route_table_mutex_`, so an in-flight request that hit the
@@ -220,25 +221,54 @@ class webserver {
 #undef SRC_HTTPSERVER_WEBSERVER_HPP_INSIDE_CLASS_
 
      /**
-      * Add @p ip (or a range, e.g. "127.0.0.*") to the IP block list.
+      * Add @p ip (or a range, e.g. "127.0.0.*") to the IP deny list.
       * Connections from a matching address are refused at the policy
-      * callback. Intended for use under the default ACCEPT policy.
+      * callback. This is the exception list under the default ACCEPT
+      * policy (deny only these; permit everyone else).
+      *
+      * Precedence: a matching @ref allow_ip entry overrides a matching
+      * deny entry, so an allow-listed address is admitted even under
+      * ACCEPT. No-op semantics are preserved when the same IP is added
+      * twice; a more specific entry replaces a previously-recorded
+      * wildcard.
+      *
+      * @param ip an IP literal or wildcard pattern.
+      * @see remove_denied_ip, allow_ip
+     **/
+     void deny_ip(std::string_view ip);
+
+     /**
+      * Remove @p ip from the IP deny list. Idempotent: removing an IP
+      * that is not currently denied is a no-op.
+      *
+      * @param ip an IP literal or wildcard pattern previously passed to @ref deny_ip.
+      * @see deny_ip
+     **/
+     void remove_denied_ip(std::string_view ip);
+
+     /**
+      * Add @p ip (or a range, e.g. "127.0.0.*") to the IP allow list.
+      * This is the exception list under the REJECT policy
+      * (@ref create_webserver::default_policy): permit only these,
+      * refuse everyone else. Under the default ACCEPT policy an allow
+      * entry overrides a matching @ref deny_ip entry (allow wins).
+      *
       * No-op semantics are preserved when the same IP is added twice;
       * a more specific entry replaces a previously-recorded wildcard.
       *
       * @param ip an IP literal or wildcard pattern.
-      * @see unblock_ip
+      * @see remove_allowed_ip, deny_ip
      **/
-     void block_ip(std::string_view ip);
+     void allow_ip(std::string_view ip);
 
      /**
-      * Remove @p ip from the IP block list. Idempotent: removing an IP
-      * that is not currently blocked is a no-op.
+      * Remove @p ip from the IP allow list. Idempotent: removing an IP
+      * that is not currently allowed is a no-op.
       *
-      * @param ip an IP literal or wildcard pattern previously passed to @ref block_ip.
-      * @see block_ip
+      * @param ip an IP literal or wildcard pattern previously passed to @ref allow_ip.
+      * @see allow_ip
      **/
-     void unblock_ip(std::string_view ip);
+     void remove_allowed_ip(std::string_view ip);
 
      /// Returns the configured access-log callback; null if none was set.
      /// The callback may be invoked concurrently from MHD worker threads.
@@ -333,7 +363,7 @@ class webserver {
      const bool basic_auth_enabled;
      const bool digest_auth_enabled;
      const bool regex_checking;
-     const bool ban_system_enabled;
+     const bool ip_access_control_enabled;
      const bool post_process_enabled;
      const bool put_processed_data_to_content;
      const file_upload_target_T file_upload_target;

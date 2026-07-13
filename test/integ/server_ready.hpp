@@ -38,7 +38,7 @@
 //     still acceptable evidence that the daemon is listening.
 //
 //   * Works correctly even when the caller has invoked
-//     `ws.block_ip("127.0.0.1")`: the kernel completes the TCP
+//     `ws.deny_ip("127.0.0.1")`: the kernel completes the TCP
 //     handshake before MHD's policy_callback runs, so the probe still
 //     returns OK.
 //

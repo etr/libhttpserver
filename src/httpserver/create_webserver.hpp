@@ -197,7 +197,7 @@ class create_webserver {
       * provided by @ref max_args_bytes.
       *
       * Pass `0` to keep the compile-time default
-      * (@ref httpserver::detail::arguments_accumulator::DEFAULT_MAX_ARGS_COUNT,
+      * (@c httpserver::detail::arguments_accumulator::DEFAULT_MAX_ARGS_COUNT,
       * currently 64). POST argument limits are unaffected — those are bounded
       * upstream by MHD_OPTION_CONNECTION_MEMORY_LIMIT
       * (see @ref memory_limit / @ref content_size_limit).
@@ -210,7 +210,7 @@ class create_webserver {
       * MHD_NO. Complements @ref max_args_count; both guards must pass.
       *
       * Pass `0` to keep the compile-time default
-      * (@ref httpserver::detail::arguments_accumulator::DEFAULT_MAX_ARGS_BYTES,
+      * (@c httpserver::detail::arguments_accumulator::DEFAULT_MAX_ARGS_BYTES,
       * currently 64 KiB).
       */
      create_webserver& max_args_bytes(std::size_t v) { _max_args_bytes = v; return *this; }
@@ -332,7 +332,7 @@ class create_webserver {
      create_webserver& digest_auth(bool enable = true) { _digest_auth_enabled = enable; return *this; }
      create_webserver& deferred(bool enable = true) { _deferred_enabled = enable; return *this; }
      create_webserver& regex_checking(bool enable = true) { _regex_checking = enable; return *this; }
-     create_webserver& ban_system(bool enable = true) { _ban_system_enabled = enable; return *this; }
+     create_webserver& ip_access_control(bool enable = true) { _ip_access_control_enabled = enable; return *this; }
      create_webserver& post_process(bool enable = true) { _post_process_enabled = enable; return *this; }
      create_webserver& put_processed_data_to_content(bool enable = true) { _put_processed_data_to_content = enable; return *this; }
 
@@ -446,7 +446,7 @@ class create_webserver {
      bool _basic_auth_enabled = basic_auth_default();
      bool _digest_auth_enabled = digest_auth_default();
      bool _regex_checking = true;
-     bool _ban_system_enabled = true;
+     bool _ip_access_control_enabled = true;
      bool _post_process_enabled = true;
      bool _put_processed_data_to_content = true;
      file_upload_target_T _file_upload_target = FILE_UPLOAD_MEMORY_ONLY;

@@ -451,27 +451,42 @@ bool webserver::add_connection(int client_socket, const struct sockaddr* addr, u
                               static_cast<socklen_t>(addrlen)) == MHD_YES;
 }
 
-void webserver::block_ip(std::string_view ip) {
-    std::unique_lock bans_lock(impl_->bans_mutex);
-    ip_representation t_ip{std::string{ip}};
-    auto it = impl_->bans.find(t_ip);
-    // Replace only when the incoming entry is less specific (lower weight)
-    // than the one already stored: erase the more-specific entry so the
-    // wildcard takes precedence.  When t_ip is more specific (higher weight),
-    // std::set::insert is a no-op (the key is already present) — the existing
-    // entry is kept, which is the correct outcome.  The unconditional insert
-    // below therefore covers all three cases: (1) no existing entry — insert;
-    // (2) existing entry with equal or higher weight — no-op insert; (3)
-    // existing entry with lower weight — erase first, then insert.
-    if (it != impl_->bans.end() && t_ip.weight() < it->weight()) {
-        impl_->bans.erase(it);
+// insert_wildcard_aware: shared helper for deny_ip/allow_ip. Inserts
+// t_ip into @p list, preserving the invariant that a less-specific
+// (lower weight()) wildcard entry takes precedence over a more-specific
+// one. When the incoming entry is less specific than a stored match, the
+// stored entry is erased first so the wildcard wins; when it is equal or
+// more specific, std::set::insert is a no-op and the existing entry is
+// kept. The unconditional insert covers all three cases: (1) no existing
+// entry — insert; (2) equal/higher weight — no-op insert; (3) lower
+// weight — erase first, then insert. Caller holds the list's mutex.
+static void insert_wildcard_aware(std::set<ip_representation>& list,
+                                  const ip_representation& t_ip) {
+    auto it = list.find(t_ip);
+    if (it != list.end() && t_ip.weight() < it->weight()) {
+        list.erase(it);
     }
-    impl_->bans.insert(t_ip);
+    list.insert(t_ip);
 }
 
-void webserver::unblock_ip(std::string_view ip) {
-    std::unique_lock bans_lock(impl_->bans_mutex);
-    impl_->bans.erase(ip_representation{std::string{ip}});
+void webserver::deny_ip(std::string_view ip) {
+    std::unique_lock deny_lock(impl_->deny_list_mutex);
+    insert_wildcard_aware(impl_->deny_list, ip_representation{std::string{ip}});
+}
+
+void webserver::remove_denied_ip(std::string_view ip) {
+    std::unique_lock deny_lock(impl_->deny_list_mutex);
+    impl_->deny_list.erase(ip_representation{std::string{ip}});
+}
+
+void webserver::allow_ip(std::string_view ip) {
+    std::unique_lock allow_lock(impl_->allow_list_mutex);
+    insert_wildcard_aware(impl_->allow_list, ip_representation{std::string{ip}});
+}
+
+void webserver::remove_allowed_ip(std::string_view ip) {
+    std::unique_lock allow_lock(impl_->allow_list_mutex);
+    impl_->allow_list.erase(ip_representation{std::string{ip}});
 }
 
 }  // namespace httpserver

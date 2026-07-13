@@ -131,9 +131,9 @@ struct connection_close_ctx {
  *
  * @note `accepted` mirrors the policy callback's MHD_YES/MHD_NO return.
  * @note `reason` is set when the connection is rejected:
- *   - `"banned"` — the peer hit the ban list.
- *   - `"not-allowed"` — default policy REJECT and the peer is not on
- *     the allowance list.
+ *   - `"denied"` — the peer hit the deny list (and is not allow-listed).
+ *   - `"not-on-allow-list"` — default policy REJECT and the peer is not
+ *     on the allow list.
  *   - `std::nullopt` — the connection was accepted.
  * @note The `string_view`'s referent is a string literal with static
  *   storage duration; capturing it past the hook return is safe. If a

@@ -336,11 +336,16 @@ void webserver::unregister_resource(const string& resource) {
 }
 
 // IP-control API history:
-// TASK-029: The v2.0 public IP-control API is the pair block_ip / unblock_ip.
-// The historical ban_ip / unban_ip / allow_ip / disallow_ip quartet was
-// collapsed to a single name pair operating on the deny list. The internal
-// allowances set and the allow-list branch in policy_callback remain in
-// place so default_policy(REJECT) keeps working at the daemon level, but
-// they are no longer reachable from the public API.
+// TASK-029 collapsed the v1 ban_ip / unban_ip / allow_ip / disallow_ip
+// quartet to a single deny-only pair (block_ip / unblock_ip), leaving the
+// allow list reachable only internally — which made default_policy(REJECT)
+// unusable from the public API.
+//
+// The current API restores a symmetric, consistently-named surface:
+//   deny_ip / remove_denied_ip   -> the deny list (exception under ACCEPT)
+//   allow_ip / remove_allowed_ip -> the allow list (exception under REJECT;
+//                                   also overrides a deny entry under ACCEPT)
+// See webserver::deny_ip / allow_ip (impls in webserver_setup.cpp) and
+// classify_decision (webserver_callbacks_lifecycle.cpp).
 
 }  // namespace httpserver

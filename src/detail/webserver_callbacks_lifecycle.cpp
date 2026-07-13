@@ -19,7 +19,7 @@
 //     owns the per-connection arena AND fires the
 //     `connection_opened` / `connection_closed` hooks.
 //   - policy_callback: MHD accept-policy callback; computes the
-//     accept/reject decision (ban + allowance lists) and fires the
+//     accept/reject decision (deny + allow IP lists) and fires the
 //     `accept_decision` hook AFTER the decision is fixed (DR-012).
 //   - anonymous-namespace `make_peer_address` adapter: converts MHD's
 //     `const struct sockaddr*` into the public `peer_address` POD.
@@ -91,24 +91,25 @@ namespace {
     return out;
 }
 
-// Reduce a {default_policy, is_banned, is_allowed} triple to the
+// Reduce a {default_policy, is_denied, is_allowed} triple to the
 // (accepted, reason) decision exposed via accept_ctx. Extracted out of
 // policy_callback to keep that function under the CCN gate.
 //
-// Truth table (matches the historical policy_callback branch):
-//   default=ACCEPT, banned, !allowed -> reject "banned"
-//   default=REJECT, banned           -> reject "banned"
-//   default=REJECT, !banned, !allowed-> reject "not-allowed"
+// Truth table:
+//   default=ACCEPT, denied, !allowed -> reject "denied"
+//   default=REJECT, denied           -> reject "denied"
+//   default=REJECT, !denied, !allowed-> reject "not-on-allow-list"
 //   anything else                    -> accept
+// An allow-list entry always overrides a deny-list entry (allow wins).
 std::pair<bool, std::optional<std::string_view>>
-classify_decision(int default_policy, bool is_banned, bool is_allowed) {
+classify_decision(int default_policy, bool is_denied, bool is_allowed) {
     if (default_policy == ::httpserver::http::http_utils::ACCEPT
-            && is_banned && !is_allowed) {
-        return {false, std::string_view{"banned"}};
+            && is_denied && !is_allowed) {
+        return {false, std::string_view{"denied"}};
     }
     if (default_policy == ::httpserver::http::http_utils::REJECT) {
-        if (is_banned) return {false, std::string_view{"banned"}};
-        if (!is_allowed) return {false, std::string_view{"not-allowed"}};
+        if (is_denied) return {false, std::string_view{"denied"}};
+        if (!is_allowed) return {false, std::string_view{"not-on-allow-list"}};
     }
     return {true, std::nullopt};
 }
@@ -224,17 +225,17 @@ MHD_Result webserver_impl::policy_callback(void *cls, const struct sockaddr* add
     bool accepted = true;
     std::optional<std::string_view> reason{};
 
-    if (ws->ban_system_enabled) {
-        bool is_banned = false;
+    if (ws->ip_access_control_enabled) {
+        bool is_denied = false;
         bool is_allowed = false;
         {
-            std::shared_lock bans_lock(impl->bans_mutex);
-            std::shared_lock allowances_lock(impl->allowances_mutex);
-            is_banned = impl->bans.count(ip_representation(addr));
-            is_allowed = impl->allowances.count(ip_representation(addr));
-        }  // release bans/allowances locks before firing the user hook
+            std::shared_lock deny_lock(impl->deny_list_mutex);
+            std::shared_lock allow_lock(impl->allow_list_mutex);
+            is_denied = impl->deny_list.count(ip_representation(addr));
+            is_allowed = impl->allow_list.count(ip_representation(addr));
+        }  // release deny/allow locks before firing the user hook
         std::tie(accepted, reason) =
-            classify_decision(ws->default_policy, is_banned, is_allowed);
+            classify_decision(ws->default_policy, is_denied, is_allowed);
     }
 
     const MHD_Result decision = accepted ? MHD_YES : MHD_NO;

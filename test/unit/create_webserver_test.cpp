@@ -160,10 +160,10 @@ LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_regex_checking_toggle)
     LT_CHECK_NOTHROW(create_webserver(8080).regex_checking(false));
 LT_END_AUTO_TEST(builder_regex_checking_toggle)
 
-LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_ban_system_toggle)
-    LT_CHECK_NOTHROW(create_webserver(8080).ban_system());
-    LT_CHECK_NOTHROW(create_webserver(8080).ban_system(false));
-LT_END_AUTO_TEST(builder_ban_system_toggle)
+LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_ip_access_control_toggle)
+    LT_CHECK_NOTHROW(create_webserver(8080).ip_access_control());
+    LT_CHECK_NOTHROW(create_webserver(8080).ip_access_control(false));
+LT_END_AUTO_TEST(builder_ip_access_control_toggle)
 
 LT_BEGIN_AUTO_TEST(create_webserver_suite, builder_post_process_toggle)
     LT_CHECK_NOTHROW(create_webserver(8080).post_process());
@@ -459,7 +459,7 @@ LT_BEGIN_AUTO_TEST(create_webserver_suite, method_chaining)
         .debug()
         .pedantic()
         .regex_checking()
-        .ban_system()
+        .ip_access_control()
         .post_process()
         .tcp_nodelay());
 LT_END_AUTO_TEST(method_chaining)

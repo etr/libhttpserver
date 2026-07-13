@@ -52,7 +52,7 @@
  * handler is already registered at the same path (mirrors the rest
  * of the v2.0 registration surface).
  *
- * @pre Must be called before @ref start(). MHD_ALLOW_UPGRADE is set
+ * @pre Must be called before @ref httpserver::webserver::start. MHD_ALLOW_UPGRADE is set
  *      at daemon-start time based on whether any WebSocket handlers are
  *      registered; handlers registered after start() will not be reachable
  *      because the daemon will not have been started with the upgrade flag.
@@ -80,7 +80,7 @@ void register_ws_resource(const std::string& resource,  // NOLINT(build/include_
  * Identical contract to @ref register_ws_resource(const std::string&, std::unique_ptr<T>)
  * but lets the caller retain a reference to the handler.
  *
- * @pre Must be called before @ref start(). See the unique_ptr overload above.
+ * @pre Must be called before @ref httpserver::webserver::start. See the unique_ptr overload above.
  *
  * @param resource The url at which to register the handler.
  * @param handler  shared_ptr to the websocket_handler; the caller
