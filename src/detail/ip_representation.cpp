@@ -128,6 +128,26 @@ bool ipv4_mapped_prefix_invalid(uint16_t a, uint16_t b) {
     return (a != 0 && a != 255) || (b != 0 && b != 255);
 }
 
+// The 12-byte prefix that precedes a nested IPv4 dotted-quad must be
+// all-zero for bytes 0-9, with bytes 10-11 each 0x00 (pure ::-mapped)
+// or 0xFF (v4-mapped). Throws invalid_argument on any other prefix.
+// Lifted out of parse_nested_ipv4 so the surrounding function stays
+// below the CCN bar.
+void validate_ipv4_mapped_prefix(const uint16_t* pieces) {
+    for (unsigned int k = 0; k < 10; k++) {
+        if (pieces[k] != 0) {
+            throw std::invalid_argument(
+                "IP is badly formatted. Nested IPV4 can be preceded only by 0 "
+                "(and, optionally, two 255 octects)");
+        }
+    }
+    if (ipv4_mapped_prefix_invalid(pieces[10], pieces[11])) {
+        throw std::invalid_argument(
+            "IP is badly formatted. Nested IPV4 can be preceded only by 0 "
+            "(and, optionally, two 255 octects)");
+    }
+}
+
 }  // namespace
 
 void ip_representation::parse_ipv4(const std::string& ip) {
@@ -189,18 +209,7 @@ void ip_representation::parse_nested_ipv4(const std::vector<std::string>& parts,
         throw std::invalid_argument("IP is badly formatted. Nested IPV4 can have max 4 parts.");
     }
     // Bytes 0-9 must be zero; bytes 10-11 must be 0x00 or 0xFF.
-    for (unsigned int k = 0; k < 10; k++) {
-        if (pieces[k] != 0) {
-            throw std::invalid_argument(
-                "IP is badly formatted. Nested IPV4 can be preceded only by 0 "
-                "(and, optionally, two 255 octects)");
-        }
-    }
-    if (ipv4_mapped_prefix_invalid(pieces[10], pieces[11])) {
-        throw std::invalid_argument(
-            "IP is badly formatted. Nested IPV4 can be preceded only by 0 "
-            "(and, optionally, two 255 octects)");
-    }
+    validate_ipv4_mapped_prefix(pieces);
     for (unsigned int ii = 0; ii < subparts.size(); ii++) {
         if (subparts[ii] == "*") {
             clear_bit(mask, static_cast<unsigned int>(y + ii));

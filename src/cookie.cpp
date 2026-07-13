@@ -179,6 +179,44 @@ std::string_view same_site_attribute_text(same_site_mode m) noexcept {
     return {};
 }
 
+// Parse a single `; `-delimited cookie entry into a (name, value) view
+// pair. Returns nullopt for entries that carry no usable cookie: empty
+// after trimming, missing `=`, a leading `=` (empty name), or an empty
+// name after trimming. Strips one pair of outer DQUOTEs from the value
+// and trims ASCII whitespace around the name; byte-transparent
+// otherwise (the wire may deliver bytes the setters would reject).
+// Lifted out of parse_cookie_header to keep that function below the
+// CCN bar.
+std::optional<std::pair<std::string_view, std::string_view>>
+parse_cookie_token(std::string_view tok) {
+    tok = trim_ws(tok);
+    if (tok.empty()) {
+        return std::nullopt;
+    }
+    const std::size_t eq = tok.find('=');
+    if (eq == std::string_view::npos || eq == 0) {
+        return std::nullopt;
+    }
+    std::string_view name_sv = tok.substr(0, eq);
+    std::string_view value_sv = tok.substr(eq + 1);
+
+    // Strip a single pair of outer DQUOTEs from the value (RFC 6265
+    // §5.2 step 2 implementation detail and common browser practice).
+    if (value_sv.size() >= 2
+            && value_sv.front() == '"'
+            && value_sv.back() == '"') {
+        value_sv = value_sv.substr(1, value_sv.size() - 2);
+    }
+
+    // Trim trailing whitespace from the name (rare, but defends
+    // against `a =b`).
+    name_sv = trim_ws(name_sv);
+    if (name_sv.empty()) {
+        return std::nullopt;
+    }
+    return std::make_pair(name_sv, value_sv);
+}
+
 }  // namespace
 
 // ----------------------------------------------------------------------
@@ -385,39 +423,16 @@ std::vector<cookie> cookie::parse_cookie_header(std::string_view header_value) {
         const std::size_t tok_end =
             (end == std::string_view::npos) ? header_value.size() : end;
 
-        std::string_view tok = header_value.substr(pos, tok_end - pos);
-        tok = trim_ws(tok);
-
-        if (!tok.empty()) {
-            const std::size_t eq = tok.find('=');
-            if (eq != std::string_view::npos && eq > 0) {
-                std::string_view name_sv = tok.substr(0, eq);
-                std::string_view value_sv = tok.substr(eq + 1);
-
-                // Strip a single pair of outer DQUOTEs from the value
-                // (RFC 6265 §5.2 step 2 implementation detail and
-                // common browser practice).
-                if (value_sv.size() >= 2
-                        && value_sv.front() == '"'
-                        && value_sv.back() == '"') {
-                    value_sv = value_sv.substr(1, value_sv.size() - 2);
-                }
-
-                // Trim trailing whitespace from the name (rare, but
-                // defends against `a =b`).
-                name_sv = trim_ws(name_sv);
-
-                if (!name_sv.empty()) {
-                    cookie c;
-                    // Bypass validation: parsed input may technically
-                    // contain bytes the validator would reject (e.g. a
-                    // SP inside a quoted value). We accept what the
-                    // wire delivers; the renderer is the strict side.
-                    c.name_ = std::string(name_sv);
-                    c.value_ = std::string(value_sv);
-                    out.push_back(std::move(c));
-                }
-            }
+        auto parsed = parse_cookie_token(header_value.substr(pos, tok_end - pos));
+        if (parsed.has_value()) {
+            cookie c;
+            // Bypass validation: parsed input may technically contain
+            // bytes the validator would reject (e.g. a SP inside a
+            // quoted value). We accept what the wire delivers; the
+            // renderer is the strict side.
+            c.name_ = std::string(parsed->first);
+            c.value_ = std::string(parsed->second);
+            out.push_back(std::move(c));
         }
 
         if (end == std::string_view::npos) {
