@@ -22,7 +22,7 @@
 //
 // Sub-test A — concurrent_register_block_from_handlers_no_data_race
 //   Drives the PUBLIC mutating surface (register_path, unregister_path,
-//   block_ip, unblock_ip) AND, as of TASK-052, the **server-wide**
+//   deny_ip, remove_denied_ip) AND, as of TASK-052, the **server-wide**
 //   lifecycle-hook registration surface (webserver::add_hook +
 //   hook_handle::remove) AND, as of TASK-094, the **per-resource**
 //   hook bus via http_resource::add_hook on both a small pool of
@@ -133,8 +133,8 @@ size_t discard_write(char* /*ptr*/, size_t size, size_t nmemb,
 struct OpCounters {
     std::atomic<int> register_ok{0};
     std::atomic<int> unregister_ok{0};
-    std::atomic<int> block_ok{0};
-    std::atomic<int> unblock_ok{0};
+    std::atomic<int> deny_ok{0};
+    std::atomic<int> remove_denied_ok{0};
     std::atomic<int> hook_add_ok{0};     // TASK-052
     std::atomic<int> hook_remove_ok{0};  // TASK-052
     std::atomic<int> cas_resource_hook_ok{0};  // TASK-094 op 6: pooled resources (null-vs-installed timing race)
@@ -303,12 +303,12 @@ ht::http_response driver_body(const ht::http_request& req,
             }
             break;
         case 2:
-            ws->block_ip(ip);
-            counters->block_ok.fetch_add(1, std::memory_order_relaxed);
+            ws->deny_ip(ip);
+            counters->deny_ok.fetch_add(1, std::memory_order_relaxed);
             break;
         case 3:
-            ws->unblock_ip(ip);
-            counters->unblock_ok.fetch_add(
+            ws->remove_denied_ip(ip);
+            counters->remove_denied_ok.fetch_add(
                 1, std::memory_order_relaxed);
             break;
         case 4: {
@@ -606,8 +606,8 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
     LT_CHECK_GT(counters.handler_calls.load(), 0);
     LT_CHECK_GT(counters.register_ok.load(), 0);    // TASK-032
     LT_CHECK_GT(counters.unregister_ok.load(), 0);  // TASK-032
-    LT_CHECK_GT(counters.block_ok.load(), 0);        // TASK-032
-    LT_CHECK_GT(counters.unblock_ok.load(), 0);      // TASK-032
+    LT_CHECK_GT(counters.deny_ok.load(), 0);        // TASK-032
+    LT_CHECK_GT(counters.remove_denied_ok.load(), 0);      // TASK-032
     LT_CHECK_GT(counters.hook_add_ok.load(), 0);     // TASK-052
     LT_CHECK_GT(counters.hook_remove_ok.load(), 0);  // TASK-052
     LT_CHECK_GT(counters.cas_resource_hook_ok.load(), 0);  // TASK-094

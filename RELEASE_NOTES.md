@@ -34,8 +34,13 @@ v1.x is end-of-life on the day v2.0 ships.
   smart-pointer overload.
 - **`sweet_kill`.** Removed. Use `stop_and_wait()` (or `stop()` for the
   signal-only form).
-- **IP allow/deny verbs.** `ban_ip`, `unban_ip`, `allow_ip`,
-  `disallow_ip` are removed. Use `block_ip` / `unblock_ip`.
+- **IP allow/deny verbs.** The v1 `ban_ip` / `unban_ip` / `allow_ip` /
+  `disallow_ip` quartet is renamed for a symmetric, unambiguous surface:
+  `deny_ip` / `remove_denied_ip` operate the deny list, and `allow_ip` /
+  `remove_allowed_ip` operate the allow list. `default_policy(ACCEPT)`
+  makes the deny list the exception list (block only these); `REJECT`
+  makes the allow list the exception list (permit only these). An allow
+  entry overrides a matching deny entry. See "What's renamed".
 - **Paired `no_*` boolean setters.** `no_basic_auth`, `no_digest_auth`,
   `no_ssl`, `no_debug`, `no_pedantic`, `no_deferred`, `no_regex_checking`,
   `no_ban_system`, `no_post_process`, `no_single_resource`, `no_ipv6`,
@@ -92,7 +97,7 @@ v1.x is end-of-life on the day v2.0 ships.
   configured validator callback is dead code. The
   v2 replacement is `webserver::add_hook(hook_phase::request_received,
   ...)` returning `hook_action::respond_with(http_response)` to reject
-  a request, or `webserver::block_ip`/`unblock_ip` for a connection-scoped
+  a request, or `webserver::deny_ip`/`remove_denied_ip` for a connection-scoped
   veto; `hook_phase::accept_decision` is observation-only (Short-circuit:
   no, per `specs/architecture/04-components/hooks.md`) and cannot reject
   a connection. The legacy
@@ -166,7 +171,7 @@ v1.x is end-of-life on the day v2.0 ships.
   `hook_handle::detach()` keeps the registration alive for the
   webserver's lifetime. See `specs/architecture/04-components/hooks.md`
   and [`README.md#lifecycle-hooks`](README.md#lifecycle-hooks). Closes:
-  #332 (banned-IP log, `examples/banned_ip_log.cpp`), #281 + #69
+  #332 (denied-IP log, `examples/denied_ip_log.cpp`), #281 + #69
   (CLF / time-taken access log, `examples/clf_access_log.cpp`), #273
   (early 413, `examples/early_413.cpp`); partially closes #272
   (per-chunk observation; body steal deferred to v2.1).
@@ -179,10 +184,10 @@ and see the v2 replacement.
 | v1 | v2 |
 |---|---|
 | `sweet_kill` | `stop_and_wait` |
-| `ban_ip` | `block_ip` |
-| `unban_ip` | `unblock_ip` |
-| `allow_ip` | `unblock_ip` (or `block_ip` to deny) |
-| `disallow_ip` | `block_ip` (or `unblock_ip` to allow) |
+| `ban_ip` | `deny_ip` |
+| `unban_ip` | `remove_denied_ip` |
+| `allow_ip` | `allow_ip` (unchanged; allow list) |
+| `disallow_ip` | `remove_allowed_ip` |
 | `not_found_resource` (setter) | `not_found_handler` |
 | `method_not_allowed_resource` (setter) | `method_not_allowed_handler` |
 | `internal_error_resource` (setter) | `internal_error_handler` |

@@ -185,8 +185,10 @@ REQUIRED_V2_TOKENS=(
     '\bhttp_response::unauthorized\b'
     '\bwith_header\b'
     '\bwith_status\b'
-    '\bblock_ip\b'
-    '\bunblock_ip\b'
+    '\bdeny_ip\b'
+    '\bremove_denied_ip\b'
+    '\ballow_ip\b'
+    '\bremove_allowed_ip\b'
     '\bstop_and_wait\b'
     '\bfeatures\(\)'
     '\bfeature_unavailable\b'
@@ -265,21 +267,24 @@ fi
 # no_ prefix and pass a bool) does not have a single mechanical pair.
 
 # IMPORTANT: v2 values may use ERE alternation groups intentionally (e.g.
-# '(block_ip|unblock_ip)').  Any new pair must be valid ERE on both sides.
+# '(foo|bar)').  Any new pair must be valid ERE on both sides.
 #
 # Word-boundary anchors (\b) on v1 values prevent false matches where the v1
 # token appears as a substring of a different, longer token on the same line.
-# Example: '\ballow_ip\b' prevents the 'disallow_ip' prose line from
-# satisfying the allow_ip pair check (the 'disallow_ip' line already contains
-# 'block_ip'/'unblock_ip', which would be a false positive without \b).
+# Example: '\ballow_ip\b' keeps the 'allow_ip' pair from being satisfied by a
+# 'disallow_ip' line — 'disallow_ip' contains 'allow_ip' as a substring, so
+# without \b the disallow_ip row would spuriously satisfy the allow_ip pair.
 # 'disallow_ip' needs no \b because no shorter token contains it as a
 # substring — the asymmetry is intentional, not an oversight.
+#
+# Note: v1 allow_ip maps to v2 allow_ip (same name, restored allow-list
+# semantics), so its pair is 'allow_ip;allow_ip'.
 RENAME_PAIRS=(
     'sweet_kill;stop_and_wait'
-    '\bban_ip\b;block_ip'
-    'unban_ip;unblock_ip'
-    '\ballow_ip\b;(block_ip|unblock_ip)'
-    'disallow_ip;(block_ip|unblock_ip)'  # no \b needed — no shorter token contains disallow_ip as a substring
+    '\bban_ip\b;deny_ip'
+    'unban_ip;remove_denied_ip'
+    '\ballow_ip\b;allow_ip'
+    'disallow_ip;remove_allowed_ip'  # no \b needed — no shorter token contains disallow_ip as a substring
     'not_found_resource;not_found_handler'
     'method_not_allowed_resource;method_not_allowed_handler'
     'internal_error_resource;internal_error_handler'

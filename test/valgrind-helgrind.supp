@@ -25,7 +25,7 @@
 # symbols — and carry a comment with the upstream reason.
 #
 # Any race that Helgrind reports inside libhttpserver's own locking — the
-# route-table shared_mutex, the hook bus, block_ip/unblock_ip — is a REAL
+# route-table shared_mutex, the hook bus, deny_ip/remove_denied_ip — is a REAL
 # race and MUST be fixed in source, never suppressed (DR-008, mirroring the
 # tsan.supp rule).
 #

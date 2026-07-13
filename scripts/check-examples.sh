@@ -184,13 +184,13 @@ if [ "$unlisted" -gt 0 ]; then
 fi
 
 # ---- TASK-052: hook-example documentation coverage --------------------------
-# The four lifecycle-hook examples (banned_ip_log, early_413, clf_access_log,
+# The four lifecycle-hook examples (denied_ip_log, early_413, clf_access_log,
 # per_route_auth) must be listed in both examples/README.md and the top-level
 # README.md so the user-visible resolution of issues #332, #281, #69, #273 is
 # discoverable. Per TASK-052 / Phase 3.
 EXAMPLES_README="$REPO_ROOT/examples/README.md"
 TOP_README="$REPO_ROOT/README.md"
-HOOK_EXAMPLES="banned_ip_log early_413 clf_access_log per_route_auth"
+HOOK_EXAMPLES="denied_ip_log early_413 clf_access_log per_route_auth"
 
 for f in "$EXAMPLES_README" "$TOP_README"; do
     [ -f "$f" ] || fail "$(basename "$f") does not exist"

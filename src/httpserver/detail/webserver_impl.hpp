@@ -129,7 +129,7 @@ bool debug_dump_request_body_opted_in();
 void maybe_warn_debug_dump_request_body(const webserver* parent);
 
 // webserver_impl: backing object holding all backend-coupled state of
-// `webserver` (MHD daemon, mutexes, ban/allowance sets, route table,
+// `webserver` (MHD daemon, mutexes, deny/allow IP sets, route table,
 // route cache, websocket registry, optional GnuTLS SNI cache) plus the
 // dispatch helpers and MHD trampolines that operate on those.
 //
@@ -368,11 +368,11 @@ class webserver_impl {
     std::vector<phase_entry<void(const ::httpserver::connection_close_ctx&)>>
         hooks_connection_closed_;
 
-    std::shared_mutex bans_mutex;
-    std::set<http::ip_representation> bans;
+    std::shared_mutex deny_list_mutex;
+    std::set<http::ip_representation> deny_list;
 
-    std::shared_mutex allowances_mutex;
-    std::set<http::ip_representation> allowances;
+    std::shared_mutex allow_list_mutex;
+    std::set<http::ip_representation> allow_list;
 
 #ifdef HAVE_WEBSOCKET
     // TASK-035: shared_ptr storage. The dispatch path

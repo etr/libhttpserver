@@ -260,7 +260,7 @@ webserver::webserver(const create_webserver& params):
     basic_auth_enabled(params._basic_auth_enabled),
     digest_auth_enabled(params._digest_auth_enabled),
     regex_checking(params._regex_checking),
-    ban_system_enabled(params._ban_system_enabled),
+    ip_access_control_enabled(params._ip_access_control_enabled),
     post_process_enabled(params._post_process_enabled),
     put_processed_data_to_content(params._put_processed_data_to_content),
     file_upload_target(params._file_upload_target),

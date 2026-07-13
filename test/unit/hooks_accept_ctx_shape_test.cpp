@@ -12,7 +12,7 @@
 //
 // TASK-045 landed accept_ctx with only a `peer_address peer` member.
 // TASK-046 extends it to carry the {accepted, reason} decision so the
-// observation-only hook can render banned-IP log entries (issue #332).
+// observation-only hook can render denied-IP log entries (issue #332).
 //
 // The fields are pinned by static_asserts so a future refactor that
 // reshapes accept_ctx must update this gate explicitly.
@@ -48,16 +48,16 @@ LT_BEGIN_SUITE(hooks_accept_ctx_shape_suite)
 LT_END_SUITE(hooks_accept_ctx_shape_suite)
 
 LT_BEGIN_AUTO_TEST(hooks_accept_ctx_shape_suite,
-                   default_accepted_true_reason_nullopt_and_aggregate_init_with_banned)
+                   default_accepted_true_reason_nullopt_and_aggregate_init_with_denied)
     accept_ctx ctx{};
     LT_CHECK_EQ(ctx.accepted, true);
     LT_CHECK(!ctx.reason.has_value());
     // Aggregate-initialize with reason set, mirroring the firing-site code.
-    accept_ctx ctx2{peer_address{}, false, std::string_view{"banned"}};
+    accept_ctx ctx2{peer_address{}, false, std::string_view{"denied"}};
     LT_CHECK_EQ(ctx2.accepted, false);
     LT_CHECK(ctx2.reason.has_value());
-    LT_CHECK_EQ(std::string(*ctx2.reason), std::string("banned"));
-LT_END_AUTO_TEST(default_accepted_true_reason_nullopt_and_aggregate_init_with_banned)
+    LT_CHECK_EQ(std::string(*ctx2.reason), std::string("denied"));
+LT_END_AUTO_TEST(default_accepted_true_reason_nullopt_and_aggregate_init_with_denied)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

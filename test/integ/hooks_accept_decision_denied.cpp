@@ -10,11 +10,11 @@
 
 // TASK-046 acceptance criterion 2.
 //
-//   "New integ test `hooks_accept_decision_banned`: with the IP ban
+//   "New integ test `hooks_accept_decision_denied`: with the IP deny
 //    list populated and the default policy ACCEPT, an `accept_decision`
-//    hook observes `accepted=false, reason="banned"`."
+//    hook observes `accepted=false, reason="denied"`."
 //
-// Closes issue #332 — emit a log entry per banned-IP rejection.
+// Closes issue #332 — emit a log entry per denied-IP rejection.
 
 #include <curl/curl.h>
 
@@ -57,15 +57,15 @@ class hello_resource : public httpserver::http_resource {
 
 }  // namespace
 
-LT_BEGIN_SUITE(hooks_accept_decision_banned_suite)
+LT_BEGIN_SUITE(hooks_accept_decision_denied_suite)
     void set_up() {}
     void tear_down() {}
-LT_END_SUITE(hooks_accept_decision_banned_suite)
+LT_END_SUITE(hooks_accept_decision_denied_suite)
 
-LT_BEGIN_AUTO_TEST(hooks_accept_decision_banned_suite, banned_ip_observed)
+LT_BEGIN_AUTO_TEST(hooks_accept_decision_denied_suite, denied_ip_observed)
     webserver ws{create_webserver(PORT)
                      .default_policy(http_utils::ACCEPT)};
-    ws.block_ip("127.0.0.1");
+    ws.deny_ip("127.0.0.1");
 
     std::mutex mu;
     std::vector<observation> log;
@@ -86,7 +86,7 @@ LT_BEGIN_AUTO_TEST(hooks_accept_decision_banned_suite, banned_ip_observed)
     auto resource = std::make_shared<hello_resource>();
     ws.register_path("/hello", resource);
     ws.start(false);
-    // TCP-level probe — works even though ws.block_ip("127.0.0.1") rejects HTTP probes
+    // TCP-level probe — works even though ws.deny_ip("127.0.0.1") rejects HTTP probes
     // (the kernel completes the handshake before MHD's policy_callback runs).
     httpserver_test::wait_for_server_ready(PORT);
 
@@ -115,17 +115,17 @@ LT_BEGIN_AUTO_TEST(hooks_accept_decision_banned_suite, banned_ip_observed)
     }
 
     // The hook should have fired at least once with accepted=false /
-    // reason="banned" for the rejected attempt.
-    bool found_banned = false;
+    // reason="denied" for the rejected attempt.
+    bool found_denied = false;
     for (const auto& o : snapshot) {
-        if (!o.accepted && o.reason_set && o.reason == "banned") {
-            found_banned = true;
+        if (!o.accepted && o.reason_set && o.reason == "denied") {
+            found_denied = true;
             // Sanity: peer is the loopback address.
             LT_CHECK_EQ(o.peer, std::string("127.0.0.1"));
         }
     }
-    LT_CHECK(found_banned);
-LT_END_AUTO_TEST(banned_ip_observed)
+    LT_CHECK(found_denied);
+LT_END_AUTO_TEST(denied_ip_observed)
 
 LT_BEGIN_AUTO_TEST_ENV()
     AUTORUN_TESTS()

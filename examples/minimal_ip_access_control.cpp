@@ -18,18 +18,31 @@
      USA
 */
 
-// minimal_ip_ban.cpp - demonstrate the v2.0 IP block API.
+// minimal_ip_access_control.cpp - demonstrate the IP access-control API.
 //
-// TASK-029: the v2.0 public IP-control surface is the pair block_ip /
-// unblock_ip, usable under the default ACCEPT policy. The historical
-// allow_ip / disallow_ip pair (under REJECT) was dropped.
+// Two lists, selected by create_webserver::default_policy():
+//   - deny_ip / remove_denied_ip : the exception list under the default
+//     ACCEPT policy (permit everyone except these).
+//   - allow_ip / remove_allowed_ip : the exception list under the REJECT
+//     policy (permit only these). Under ACCEPT, an allow entry also
+//     overrides a matching deny entry (allow wins).
 
 #include <httpserver.hpp>
 
 int main() {
+    // Default ACCEPT policy: block-list mode. Everyone is admitted except
+    // addresses on the deny list.
     httpserver::webserver ws{httpserver::create_webserver(8080)};
+    ws.deny_ip("10.0.0.1");
 
-    ws.block_ip("10.0.0.1");
+    // Allow-list mode: flip the default to REJECT, then permit only the
+    // addresses you allow_ip. Everyone else is refused at the policy
+    // callback.
+    //
+    //   httpserver::webserver ws{
+    //       httpserver::create_webserver(8080)
+    //           .default_policy(httpserver::http::http_utils::REJECT)};
+    //   ws.allow_ip("127.0.0.1");   // only localhost may connect
 
     ws.on_get("/hello", [](const httpserver::http_request&) {
         return httpserver::http_response::string("Hello, World!");
