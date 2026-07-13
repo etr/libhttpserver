@@ -82,9 +82,17 @@ static_assert(!std::is_move_assignable_v<httpserver::webserver>,
 // unrepresentative, larger sizeof. That lane's purpose is memory-safety, not
 // ABI-size stability, and the gate is fully enforced on every non-instrumented
 // lane above — so skip the upper-bound cap under MemorySanitizer rather than
-// record a fourth, meaningless number. (__has_feature is clang-only; the
-// !defined() arm keeps the assert active on the gcc/libstdc++ lanes.)
-#if !defined(__has_feature) || !__has_feature(memory_sanitizer)
+// record a fourth, meaningless number. __has_feature is clang-only, so it must
+// be probed behind defined(__has_feature) in its own nested #if — GCC's
+// preprocessor still parses `__has_feature(...)` syntactically even when the
+// left of `||` is true, which errors ("missing binary operator") since the
+// bare token isn't a macro there.
+#if defined(__has_feature)
+#  if __has_feature(memory_sanitizer)
+#    define LHS_UNDER_MSAN 1
+#  endif
+#endif
+#ifndef LHS_UNDER_MSAN
 static_assert(sizeof(httpserver::webserver) <= 864,
               "webserver size grew beyond the recorded per-lane "
               "max + 16-byte slack; see comment table above for the "

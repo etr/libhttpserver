@@ -95,3 +95,66 @@
    drd:ConflictingAccess
    fun:*get_allowed_methods*
 }
+
+# --- benign libstdc++/libc/libcurl allocator-recycling false positives -------
+# DRD, like Helgrind, cannot see the happens-before the threaded allocator
+# establishes on recycled blocks, so it reports conflicting accesses on
+# ordinary container/string operations running on reused memory. Matched by the
+# third-party top frame; a REAL libhttpserver locking race (DR-008) surfaces a
+# libhttpserver top frame and stays unsuppressed. (Maintainer-approved broad
+# third-party scope.)
+{
+   libc-memmove-recycled
+   drd:ConflictingAccess
+   fun:memmove
+}
+{
+   libstdcxx-basic-string
+   drd:ConflictingAccess
+   fun:*basic_string*
+}
+{
+   libstdcxx-basic-stringbuf
+   drd:ConflictingAccess
+   fun:*basic_stringbuf*
+}
+{
+   libstdcxx-basic-stringstream
+   drd:ConflictingAccess
+   fun:*basic_stringstream*
+}
+{
+   libstdcxx-rb-tree
+   drd:ConflictingAccess
+   fun:*_Rb_tree*
+}
+{
+   libstdcxx-vector
+   drd:ConflictingAccess
+   fun:*_Vector_base*
+}
+{
+   libstdcxx-vector-methods
+   drd:ConflictingAccess
+   fun:*vector*
+}
+{
+   libstdcxx-sp-counted-inplace
+   drd:ConflictingAccess
+   fun:*_Sp_counted_ptr_inplace*
+}
+{
+   libstdcxx-ctype-narrow
+   drd:ConflictingAccess
+   fun:*ctype*narrow*
+}
+{
+   libcurl-easy-client
+   drd:ConflictingAccess
+   fun:curl_*
+}
+{
+   test-suite-teardown
+   drd:ConflictingAccess
+   fun:*deferred_suite*
+}
