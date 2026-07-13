@@ -699,6 +699,7 @@ jobs:
           -DCMAKE_C_COMPILER=clang-18 \
           -DCMAKE_CXX_COMPILER=clang++-18 \
           -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi" \
+          -DLIBCXXABI_USE_LLVM_UNWINDER=OFF \
           -DLLVM_USE_SANITIZER=MemoryWithOrigins \
           -DCMAKE_BUILD_TYPE=RelWithDebInfo \
           -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/libcxx-msan" ;
