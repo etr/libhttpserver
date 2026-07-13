@@ -67,7 +67,9 @@
 // adversarial_segments_registration_no_latency_spike (TASK-080).
 // _GNU_SOURCE must be defined before the first system header is included.
 #if defined(__linux__) && !defined(_WIN32)
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#endif
 #endif
 
 #include <curl/curl.h>
