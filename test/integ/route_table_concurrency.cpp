@@ -149,11 +149,14 @@ LT_BEGIN_AUTO_TEST(route_table_concurrency_suite,
     // We don't assert specific counts — the gate is "completed without
     // deadlock or crash". TSan-detected races would break the build
     // when this same TU is rebuilt under the manual TSan gate.
-    LT_CHECK(writer_ops.load() > 0);
-    // Reader liveness can be defeated by valgrind's single-core scheduler
-    // (see under_valgrind() note); the race/crash gate is enforced by the
-    // sanitizer/valgrind tools themselves regardless.
+    // Liveness (both roles made progress) can be defeated by valgrind's
+    // single-core scheduler, which can starve EITHER the writers or the readers
+    // for the whole window — observed both writer_ops==0 and reader_ops==0
+    // across runs. The actual race/crash/deadlock concern is enforced by the
+    // valgrind/sanitizer tools themselves (0 errors) plus the completed join
+    // above, so only assert liveness off-valgrind.
     if (!under_valgrind()) {
+        LT_CHECK(writer_ops.load() > 0);
         LT_CHECK(reader_ops.load() > 0);
     }
 LT_END_AUTO_TEST(concurrent_register_and_lookup_no_data_race)
@@ -240,11 +243,14 @@ LT_BEGIN_AUTO_TEST(route_table_concurrency_suite,
     stop.store(true, std::memory_order_relaxed);
     for (auto& t : threads) t.join();
 
-    LT_CHECK(writer_ops.load() > 0);
-    // Reader liveness can be defeated by valgrind's single-core scheduler
-    // (see under_valgrind() note); the race/crash gate is enforced by the
-    // sanitizer/valgrind tools themselves regardless.
+    // Liveness (both roles made progress) can be defeated by valgrind's
+    // single-core scheduler, which can starve EITHER the writers or the readers
+    // for the whole window — observed both writer_ops==0 and reader_ops==0
+    // across runs. The actual race/crash/deadlock concern is enforced by the
+    // valgrind/sanitizer tools themselves (0 errors) plus the completed join
+    // above, so only assert liveness off-valgrind.
     if (!under_valgrind()) {
+        LT_CHECK(writer_ops.load() > 0);
         LT_CHECK(reader_ops.load() > 0);
     }
 LT_END_AUTO_TEST(concurrent_wildcard_node_alloc_and_lookup_no_data_race)
