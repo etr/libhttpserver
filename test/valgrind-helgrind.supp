@@ -125,7 +125,18 @@
 {
    mhd-poll-listen-socket
    Helgrind:Race
+   ...
    fun:MHD_poll_listen_socket
+}
+# MHD worker draining a response (queue path) racing the main thread's
+# webserver::stop() -> MHD_stop_daemon at teardown. The access is inside
+# MHD_queue_response reading MHD's own connection/daemon state; libhttpserver
+# frames are only callers below it. Third-party MHD ITC-pipe lifecycle FP, not a
+# libhttpserver locking race (DRD reports the mirror of this; kept here in sync).
+{
+   mhd-queue-response
+   Helgrind:Race
+   fun:MHD_queue_response
 }
 {
    lhs-method-set-read
@@ -213,14 +224,24 @@
 # --- libp11-kit atexit/dl_fini mutex teardown (third-party) ------------------
 # gnutls pulls in libp11-kit (PKCS#11); its cleanup runs from _dl_fini() at
 # process exit and calls pthread_mutex_destroy() on an object Helgrind rejects
-# ("pthread_mutex_destroy with invalid argument"). Helgrind classes this as a
-# PthAPIerror (not Race/Misc); the intercepted top frame is unresolved (vgpreload
-# ???), so match on the libp11-kit object with a leading `...` — which spans only
-# the interceptor/libc frames, never a libhttpserver frame. Third-party shutdown
-# path, not a libhttpserver mutex error.
+# with the message "pthread_mutex_destroy with invalid argument". Helgrind emits
+# that via HG_(record_error_Misc) — so the suppression KIND is Helgrind:Misc, NOT
+# PthAPIerror (an earlier PthAPIerror attempt matched the frames but never fired:
+# suppressed:0, 2 errors survived in every test process). The intercepted top
+# frame is unresolved (vgpreload ???), so match on the libp11-kit object with a
+# leading `...` — which spans only the interceptor/libc frames, never a
+# libhttpserver frame. A second explicit-frame variant (vgpreload interceptor +
+# libp11-kit) is kept as a belt-and-suspenders match in case the leading-`...`
+# form is ever stripped. Third-party shutdown path, not a libhttpserver error.
 {
-   libp11-kit-dlfini-mutex-destroy
-   Helgrind:PthAPIerror
+   libp11-kit-dlfini-mutex-destroy-misc
+   Helgrind:Misc
    ...
+   obj:*libp11-kit.so*
+}
+{
+   libp11-kit-dlfini-mutex-destroy-misc-explicit
+   Helgrind:Misc
+   obj:*vgpreload_helgrind*
    obj:*libp11-kit.so*
 }

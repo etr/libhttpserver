@@ -121,7 +121,19 @@
 {
    mhd-poll-listen-socket
    drd:ConflictingAccess
+   ...
    fun:MHD_poll_listen_socket
+}
+# MHD worker draining a response (queue path) at the instant the main thread
+# calls webserver::stop() -> MHD_stop_daemon. The conflicting access is inside
+# MHD_queue_response reading MHD's own connection/daemon state; the libhttpserver
+# frames in the stack are only callers *below* it, so this is a third-party MHD
+# ITC-pipe lifecycle FP (DRD can't see the pipe/join happens-before), NOT a
+# libhttpserver locking race. Top frame is the MHD C symbol.
+{
+   mhd-queue-response
+   drd:ConflictingAccess
+   fun:MHD_queue_response
 }
 {
    lhs-method-set-read
