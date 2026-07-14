@@ -1409,8 +1409,10 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
 LT_END_AUTO_TEST(per_resource_add_hook_first_call_cas_no_data_race)
 
 LT_BEGIN_AUTO_TEST_ENV()
-#if defined(_WIN32) && !defined(__CYGWIN__)
-    // Windows/mingw whole-binary skip. The registration-stress subtests
+#if defined(_WIN32) || defined(__CYGWIN__) || defined(__MSYS__)
+    // Windows-family whole-binary skip — covers both CI subsystems: MINGW64
+    // (native, _WIN32) and the MSYS/Cygwin POSIX layer (__CYGWIN__/__MSYS__,
+    // where _WIN32 is NOT defined). The registration-stress subtests
     // rely on POSIX threading/timing behavior — and the DR-008 negative
     // case (stop_from_handler) contains an abort in a forked child via
     // fork()/waitpid(), which do not exist on Windows — so the heavy
@@ -1422,6 +1424,6 @@ LT_BEGIN_AUTO_TEST_ENV()
                  "depends on POSIX threading/timing; unsupported on "
                  "Windows/mingw" << std::endl;
     return 77;  // Automake SKIP
-#endif  // _WIN32 && !__CYGWIN__
+#endif  // _WIN32 || __CYGWIN__ || __MSYS__
     AUTORUN_TESTS()
 LT_END_AUTO_TEST_ENV()

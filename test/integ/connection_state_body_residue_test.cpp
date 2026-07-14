@@ -33,7 +33,10 @@
 //   - A connection_opened server-wide hook fires exactly once across
 //     both requests (belt-and-braces signal that keep-alive engaged).
 
-#if defined(_WIN32) && !defined(__CYGWIN__)
+// Windows-family: MINGW64 (native, _WIN32) AND the MSYS/Cygwin POSIX layer
+// (__CYGWIN__/__MSYS__, where _WIN32 is NOT defined). Both CI subsystems hit the
+// same MHD keep-alive request-state difference, so the skip must cover both.
+#if defined(_WIN32) || defined(__CYGWIN__) || defined(__MSYS__)
 #define _WINDOWS
 #endif
 
