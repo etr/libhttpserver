@@ -1371,12 +1371,15 @@ jobs:
       if: ${{ failure() && matrix.build-type != 'iwyu' && matrix.compiler-family != 'arm-cross' && matrix.build-type != 'header-hygiene' }}
 
     - name: Verify Windows smoke test ran (TASK-077)
-      # TASK-077: assert the new `ws_start_stop_suite::windows_smoke` test
-      # is actually being compiled and executed on the MinGW64 / MSYS lanes
-      # so that the basic daemon-start-accept-one-GET path is observed end
-      # to end on Windows. Without this, a future build-flag tweak that
-      # inadvertently turns off the `#ifdef _WINDOWS` branch would silently
-      # erase the Windows round-trip coverage.
+      # TASK-077: assert the `ws_start_stop_suite::windows_smoke` test is
+      # actually compiled and executed on the native MinGW64 lane so the basic
+      # daemon-start-accept-one-GET path is observed end to end on Windows.
+      # Without this, a future build-flag tweak that inadvertently turns off the
+      # `#ifdef _WINDOWS` branch would silently erase the Windows round-trip
+      # coverage. Restricted to MINGW64: windows_smoke is gated on _WINDOWS
+      # (defined(_WIN32) && !defined(__CYGWIN__)) and does native-Windows setup
+      # (winsock2 / _WIN32_WINNT), so it is deliberately NOT built on the MSYS
+      # (Cygwin/POSIX) lane where _WIN32 is undefined.
       shell: bash
       run: |
         cd build
@@ -1388,7 +1391,7 @@ jobs:
           echo "ERROR: windows_smoke test did not appear in test/ws_start_stop.log" >&2
           exit 1
         fi
-      if: ${{ matrix.os-type == 'windows' }}
+      if: ${{ matrix.os-type == 'windows' && matrix.msys-env == 'MINGW64' }}
 
     - name: Run Valgrind checks
       timeout-minutes: 90
