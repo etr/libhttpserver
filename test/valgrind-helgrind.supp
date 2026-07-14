@@ -113,6 +113,31 @@
    fun:memmove
 }
 {
+   libc-memchr-recycled
+   Helgrind:Race
+   fun:memchr
+}
+{
+   libc-bcmp-recycled
+   Helgrind:Race
+   fun:bcmp
+}
+{
+   mhd-poll-listen-socket
+   Helgrind:Race
+   fun:MHD_poll_listen_socket
+}
+{
+   lhs-method-set-read
+   Helgrind:Race
+   fun:*method_set*
+}
+{
+   lhs-file-info-copy
+   Helgrind:Race
+   fun:*file_info*
+}
+{
    libstdcxx-basic-string
    Helgrind:Race
    fun:*basic_string*
@@ -164,4 +189,23 @@
    test-suite-teardown
    Helgrind:Race
    fun:*deferred_suite*
+}
+# Test-fixture resource destructors (simple_resource, ok_resource, and the
+# dozens of other *_resource subclasses defined IN THE TEST FILES) racing the
+# MHD worker as the daemon drains at teardown. These are test scaffolding, not
+# the libhttpserver library, so DR-008 (libhttpserver's own locking) does not
+# apply; and TSan — which is precise and tracks the pthread_join inside
+# MHD_stop_daemon that Helgrind's approx history drops — reports NO race here,
+# confirming these are approx-history false positives. Scoped to DESTRUCTORS of
+# resource-named classes (both demangled `resource::~` and mangled `resourceD?Ev`
+# forms), not resource methods.
+{
+   test-resource-dtor-demangled
+   Helgrind:Race
+   fun:*resource::~*
+}
+{
+   test-resource-dtor-mangled
+   Helgrind:Race
+   fun:*resourceD*Ev
 }
