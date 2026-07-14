@@ -27,6 +27,17 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SRC="$REPO_ROOT/src/httpserver"
 
+# Header doc-comment invariants are platform-independent and fully enforced on
+# the Linux and macOS lanes. This gate relies on GNU/POSIX grep behavior that is
+# unreliable under the MSYS2/mingw shell (git autocrlf CRLF + word-boundary
+# matching), so skip on Windows rather than re-validate identical repo content.
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+        echo "check-hooks-doc-spotcheck: SKIP on Windows/MSYS (content gate enforced on POSIX lanes)"
+        exit 0
+        ;;
+esac
+
 fail() {
     echo "check-hooks-doc-spotcheck: FAIL: $*" >&2
     exit 1
