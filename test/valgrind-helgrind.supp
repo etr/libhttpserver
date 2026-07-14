@@ -209,3 +209,14 @@
    Helgrind:Race
    fun:*resourceD*Ev
 }
+
+# --- libp11-kit atexit/dl_fini mutex teardown (third-party) ------------------
+# gnutls pulls in libp11-kit (PKCS#11); its cleanup runs from _dl_fini() at
+# process exit and calls pthread_mutex_destroy() on an object Helgrind flags as
+# invalid. Third-party shutdown path, not a libhttpserver mutex error.
+{
+   libp11-kit-dlfini-mutex-misc
+   Helgrind:Misc
+   fun:pthread_mutex_destroy*
+   obj:*libp11-kit.so*
+}
