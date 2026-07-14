@@ -79,6 +79,26 @@
    fun:*_Sp_counted_base*_M_release*
 }
 
+# --- libstdc++ atomic<shared_ptr> free-function ops (_Sp_locker spinlock) -----
+# std::atomic_load/atomic_compare_exchange on a std::shared_ptr take a
+# libstdc++-internal _Sp_locker spinlock (global pool) to make the pointer +
+# control-block update atomic. Helgrind does not model that spinlock's
+# happens-before, so it reports a benign race between two correctly-synchronised
+# atomic accesses to the SAME shared_ptr -- here http_resource::hook_table_,
+# driven by ensure_table()'s atomic_load(acquire)/compare_exchange(acq_rel)
+# lock-free idiom when a handler calls add_hook() concurrently on multiple MHD
+# workers. Same detector blind spot as _Sp_counted_base::_M_release above; TSan,
+# which models the atomics precisely, reports NO race on this test. Matched on
+# the libstdc++ _Sp_locker frame (third-party) -- a genuinely unsynchronised
+# shared_ptr access would surface its own (non-_Sp_locker) frame and stay
+# unsuppressed, so DR-008 (libhttpserver's own locking) is unaffected.
+{
+   libstdcxx-atomic-shared-ptr-sp-locker
+   Helgrind:Race
+   ...
+   fun:*_Sp_locker*
+}
+
 # --- benign lock-free reads of immutable-after-registration resource config -
 # The method-dispatch table and a resource's allowed-method set are written
 # once at registration (before start()) and only READ from the MHD worker

@@ -82,6 +82,21 @@
    fun:*_Sp_counted_base*_M_release*
 }
 
+# --- libstdc++ atomic<shared_ptr> free-function ops (_Sp_locker spinlock) -----
+# std::atomic_load/atomic_compare_exchange on a std::shared_ptr take a
+# libstdc++-internal _Sp_locker spinlock whose happens-before DRD does not model,
+# so it can report a benign conflict between two correctly-synchronised atomic
+# accesses to the SAME shared_ptr (http_resource::hook_table_, via ensure_table's
+# atomic_load/compare_exchange lock-free idiom). Helgrind reports the mirror of
+# this; kept here in sync. Matched on the third-party _Sp_locker frame, never the
+# libhttpserver caller, so DR-008 is unaffected.
+{
+   libstdcxx-atomic-shared-ptr-sp-locker
+   drd:ConflictingAccess
+   ...
+   fun:*_Sp_locker*
+}
+
 # --- benign lock-free reads of immutable-after-registration resource config -
 # Written once at registration (before start()), only READ from the MHD worker
 # during dispatch. NOT a libhttpserver locking race (DR-008).
