@@ -73,13 +73,22 @@
    fun:thread_main_handle_connection
 }
 
-# --- libstdc++ shared_ptr control-block refcount ----------------------------
-# _M_release decrements an atomic use-count; DRD does not model the libstdc++
-# atomic and reports a benign counter conflict.
+# --- libstdc++ shared_ptr control-block (atomic refcount + teardown) ---------
+# The shared_ptr control block (_Sp_counted_base and derived) keeps an atomic
+# use-/weak-count DRD does not model, so it reports a benign conflict whenever
+# the last ref is dropped on one thread while another touched the block. The
+# teardown surfaces through many control-block methods depending on timing
+# (_M_release, _M_weak_release, _M_dispose, ~_Sp_counted_base), so match the
+# whole _Sp_counted_base family rather than a single method -- otherwise each
+# timing-dependent valgrind run hits a different frame (observed: the MHD worker
+# dropping the last resource ref in modded_request::~modded_request during
+# request_completed while the main thread unregisters). Pure libstdc++ frame; a
+# real libhttpserver locking race surfaces a libhttpserver top frame. TSan is
+# green on the same tests.
 {
-   libstdcxx-shared-ptr-refcount-release
+   libstdcxx-shared-ptr-control-block
    drd:ConflictingAccess
-   fun:*_Sp_counted_base*_M_release*
+   fun:*_Sp_counted_base*
 }
 
 # --- libstdc++ atomic<shared_ptr> free-function ops (_Sp_locker spinlock) -----
