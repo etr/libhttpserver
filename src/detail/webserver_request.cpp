@@ -270,7 +270,8 @@ MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection,
     // NOTE: after_handler is NOT fired on this path (no handler ran);
     // response_sent fires unconditionally in materialize_and_queue_response.
     if (mr->skip_handler) {
-        return materialize_and_queue_response(connection, mr);
+        // No resource was resolved on this path -- pass nullptr.
+        return materialize_and_queue_response(connection, mr, nullptr);
     }
 
     // TASK-023: hold a shared_ptr copy across dispatch. If a concurrent
@@ -289,6 +290,13 @@ MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection,
     // the resource directly.
     if (found) {
         mr->resource_weak_ = hrm;
+        // Snapshot whether this resource carries a per-route hook table,
+        // so fire_request_completed_gated (which fires after this
+        // shared_ptr is gone) can gate its weak_ptr lock() on the common
+        // zero-per-route-hook path. Same acquire barrier as
+        // fire_before_handler_gated relies on (hrm came from
+        // resolve_resource_for_request under the route-table shared_lock).
+        mr->route_has_hook_table_ = (hrm->hook_table_raw_() != nullptr);
     }
 
     fire_route_resolved_gated(this, mr, found, hrm);
@@ -305,7 +313,7 @@ MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection,
         // NOTE: after_handler was NOT fired on this path (before_handler
         // short-circuit); response_sent fires unconditionally in
         // materialize_and_queue_response below.
-        return materialize_and_queue_response(connection, mr);
+        return materialize_and_queue_response(connection, mr, hrm.get());
     }
 
     if (found) {
@@ -323,9 +331,11 @@ MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection,
     // design choice: we fire because the dispatch site has produced a
     // response and the contract is "fires between response readiness
     // and queue", and that gives users a uniform observation point.
-    fire_after_handler_gated(mr);
+    // hrm is null on the 404 path (found == false); fire_after_handler_gated
+    // and materialize_and_queue_response both tolerate a null resource.
+    fire_after_handler_gated(mr, hrm.get());
 
-    return materialize_and_queue_response(connection, mr);
+    return materialize_and_queue_response(connection, mr, hrm.get());
 }
 
 MHD_Result webserver_impl::complete_request(MHD_Connection* connection, struct detail::modded_request* mr, const char* version, const char* method) {

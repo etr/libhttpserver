@@ -135,10 +135,13 @@ bool webserver_impl::fire_before_handler_gated(
 // Per §4.10: after_handler fires only when a handler conceptually ran.
 // The pre-handler short-circuit branch (mr->skip_handler) is handled
 // upstream in finalize_answer and never reaches this site.
-void webserver_impl::fire_after_handler_gated(detail::modded_request* mr) {
+void webserver_impl::fire_after_handler_gated(detail::modded_request* mr,
+                                              http_resource* resource) {
     const bool server_gate = has_hooks_for(hook_phase::after_handler);
-    std::shared_ptr<http_resource> res;
-    auto* rtable = per_route_table(mr, res);
+    // resource is borrowed from finalize_answer's live shared_ptr; no
+    // weak_ptr lock() needed (this fires within finalize_answer's scope).
+    // nullptr on the 404 path -- no per-route table then.
+    auto* rtable = resource != nullptr ? resource->hook_table_raw_() : nullptr;
     const bool route_gate = rtable != nullptr &&
         rtable->any_hooks(hook_phase::after_handler);
 
@@ -175,10 +178,14 @@ void webserver_impl::fire_after_handler_gated(detail::modded_request* mr) {
 // webserver_impl::request_completed). bytes_queued is the logical body
 // size from http_response::body_->size(); for deferred/pipe bodies this
 // is 0 and consumers should fall back to the Content-Length header.
-void webserver_impl::fire_response_sent_gated(detail::modded_request* mr) {
+void webserver_impl::fire_response_sent_gated(detail::modded_request* mr,
+                                              http_resource* resource) {
     const bool server_gate = has_hooks_for(hook_phase::response_sent);
-    std::shared_ptr<http_resource> res;
-    auto* rtable = per_route_table(mr, res);
+    // resource is borrowed from finalize_answer's live shared_ptr (this
+    // fires from materialize_and_queue_response, still within that scope),
+    // so read the per-route table directly instead of locking the
+    // weak_ptr. nullptr on the skip_handler / 404 paths.
+    auto* rtable = resource != nullptr ? resource->hook_table_raw_() : nullptr;
     const bool route_gate = rtable != nullptr &&
         rtable->any_hooks(hook_phase::response_sent);
 
@@ -226,12 +233,24 @@ void webserver_impl::fire_request_completed_gated(
         enum MHD_RequestTerminationCode toe) {
     const bool server_gate = has_hooks_for(hook_phase::request_completed);
 
-    // TASK-051: per-route gate. per_route_table() returns null if the
-    // resource was unregistered between dispatch and completion (per the
-    // action-item contract: skip the per-route chain in that case).
-    // res keeps the resource alive while rtable is in use.
+    // TASK-051: per-route gate. Unlike after_handler/response_sent, this
+    // fires from the MHD completion callback -- finalize_answer's owning
+    // shared_ptr is gone, so we must lock() the weak_ptr to keep the
+    // resource alive while rtable is in use. per_route_table() returns
+    // null if the resource was unregistered between dispatch and
+    // completion (action-item contract: skip the per-route chain).
+    //
+    // But skip the lock() entirely on the common path: mr->route_has_hook_table_
+    // is a snapshot (taken in finalize_answer) of whether the resource
+    // carried any per-route hook table. When it's false and no server-wide
+    // request_completed hook is registered, no control-block atomics are
+    // touched. When it's true we still lock() and run the precise
+    // any_hooks(request_completed) check, preserving the skip contract.
     std::shared_ptr<http_resource> res;
-    auto* rtable = per_route_table(mr, res);
+    resource_hook_table* rtable = nullptr;
+    if (server_gate || mr->route_has_hook_table_) {
+        rtable = per_route_table(mr, res);
+    }
     const bool per_route_present = rtable != nullptr &&
         rtable->any_hooks(hook_phase::request_completed);
 

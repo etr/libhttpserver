@@ -224,8 +224,21 @@ void fire_request_completed(
 // TASK-050: gated-fire helpers, members so the http_response friendship
 // applies (response_sent_ctx::bytes_queued reads response.body_->size()).
 // Definitions live in src/detail/webserver_finalize.cpp.
-void fire_after_handler_gated(modded_request* mr);
-void fire_response_sent_gated(modded_request* mr);
+//
+// @p resource is the resolved resource borrowed from finalize_answer's
+// owning shared_ptr (nullptr on the 404 / short-circuit paths where no
+// resource was resolved). Passing it avoids a per-request weak_ptr
+// lock() -- and its control-block atomics -- on the zero-hook hot path;
+// the resource stays alive for the whole finalize_answer scope, which
+// both of these fire sites run within.
+void fire_after_handler_gated(modded_request* mr,
+                              ::httpserver::http_resource* resource);
+void fire_response_sent_gated(modded_request* mr,
+                              ::httpserver::http_resource* resource);
+// request_completed fires from the MHD completion callback, after
+// finalize_answer's shared_ptr is gone, so it keeps the weak_ptr lock()
+// -- but gated behind mr->route_has_hook_table_ so the lock is skipped
+// entirely on the common zero-per-route-hook path.
 void fire_request_completed_gated(modded_request* mr,
                                   enum MHD_RequestTerminationCode toe);
 
@@ -330,8 +343,14 @@ std::string serialize_allow_methods(method_set allowed) const;
 // mr->response, decorate it, queue it on the connection. Handles
 // the belt-and-suspenders fallback when get_raw_response_with_fallback
 // itself fails to produce a response.
+//
+// @p resource is the resolved resource (nullptr when none was resolved),
+// forwarded to fire_response_sent_gated so it can reach the per-route
+// hook table without a weak_ptr lock(). Borrowed for the duration of the
+// call from finalize_answer's owning shared_ptr.
 MHD_Result materialize_and_queue_response(MHD_Connection* connection,
-                                          modded_request* mr);
+                                          modded_request* mr,
+                                          ::httpserver::http_resource* resource);
 
 // TASK-062: kind-dispatched MHD queue entry-point.  For
 // body_kind::digest_challenge, branches into the auth-required

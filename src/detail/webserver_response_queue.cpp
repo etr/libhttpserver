@@ -231,7 +231,8 @@ int webserver_impl::queue_response_dispatching_kind(
 }
 
 MHD_Result webserver_impl::materialize_and_queue_response(MHD_Connection* connection,
-                                                          detail::modded_request* mr) {
+                                                          detail::modded_request* mr,
+                                                          http_resource* resource) {
     struct MHD_Response* raw_response = get_raw_response_with_fallback(mr);
     if (raw_response == nullptr) {
         // Belt-and-suspenders: even get_raw_response_with_fallback's
@@ -263,7 +264,7 @@ MHD_Result webserver_impl::materialize_and_queue_response(MHD_Connection* connec
     // queue, so destroying the MHD_Response below does not affect the
     // queued bytes -- only the http_response in mr->response matters
     // for the hook ctx pointer.
-    fire_response_sent_gated(mr);
+    fire_response_sent_gated(mr, resource);
     // MHD reference-counting note: for MHD_create_response_from_callback
     // responses (deferred/streaming), MHD increments its own internal
     // refcount during MHD_queue_response, so this MHD_destroy_response only

@@ -120,16 +120,30 @@ struct modded_request {
 
     // TASK-051: weak_ptr to the resource that handled this request.
     // Populated in finalize_answer when resolve_resource_for_request
-    // returns a non-null hrm. Used by fire_response_sent_gated and
-    // fire_request_completed_gated to fire the per-route phase chain
-    // after the server-wide one. If the resource was unregistered
-    // between dispatch and completion, lock() returns null and the
-    // per-route chain is skipped (the action-item contract). The
-    // weak_ptr also keeps a control-block reference into the resource
-    // alive until ~modded_request, so the resource cannot be destroyed
-    // mid-firing -- the hot-path firing helpers lock() into a local
-    // shared_ptr before iterating.
+    // returns a non-null hrm. Used by fire_request_completed_gated (which
+    // fires from the MHD completion callback, after finalize_answer's
+    // owning shared_ptr is gone) and the handler_exception path. If the
+    // resource was unregistered between dispatch and completion, lock()
+    // returns null and the per-route chain is skipped (the action-item
+    // contract).
+    //
+    // The two in-scope firing helpers (fire_after_handler_gated /
+    // fire_response_sent_gated) do NOT lock() this weak_ptr: they run
+    // while finalize_answer's owning shared_ptr is still alive, so the
+    // resolved resource is passed to them directly. Locking there cost a
+    // control-block CAS per matched request even with zero hooks -- the
+    // gate is checked first now instead.
     std::weak_ptr<http_resource> resource_weak_{};
+
+    // Snapshot, taken in finalize_answer, of whether the resolved
+    // resource carried a per-route hook table at dispatch time. Lets
+    // fire_request_completed_gated skip the weak_ptr lock() (and its
+    // control-block atomics) on the overwhelmingly common zero-per-route-
+    // hook path: when this is false and no server-wide request_completed
+    // hook is registered, no lock is taken at all. The precise
+    // any_hooks(request_completed) check still happens after locking when
+    // this is true, preserving the unregistration-skip contract.
+    bool route_has_hook_table_ = false;
 
     modded_request() = default;
 
