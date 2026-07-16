@@ -417,7 +417,20 @@ MHD_Result webserver_impl::answer_to_connection(void* cls, MHD_Connection* conne
 
     std::string t_url = url;
     base_unescaper(&t_url, impl->parent->unescaper);
-    mr->standardized_url = http_utils::standardize_url(t_url);
+    // SECURITY: collapse dot-segments ("." / "..") into the canonical
+    // path here, at the single point where the routing/auth path is
+    // derived. Both the route matcher (radix_tree::find via
+    // mr->standardized_url) and should_skip_auth() must interpret the
+    // path identically; should_skip_auth() runs the path through
+    // normalize_path() (which pops ".."), but standardize_url() only
+    // collapses duplicate '/' and a trailing '/'. Without this, a request
+    // such as "/admin/../public/x" normalizes to "/public/x" for the
+    // auth-skip check (auth skipped) yet the router still descends to the
+    // "/admin" prefix/regex handler -- an authentication bypass. Applying
+    // normalize_path() to the standardized URL makes the two views agree;
+    // it is idempotent w.r.t. the normalize_path() call already in
+    // should_skip_auth().
+    mr->standardized_url = normalize_path(http_utils::standardize_url(t_url));
     mr->has_body = false;
 
     // log_access is now a response_sent alias (see webserver_aliases.cpp).

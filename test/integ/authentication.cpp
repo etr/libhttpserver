@@ -972,6 +972,71 @@ LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_paths_deep_nested)
     ws.stop();
 LT_END_AUTO_TEST(auth_skip_paths_deep_nested)
 
+// SECURITY REGRESSION (path-normalization auth bypass): the auth-skip
+// check and the route matcher must interpret the request path
+// identically. Before the fix, should_skip_auth() collapsed ".."
+// segments while the router did not, so "GET /admin/../public/x" looked
+// like "/public/x" to the auth gate (auth skipped) yet still descended
+// to the protected "/admin" prefix handler -- serving it unauthenticated.
+// After the fix the dispatch path canonicalizes the URL once (dot-
+// segments collapsed at answer_to_connection), so the same request is
+// uniformly treated as "/public/x": auth is legitimately skipped and it
+// routes to the public handler, never to /admin.
+//
+// CURLOPT_PATH_AS_IS is required -- libcurl collapses "/../" client-side
+// by default, which would mask the server-side behaviour under test.
+class admin_secret_resource : public http_resource {
+ public:
+     http_response render_get(const http_request&) {
+         return http_response::string("ADMIN_SECRET");
+     }
+};
+
+class public_ok_resource : public http_resource {
+ public:
+     http_response render_get(const http_request&) {
+         return http_response::string("PUBLIC_OK");
+     }
+};
+
+LT_BEGIN_AUTO_TEST(authentication_suite, auth_skip_dotdot_no_route_confusion)
+    webserver ws{create_webserver(0)
+        .auth_handler(centralized_auth_handler)
+        .auth_skip_paths({"/public/*"})};
+
+    ws.register_prefix("admin", std::make_shared<admin_secret_resource>());
+    ws.register_prefix("public", std::make_shared<public_ok_resource>());
+    ws.start(false);
+    const uint16_t port = ws.get_bound_port();
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    std::string s;
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    long http_code = 0;  // NOLINT(runtime/int)
+
+    // Attacker path: normalizes to /public/x for the auth-skip check,
+    // but a pre-fix router would descend to the /admin prefix handler.
+    const std::string url =
+        "localhost:" + std::to_string(port) + "/admin/../public/x";
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_PATH_AS_IS, 1L);
+    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writefunc);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+    res = curl_easy_perform(curl);
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    LT_ASSERT_EQ(res, 0);
+    // Must NOT reach the protected /admin handler unauthenticated.
+    LT_CHECK(s != "ADMIN_SECRET");
+    // Uniformly canonicalized to /public/x -> served by the public handler.
+    LT_CHECK_EQ(http_code, 200);
+    LT_CHECK_EQ(s, "PUBLIC_OK");
+    curl_easy_cleanup(curl);
+
+    ws.stop();
+LT_END_AUTO_TEST(auth_skip_dotdot_no_route_confusion)
+
 // Test POST method with centralized auth
 class post_resource : public http_resource {
  public:
