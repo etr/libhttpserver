@@ -330,7 +330,7 @@ void webserver::unregister_resource(const string& resource) {
 //   deny_ip / remove_denied_ip   -> the deny list (exception under ACCEPT)
 //   allow_ip / remove_allowed_ip -> the allow list (exception under REJECT;
 //                                   also overrides a deny entry under ACCEPT)
-// See webserver::deny_ip / allow_ip (impls in webserver_setup.cpp) and
+// See webserver::deny_ip / allow_ip (impls in webserver_lifecycle.cpp) and
 // classify_decision (webserver_callbacks_lifecycle.cpp).
 
 }  // namespace httpserver

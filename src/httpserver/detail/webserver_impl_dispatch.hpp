@@ -224,7 +224,7 @@ void fire_request_completed(
 
 // Gated-fire helpers, members so the http_response friendship
 // applies (response_sent_ctx::bytes_queued reads response.body_->size()).
-// Definitions live in src/detail/webserver_finalize.cpp.
+// Definitions live in src/detail/webserver_hook_firing.cpp.
 //
 // @p resource is the resolved resource borrowed from finalize_answer's
 // owning shared_ptr (nullptr on the 404 / short-circuit paths where no
@@ -248,7 +248,7 @@ void fire_request_completed_gated(modded_request* mr,
 // short-circuited (mr->response already populated; caller must go
 // straight to materialize_and_queue_response). False means both chains
 // passed (or both gates were closed) and dispatch should proceed.
-// Definition lives in src/detail/webserver_finalize.cpp alongside the
+// Definition lives in src/detail/webserver_hook_firing.cpp alongside the
 // other gated-fire helpers. @p hrm is the resolved resource (non-null at
 // the call site in finalize_answer).
 bool fire_before_handler_gated(

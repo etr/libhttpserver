@@ -18,10 +18,10 @@
      USA
 */
 
-// Gated hook-firing helpers for the after_handler, response_sent, and
-// request_completed lifecycle phases. Carved out of webserver_request.cpp
-// and webserver_callbacks.cpp to keep each TU under the project LOC
-// ceiling. See per-function comments for behavioral details.
+// Gated hook-firing helpers for the before_handler, after_handler,
+// response_sent, and request_completed lifecycle phases. Carved out of
+// webserver_request.cpp and webserver_callbacks.cpp to keep each TU under
+// the project LOC ceiling. See per-function comments for behavioral details.
 
 #include "httpserver/webserver.hpp"
 #include "httpserver/detail/webserver_impl.hpp"

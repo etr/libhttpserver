@@ -445,6 +445,6 @@ using arg_view_map = std::map<std::string_view, http_arg_value, http::arg_compar
 // consumers of <httpserver/http_utils.hpp> still see the type.
 #include "httpserver/ip_representation.hpp"
 
-#include "httpserver/http_utils_inet.hpp"
+#include "httpserver/http_utils_helpers.hpp"
 #endif  // SRC_HTTPSERVER_HTTP_UTILS_HPP_
 

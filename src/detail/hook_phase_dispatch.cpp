@@ -307,7 +307,7 @@ detail::webserver_impl::fire_handler_exception(
 //
 // after_handler is the post-handler short-circuit. Returns engaged
 // optional iff a hook short-circuited with respond_with(); the caller
-// (fire_after_handler_gated in webserver_finalize.cpp) emplaces the new
+// (fire_after_handler_gated in webserver_hook_firing.cpp) emplaces the new
 // response into mr->response ahead of materialize_and_queue_response.
 
 std::optional<::httpserver::http_response>

@@ -362,7 +362,7 @@ bool is_v4_mapped_prefix_octet_pair(uint16_t a, uint16_t b) {
 // case does not apply are bytes 10-11 folded into the scores and the
 // totals compared.
 //
-// insert_wildcard_aware in src/detail/webserver_setup.cpp relies on
+// insert_wildcard_aware in src/detail/webserver_lifecycle.cpp relies on
 // this equivalence: std::set::find must locate a stored entry that
 // merely OVERLAPS the new one (wildcard-subsumed, or v4-mapped vs
 // plain form) so the more-permissive entry can win.

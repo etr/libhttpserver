@@ -115,7 +115,7 @@ LT_BEGIN_AUTO_TEST(dump_set_suite, startup_warning_emitted_exactly_once_across_m
     // webserver::stop() (called above and again by ~webserver via
     // reset()) invokes MHD_stop_daemon(), which blocks until all active
     // connections are drained and every libmicrohttpd worker thread has
-    // been joined (see webserver::stop() in src/detail/webserver_setup.cpp
+    // been joined (see webserver::stop() in src/detail/webserver_lifecycle.cpp
     // and the stop_and_wait() contract in src/webserver.cpp). ws1's MHD
     // threads are therefore fully gone before ws2 starts -- nothing from
     // ws1 can write to the captured stderr concurrently with ws2's

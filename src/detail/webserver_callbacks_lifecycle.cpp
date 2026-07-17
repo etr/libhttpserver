@@ -134,7 +134,7 @@ namespace detail {
 void webserver_impl::connection_notify(void* cls, struct MHD_Connection* connection,
                                        void** socket_context,
                                        enum MHD_ConnectionNotificationCode toe) {
-    // cls is the owning webserver* (set in webserver_setup.cpp at
+    // cls is the owning webserver* (set in webserver_lifecycle.cpp at
     // MHD_OPTION_NOTIFY_CONNECTION). It MAY be null in tests that
     // exercise the callback without an enclosing webserver; defensive
     // null-check gates every hook fire on a non-null impl.

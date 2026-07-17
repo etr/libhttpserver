@@ -22,7 +22,7 @@
 #error "Only <httpserver.hpp> or <httpserverpp> can be included directly."
 #endif
 
-// http_utils_inet.hpp -- free-function helpers in namespace
+// http_utils_helpers.hpp -- free-function helpers in namespace
 // httpserver::http (sockaddr -> string/port, header/arg map dumps, URL
 // unescape, file loading).
 //
@@ -32,8 +32,8 @@
 // after the types these declarations reference (header_view_map /
 // header_map / arg_view_map / unescaper_ptr) are defined; not intended to
 // be included on its own.
-#ifndef SRC_HTTPSERVER_HTTP_UTILS_INET_HPP_
-#define SRC_HTTPSERVER_HTTP_UTILS_INET_HPP_
+#ifndef SRC_HTTPSERVER_HTTP_UTILS_HELPERS_HPP_
+#define SRC_HTTPSERVER_HTTP_UTILS_HELPERS_HPP_
 
 #include <stddef.h>
 #include <stdint.h>
@@ -105,4 +105,4 @@ size_t base_unescaper(std::string*, unescaper_ptr unescaper);
 }  // namespace http
 }  // namespace httpserver
 
-#endif  // SRC_HTTPSERVER_HTTP_UTILS_INET_HPP_
+#endif  // SRC_HTTPSERVER_HTTP_UTILS_HELPERS_HPP_
