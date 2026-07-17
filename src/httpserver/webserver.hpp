@@ -267,26 +267,26 @@ class webserver {
      /// Returns the configured access-log callback; null if none was set.
      /// The callback may be invoked concurrently from MHD worker threads.
      log_access_ptr get_access_logger() const {
-         return log_access;
+         return config.log_access;
      }
 
      /// Returns the configured error-log callback; null if none was set.
      /// The callback may be invoked concurrently from MHD worker threads.
      log_error_ptr get_error_logger() const {
-         return log_error;
+         return config.log_error;
      }
 
      /// Returns the configured request-validator callback; null if none was set.
      /// The callback may be invoked concurrently from MHD worker threads.
      [[deprecated("validator callback is not invoked by v2 dispatch; use webserver::add_hook(hook_phase::request_received, ...) instead")]]
      validator_ptr get_request_validator() const {
-         return validator;
+         return config.validator;
      }
 
      /// Returns the configured URL-unescaper callback; null if none was set.
      /// The callback may be invoked concurrently from MHD worker threads.
      unescaper_ptr get_unescaper() const {
-         return unescaper;
+         return config.unescaper;
      }
 
      // Event-loop, connection-management, and feature-reporting methods
@@ -306,94 +306,20 @@ class webserver {
 #undef SRC_HTTPSERVER_WEBSERVER_HPP_INSIDE_CLASS_
 
  private:
-     const uint16_t port;
-     http::http_utils::start_method_T start_method;
-     const int max_threads;
-     const int max_connections;
-     const int memory_limit;
-     const size_t content_size_limit;
-     const int connection_timeout;
-     const int per_IP_connection_limit;
-     log_access_ptr log_access;
-     log_error_ptr log_error;
-     validator_ptr validator;
-     unescaper_ptr unescaper;
-     const struct sockaddr* bind_address;
-     std::shared_ptr<struct sockaddr_storage> bind_address_storage;
-     const int max_thread_stack_size;
-     // 0 sentinel -> compile-time defaults
-     // (arguments_accumulator::DEFAULT_MAX_ARGS_COUNT / _BYTES).
-     // webserver_impl::connection_notify copies these into the per-
-     // connection_state at MHD_CONNECTION_NOTIFY_STARTED; populate_args
-     // reads them from connection_state via the socket_context.
-     const std::size_t max_args_count;
-     const std::size_t max_args_bytes;
-     const bool use_ssl;
-     const bool use_ipv6;
-     const bool use_dual_stack;
-     const bool debug;
-     const bool pedantic;
-     // When true, the default
-     // internal_error_page surfaces the originating exception message in
-     // the 500 body (development-only behaviour; CWE-209). Default is
-     // false: the body is the fixed string "Internal Server Error".
-     const bool expose_exception_messages;
-     // When true, http_request::operator<< streams credential
-     // material verbatim (v1 verbose form; development-only behaviour;
-     // CWE-312 / CWE-532). Default is false: the four credential
-     // surfaces are replaced by the fixed token "<redacted>".
-     const bool expose_credentials_in_logs;
-     const std::string https_mem_key;
-     const std::string https_mem_cert;
-     const std::string https_mem_trust;
-     const std::string https_priorities;
-     const http::http_utils::cred_type_T cred_type;
-     const psk_cred_handler_callback psk_cred_handler;
-     const std::string digest_auth_random;
-     const int nonce_nc_size;
-     const http::http_utils::policy_T default_policy;
-     // Stored unconditionally. webserver(create_webserver const&)
-     // throws feature_unavailable when this is true but HAVE_BAUTH is off.
-     const bool basic_auth_enabled;
-     const bool digest_auth_enabled;
-     const bool regex_checking;
-     const bool ip_access_control_enabled;
-     const bool post_process_enabled;
-     const bool put_processed_data_to_content;
-     const file_upload_target_T file_upload_target;
-     const std::string file_upload_dir;
-     const bool generate_random_filename_on_upload;
-     const bool deferred_enabled;
-     const bool single_resource;
-     const bool tcp_nodelay;
-     const error_handler not_found_handler;
-     const error_handler method_not_allowed_handler;
-     const internal_error_handler_t internal_error_handler;
-     const file_cleanup_callback_ptr file_cleanup_callback;
-     const auth_handler_ptr auth_handler;
-     const std::vector<std::string> auth_skip_paths;
-     // Pre-normalized form of @ref auth_skip_paths,
-     // populated once at construction.  webserver_impl::should_skip_auth
-     // compares request paths against this list (not @ref auth_skip_paths)
-     // so non-canonical entries like "/public/" or "/a/../b" match the
+     // All builder inputs, copied wholesale from the create_webserver
+     // builder at construction (see webserver_config in
+     // create_webserver.hpp). Immutable for the server's lifetime.
+     // webserver_impl and the dispatch path read options as
+     // parent->config.<field>.
+     const webserver_config config;
+     // Pre-normalized form of @ref config.auth_skip_paths, populated once
+     // at construction (a derived value, not a builder input, so it is not
+     // part of webserver_config).  webserver_impl::should_skip_auth compares
+     // request paths against this list (not config.auth_skip_paths) so
+     // non-canonical entries like "/public/" or "/a/../b" match the
      // canonical request path the dispatch surface produces.  Built by
      // detail::normalize_auth_skip_paths in webserver_request.cpp.
      const std::vector<std::string> auth_skip_paths_normalized;
-     const sni_callback_t sni_callback;
-     const bool no_listen_socket;
-     const bool no_thread_safety;
-     const bool turbo;
-     const bool suppress_date_header;
-     const int listen_backlog;
-     const int address_reuse;
-     const size_t connection_memory_increment;
-     const int tcp_fastopen_queue_size;
-     const bool sigpipe_handled_by_app;
-     const std::string https_mem_dhparams;
-     const std::string https_key_password;
-     const std::string https_priorities_append;
-     const bool no_alpn;
-     const int client_discipline_level;
 
      // Shared registration helper. Both register_path and register_prefix
      // funnel through here so the validation/insertion logic lives in one

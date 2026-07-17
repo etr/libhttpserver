@@ -50,16 +50,16 @@ using httpserver::http::http_utils;
 namespace detail {
 
 http_response webserver_impl::not_found_page(detail::modded_request* mr) const {
-    if (parent->not_found_handler != nullptr) {
-        return parent->not_found_handler(*mr->request);
+    if (parent->config.not_found_handler != nullptr) {
+        return parent->config.not_found_handler(*mr->request);
     }
     return http_response::string(std::string{constants::NOT_FOUND_ERROR})
         .with_status(http_utils::http_not_found);
 }
 
 http_response webserver_impl::method_not_allowed_page(detail::modded_request* mr) const {
-    if (parent->method_not_allowed_handler != nullptr) {
-        return parent->method_not_allowed_handler(*mr->request);
+    if (parent->config.method_not_allowed_handler != nullptr) {
+        return parent->config.method_not_allowed_handler(*mr->request);
     }
     return http_response::string(std::string{constants::METHOD_ERROR})
         .with_status(http_utils::http_method_not_allowed);
@@ -79,8 +79,8 @@ http_response webserver_impl::internal_error_page(
             .with_status(http_utils::http_internal_server_error);
     }
     // Invoke the user handler with the originating message.
-    if (parent->internal_error_handler != nullptr) {
-        return parent->internal_error_handler(*mr->request, msg);
+    if (parent->config.internal_error_handler != nullptr) {
+        return parent->config.internal_error_handler(*mr->request, msg);
     }
     // The default body is the fixed string
     // "Internal Server Error" to avoid CWE-209 information disclosure of
@@ -91,7 +91,7 @@ http_response webserver_impl::internal_error_page(
     // verbose body (for development) must opt in via
     // create_webserver::expose_exception_messages(true).
     const auto status = http_utils::http_internal_server_error;
-    if (parent->expose_exception_messages) {
+    if (parent->config.expose_exception_messages) {
         return http_response::string(std::string{msg}).with_status(status);
     }
     return http_response::string(
@@ -100,7 +100,7 @@ http_response webserver_impl::internal_error_page(
 }
 
 void webserver_impl::log_dispatch_error(std::string_view msg) const noexcept {
-    if (parent->log_error == nullptr) {
+    if (parent->config.log_error == nullptr) {
         return;
     }
     // msg is forwarded VERBATIM regardless
@@ -118,7 +118,7 @@ void webserver_impl::log_dispatch_error(std::string_view msg) const noexcept {
     // the catch. Swallow any exception it throws; we have no recovery
     // beyond dropping the log line.
     try {
-        parent->log_error(std::string(msg));
+        parent->config.log_error(std::string(msg));
     } catch (...) {
         // Intentionally suppressed.
     }

@@ -222,76 +222,14 @@ webserver_impl::~webserver_impl() {
 // ----- webserver construction / destruction ------------------------------
 
 webserver::webserver(const create_webserver& params):
-    port(params._port),
-    start_method(params._start_method),
-    max_threads(params._max_threads),
-    max_connections(params._max_connections),
-    memory_limit(params._memory_limit),
-    content_size_limit(params._content_size_limit),
-    connection_timeout(params._connection_timeout),
-    per_IP_connection_limit(params._per_IP_connection_limit),
-    log_access(params._log_access),
-    log_error(params._log_error),
-    validator(params._validator),
-    unescaper(params._unescaper),
-    bind_address(params._bind_address),
-    bind_address_storage(params._bind_address_storage),
-    max_thread_stack_size(params._max_thread_stack_size),
-    max_args_count(params._max_args_count),
-    max_args_bytes(params._max_args_bytes),
-    use_ssl(params._use_ssl),
-    use_ipv6(params._use_ipv6),
-    use_dual_stack(params._use_dual_stack),
-    debug(params._debug),
-    pedantic(params._pedantic),
-    expose_exception_messages(params._expose_exception_messages),
-    expose_credentials_in_logs(params._expose_credentials_in_logs),
-    https_mem_key(params._https_mem_key),
-    https_mem_cert(params._https_mem_cert),
-    https_mem_trust(params._https_mem_trust),
-    https_priorities(params._https_priorities),
-    cred_type(params._cred_type),
-    psk_cred_handler(params._psk_cred_handler),
-    digest_auth_random(params._digest_auth_random),
-    nonce_nc_size(params._nonce_nc_size),
-    default_policy(params._default_policy),
-    // Stored unconditionally; the ctor body below throws
-    // feature_unavailable if this is true on a HAVE_BAUTH-off build.
-    basic_auth_enabled(params._basic_auth_enabled),
-    digest_auth_enabled(params._digest_auth_enabled),
-    regex_checking(params._regex_checking),
-    ip_access_control_enabled(params._ip_access_control_enabled),
-    post_process_enabled(params._post_process_enabled),
-    put_processed_data_to_content(params._put_processed_data_to_content),
-    file_upload_target(params._file_upload_target),
-    file_upload_dir(params._file_upload_dir),
-    generate_random_filename_on_upload(params._generate_random_filename_on_upload),
-    deferred_enabled(params._deferred_enabled),
-    single_resource(params._single_resource),
-    tcp_nodelay(params._tcp_nodelay),
-    not_found_handler(params._not_found_handler),
-    method_not_allowed_handler(params._method_not_allowed_handler),
-    internal_error_handler(params._internal_error_handler),
-    file_cleanup_callback(params._file_cleanup_callback),
-    auth_handler(params._auth_handler),
-    auth_skip_paths(params._auth_skip_paths),
+    // Copy the builder's config wholesale; the feature-availability guards
+    // in the ctor body below throw if an option (e.g. basic_auth_enabled)
+    // was requested on a build that lacks it.
+    config(params._config),
+    // Derived at construction from config.auth_skip_paths (not a builder
+    // input), so it is initialised separately rather than copied.
     auth_skip_paths_normalized(
-        detail::normalize_auth_skip_paths(params._auth_skip_paths)),
-    sni_callback(params._sni_callback),
-    no_listen_socket(params._no_listen_socket),
-    no_thread_safety(params._no_thread_safety),
-    turbo(params._turbo),
-    suppress_date_header(params._suppress_date_header),
-    listen_backlog(params._listen_backlog),
-    address_reuse(params._address_reuse),
-    connection_memory_increment(params._connection_memory_increment),
-    tcp_fastopen_queue_size(params._tcp_fastopen_queue_size),
-    sigpipe_handled_by_app(params._sigpipe_handled_by_app),
-    https_mem_dhparams(params._https_mem_dhparams),
-    https_key_password(params._https_key_password),
-    https_priorities_append(params._https_priorities_append),
-    no_alpn(params._no_alpn),
-    client_discipline_level(params._client_discipline_level),
+        detail::normalize_auth_skip_paths(params._config.auth_skip_paths)),
     // create_webserver uses int=0 as "no pre-bound socket" to keep the
     // public builder header free of <microhttpd.h>. Convert to the
     // MHD_socket sentinel (MHD_INVALID_SOCKET) so the impl always uses
@@ -300,8 +238,8 @@ webserver::webserver(const create_webserver& params):
     // post-construction mutations of impl_ members.
     impl_(std::make_unique<detail::webserver_impl>(
         this,
-        (params._bind_socket != 0)
-            ? static_cast<MHD_socket>(params._bind_socket)
+        (params._config.bind_socket != 0)
+            ? static_cast<MHD_socket>(params._config.bind_socket)
             : MHD_INVALID_SOCKET)) {
         // Any feature the builder asked for that the
         // library was not compiled with must fail loudly here. Throwing
@@ -309,12 +247,12 @@ webserver::webserver(const create_webserver& params):
         // the just-constructed impl_ unique_ptr destroy itself cleanly
         // — no MHD daemon is running yet.
 #ifndef HAVE_GNUTLS
-        if (use_ssl) {
+        if (config.use_ssl) {
             throw feature_unavailable("tls", "HAVE_GNUTLS");
         }
 #endif
 #ifndef HAVE_BAUTH
-        if (basic_auth_enabled) {
+        if (config.basic_auth_enabled) {
             throw feature_unavailable("basic_auth", "HAVE_BAUTH");
         }
 #endif
@@ -323,7 +261,7 @@ webserver::webserver(const create_webserver& params):
         // auth. Without this a HAVE_DAUTH-off build silently accepts
         // digest_auth_enabled=true and the request handler returns
         // WRONG_HEADER, making the authentication gate a silent no-op.
-        if (digest_auth_enabled) {
+        if (config.digest_auth_enabled) {
             throw feature_unavailable("digest_auth", "HAVE_DAUTH");
         }
 #endif

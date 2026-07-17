@@ -111,7 +111,7 @@ void webserver::validate_on_methods_inputs_(method_set methods,
     // exact-matched (family=false by design -- prefix matching is only
     // available via register_prefix()), so the arm would always be
     // true. The guard below is therefore complete for lambda routes.
-    if (single_resource && path != "" && path != "/") {
+    if (config.single_resource && path != "" && path != "/") {
         throw std::invalid_argument(
             "When using a single_resource server, on_*/route requires "
             "the path to be '' or '/'");
@@ -142,7 +142,7 @@ void webserver::on_methods_(method_set methods,
     validate_on_methods_inputs_(methods, path, handler);
 
     detail::http_endpoint idx(path, /*family=*/false,
-                              /*registration=*/true, regex_checking);
+                              /*registration=*/true, config.regex_checking);
 
     {
         // Single-locked window across the v2 conflict probe, the

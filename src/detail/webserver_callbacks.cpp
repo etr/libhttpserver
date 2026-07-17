@@ -181,11 +181,11 @@ int webserver_impl::psk_cred_handler_func(void* cls,
     *psk = nullptr;
     *psk_size = 0;
 
-    if (ws == nullptr || ws->psk_cred_handler == nullptr) {
+    if (ws == nullptr || ws->config.psk_cred_handler == nullptr) {
         return -1;
     }
 
-    std::string psk_hex = ws->psk_cred_handler(std::string(username));
+    std::string psk_hex = ws->config.psk_cred_handler(std::string(username));
     if (psk_hex.empty()) {
         return -1;
     }
@@ -225,7 +225,7 @@ int webserver_impl::sni_cert_callback_func(void* cls,
     std::ignore = connection;
 
     webserver* ws = static_cast<webserver*>(cls);
-    if (ws == nullptr || ws->sni_callback == nullptr || server_name == nullptr) {
+    if (ws == nullptr || ws->config.sni_callback == nullptr || server_name == nullptr) {
         return -1;
     }
 
@@ -244,7 +244,7 @@ int webserver_impl::sni_cert_callback_func(void* cls,
     }
 
     // Call user's callback to get cert/key pair
-    auto [cert_pem, key_pem] = ws->sni_callback(name);
+    auto [cert_pem, key_pem] = ws->config.sni_callback(name);
     if (cert_pem.empty() || key_pem.empty()) {
         return -1;  // Use default certificate
     }
@@ -324,7 +324,7 @@ void webserver_impl::error_log(void* cls, const char* fmt, va_list ap) {
     va_end(va);
     msg.resize(r);
 
-    if (dws->log_error != nullptr) dws->log_error(msg);
+    if (dws->config.log_error != nullptr) dws->config.log_error(msg);
 }
 
 size_t webserver_impl::unescaper_func(void * cls, struct MHD_Connection *c, char *s) {
@@ -395,13 +395,13 @@ bool webserver_impl::setup_new_upload_file_info(http::file_info& file,
     // otherwise sanitize the client-supplied filename) and prime the
     // file_info with content_type / transfer_encoding when MHD gave
     // them to us.
-    if (parent->generate_random_filename_on_upload) {
+    if (parent->config.generate_random_filename_on_upload) {
         file.set_file_system_file_name(
-            http_utils::generate_random_upload_filename(parent->file_upload_dir));
+            http_utils::generate_random_upload_filename(parent->config.file_upload_dir));
     } else {
         std::string safe_name = http_utils::sanitize_upload_filename(filename);
         if (safe_name.empty()) return false;
-        file.set_file_system_file_name(parent->file_upload_dir + "/" + safe_name);
+        file.set_file_system_file_name(parent->config.file_upload_dir + "/" + safe_name);
     }
     // Avoid appending to a leftover file from a previous request.
     unlink(file.get_file_system_file_name().c_str());
@@ -462,11 +462,11 @@ MHD_Result webserver_impl::post_iterator(void *cls, enum MHD_ValueKind kind,
     }
 
     try {
-        if (mr->ws->file_upload_target != FILE_UPLOAD_DISK_ONLY) {
+        if (mr->ws->config.file_upload_target != FILE_UPLOAD_DISK_ONLY) {
             mr->request->set_arg_flat(key,
                 std::string(mr->request->get_arg(key)) + std::string(data, size));
         }
-        if (*filename != '\0' && mr->ws->file_upload_target != FILE_UPLOAD_MEMORY_ONLY) {
+        if (*filename != '\0' && mr->ws->config.file_upload_target != FILE_UPLOAD_MEMORY_ONLY) {
             MHD_Result r = mr->ws->impl_->process_file_upload(
                 mr, key, filename, content_type, transfer_encoding, data, size);
             if (r != MHD_YES) return r;

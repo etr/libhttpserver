@@ -175,8 +175,8 @@ void webserver_impl::connection_notify(void* cls, struct MHD_Connection* connect
             // arguments_accumulator from the socket_context. 0 means
             // "use the compile-time defaults" -- see connection_state.hpp.
             if (ws != nullptr) {
-                cs->max_args_count = ws->max_args_count;
-                cs->max_args_bytes = ws->max_args_bytes;
+                cs->max_args_count = ws->config.max_args_count;
+                cs->max_args_bytes = ws->config.max_args_bytes;
             }
             *socket_context = cs;
             // Fire connection_opened. Zero-cost when no hook is
@@ -224,7 +224,7 @@ MHD_Result webserver_impl::policy_callback(void *cls, const struct sockaddr* add
     bool accepted = true;
     std::optional<std::string_view> reason{};
 
-    if (ws->ip_access_control_enabled) {
+    if (ws->config.ip_access_control_enabled) {
         bool is_denied = false;
         bool is_allowed = false;
         {
@@ -234,7 +234,7 @@ MHD_Result webserver_impl::policy_callback(void *cls, const struct sockaddr* add
             is_allowed = impl->allow_list.count(ip_representation(addr));
         }  // release deny/allow locks before firing the user hook
         std::tie(accepted, reason) =
-            classify_decision(ws->default_policy, is_denied, is_allowed);
+            classify_decision(ws->config.default_policy, is_denied, is_allowed);
     }
 
     const MHD_Result decision = accepted ? MHD_YES : MHD_NO;

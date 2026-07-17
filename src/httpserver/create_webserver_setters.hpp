@@ -67,7 +67,7 @@
       * @return reference to this builder for chaining.
       * @see method_not_allowed_handler, internal_error_handler
       */
-     create_webserver& not_found_handler(error_handler h) { _not_found_handler = std::move(h); return *this; }
+     create_webserver& not_found_handler(error_handler h) { _config.not_found_handler = std::move(h); return *this; }
      /**
       * Install a handler invoked when a resource matches the path but
       * not the HTTP method (HTTP 405).
@@ -86,7 +86,7 @@
       * @return reference to this builder for chaining.
       * @see not_found_handler, internal_error_handler
       */
-     create_webserver& method_not_allowed_handler(error_handler h) { _method_not_allowed_handler = std::move(h); return *this; }
+     create_webserver& method_not_allowed_handler(error_handler h) { _config.method_not_allowed_handler = std::move(h); return *this; }
      /**
       * Install the handler invoked when a registered request handler
       * throws (HTTP 500 by default).
@@ -128,8 +128,8 @@
       * @return reference to this builder for chaining.
       * @see webserver (dispatch exception contract), not_found_handler, method_not_allowed_handler
       */
-     create_webserver& internal_error_handler(internal_error_handler_t h) { _internal_error_handler = std::move(h); return *this; }
-     create_webserver& file_cleanup_callback(file_cleanup_callback_ptr v) { _file_cleanup_callback = std::move(v); return *this; }
+     create_webserver& internal_error_handler(internal_error_handler_t h) { _config.internal_error_handler = std::move(h); return *this; }
+     create_webserver& file_cleanup_callback(file_cleanup_callback_ptr v) { _config.file_cleanup_callback = std::move(v); return *this; }
      /**
       * Install the centralised auth handler invoked before every
       * dispatched request whose path is not on the @ref auth_skip_paths
@@ -158,27 +158,27 @@
       * @param v @ref httpserver::auth_handler_ptr callback; pass `nullptr` to clear.
       * @return reference to this builder for chaining.
       */
-     create_webserver& auth_handler(auth_handler_ptr v) { _auth_handler = std::move(v); return *this; }
+     create_webserver& auth_handler(auth_handler_ptr v) { _config.auth_handler = std::move(v); return *this; }
 
-     create_webserver& auth_skip_paths(std::vector<std::string> v) { _auth_skip_paths = std::move(v); return *this; }
-     create_webserver& sni_callback(sni_callback_t v) { _sni_callback = std::move(v); return *this; }
+     create_webserver& auth_skip_paths(std::vector<std::string> v) { _config.auth_skip_paths = std::move(v); return *this; }
+     create_webserver& sni_callback(sni_callback_t v) { _config.sni_callback = std::move(v); return *this; }
 
      // Public-API polarity is inverted relative to the private "_no_*"
      // fields: each member stores the NEGATED flag so its polarity
      // matches the underlying MHD_USE_NO_* / MHD_OPTION_TLS_NO_ALPN
      // option it feeds.
-     create_webserver& listen_socket(bool enable = true) { _no_listen_socket = !enable; return *this; }  // member stores the NEGATED flag
-     create_webserver& thread_safety(bool enable = true) { _no_thread_safety = !enable; return *this; }  // member stores the NEGATED flag
-     create_webserver& alpn(bool enable = true) { _no_alpn = !enable; return *this; }  // member stores the NEGATED flag
+     create_webserver& listen_socket(bool enable = true) { _config.no_listen_socket = !enable; return *this; }  // member stores the NEGATED flag
+     create_webserver& thread_safety(bool enable = true) { _config.no_thread_safety = !enable; return *this; }  // member stores the NEGATED flag
+     create_webserver& alpn(bool enable = true) { _config.no_alpn = !enable; return *this; }  // member stores the NEGATED flag
 
-     create_webserver& turbo(bool enable = true) { _turbo = enable; return *this; }
-     create_webserver& suppress_date_header(bool enable = true) { _suppress_date_header = enable; return *this; }
-     create_webserver& listen_backlog(int v) { check_non_negative("listen_backlog", v); _listen_backlog = v; return *this; }
-     create_webserver& address_reuse(int v) { check_non_negative("address_reuse", v); _address_reuse = v; return *this; }
-     create_webserver& connection_memory_increment(size_t v) { _connection_memory_increment = v; return *this; }
-     create_webserver& tcp_fastopen_queue_size(int v) { check_non_negative("tcp_fastopen_queue_size", v); _tcp_fastopen_queue_size = v; return *this; }
-     create_webserver& sigpipe_handled_by_app(bool enable = true) { _sigpipe_handled_by_app = enable; return *this; }
-     create_webserver& https_mem_dhparams(std::string v) { _https_mem_dhparams = std::move(v); return *this; }
+     create_webserver& turbo(bool enable = true) { _config.turbo = enable; return *this; }
+     create_webserver& suppress_date_header(bool enable = true) { _config.suppress_date_header = enable; return *this; }
+     create_webserver& listen_backlog(int v) { check_non_negative("listen_backlog", v); _config.listen_backlog = v; return *this; }
+     create_webserver& address_reuse(int v) { check_non_negative("address_reuse", v); _config.address_reuse = v; return *this; }
+     create_webserver& connection_memory_increment(size_t v) { _config.connection_memory_increment = v; return *this; }
+     create_webserver& tcp_fastopen_queue_size(int v) { check_non_negative("tcp_fastopen_queue_size", v); _config.tcp_fastopen_queue_size = v; return *this; }
+     create_webserver& sigpipe_handled_by_app(bool enable = true) { _config.sigpipe_handled_by_app = enable; return *this; }
+     create_webserver& https_mem_dhparams(std::string v) { _config.https_mem_dhparams = std::move(v); return *this; }
      /**
       * Set the passphrase for the TLS private key (PEM decryption).
       *
@@ -191,11 +191,11 @@
       * @param v the PEM passphrase string.
       * @return reference to this builder for chaining.
       */
-     create_webserver& https_key_password(std::string v) { _https_key_password = std::move(v); return *this; }
-     create_webserver& https_priorities_append(std::string v) { _https_priorities_append = std::move(v); return *this; }  // NOLINT(build/include_what_you_use)
+     create_webserver& https_key_password(std::string v) { _config.https_key_password = std::move(v); return *this; }
+     create_webserver& https_priorities_append(std::string v) { _config.https_priorities_append = std::move(v); return *this; }  // NOLINT(build/include_what_you_use)
      create_webserver& client_discipline_level(int v) {
          if (v < -1) throw_invalid("client_discipline_level", v, ">= -1");
-         _client_discipline_level = v; return *this;
+         _config.client_discipline_level = v; return *this;
      }
 
 #endif  // SRC_HTTPSERVER_CREATE_WEBSERVER_SETTERS_HPP_

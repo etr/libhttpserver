@@ -198,7 +198,7 @@ void install_log_access_alias(
 // 404s) should add a catch-all fallback route or register a
 // not_found_handler that applies equivalent auth logic.
 void webserver::install_auth_alias_() {
-    if (auth_handler == nullptr) return;
+    if (config.auth_handler == nullptr) return;
     // Capture both the webserver* (for auth_handler callable) and the
     // webserver_impl* (for should_skip_auth, which normalises the path
     // before comparing against auth_skip_paths).
@@ -244,7 +244,7 @@ void webserver::install_auth_alias_() {
                 std::optional<http_response> rejection;
                 bool auth_threw = false;
                 try {
-                    rejection = ws_ptr->auth_handler(*ctx.request);
+                    rejection = ws_ptr->config.auth_handler(*ctx.request);
                 } catch (const std::exception& e) {
                     impl_ptr->log_dispatch_error(
                         std::string("auth_handler threw: ").append(e.what())
@@ -285,7 +285,7 @@ void webserver::install_auth_alias_() {
 // synthesises a default 405 body), appends the Allow header, and
 // returns hook_action::respond_with(...) to short-circuit dispatch.
 void webserver::install_method_not_allowed_alias_() {
-    if (method_not_allowed_handler == nullptr) return;
+    if (config.method_not_allowed_handler == nullptr) return;
     webserver* ws_ptr = this;
     add_hook(hook_phase::before_handler,
         std::function<hook_action(before_handler_ctx&)>(
@@ -299,7 +299,7 @@ void webserver::install_method_not_allowed_alias_() {
                 }
                 // Method not allowed: build the response.
                 http_response resp =
-                    ws_ptr->method_not_allowed_handler(*ctx.request);
+                    ws_ptr->config.method_not_allowed_handler(*ctx.request);
                 // Append Allow header from the matched route descriptor.
                 if (ctx.matched) {
                     std::string allow_value =
@@ -337,7 +337,7 @@ void webserver::install_method_not_allowed_alias_() {
 // body shape is pinned by hooks_not_found_alias_test (default and
 // custom branches) and by basic.cpp:custom_not_found_handler.
 void webserver::install_not_found_alias_() {
-    if (not_found_handler == nullptr) return;
+    if (config.not_found_handler == nullptr) return;
     add_hook(hook_phase::route_resolved,
         std::function<void(const route_resolved_ctx&)>(
             [](const route_resolved_ctx&) {
@@ -390,7 +390,7 @@ void webserver::install_default_alias_hooks_() {
     // thereafter. Runtime extension of the
     // handler_exception phase is via add_hook(); the alias slot is not
     // user-mutable post-construction.
-    install_internal_error_alias(impl_.get(), internal_error_handler);
+    install_internal_error_alias(impl_.get(), config.internal_error_handler);
 
     // ----------------------------------------------------------------
     // log_access -> response_sent alias slot.
@@ -405,7 +405,7 @@ void webserver::install_default_alias_hooks_() {
     //
     // Format: '<path> METHOD: <method>' -- mirrors v1 access_log to keep
     // basic.cpp log_access_callback test passing without modification.
-    install_log_access_alias(impl_.get(), log_access);
+    install_log_access_alias(impl_.get(), config.log_access);
 }
 
 }  // namespace httpserver

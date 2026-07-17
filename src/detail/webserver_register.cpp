@@ -108,7 +108,7 @@ void webserver::validate_register_inputs_(const std::string& resource,
     if (res == nullptr) {
         throw std::invalid_argument("The http_resource pointer cannot be null");
     }
-    if (single_resource && ((resource != "" && resource != "/") || !family)) {
+    if (config.single_resource && ((resource != "" && resource != "/") || !family)) {
         throw std::invalid_argument(
             "The resource should be '' or '/' and be registered via "
             "register_prefix when using a single_resource server");
@@ -130,7 +130,7 @@ void webserver::register_impl_(const std::string& resource,
                                bool family) {
     validate_register_inputs_(resource, res, family);
 
-    detail::http_endpoint idx(resource, family, true, regex_checking);
+    detail::http_endpoint idx(resource, family, true, config.regex_checking);
 
     // Duplicate detection happens entirely
     // inside register_v2_route, which takes its own unique_lock on
@@ -258,7 +258,7 @@ void webserver::register_prefix(const std::string& path,
 // registration. The route_table_mutex_ write lock keeps the erasure
 // atomic against concurrent dispatch.
 void webserver::unregister_impl_(const string& resource, bool family) {
-    detail::http_endpoint he(resource, family, true, regex_checking);
+    detail::http_endpoint he(resource, family, true, config.regex_checking);
 
     // Erase from the v2 3-tier table.
     // Lock ordering: route_table_mutex_ -> route_lru_cache's internal
@@ -298,7 +298,7 @@ void webserver::unregister_resource(const string& resource) {
     // Build the canonical endpoint key once. The family flag does not
     // affect which v2 storage location holds the entry; the
     // url_complete key is the only sweep key.
-    detail::http_endpoint he_exact(resource, /*family=*/false, true, regex_checking);
+    detail::http_endpoint he_exact(resource, /*family=*/false, true, config.regex_checking);
 
     // Erase from the v2 3-tier table. Hold a single write-lock
     // across all four tier sweeps so no request thread can observe a

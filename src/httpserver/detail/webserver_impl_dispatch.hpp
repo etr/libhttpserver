@@ -55,7 +55,7 @@
 // sites that synthesise a 500 with no exception in flight).
 //
 // Behaviour:
-//   - parent->internal_error_handler set, !force_our:
+//   - parent->config.internal_error_handler set, !force_our:
 //       invoke it with (*mr->request, msg) and return the result.
 //   - force_our=true: return a hardcoded 500 with an EMPTY body
 //       (the "double-fault" fallback used when the user handler
@@ -63,10 +63,10 @@
 //   - otherwise (no handler set, !force_our): return a default 500
 //       whose body is the fixed string "Internal Server Error"
 //       (CWE-209). @p msg is forwarded into the
-//       body only when parent->expose_exception_messages is true
+//       body only when parent->config.expose_exception_messages is true
 //       (development opt-in).
 //
-// Throws nothing on its own; if parent->internal_error_handler
+// Throws nothing on its own; if parent->config.internal_error_handler
 // throws, that exception propagates to the caller. Callers in the
 // handler-throw path use run_internal_error_handler_safely() to
 // contain that double-fault.
@@ -82,7 +82,7 @@
     std::string_view msg,
     bool force_our = false) const;
 
-// Log @p msg via parent->log_error if a logger is configured.
+// Log @p msg via parent->config.log_error if a logger is configured.
 // Swallows any exception thrown by the logger -- dispatch must never
 // re-enter the catch from inside its own catch. Marked noexcept because
 // the outer catch(...) absorbs any bad_alloc from std::string(msg)

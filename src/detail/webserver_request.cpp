@@ -445,7 +445,7 @@ MHD_Result webserver_impl::answer_to_connection(void* cls, MHD_Connection* conne
 
     const MHD_ConnectionInfo* conninfo =
         MHD_get_connection_info(connection, MHD_CONNECTION_INFO_CONNECTION_FD);
-    if (conninfo != nullptr && impl->parent->tcp_nodelay) {
+    if (conninfo != nullptr && impl->parent->config.tcp_nodelay) {
         int yes = 1;
         setsockopt(conninfo->connect_fd, IPPROTO_TCP, TCP_NODELAY,
                    reinterpret_cast<char*>(&yes), sizeof(int));
@@ -465,7 +465,7 @@ MHD_Result webserver_impl::answer_to_connection(void* cls, MHD_Connection* conne
     mr->ws = impl->parent;
 
     std::string t_url = url;
-    base_unescaper(&t_url, impl->parent->unescaper);
+    base_unescaper(&t_url, impl->parent->config.unescaper);
     // SECURITY: collapse dot-segments ("." / "..") into the canonical
     // path here, at the single point where the routing/auth path is
     // derived. Both the route matcher (segment_trie::find via

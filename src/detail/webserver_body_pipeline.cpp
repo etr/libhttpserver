@@ -199,11 +199,11 @@ MHD_Result webserver_impl::requests_answer_first_step(MHD_Connection* connection
     // MHD_CONNECTION_INFO_SOCKET_CONTEXT, then allocates the http_request_impl
     // from that arena. The arena plumbing is therefore implicit at this call
     // site but explicit within the constructor.
-    mr->request.reset(new http_request(connection, parent->unescaper));
-    mr->request->set_file_cleanup_callback(parent->file_cleanup_callback);
+    mr->request.reset(new http_request(connection, parent->config.unescaper));
+    mr->request->set_file_cleanup_callback(parent->config.file_cleanup_callback);
     // Propagate the redaction-bypass bit so operator<< honours
     // the builder opt-in for every request the webserver dispatches.
-    mr->request->set_expose_credentials_in_logs(parent->expose_credentials_in_logs);
+    mr->request->set_expose_credentials_in_logs(parent->config.expose_credentials_in_logs);
 
     // request_received hook. Fires after the http_request is
     // populated but before any body bytes are read (and before any
@@ -229,10 +229,10 @@ MHD_Result webserver_impl::requests_answer_first_step(MHD_Connection* connection
         return MHD_YES;
     }
 
-    mr->request->set_content_size_limit(parent->content_size_limit);
+    mr->request->set_content_size_limit(parent->config.content_size_limit);
     const char *encoding = MHD_lookup_connection_value(connection, MHD_HEADER_KIND, http_utils::http_header_content_type);
 
-    if (parent->post_process_enabled &&
+    if (parent->config.post_process_enabled &&
         (nullptr != encoding &&
             ((0 == strncasecmp(http_utils::http_post_encoding_form_urlencoded, encoding, strlen(http_utils::http_post_encoding_form_urlencoded))) ||
              (0 == strncasecmp(http_utils::http_post_encoding_multipart_formdata, encoding, strlen(http_utils::http_post_encoding_multipart_formdata)))))) {
@@ -293,7 +293,7 @@ MHD_Result webserver_impl::requests_answer_second_step(MHD_Connection* connectio
     // multipart/form-data and application/x-www-form-urlencoded
     // all other content (which is indicated by mr-pp == nullptr)
     // has to be put to the content even if put_processed_data_to_content is set to false
-    if (mr->pp == nullptr || parent->put_processed_data_to_content) {
+    if (mr->pp == nullptr || parent->config.put_processed_data_to_content) {
         mr->request->grow_content(upload_data, *upload_data_size);
     }
     run_post_processor_if_attached(mr, parent, upload_data, *upload_data_size);

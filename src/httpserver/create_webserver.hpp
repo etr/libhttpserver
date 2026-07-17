@@ -103,6 +103,110 @@ typedef std::function<bool(const std::string&, const std::string&, const http::f
  */
 typedef std::function<std::optional<http_response>(const http_request&)> auth_handler_ptr;
 
+namespace detail {
+// Historical auth defaults. Defined in create_webserver.cpp, where the
+// HAVE_BAUTH / HAVE_DAUTH build flags are reachable -- this keeps the
+// public header free of build-flag preprocessor gates while preserving
+// the historical defaults (true on the respective auth-on builds; false
+// on auth-off builds, so an unmodified builder does not trip the
+// feature_unavailable throw at construction time).
+bool default_basic_auth_enabled() noexcept;
+bool default_digest_auth_enabled() noexcept;
+}  // namespace detail
+
+/**
+ * The full set of webserver configuration inputs, in one struct.
+ *
+ * A single @ref create_webserver builder owns one of these and its setters
+ * mutate it; the @ref webserver constructor copies it wholesale into its
+ * own `const webserver_config`. Storing the config as one struct (rather
+ * than ~65 parallel members duplicated across the builder and the server)
+ * means adding a new option touches one field here plus one builder setter,
+ * instead of four-plus separate sites.
+ *
+ * Every field is a builder input. Values derived at construction time (e.g.
+ * the normalized auth-skip path list) are NOT here -- they live on the
+ * @ref webserver directly.
+ */
+struct webserver_config {
+    std::uint16_t port = constants::DEFAULT_WS_PORT;
+    http::http_utils::start_method_T start_method = http::http_utils::INTERNAL_SELECT;
+    int max_threads = 0;
+    int max_connections = 0;
+    int memory_limit = 0;
+    size_t content_size_limit = std::numeric_limits<size_t>::max();
+    int connection_timeout = constants::DEFAULT_WS_TIMEOUT;
+    int per_IP_connection_limit = 0;
+    log_access_ptr log_access = nullptr;
+    log_error_ptr log_error = nullptr;
+    validator_ptr validator = nullptr;
+    unescaper_ptr unescaper = nullptr;
+    const struct sockaddr* bind_address = nullptr;
+    std::shared_ptr<struct sockaddr_storage> bind_address_storage;
+    int bind_socket = 0;
+    int max_thread_stack_size = 0;
+    // 0 = use the compile-time defaults
+    // (arguments_accumulator::DEFAULT_MAX_ARGS_COUNT / _BYTES).
+    std::size_t max_args_count = 0;
+    std::size_t max_args_bytes = 0;
+    bool use_ssl = false;
+    bool use_ipv6 = false;
+    bool use_dual_stack = false;
+    bool debug = false;
+    bool pedantic = false;
+    // Default false (CWE-209 fix). When true, internal_error_page surfaces
+    // the originating exception's message in the default 500 body
+    // (development-only behaviour).
+    bool expose_exception_messages = false;
+    // Default false (CWE-312 / CWE-532 fix). When true, http_request's
+    // operator<< restores the v1 verbose form for the four credential
+    // surfaces (pass, Authorization / Proxy-Authorization header values,
+    // cookie values).
+    bool expose_credentials_in_logs = false;
+    std::string https_mem_key;
+    std::string https_mem_cert;
+    std::string https_mem_trust;
+    std::string https_priorities;
+    http::http_utils::cred_type_T cred_type = http::http_utils::NONE;
+    psk_cred_handler_callback psk_cred_handler = nullptr;
+    std::string digest_auth_random;
+    int nonce_nc_size = 0;
+    http::http_utils::policy_T default_policy = http::http_utils::ACCEPT;
+    bool basic_auth_enabled = detail::default_basic_auth_enabled();
+    bool digest_auth_enabled = detail::default_digest_auth_enabled();
+    bool regex_checking = true;
+    bool ip_access_control_enabled = true;
+    bool post_process_enabled = true;
+    bool put_processed_data_to_content = true;
+    file_upload_target_T file_upload_target = FILE_UPLOAD_MEMORY_ONLY;
+    std::string file_upload_dir = "/tmp";
+    bool generate_random_filename_on_upload = false;
+    bool deferred_enabled = false;
+    bool single_resource = false;
+    bool tcp_nodelay = false;
+    error_handler not_found_handler = nullptr;
+    error_handler method_not_allowed_handler = nullptr;
+    internal_error_handler_t internal_error_handler = nullptr;
+    file_cleanup_callback_ptr file_cleanup_callback = nullptr;
+    auth_handler_ptr auth_handler = nullptr;
+    std::vector<std::string> auth_skip_paths;
+    sni_callback_t sni_callback = nullptr;
+    bool no_listen_socket = false;
+    bool no_thread_safety = false;
+    bool turbo = false;
+    bool suppress_date_header = false;
+    int listen_backlog = 0;
+    int address_reuse = 0;
+    size_t connection_memory_increment = 0;
+    int tcp_fastopen_queue_size = 0;
+    bool sigpipe_handled_by_app = false;
+    std::string https_mem_dhparams;
+    std::string https_key_password;
+    std::string https_priorities_append;
+    bool no_alpn = false;
+    int client_discipline_level = -1;
+};
+
 /**
  * Fluent builder for @ref webserver instances.
  *
@@ -129,24 +233,24 @@ class create_webserver {
      create_webserver& operator=(const create_webserver& b) = default;
      create_webserver& operator=(create_webserver&& b) = default;
 
-     explicit create_webserver(std::uint16_t port): _port(port) { }
+     explicit create_webserver(std::uint16_t port) { _config.port = port; }
 
      // Validate at the setter. The `int` overload
      // exists so out-of-uint16_t values like 70000 are expressible (and
      // throwable); the `std::uint16_t` overload preserves type-safe calls.
-     create_webserver& port(std::uint16_t port) { _port = port; return *this; }
+     create_webserver& port(std::uint16_t port) { _config.port = port; return *this; }
      create_webserver& port(int port) {
          if (port < 0 || port > 65535) throw_invalid("port", port, "[0, 65535]");
-         _port = static_cast<std::uint16_t>(port); return *this;
+         _config.port = static_cast<std::uint16_t>(port); return *this;
      }
 
-     create_webserver& start_method(const http::http_utils::start_method_T& v) { _start_method = v; return *this; }
-     create_webserver& max_threads(int v) { check_non_negative("max_threads", v); _max_threads = v; return *this; }
-     create_webserver& max_connections(int v) { check_non_negative("max_connections", v); _max_connections = v; return *this; }
-     create_webserver& memory_limit(int v) { check_non_negative("memory_limit", v); _memory_limit = v; return *this; }
-     create_webserver& content_size_limit(size_t v) { _content_size_limit = v; return *this; }
-     create_webserver& connection_timeout(int v) { check_non_negative("connection_timeout", v); _connection_timeout = v; return *this; }
-     create_webserver& per_IP_connection_limit(int v) { check_non_negative("per_IP_connection_limit", v); _per_IP_connection_limit = v; return *this; }
+     create_webserver& start_method(const http::http_utils::start_method_T& v) { _config.start_method = v; return *this; }
+     create_webserver& max_threads(int v) { check_non_negative("max_threads", v); _config.max_threads = v; return *this; }
+     create_webserver& max_connections(int v) { check_non_negative("max_connections", v); _config.max_connections = v; return *this; }
+     create_webserver& memory_limit(int v) { check_non_negative("memory_limit", v); _config.memory_limit = v; return *this; }
+     create_webserver& content_size_limit(size_t v) { _config.content_size_limit = v; return *this; }
+     create_webserver& connection_timeout(int v) { check_non_negative("connection_timeout", v); _config.connection_timeout = v; return *this; }
+     create_webserver& per_IP_connection_limit(int v) { check_non_negative("per_IP_connection_limit", v); _config.per_IP_connection_limit = v; return *this; }
      /**
       * Install a legacy access-log callback invoked after every response
       * is sent (HTTP 2xx, 4xx, 5xx — any status).
@@ -174,15 +278,15 @@ class create_webserver {
       * @return reference to this builder for chaining.
       * @see webserver, not_found_handler, internal_error_handler
       */
-     create_webserver& log_access(log_access_ptr v) { _log_access = std::move(v); return *this; }
-     create_webserver& log_error(log_error_ptr v) { _log_error = std::move(v); return *this; }
+     create_webserver& log_access(log_access_ptr v) { _config.log_access = std::move(v); return *this; }
+     create_webserver& log_error(log_error_ptr v) { _config.log_error = std::move(v); return *this; }
      [[deprecated("validator callback is not invoked by v2 dispatch; use webserver::add_hook(hook_phase::request_received, ...) instead")]]
-     create_webserver& validator(validator_ptr v) { _validator = std::move(v); return *this; }
-     create_webserver& unescaper(unescaper_ptr v) { _unescaper = v; return *this; }
-     create_webserver& bind_address(const struct sockaddr* v) { _bind_address = v; return *this; }
+     create_webserver& validator(validator_ptr v) { _config.validator = std::move(v); return *this; }
+     create_webserver& unescaper(unescaper_ptr v) { _config.unescaper = v; return *this; }
+     create_webserver& bind_address(const struct sockaddr* v) { _config.bind_address = v; return *this; }
      create_webserver& bind_address(const std::string& ip);
-     create_webserver& bind_socket(int v) { _bind_socket = v; return *this; }
-     create_webserver& max_thread_stack_size(int v) { check_non_negative("max_thread_stack_size", v); _max_thread_stack_size = v; return *this; }
+     create_webserver& bind_socket(int v) { _config.bind_socket = v; return *this; }
+     create_webserver& max_thread_stack_size(int v) { check_non_negative("max_thread_stack_size", v); _config.max_thread_stack_size = v; return *this; }
 
      /**
       * Per-request hard limit on the number of distinct GET argument keys.
@@ -198,7 +302,7 @@ class create_webserver {
       * upstream by MHD_OPTION_CONNECTION_MEMORY_LIMIT
       * (see @ref memory_limit / @ref content_size_limit).
       */
-     create_webserver& max_args_count(std::size_t v) { _max_args_count = v; return *this; }
+     create_webserver& max_args_count(std::size_t v) { _config.max_args_count = v; return *this; }
 
      /**
       * Per-request hard limit on the total bytes (sum of all key + value
@@ -209,7 +313,7 @@ class create_webserver {
       * (@c httpserver::detail::arguments_accumulator::DEFAULT_MAX_ARGS_BYTES,
       * currently 64 KiB).
       */
-     create_webserver& max_args_bytes(std::size_t v) { _max_args_bytes = v; return *this; }
+     create_webserver& max_args_bytes(std::size_t v) { _config.max_args_bytes = v; return *this; }
 
      // Boolean flag setters.
      /**
@@ -222,15 +326,15 @@ class create_webserver {
       * @param enable `true` to enable TLS, `false` to disable.
       * @return reference to this builder for chaining.
       */
-     create_webserver& use_ssl(bool enable = true) { _use_ssl = enable; return *this; }
-     create_webserver& use_ipv6(bool enable = true) { _use_ipv6 = enable; return *this; }
-     create_webserver& use_dual_stack(bool enable = true) { _use_dual_stack = enable; return *this; }
+     create_webserver& use_ssl(bool enable = true) { _config.use_ssl = enable; return *this; }
+     create_webserver& use_ipv6(bool enable = true) { _config.use_ipv6 = enable; return *this; }
+     create_webserver& use_dual_stack(bool enable = true) { _config.use_dual_stack = enable; return *this; }
      // Security note (CWE-11): debug(true) routes verbose libmicrohttpd
      // internal messages (connection details, MHD state) through the
      // log_error callback. Must not be set in production builds. Guard
      // with `#ifndef NDEBUG` or an explicit environment check.
-     create_webserver& debug(bool enable = true) { _debug = enable; return *this; }
-     create_webserver& pedantic(bool enable = true) { _pedantic = enable; return *this; }
+     create_webserver& debug(bool enable = true) { _config.debug = enable; return *this; }
+     create_webserver& pedantic(bool enable = true) { _config.pedantic = enable; return *this; }
      /**
       * Restore the v1 behaviour of surfacing the
       * originating exception message in the default internal-server-error
@@ -253,7 +357,7 @@ class create_webserver {
       * @return reference to this builder for chaining.
       */
      create_webserver& expose_exception_messages(bool enable = true) {
-         _expose_exception_messages = enable; return *this;
+         _config.expose_exception_messages = enable; return *this;
      }
 
      /**
@@ -281,21 +385,21 @@ class create_webserver {
       * @return reference to this builder for chaining.
       */
      create_webserver& expose_credentials_in_logs(bool enable = true) {
-         _expose_credentials_in_logs = enable; return *this;
+         _config.expose_credentials_in_logs = enable; return *this;
      }
 
-     create_webserver& https_mem_key(const std::string& v) { _https_mem_key = http::load_file(v); return *this; }
-     create_webserver& https_mem_cert(const std::string& v) { _https_mem_cert = http::load_file(v); return *this; }
-     create_webserver& https_mem_trust(const std::string& v) { _https_mem_trust = http::load_file(v); return *this; }
-     create_webserver& raw_https_mem_key(const std::string& v) { _https_mem_key = v; return *this; }
-     create_webserver& raw_https_mem_cert(const std::string& v) { _https_mem_cert = v; return *this; }
-     create_webserver& raw_https_mem_trust(const std::string& v) { _https_mem_trust = v; return *this; }
-     create_webserver& https_priorities(std::string v) { _https_priorities = std::move(v); return *this; }
-     create_webserver& cred_type(const http::http_utils::cred_type_T& v) { _cred_type = v; return *this; }
-     create_webserver& psk_cred_handler(psk_cred_handler_callback v) { _psk_cred_handler = std::move(v); return *this; }
-     create_webserver& digest_auth_random(std::string v) { _digest_auth_random = std::move(v); return *this; }
-     create_webserver& nonce_nc_size(int v) { check_non_negative("nonce_nc_size", v); _nonce_nc_size = v; return *this; }
-     create_webserver& default_policy(const http::http_utils::policy_T& v) { _default_policy = v; return *this; }
+     create_webserver& https_mem_key(const std::string& v) { _config.https_mem_key = http::load_file(v); return *this; }
+     create_webserver& https_mem_cert(const std::string& v) { _config.https_mem_cert = http::load_file(v); return *this; }
+     create_webserver& https_mem_trust(const std::string& v) { _config.https_mem_trust = http::load_file(v); return *this; }
+     create_webserver& raw_https_mem_key(const std::string& v) { _config.https_mem_key = v; return *this; }
+     create_webserver& raw_https_mem_cert(const std::string& v) { _config.https_mem_cert = v; return *this; }
+     create_webserver& raw_https_mem_trust(const std::string& v) { _config.https_mem_trust = v; return *this; }
+     create_webserver& https_priorities(std::string v) { _config.https_priorities = std::move(v); return *this; }
+     create_webserver& cred_type(const http::http_utils::cred_type_T& v) { _config.cred_type = v; return *this; }
+     create_webserver& psk_cred_handler(psk_cred_handler_callback v) { _config.psk_cred_handler = std::move(v); return *this; }
+     create_webserver& digest_auth_random(std::string v) { _config.digest_auth_random = std::move(v); return *this; }
+     create_webserver& nonce_nc_size(int v) { check_non_negative("nonce_nc_size", v); _config.nonce_nc_size = v; return *this; }
+     create_webserver& default_policy(const http::http_utils::policy_T& v) { _config.default_policy = v; return *this; }
 
      // Setter is unconditional. The actual
      // validation lives in webserver(const create_webserver&), which
@@ -312,7 +416,7 @@ class create_webserver {
       * @param enable `true` to enable Basic auth, `false` to disable.
       * @return reference to this builder for chaining.
       */
-     create_webserver& basic_auth(bool enable = true) { _basic_auth_enabled = enable; return *this; }
+     create_webserver& basic_auth(bool enable = true) { _config.basic_auth_enabled = enable; return *this; }
      /**
       * Enable HTTP Digest authentication on the webserver.
       *
@@ -324,14 +428,14 @@ class create_webserver {
       * @param enable `true` to enable Digest auth, `false` to disable.
       * @return reference to this builder for chaining.
       */
-     create_webserver& digest_auth(bool enable = true) { _digest_auth_enabled = enable; return *this; }
-     create_webserver& deferred(bool enable = true) { _deferred_enabled = enable; return *this; }
-     create_webserver& regex_checking(bool enable = true) { _regex_checking = enable; return *this; }
-     create_webserver& ip_access_control(bool enable = true) { _ip_access_control_enabled = enable; return *this; }
-     create_webserver& post_process(bool enable = true) { _post_process_enabled = enable; return *this; }
-     create_webserver& put_processed_data_to_content(bool enable = true) { _put_processed_data_to_content = enable; return *this; }
+     create_webserver& digest_auth(bool enable = true) { _config.digest_auth_enabled = enable; return *this; }
+     create_webserver& deferred(bool enable = true) { _config.deferred_enabled = enable; return *this; }
+     create_webserver& regex_checking(bool enable = true) { _config.regex_checking = enable; return *this; }
+     create_webserver& ip_access_control(bool enable = true) { _config.ip_access_control_enabled = enable; return *this; }
+     create_webserver& post_process(bool enable = true) { _config.post_process_enabled = enable; return *this; }
+     create_webserver& put_processed_data_to_content(bool enable = true) { _config.put_processed_data_to_content = enable; return *this; }
 
-     create_webserver& file_upload_target(const file_upload_target_T& v) { _file_upload_target = v; return *this; }
+     create_webserver& file_upload_target(const file_upload_target_T& v) { _config.file_upload_target = v; return *this; }
      /**
       * Set the directory where uploaded files are written to disk.
       *
@@ -349,7 +453,7 @@ class create_webserver {
       */
      create_webserver& file_upload_dir(const std::string& v) {
          if (v.empty()) throw std::invalid_argument("file_upload_dir: must not be empty");
-         _file_upload_dir = v; return *this;
+         _config.file_upload_dir = v; return *this;
      }
      /**
       * When enabled, uploaded files are stored under a randomly-generated
@@ -364,9 +468,9 @@ class create_webserver {
       * @return reference to this builder for chaining.
       * @see file_upload_dir
       */
-     create_webserver& generate_random_filename_on_upload(bool enable = true) { _generate_random_filename_on_upload = enable; return *this; }
-     create_webserver& single_resource(bool enable = true) { _single_resource = enable; return *this; }
-     create_webserver& tcp_nodelay(bool enable = true) { _tcp_nodelay = enable; return *this; }
+     create_webserver& generate_random_filename_on_upload(bool enable = true) { _config.generate_random_filename_on_upload = enable; return *this; }
+     create_webserver& single_resource(bool enable = true) { _config.single_resource = enable; return *this; }
+     create_webserver& tcp_nodelay(bool enable = true) { _config.tcp_nodelay = enable; return *this; }
      // The handler/callback setters and the remaining TLS / connection-
      // tuning setters live in a sibling header to keep this class
      // definition under the project per-file LOC ceiling. The inner gate
@@ -385,92 +489,9 @@ class create_webserver {
          if (v < 0) throw std::invalid_argument(std::string(name) + ": " + std::to_string(v) + " must be >= 0");
      }
 
-     std::uint16_t _port = constants::DEFAULT_WS_PORT;
-     http::http_utils::start_method_T _start_method = http::http_utils::INTERNAL_SELECT;
-     int _max_threads = 0;
-     int _max_connections = 0;
-     int _memory_limit = 0;
-     size_t _content_size_limit = std::numeric_limits<size_t>::max();
-     int _connection_timeout = constants::DEFAULT_WS_TIMEOUT;
-     int _per_IP_connection_limit = 0;
-     log_access_ptr _log_access = nullptr;
-     log_error_ptr _log_error = nullptr;
-     validator_ptr _validator = nullptr;
-     unescaper_ptr _unescaper = nullptr;
-     const struct sockaddr* _bind_address = nullptr;
-     std::shared_ptr<struct sockaddr_storage> _bind_address_storage;
-     int _bind_socket = 0;
-     int _max_thread_stack_size = 0;
-     // 0 = use the compile-time defaults
-     // (arguments_accumulator::DEFAULT_MAX_ARGS_COUNT / _BYTES).
-     std::size_t _max_args_count = 0;
-     std::size_t _max_args_bytes = 0;
-     bool _use_ssl = false;
-     bool _use_ipv6 = false;
-     bool _use_dual_stack = false;
-     bool _debug = false;
-     bool _pedantic = false;
-     // Default false (CWE-209 fix). When
-     // true, internal_error_page surfaces the originating exception's
-     // message in the default 500 body (development-only behaviour).
-     bool _expose_exception_messages = false;
-     // Default false (CWE-312 / CWE-532 fix). When true,
-     // http_request::operator<< restores the v1 verbose form for the
-     // four credential surfaces (pass, Authorization /
-     // Proxy-Authorization header values, cookie values).
-     bool _expose_credentials_in_logs = false;
-     std::string _https_mem_key;
-     std::string _https_mem_cert;
-     std::string _https_mem_trust;
-     std::string _https_priorities;
-     http::http_utils::cred_type_T _cred_type = http::http_utils::NONE;
-     psk_cred_handler_callback _psk_cred_handler = nullptr;
-     std::string _digest_auth_random;
-     int _nonce_nc_size = 0;
-     http::http_utils::policy_T _default_policy = http::http_utils::ACCEPT;
-     // Stored unconditionally. The default values are computed
-     // by basic_auth_default() and digest_auth_default() in
-     // create_webserver.cpp, where the HAVE_BAUTH / HAVE_DAUTH build
-     // flags are reachable — that keeps the public header free of
-     // build-flag preprocessor gates while preserving
-     // the historical defaults (true on the respective auth-on builds;
-     // false on auth-off builds so an unmodified builder doesn't trip
-     // the feature_unavailable throw at construction time).
-     static bool basic_auth_default() noexcept;
-     static bool digest_auth_default() noexcept;
-     bool _basic_auth_enabled = basic_auth_default();
-     bool _digest_auth_enabled = digest_auth_default();
-     bool _regex_checking = true;
-     bool _ip_access_control_enabled = true;
-     bool _post_process_enabled = true;
-     bool _put_processed_data_to_content = true;
-     file_upload_target_T _file_upload_target = FILE_UPLOAD_MEMORY_ONLY;
-     std::string _file_upload_dir = "/tmp";
-     bool _generate_random_filename_on_upload = false;
-     bool _deferred_enabled = false;
-     bool _single_resource = false;
-     bool _tcp_nodelay = false;
-     error_handler _not_found_handler = nullptr;
-     error_handler _method_not_allowed_handler = nullptr;
-     internal_error_handler_t _internal_error_handler = nullptr;
-     file_cleanup_callback_ptr _file_cleanup_callback = nullptr;
-     auth_handler_ptr _auth_handler = nullptr;
-     std::vector<std::string> _auth_skip_paths;
-     sni_callback_t _sni_callback = nullptr;
-     bool _no_listen_socket = false;
-     bool _no_thread_safety = false;
-     bool _turbo = false;
-     bool _suppress_date_header = false;
-     int _listen_backlog = 0;
-     int _address_reuse = 0;
-     size_t _connection_memory_increment = 0;
-     int _tcp_fastopen_queue_size = 0;
-     bool _sigpipe_handled_by_app = false;
-     std::string _https_mem_dhparams;
-     std::string _https_key_password;
-     std::string _https_priorities_append;
-     bool _no_alpn = false;
-     int _client_discipline_level = -1;
+     // All builder inputs live in one struct (see webserver_config above).
+     // Setters mutate _config; the webserver constructor copies it whole.
+     webserver_config _config;
 
      friend class webserver;
 };

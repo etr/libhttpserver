@@ -461,7 +461,7 @@ void webserver_impl::dispatch_resource_handler(detail::modded_request* mr,
         // Perf: only build the heap string
         // when a log_error callback is actually wired; log_dispatch_error
         // also checks this but the concatenation happens at the call site.
-        if (parent->log_error) {
+        if (parent->config.log_error) {
             log_dispatch_error(
                 std::string("dispatch: handler threw std::exception: ")
                     .append(e.what()));

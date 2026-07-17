@@ -27,9 +27,10 @@
 //
 // Additionally, a default-constructed create_webserver (without an explicit
 // .digest_auth(true) call) must NOT throw on a HAVE_DAUTH-off build.
-// This requires _digest_auth_enabled to default to false on HAVE_DAUTH-off
-// builds, which is achieved via digest_auth_default() defined in
-// create_webserver.cpp — the same pattern used for basic_auth_default().
+// This requires webserver_config::digest_auth_enabled to default to false
+// on HAVE_DAUTH-off builds, which is achieved via
+// detail::default_digest_auth_enabled() defined in create_webserver.cpp —
+// the same pattern used for detail::default_basic_auth_enabled().
 //
 // On HAVE_DAUTH-on builds this suite is left empty: the behavioural
 // contract (webserver construction succeeds) is already exercised by
@@ -72,8 +73,8 @@ LT_END_AUTO_TEST(ctor_throws_feature_unavailable_when_digest_auth_requested)
 
 // PRD-FLG-REQ-001 complementary: a default create_webserver (no
 // explicit .digest_auth(true)) must NOT throw on a HAVE_DAUTH-off build.
-// This pins that _digest_auth_enabled defaults to false via
-// digest_auth_default(), not to the hardcoded true.
+// This pins that webserver_config::digest_auth_enabled defaults to false
+// via detail::default_digest_auth_enabled(), not to the hardcoded true.
 // listen_socket(false) avoids binding a real port so the test is
 // port-safe in CI.
 LT_BEGIN_AUTO_TEST(webserver_dauth_unavailable_suite,

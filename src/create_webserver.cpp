@@ -43,7 +43,7 @@ namespace httpserver {
 // initializer in the header) so the public header carries no
 // #ifdef HAVE_BAUTH. The library was compiled with the right
 // HAVE_BAUTH state; the consumer TU's HAVE_BAUTH is irrelevant.
-bool create_webserver::basic_auth_default() noexcept {
+bool detail::default_basic_auth_enabled() noexcept {
 #ifdef HAVE_BAUTH
     return true;
 #else
@@ -51,11 +51,11 @@ bool create_webserver::basic_auth_default() noexcept {
 #endif
 }
 
-// Same pattern as basic_auth_default(). Returns true
+// Same pattern as default_basic_auth_enabled(). Returns true
 // on HAVE_DAUTH-on builds (preserving historical behaviour) and false
 // on HAVE_DAUTH-off builds so an unmodified builder doesn't trip the
 // feature_unavailable guard in webserver::webserver().
-bool create_webserver::digest_auth_default() noexcept {
+bool detail::default_digest_auth_enabled() noexcept {
 #ifdef HAVE_DAUTH
     return true;
 #else
@@ -64,25 +64,25 @@ bool create_webserver::digest_auth_default() noexcept {
 }
 
 create_webserver& create_webserver::bind_address(const std::string& ip) {
-    _bind_address_storage = std::make_shared<struct sockaddr_storage>();
-    std::memset(_bind_address_storage.get(), 0, sizeof(struct sockaddr_storage));
+    _config.bind_address_storage = std::make_shared<struct sockaddr_storage>();
+    std::memset(_config.bind_address_storage.get(), 0, sizeof(struct sockaddr_storage));
 
     // Try IPv4 first
-    auto* addr4 = reinterpret_cast<struct sockaddr_in*>(_bind_address_storage.get());
+    auto* addr4 = reinterpret_cast<struct sockaddr_in*>(_config.bind_address_storage.get());
     if (inet_pton(AF_INET, ip.c_str(), &(addr4->sin_addr)) == 1) {
         addr4->sin_family = AF_INET;
-        addr4->sin_port = htons(_port);
-        _bind_address = reinterpret_cast<const struct sockaddr*>(_bind_address_storage.get());
+        addr4->sin_port = htons(_config.port);
+        _config.bind_address = reinterpret_cast<const struct sockaddr*>(_config.bind_address_storage.get());
         return *this;
     }
 
     // Try IPv6
-    auto* addr6 = reinterpret_cast<struct sockaddr_in6*>(_bind_address_storage.get());
+    auto* addr6 = reinterpret_cast<struct sockaddr_in6*>(_config.bind_address_storage.get());
     if (inet_pton(AF_INET6, ip.c_str(), &(addr6->sin6_addr)) == 1) {
         addr6->sin6_family = AF_INET6;
-        addr6->sin6_port = htons(_port);
-        _bind_address = reinterpret_cast<const struct sockaddr*>(_bind_address_storage.get());
-        _use_ipv6 = true;
+        addr6->sin6_port = htons(_config.port);
+        _config.bind_address = reinterpret_cast<const struct sockaddr*>(_config.bind_address_storage.get());
+        _config.use_ipv6 = true;
         return *this;
     }
 
