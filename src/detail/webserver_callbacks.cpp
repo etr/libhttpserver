@@ -99,7 +99,7 @@ void webserver_impl::request_completed(void *cls, struct MHD_Connection *connect
     // Fire request_completed BEFORE the modded_request is
     // destroyed so the ctx pointers remain backed by live storage. The
     // gate-and-fire helper reads any_hooks_[request_completed] and
-    // builds the ctx from mr->dhr, mr->response, and the MHD
+    // builds the ctx from mr->request, mr->response, and the MHD
     // termination code. The fire site is the very first thing this
     // callback does, while mr is still untouched.
     auto* mr = static_cast<detail::modded_request*>(*con_cls);
@@ -380,9 +380,9 @@ MHD_Result webserver_impl::handle_post_form_arg(detail::modded_request* mr,
     // means MHD is feeding us a continuation chunk of a previously-
     // started value, so append rather than replace.
     if (off > 0) {
-        mr->dhr->grow_last_arg(key, std::string(data, size));
+        mr->request->grow_last_arg(key, std::string(data, size));
     } else {
-        mr->dhr->set_arg(key, std::string(data, size));
+        mr->request->set_arg(key, std::string(data, size));
     }
     return MHD_YES;
 }
@@ -435,7 +435,7 @@ void webserver_impl::manage_upload_stream(detail::modded_request* mr,
 MHD_Result webserver_impl::process_file_upload(detail::modded_request* mr,
         const char* key, const char* filename, const char* content_type,
         const char* transfer_encoding, const char* data, size_t size) const {
-    http::file_info& file = mr->dhr->get_or_create_file_info(key, filename);
+    http::file_info& file = mr->request->get_or_create_file_info(key, filename);
     if (file.get_file_system_file_name().empty()) {
         if (!setup_new_upload_file_info(file, filename, content_type, transfer_encoding)) {
             return MHD_NO;
@@ -463,8 +463,8 @@ MHD_Result webserver_impl::post_iterator(void *cls, enum MHD_ValueKind kind,
 
     try {
         if (mr->ws->file_upload_target != FILE_UPLOAD_DISK_ONLY) {
-            mr->dhr->set_arg_flat(key,
-                std::string(mr->dhr->get_arg(key)) + std::string(data, size));
+            mr->request->set_arg_flat(key,
+                std::string(mr->request->get_arg(key)) + std::string(data, size));
         }
         if (*filename != '\0' && mr->ws->file_upload_target != FILE_UPLOAD_MEMORY_ONLY) {
             MHD_Result r = mr->ws->impl_->process_file_upload(

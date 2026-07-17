@@ -101,7 +101,7 @@ void install_internal_error_alias(
     impl->handler_exception_alias_ =
         [user_handler = std::move(user_handler)](
                 const handler_exception_ctx& ctx) -> hook_action {
-            // mr->dhr is always non-null at the call site in
+            // mr->request is always non-null at the call site in
             // handle_dispatch_exception; this guard is purely defensive for
             // any future call site that relaxes that invariant. If that
             // invariant is violated in debug builds, assert fires first.

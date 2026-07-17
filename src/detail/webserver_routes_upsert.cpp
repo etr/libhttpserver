@@ -128,9 +128,9 @@ const detail::route_entry* webserver_impl::find_v2_entry_by_path_(
         // it as the wildcard child) and descends that unconstrained
         // wildcard child. A constrained "{id|[0-9]+}" segment, however,
         // fails the constraint regex_match in step_to_child_
-        // (radix_tree.hpp) and is NOT found -- the literal pattern text
+        // (segment_trie.hpp) and is NOT found -- the literal pattern text
         // does not satisfy its own constraint.
-        detail::radix_match<detail::route_entry> rm;
+        detail::segment_trie_match<detail::route_entry> rm;
         if (param_and_prefix_routes_.find(key, rm)
                 && rm.entry != nullptr && !rm.is_prefix_match) {
             return rm.entry;
@@ -265,9 +265,9 @@ void webserver_impl::upsert_v2_radix_route(const std::string& key,
     // symmetric guard in register_v2_route). Must run BEFORE the
     // read-merge below so a thrown exception leaves the table intact.
     reject_terminus_collision(key, /*want_is_prefix=*/false);
-    // Read-merge-reinsert: radix_tree::insert always overwrites the
+    // Read-merge-reinsert: segment_trie::insert always overwrites the
     // terminus, so we must fold any existing entry's methods in first.
-    detail::radix_match<detail::route_entry> existing;
+    detail::segment_trie_match<detail::route_entry> existing;
     detail::route_entry merged;
     if (param_and_prefix_routes_.find(key, existing)
             && existing.entry && !existing.is_prefix_match) {

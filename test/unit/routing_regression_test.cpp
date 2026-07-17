@@ -122,7 +122,7 @@ LT_BEGIN_AUTO_TEST(routing_regression_suite,
         .start_method(ht::http::http_utils::INTERNAL_SELECT)};
     ws.register_path("/ok", std::make_shared<noop_resource>());
 
-    // The radix tree's exact tier stores the canonical form. Both
+    // The segment trie's exact tier stores the canonical form. Both
     // /ok and /ok/ should resolve.
     auto a = impl_of(ws).lookup_v2(ht::http_method::get,
                                    std::string("/ok"));
@@ -186,7 +186,7 @@ LT_BEGIN_AUTO_TEST(routing_regression_suite,
     // Mirrors basic_suite::regex_matching_arg_custom. v1 used the
     // http_endpoint compiled-regex map to enforce per-segment
     // constraints; the v2 radix tier now does the same in-line via
-    // radix_node::wildcard_constraint_, restoring v1 parity. A
+    // segment_trie_node::wildcard_constraint_, restoring v1 parity. A
     // matching segment resolves in the radix tier (and captures
     // under the bare name); a non-matching segment misses the
     // wildcard slot and falls through to 404.
@@ -560,7 +560,7 @@ LT_BEGIN_AUTO_TEST(routing_regression_suite,
     auto r = impl_of(ws).lookup_v2(ht::http_method::get,
                                    std::string("/foo/bar/"));
     LT_CHECK(r.found);
-    // The v2 radix tree prefers exact children over wildcard children
+    // The v2 segment trie prefers exact children over wildcard children
     // at each node. /foo/{var|([a-z]+)}/ anchors segment 0 on the
     // literal "foo" (exact child), so the tree descends there first and
     // never tries the wildcard root branch required by the second

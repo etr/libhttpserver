@@ -72,7 +72,7 @@
 #include "httpserver/hook_phase.hpp"
 #include "httpserver/detail/connection_state.hpp"
 #include "httpserver/detail/http_endpoint.hpp"
-#include "httpserver/detail/radix_tree.hpp"
+#include "httpserver/detail/segment_trie.hpp"
 #include "httpserver/detail/route_cache.hpp"
 #include "httpserver/detail/route_entry.hpp"
 
@@ -207,12 +207,12 @@ class webserver_impl {
     //
     // **CWE-407 hash-flooding immunity.** exact_routes_ uses std::map
     // (not std::unordered_map) so the keyed lookup on the dispatch hot
-    // path is hash-free. Same posture as the radix-tree per-segment
+    // path is hash-free. Same posture as the segment-trie per-segment
     // child container. std::less<> enables transparent
     // string_view lookup without constructing a temporary std::string.
     std::shared_mutex route_table_mutex_;
     std::map<std::string, route_entry, std::less<>> exact_routes_;
-    radix_tree<route_entry> param_and_prefix_routes_;
+    segment_trie<route_entry> param_and_prefix_routes_;
     // Pre-compiled regex objects: a vector of (compiled std::regex,
     // route_entry) pairs so that lookup_v2
     // calls std::regex_match on an already-compiled object without paying

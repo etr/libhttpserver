@@ -28,7 +28,7 @@
 // double-fault-safe wrapper around the user internal_error_handler
 // (run_internal_error_handler_safely). They are pure const helpers off
 // webserver_impl and share no state with the rest of the dispatch TU
-// beyond `parent->*` user handlers and `mr->dhr`.
+// beyond `parent->*` user handlers and `mr->request`.
 
 #include "httpserver/webserver.hpp"
 #include "httpserver/detail/webserver_impl.hpp"
@@ -51,7 +51,7 @@ namespace detail {
 
 http_response webserver_impl::not_found_page(detail::modded_request* mr) const {
     if (parent->not_found_handler != nullptr) {
-        return parent->not_found_handler(*mr->dhr);
+        return parent->not_found_handler(*mr->request);
     }
     return http_response::string(std::string{constants::NOT_FOUND_ERROR})
         .with_status(http_utils::http_not_found);
@@ -59,7 +59,7 @@ http_response webserver_impl::not_found_page(detail::modded_request* mr) const {
 
 http_response webserver_impl::method_not_allowed_page(detail::modded_request* mr) const {
     if (parent->method_not_allowed_handler != nullptr) {
-        return parent->method_not_allowed_handler(*mr->dhr);
+        return parent->method_not_allowed_handler(*mr->request);
     }
     return http_response::string(std::string{constants::METHOD_ERROR})
         .with_status(http_utils::http_method_not_allowed);
@@ -80,7 +80,7 @@ http_response webserver_impl::internal_error_page(
     }
     // Invoke the user handler with the originating message.
     if (parent->internal_error_handler != nullptr) {
-        return parent->internal_error_handler(*mr->dhr, msg);
+        return parent->internal_error_handler(*mr->request, msg);
     }
     // The default body is the fixed string
     // "Internal Server Error" to avoid CWE-209 information disclosure of

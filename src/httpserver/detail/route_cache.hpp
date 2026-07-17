@@ -79,7 +79,7 @@ struct cache_key_hash {
 // cache_value: the hit payload. Carries a copy of the route_entry (one
 // shared_ptr ref-bump for the class arm; std::function copy for the
 // lambda arm) and the parameter capture vector so the cache hit can
-// replay parameter binding without re-walking the radix tree.
+// replay parameter binding without re-walking the segment trie.
 struct cache_value {
     route_entry entry;
     // Read in src/webserver.cpp at the cache-hit replay site

@@ -33,11 +33,11 @@
 // handle_post_form_arg, which is the function issue #375 hardens. We drive
 // the public callback so the test exercises the same entry point MHD does.
 //
-// modded_request::dhr is a unique_ptr<http_request> with the default
+// modded_request::request is a unique_ptr<http_request> with the default
 // deleter, and http_request's move constructor is private (friended only
 // to create_test_request), so the request cannot be make_unique'd. Instead
 // we own an http_request on the stack -- built via the public test builder
-// using guaranteed copy elision -- and point dhr at it, detaching dhr
+// using guaranteed copy elision -- and point request at it, detaching request
 // before destruction so the stack object is not double-freed.
 namespace {
 struct request_fixture {
@@ -47,13 +47,13 @@ struct request_fixture {
 
     request_fixture() {
         // ws is never read on the no-file form-arg path, so leave it null.
-        mr.dhr.reset(&req);
+        mr.request.reset(&req);
     }
 
     ~request_fixture() {
         // Detach before mr (and its unique_ptr) is destroyed: req is
-        // stack-owned and must not be deleted through dhr.
-        mr.dhr.release();
+        // stack-owned and must not be deleted through request.
+        mr.request.release();
     }
 
     MHD_Result feed(const char* key, const char* data, uint64_t off,
@@ -87,7 +87,7 @@ LT_BEGIN_AUTO_TEST(post_iterator_null_key_suite, null_key_continuation_does_not_
     // MHD_YES keeps the request alive; MHD_NO would abort it.
     LT_CHECK_EQ(r, MHD_YES);
     // Nothing was stored: there was no field name to key the value under.
-    LT_CHECK_EQ(f.mr.dhr->get_args().size(), static_cast<size_t>(0));
+    LT_CHECK_EQ(f.mr.request->get_args().size(), static_cast<size_t>(0));
 LT_END_AUTO_TEST(null_key_continuation_does_not_throw)
 
 // Same guard on the initial-chunk path (off == 0). MHD should not normally
@@ -97,7 +97,7 @@ LT_BEGIN_AUTO_TEST(post_iterator_null_key_suite, null_key_initial_does_not_throw
     MHD_Result r = MHD_NO;
     LT_CHECK_NOTHROW(r = f.feed(/*key=*/nullptr, "value", /*off=*/0, 5));
     LT_CHECK_EQ(r, MHD_YES);
-    LT_CHECK_EQ(f.mr.dhr->get_args().size(), static_cast<size_t>(0));
+    LT_CHECK_EQ(f.mr.request->get_args().size(), static_cast<size_t>(0));
 LT_END_AUTO_TEST(null_key_initial_does_not_throw)
 
 // Happy path: a non-null key on the initial chunk stores the value under
@@ -106,7 +106,7 @@ LT_BEGIN_AUTO_TEST(post_iterator_null_key_suite, valid_key_stores_arg)
     request_fixture f;
     MHD_Result r = f.feed("field", "value", /*off=*/0, 5);
     LT_CHECK_EQ(r, MHD_YES);
-    LT_CHECK_EQ(std::string(f.mr.dhr->get_arg_flat("field")),
+    LT_CHECK_EQ(std::string(f.mr.request->get_arg_flat("field")),
                 std::string("value"));
 LT_END_AUTO_TEST(valid_key_stores_arg)
 
@@ -117,7 +117,7 @@ LT_BEGIN_AUTO_TEST(post_iterator_null_key_suite, valid_key_continuation_appends)
     request_fixture f;
     LT_CHECK_EQ(f.feed("field", "hel", /*off=*/0, 3), MHD_YES);
     LT_CHECK_EQ(f.feed("field", "lo", /*off=*/3, 2), MHD_YES);
-    LT_CHECK_EQ(std::string(f.mr.dhr->get_arg_flat("field")),
+    LT_CHECK_EQ(std::string(f.mr.request->get_arg_flat("field")),
                 std::string("hello"));
 LT_END_AUTO_TEST(valid_key_continuation_appends)
 

@@ -199,8 +199,8 @@ void webserver_impl::register_v2_route(const detail::http_endpoint& idx,
     // Place a register_path / register_prefix registration into the
     // v2 3-tier route table. Tier placement via classify_route_tier()
     // (single source-of-truth):
-    //   - family=true  -> radix tree (prefix terminus).
-    //   - radix tier   -> radix tree (exact terminus, wildcard nodes).
+    //   - family=true  -> segment trie (prefix terminus).
+    //   - radix tier   -> segment trie (exact terminus, wildcard nodes).
     //   - regex tier   -> regex_routes_ (pre-compiled at registration time).
     //   - exact tier   -> exact_routes_ hash map.
     std::unique_lock table_lock(route_table_mutex_);

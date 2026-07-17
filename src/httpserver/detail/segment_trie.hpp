@@ -28,11 +28,11 @@
 //
 // Internal header — only reachable when compiling libhttpserver.
 #if !defined(HTTPSERVER_COMPILATION)
-#error "radix_tree.hpp is internal; only reachable when compiling libhttpserver."
+#error "segment_trie.hpp is internal; only reachable when compiling libhttpserver."
 #endif
 
-#ifndef SRC_HTTPSERVER_DETAIL_RADIX_TREE_HPP_
-#define SRC_HTTPSERVER_DETAIL_RADIX_TREE_HPP_
+#ifndef SRC_HTTPSERVER_DETAIL_SEGMENT_TRIE_HPP_
+#define SRC_HTTPSERVER_DETAIL_SEGMENT_TRIE_HPP_
 
 #include <cstddef>
 #include <functional>
@@ -51,10 +51,10 @@
 namespace httpserver {
 namespace detail {
 
-// radix_match: result type of radix_tree<T>::find.
+// segment_trie_match: result type of segment_trie<T>::find.
 // `entry` is a non-owning pointer into the tree; valid until the next mutation.
 template <typename T>
-struct radix_match {
+struct segment_trie_match {
     const T* entry = nullptr;
     std::vector<std::pair<std::string, std::string>> captures;
     bool is_prefix_match = false;
@@ -65,7 +65,7 @@ struct radix_match {
 // path level by design — two {name} siblings at the same depth are
 // ambiguous and rejected at registration time.
 template <typename T>
-struct radix_node {
+struct segment_trie_node {
     // Per-segment children are kept in std::map rather than
     // std::unordered_map for hash-flooding immunity (CWE-407). URL path
     // segments are attacker-controlled and neither libc++ nor libstdc++
@@ -79,8 +79,8 @@ struct radix_node {
     // std::less<> is the transparent comparator: it lets find() take a
     // std::string_view directly and compare against the std::string keys
     // without constructing a temporary std::string per probe.
-    std::map<std::string, std::unique_ptr<radix_node>, std::less<>> children_;
-    std::unique_ptr<radix_node> wildcard_child_;
+    std::map<std::string, std::unique_ptr<segment_trie_node>, std::less<>> children_;
+    std::unique_ptr<segment_trie_node> wildcard_child_;
     // wildcard_name_ is the bare parameter name (e.g. "id" for the
     // pattern `{id|([0-9]+)}`), matching v1 semantics: callers reach the
     // captured value via `req.get_arg("id")`, not via the full source
@@ -94,27 +94,29 @@ struct radix_node {
     std::optional<T> prefix_terminus_;
 };
 
-// radix_tree<T>: segment-trie. Inserts route paths split on '/', supports
-// `{name}` wildcard segments, and carries a `is_prefix` flag per insertion
-// so the same tree backs both parameterized exact and prefix registrations.
+// segment_trie<T>: an uncompressed per-segment trie (one node per '/'-
+// delimited path segment; no edge compression, hence "segment trie" and
+// not "radix tree"). Inserts route paths split on '/', supports `{name}`
+// wildcard segments, and carries a `is_prefix` flag per insertion so the
+// same tree backs both parameterized exact and prefix registrations.
 //
 // Concurrency: this type is NOT internally synchronized. The owning
 // webserver_impl protects all three tier structures (exact_routes_,
 // param_and_prefix_routes_, regex_routes_) with a single std::shared_mutex.
 template <typename T>
-class radix_tree {
+class segment_trie {
  public:
-    radix_tree() : root_(std::make_unique<radix_node<T>>()) {}
+    segment_trie() : root_(std::make_unique<segment_trie_node<T>>()) {}
 
     // Insert `path` with the given entry. is_prefix selects whether the
     // entry terminates in `prefix_terminus_` (and matches any deeper
     // request path) or `exact_terminus_` (and matches only this path).
-    // The radix_tree itself does not look inside `entry` — the caller
+    // The segment_trie itself does not look inside `entry` — the caller
     // (webserver_impl) is responsible for keeping the is_prefix argument
     // consistent with route_entry::is_prefix, which is the source of
     // truth. Replaces an existing terminus of the same kind.
     void insert(const std::string& path, T entry, bool is_prefix = false) {
-        radix_node<T>* node = root_.get();
+        segment_trie_node<T>* node = root_.get();
         const auto segments = tokenize(path);
         for (const std::string& seg : segments) {
             node = descend_or_create(node, seg);
@@ -128,8 +130,8 @@ class radix_tree {
 
     // Match the root node's termini (exact first, then prefix). Pulled
     // out of find() so the empty-segments branch stays a one-liner.
-    bool match_root_terminus(radix_match<T>& out) const {
-        const radix_node<T>* node = root_.get();
+    bool match_root_terminus(segment_trie_match<T>& out) const {
+        const segment_trie_node<T>* node = root_.get();
         if (node->exact_terminus_.has_value()) {
             out.entry = &node->exact_terminus_.value();
             out.is_prefix_match = false;
@@ -157,9 +159,9 @@ class radix_tree {
     // temporary std::string is constructed per probe.
     // The wildcard path copies the segment into captures<string,string>
     // only when a wildcard node is taken.
-    bool find(std::string_view path, radix_match<T>& out) const {
+    bool find(std::string_view path, segment_trie_match<T>& out) const {
         out = {};
-        const radix_node<T>* node = root_.get();
+        const segment_trie_node<T>* node = root_.get();
 
         // Strip a single leading slash; a bare "/" normalises to empty.
         std::string_view rest = path;
@@ -177,7 +179,7 @@ class radix_tree {
 
         while (!rest.empty()) {
             std::string_view seg = pop_next_segment_(rest);
-            const radix_node<T>* next = step_to_child_(node, seg, caps);
+            const segment_trie_node<T>* next = step_to_child_(node, seg, caps);
             if (next == nullptr) break;
             node = next;
             if (node->prefix_terminus_.has_value()) {
@@ -218,9 +220,9 @@ class radix_tree {
     // populate `out` and return true. Returns false otherwise (caller
     // continues the descent or falls back to the best prefix candidate).
     static bool try_consume_exact_terminus_(std::string_view rest,
-            const radix_node<T>* node,
+            const segment_trie_node<T>* node,
             std::vector<std::pair<std::string, std::string>>& caps,
-            radix_match<T>& out) {
+            segment_trie_match<T>& out) {
         if (!rest.empty() || !node->exact_terminus_.has_value()) return false;
         out.entry = &node->exact_terminus_.value();
         out.captures = std::move(caps);
@@ -233,7 +235,7 @@ class radix_tree {
     // any per-segment regex constraint). Returns the new node or nullptr
     // when no descent is possible (caller falls back to a prefix candidate
     // or returns 404).
-    static const radix_node<T>* step_to_child_(const radix_node<T>* node,
+    static const segment_trie_node<T>* step_to_child_(const segment_trie_node<T>* node,
             std::string_view seg,
             std::vector<std::pair<std::string, std::string>>& caps) {
         // Prefer exact child over wildcard. std::map's transparent
@@ -246,7 +248,7 @@ class radix_tree {
         // carries a `|regex` suffix, the actual segment must satisfy
         // it; otherwise the branch is not taken and we fall back to a
         // prefix candidate or 404, matching v1 semantics.
-        const radix_node<T>* candidate = node->wildcard_child_.get();
+        const segment_trie_node<T>* candidate = node->wildcard_child_.get();
         if (candidate->wildcard_constraint_.has_value()
                 && !std::regex_match(seg.begin(), seg.end(),
                                      *candidate->wildcard_constraint_)) {
@@ -271,7 +273,7 @@ class radix_tree {
     // prefix terminus is already registered at /admin (and vice versa)
     // — silent shadowing would corrupt the (method, path) cache key.
     bool has_terminus_at(const std::string& path, bool is_prefix) const {
-        const radix_node<T>* node = walk_registered_pattern_(root_.get(),
+        const segment_trie_node<T>* node = walk_registered_pattern_(root_.get(),
                                                              tokenize(path));
         if (node == nullptr) return false;
         return is_prefix ? node->prefix_terminus_.has_value()
@@ -284,7 +286,7 @@ class radix_tree {
     // segment value (e.g. "42"), remove() receives the registered pattern
     // (e.g. "{id}") and matches wildcard nodes by the placeholder shape.
     bool remove(const std::string& path, bool is_prefix) {
-        radix_node<T>* node = walk_registered_pattern_(root_.get(),
+        segment_trie_node<T>* node = walk_registered_pattern_(root_.get(),
                                                        tokenize(path));
         if (node == nullptr) return false;
         if (is_prefix) {
@@ -316,7 +318,7 @@ class radix_tree {
     // the {name} placeholder shape. Returns the terminal node or
     // nullptr if any segment failed to match.
     //
-    // Templated on Node (radix_node<T> or const radix_node<T>) so the
+    // Templated on Node (segment_trie_node<T> or const segment_trie_node<T>) so the
     // const-correct mutable / const callers (has_terminus_at, remove)
     // share one descent body.
     template <class Node>
@@ -359,12 +361,12 @@ class radix_tree {
                 seg.substr(bar + 1, seg.size() - bar - 2)};
     }
 
-    static radix_node<T>* descend_or_create(radix_node<T>* node,
+    static segment_trie_node<T>* descend_or_create(segment_trie_node<T>* node,
                                             const std::string& seg) {
         if (is_wildcard_segment(seg)) {
             auto [name, constraint_src] = parse_wildcard(seg);
             if (!node->wildcard_child_) {
-                node->wildcard_child_ = std::make_unique<radix_node<T>>();
+                node->wildcard_child_ = std::make_unique<segment_trie_node<T>>();
                 node->wildcard_child_->wildcard_name_ = std::move(name);
                 if (!constraint_src.empty()) {
                     try {
@@ -387,12 +389,12 @@ class radix_tree {
         auto it = node->children_.find(seg);
         if (it == node->children_.end()) {
             it = node->children_.emplace(seg,
-                std::make_unique<radix_node<T>>()).first;
+                std::make_unique<segment_trie_node<T>>()).first;
         }
         return it->second.get();
     }
 
-    static bool is_node_empty(const radix_node<T>* n) noexcept {
+    static bool is_node_empty(const segment_trie_node<T>* n) noexcept {
         if (n == nullptr) return true;
         if (n->exact_terminus_.has_value()
             || n->prefix_terminus_.has_value()) return false;
@@ -404,10 +406,10 @@ class radix_tree {
         return true;
     }
 
-    std::unique_ptr<radix_node<T>> root_;
+    std::unique_ptr<segment_trie_node<T>> root_;
 };
 
 }  // namespace detail
 }  // namespace httpserver
 
-#endif  // SRC_HTTPSERVER_DETAIL_RADIX_TREE_HPP_
+#endif  // SRC_HTTPSERVER_DETAIL_SEGMENT_TRIE_HPP_

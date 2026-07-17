@@ -300,7 +300,7 @@ webserver_on_methods_SOURCES = unit/webserver_on_methods_test.cpp
 webserver_route_SOURCES = unit/webserver_route_test.cpp
 
 # route_table: TASK-027. Unit tests for the bespoke segment-trie
-# (detail::radix_tree<route_entry>) and the LRU route cache
+# (detail::segment_trie<route_entry>) and the LRU route cache
 # (detail::route_cache). Exercises insert/find/remove on exact,
 # parameterized and prefix routes; cache key equality (method-distinct),
 # LRU eviction order, hit-promotion, and clear(). Default LDADD

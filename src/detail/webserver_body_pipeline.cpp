@@ -99,7 +99,7 @@ bool fire_and_maybe_short_circuit_body_chunk(webserver_impl* impl,
     // upload callback (the *upload_data_size == 0 call that routes to
     // complete_request), which never reaches this fire site.
     ::httpserver::body_chunk_ctx ctx{
-        mr->dhr.get(),
+        mr->request.get(),
         std::as_bytes(std::span<const char>(upload_data, upload_data_size)),
         mr->body_bytes_seen,
         /*is_final=*/false};
@@ -199,11 +199,11 @@ MHD_Result webserver_impl::requests_answer_first_step(MHD_Connection* connection
     // MHD_CONNECTION_INFO_SOCKET_CONTEXT, then allocates the http_request_impl
     // from that arena. The arena plumbing is therefore implicit at this call
     // site but explicit within the constructor.
-    mr->dhr.reset(new http_request(connection, parent->unescaper));
-    mr->dhr->set_file_cleanup_callback(parent->file_cleanup_callback);
+    mr->request.reset(new http_request(connection, parent->unescaper));
+    mr->request->set_file_cleanup_callback(parent->file_cleanup_callback);
     // Propagate the redaction-bypass bit so operator<< honours
     // the builder opt-in for every request the webserver dispatches.
-    mr->dhr->set_expose_credentials_in_logs(parent->expose_credentials_in_logs);
+    mr->request->set_expose_credentials_in_logs(parent->expose_credentials_in_logs);
 
     // request_received hook. Fires after the http_request is
     // populated but before any body bytes are read (and before any
@@ -216,7 +216,7 @@ MHD_Result webserver_impl::requests_answer_first_step(MHD_Connection* connection
     // No post-processor exists at this point, so no teardown is needed.
     if (has_hooks_for(::httpserver::hook_phase::request_received)) {
         ::httpserver::request_received_ctx ctx{
-            mr->dhr.get(),
+            mr->request.get(),
             std::chrono::steady_clock::now()};
         if (auto sc = fire_request_received(ctx)) {
             mr->response.emplace(std::move(*sc));
@@ -229,7 +229,7 @@ MHD_Result webserver_impl::requests_answer_first_step(MHD_Connection* connection
         return MHD_YES;
     }
 
-    mr->dhr->set_content_size_limit(parent->content_size_limit);
+    mr->request->set_content_size_limit(parent->content_size_limit);
     const char *encoding = MHD_lookup_connection_value(connection, MHD_HEADER_KIND, http_utils::http_header_content_type);
 
     if (parent->post_process_enabled &&
@@ -265,7 +265,7 @@ MHD_Result webserver_impl::requests_answer_second_step(MHD_Connection* connectio
     }
 
     // body_chunk hook fires per chunk BEFORE the bytes are
-    // appended to mr->dhr / fed to MHD_post_process.
+    // appended to mr->request / fed to MHD_post_process.
     if (has_hooks_for(::httpserver::hook_phase::body_chunk)) {
         if (fire_and_maybe_short_circuit_body_chunk(
                 this, mr, upload_data, *upload_data_size)) {
@@ -294,7 +294,7 @@ MHD_Result webserver_impl::requests_answer_second_step(MHD_Connection* connectio
     // all other content (which is indicated by mr-pp == nullptr)
     // has to be put to the content even if put_processed_data_to_content is set to false
     if (mr->pp == nullptr || parent->put_processed_data_to_content) {
-        mr->dhr->grow_content(upload_data, *upload_data_size);
+        mr->request->grow_content(upload_data, *upload_data_size);
     }
     run_post_processor_if_attached(mr, parent, upload_data, *upload_data_size);
 

@@ -55,8 +55,8 @@ namespace detail {
 //      stores the returned pointer in *con_cls and hands it back to
 //      every later callback for the same request.
 //   2. answer_to_connection (webserver_request.cpp) fires one or more
-//      times; `dhr == nullptr` marks the FIRST invocation, which stamps
-//      start_time, ws, standardized_url, method_enum and builds dhr.
+//      times; `request == nullptr` marks the FIRST invocation, which stamps
+//      start_time, ws, standardized_url, method_enum and builds request.
 //   3. Body chunks arrive via requests_answer_second_step
 //      (webserver_body_pipeline.cpp); a hook short-circuit there sets
 //      skip_handler, which drains remaining chunks and later makes
@@ -85,10 +85,10 @@ struct modded_request {
     // is_allowed returns false for unrecognized verbs (the 405 path).
     http_method method_enum = http_method::count_;
 
-    // The http_request object for this connection (the terse name is
-    // inherited v1 naming, used throughout dispatch). Null until the
-    // first answer_to_connection invocation constructs it.
-    std::unique_ptr<http_request> dhr = nullptr;
+    // The http_request object for this connection, accessed throughout
+    // dispatch as mr->request. Null until the first answer_to_connection
+    // invocation constructs it.
+    std::unique_ptr<http_request> request = nullptr;
     // Anchor kept alive until request_completed. See webserver_impl.hpp for the full contract.
     std::optional<http_response> response;
     bool has_body = false;
@@ -134,7 +134,7 @@ struct modded_request {
 
     // Captured once on the first invocation of
     // webserver_impl::answer_to_connection for this request (i.e., when
-    // mr->dhr is still null -- the "fresh request" branch). The
+    // mr->request is still null -- the "fresh request" branch). The
     // response_sent and request_completed firing sites measure elapsed
     // wall time from this anchor. Default-constructed value (epoch) is
     // never read because both fire sites are unreachable until

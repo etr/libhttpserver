@@ -162,9 +162,9 @@ LT_BEGIN_AUTO_TEST(route_table_concurrency_suite,
 LT_END_AUTO_TEST(concurrent_register_and_lookup_no_data_race)
 
 // Cycle J: concurrent register/unregister of parameterised paths alongside
-// readers. Exercises the radix tree's wildcard_child_ node allocation and
+// readers. Exercises the segment trie's wildcard_child_ node allocation and
 // deallocation paths under contention. Writers use paths
-// like /dyn/{id}/wN so the radix tree must allocate and free wildcard nodes
+// like /dyn/{id}/wN so the segment trie must allocate and free wildcard nodes
 // concurrently with readers calling lookup_v2 on those same paths.
 LT_BEGIN_AUTO_TEST(route_table_concurrency_suite,
                    concurrent_wildcard_node_alloc_and_lookup_no_data_race)
@@ -191,7 +191,7 @@ LT_BEGIN_AUTO_TEST(route_table_concurrency_suite,
 
     // Writers: concurrently register / unregister parameterised paths with
     // different writer indices so each writer owns a disjoint numeric prefix
-    // for the wildcard segment, exercising the radix tree's wildcard_child_
+    // for the wildcard segment, exercising the segment trie's wildcard_child_
     // allocation and deallocation path concurrently.
     for (int w = 0; w < kWriters; ++w) {
         threads.emplace_back([&, w] {
@@ -214,7 +214,7 @@ LT_BEGIN_AUTO_TEST(route_table_concurrency_suite,
 
     // Readers: lookup both the stable parameterised paths and the paths
     // under concurrent mutation to exercise the shared_lock path on the
-    // radix tree's wildcard_child_ node.
+    // segment trie's wildcard_child_ node.
     for (int r = 0; r < kReaders; ++r) {
         threads.emplace_back([&, r] {
             int counter = 0;

@@ -275,7 +275,7 @@ static void fire_route_resolved_gated(webserver_impl* impl,
             /*is_prefix=*/mr->matched_is_prefix};
     }
     route_resolved_ctx ctx{
-        /*request=*/mr->dhr.get(),
+        /*request=*/mr->request.get(),
         /*matched=*/std::move(desc),
         /*resource=*/hrm ? hrm.get() : nullptr};
     impl->fire_route_resolved(ctx);
@@ -381,9 +381,9 @@ MHD_Result webserver_impl::finalize_answer(MHD_Connection* connection,
 MHD_Result webserver_impl::complete_request(MHD_Connection* connection, struct detail::modded_request* mr, const char* version, const char* method) {
     // mr->ws is pre-populated in answer_to_connection (hoisted there for
     // early-path request_completed coverage); no need to set it again here.
-    mr->dhr->set_path(mr->standardized_url);
-    mr->dhr->set_method(method);
-    mr->dhr->set_version(version);
+    mr->request->set_path(mr->standardized_url);
+    mr->request->set_method(method);
+    mr->request->set_version(version);
 
     return finalize_answer(connection, mr);
 }
@@ -438,7 +438,7 @@ MHD_Result webserver_impl::answer_to_connection(void* cls, MHD_Connection* conne
     auto* mr = static_cast<detail::modded_request*>(*con_cls);
     auto* impl = static_cast<webserver_impl*>(cls);
 
-    if (mr->dhr) {
+    if (mr->request) {
         return impl->requests_answer_second_step(connection, method, version,
                                                   upload_data, upload_data_size, mr);
     }
@@ -468,7 +468,7 @@ MHD_Result webserver_impl::answer_to_connection(void* cls, MHD_Connection* conne
     base_unescaper(&t_url, impl->parent->unescaper);
     // SECURITY: collapse dot-segments ("." / "..") into the canonical
     // path here, at the single point where the routing/auth path is
-    // derived. Both the route matcher (radix_tree::find via
+    // derived. Both the route matcher (segment_trie::find via
     // mr->standardized_url) and should_skip_auth() must interpret the
     // path identically; should_skip_auth() runs the path through
     // normalize_path() (which pops ".."), but standardize_url() only

@@ -56,7 +56,7 @@
 //
 // Behaviour:
 //   - parent->internal_error_handler set, !force_our:
-//       invoke it with (*mr->dhr, msg) and return the result.
+//       invoke it with (*mr->request, msg) and return the result.
 //   - force_our=true: return a hardcoded 500 with an EMPTY body
 //       (the "double-fault" fallback used when the user handler
 //       itself threw).
@@ -312,7 +312,7 @@ std::optional<MHD_Result> complete_websocket_upgrade(MHD_Connection* connection,
 
 // Locate the resource serving @p mr by consulting lookup_v2
 // (cache -> exact -> radix -> regex). Returns true and sets @p hrm on
-// hit (also populates URL parameter captures on @p mr->dhr via
+// hit (also populates URL parameter captures on @p mr->request via
 // set_arg, and sets mr->matched_path_template + matched_is_prefix when
 // any hook in the route_resolved / before_handler phases is registered);
 // false otherwise.

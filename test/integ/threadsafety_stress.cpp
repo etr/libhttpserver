@@ -461,7 +461,7 @@ int stress_repeats() {
 // pthread_setaffinity_np. Pinning all writers to the same CPU is
 // counter-intuitive but correct for this test: the writers contend on
 // route_table_mutex_, so they are effectively serialised — forcing them
-// onto one CPU eliminates cross-CPU cache misses on radix-tree node
+// onto one CPU eliminates cross-CPU cache misses on segment-trie node
 // memory and removes scheduler migration jitter from the p95 tail. macOS
 // has no equivalent (thread_policy_set is a hint widely reported as
 // ineffective on Apple Silicon), so the knob is a no-op there. Returns
@@ -761,7 +761,7 @@ LT_END_AUTO_TEST(stop_from_handler_deadlocks_as_documented)
 // Sub-test C — adversarial_segments_registration_no_latency_spike
 //
 // Hammer the registration path with an adversarial corpus of sibling
-// path segments to confirm the radix tree's per-segment children
+// path segments to confirm the segment trie's per-segment children
 // container is DoS-resistant. With the std::map swap landed in this
 // task, per-segment lookup is O(log n) regardless of input shape, so
 // even a corpus designed to maximise per-probe cost completes within
@@ -892,7 +892,7 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
             // Pinning all writers to the same CPU is correct for THIS
             // test because they contend on route_table_mutex_ (effectively
             // serialised) — single-CPU placement eliminates cross-CPU
-            // cache misses on radix-tree node memory. macOS / Windows:
+            // cache misses on segment-trie node memory. macOS / Windows:
             // no-op (pin_this_thread_to_cpu returns false). Failure to
             // pin is silent (best-effort optimisation, not a contract).
             if (pin_cpu >= 0) {
@@ -1129,7 +1129,7 @@ LT_BEGIN_AUTO_TEST(threadsafety_stress_suite,
     // ratio on a quiet Apple Silicon laptop runs 11×–14× across a
     // 10-round local sweep. The dominant floor is NOT OS noise but
     // legitimate route_table_mutex_ contention: 4 writer threads
-    // contend on a single std::mutex around the radix-tree insert, and
+    // contend on a single std::mutex around the segment-trie insert, and
     // the top 5% of samples are precisely the lock-wait queue tail.
     // 10× is therefore genuinely infeasible without rewriting the lock
     // strategy (out of scope here). 20× gives ~50% headroom

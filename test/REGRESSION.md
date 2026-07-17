@@ -44,7 +44,7 @@ here AND a test in `routing_regression_test.cpp`.
 | Exact root `/` | `http_endpoint_suite::http_endpoint_root_only` | `test/unit/http_endpoint_test.cpp` | unchanged |
 | Single-segment param `/{arg}` | `basic_suite::regex_matching_arg`, `regex_matching_arg_with_url_pars`, `http_endpoint_*` unit tests | `test/integ/basic.cpp`, `test/unit/http_endpoint_test.cpp` | API-ported |
 | Multi-segment param `/{a}/{b}` | `http_endpoint_suite::http_endpoint_multiple_params` | `test/unit/http_endpoint_test.cpp` | unchanged |
-| Custom-regex param `/{arg|([0-9]+)}` | `basic_suite::regex_matching_arg_custom`, `http_endpoint_registration_arg_custom_regex` | `test/integ/basic.cpp`, `test/unit/http_endpoint_test.cpp` | API-ported; v2 radix tier enforces the per-segment regex in-line via `radix_node::wildcard_constraint_`, matching v1 semantics |
+| Custom-regex param `/{arg|([0-9]+)}` | `basic_suite::regex_matching_arg_custom`, `http_endpoint_registration_arg_custom_regex` | `test/integ/basic.cpp`, `test/unit/http_endpoint_test.cpp` | API-ported; v2 radix tier enforces the per-segment regex in-line via `segment_trie_node::wildcard_constraint_`, matching v1 semantics |
 | Prefix (family) | `basic_suite::family_endpoints`, `non_family_url_with_regex_like_pieces`, `single_resource_mode` | `test/integ/basic.cpp` | API-ported (`register_resource(..., true)` → `register_prefix`) |
 | Regex (anchored, no `{}`) | `basic_suite::regex_matching`, `regex_url_exact_match`, `url_with_regex_like_pieces` | `test/integ/basic.cpp` | API-ported |
 | Regex-checking disabled | `basic_suite::*` with `no_regex_checking()` | `test/integ/basic.cpp` | unchanged |
@@ -109,9 +109,9 @@ radix entry.
 
 **Resolution**: the radix tier now parses `{name|regex}` at registration
 time, binds captures under the bare `name`, and stores the compiled
-regex on the wildcard node (`radix_node::wildcard_constraint_`, using
+regex on the wildcard node (`segment_trie_node::wildcard_constraint_`, using
 the same `extended | icase | nosubs` flags as `http_endpoint`). During
-`radix_tree::find()` the constraint is matched against the request
+`segment_trie::find()` the constraint is matched against the request
 segment; a miss breaks the descent so the lookup falls back to a prefix
 candidate or 404. `regex_matching_arg_custom`, `regex_url_exact_match`,
 and `parameterized_with_custom_regex_enforced_in_radix_tier` now pin

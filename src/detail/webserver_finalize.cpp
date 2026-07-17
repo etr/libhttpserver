@@ -102,7 +102,7 @@ bool webserver_impl::fire_before_handler_gated(
             /*is_prefix=*/mr->matched_is_prefix};
     }
     before_handler_ctx ctx{
-        /*request=*/mr->dhr.get(),
+        /*request=*/mr->request.get(),
         /*matched=*/std::move(desc),
         /*method=*/mr->method_enum,
         /*resource=*/hrm.get()};
@@ -148,7 +148,7 @@ void webserver_impl::fire_after_handler_gated(detail::modded_request* mr,
     if (!server_gate && !route_gate) return;
     if (!mr->response) return;  // defensive: never fire without a response
 
-    after_handler_ctx ctx{mr->dhr.get(), &*mr->response};
+    after_handler_ctx ctx{mr->request.get(), &*mr->response};
     if (server_gate) {
         if (auto sc = fire_after_handler(ctx)) {
             // Short-circuit: REPLACE mr->response (emplace
@@ -207,7 +207,7 @@ void webserver_impl::fire_response_sent_gated(detail::modded_request* mr,
         ? std::chrono::duration_cast<std::chrono::nanoseconds>(
               std::chrono::steady_clock::now() - mr->start_time)
         : std::chrono::nanoseconds::zero();
-    response_sent_ctx ctx{mr->dhr.get(), &*mr->response,
+    response_sent_ctx ctx{mr->request.get(), &*mr->response,
         mr->response->get_status(), bytes_queued, elapsed};
     fire_response_sent(ctx);
     // Per-route chain AFTER server-wide + its alias slot.
@@ -273,7 +273,7 @@ void webserver_impl::fire_request_completed_gated(
             : std::chrono::duration_cast<std::chrono::nanoseconds>(
                   raw_duration);
     request_completed_ctx ctx{
-        /*request=*/mr->dhr.get(),
+        /*request=*/mr->request.get(),
         /*resp=*/resp_ptr,
         /*succeeded=*/(toe == MHD_REQUEST_TERMINATED_COMPLETED_OK),
         /*duration=*/duration,

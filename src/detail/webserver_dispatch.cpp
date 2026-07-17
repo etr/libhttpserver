@@ -226,7 +226,7 @@ webserver_impl::lookup_v2(http_method method, const std::string& path) {
         std::shared_lock table_lock(route_table_mutex_);
 
         // Radix tier — segment-trie walk.
-        radix_match<route_entry> rm;
+        segment_trie_match<route_entry> rm;
         if (param_and_prefix_routes_.find(key.path, rm) && rm.entry) {
             result.found = true;
             result.tier = tier_hit::radix;
@@ -314,9 +314,9 @@ bool webserver_impl::resolve_resource_for_request(detail::modded_request* mr,
     // Replay captured URL parameters into the request. Per-name
     // set_arg matches v1 behaviour exactly — duplicates with later
     // wins, etc.
-    if (mr->dhr != nullptr) {
+    if (mr->request != nullptr) {
         for (const auto& [name, value] : result.captured_params) {
-            mr->dhr->set_arg(name, value);
+            mr->request->set_arg(name, value);
         }
     }
 
@@ -369,7 +369,7 @@ void handle_dispatch_exception(
         // (Naming the capture makes clear we are taking a reference to
         // the in-flight exception object.)
         auto current_exc = std::current_exception();
-        handler_exception_ctx ctx{mr->dhr.get(), current_exc, message};
+        handler_exception_ctx ctx{mr->request.get(), current_exc, message};
         if (server_chain) {
             if (auto sc = impl->fire_handler_exception(ctx)) {
                 mr->response.emplace(std::move(*sc));
@@ -427,7 +427,7 @@ void webserver_impl::dispatch_resource_handler(detail::modded_request* mr,
             // by value; the prvalue is moved into the
             // per-connection optional anchor. shared_ptr has no
             // operator->*, so call as ((*ptr).*pmf)(...).
-            mr->response.emplace(((*hrm).*(mr->callback))(*mr->dhr));
+            mr->response.emplace(((*hrm).*(mr->callback))(*mr->request));
             if (mr->response->get_status() == -1) {
                 // No exception was thrown, but the handler
                 // returned the default-sentinel response. Route through

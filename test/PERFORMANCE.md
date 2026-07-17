@@ -186,7 +186,7 @@ papering over the new field's cost.
 15 000 sibling path segments distributed across 3 parent prefixes,
 driven by 4 contending writer threads. The corpus shape (24-byte common
 prefix, 8-byte discriminating tail) is the worst case for
-`std::map<std::string>::find` per-probe cost in the radix tree's
+`std::map<std::string>::find` per-probe cost in the segment trie's
 per-segment child container, so per-op insert cost will surface any
 algorithmic regression (e.g. a future refactor that drops back to O(n)
 sibling scan).
@@ -216,7 +216,7 @@ warmup-window computation in `test/integ/threadsafety_stress.cpp`.)
 | Technique | Status | Notes |
 |---|---|---|
 | Per-thread sample buffers (no hot-path lock) | adopted | Eliminates `samples_mtx` from the timing window; the previous global `std::mutex`-guarded `push_back` leaked prior-iteration lock-wait jitter into the next sample's cache lines |
-| Linux CPU pinning of writer threads | optional, off by default | `HTTPSERVER_STRESS_PIN_CPU=N` pins all 4 writers to CPU N via `pthread_setaffinity_np`. Counter-intuitively single-CPU pinning is correct here — writers serialise on `route_table_mutex_` regardless, so single-CPU placement eliminates cross-CPU cache misses on radix-tree node memory. macOS / Windows: no-op |
+| Linux CPU pinning of writer threads | optional, off by default | `HTTPSERVER_STRESS_PIN_CPU=N` pins all 4 writers to CPU N via `pthread_setaffinity_np`. Counter-intuitively single-CPU pinning is correct here — writers serialise on `route_table_mutex_` regardless, so single-CPU placement eliminates cross-CPU cache misses on segment-trie node memory. macOS / Windows: no-op |
 | Statistic switch p99 → p95 | adopted | See "Why p95, not p99" below |
 | Top-N% trimming | rejected | "Trim before gate" is unprincipled and looks like hiding regressions. Switching the statistic (p99 → p95) is principled — the gate now uses a more robust order statistic, not censored data |
 | `__rdtsc` high-precision timer | rejected | `std::chrono::steady_clock` (≈20 ns resolution on Linux, ≈40 ns on macOS) is fine for 10-100+ µs samples; TSC drift across cores is not worth the portability cost |
@@ -239,7 +239,7 @@ p99 is still printed in the `[STATS]` diagnostic line for forensic use.
 The stabilisation stack reduces but does NOT eliminate the
 noise floor. The dominant residual contributor is **legitimate
 contention on `route_table_mutex_`**, not OS noise: 4 writer threads
-serialise on a single std::mutex around the radix-tree insert, and the
+serialise on a single std::mutex around the segment-trie insert, and the
 top 5% of samples are precisely the lock-wait queue tail.
 
 | Sweep | Worst observed p95/warmup_median ratio | Notes |

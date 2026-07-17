@@ -30,7 +30,7 @@
 #include <vector>
 
 #include "./httpserver.hpp"
-#include "./httpserver/detail/radix_tree.hpp"
+#include "./httpserver/detail/segment_trie.hpp"
 #include "./httpserver/detail/route_cache.hpp"
 #include "./httpserver/detail/route_entry.hpp"
 #include "./littletest.hpp"
@@ -41,7 +41,7 @@ namespace htd = httpserver::detail;
 // Sentinel makers to avoid crafting a real http_resource just to populate
 // the handler field; we leave it null (a default-constructed shared_ptr)
 // and ride on the sentinel id field in the test below. The handler field
-// is irrelevant — the radix_tree / route_cache tests only care about the
+// is irrelevant — the segment_trie / route_cache tests only care about the
 // entry payload identity through pointer equality and the methods/is_prefix
 // fields. (route_entry::handler was originally a
 // std::variant<lambda_handler, shared_ptr<http_resource>>; the variant arm
@@ -70,100 +70,100 @@ LT_END_SUITE(route_table_suite)
 
 // ----- Cycle B: exact path insertion / lookup ----------------------------
 
-LT_BEGIN_AUTO_TEST(route_table_suite, radix_tree_inserts_exact_path_and_finds_it)
-    htd::radix_tree<htd::route_entry> tree;
+LT_BEGIN_AUTO_TEST(route_table_suite, segment_trie_inserts_exact_path_and_finds_it)
+    htd::segment_trie<htd::route_entry> tree;
     tree.insert("/users/42", make_entry(1));
-    htd::radix_match<htd::route_entry> m;
+    htd::segment_trie_match<htd::route_entry> m;
     LT_CHECK(tree.find("/users/42", m));
     LT_CHECK(m.entry != nullptr);
     LT_CHECK(m.captures.empty());
     LT_CHECK(!tree.find("/users/43", m));
-LT_END_AUTO_TEST(radix_tree_inserts_exact_path_and_finds_it)
+LT_END_AUTO_TEST(segment_trie_inserts_exact_path_and_finds_it)
 
-LT_BEGIN_AUTO_TEST(route_table_suite, radix_tree_root_path_finds_root)
-    htd::radix_tree<htd::route_entry> tree;
+LT_BEGIN_AUTO_TEST(route_table_suite, segment_trie_root_path_finds_root)
+    htd::segment_trie<htd::route_entry> tree;
     tree.insert("/", make_entry(7));
-    htd::radix_match<htd::route_entry> m;
+    htd::segment_trie_match<htd::route_entry> m;
     LT_CHECK(tree.find("/", m));
     LT_CHECK(m.entry != nullptr);
-LT_END_AUTO_TEST(radix_tree_root_path_finds_root)
+LT_END_AUTO_TEST(segment_trie_root_path_finds_root)
 
-LT_BEGIN_AUTO_TEST(route_table_suite, radix_tree_no_partial_match)
-    htd::radix_tree<htd::route_entry> tree;
+LT_BEGIN_AUTO_TEST(route_table_suite, segment_trie_no_partial_match)
+    htd::segment_trie<htd::route_entry> tree;
     tree.insert("/users", make_entry(2));
-    htd::radix_match<htd::route_entry> m;
+    htd::segment_trie_match<htd::route_entry> m;
     LT_CHECK(!tree.find("/users/42", m));      // exact miss (not a prefix)
     LT_CHECK(!tree.find("/userzzz", m));        // wrong segment
-LT_END_AUTO_TEST(radix_tree_no_partial_match)
+LT_END_AUTO_TEST(segment_trie_no_partial_match)
 
 // ----- Cycle C: parameterized routes -------------------------------------
 
-LT_BEGIN_AUTO_TEST(route_table_suite, radix_tree_matches_parameterized_segment_and_captures)
-    htd::radix_tree<htd::route_entry> tree;
+LT_BEGIN_AUTO_TEST(route_table_suite, segment_trie_matches_parameterized_segment_and_captures)
+    htd::segment_trie<htd::route_entry> tree;
     tree.insert("/users/{id}/posts", make_entry(3));
-    htd::radix_match<htd::route_entry> m;
+    htd::segment_trie_match<htd::route_entry> m;
     LT_CHECK(tree.find("/users/42/posts", m));
     LT_CHECK_EQ(m.captures.size(), static_cast<std::size_t>(1));
     LT_CHECK_EQ(m.captures[0].first, std::string("id"));
     LT_CHECK_EQ(m.captures[0].second, std::string("42"));
-LT_END_AUTO_TEST(radix_tree_matches_parameterized_segment_and_captures)
+LT_END_AUTO_TEST(segment_trie_matches_parameterized_segment_and_captures)
 
-LT_BEGIN_AUTO_TEST(route_table_suite, radix_tree_parameterized_too_short_returns_null)
-    htd::radix_tree<htd::route_entry> tree;
+LT_BEGIN_AUTO_TEST(route_table_suite, segment_trie_parameterized_too_short_returns_null)
+    htd::segment_trie<htd::route_entry> tree;
     tree.insert("/users/{id}/posts", make_entry(3));
-    htd::radix_match<htd::route_entry> m;
+    htd::segment_trie_match<htd::route_entry> m;
     LT_CHECK(!tree.find("/users/42", m));
-LT_END_AUTO_TEST(radix_tree_parameterized_too_short_returns_null)
+LT_END_AUTO_TEST(segment_trie_parameterized_too_short_returns_null)
 
-LT_BEGIN_AUTO_TEST(route_table_suite, radix_tree_exact_shadows_wildcard)
+LT_BEGIN_AUTO_TEST(route_table_suite, segment_trie_exact_shadows_wildcard)
     // Both /users/me (exact) and /users/{id} (parameterized) registered.
     // /users/me must hit exact; /users/42 must hit parameterized.
-    htd::radix_tree<htd::route_entry> tree;
+    htd::segment_trie<htd::route_entry> tree;
     tree.insert("/users/me", make_entry(10));
     tree.insert("/users/{id}", make_entry(11));
-    htd::radix_match<htd::route_entry> m;
+    htd::segment_trie_match<htd::route_entry> m;
     LT_CHECK(tree.find("/users/me", m));
     LT_CHECK(m.captures.empty());
     LT_CHECK(tree.find("/users/42", m));
     LT_CHECK_EQ(m.captures.size(), static_cast<std::size_t>(1));
     LT_CHECK_EQ(m.captures[0].second, std::string("42"));
-LT_END_AUTO_TEST(radix_tree_exact_shadows_wildcard)
+LT_END_AUTO_TEST(segment_trie_exact_shadows_wildcard)
 
 // ----- Cycle D: prefix routes --------------------------------------------
 
-LT_BEGIN_AUTO_TEST(route_table_suite, radix_tree_prefix_match_serves_subpaths_and_bare_path)
-    htd::radix_tree<htd::route_entry> tree;
+LT_BEGIN_AUTO_TEST(route_table_suite, segment_trie_prefix_match_serves_subpaths_and_bare_path)
+    htd::segment_trie<htd::route_entry> tree;
     tree.insert("/static",
                 make_entry(20, ht::method_set{}.set(ht::http_method::get),
                            /*is_prefix=*/true),
                 /*is_prefix=*/true);
-    htd::radix_match<htd::route_entry> m;
+    htd::segment_trie_match<htd::route_entry> m;
     LT_CHECK(tree.find("/static", m));
     LT_CHECK(tree.find("/static/foo", m));
     LT_CHECK(tree.find("/static/foo/bar/baz", m));
     LT_CHECK(!tree.find("/staticx", m));        // sibling segment
     LT_CHECK(!tree.find("/", m));                // not a parent
-LT_END_AUTO_TEST(radix_tree_prefix_match_serves_subpaths_and_bare_path)
+LT_END_AUTO_TEST(segment_trie_prefix_match_serves_subpaths_and_bare_path)
 
-LT_BEGIN_AUTO_TEST(route_table_suite, radix_tree_more_specific_exact_shadows_prefix)
-    htd::radix_tree<htd::route_entry> tree;
+LT_BEGIN_AUTO_TEST(route_table_suite, segment_trie_more_specific_exact_shadows_prefix)
+    htd::segment_trie<htd::route_entry> tree;
     tree.insert("/static",
                 make_entry(20, ht::method_set{}.set(ht::http_method::get),
                            /*is_prefix=*/true),
                 /*is_prefix=*/true);
     tree.insert("/static/foo", make_entry(21));
-    htd::radix_match<htd::route_entry> m;
+    htd::segment_trie_match<htd::route_entry> m;
 
     LT_CHECK(tree.find("/static/foo", m));
     LT_CHECK(!m.is_prefix_match);                   // exact shadows prefix
     LT_CHECK(tree.find("/static/bar", m));
     LT_CHECK(m.is_prefix_match);
-LT_END_AUTO_TEST(radix_tree_more_specific_exact_shadows_prefix)
+LT_END_AUTO_TEST(segment_trie_more_specific_exact_shadows_prefix)
 
-LT_BEGIN_AUTO_TEST(route_table_suite, radix_tree_matches_multiple_parameterized_segments)
-    htd::radix_tree<htd::route_entry> tree;
+LT_BEGIN_AUTO_TEST(route_table_suite, segment_trie_matches_multiple_parameterized_segments)
+    htd::segment_trie<htd::route_entry> tree;
     tree.insert("/a/{x}/b/{y}/c", make_entry(30));
-    htd::radix_match<htd::route_entry> m;
+    htd::segment_trie_match<htd::route_entry> m;
     LT_CHECK(tree.find("/a/1/b/2/c", m));
     LT_CHECK_EQ(m.captures.size(), static_cast<std::size_t>(2));
     LT_CHECK_EQ(m.captures[0].first, std::string("x"));
@@ -172,7 +172,7 @@ LT_BEGIN_AUTO_TEST(route_table_suite, radix_tree_matches_multiple_parameterized_
     LT_CHECK_EQ(m.captures[1].second, std::string("2"));
     // Too short: missing trailing /c
     LT_CHECK(!tree.find("/a/1/b/2", m));
-LT_END_AUTO_TEST(radix_tree_matches_multiple_parameterized_segments)
+LT_END_AUTO_TEST(segment_trie_matches_multiple_parameterized_segments)
 
 LT_BEGIN_AUTO_TEST(route_table_suite, cache_duplicate_insert_replaces_in_place_and_keeps_size)
     htd::route_cache cache(4);
@@ -191,16 +191,16 @@ LT_BEGIN_AUTO_TEST(route_table_suite, cache_duplicate_insert_replaces_in_place_a
     LT_CHECK(cache.find({ht::http_method::get, "/dup"}, out));
 LT_END_AUTO_TEST(cache_duplicate_insert_replaces_in_place_and_keeps_size)
 
-LT_BEGIN_AUTO_TEST(route_table_suite, radix_tree_remove_exact_path)
-    htd::radix_tree<htd::route_entry> tree;
+LT_BEGIN_AUTO_TEST(route_table_suite, segment_trie_remove_exact_path)
+    htd::segment_trie<htd::route_entry> tree;
     tree.insert("/users/42", make_entry(1));
-    htd::radix_match<htd::route_entry> m;
+    htd::segment_trie_match<htd::route_entry> m;
     LT_CHECK(tree.find("/users/42", m));
     LT_CHECK(tree.remove("/users/42", /*is_prefix=*/false));
     LT_CHECK(!tree.find("/users/42", m));
     // Removing twice is a no-op (returns false).
     LT_CHECK(!tree.remove("/users/42", /*is_prefix=*/false));
-LT_END_AUTO_TEST(radix_tree_remove_exact_path)
+LT_END_AUTO_TEST(segment_trie_remove_exact_path)
 
 // ----- Cycle E: route_cache ----------------------------------------------
 
@@ -295,48 +295,48 @@ LT_BEGIN_AUTO_TEST(route_table_suite, cache_zero_max_entries_throws)
 LT_END_AUTO_TEST(cache_zero_max_entries_throws)
 
 // Minor #30: multiple parameterised segments coverage.
-// (This test already exists at radix_tree_matches_multiple_parameterized_segments)
+// (This test already exists at segment_trie_matches_multiple_parameterized_segments)
 
 // Minor #30: removing a parameterised path does not clear sibling exact terminus.
-LT_BEGIN_AUTO_TEST(route_table_suite, radix_tree_remove_parameterized_path)
-    htd::radix_tree<htd::route_entry> tree;
+LT_BEGIN_AUTO_TEST(route_table_suite, segment_trie_remove_parameterized_path)
+    htd::segment_trie<htd::route_entry> tree;
     tree.insert("/users/{id}", make_entry(40));
-    htd::radix_match<htd::route_entry> m;
+    htd::segment_trie_match<htd::route_entry> m;
     LT_CHECK(tree.find("/users/42", m));
     LT_CHECK(tree.remove("/users/{id}", /*is_prefix=*/false));
     LT_CHECK(!tree.find("/users/42", m));
     // Removing a non-existent parameterised path returns false.
     LT_CHECK(!tree.remove("/users/{id}", /*is_prefix=*/false));
-LT_END_AUTO_TEST(radix_tree_remove_parameterized_path)
+LT_END_AUTO_TEST(segment_trie_remove_parameterized_path)
 
-LT_BEGIN_AUTO_TEST(route_table_suite, radix_tree_remove_prefix_path)
-    htd::radix_tree<htd::route_entry> tree;
+LT_BEGIN_AUTO_TEST(route_table_suite, segment_trie_remove_prefix_path)
+    htd::segment_trie<htd::route_entry> tree;
     tree.insert("/static",
                 make_entry(41, ht::method_set{}.set(ht::http_method::get),
                            /*is_prefix=*/true),
                 /*is_prefix=*/true);
-    htd::radix_match<htd::route_entry> m;
+    htd::segment_trie_match<htd::route_entry> m;
     LT_CHECK(tree.find("/static/css", m));
     LT_CHECK(tree.remove("/static", /*is_prefix=*/true));
     LT_CHECK(!tree.find("/static/css", m));
-LT_END_AUTO_TEST(radix_tree_remove_prefix_path)
+LT_END_AUTO_TEST(segment_trie_remove_prefix_path)
 
-LT_BEGIN_AUTO_TEST(route_table_suite, radix_tree_remove_one_terminus_does_not_clear_sibling)
+LT_BEGIN_AUTO_TEST(route_table_suite, segment_trie_remove_one_terminus_does_not_clear_sibling)
     // /static has both an exact terminus and a prefix terminus.
     // Removing the exact one must not clear the prefix one.
-    htd::radix_tree<htd::route_entry> tree;
+    htd::segment_trie<htd::route_entry> tree;
     tree.insert("/static", make_entry(42),          /*is_prefix=*/false);
     tree.insert("/static",
                 make_entry(43, ht::method_set{}.set(ht::http_method::get),
                            /*is_prefix=*/true),
                 /*is_prefix=*/true);
-    htd::radix_match<htd::route_entry> m;
+    htd::segment_trie_match<htd::route_entry> m;
     // Remove the exact terminus.
     LT_CHECK(tree.remove("/static", /*is_prefix=*/false));
     // Subpath still served by prefix terminus.
     LT_CHECK(tree.find("/static/js", m));
     LT_CHECK(m.is_prefix_match);
-LT_END_AUTO_TEST(radix_tree_remove_one_terminus_does_not_clear_sibling)
+LT_END_AUTO_TEST(segment_trie_remove_one_terminus_does_not_clear_sibling)
 
 // find_by_view must promote the hit to the front of the LRU list,
 // just like find(). After a find_by_view hit on /a, inserting /d into a
