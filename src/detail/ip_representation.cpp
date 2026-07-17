@@ -100,18 +100,18 @@ uint16_t get_port(const struct sockaddr* sa) {
 }
 
 ip_representation::ip_representation(const struct sockaddr* ip) {
-    std::fill(pieces, pieces + 16, 0);
+    std::fill(octets, octets + 16, 0);
     if (ip->sa_family == AF_INET) {
         ip_version = http_utils::IPV4;
         const in_addr* sin_addr_pt = &((reinterpret_cast<const struct sockaddr_in*>(ip))->sin_addr);
         for (int i = 0; i < 4; i++) {
-            pieces[12 + i] = (reinterpret_cast<const u_char*>(sin_addr_pt))[i];
+            octets[12 + i] = (reinterpret_cast<const u_char*>(sin_addr_pt))[i];
         }
     } else {
         ip_version = http_utils::IPV6;
         const in6_addr* sin_addr6_pt = &((reinterpret_cast<const struct sockaddr_in6*>(ip))->sin6_addr);
         for (int i = 0; i < 16; i++) {
-            pieces[i] = (reinterpret_cast<const u_char*>(sin_addr6_pt))[i];
+            octets[i] = (reinterpret_cast<const u_char*>(sin_addr6_pt))[i];
         }
     }
     mask = constants::DEFAULT_MASK_VALUE;
@@ -123,7 +123,7 @@ namespace {
 // be either 0x00 (pure ::-mapped) or 0xFF (v4-mapped). Lifted out of
 // parse_nested_ipv4 so the surrounding function stays below the CCN
 // bar.
-bool ipv4_mapped_prefix_invalid(uint16_t a, uint16_t b) {
+bool ipv4_mapped_prefix_invalid(uint8_t a, uint8_t b) {
     return (a != 0 && a != 255) || (b != 0 && b != 255);
 }
 
@@ -132,15 +132,15 @@ bool ipv4_mapped_prefix_invalid(uint16_t a, uint16_t b) {
 // or 0xFF (v4-mapped). Throws invalid_argument on any other prefix.
 // Lifted out of parse_nested_ipv4 so the surrounding function stays
 // below the CCN bar.
-void validate_ipv4_mapped_prefix(const uint16_t* pieces) {
+void validate_ipv4_mapped_prefix(const uint8_t* octets) {
     for (unsigned int k = 0; k < 10; k++) {
-        if (pieces[k] != 0) {
+        if (octets[k] != 0) {
             throw std::invalid_argument(
                 "IP is badly formatted. Nested IPV4 can be preceded only by 0 "
                 "(and, optionally, two 255 octects)");
         }
     }
-    if (ipv4_mapped_prefix_invalid(pieces[10], pieces[11])) {
+    if (ipv4_mapped_prefix_invalid(octets[10], octets[11])) {
         throw std::invalid_argument(
             "IP is badly formatted. Nested IPV4 can be preceded only by 0 "
             "(and, optionally, two 255 octects)");
@@ -164,7 +164,7 @@ void ip_representation::parse_ipv4(const std::string& ip) {
         if (piece < 0 || piece > 255) {
             throw std::invalid_argument("IP is badly formatted. 255 is max value for ip part.");
         }
-        pieces[12+i] = static_cast<uint16_t>(piece);
+        octets[12+i] = static_cast<uint8_t>(piece);
     }
 }
 
@@ -228,7 +228,7 @@ void ip_representation::parse_nested_ipv4(const std::vector<std::string>& parts,
         throw std::invalid_argument("IP is badly formatted. Nested IPV4 can have max 4 parts.");
     }
     // Bytes 0-9 must be zero; bytes 10-11 must be 0x00 or 0xFF.
-    validate_ipv4_mapped_prefix(pieces);
+    validate_ipv4_mapped_prefix(octets);
     for (unsigned int ii = 0; ii < subparts.size(); ii++) {
         if (subparts[ii] == "*") {
             clear_bit(mask, static_cast<unsigned int>(y + ii));
@@ -238,7 +238,7 @@ void ip_representation::parse_nested_ipv4(const std::vector<std::string>& parts,
         if (subpart < 0 || subpart > 255) {
             throw std::invalid_argument("IP is badly formatted. 255 is max value for ip part.");
         }
-        pieces[y+ii] = static_cast<uint16_t>(subpart);
+        octets[y+ii] = static_cast<uint8_t>(subpart);
     }
 }
 
@@ -255,8 +255,8 @@ void ip_representation::apply_ipv6_part(std::vector<std::string>& parts, unsigne
         // Placeholder for one or more omitted segments. Zero-fill the
         // implied slots; the bump is `omitted` segments x 2 bytes each.
         for (unsigned int o = 0; o < omitted; o++) {
-            pieces[y]   = 0;
-            pieces[y+1] = 0;
+            octets[y]   = 0;
+            octets[y+1] = 0;
             y += 2;
         }
         return;
@@ -281,8 +281,8 @@ void ip_representation::apply_ipv6_part(std::vector<std::string>& parts, unsigne
             throw std::invalid_argument(
                 "IP is badly formatted. IPV6 part contains a non-hex character.");
         }
-        pieces[y]   = static_cast<uint16_t>(hi);
-        pieces[y+1] = static_cast<uint16_t>(lo);
+        octets[y]   = static_cast<uint8_t>(hi);
+        octets[y+1] = static_cast<uint8_t>(lo);
         y += 2;
         return;
     }
@@ -308,7 +308,7 @@ void ip_representation::parse_ipv6(const std::string& ip) {
 
 ip_representation::ip_representation(const std::string& ip) {
     mask = constants::DEFAULT_MASK_VALUE;
-    std::fill(pieces, pieces + 16, 0);
+    std::fill(octets, octets + 16, 0);
     if (ip.find(':') != std::string::npos) {
         parse_ipv6(ip);
     } else {
@@ -318,7 +318,7 @@ ip_representation::ip_representation(const std::string& ip) {
 
 namespace {
 
-// Add (16 - i) * piece[i] for both ip representations when both have
+// Add (16 - i) * octets[i] for both ip representations when both have
 // the i-th octet masked in. Pulled out of operator< so the surrounding
 // function stays below the CCN bar.
 void accumulate_octet_score(const ip_representation& a,
@@ -330,13 +330,13 @@ void accumulate_octet_score(const ip_representation& a,
     // is computed in the destination type. Without the cast the multiplication
     // happens in int and only the result is widened, which CodeQL flags as a
     // potential overflow.
-    a_score += static_cast<int64_t>(16 - i) * a.pieces[i];
-    b_score += static_cast<int64_t>(16 - i) * b.pieces[i];
+    a_score += static_cast<int64_t>(16 - i) * a.octets[i];
+    b_score += static_cast<int64_t>(16 - i) * b.octets[i];
 }
 
 // True when both v4-mapped-prefix octets on a and b are 0x00 or 0xFF.
 // Mirrors the "::ffff:" / "::"-prefix invariant from parse_nested_ipv4.
-bool is_v4_mapped_prefix_octet_pair(uint16_t a, uint16_t b) {
+bool is_v4_mapped_prefix_octet_pair(uint8_t a, uint8_t b) {
     return (a == 0x00 || a == 0xFF) && (b == 0x00 || b == 0xFF);
 }
 
@@ -344,7 +344,7 @@ bool is_v4_mapped_prefix_octet_pair(uint16_t a, uint16_t b) {
 
 // Strict-weak ordering for std::set<ip_representation> (the allow and
 // deny lists). NOT lexicographic: each operand gets a position-weighted
-// score — the sum over octet index i of (16 - i) * pieces[i] — and the
+// score — the sum over octet index i of (16 - i) * octets[i] — and the
 // totals are compared. An octet contributes only when it is unmasked
 // on BOTH operands (see accumulate_octet_score), so wildcard octets on
 // either side drop out of the comparison entirely: a wildcard entry
@@ -375,8 +375,8 @@ bool ip_representation::operator <(const ip_representation& b) const {
     }
 
     if (this_score == b_score
-            && is_v4_mapped_prefix_octet_pair(pieces[10], b.pieces[10])
-            && is_v4_mapped_prefix_octet_pair(pieces[11], b.pieces[11])) {
+            && is_v4_mapped_prefix_octet_pair(octets[10], b.octets[10])
+            && is_v4_mapped_prefix_octet_pair(octets[11], b.octets[11])) {
         return false;
     }
 

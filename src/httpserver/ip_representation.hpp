@@ -28,6 +28,7 @@
 #include <stdint.h>
 
 #include <algorithm>
+#include <bit>
 #include <string>
 #include <vector>
 
@@ -45,18 +46,20 @@ namespace http {
 
 struct ip_representation {
     http_utils::IP_version_T ip_version;
-    // One OCTET per element (values 0-255), despite the 16-bit element
-    // type — do not read these as IPv6 hextets. A 4-hex-digit IPv6
-    // group occupies TWO elements (high byte then low byte); an IPv4
-    // or IPv4-mapped address occupies pieces[12..15]. See the parsers
-    // in src/detail/ip_representation.cpp.
-    uint16_t pieces[16];
+    // The address as 16 octets, one per element. An IPv6 address fills all
+    // 16 (each 4-hex-digit group is two octets: high byte then low byte);
+    // an IPv4 (or IPv4-mapped) address fills octets[12..15] and leaves the
+    // rest as the mapped prefix. See the parsers in
+    // src/detail/ip_representation.cpp.
+    uint8_t octets[16];
+    // Bitmask over the 16 octets: bit i set means octet i is significant;
+    // a cleared bit marks a '*' wildcard octet that matches anything.
     uint16_t mask;
 
     explicit ip_representation(http_utils::IP_version_T ip_version) :
         ip_version(ip_version) {
             mask = constants::DEFAULT_MASK_VALUE;
-            std::fill(pieces, pieces + 16, 0);
+            std::fill(octets, octets + 16, 0);
     }
 
     explicit ip_representation(const std::string& ip);
@@ -64,14 +67,10 @@ struct ip_representation {
 
     bool operator<(const ip_representation& b) const;
 
-    // Returns the number of unmasked octets: the popcount of the 16-bit
-    // mask (one bit per element of `pieces`). The magic constants below
-    // are a variable-precision SWAR popcount.
+    // Number of significant (non-wildcard) octets: the popcount of `mask`,
+    // which carries one bit per octet.
     int weight() const {
-        uint16_t x = mask;
-        x = x - ((x >> 1) & 0x55555555);
-        x = (x & 0x33333333) + ((x >> 2) & 0x33333333);
-        return (((x + (x >> 4)) & 0x0F0F0F0F) * 0x01010101) >> 24;
+        return std::popcount(mask);
     }
 
  private:
